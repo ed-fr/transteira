@@ -1,0 +1,71 @@
+extends:
+  - [spectral:oas, all]
+
+rules:
+  # OpenAPI 3.1 forbids license.url when license.identifier (SPDX) is set.
+  license-url: 'off'
+  # No personal email address in a public repository; the project URL is the contact.
+  contact-properties: 'off'
+  # Tags follow the functional order of the API, not the alphabet.
+  openapi-tags-alphabetical: 'off'
+
+  operation-description: error
+  operation-operationId: error
+  operation-tags: error
+
+  tt-operation-4xx-response:
+    description: Every operation documents at least one 4xx response.
+    severity: error
+    given: $.paths[*][get,put,post,patch,delete,head]
+    then:
+      field: responses
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          not:
+            propertyNames:
+              not:
+                pattern: '^4'
+
+  tt-json-response-example:
+    description: Every JSON response has an example (example or examples).
+    severity: error
+    given: $.paths[*][*].responses[*].content[?(@property.match(/json|yaml/))]
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          anyOf:
+            - required: [example]
+            - required: [examples]
+
+  tt-json-request-example:
+    description: Every JSON request body has an example (example or examples).
+    severity: error
+    given: $.paths[*][*].requestBody.content[?(@property.match(/json/))]
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          anyOf:
+            - required: [example]
+            - required: [examples]
+
+  tt-error-problem-json:
+    description: Error responses with a body use application/problem+json (RFC 9457).
+    severity: error
+    given: $.paths[*][*].responses[?(@property.match(/^[45]/))].content
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: ['application/problem+json']
+
+overrides:
+  # The health check returns its usual JSON document with 503 so that monitoring tools can read component states.
+  - files:
+      - 'api/openapi.yaml#/paths/~1healthz/get/responses/503'
+    rules:
+      tt-error-problem-json: 'off'

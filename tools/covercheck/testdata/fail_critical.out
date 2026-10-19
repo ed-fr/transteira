@@ -1,0 +1,6 @@
+mode: set
+github.com/ed-fr/transteira/internal/crypto/aead.go:10.2,12.3 9 1
+mode: set
+github.com/ed-fr/transteira/internal/crypto/aead.go:14.2,15.3 1 0
+mode: set
+github.com/ed-fr/transteira/internal/transfer/transfer.go:5.1,9.2 90 1

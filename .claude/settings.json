@@ -70,9 +70,18 @@
     ],
     "deny": [
       "Read(./.env)",
+      "Read(./.env.local)",
       "Read(./.env.*.local)",
+      "Read(./.env.prod)",
+      "Read(./.env.production)",
+      "Read(./.env.staging)",
+      "Read(./.env.test)",
       "Read(./secrets/**)",
       "Read(./**/master.key)",
+      "Read(./**/*master_key*)",
+      "Read(./**/*.key)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.p12)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push:*--no-verify*)",
@@ -80,7 +89,11 @@
       "Bash(docker system prune:*)",
       "Bash(docker volume rm:*)",
       "PowerShell(git push --force:*)",
-      "PowerShell(git push -f:*)"
+      "PowerShell(git push -f:*)",
+      "PowerShell(git push:*--no-verify*)",
+      "PowerShell(git commit:*--no-verify*)",
+      "PowerShell(docker system prune:*)",
+      "PowerShell(docker volume rm:*)"
     ]
   }
 }

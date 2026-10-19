@@ -1,0 +1,1 @@
+{"global": 85, "module": "github.com/ed-fr/transteira", "exclude": ["internal/api/gen"], "critical": {"internal/crypto": 100, "internal/tenant": 100}}

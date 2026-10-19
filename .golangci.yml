@@ -1,0 +1,76 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - errname
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+    - unparam
+  settings:
+    depguard:
+      rules:
+        crypto-rand-only:
+          files:
+            - "$all"
+            - "!$test"
+          deny:
+            - pkg: math/rand$
+              desc: use crypto/rand for anything security related
+            - pkg: math/rand/v2
+              desc: use crypto/rand for anything security related
+        crypto-isolated:
+          files:
+            - "**/internal/crypto/**/*.go"
+          deny:
+            - pkg: github.com/ed-fr/transteira/internal
+              desc: internal/crypto must not depend on other internal packages
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: indent-error-flow
+        - name: errorf
+        - name: error-return
+        - name: error-strings
+        - name: receiver-naming
+        - name: unused-parameter
+  exclusions:
+    generated: strict
+    paths:
+      - internal/api/gen
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ed-fr/transteira
+  exclusions:
+    generated: strict
+    paths:
+      - internal/api/gen

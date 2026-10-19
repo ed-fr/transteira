@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Blocks a push when gitleaks finds a secret in the commits about to be pushed.
+# Installed with `make hooks` (git config core.hooksPath scripts/hooks).
+#
+# gitleaks runs with `go run pkg@version`: the version is pinned, and it is built with its own
+# module graph so that it cannot conflict with the dependencies of the project tools.
+set -euo pipefail
+
+GITLEAKS_VERSION=v8.30.1
+gitleaks() { go run "github.com/zricethezav/gitleaks/v8@${GITLEAKS_VERSION}" "$@"; }
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Fail closed: if gitleaks cannot run, the push is refused rather than left unscanned.
+if ! gitleaks version >/dev/null 2>&1; then
+	echo "pre-push: unable to run gitleaks ${GITLEAKS_VERSION}, push aborted" >&2
+	exit 1
+fi
+
+zero=0000000000000000000000000000000000000000
+status=0
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+	if [ "$local_sha" = "$zero" ]; then
+		continue # branch deletion: nothing to scan
+	fi
+	if [ "$remote_sha" = "$zero" ]; then
+		log_opts="$local_sha" # new branch: scan its whole history
+	else
+		log_opts="$remote_sha..$local_sha"
+	fi
+	echo "pre-push: scanning $log_opts with gitleaks"
+	if ! gitleaks git --redact --no-banner --config .gitleaks.toml --log-opts="$log_opts" .; then
+		status=1
+	fi
+done
+
+if [ "$status" -ne 0 ]; then
+	echo "pre-push: secrets detected, push aborted" >&2
+fi
+exit "$status"

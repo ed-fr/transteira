@@ -1,0 +1,18 @@
+{
+  "global": 85.0,
+  "module": "github.com/ed-fr/transteira",
+  "exclude": [
+    "internal/api/gen",
+    "internal/store/storetest",
+    "internal/testutil"
+  ],
+  "critical": {
+    "internal/adminauth": 100,
+    "internal/apitoken": 100,
+    "internal/authz": 100,
+    "internal/crypto": 100,
+    "internal/httpserver/middleware": 100,
+    "internal/store": 100,
+    "internal/tenant": 100
+  }
+}

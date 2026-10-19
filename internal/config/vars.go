@@ -1,0 +1,268 @@
+package config
+
+import (
+	"bufio"
+	"io"
+	"slices"
+	"strings"
+)
+
+// Environment variable names read by [Load].
+const (
+	EnvDBDriver                 = "TT_DB_DRIVER"
+	EnvDBDSN                    = "TT_DB_DSN"
+	EnvDBDSNFile                = "TT_DB_DSN_FILE"
+	EnvDataDir                  = "TT_DATA_DIR"
+	EnvBackupDir                = "TT_BACKUP_DIR"
+	EnvLogDir                   = "TT_LOG_DIR"
+	EnvMasterKeyFile            = "TT_MASTER_KEY_FILE"
+	EnvMasterKeyNewFile         = "TT_MASTER_KEY_NEW_FILE"
+	EnvTrustedProxies           = "TT_TRUSTED_PROXIES"
+	EnvListenAddr               = "TT_LISTEN_ADDR"
+	EnvLogLevel                 = "TT_LOG_LEVEL"
+	EnvMaintenance              = "TT_MAINTENANCE"
+	EnvAdminHosts               = "TT_ADMIN_HOSTS"
+	EnvAPIDocsPublic            = "TT_API_DOCS_PUBLIC"
+	EnvSetupToken               = "TT_SETUP_TOKEN"      //nolint:gosec // G101: variable name, not a credential
+	EnvSetupTokenFile           = "TT_SETUP_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
+	EnvUploadTTL                = "TT_UPLOAD_TTL"
+	EnvDepositSessionTTL        = "TT_DEPOSIT_SESSION_TTL"
+	EnvDeleteAfterDownloadGrace = "TT_DELETE_AFTER_DOWNLOAD_GRACE"
+	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
+)
+
+// Default values applied by [Load] when a variable is unset or empty.
+const (
+	DefaultDBDriver                 = DriverSQLite
+	DefaultSQLiteDSN                = "/var/lib/transteira/db/transteira.db"
+	DefaultDataDir                  = "/var/lib/transteira/data"
+	DefaultBackupDir                = "/var/lib/transteira/backups"
+	DefaultLogDir                   = "/var/log/transteira"
+	DefaultListenAddr               = ":8080"
+	DefaultLogLevel                 = "info"
+	DefaultUploadTTL                = "24h"
+	DefaultDepositSessionTTL        = "4h"
+	DefaultDeleteAfterDownloadGrace = "15m"
+	DefaultClamAVAddr               = "clamav:3310"
+)
+
+// envPrefix is the prefix shared by every TransTeira variable.
+const envPrefix = "TT_"
+
+// Var documents one environment variable. [Variables] is the single source of
+// truth used to generate .env.example.
+type Var struct {
+	// Name is the environment variable name.
+	Name string
+	// Group is the .env.example section the variable belongs to.
+	Group string
+	// Default is the value used when the variable is unset ("" if none).
+	Default string
+	// Example is the value written uncommented in .env.example for required
+	// variables ("" for optional ones).
+	Example string
+	// Description explains the variable in English.
+	Description string
+	// Required is true when Load fails if the variable is missing.
+	Required bool
+	// Secret is true when the value is sensitive and must never be logged.
+	Secret bool
+}
+
+// Variables returns the documentation of every environment variable read by
+// [Load], in .env.example order.
+func Variables() []Var {
+	return []Var{
+		{
+			Name: EnvDBDriver, Group: "Database", Default: DefaultDBDriver,
+			Description: "Database engine: sqlite (default, single instance) or postgres.",
+		},
+		{
+			Name: EnvDBDSN, Group: "Database", Default: DefaultSQLiteDSN, Secret: true,
+			Description: "Database connection string. For sqlite, the path of the database file " +
+				"(default shown). Required for postgres, e.g. " +
+				"postgres://transteira:password@postgres:5432/transteira?sslmode=disable. " +
+				"Mutually exclusive with " + EnvDBDSNFile + ".",
+		},
+		{
+			Name: EnvDBDSNFile, Group: "Database",
+			Description: "Path of a file (e.g. a Docker secret) containing the database connection " +
+				"string. Preferred over " + EnvDBDSN + " for postgres since it keeps the password " +
+				"out of the environment.",
+		},
+		{
+			Name: EnvDataDir, Group: "Storage", Default: DefaultDataDir,
+			Description: "Absolute path of the volume holding the encrypted uploaded files " +
+				"(one sub-directory per tenant).",
+		},
+		{
+			Name: EnvBackupDir, Group: "Storage", Default: DefaultBackupDir,
+			Description: "Absolute path of the volume receiving the regular database backups " +
+				"(VACUUM INTO or pg_dump).",
+		},
+		{
+			Name: EnvLogDir, Group: "Storage", Default: DefaultLogDir,
+			Description: "Absolute path of the directory holding the security log read by " +
+				"fail2ban or CrowdSec.",
+		},
+		{
+			Name: EnvMasterKeyFile, Group: "Encryption", Required: true,
+			Example: "/run/secrets/transteira_master_key",
+			Description: "Absolute path of the file containing the master key (e.g. a Docker " +
+				"secret). It must NOT be located inside the data, backup or log directories, " +
+				"nor in the folder of the SQLite database. " +
+				"Keep a copy of the key in a password vault outside the VM: without it, " +
+				"files and backups cannot be decrypted.",
+		},
+		{
+			Name: EnvMasterKeyNewFile, Group: "Encryption",
+			Description: "Absolute path of the new master key, only set while running the " +
+				"rotate-master-key command. Same location rules as " + EnvMasterKeyFile +
+				", and it must differ from it.",
+		},
+		{
+			Name: EnvTrustedProxies, Group: "Network",
+			Description: "Comma-separated list of IP addresses or CIDR prefixes of the trusted " +
+				"reverse proxies. X-Forwarded-For / X-Real-IP are only honored for requests " +
+				"coming from these addresses. Empty means no proxy is trusted.",
+		},
+		{
+			Name: EnvListenAddr, Group: "Network", Default: DefaultListenAddr,
+			Description: "Address (host:port) the HTTP server listens on inside the container.",
+		},
+		{
+			Name: EnvAdminHosts, Group: "Network",
+			Description: "Comma-separated list of host names from which the administration is " +
+				"reachable. Empty means every tenant host.",
+		},
+		{
+			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,
+			Description: "Address of the clamd daemon: host:port, or unix:/absolute/path for a " +
+				"Unix socket.",
+		},
+		{
+			Name: EnvLogLevel, Group: "Logging", Default: DefaultLogLevel,
+			Description: "Application log level: debug, info, warn or error.",
+		},
+		{
+			Name: EnvMaintenance, Group: "Operations", Default: "false",
+			Description: "Start in maintenance mode (true/false/1/0): new deposits are refused, " +
+				"the health check keeps answering.",
+		},
+		{
+			Name: EnvAPIDocsPublic, Group: "Operations", Default: "false",
+			Description: "Serve the interactive API documentation to anonymous visitors " +
+				"(true/false/1/0). By default it is reserved to authenticated admins.",
+		},
+		{
+			Name: EnvSetupToken, Group: "Operations", Secret: true,
+			Description: "Optional token (16 to 128 characters) required to create the first " +
+				"super admin, protecting the window between deployment and setup. Mutually " +
+				"exclusive with " + EnvSetupTokenFile + ".",
+		},
+		{
+			Name: EnvSetupTokenFile, Group: "Operations",
+			Description: "Path of a file containing the setup token (alternative to " +
+				EnvSetupToken + ").",
+		},
+		{
+			Name: EnvUploadTTL, Group: "Uploads", Default: DefaultUploadTTL,
+			Description: "Time after which an unfinished resumable upload is discarded " +
+				"(Go duration, between 1h and 168h).",
+		},
+		{
+			Name: EnvDepositSessionTTL, Group: "Uploads", Default: DefaultDepositSessionTTL,
+			Description: "Lifetime of a deposit session after e-mail verification " +
+				"(Go duration, between 15m and 24h).",
+		},
+		{
+			Name: EnvDeleteAfterDownloadGrace, Group: "Uploads",
+			Default: DefaultDeleteAfterDownloadGrace,
+			Description: "Grace period before a delete-after-first-download transfer is erased, " +
+				"so that an interrupted download can be resumed (Go duration, between 0s and 24h).",
+		},
+	}
+}
+
+// commentWidth is the line width used to wrap descriptions in .env.example.
+const commentWidth = 78
+
+// WriteEnvExample writes a commented .env.example generated from [Variables].
+// Required variables are written uncommented with their example value; other
+// variables are commented out with their default value.
+func WriteEnvExample(w io.Writer) error {
+	bw := bufio.NewWriter(w)
+	rule := "# " + strings.Repeat("=", commentWidth-2) + "\n"
+	write := func(s string) { _, _ = bw.WriteString(s) } // errors surface in Flush
+	write("# TransTeira configuration (generated from internal/config, do not edit by hand).\n")
+	write("# Copy this file to .env and adjust the values. Durations use Go syntax (15m, 4h, 168h).\n")
+	write("# Tenant-specific settings (branding, SMTP, IP ranges...) live in the database and are\n")
+	write("# managed from the administration, not here.\n")
+	group := ""
+	for _, v := range Variables() {
+		if v.Group != group {
+			group = v.Group
+			write("\n" + rule + "# " + group + "\n" + rule)
+		}
+		write("\n")
+		for _, line := range wrap(v.Description, commentWidth-2) {
+			write("# " + line + "\n")
+		}
+		switch {
+		case v.Required:
+			write("# Required.\n")
+		case v.Default != "":
+			write("# Default: " + v.Default + "\n")
+		}
+		if v.Secret {
+			write("# Secret: never commit a real value.\n")
+		}
+		if v.Required {
+			write(v.Name + "=" + v.Example + "\n")
+		} else {
+			write("# " + v.Name + "=" + v.Default + "\n")
+		}
+	}
+	return bw.Flush()
+}
+
+// wrap splits text into lines of at most width characters, breaking on
+// spaces. Words longer than width are kept whole.
+func wrap(text string, width int) []string {
+	var lines []string
+	line := ""
+	for _, word := range strings.Fields(text) {
+		switch {
+		case line == "":
+			line = word
+		case len(line)+1+len(word) <= width:
+			line += " " + word
+		default:
+			lines = append(lines, line)
+			line = word
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// UnknownVariables returns, sorted, the names of the TT_ variables present in
+// environ (in os.Environ "NAME=value" form) that TransTeira does not know.
+// It helps operators spot typos such as TT_TRUSTED_PROXY.
+func UnknownVariables(environ []string) []string {
+	known := make(map[string]bool)
+	for _, v := range Variables() {
+		known[v.Name] = true
+	}
+	var unknown []string
+	for _, kv := range environ {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, envPrefix) && !known[name] && !slices.Contains(unknown, name) {
+			unknown = append(unknown, name)
+		}
+	}
+	slices.Sort(unknown)
+	return unknown
+}

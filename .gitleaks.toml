@@ -1,0 +1,26 @@
+title = "TransTeira gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "transteira-api-token"
+description = "TransTeira API token"
+regex = '''\btt_[A-Za-z0-9]{40,}\b'''
+keywords = ["tt_"]
+
+# The API specification and the documentation contain fake tokens and passwords in their
+# examples. Only the token-like rules are relaxed there; every other rule still applies.
+[[allowlists]]
+description = "Fake example values in the API specification and documentation"
+targetRules = ["generic-api-key", "transteira-api-token"]
+paths = [
+  '''^api/openapi\.yaml$''',
+  '''^docs/''',
+]
+
+[[allowlists]]
+description = "Test fixtures use fake values"
+paths = [
+  '''(^|/)testdata/''',
+]

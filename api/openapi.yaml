@@ -136,6 +136,7 @@ paths:
                 maintenance: false
                 checks: { database: ok, antivirus: unavailable, storage: ok }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /openapi.yaml:
     servers:
@@ -154,12 +155,14 @@ paths:
               schema: { type: string }
               example: "openapi: 3.1.0\ninfo:\n  title: TransTeira API\n"
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /version:
     get:
       tags: [Meta]
       operationId: getVersion
       summary: Application version
+      description: "Returns the semantic version of the running instance and the API major version, so that clients can check compatibility."
       security: []
       responses:
         '200':
@@ -169,6 +172,7 @@ paths:
               schema: { $ref: '#/components/schemas/VersionInfo' }
               example: { version: 1.0.0, apiVersion: v1, commit: 3f9c2ab }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /tenant:
     get:
@@ -204,6 +208,7 @@ paths:
                 maintenance: false
                 legalDocuments: [legal-notice, privacy-policy]
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /tenant/assets/{asset}:
     get:
@@ -215,6 +220,7 @@ paths:
       parameters:
         - name: asset
           in: path
+          description: "Which image: `logo` or `background`."
           required: true
           schema: { type: string, enum: [logo, background] }
           example: logo
@@ -231,12 +237,14 @@ paths:
           description: Not modified.
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /tenant/legal/{document}:
     get:
       tags: [Meta]
       operationId: getTenantLegalDocument
       summary: Legal notice or privacy policy of the tenant
+      description: "Returns the legal notice or the privacy policy of the current tenant in the negotiated language, falling back to the tenant default language."
       security: []
       parameters:
         - $ref: '#/components/parameters/LegalDocumentPath'
@@ -256,6 +264,7 @@ paths:
                 updatedAt: '2026-10-01T09:00:00Z'
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Deposit sessions
@@ -324,7 +333,8 @@ paths:
         '410': { $ref: '#/components/responses/InvitationGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Maintenance' }
+        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /verification-challenges/{challengeId}/confirm:
     post:
@@ -388,12 +398,14 @@ paths:
                 code: verification-code-invalid
                 attemptsRemaining: 1
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /deposit-sessions/current:
     get:
       tags: [Deposit sessions]
       operationId: getCurrentDepositSession
       summary: Current deposit session
+      description: "Returns the address, depositor kind, limits and CSRF token of the current deposit session. Used by the web interface after a page reload."
       security:
         - depositSession: []
       responses:
@@ -411,10 +423,12 @@ paths:
                 canInvite: true
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Deposit sessions]
       operationId: endDepositSession
       summary: End the deposit session
+      description: "Revokes the deposit session server side and clears the session cookie."
       security:
         - depositSession: []
           csrfToken: []
@@ -424,6 +438,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/CsrfInvalid' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Transfers (sender side)
@@ -439,7 +454,9 @@ paths:
         `uploadUrl` per file. The transfer stays in `uploading` state until
         `POST /transfers/{transferId}/finalize` is called.
 
-        With an API token, the client IP must belong to the token's `allowedCidrs` (otherwise
+        With an API token, the token is authenticated first (an unknown, revoked or expired token
+        always gives `401`, whatever the client IP), then the client IP must belong to the token's
+        `allowedCidrs` (otherwise
         `403 ip-not-allowed`, written to the security log), `senderEmail` is mandatory and must
         belong to one of the tenant's internal domains; no email verification is performed (the
         token is the proof).
@@ -525,8 +542,9 @@ paths:
         '413': { $ref: '#/components/responses/TransferTooLarge' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Maintenance' }
+        '503': { $ref: '#/components/responses/MaintenanceMode' }
         '507': { $ref: '#/components/responses/QuotaExceeded' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /transfers/{transferId}:
     parameters:
@@ -576,6 +594,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Transfers]
       operationId: cancelTransfer
@@ -597,6 +616,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /transfers/{transferId}/finalize:
     parameters:
@@ -678,7 +698,8 @@ paths:
                     code: checksum-mismatch
                     files: [fil_01JABCD9F1A2B3C4D5E6F7G8H9]
         '421': { $ref: '#/components/responses/UnknownTenant' }
-        '503': { $ref: '#/components/responses/Maintenance' }
+        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # tus uploads
@@ -688,6 +709,7 @@ paths:
       tags: [Uploads (tus)]
       operationId: getTusCapabilities
       summary: tus server capabilities
+      description: "Returns the tus protocol version, the supported extensions and the maximum upload size for the current tenant."
       security: []
       responses:
         '204':
@@ -705,6 +727,7 @@ paths:
               schema: { type: integer }
               example: 21474836480
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /uploads/{uploadId}:
     parameters:
@@ -713,6 +736,7 @@ paths:
       tags: [Uploads (tus)]
       operationId: getUploadOffset
       summary: Current offset of an upload (resume)
+      description: "Returns the number of bytes durably stored for an upload, so that an interrupted upload can resume at the right offset."
       security:
         - depositSession: []
         - apiToken: []
@@ -731,6 +755,7 @@ paths:
         '401': { description: Unauthenticated. }
         '404': { description: "Unknown upload, or upload belonging to another session or tenant." }
         '410': { description: Upload expired and purged. }
+        '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Uploads (tus)]
       operationId: appendUploadChunk
@@ -749,6 +774,7 @@ paths:
         - $ref: '#/components/parameters/TusResumableHeader'
         - name: Upload-Offset
           in: header
+          description: "Offset at which the bytes of this request start; must equal the current offset of the upload."
           required: true
           schema: { type: integer, minimum: 0 }
           example: 0
@@ -774,6 +800,7 @@ paths:
         '413': { description: Bytes beyond the declared `Upload-Length`. }
         '415': { description: 'Content-Type is not `application/offset+octet-stream`.' }
         '503': { description: Maintenance mode; retry after `Retry-After`. Uploads already started may be resumed after maintenance. }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Uploads (tus)]
       operationId: terminateUpload
@@ -793,6 +820,7 @@ paths:
         '401': { description: Unauthenticated. }
         '404': { description: Unknown upload. }
         '409': { description: Transfer already finalized. }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Invitations
@@ -837,7 +865,8 @@ paths:
         '403': { $ref: '#/components/responses/DepositForbidden' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Maintenance' }
+        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /invitations/{invitationToken}:
     get:
@@ -862,6 +891,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/InvitationGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Downloads (recipient side)
@@ -921,6 +951,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/TransferGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /downloads/{linkToken}/unlock:
     parameters:
@@ -975,6 +1006,7 @@ paths:
                 status: 429
                 code: transfer-locked
                 retryAfterSeconds: 900
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /downloads/{linkToken}/files/{fileId}:
     parameters:
@@ -1002,6 +1034,7 @@ paths:
       parameters:
         - name: Range
           in: header
+          description: "Optional single byte range (RFC 9110) to resume a download."
           required: false
           schema: { type: string }
           example: bytes=1048576-
@@ -1036,6 +1069,7 @@ paths:
         '410': { $ref: '#/components/responses/TransferGone' }
         '416': { description: Range not satisfiable. }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /downloads/{linkToken}/archive:
     parameters:
@@ -1067,6 +1101,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/TransferGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Admin auth
@@ -1076,6 +1111,7 @@ paths:
       tags: [Admin auth]
       operationId: getSetupStatus
       summary: Is first-run setup required?
+      description: "Tells the web interface whether the first-run setup (creation of the super admin) still has to be done."
       security: []
       responses:
         '200':
@@ -1085,6 +1121,7 @@ paths:
               schema: { $ref: '#/components/schemas/SetupStatus' }
               example: { setupRequired: true }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin auth]
       operationId: createSuperAdmin
@@ -1139,6 +1176,7 @@ paths:
                 status: 409
                 code: setup-already-done
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/auth/login:
     post:
@@ -1168,12 +1206,14 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/auth/totp:
     post:
       tags: [Admin auth]
       operationId: adminVerifyTotp
       summary: Second factor - TOTP code or recovery code
+      description: "Validates the second factor (6-digit TOTP code, or a single-use recovery code) of a pre-authenticated admin session and turns it into a full session. Failures are rate limited and written to the security log."
       security:
         - adminSession: []
           csrfToken: []
@@ -1196,12 +1236,14 @@ paths:
               example: { status: authenticated, csrfToken: csrf_Zx98Yw76Vu54Ts32 }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/auth/logout:
     post:
       tags: [Admin auth]
       operationId: adminLogout
       summary: Log out
+      description: "Revokes the admin session server side and clears the session cookie."
       security:
         - adminSession: []
           csrfToken: []
@@ -1209,12 +1251,14 @@ paths:
         '204':
           description: Session revoked server side and cookie cleared.
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me:
     get:
       tags: [Admin auth]
       operationId: getAdminMe
       summary: Current admin profile
+      description: "Returns the profile of the authenticated admin, their role, the tenants they may manage and the CSRF token for subsequent requests."
       security:
         - adminSession: []
       responses:
@@ -1230,10 +1274,11 @@ paths:
                 role: delegated_admin
                 totpEnabled: true
                 tenants:
-                  - { id: ten_01JAB0000000000000ENTITYA, name: Entity A, fqdn: transfer.entity-a.example.com }
+                  - { id: ten_01JAB00000000000000ENTITYA, name: Entity A, fqdn: transfer.entity-a.example.com }
                 csrfToken: csrf_Zx98Yw76Vu54Ts32
                 language: en
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me/password:
     put:
@@ -1256,12 +1301,14 @@ paths:
         '204': { description: Password changed. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me/totp:
     post:
       tags: [Admin auth]
       operationId: startTotpEnrollment
       summary: Start (or restart) TOTP enrollment
+      description: "Generates a new TOTP secret for the authenticated admin. The secret only becomes active once confirmed with a valid code."
       security:
         - adminSession: []
           csrfToken: []
@@ -1276,6 +1323,7 @@ paths:
                 otpauthUri: otpauth://totp/TransTeira:admin.entity-a?secret=JBSWY3DPEHPK3PXP&issuer=TransTeira
                 qrCodePng: iVBORw0KGgoAAAANSUhEUgAA...
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin auth]
       operationId: disableTotp
@@ -1294,6 +1342,7 @@ paths:
         '204': { description: TOTP disabled. }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me/totp/confirm:
     post:
@@ -1325,6 +1374,7 @@ paths:
                 recoveryCodes: [rc-7KQ2-9XLM-4PZD, rc-2HDF-8WQA-1MNB, rc-5TRE-3ZXC-0LKJ, rc-8YUI-6OPA-2SDF, rc-4GHJ-1KLZ-7XCV, rc-9BNM-5QWE-3RTY, rc-0UIO-2PAS-8DFG, rc-6HJK-4LZX-1CVB]
                 csrfToken: csrf_Zx98Yw76Vu54Ts32
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Admin - tenants
@@ -1348,7 +1398,7 @@ paths:
               schema: { $ref: '#/components/schemas/TenantList' }
               example:
                 items:
-                  - id: ten_01JAB0000000000000ENTITYA
+                  - id: ten_01JAB00000000000000ENTITYA
                     name: Entity A
                     fqdn: transfer.entity-a.example.com
                     defaultLanguage: fr
@@ -1358,10 +1408,12 @@ paths:
                     createdAt: '2026-09-01T08:00:00Z'
                     updatedAt: '2026-10-01T08:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin tenants]
       operationId: createTenant
       summary: Create a tenant (super admin)
+      description: "Creates a tenant with its FQDN, default language and storage quota. Default branding, email templates and legal texts are provisioned. Reserved to the super admin."
       security:
         - adminSession: []
           csrfToken: []
@@ -1383,7 +1435,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB0000000000000ENTITYB
+                id: ten_01JAB00000000000000ENTITYB
                 name: Entity B
                 fqdn: transfer.entity-b.example.com
                 defaultLanguage: en
@@ -1396,6 +1448,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}:
     parameters:
@@ -1404,6 +1457,7 @@ paths:
       tags: [Admin tenants]
       operationId: getTenant
       summary: Tenant general settings
+      description: "Returns the general settings of a tenant within the admin scope, including quota usage."
       security:
         - adminSession: []
       responses:
@@ -1413,7 +1467,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB0000000000000ENTITYA
+                id: ten_01JAB00000000000000ENTITYA
                 name: Entity A
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: fr
@@ -1424,6 +1478,7 @@ paths:
                 updatedAt: '2026-10-01T08:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Admin tenants]
       operationId: updateTenant
@@ -1448,7 +1503,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB0000000000000ENTITYA
+                id: ten_01JAB00000000000000ENTITYA
                 name: Entity A
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: en
@@ -1462,6 +1517,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin tenants]
       operationId: deleteTenant
@@ -1486,6 +1542,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/branding:
     parameters:
@@ -1494,6 +1551,7 @@ paths:
       tags: [Admin tenants]
       operationId: getBranding
       summary: Branding (colours, images)
+      description: "Returns the colours of the tenant, whether custom images are configured, and the RGAA contrast diagnostics of the colours."
       security:
         - adminSession: []
       responses:
@@ -1512,6 +1570,7 @@ paths:
                   - { pair: accent-on-light, ratio: 4.6, level: AA }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: updateBranding
@@ -1546,12 +1605,14 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/branding/{asset}:
     parameters:
       - $ref: '#/components/parameters/TenantId'
       - name: asset
         in: path
+        description: "Which image: `logo` or `background`."
         required: true
         schema: { type: string, enum: [logo, background] }
         example: background
@@ -1569,9 +1630,9 @@ paths:
       requestBody:
         required: true
         content:
-          image/png: { schema: { type: string, format: binary }, example: "<binary data>" }
-          image/jpeg: { schema: { type: string, format: binary }, example: "<binary data>" }
-          image/webp: { schema: { type: string, format: binary }, example: "<binary data>" }
+          image/*:
+            schema: { type: string, format: binary, description: "PNG, JPEG or WebP; the format is detected from the content." }
+            example: "<binary data>"
       responses:
         '204': { description: Image stored. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
@@ -1579,10 +1640,12 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin tenants]
       operationId: deleteBrandingAsset
       summary: Revert to the default image
+      description: "Removes the custom logo or background image; the default image is served again."
       security:
         - adminSession: []
           csrfToken: []
@@ -1590,6 +1653,7 @@ paths:
         '204': { description: Image removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/network:
     parameters:
@@ -1598,6 +1662,7 @@ paths:
       tags: [Admin tenants]
       operationId: getNetworkRules
       summary: Internal IP ranges and email domains
+      description: "Returns the internal IP ranges and internal email domains that define an internal user of the tenant."
       security:
         - adminSession: []
       responses:
@@ -1611,10 +1676,12 @@ paths:
                 internalDomains: [entity-a.example.com, corp.entity-a.example.com]
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: updateNetworkRules
       summary: Replace internal IP ranges and email domains
+      description: "Replaces the internal IP ranges (IPv4 or IPv6 CIDR) and internal email domains of the tenant. Values are validated and normalised; the change is audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -1638,6 +1705,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/smtp:
     parameters:
@@ -1665,14 +1733,20 @@ paths:
                 fromName: Entity A Transfer
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: updateSmtpSettings
       summary: Replace SMTP settings
       description: |
         Authentication is optional (unauthenticated relay on the internal Docker network is
-        supported). Omit `password` to keep the stored one; send `null` to remove it. The
+        supported). Omit `password` to keep the stored one; set `removePassword` to remove it. The
         password is encrypted at rest with the master key.
+
+        To prevent a stored password from being sent to another server, `password` (or
+        `removePassword`) is mandatory whenever `host`, `port` or `username` differs from the stored
+        settings; otherwise the request is refused with `400 validation-failed`. Sending both
+        `password` and `removePassword` is also refused.
       security:
         - adminSession: []
           csrfToken: []
@@ -1705,6 +1779,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/smtp/test:
     parameters:
@@ -1713,6 +1788,7 @@ paths:
       tags: [Admin tenants]
       operationId: testSmtp
       summary: Send a test email
+      description: "Sends a test email through the tenant SMTP settings and reports the result of the SMTP dialogue. Rate limited."
       security:
         - adminSession: []
           csrfToken: []
@@ -1734,6 +1810,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/smtp/dns-check:
     parameters:
@@ -1748,6 +1825,7 @@ paths:
       parameters:
         - name: dkimSelector
           in: query
+          description: "DKIM selectors to probe (they cannot be discovered from DNS)."
           required: false
           schema: { type: array, items: { type: string, maxLength: 63 }, maxItems: 5 }
           example: [selector1, selector2]
@@ -1764,6 +1842,7 @@ paths:
                 dmarc: { status: warning, record: 'v=DMARC1; p=none', message: Policy is p=none. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/email-templates:
     parameters:
@@ -1772,6 +1851,7 @@ paths:
       tags: [Admin tenants]
       operationId: listEmailTemplates
       summary: List email templates and whether they are customised
+      description: "Lists every email template key and language, and whether the tenant customised it."
       security:
         - adminSession: []
       responses:
@@ -1787,6 +1867,7 @@ paths:
                 - { key: transfer-notification, language: fr, customised: true, updatedAt: '2026-10-02T10:00:00Z' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/email-templates/{templateKey}/{language}:
     parameters:
@@ -1797,6 +1878,7 @@ paths:
       tags: [Admin tenants]
       operationId: getEmailTemplate
       summary: Get a template (customised or default)
+      description: "Returns the customised template, or the default one, with the variables available for this template."
       security:
         - adminSession: []
       responses:
@@ -1815,6 +1897,7 @@ paths:
                 variables: [SenderEmail, Message, FileCount, Files, DownloadURL, ExpiresAt, PasswordProtected, TenantName]
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: updateEmailTemplate
@@ -1853,10 +1936,12 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin tenants]
       operationId: resetEmailTemplate
       summary: Revert to the default template
+      description: "Deletes the tenant customisation of a template; the default template is used again."
       security:
         - adminSession: []
           csrfToken: []
@@ -1864,6 +1949,7 @@ paths:
         '204': { description: Customisation removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/email-templates/{templateKey}/{language}/preview:
     parameters:
@@ -1900,6 +1986,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/legal/{document}/{language}:
     parameters:
@@ -1910,6 +1997,7 @@ paths:
       tags: [Admin tenants]
       operationId: getLegalDocumentAdmin
       summary: Get a legal text
+      description: "Returns the Markdown source of a legal text of the tenant in one language."
       security:
         - adminSession: []
       responses:
@@ -1925,10 +2013,12 @@ paths:
                 updatedAt: '2026-10-01T09:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: updateLegalDocument
       summary: Replace a legal text (Markdown, rendered without raw HTML)
+      description: "Replaces a legal text of the tenant. Markdown is rendered without raw HTML."
       security:
         - adminSession: []
           csrfToken: []
@@ -1952,6 +2042,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Admin - operations of a tenant
@@ -1963,11 +2054,13 @@ paths:
       tags: [Admin operations]
       operationId: listTenantTransfers
       summary: List transfers of the tenant
+      description: "Lists the transfers of the tenant, most recent first, with filters on status, address and creation date. Metadata only."
       security:
         - adminSession: []
       parameters:
         - name: status
           in: query
+          description: "Filter by status."
           schema: { $ref: '#/components/schemas/TransferStatus' }
           example: available
         - name: email
@@ -1977,6 +2070,7 @@ paths:
           example: alice@entity-a.example.com
         - name: createdAfter
           in: query
+          description: "Only items created after this instant."
           schema: { type: string, format: date-time }
           example: '2026-10-01T00:00:00Z'
         - $ref: '#/components/parameters/Limit'
@@ -2005,6 +2099,7 @@ paths:
                 nextCursor: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/transfers/{transferId}:
     parameters:
@@ -2014,6 +2109,7 @@ paths:
       tags: [Admin operations]
       operationId: getTenantTransfer
       summary: Transfer details (metadata only, never content)
+      description: "Returns the metadata of a transfer, its files, SHA-256 fingerprints and antivirus results. File contents are never accessible to admins."
       security:
         - adminSession: []
       responses:
@@ -2046,6 +2142,7 @@ paths:
                     scanStatus: clean
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin operations]
       operationId: deleteTenantTransfer
@@ -2064,6 +2161,7 @@ paths:
         '204': { description: Transfer deleted. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/transfers/{transferId}/resend:
     parameters:
@@ -2073,6 +2171,7 @@ paths:
       tags: [Admin operations]
       operationId: resendTransferNotification
       summary: Resend the notification email to recipients
+      description: "Queues the notification email again for all or some of the original recipients of an available transfer. Audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2088,6 +2187,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/invitations:
     parameters:
@@ -2096,11 +2196,13 @@ paths:
       tags: [Admin operations]
       operationId: listTenantInvitations
       summary: List invitations with their issuer
+      description: "Lists the invitations of the tenant with their issuer and status."
       security:
         - adminSession: []
       parameters:
         - name: status
           in: query
+          description: "Filter by status."
           schema: { $ref: '#/components/schemas/InvitationStatus' }
           example: pending
         - $ref: '#/components/parameters/Limit'
@@ -2121,12 +2223,14 @@ paths:
                     expiresAt: '2027-10-19T16:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/invitations/{invitationId}:
     parameters:
       - $ref: '#/components/parameters/TenantId'
       - name: invitationId
         in: path
+        description: "Invitation identifier."
         required: true
         schema: { type: string, pattern: '^inv_[0-9A-Z]{26}$' }
         example: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
@@ -2134,6 +2238,7 @@ paths:
       tags: [Admin operations]
       operationId: revokeInvitation
       summary: Revoke an invitation
+      description: "Revokes a pending invitation; its link stops working immediately. Audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2141,6 +2246,7 @@ paths:
         '204': { description: Invitation revoked. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/blocklist:
     parameters:
@@ -2149,11 +2255,13 @@ paths:
       tags: [Admin operations]
       operationId: listBlocklist
       summary: List blocklist entries
+      description: "Lists the blocklist entries of the tenant (email addresses, domains and SHA-256 fingerprints)."
       security:
         - adminSession: []
       parameters:
         - name: kind
           in: query
+          description: "Filter by entry kind."
           schema: { $ref: '#/components/schemas/BlocklistKind' }
           example: domain
         - $ref: '#/components/parameters/Limit'
@@ -2170,10 +2278,12 @@ paths:
                   - { id: blk_01JABCH3K4L5M6N7P8Q9R0S1T2, kind: sha256, value: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f, comment: Known malware sample, createdBy: admin.entity-a, createdAt: '2026-10-11T08:00:00Z' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin operations]
       operationId: createBlocklistEntry
       summary: Add a blocklist entry
+      description: "Adds an email address, a domain or a SHA-256 fingerprint to the tenant blocklist. Values are normalised to lower case; the change is audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2194,12 +2304,14 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/blocklist/{entryId}:
     parameters:
       - $ref: '#/components/parameters/TenantId'
       - name: entryId
         in: path
+        description: "Blocklist entry identifier."
         required: true
         schema: { type: string, pattern: '^blk_[0-9A-Z]{26}$' }
         example: blk_01JABCH4L5M6N7P8Q9R0S1T2U3
@@ -2207,6 +2319,7 @@ paths:
       tags: [Admin operations]
       operationId: deleteBlocklistEntry
       summary: Remove a blocklist entry
+      description: "Removes an entry from the tenant blocklist. Audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2214,6 +2327,7 @@ paths:
         '204': { description: Entry removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/api-tokens:
     parameters:
@@ -2222,6 +2336,7 @@ paths:
       tags: [Admin operations]
       operationId: listApiTokens
       summary: List API tokens (never the secret)
+      description: "Lists the API tokens of the tenant with their allowed IP ranges and usage dates. Secrets are never returned."
       security:
         - adminSession: []
       responses:
@@ -2244,6 +2359,7 @@ paths:
                   revokedAt: null
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin operations]
       operationId: createApiToken
@@ -2287,12 +2403,14 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/api-tokens/{tokenId}:
     parameters:
       - $ref: '#/components/parameters/TenantId'
       - name: tokenId
         in: path
+        description: "API token identifier."
         required: true
         schema: { type: string, pattern: '^tok_[0-9A-Z]{26}$' }
         example: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
@@ -2300,6 +2418,7 @@ paths:
       tags: [Admin operations]
       operationId: updateApiToken
       summary: Rename a token or change its allowed IP ranges
+      description: "Renames an API token or replaces its allowed IP ranges. A revoked token cannot be modified. Audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2329,10 +2448,12 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin operations]
       operationId: revokeApiToken
       summary: Revoke an API token (immediate)
+      description: "Revokes an API token; subsequent calls with it are refused immediately. Audited."
       security:
         - adminSession: []
           csrfToken: []
@@ -2340,6 +2461,7 @@ paths:
         '204': { description: Token revoked. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/audit-events:
     parameters:
@@ -2348,23 +2470,28 @@ paths:
       tags: [Admin operations]
       operationId: listTenantAuditEvents
       summary: Audit log of the tenant (12-month retention)
+      description: "Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period."
       security:
         - adminSession: []
       parameters:
         - name: action
           in: query
+          description: "Filter by audit action."
           schema: { $ref: '#/components/schemas/AuditAction' }
           example: transfer.deleted
         - name: actor
           in: query
+          description: "Filter by actor (email address or admin username)."
           schema: { type: string, maxLength: 320 }
           example: alice@entity-a.example.com
         - name: from
           in: query
+          description: "Start of the period (inclusive)."
           schema: { type: string, format: date-time }
           example: '2026-10-01T00:00:00Z'
         - name: to
           in: query
+          description: "End of the period (inclusive)."
           schema: { type: string, format: date-time }
           example: '2026-10-19T23:59:59Z'
         - $ref: '#/components/parameters/Limit'
@@ -2379,7 +2506,7 @@ paths:
                 items:
                   - id: aud_01JABCK6N7P8Q9R0S1T2U3V4W5
                     occurredAt: '2026-10-19T16:20:00Z'
-                    tenantId: ten_01JAB0000000000000ENTITYA
+                    tenantId: ten_01JAB00000000000000ENTITYA
                     actor: { kind: depositor, id: alice@entity-a.example.com }
                     ip: 10.10.4.21
                     action: transfer.finalized
@@ -2387,6 +2514,7 @@ paths:
                     details: { fileCount: 2, totalBytes: 12900630528 }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/stats:
     parameters:
@@ -2395,11 +2523,13 @@ paths:
       tags: [Admin operations]
       operationId: getTenantStats
       summary: Tenant dashboard statistics
+      description: "Returns the dashboard statistics of the tenant for a period: volumes, transfers, downloads, antivirus detections and quota usage."
       security:
         - adminSession: []
       parameters:
         - name: period
           in: query
+          description: "Statistics period: last 7 days, 30 days or 12 months."
           schema: { type: string, enum: [7d, 30d, 12m], default: 30d }
           example: 30d
       responses:
@@ -2423,6 +2553,7 @@ paths:
                   - { date: '2026-10-19', transfers: 9, bytesUploaded: 32212254720 }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/data-subjects/search:
     parameters:
@@ -2458,6 +2589,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/data-subjects/erase:
     parameters:
@@ -2495,6 +2627,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
   # Admin - system (super admin)
@@ -2504,6 +2637,7 @@ paths:
       tags: [Admin system]
       operationId: listAdmins
       summary: List admin accounts (super admin)
+      description: "Lists every admin account with role, tenant assignments and TOTP status. Reserved to the super admin."
       security:
         - adminSession: []
       parameters:
@@ -2521,13 +2655,14 @@ paths:
                     username: admin.entity-a
                     email: admin@entity-a.example.com
                     role: delegated_admin
-                    tenantIds: [ten_01JAB0000000000000ENTITYA]
+                    tenantIds: [ten_01JAB00000000000000ENTITYA]
                     totpEnabled: true
                     disabled: false
                     lastLoginAt: '2026-10-19T08:30:00Z'
                     createdAt: '2026-09-01T08:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin system]
       operationId: createAdmin
@@ -2547,7 +2682,7 @@ paths:
               username: admin.entity-b
               email: admin@entity-b.example.com
               role: delegated_admin
-              tenantIds: [ten_01JAB0000000000000ENTITYB]
+              tenantIds: [ten_01JAB00000000000000ENTITYB]
               requireTotp: true
       responses:
         '201':
@@ -2560,7 +2695,7 @@ paths:
                 username: admin.entity-b
                 email: admin@entity-b.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB0000000000000ENTITYB]
+                tenantIds: [ten_01JAB00000000000000ENTITYB]
                 totpEnabled: false
                 requireTotp: true
                 disabled: false
@@ -2570,6 +2705,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/admins/{adminId}:
     parameters:
@@ -2578,6 +2714,7 @@ paths:
       tags: [Admin system]
       operationId: getAdmin
       summary: Get an admin account (super admin)
+      description: "Returns one admin account. Reserved to the super admin."
       security:
         - adminSession: []
       responses:
@@ -2591,7 +2728,7 @@ paths:
                 username: admin.entity-a
                 email: admin@entity-a.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB0000000000000ENTITYA]
+                tenantIds: [ten_01JAB00000000000000ENTITYA]
                 totpEnabled: true
                 requireTotp: true
                 disabled: false
@@ -2600,6 +2737,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Admin system]
       operationId: updateAdmin
@@ -2613,7 +2751,7 @@ paths:
         content:
           application/merge-patch+json:
             schema: { $ref: '#/components/schemas/AdminUpdate' }
-            example: { tenantIds: [ten_01JAB0000000000000ENTITYA, ten_01JAB0000000000000ENTITYB] }
+            example: { tenantIds: [ten_01JAB00000000000000ENTITYA, ten_01JAB00000000000000ENTITYB] }
       responses:
         '200':
           description: Updated admin.
@@ -2625,7 +2763,7 @@ paths:
                 username: admin.entity-a
                 email: admin@entity-a.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB0000000000000ENTITYA, ten_01JAB0000000000000ENTITYB]
+                tenantIds: [ten_01JAB00000000000000ENTITYA, ten_01JAB00000000000000ENTITYB]
                 totpEnabled: true
                 requireTotp: true
                 disabled: false
@@ -2635,6 +2773,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin system]
       operationId: deleteAdmin
@@ -2649,6 +2788,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/admins/{adminId}/reset-credentials:
     parameters:
@@ -2666,6 +2806,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/activation:
     post:
@@ -2692,17 +2833,20 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/stats:
     get:
       tags: [Admin system]
       operationId: getGlobalStats
       summary: Global dashboard (super admin)
+      description: "Returns the disk usage of the instance and the statistics of every tenant. Reserved to the super admin."
       security:
         - adminSession: []
       parameters:
         - name: period
           in: query
+          description: "Statistics period: last 7 days, 30 days or 12 months."
           schema: { type: string, enum: [7d, 30d, 12m], default: 30d }
           example: 30d
       responses:
@@ -2715,7 +2859,7 @@ paths:
                 period: 30d
                 disk: { totalBytes: 4398046511104, usedBytes: 1319413953331, usedRatio: 0.30, alertThreshold: 0.85 }
                 tenants:
-                  - tenantId: ten_01JAB0000000000000ENTITYA
+                  - tenantId: ten_01JAB00000000000000ENTITYA
                     name: Entity A
                     transferCount: 412
                     bytesUploaded: 1932735283200
@@ -2724,12 +2868,14 @@ paths:
                     storageUsedRatio: 0.25
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/settings:
     get:
       tags: [Admin system]
       operationId: getSystemSettings
       summary: Instance settings editable at runtime (super admin)
+      description: "Returns the instance settings that can be changed at runtime, such as the disk alert threshold. Reserved to the super admin."
       security:
         - adminSession: []
       responses:
@@ -2741,10 +2887,12 @@ paths:
               example: { diskAlertThreshold: 0.85, alertEmail: it-admin@example.com }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Admin system]
       operationId: updateSystemSettings
       summary: Update instance settings (super admin)
+      description: "Updates the instance settings that can be changed at runtime. JSON Merge Patch semantics; audited. Reserved to the super admin."
       security:
         - adminSession: []
           csrfToken: []
@@ -2764,12 +2912,14 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/maintenance:
     get:
       tags: [Admin system]
       operationId: getMaintenance
       summary: Maintenance mode state
+      description: "Returns whether maintenance mode is enabled, by whom (environment or admin) and the displayed messages."
       security:
         - adminSession: []
       responses:
@@ -2780,6 +2930,7 @@ paths:
               schema: { $ref: '#/components/schemas/Maintenance' }
               example: { enabled: false, source: none }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin system]
       operationId: setMaintenance
@@ -2808,6 +2959,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/master-key/rotations:
     post:
@@ -2854,17 +3006,20 @@ paths:
                 title: New master key not configured
                 status: 409
                 code: new-master-key-missing
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/master-key/rotations/{rotationId}:
     get:
       tags: [Admin system]
       operationId: getMasterKeyRotation
       summary: Progress of a master key rotation
+      description: "Returns the progress of a master key rotation. Reserved to the super admin."
       security:
         - adminSession: []
       parameters:
         - name: rotationId
           in: path
+          description: "Master key rotation identifier."
           required: true
           schema: { type: string, pattern: '^rot_[0-9A-Z]{26}$' }
           example: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
@@ -2886,6 +3041,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/audit-events:
     get:
@@ -2898,10 +3054,12 @@ paths:
       parameters:
         - name: tenantId
           in: query
+          description: "Filter by tenant."
           schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
-          example: ten_01JAB0000000000000ENTITYA
+          example: ten_01JAB00000000000000ENTITYA
         - name: action
           in: query
+          description: "Filter by audit action."
           schema: { $ref: '#/components/schemas/AuditAction' }
           example: maintenance.enabled
         - $ref: '#/components/parameters/Limit'
@@ -2923,6 +3081,7 @@ paths:
                     object: { kind: system, id: maintenance }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
 components:
   securitySchemes:
@@ -2956,6 +3115,7 @@ components:
     AcceptLanguage:
       name: Accept-Language
       in: header
+      description: "Preferred languages of the client (RFC 9110); falls back to the tenant default language."
       required: false
       schema: { type: string }
       example: fr-FR,fr;q=0.9,en;q=0.8
@@ -2969,30 +3129,35 @@ components:
     TusResumableHeader:
       name: Tus-Resumable
       in: header
+      description: "tus protocol version used by the client."
       required: true
       schema: { type: string, enum: ['1.0.0'] }
       example: 1.0.0
     ChallengeId:
       name: challengeId
       in: path
+      description: "Verification challenge identifier returned by `startDepositSession`."
       required: true
       schema: { type: string, pattern: '^vch_[A-Za-z0-9]{16,32}$' }
       example: vch_4Fq9Lm2Zx8Rt6Yb1
     TransferId:
       name: transferId
       in: path
+      description: "Transfer identifier."
       required: true
       schema: { type: string, pattern: '^trf_[0-9A-Z]{26}$' }
       example: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
     FileId:
       name: fileId
       in: path
+      description: "File identifier within the transfer."
       required: true
       schema: { type: string, pattern: '^fil_[0-9A-Z]{26}$' }
       example: fil_01JABCD9F1A2B3C4D5E6F7G8H9
     UploadId:
       name: uploadId
       in: path
+      description: "tus upload identifier, part of the `uploadUrl` returned at transfer creation."
       required: true
       schema: { type: string, pattern: '^upl_[A-Za-z0-9]{24,43}$' }
       example: upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd
@@ -3006,6 +3171,7 @@ components:
     InvitationToken:
       name: invitationToken
       in: path
+      description: "Unguessable invitation token from the invitation link."
       required: true
       schema: { type: string, pattern: '^inv_[A-Za-z0-9]{22,43}$' }
       example: inv_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
@@ -3015,40 +3181,46 @@ components:
       required: true
       description: Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
       schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
-      example: ten_01JAB0000000000000ENTITYA
+      example: ten_01JAB00000000000000ENTITYA
     AdminId:
       name: adminId
       in: path
+      description: "Admin account identifier."
       required: true
       schema: { type: string, pattern: '^adm_[0-9A-Z]{26}$' }
       example: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
     TemplateKey:
       name: templateKey
       in: path
+      description: "Email template key."
       required: true
       schema: { $ref: '#/components/schemas/EmailTemplateKey' }
       example: transfer-notification
     LanguagePath:
       name: language
       in: path
+      description: "Language of the template or text."
       required: true
       schema: { $ref: '#/components/schemas/Language' }
       example: fr
     LegalDocumentPath:
       name: document
       in: path
+      description: "Legal document: legal notice or privacy policy."
       required: true
       schema: { type: string, enum: [legal-notice, privacy-policy] }
       example: privacy-policy
     Limit:
       name: limit
       in: query
+      description: "Maximum number of items per page."
       required: false
       schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       example: 50
     Cursor:
       name: cursor
       in: query
+      description: "Opaque cursor returned as `nextCursor` by the previous page."
       required: false
       schema: { type: string, maxLength: 512 }
       example: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
@@ -3149,19 +3321,35 @@ components:
             code: csrf-invalid
     DepositForbidden:
       description: |
-        Deposit not allowed: client outside internal IP ranges (`ip-not-allowed`), email domain not
-        internal (`domain-not-allowed`), address or domain blocklisted (`blocked-sender`), external
-        user trying to invite (`invitation-not-allowed`), or CSRF failure. Written to the security log.
-        The message is deliberately generic and identical for IP and domain refusals.
+        Deposit not allowed. For public deposits the code is always the generic
+        `deposit-not-allowed`, whatever the reason (client outside internal IP ranges, email domain
+        not internal, address or domain blocklisted), so that the response does not reveal which
+        check failed; the precise reason is written to the security log. Other codes:
+        `ip-not-allowed` (API token used outside its `allowedCidrs`, visible to the token owner only)
+        and `invitation-not-allowed` (external depositor trying to invite).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
-          example:
-            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
-            title: Deposit not allowed
-            status: 403
-            code: deposit-not-allowed
-            detail: Deposits are only possible from the internal network with an internal address, or with an invitation.
+          examples:
+            depositNotAllowed:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
+                title: Deposit not allowed
+                status: 403
+                code: deposit-not-allowed
+                detail: Deposits are only possible from the internal network with an internal address, or with an invitation.
+            ipNotAllowed:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+                title: Address not allowed for this token
+                status: 403
+                code: ip-not-allowed
+            invitationNotAllowed:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invitation-not-allowed
+                title: Invitations are reserved to internal users
+                status: 403
+                code: invitation-not-allowed
     InvitationGone:
       description: Invitation expired, revoked or already used.
       content:
@@ -3278,7 +3466,7 @@ components:
             status: 429
             code: rate-limited
             retryAfterSeconds: 1800
-    Maintenance:
+    MaintenanceMode:
       description: Maintenance mode; deposits are temporarily refused.
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
@@ -3291,6 +3479,17 @@ components:
             status: 503
             code: maintenance
             detail: Upgrade in progress, back around 8 pm.
+    InternalError:
+      description: Unexpected server error. The response never contains internal details; the `instance` identifier allows correlation with the server logs.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#internal-error
+            title: Internal error
+            status: 500
+            code: internal-error
+            instance: req_01JABCP0S1T2U3V4W5X6Y7Z8A9
     UnknownTenant:
       description: The `Host` header does not match any tenant. Written to the security log.
       content:
@@ -3342,8 +3541,6 @@ components:
         - csrf-invalid
         - deposit-not-allowed
         - ip-not-allowed
-        - domain-not-allowed
-        - blocked-sender
         - blocked-file
         - invitation-not-allowed
         - invitation-gone
@@ -3385,7 +3582,7 @@ components:
       type: integer
       format: int64
       minimum: 0
-    Cursor:
+    PageCursor:
       type: string
       description: Opaque cursor for the next page; absent on the last page.
 
@@ -3625,7 +3822,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Invitation' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     PublicInvitation:
       type: object
       required: [email, invitedBy, expiresAt]
@@ -3797,7 +3994,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Admin' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     AdminCreate:
       type: object
       required: [username, email, role]
@@ -3843,7 +4040,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Tenant' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     TenantCreate:
       type: object
       required: [name, fqdn, defaultLanguage, storageQuotaBytes]
@@ -3926,10 +4123,13 @@ components:
         port: { type: integer, minimum: 1, maximum: 65535 }
         security: { $ref: '#/components/schemas/SmtpSecurity' }
         username: { type: [string, 'null'], maxLength: 320 }
-        password: { type: [string, 'null'], maxLength: 1024, description: "Omit to keep, `null` to remove." }
+        password: { type: string, minLength: 1, maxLength: 1024, description: "New password. Omit to keep the stored one." }
+        removePassword: { type: boolean, default: false, description: "Remove the stored password (unauthenticated relay). Cannot be combined with `password`." }
         fromAddress: { $ref: '#/components/schemas/Email' }
         fromName: { type: [string, 'null'], maxLength: 100 }
       additionalProperties: false
+      not:
+        required: [password, removePassword]
     SmtpTest:
       type: object
       required: [to]
@@ -4074,7 +4274,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminTransfer' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     AdminReason:
       type: object
       properties:
@@ -4114,7 +4314,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/BlocklistEntry' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     AllowedCidrs:
       type: array
       minItems: 1
@@ -4220,7 +4420,7 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
-        nextCursor: { $ref: '#/components/schemas/Cursor' }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
     TenantStats:
       type: object
       required: [period, transferCount, bytesUploaded, downloadCount, bytesDownloaded, virusDetections, storageUsedBytes, storageQuotaBytes, storageUsedRatio, series]

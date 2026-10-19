@@ -1,0 +1,11 @@
+# oapi-codegen configuration: types and strict server interface generated from openapi.yaml.
+# Run `make generate` after editing the specification; never edit internal/api/gen by hand.
+package: gen
+output: ../internal/api/gen/gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+  embedded-spec: false
+output-options:
+  skip-prune: true

@@ -1,0 +1,50 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
+*.p12
+master.key*
+*master_key*
+gitleaks-report*
+
+# Runtime data (never commit uploaded files, databases, backups or logs)
+/data/
+/var/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+backups/
+*.log
+logs/
+
+# Build and test artefacts
+/bin/
+/dist/
+coverage.out
+.gencheck.*
+coverage.html
+*.test
+*.prof
+web/dist/
+web/node_modules/
+test/e2e/node_modules/
+test/e2e/test-results/
+test/e2e/playwright-report/
+
+# Go fuzzing cache stays local; committed regression inputs live in testdata/fuzz
+/fuzz/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
