@@ -1,0 +1,4338 @@
+openapi: 3.1.0
+
+info:
+  title: TransTeira API
+  version: 1.0.0-draft.1
+  summary: Multi-tenant, self-hosted large file transfer.
+  description: |
+    TransTeira is a self-hosted, multi-tenant file transfer service (WeTransfer-like)
+    designed for organisations with several entities (tenants).
+
+    ## Tenant resolution
+    Every request is bound to exactly **one tenant**, resolved from the `Host` header
+    (for example `transfer.entity-a.example.com`). There is no tenant identifier in public
+    URLs. A request for an unknown host is rejected with `421 Misdirected Request`
+    (problem code `unknown-tenant`) and recorded in the security log.
+
+    Administration endpoints are an exception: an admin may manage several tenants, so the
+    tenant is given explicitly in the path (`/admin/tenants/{tenantId}/...`) and checked
+    against the admin's assignments. The host used to reach the admin space is still
+    validated (see `TT_ADMIN_HOSTS` in `.env.example`).
+
+    ## Authentication
+    | Scheme | Used by | Transport |
+    |---|---|---|
+    | `depositSession` | Depositors (internal users, invited externals) after email verification | Cookie `__Host-tt_deposit` |
+    | `adminSession` | Super admin and delegated admins after password + TOTP | Cookie `__Host-tt_admin` |
+    | `csrfToken` | Required with any cookie-based scheme on unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) | Header `X-CSRF-Token` |
+    | `apiToken` | Automated deposits by scripts and third-party software | `Authorization: Bearer tt_...` |
+    | `downloadGrant` | Recipients who unlocked a password-protected transfer | Cookie `__Host-tt_dl` |
+
+    Only strictly technical cookies are used (`Secure`, `HttpOnly`, `SameSite=Strict`).
+
+    ## Errors
+    All errors use **RFC 9457 Problem Details** (`application/problem+json`). Each problem carries
+    a stable machine-readable `code` extension member; the full catalogue is documented in
+    `docs/api/errors.md` and in the `ProblemCode` schema below. Clients must rely on `code`,
+    never on `title` or `detail`, which are localised.
+
+    ## Large uploads (tus)
+    File content is uploaded with the [tus 1.0.0](https://tus.io/protocols/resumable-upload)
+    resumable upload protocol. Creating a transfer (`POST /transfers`) pre-creates one tus upload
+    resource per declared file and returns its `uploadUrl`; clients then use `HEAD` and `PATCH`
+    on that URL. Supported tus extensions: `expiration`, `termination`.
+    The tus `creation` extension is intentionally not exposed: uploads are always attached to a
+    transfer whose limits and quota have been checked beforehand.
+
+    ## Pagination
+    List endpoints use opaque cursors: `?limit=50&cursor=...`; responses contain `items` and
+    `nextCursor` (absent on the last page).
+
+    ## Versioning
+    The API is versioned in the URL (`/api/v1`). No incompatible change is made within a major
+    version: fields may be added, never removed or retyped. Enumerations marked
+    `x-extensible-enum` may gain new values; clients must tolerate unknown values.
+
+    ## Roadmap reservations (not part of V1)
+    The following path prefixes and fields are **reserved** so that later versions do not
+    require a breaking change:
+    - V1.1: `/me/transfers` ("My transfers"), `/downloads/{linkToken}/reply`,
+      `/downloads/{linkToken}/abuse-reports`, `/admin/tenants/{tenantId}/webhooks`,
+      `/admin/tenants/{tenantId}/abuse-thresholds`, `/admin/tenants/{tenantId}/confidentiality-levels`,
+      `/admin/tenants/{tenantId}/recipient-rules`, `/status`, `/metrics`;
+      transfer fields `maxDownloads`, `recipientVerification`, `confidentialityLevel`, file field `path`.
+    - V2: `/admin/auth/oidc/*`, `/admin/tenants/{tenantId}/sso`, `/admin/tenants/{tenantId}/drop-links`,
+      `/admin/tenants/{tenantId}/export`, `/admin/tenants/import`, `/transfers/{transferId}/proof`;
+      admin role `auditor`; transfer fields `linkOnly`, `endToEndEncrypted`.
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+  contact:
+    name: TransTeira project
+    url: https://github.com/ed-fr/transteira
+
+servers:
+  - url: /api/v1
+    description: Same origin as the tenant FQDN (for example https://transfer.entity-a.example.com/api/v1)
+
+tags:
+  - name: Meta
+    description: Version, health and public tenant information.
+  - name: Deposit sessions
+    description: Identification of depositors by email address and one-time verification code.
+  - name: Transfers
+    description: Creation and follow-up of transfers by their sender (session or API token).
+  - name: Uploads (tus)
+    description: Resumable upload of file content with the tus 1.0.0 protocol.
+  - name: Invitations
+    description: Invitations issued by internal users so that externals can deposit files.
+  - name: Downloads
+    description: Public download pages for recipients.
+  - name: Admin auth
+    description: First-run setup, login with TOTP, own account management.
+  - name: Admin tenants
+    description: Tenant creation (super admin) and configuration (super admin and delegated admins).
+  - name: Admin operations
+    description: Transfers, invitations, blocklist, API tokens, audit, statistics and GDPR requests of a tenant.
+  - name: Admin system
+    description: Instance-wide operations reserved to the super admin.
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Meta
+  # ---------------------------------------------------------------------------
+  /healthz:
+    servers:
+      - url: /
+    get:
+      tags: [Meta]
+      operationId: getHealth
+      summary: Health check
+      description: |
+        Checks the application, the database and ClamAV availability. Answers even in
+        maintenance mode. Does not require a known tenant host, so that it can be probed
+        directly on the container (Uptime Kuma, Docker healthcheck). Never exposes secrets
+        or tenant data.
+      security: []
+      responses:
+        '200':
+          description: All components are healthy.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+              example:
+                status: ok
+                version: 1.0.0
+                maintenance: false
+                checks: { database: ok, antivirus: ok, storage: ok }
+        '503':
+          description: At least one component is unhealthy.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+              example:
+                status: degraded
+                version: 1.0.0
+                maintenance: false
+                checks: { database: ok, antivirus: unavailable, storage: ok }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /openapi.yaml:
+    servers:
+      - url: /api
+    get:
+      tags: [Meta]
+      operationId: getOpenApiSpec
+      summary: Download the OpenAPI specification
+      description: Returns this specification. Publicly accessible so that clients can be generated.
+      security: []
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/yaml:
+              schema: { type: string }
+              example: "openapi: 3.1.0\ninfo:\n  title: TransTeira API\n"
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /version:
+    get:
+      tags: [Meta]
+      operationId: getVersion
+      summary: Application version
+      security: []
+      responses:
+        '200':
+          description: Semantic version of the running instance and API.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionInfo' }
+              example: { version: 1.0.0, apiVersion: v1, commit: 3f9c2ab }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /tenant:
+    get:
+      tags: [Meta]
+      operationId: getPublicTenant
+      summary: Public configuration of the current tenant
+      description: |
+        Branding, language and limits needed by the public interface. The response language
+        follows `Accept-Language` when available, otherwise the tenant default language.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Public tenant configuration.
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicTenant' }
+              example:
+                name: Entity A
+                language: fr
+                availableLanguages: [fr, en]
+                branding:
+                  primaryColor: '#0B5FFF'
+                  accentColor: '#00875A'
+                  logoUrl: /api/v1/tenant/assets/logo
+                  backgroundUrl: /api/v1/tenant/assets/background
+                limits:
+                  maxTransferBytes: 21474836480
+                  expiryDays: [1, 7, 30]
+                maintenance: false
+                legalDocuments: [legal-notice, privacy-policy]
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /tenant/assets/{asset}:
+    get:
+      tags: [Meta]
+      operationId: getTenantAsset
+      summary: Tenant logo or background image
+      description: Returns the configured image, or the default one when the tenant has none.
+      security: []
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema: { type: string, enum: [logo, background] }
+          example: logo
+      responses:
+        '200':
+          description: "Image content. Served with `X-Content-Type-Options: nosniff` and a long cache lifetime with ETag."
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '304':
+          description: Not modified.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /tenant/legal/{document}:
+    get:
+      tags: [Meta]
+      operationId: getTenantLegalDocument
+      summary: Legal notice or privacy policy of the tenant
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LegalDocumentPath'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Document in the negotiated language (Markdown source; rendered by the client).
+          headers:
+            Content-Language: { $ref: '#/components/headers/ContentLanguage' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalDocument' }
+              example:
+                document: privacy-policy
+                language: en
+                markdown: "# Privacy policy\n\nEntity A processes the email addresses..."
+                updatedAt: '2026-10-01T09:00:00Z'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  # ---------------------------------------------------------------------------
+  # Deposit sessions
+  # ---------------------------------------------------------------------------
+  /deposit-sessions:
+    post:
+      tags: [Deposit sessions]
+      operationId: startDepositSession
+      summary: Identify a depositor by email address
+      description: |
+        Starts the identification of a depositor.
+
+        Eligibility is checked first (in this order): blocklist, then either an
+        `invitationToken` (external depositor) or the internal-user rule (client IP in a tenant
+        CIDR range **and** email domain in the tenant's allowed domains).
+
+        - If the address has already been verified for this tenant, a deposit session is
+          created immediately (`201`) and the address' last-use date is refreshed.
+        - Otherwise a 6-digit code is sent through the tenant SMTP server and a verification
+          challenge is returned (`202`). The code is valid 15 minutes and allows 2 wrong attempts.
+
+        Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
+        Refused deposits are written to the security log.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DepositSessionStart' }
+            examples:
+              internal:
+                summary: Internal user on the corporate network
+                value: { email: alice@entity-a.example.com }
+              invited:
+                summary: External user with an invitation
+                value: { email: bob@partner.example.org, invitationToken: inv_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ }
+      responses:
+        '201':
+          description: Address already verified; deposit session created.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetDepositCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSession' }
+              example:
+                email: alice@entity-a.example.com
+                kind: internal
+                csrfToken: csrf_Jd83kLm0Qp2Zx7Vb
+                expiresAt: '2026-10-19T20:00:00Z'
+                limits: { maxTransferBytes: 21474836480, expiryDays: [1, 7, 30] }
+                canInvite: true
+        '202':
+          description: A verification code has been sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationChallenge' }
+              example:
+                challengeId: vch_4Fq9Lm2Zx8Rt6Yb1
+                email: alice@entity-a.example.com
+                expiresAt: '2026-10-19T16:15:00Z'
+                attemptsRemaining: 2
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/DepositForbidden' }
+        '410': { $ref: '#/components/responses/InvitationGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Maintenance' }
+
+  /verification-challenges/{challengeId}/confirm:
+    post:
+      tags: [Deposit sessions]
+      operationId: confirmVerificationChallenge
+      summary: Submit the verification code
+      description: |
+        Validates the 6-digit code. On success the address is stored as verified for the tenant
+        (it will not be asked again for 12 months of inactivity) and a deposit session is created.
+        After 2 wrong codes the challenge is invalidated and a new code must be requested.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ChallengeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerificationCode' }
+            example: { code: '482913' }
+      responses:
+        '201':
+          description: Code accepted; deposit session created.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetDepositCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSession' }
+              example:
+                email: bob@partner.example.org
+                kind: external
+                csrfToken: csrf_Pq1Lm8Zx3Vb7Kd0R
+                expiresAt: '2026-10-19T20:00:00Z'
+                limits: { maxTransferBytes: 21474836480, expiryDays: [1, 7, 30] }
+                canInvite: false
+                invitation:
+                  invitedBy: alice@entity-a.example.com
+                  expiresAt: '2027-10-01T08:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Challenge expired or invalidated after too many wrong attempts.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#verification-exhausted
+                title: Verification code invalidated
+                status: 410
+                code: verification-exhausted
+                detail: Too many wrong attempts. Please request a new code.
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '422':
+          description: Wrong code; at least one attempt remains.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#verification-code-invalid
+                title: Invalid verification code
+                status: 422
+                code: verification-code-invalid
+                attemptsRemaining: 1
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /deposit-sessions/current:
+    get:
+      tags: [Deposit sessions]
+      operationId: getCurrentDepositSession
+      summary: Current deposit session
+      security:
+        - depositSession: []
+      responses:
+        '200':
+          description: Session details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSession' }
+              example:
+                email: alice@entity-a.example.com
+                kind: internal
+                csrfToken: csrf_Jd83kLm0Qp2Zx7Vb
+                expiresAt: '2026-10-19T20:00:00Z'
+                limits: { maxTransferBytes: 21474836480, expiryDays: [1, 7, 30] }
+                canInvite: true
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+    delete:
+      tags: [Deposit sessions]
+      operationId: endDepositSession
+      summary: End the deposit session
+      security:
+        - depositSession: []
+          csrfToken: []
+      responses:
+        '204':
+          description: Session ended; cookie cleared.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  # ---------------------------------------------------------------------------
+  # Transfers (sender side)
+  # ---------------------------------------------------------------------------
+  /transfers:
+    post:
+      tags: [Transfers]
+      operationId: createTransfer
+      summary: Create a transfer and its upload resources
+      description: |
+        Declares a transfer and its files. The server checks the per-transfer size limit, the
+        tenant storage quota (reserving the declared size), the blocklist, and returns one tus
+        `uploadUrl` per file. The transfer stays in `uploading` state until
+        `POST /transfers/{transferId}/finalize` is called.
+
+        With an API token, the client IP must belong to the token's `allowedCidrs` (otherwise
+        `403 ip-not-allowed`, written to the security log), `senderEmail` is mandatory and must
+        belong to one of the tenant's internal domains; no email verification is performed (the
+        token is the proof).
+        With a deposit session, `senderEmail` must be omitted: the verified session address is used.
+        An invited external depositor cannot choose recipients: files are addressed to the
+        internal user who issued the invitation.
+
+        An unfinished transfer (never finalized) is purged after `TT_UPLOAD_TTL` (24 h by default),
+        releasing its quota reservation.
+      security:
+        - depositSession: []
+          csrfToken: []
+        - apiToken: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferCreate' }
+            examples:
+              session:
+                summary: Internal user, two files, password protected
+                value:
+                  recipients: [carol@customer.example.net, dave@customer.example.net]
+                  message: Here are the plans discussed this morning.
+                  expiryDays: 7
+                  password: correct horse battery staple
+                  deleteAfterFirstDownload: false
+                  language: en
+                  files:
+                    - { name: plans-v3.pdf, size: 15728640, mediaType: application/pdf }
+                    - { name: site-survey.mp4, size: 12884901888, mediaType: video/mp4 }
+              apiToken:
+                summary: Automated deposit with an API token
+                value:
+                  senderEmail: reporting@entity-a.example.com
+                  recipients: [finance@entity-a.example.com]
+                  expiryDays: 1
+                  files:
+                    - { name: export-2026-10-19.csv, size: 52428800, expectedSha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 }
+      responses:
+        '201':
+          description: Transfer created; upload the files with tus, then finalize.
+          headers:
+            Location:
+              description: URL of the created transfer.
+              schema: { type: string }
+              example: /api/v1/transfers/trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SenderTransfer' }
+              example:
+                id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                status: uploading
+                senderEmail: alice@entity-a.example.com
+                recipients: [carol@customer.example.net, dave@customer.example.net]
+                message: Here are the plans discussed this morning.
+                expiryDays: 7
+                passwordProtected: true
+                deleteAfterFirstDownload: false
+                totalBytes: 12900630528
+                createdAt: '2026-10-19T16:00:00Z'
+                uploadExpiresAt: '2026-10-20T16:00:00Z'
+                files:
+                  - id: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                    name: plans-v3.pdf
+                    size: 15728640
+                    mediaType: application/pdf
+                    uploadUrl: /api/v1/uploads/upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd
+                    uploadOffset: 0
+                    scanStatus: pending
+                  - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                    name: site-survey.mp4
+                    size: 12884901888
+                    mediaType: video/mp4
+                    uploadUrl: /api/v1/uploads/upl_2Bc5Df8Gh1Jk4Lm7Np0Qr3St
+                    uploadOffset: 0
+                    scanStatus: pending
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/DepositForbidden' }
+        '413': { $ref: '#/components/responses/TransferTooLarge' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Maintenance' }
+        '507': { $ref: '#/components/responses/QuotaExceeded' }
+
+  /transfers/{transferId}:
+    parameters:
+      - $ref: '#/components/parameters/TransferId'
+    get:
+      tags: [Transfers]
+      operationId: getTransfer
+      summary: Follow a transfer as its sender
+      description: |
+        Returns the state of a transfer created by the same deposit session or by an API token of
+        the same tenant. Used to poll antivirus progress after finalization.
+      security:
+        - depositSession: []
+        - apiToken: []
+      responses:
+        '200':
+          description: Transfer state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SenderTransfer' }
+              example:
+                id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                status: available
+                senderEmail: alice@entity-a.example.com
+                recipients: [carol@customer.example.net]
+                expiryDays: 7
+                expiresAt: '2026-10-26T16:20:00Z'
+                passwordProtected: true
+                deleteAfterFirstDownload: false
+                totalBytes: 12900630528
+                createdAt: '2026-10-19T16:00:00Z'
+                finalizedAt: '2026-10-19T16:20:00Z'
+                downloadUrl: https://transfer.entity-a.example.com/d/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                files:
+                  - id: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                    name: plans-v3.pdf
+                    size: 15728640
+                    mediaType: application/pdf
+                    sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+                    scanStatus: clean
+                  - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                    name: site-survey.mp4
+                    size: 12884901888
+                    mediaType: video/mp4
+                    sha256: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+                    scanStatus: not_scanned_too_large
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+    delete:
+      tags: [Transfers]
+      operationId: cancelTransfer
+      summary: Cancel or delete a transfer as its sender
+      description: |
+        Deletes the transfer, its uploads and files, with crypto-erase of the file keys.
+        In V1 a sender may only cancel a transfer that is not yet `available`; deleting an
+        available transfer is reserved to admins (and to the V1.1 "My transfers" feature).
+        API tokens may delete any transfer they created.
+      security:
+        - depositSession: []
+          csrfToken: []
+        - apiToken: []
+      responses:
+        '204':
+          description: Transfer deleted.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /transfers/{transferId}/finalize:
+    parameters:
+      - $ref: '#/components/parameters/TransferId'
+    post:
+      tags: [Transfers]
+      operationId: finalizeTransfer
+      summary: Finalize a transfer after all files are uploaded
+      description: |
+        Checks that every declared file is fully uploaded, compares `expectedSha256` when it was
+        provided, checks file hashes against the blocklist, then queues the antivirus scan.
+        Once every file is scanned, infected files are deleted (sender alerted), and notifications
+        are sent: recipients receive the link, a QR code (inline CID) and SHA-256 fingerprints;
+        the sender receives a confirmation. If every file is infected, the transfer ends in
+        `rejected` state and no recipient is notified.
+
+        Antivirus availability is **fail-closed**: while clamd is unreachable, files stay in
+        `scanning`, the scan is retried with back-off, the super admin is alerted, and nothing is
+        made available. Only files above the ClamAV size limits are released unscanned
+        (`not_scanned_too_large`), as required by the specification.
+      security:
+        - depositSession: []
+          csrfToken: []
+        - apiToken: []
+      responses:
+        '202':
+          description: Accepted; antivirus scan in progress.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SenderTransfer' }
+              example:
+                id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                status: scanning
+                senderEmail: alice@entity-a.example.com
+                recipients: [carol@customer.example.net]
+                expiryDays: 7
+                passwordProtected: true
+                deleteAfterFirstDownload: false
+                totalBytes: 15728640
+                createdAt: '2026-10-19T16:00:00Z'
+                files:
+                  - id: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                    name: plans-v3.pdf
+                    size: 15728640
+                    mediaType: application/pdf
+                    sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+                    scanStatus: scanning
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: CSRF failure, or a file hash is on the tenant blocklist (`blocked-file`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#blocked-file
+                title: File refused
+                status: 403
+                code: blocked-file
+                detail: One of the files is not allowed by the administrators of this service.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Some files are not fully uploaded, a checksum mismatched, or the transfer is not in `uploading` state.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                incomplete:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#upload-incomplete
+                    title: Upload incomplete
+                    status: 409
+                    code: upload-incomplete
+                    files: [fil_01JABCDA0K1L2M3N4P5Q6R7S8T]
+                checksum:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#checksum-mismatch
+                    title: Checksum mismatch
+                    status: 409
+                    code: checksum-mismatch
+                    files: [fil_01JABCD9F1A2B3C4D5E6F7G8H9]
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '503': { $ref: '#/components/responses/Maintenance' }
+
+  # ---------------------------------------------------------------------------
+  # tus uploads
+  # ---------------------------------------------------------------------------
+  /uploads:
+    options:
+      tags: [Uploads (tus)]
+      operationId: getTusCapabilities
+      summary: tus server capabilities
+      security: []
+      responses:
+        '204':
+          description: Supported tus version and extensions.
+          headers:
+            Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
+            Tus-Version:
+              schema: { type: string }
+              example: 1.0.0
+            Tus-Extension:
+              schema: { type: string }
+              example: expiration,termination
+            Tus-Max-Size:
+              description: Maximum size of a single upload resource, in bytes (the per-transfer limit of the tenant).
+              schema: { type: integer }
+              example: 21474836480
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /uploads/{uploadId}:
+    parameters:
+      - $ref: '#/components/parameters/UploadId'
+    head:
+      tags: [Uploads (tus)]
+      operationId: getUploadOffset
+      summary: Current offset of an upload (resume)
+      security:
+        - depositSession: []
+        - apiToken: []
+      parameters:
+        - $ref: '#/components/parameters/TusResumableHeader'
+      responses:
+        '200':
+          description: "Current offset. Responses are never cached (`Cache-Control: no-store`)."
+          headers:
+            Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
+            Upload-Offset: { $ref: '#/components/headers/UploadOffset' }
+            Upload-Length:
+              schema: { type: integer }
+              example: 12884901888
+            Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
+        '401': { description: Unauthenticated. }
+        '404': { description: "Unknown upload, or upload belonging to another session or tenant." }
+        '410': { description: Upload expired and purged. }
+    patch:
+      tags: [Uploads (tus)]
+      operationId: appendUploadChunk
+      summary: Append bytes to an upload
+      description: |
+        Streams bytes at `Upload-Offset`. Content is encrypted (AES-256-GCM, chunked) and hashed
+        (SHA-256) on the fly while being written to disk; nothing is buffered in memory and the
+        database is not written per chunk. Any chunk size is accepted; the server persists
+        progress on disk so that an interrupted request can be resumed from the last durable offset
+        (obtained with `HEAD`).
+      security:
+        - depositSession: []
+          csrfToken: []
+        - apiToken: []
+      parameters:
+        - $ref: '#/components/parameters/TusResumableHeader'
+        - name: Upload-Offset
+          in: header
+          required: true
+          schema: { type: integer, minimum: 0 }
+          example: 0
+      requestBody:
+        required: true
+        content:
+          application/offset+octet-stream:
+            schema: { type: string, format: binary }
+            example: "<binary data>"
+      responses:
+        '204':
+          description: Bytes appended.
+          headers:
+            Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
+            Upload-Offset: { $ref: '#/components/headers/UploadOffset' }
+            Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
+        '401': { description: Unauthenticated. }
+        '403': { description: CSRF failure. }
+        '404': { description: "Unknown upload, or upload belonging to another session or tenant." }
+        '409': { description: '`Upload-Offset` does not match the current offset.' }
+        '410': { description: Upload expired and purged. }
+        '412': { description: Unsupported `Tus-Resumable` version. }
+        '413': { description: Bytes beyond the declared `Upload-Length`. }
+        '415': { description: 'Content-Type is not `application/offset+octet-stream`.' }
+        '503': { description: Maintenance mode; retry after `Retry-After`. Uploads already started may be resumed after maintenance. }
+    delete:
+      tags: [Uploads (tus)]
+      operationId: terminateUpload
+      summary: Abort an upload (tus termination)
+      description: Removes the partial file. The file is removed from the transfer declaration and the quota reservation is released.
+      security:
+        - depositSession: []
+          csrfToken: []
+        - apiToken: []
+      parameters:
+        - $ref: '#/components/parameters/TusResumableHeader'
+      responses:
+        '204':
+          description: Upload terminated.
+          headers:
+            Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
+        '401': { description: Unauthenticated. }
+        '404': { description: Unknown upload. }
+        '409': { description: Transfer already finalized. }
+
+  # ---------------------------------------------------------------------------
+  # Invitations
+  # ---------------------------------------------------------------------------
+  /invitations:
+    post:
+      tags: [Invitations]
+      operationId: createInvitation
+      summary: Invite an external user to deposit files
+      description: |
+        Reserved to internal depositors. Sends an invitation email (tenant SMTP and template)
+        containing a unique link. Files deposited through it are addressed to the inviter.
+        The invitation expires after 12 months if unused. The inviter is recorded in the
+        database and in the audit log.
+      security:
+        - depositSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationCreate' }
+            example:
+              email: bob@partner.example.org
+              message: Please send me the signed contract.
+              language: en
+      responses:
+        '201':
+          description: Invitation sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+              example:
+                id: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+                email: bob@partner.example.org
+                invitedBy: alice@entity-a.example.com
+                status: pending
+                createdAt: '2026-10-19T16:00:00Z'
+                expiresAt: '2027-10-19T16:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/DepositForbidden' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Maintenance' }
+
+  /invitations/{invitationToken}:
+    get:
+      tags: [Invitations]
+      operationId: getInvitation
+      summary: Check an invitation link
+      description: Used by the invitation landing page. Reveals only what the invited person needs.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/InvitationToken'
+      responses:
+        '200':
+          description: Valid invitation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicInvitation' }
+              example:
+                email: bob@partner.example.org
+                invitedBy: alice@entity-a.example.com
+                message: Please send me the signed contract.
+                expiresAt: '2027-10-19T16:00:00Z'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/InvitationGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  # ---------------------------------------------------------------------------
+  # Downloads (recipient side)
+  # ---------------------------------------------------------------------------
+  /downloads/{linkToken}:
+    parameters:
+      - $ref: '#/components/parameters/LinkToken'
+    get:
+      tags: [Downloads]
+      operationId: getDownload
+      summary: Download page content
+      description: |
+        Returns the transfer as seen by a recipient. When the transfer is password protected and
+        not yet unlocked by this browser, only `locked: true`, the sender and the expiry date are
+        returned (no file list).
+      security:
+        - {}
+        - downloadGrant: []
+      responses:
+        '200':
+          description: Transfer details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicTransfer' }
+              examples:
+                unlocked:
+                  value:
+                    senderEmail: alice@entity-a.example.com
+                    message: Here are the plans discussed this morning.
+                    expiresAt: '2026-10-26T16:20:00Z'
+                    passwordProtected: true
+                    locked: false
+                    deleteAfterFirstDownload: false
+                    totalBytes: 12900630528
+                    archiveUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/archive
+                    files:
+                      - id: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                        name: plans-v3.pdf
+                        size: 15728640
+                        mediaType: application/pdf
+                        sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+                        scanStatus: clean
+                        downloadUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/files/fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                      - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                        name: site-survey.mp4
+                        size: 12884901888
+                        mediaType: video/mp4
+                        sha256: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+                        scanStatus: not_scanned_too_large
+                        downloadUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/files/fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                locked:
+                  value:
+                    senderEmail: alice@entity-a.example.com
+                    expiresAt: '2026-10-26T16:20:00Z'
+                    passwordProtected: true
+                    locked: true
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/TransferGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /downloads/{linkToken}/unlock:
+    parameters:
+      - $ref: '#/components/parameters/LinkToken'
+    post:
+      tags: [Downloads]
+      operationId: unlockDownload
+      summary: Unlock a password-protected transfer
+      description: |
+        Two independent failure counters apply, each locking for 15 minutes after 3 wrong
+        passwords (`429`, with `Retry-After`):
+        - **per transfer**, all client IPs combined: the transfer is locked for everyone;
+        - **per client IP**, all transfers of the tenant combined: the IP is locked on every transfer.
+        Each failure is written to the security log.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferPassword' }
+            example: { password: correct horse battery staple }
+      responses:
+        '204':
+          description: Unlocked; the download grant cookie is set.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetDownloadGrantCookie' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: Wrong password.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#transfer-password-invalid
+                title: Wrong password
+                status: 401
+                code: transfer-password-invalid
+                attemptsRemaining: 2
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/TransferGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429':
+          description: Too many wrong passwords; locked for 15 minutes.
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#transfer-locked
+                title: Too many attempts
+                status: 429
+                code: transfer-locked
+                retryAfterSeconds: 900
+
+  /downloads/{linkToken}/files/{fileId}:
+    parameters:
+      - $ref: '#/components/parameters/LinkToken'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [Downloads]
+      operationId: downloadFile
+      summary: Download one file
+      description: |
+        Streams the decrypted file. Always sent as an attachment
+        (`Content-Disposition: attachment` with RFC 6266 `filename*`, `X-Content-Type-Options: nosniff`,
+        `Content-Type: application/octet-stream`). Single byte ranges are supported so that
+        download managers can resume, including on transfers with `deleteAfterFirstDownload`.
+
+        The transfer counts as downloaded once every byte of every file has been served at least
+        once (the union of served ranges is tracked on disk, never per chunk in the database), or
+        once the archive has been streamed to its end. This triggers the acknowledgement email to
+        the sender. With `deleteAfterFirstDownload`, the transfer is then deleted (with crypto-erase)
+        after a grace period (`TT_DELETE_AFTER_DOWNLOAD_GRACE`, 15 minutes by default) so that an
+        interrupted final range can still be resumed.
+      security:
+        - {}
+        - downloadGrant: []
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          schema: { type: string }
+          example: bytes=1048576-
+      responses:
+        '200':
+          description: Full file content.
+          headers:
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
+              example: bytes
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+              example: "<binary data>"
+        '206':
+          description: Partial content.
+          headers:
+            Content-Range:
+              schema: { type: string }
+              example: bytes 1048576-15728639/15728640
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+              example: "<binary data>"
+        '401': { $ref: '#/components/responses/DownloadLocked' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/TransferGone' }
+        '416': { description: Range not satisfiable. }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  /downloads/{linkToken}/archive:
+    parameters:
+      - $ref: '#/components/parameters/LinkToken'
+    get:
+      tags: [Downloads]
+      operationId: downloadArchive
+      summary: Download all files as a ZIP archive
+      description: |
+        Generates a ZIP64 archive on the fly in store mode (no compression, no temporary copy
+        on disk). The `Content-Length` is computed in advance. File names inside the archive are
+        sanitised (no absolute paths, no `..`, no control or bidirectional characters).
+        Range requests are not supported on the archive.
+      security:
+        - {}
+        - downloadGrant: []
+      responses:
+        '200':
+          description: ZIP stream.
+          headers:
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+              example: "<binary data>"
+        '401': { $ref: '#/components/responses/DownloadLocked' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/TransferGone' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+
+  # ---------------------------------------------------------------------------
+  # Admin auth
+  # ---------------------------------------------------------------------------
+  /admin/setup:
+    get:
+      tags: [Admin auth]
+      operationId: getSetupStatus
+      summary: Is first-run setup required?
+      security: []
+      responses:
+        '200':
+          description: Setup status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupStatus' }
+              example: { setupRequired: true }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+    post:
+      tags: [Admin auth]
+      operationId: createSuperAdmin
+      summary: First-run setup - create the super admin
+      description: |
+        Only available while no admin exists. If `TT_SETUP_TOKEN` is configured, the token must
+        be provided (protects the window between deployment and setup). Returns a pre-auth session
+        in `totp_enrollment_required` state: no other admin endpoint is usable until TOTP is confirmed.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetupRequest' }
+            example:
+              username: superadmin
+              email: it-admin@example.com
+              password: a-long-passphrase-of-at-least-12-characters
+              setupToken: stp_Kd82Lq0Zm4Xv7Bn1
+      responses:
+        '201':
+          description: Super admin created; TOTP enrollment must follow.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpEnrollment' }
+              example:
+                secret: JBSWY3DPEHPK3PXP
+                otpauthUri: otpauth://totp/TransTeira:superadmin?secret=JBSWY3DPEHPK3PXP&issuer=TransTeira
+                qrCodePng: iVBORw0KGgoAAAANSUhEUgAA...
+                csrfToken: csrf_Ab12Cd34Ef56Gh78
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403':
+          description: Invalid setup token.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#setup-token-invalid
+                title: Invalid setup token
+                status: 403
+                code: setup-token-invalid
+        '409':
+          description: Setup already completed.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#setup-already-done
+                title: Setup already completed
+                status: 409
+                code: setup-already-done
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/auth/login:
+    post:
+      tags: [Admin auth]
+      operationId: adminLogin
+      summary: First factor - username and password
+      description: |
+        On success, sets a pre-auth session cookie whose `status` tells the next step. A full
+        session is never granted on password alone. Failures are rate limited and written to the
+        security log; the response does not reveal whether the username exists.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example: { username: admin.entity-a, password: a-long-passphrase-of-at-least-12-characters }
+      responses:
+        '200':
+          description: Password accepted; second factor or enrollment required.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginState' }
+              example: { status: totp_required, csrfToken: csrf_Ab12Cd34Ef56Gh78 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/auth/totp:
+    post:
+      tags: [Admin auth]
+      operationId: adminVerifyTotp
+      summary: Second factor - TOTP code or recovery code
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpCode' }
+            examples:
+              totp: { value: { code: '204816' } }
+              recovery: { value: { recoveryCode: rc-7KQ2-9XLM-4PZD } }
+      responses:
+        '200':
+          description: Authenticated; the session cookie is rotated.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginState' }
+              example: { status: authenticated, csrfToken: csrf_Zx98Yw76Vu54Ts32 }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/auth/logout:
+    post:
+      tags: [Admin auth]
+      operationId: adminLogout
+      summary: Log out
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204':
+          description: Session revoked server side and cookie cleared.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /admin/me:
+    get:
+      tags: [Admin auth]
+      operationId: getAdminMe
+      summary: Current admin profile
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Profile, role and assigned tenants.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminMe' }
+              example:
+                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                username: admin.entity-a
+                email: admin@entity-a.example.com
+                role: delegated_admin
+                totpEnabled: true
+                tenants:
+                  - { id: ten_01JAB0000000000000ENTITYA, name: Entity A, fqdn: transfer.entity-a.example.com }
+                csrfToken: csrf_Zx98Yw76Vu54Ts32
+                language: en
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /admin/me/password:
+    put:
+      tags: [Admin auth]
+      operationId: changeAdminPassword
+      summary: Change own password
+      description: Other sessions of the admin are revoked.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChange' }
+            example:
+              currentPassword: a-long-passphrase-of-at-least-12-characters
+              newPassword: another-even-longer-passphrase-2026
+      responses:
+        '204': { description: Password changed. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+
+  /admin/me/totp:
+    post:
+      tags: [Admin auth]
+      operationId: startTotpEnrollment
+      summary: Start (or restart) TOTP enrollment
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: New TOTP secret to confirm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpEnrollment' }
+              example:
+                secret: JBSWY3DPEHPK3PXP
+                otpauthUri: otpauth://totp/TransTeira:admin.entity-a?secret=JBSWY3DPEHPK3PXP&issuer=TransTeira
+                qrCodePng: iVBORw0KGgoAAAANSUhEUgAA...
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    delete:
+      tags: [Admin auth]
+      operationId: disableTotp
+      summary: Disable TOTP (delegated admins only)
+      description: Refused for the super admin, for whom TOTP is mandatory. Requires the current password.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordConfirmation' }
+            example: { currentPassword: a-long-passphrase-of-at-least-12-characters }
+      responses:
+        '204': { description: TOTP disabled. }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/me/totp/confirm:
+    post:
+      tags: [Admin auth]
+      operationId: confirmTotpEnrollment
+      summary: Confirm TOTP enrollment
+      description: |
+        Confirms the pending secret with a valid code. Returns single-use recovery codes, shown
+        once. When called from a pre-auth session (first-run setup or mandatory enrollment), the
+        session becomes fully authenticated.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpCode' }
+            example: { code: '204816' }
+      responses:
+        '200':
+          description: TOTP enabled.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TotpConfirmed' }
+              example:
+                recoveryCodes: [rc-7KQ2-9XLM-4PZD, rc-2HDF-8WQA-1MNB, rc-5TRE-3ZXC-0LKJ, rc-8YUI-6OPA-2SDF, rc-4GHJ-1KLZ-7XCV, rc-9BNM-5QWE-3RTY, rc-0UIO-2PAS-8DFG, rc-6HJK-4LZX-1CVB]
+                csrfToken: csrf_Zx98Yw76Vu54Ts32
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+
+  # ---------------------------------------------------------------------------
+  # Admin - tenants
+  # ---------------------------------------------------------------------------
+  /admin/tenants:
+    get:
+      tags: [Admin tenants]
+      operationId: listTenants
+      summary: List tenants visible to the admin
+      description: Super admin sees all tenants; a delegated admin sees only assigned tenants.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Tenants.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantList' }
+              example:
+                items:
+                  - id: ten_01JAB0000000000000ENTITYA
+                    name: Entity A
+                    fqdn: transfer.entity-a.example.com
+                    defaultLanguage: fr
+                    maxTransferBytes: 21474836480
+                    storageQuotaBytes: 1099511627776
+                    storageUsedBytes: 274877906944
+                    createdAt: '2026-09-01T08:00:00Z'
+                    updatedAt: '2026-10-01T08:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Admin tenants]
+      operationId: createTenant
+      summary: Create a tenant (super admin)
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantCreate' }
+            example:
+              name: Entity B
+              fqdn: transfer.entity-b.example.com
+              defaultLanguage: en
+              storageQuotaBytes: 549755813888
+              maxTransferBytes: 10737418240
+      responses:
+        '201':
+          description: Tenant created (with default branding, templates and legal texts).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+              example:
+                id: ten_01JAB0000000000000ENTITYB
+                name: Entity B
+                fqdn: transfer.entity-b.example.com
+                defaultLanguage: en
+                maxTransferBytes: 10737418240
+                storageQuotaBytes: 549755813888
+                storageUsedBytes: 0
+                createdAt: '2026-10-19T16:00:00Z'
+                updatedAt: '2026-10-19T16:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+
+  /admin/tenants/{tenantId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: getTenant
+      summary: Tenant general settings
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Tenant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+              example:
+                id: ten_01JAB0000000000000ENTITYA
+                name: Entity A
+                fqdn: transfer.entity-a.example.com
+                defaultLanguage: fr
+                maxTransferBytes: 21474836480
+                storageQuotaBytes: 1099511627776
+                storageUsedBytes: 274877906944
+                createdAt: '2026-09-01T08:00:00Z'
+                updatedAt: '2026-10-01T08:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin tenants]
+      operationId: updateTenant
+      summary: Update tenant general settings
+      description: |
+        `fqdn` and `storageQuotaBytes` can only be changed by the super admin. A delegated admin
+        may only lower `maxTransferBytes`, never above 20 GiB nor above the value set by the super admin.
+        JSON Merge Patch semantics (RFC 7396).
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/TenantUpdate' }
+            example: { defaultLanguage: en, maxTransferBytes: 5368709120 }
+      responses:
+        '200':
+          description: Updated tenant.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+              example:
+                id: ten_01JAB0000000000000ENTITYA
+                name: Entity A
+                fqdn: transfer.entity-a.example.com
+                defaultLanguage: en
+                maxTransferBytes: 5368709120
+                storageQuotaBytes: 1099511627776
+                storageUsedBytes: 274877906944
+                createdAt: '2026-09-01T08:00:00Z'
+                updatedAt: '2026-10-19T16:05:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+    delete:
+      tags: [Admin tenants]
+      operationId: deleteTenant
+      summary: Delete a tenant and all its data (super admin)
+      description: |
+        Irreversible. Deletes every transfer (with crypto-erase), verified address, invitation,
+        token, template and configuration of the tenant. Audit and security log entries are kept
+        until their 12-month retention expires. The tenant name must be repeated as confirmation.
+      security:
+        - adminSession: []
+          csrfToken: []
+      parameters:
+        - name: confirm
+          in: query
+          required: true
+          description: Exact tenant name.
+          schema: { type: string }
+          example: Entity B
+      responses:
+        '202': { description: Deletion scheduled. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/branding:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: getBranding
+      summary: Branding (colours, images)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Branding with RGAA contrast diagnostics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branding' }
+              example:
+                primaryColor: '#0B5FFF'
+                accentColor: '#00875A'
+                hasLogo: true
+                hasBackground: false
+                contrast:
+                  - { pair: primary-on-light, ratio: 5.1, level: AA }
+                  - { pair: accent-on-light, ratio: 4.6, level: AA }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin tenants]
+      operationId: updateBranding
+      summary: Update colours
+      description: |
+        Colours are always saved; the response contains contrast diagnostics (`level: fail` when
+        below RGAA/WCAG AA 4.5:1) so that the UI can warn the admin. The `contrast` array is
+        designed to also cover the V1.1 dark theme (pairs `*-on-dark`).
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BrandingUpdate' }
+            example: { primaryColor: '#7FB3FF', accentColor: '#00875A' }
+      responses:
+        '200':
+          description: Saved, with diagnostics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branding' }
+              example:
+                primaryColor: '#7FB3FF'
+                accentColor: '#00875A'
+                hasLogo: true
+                hasBackground: false
+                contrast:
+                  - { pair: primary-on-light, ratio: 2.2, level: fail }
+                  - { pair: accent-on-light, ratio: 4.6, level: AA }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/branding/{asset}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: asset
+        in: path
+        required: true
+        schema: { type: string, enum: [logo, background] }
+        example: background
+    put:
+      tags: [Admin tenants]
+      operationId: uploadBrandingAsset
+      summary: Upload logo or background image
+      description: |
+        PNG, JPEG or WebP only (detected from content, not from the declared type), 5 MiB max for
+        a logo and 10 MiB for a background. Images are decoded and re-encoded server side to strip
+        metadata and active content. SVG is refused.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          image/png: { schema: { type: string, format: binary }, example: "<binary data>" }
+          image/jpeg: { schema: { type: string, format: binary }, example: "<binary data>" }
+          image/webp: { schema: { type: string, format: binary }, example: "<binary data>" }
+      responses:
+        '204': { description: Image stored. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+    delete:
+      tags: [Admin tenants]
+      operationId: deleteBrandingAsset
+      summary: Revert to the default image
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Image removed. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/network:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: getNetworkRules
+      summary: Internal IP ranges and email domains
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Rules defining internal users.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkRules' }
+              example:
+                internalCidrs: [10.10.0.0/16, 192.0.2.0/24, '2001:db8:10::/48']
+                internalDomains: [entity-a.example.com, corp.entity-a.example.com]
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin tenants]
+      operationId: updateNetworkRules
+      summary: Replace internal IP ranges and email domains
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NetworkRules' }
+            example:
+              internalCidrs: [10.10.0.0/16]
+              internalDomains: [entity-a.example.com]
+      responses:
+        '200':
+          description: Saved rules (normalised).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkRules' }
+              example:
+                internalCidrs: [10.10.0.0/16]
+                internalDomains: [entity-a.example.com]
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/smtp:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: getSmtpSettings
+      summary: SMTP settings
+      description: The password is never returned; `passwordSet` tells whether one is stored.
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: SMTP settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SmtpSettings' }
+              example:
+                host: smtp-relay
+                port: 25
+                security: none
+                username: null
+                passwordSet: false
+                fromAddress: no-reply@entity-a.example.com
+                fromName: Entity A Transfer
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin tenants]
+      operationId: updateSmtpSettings
+      summary: Replace SMTP settings
+      description: |
+        Authentication is optional (unauthenticated relay on the internal Docker network is
+        supported). Omit `password` to keep the stored one; send `null` to remove it. The
+        password is encrypted at rest with the master key.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SmtpSettingsUpdate' }
+            examples:
+              relay:
+                summary: Unauthenticated internal relay
+                value: { host: smtp-relay, port: 25, security: none, fromAddress: no-reply@entity-a.example.com, fromName: Entity A Transfer }
+              submission:
+                summary: Authenticated submission with STARTTLS
+                value: { host: smtp.example.com, port: 587, security: starttls, username: transfer@entity-a.example.com, password: s3cr3t-app-password, fromAddress: transfer@entity-a.example.com }
+      responses:
+        '200':
+          description: Saved settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SmtpSettings' }
+              example:
+                host: smtp.example.com
+                port: 587
+                security: starttls
+                username: transfer@entity-a.example.com
+                passwordSet: true
+                fromAddress: transfer@entity-a.example.com
+                fromName: null
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/smtp/test:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin tenants]
+      operationId: testSmtp
+      summary: Send a test email
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SmtpTest' }
+            example: { to: admin@entity-a.example.com }
+      responses:
+        '200':
+          description: Result of the SMTP dialogue (the email may still be filtered downstream).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SmtpTestResult' }
+              examples:
+                ok: { value: { success: true, durationMs: 412 } }
+                ko: { value: { success: false, durationMs: 5003, error: 'dial tcp: i/o timeout' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/tenants/{tenantId}/smtp/dns-check:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: checkMailDns
+      summary: Indicative SPF, DKIM and DMARC check of the sender domain
+      description: Informational only; DKIM selectors to probe can be given since they cannot be discovered.
+      security:
+        - adminSession: []
+      parameters:
+        - name: dkimSelector
+          in: query
+          required: false
+          schema: { type: array, items: { type: string, maxLength: 63 }, maxItems: 5 }
+          example: [selector1, selector2]
+      responses:
+        '200':
+          description: DNS diagnostics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MailDnsCheck' }
+              example:
+                domain: entity-a.example.com
+                spf: { status: ok, record: 'v=spf1 include:spf.protection.example.net -all' }
+                dkim: { status: ok, selectors: [{ selector: selector1, found: true }] }
+                dmarc: { status: warning, record: 'v=DMARC1; p=none', message: Policy is p=none. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/email-templates:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: listEmailTemplates
+      summary: List email templates and whether they are customised
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EmailTemplateSummary' }
+              example:
+                - { key: verification-code, language: fr, customised: false }
+                - { key: transfer-notification, language: fr, customised: true, updatedAt: '2026-10-02T10:00:00Z' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/email-templates/{templateKey}/{language}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/TemplateKey'
+      - $ref: '#/components/parameters/LanguagePath'
+    get:
+      tags: [Admin tenants]
+      operationId: getEmailTemplate
+      summary: Get a template (customised or default)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Template source and available variables.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailTemplate' }
+              example:
+                key: transfer-notification
+                language: en
+                customised: false
+                subject: '{{.SenderEmail}} sent you files'
+                bodyHtml: '<p>{{.SenderEmail}} sent you {{.FileCount}} file(s).</p><p><a href="{{.DownloadURL}}">Download</a></p>'
+                bodyText: "{{.SenderEmail}} sent you {{.FileCount}} file(s).\n{{.DownloadURL}}"
+                variables: [SenderEmail, Message, FileCount, Files, DownloadURL, ExpiresAt, PasswordProtected, TenantName]
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin tenants]
+      operationId: updateEmailTemplate
+      summary: Customise a template
+      description: |
+        Templates use a restricted, auto-escaping template language: only the documented
+        variables are available, no function call can reach the file system or the network.
+        Invalid templates are refused with `400`.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailTemplateUpdate' }
+            example:
+              subject: 'Files from {{.SenderEmail}}'
+              bodyHtml: '<p>Hello,</p><p>{{.SenderEmail}} sent you files.</p><p><a href="{{.DownloadURL}}">Download</a></p>'
+              bodyText: "Hello,\n{{.SenderEmail}} sent you files.\n{{.DownloadURL}}"
+      responses:
+        '200':
+          description: Saved template.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailTemplate' }
+              example:
+                key: transfer-notification
+                language: en
+                customised: true
+                subject: 'Files from {{.SenderEmail}}'
+                bodyHtml: '<p>Hello,</p><p>{{.SenderEmail}} sent you files.</p><p><a href="{{.DownloadURL}}">Download</a></p>'
+                bodyText: "Hello,\n{{.SenderEmail}} sent you files.\n{{.DownloadURL}}"
+                variables: [SenderEmail, Message, FileCount, Files, DownloadURL, ExpiresAt, PasswordProtected, TenantName]
+                updatedAt: '2026-10-19T16:10:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Admin tenants]
+      operationId: resetEmailTemplate
+      summary: Revert to the default template
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Customisation removed. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/email-templates/{templateKey}/{language}/preview:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/TemplateKey'
+      - $ref: '#/components/parameters/LanguagePath'
+    post:
+      tags: [Admin tenants]
+      operationId: previewEmailTemplate
+      summary: Render a template with sample data
+      description: Renders the submitted (unsaved) template, or the stored one when the body is empty.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailTemplateUpdate' }
+            example:
+              subject: 'Files from {{.SenderEmail}}'
+              bodyHtml: '<p>{{.SenderEmail}} sent you files.</p>'
+              bodyText: '{{.SenderEmail}} sent you files.'
+      responses:
+        '200':
+          description: Rendered email.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailPreview' }
+              example:
+                subject: Files from alice@entity-a.example.com
+                bodyHtml: '<p>alice@entity-a.example.com sent you files.</p>'
+                bodyText: alice@entity-a.example.com sent you files.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/legal/{document}/{language}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/LegalDocumentPath'
+      - $ref: '#/components/parameters/LanguagePath'
+    get:
+      tags: [Admin tenants]
+      operationId: getLegalDocumentAdmin
+      summary: Get a legal text
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Legal text.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalDocument' }
+              example:
+                document: legal-notice
+                language: fr
+                markdown: "# Mentions légales\n\nÉditeur : Entity A..."
+                updatedAt: '2026-10-01T09:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin tenants]
+      operationId: updateLegalDocument
+      summary: Replace a legal text (Markdown, rendered without raw HTML)
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LegalDocumentUpdate' }
+            example: { markdown: "# Mentions légales\n\nÉditeur : Entity A, 1 rue de l'Exemple..." }
+      responses:
+        '200':
+          description: Saved text.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LegalDocument' }
+              example:
+                document: legal-notice
+                language: fr
+                markdown: "# Mentions légales\n\nÉditeur : Entity A, 1 rue de l'Exemple..."
+                updatedAt: '2026-10-19T16:12:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # Admin - operations of a tenant
+  # ---------------------------------------------------------------------------
+  /admin/tenants/{tenantId}/transfers:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listTenantTransfers
+      summary: List transfers of the tenant
+      security:
+        - adminSession: []
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/TransferStatus' }
+          example: available
+        - name: email
+          in: query
+          description: Filter on sender or recipient address (exact match).
+          schema: { type: string, format: email }
+          example: alice@entity-a.example.com
+        - name: createdAfter
+          in: query
+          schema: { type: string, format: date-time }
+          example: '2026-10-01T00:00:00Z'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Transfers (most recent first).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminTransferList' }
+              example:
+                items:
+                  - id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                    status: available
+                    origin: internal
+                    senderEmail: alice@entity-a.example.com
+                    recipients: [carol@customer.example.net]
+                    fileCount: 2
+                    totalBytes: 12900630528
+                    passwordProtected: true
+                    deleteAfterFirstDownload: false
+                    createdAt: '2026-10-19T16:00:00Z'
+                    expiresAt: '2026-10-26T16:20:00Z'
+                    firstDownloadedAt: null
+                    downloadCount: 0
+                nextCursor: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/transfers/{transferId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/TransferId'
+    get:
+      tags: [Admin operations]
+      operationId: getTenantTransfer
+      summary: Transfer details (metadata only, never content)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Transfer details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminTransferDetail' }
+              example:
+                id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                status: available
+                origin: internal
+                senderEmail: alice@entity-a.example.com
+                recipients: [carol@customer.example.net]
+                fileCount: 1
+                totalBytes: 15728640
+                passwordProtected: false
+                deleteAfterFirstDownload: false
+                createdAt: '2026-10-19T16:00:00Z'
+                expiresAt: '2026-10-26T16:20:00Z'
+                firstDownloadedAt: '2026-10-19T17:02:00Z'
+                downloadCount: 3
+                senderIp: 10.10.4.21
+                files:
+                  - id: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+                    name: plans-v3.pdf
+                    size: 15728640
+                    mediaType: application/pdf
+                    sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+                    scanStatus: clean
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Admin operations]
+      operationId: deleteTenantTransfer
+      summary: Delete a transfer before expiry
+      description: Deletes files with crypto-erase and records the action in the audit log.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReason' }
+            example: { reason: Sent to the wrong recipient at the sender's request. }
+      responses:
+        '204': { description: Transfer deleted. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/transfers/{transferId}/resend:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/TransferId'
+    post:
+      tags: [Admin operations]
+      operationId: resendTransferNotification
+      summary: Resend the notification email to recipients
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendRequest' }
+            example: { recipients: [carol@customer.example.net] }
+      responses:
+        '202': { description: Notification queued. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+
+  /admin/tenants/{tenantId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listTenantInvitations
+      summary: List invitations with their issuer
+      security:
+        - adminSession: []
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/InvitationStatus' }
+          example: pending
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Invitations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationList' }
+              example:
+                items:
+                  - id: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+                    email: bob@partner.example.org
+                    invitedBy: alice@entity-a.example.com
+                    status: pending
+                    createdAt: '2026-10-19T16:00:00Z'
+                    expiresAt: '2027-10-19T16:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^inv_[0-9A-Z]{26}$' }
+        example: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+    delete:
+      tags: [Admin operations]
+      operationId: revokeInvitation
+      summary: Revoke an invitation
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Invitation revoked. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/blocklist:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listBlocklist
+      summary: List blocklist entries
+      security:
+        - adminSession: []
+      parameters:
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/BlocklistKind' }
+          example: domain
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlocklistList' }
+              example:
+                items:
+                  - { id: blk_01JABCH2J3K4L5M6N7P8Q9R0S1, kind: domain, value: spam.example.net, comment: Repeated abuse, createdBy: admin.entity-a, createdAt: '2026-10-10T08:00:00Z' }
+                  - { id: blk_01JABCH3K4L5M6N7P8Q9R0S1T2, kind: sha256, value: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f, comment: Known malware sample, createdBy: admin.entity-a, createdAt: '2026-10-11T08:00:00Z' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin operations]
+      operationId: createBlocklistEntry
+      summary: Add a blocklist entry
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlocklistEntryCreate' }
+            example: { kind: email, value: mallory@example.net, comment: Phishing attempts }
+      responses:
+        '201':
+          description: Entry created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlocklistEntry' }
+              example: { id: blk_01JABCH4L5M6N7P8Q9R0S1T2U3, kind: email, value: mallory@example.net, comment: Phishing attempts, createdBy: admin.entity-a, createdAt: '2026-10-19T16:15:00Z' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+
+  /admin/tenants/{tenantId}/blocklist/{entryId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: entryId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^blk_[0-9A-Z]{26}$' }
+        example: blk_01JABCH4L5M6N7P8Q9R0S1T2U3
+    delete:
+      tags: [Admin operations]
+      operationId: deleteBlocklistEntry
+      summary: Remove a blocklist entry
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Entry removed. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/api-tokens:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listApiTokens
+      summary: List API tokens (never the secret)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Tokens.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApiToken' }
+              example:
+                - id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                  name: Nightly ERP export
+                  prefix: tt_9fK2
+                  allowedCidrs: [10.10.20.15/32]
+                  createdBy: admin.entity-a
+                  createdAt: '2026-10-01T08:00:00Z'
+                  lastUsedAt: '2026-10-19T02:00:12Z'
+                  expiresAt: null
+                  revokedAt: null
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Admin operations]
+      operationId: createApiToken
+      summary: Create an API token
+      description: |
+        The secret is returned **once** in this response and stored hashed. No expiry by default.
+        `allowedCidrs` is mandatory: list the IP ranges the token may be used from, or
+        `0.0.0.0/0` and `::/0` to allow any address explicitly.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApiTokenCreate' }
+            examples:
+              singleHost:
+                summary: Restricted to one server
+                value: { name: Nightly ERP export, allowedCidrs: [10.10.20.15/32], expiresAt: null }
+              anyAddress:
+                summary: Usable from any address (explicit)
+                value: { name: Partner integration, allowedCidrs: [0.0.0.0/0, '::/0'], expiresAt: '2027-06-30T23:59:59Z' }
+      responses:
+        '201':
+          description: Token created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiTokenCreated' }
+              example:
+                id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                name: Nightly ERP export
+                prefix: tt_9fK2
+                allowedCidrs: [10.10.20.15/32]
+                createdBy: admin.entity-a
+                createdAt: '2026-10-19T16:20:00Z'
+                lastUsedAt: null
+                expiresAt: null
+                revokedAt: null
+                token: tt_9fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5dF8gH1jK4
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/api-tokens/{tokenId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - name: tokenId
+        in: path
+        required: true
+        schema: { type: string, pattern: '^tok_[0-9A-Z]{26}$' }
+        example: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+    patch:
+      tags: [Admin operations]
+      operationId: updateApiToken
+      summary: Rename a token or change its allowed IP ranges
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/ApiTokenUpdate' }
+            example: { allowedCidrs: [10.10.20.16/32] }
+      responses:
+        '200':
+          description: Updated token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiToken' }
+              example:
+                id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                name: Nightly ERP export
+                prefix: tt_9fK2
+                allowedCidrs: [10.10.20.16/32]
+                createdBy: admin.entity-a
+                createdAt: '2026-10-01T08:00:00Z'
+                lastUsedAt: '2026-10-19T02:00:12Z'
+                expiresAt: null
+                revokedAt: null
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+    delete:
+      tags: [Admin operations]
+      operationId: revokeApiToken
+      summary: Revoke an API token (immediate)
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Token revoked. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/audit-events:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listTenantAuditEvents
+      summary: Audit log of the tenant (12-month retention)
+      security:
+        - adminSession: []
+      parameters:
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/AuditAction' }
+          example: transfer.deleted
+        - name: actor
+          in: query
+          schema: { type: string, maxLength: 320 }
+          example: alice@entity-a.example.com
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+          example: '2026-10-01T00:00:00Z'
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+          example: '2026-10-19T23:59:59Z'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Audit events (most recent first).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditEventList' }
+              example:
+                items:
+                  - id: aud_01JABCK6N7P8Q9R0S1T2U3V4W5
+                    occurredAt: '2026-10-19T16:20:00Z'
+                    tenantId: ten_01JAB0000000000000ENTITYA
+                    actor: { kind: depositor, id: alice@entity-a.example.com }
+                    ip: 10.10.4.21
+                    action: transfer.finalized
+                    object: { kind: transfer, id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS }
+                    details: { fileCount: 2, totalBytes: 12900630528 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/stats:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: getTenantStats
+      summary: Tenant dashboard statistics
+      security:
+        - adminSession: []
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [7d, 30d, 12m], default: 30d }
+          example: 30d
+      responses:
+        '200':
+          description: Statistics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantStats' }
+              example:
+                period: 30d
+                transferCount: 412
+                bytesUploaded: 1932735283200
+                downloadCount: 1287
+                bytesDownloaded: 4123168604160
+                virusDetections: 2
+                storageUsedBytes: 274877906944
+                storageQuotaBytes: 1099511627776
+                storageUsedRatio: 0.25
+                series:
+                  - { date: '2026-10-18', transfers: 17, bytesUploaded: 64424509440 }
+                  - { date: '2026-10-19', transfers: 9, bytesUploaded: 32212254720 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/data-subjects/search:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin operations]
+      operationId: searchDataSubject
+      summary: GDPR - find all data linked to an email address
+      description: POST is used so that the address does not appear in URLs and proxy logs.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+            example: { email: carol@customer.example.net }
+      responses:
+        '200':
+          description: Summary of the data held.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectSummary' }
+              example:
+                email: carol@customer.example.net
+                verifiedAddress: false
+                transfersAsSender: 0
+                transfersAsRecipient: 3
+                invitations: 0
+                auditEvents: 7
+                securityEvents: 0
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/tenants/{tenantId}/data-subjects/erase:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin operations]
+      operationId: eraseDataSubject
+      summary: GDPR - erase all data linked to an email address
+      description: |
+        Deletes transfers sent by the address (with crypto-erase), removes the address from
+        recipient lists (a transfer left without recipient is deleted), deletes its verified
+        address record, verification codes and invitations, and pseudonymises it in audit and
+        security log entries. The erase itself is audited without the address in clear.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+            example: { email: carol@customer.example.net }
+      responses:
+        '200':
+          description: Erasure report.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectEraseReport' }
+              example:
+                transfersDeleted: 0
+                recipientEntriesRemoved: 3
+                verifiedAddressDeleted: false
+                invitationsDeleted: 0
+                logEntriesPseudonymised: 7
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # Admin - system (super admin)
+  # ---------------------------------------------------------------------------
+  /admin/admins:
+    get:
+      tags: [Admin system]
+      operationId: listAdmins
+      summary: List admin accounts (super admin)
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Admins.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminList' }
+              example:
+                items:
+                  - id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                    username: admin.entity-a
+                    email: admin@entity-a.example.com
+                    role: delegated_admin
+                    tenantIds: [ten_01JAB0000000000000ENTITYA]
+                    totpEnabled: true
+                    disabled: false
+                    lastLoginAt: '2026-10-19T08:30:00Z'
+                    createdAt: '2026-09-01T08:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin system]
+      operationId: createAdmin
+      summary: Create a delegated admin (super admin)
+      description: |
+        The account is created with a one-time activation link sent by email (through the SMTP
+        of the first assigned tenant); the admin chooses a password and enrolls TOTP on first login.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCreate' }
+            example:
+              username: admin.entity-b
+              email: admin@entity-b.example.com
+              role: delegated_admin
+              tenantIds: [ten_01JAB0000000000000ENTITYB]
+              requireTotp: true
+      responses:
+        '201':
+          description: Admin created; activation email sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Admin' }
+              example:
+                id: adm_01JABCL7P8Q9R0S1T2U3V4W5X6
+                username: admin.entity-b
+                email: admin@entity-b.example.com
+                role: delegated_admin
+                tenantIds: [ten_01JAB0000000000000ENTITYB]
+                totpEnabled: false
+                requireTotp: true
+                disabled: false
+                lastLoginAt: null
+                createdAt: '2026-10-19T16:25:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+
+  /admin/admins/{adminId}:
+    parameters:
+      - $ref: '#/components/parameters/AdminId'
+    get:
+      tags: [Admin system]
+      operationId: getAdmin
+      summary: Get an admin account (super admin)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Admin' }
+              example:
+                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                username: admin.entity-a
+                email: admin@entity-a.example.com
+                role: delegated_admin
+                tenantIds: [ten_01JAB0000000000000ENTITYA]
+                totpEnabled: true
+                requireTotp: true
+                disabled: false
+                lastLoginAt: '2026-10-19T08:30:00Z'
+                createdAt: '2026-09-01T08:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin system]
+      operationId: updateAdmin
+      summary: Update assignments, TOTP requirement or disable an account (super admin)
+      description: Disabling an account or changing its assignments revokes its sessions.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/AdminUpdate' }
+            example: { tenantIds: [ten_01JAB0000000000000ENTITYA, ten_01JAB0000000000000ENTITYB] }
+      responses:
+        '200':
+          description: Updated admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Admin' }
+              example:
+                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                username: admin.entity-a
+                email: admin@entity-a.example.com
+                role: delegated_admin
+                tenantIds: [ten_01JAB0000000000000ENTITYA, ten_01JAB0000000000000ENTITYB]
+                totpEnabled: true
+                requireTotp: true
+                disabled: false
+                lastLoginAt: '2026-10-19T08:30:00Z'
+                createdAt: '2026-09-01T08:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Admin system]
+      operationId: deleteAdmin
+      summary: Delete an admin account (super admin)
+      description: The last super admin cannot be deleted.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Admin deleted. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+
+  /admin/admins/{adminId}/reset-credentials:
+    parameters:
+      - $ref: '#/components/parameters/AdminId'
+    post:
+      tags: [Admin system]
+      operationId: resetAdminCredentials
+      summary: Reset password and TOTP of an admin (super admin)
+      description: Revokes sessions, clears TOTP and recovery codes, and sends a new activation link.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '202': { description: Reset done; activation email queued. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/activation:
+    post:
+      tags: [Admin auth]
+      operationId: activateAdmin
+      summary: Activate an admin account from the emailed link
+      description: Sets the password; the resulting pre-auth session must then enroll TOTP if required.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivationRequest' }
+            example: { activationToken: act_Lm3Qz8Xv1Bn6Kd0R4Tp7Yw2H, password: a-long-passphrase-of-at-least-12-characters }
+      responses:
+        '200':
+          description: Account activated.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginState' }
+              example: { status: totp_enrollment_required, csrfToken: csrf_Ab12Cd34Ef56Gh78 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/system/stats:
+    get:
+      tags: [Admin system]
+      operationId: getGlobalStats
+      summary: Global dashboard (super admin)
+      security:
+        - adminSession: []
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [7d, 30d, 12m], default: 30d }
+          example: 30d
+      responses:
+        '200':
+          description: Global and per-tenant statistics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GlobalStats' }
+              example:
+                period: 30d
+                disk: { totalBytes: 4398046511104, usedBytes: 1319413953331, usedRatio: 0.30, alertThreshold: 0.85 }
+                tenants:
+                  - tenantId: ten_01JAB0000000000000ENTITYA
+                    name: Entity A
+                    transferCount: 412
+                    bytesUploaded: 1932735283200
+                    storageUsedBytes: 274877906944
+                    storageQuotaBytes: 1099511627776
+                    storageUsedRatio: 0.25
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/system/settings:
+    get:
+      tags: [Admin system]
+      operationId: getSystemSettings
+      summary: Instance settings editable at runtime (super admin)
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemSettings' }
+              example: { diskAlertThreshold: 0.85, alertEmail: it-admin@example.com }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [Admin system]
+      operationId: updateSystemSettings
+      summary: Update instance settings (super admin)
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/SystemSettings' }
+            example: { diskAlertThreshold: 0.9 }
+      responses:
+        '200':
+          description: Updated settings.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemSettings' }
+              example: { diskAlertThreshold: 0.9, alertEmail: it-admin@example.com }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/system/maintenance:
+    get:
+      tags: [Admin system]
+      operationId: getMaintenance
+      summary: Maintenance mode state
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Maintenance state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Maintenance' }
+              example: { enabled: false, source: none }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      tags: [Admin system]
+      operationId: setMaintenance
+      summary: Enable or disable maintenance mode (super admin)
+      description: |
+        When enabled, new deposits, invitations and uploads are refused with `503`; downloads,
+        the health check and the admin space remain available. When forced by `TT_MAINTENANCE=true`,
+        it cannot be disabled from the API (`409`).
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaintenanceUpdate' }
+            example: { enabled: true, message: { fr: "Mise à jour en cours, retour vers 20 h.", en: "Upgrade in progress, back around 8 pm." } }
+      responses:
+        '200':
+          description: New state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Maintenance' }
+              example: { enabled: true, source: admin, since: '2026-10-19T18:00:00Z', message: { fr: "Mise à jour en cours, retour vers 20 h.", en: "Upgrade in progress, back around 8 pm." } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+
+  /admin/system/master-key/rotations:
+    post:
+      tags: [Admin system]
+      operationId: startMasterKeyRotation
+      summary: Start a master key rotation (super admin)
+      description: |
+        Re-wraps every per-file key (and every encrypted secret such as SMTP passwords) with the
+        new master key provided through `TT_MASTER_KEY_NEW_FILE`. File contents are neither read
+        nor rewritten. The operation is resumable after an interruption and audited. Equivalent
+        to the `transteira rotate-master-key` command. Requires TOTP re-confirmation.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpCode' }
+            example: { code: '204816' }
+      responses:
+        '202':
+          description: Rotation started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyRotation' }
+              example:
+                id: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+                status: running
+                fromKeyId: mk-2026-01
+                toKeyId: mk-2026-10
+                totalKeys: 18342
+                rewrappedKeys: 0
+                startedAt: '2026-10-19T16:30:00Z'
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: A rotation is already running, or no new master key is configured.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#new-master-key-missing
+                title: New master key not configured
+                status: 409
+                code: new-master-key-missing
+
+  /admin/system/master-key/rotations/{rotationId}:
+    get:
+      tags: [Admin system]
+      operationId: getMasterKeyRotation
+      summary: Progress of a master key rotation
+      security:
+        - adminSession: []
+      parameters:
+        - name: rotationId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^rot_[0-9A-Z]{26}$' }
+          example: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+      responses:
+        '200':
+          description: Rotation state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyRotation' }
+              example:
+                id: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+                status: completed
+                fromKeyId: mk-2026-01
+                toKeyId: mk-2026-10
+                totalKeys: 18342
+                rewrappedKeys: 18342
+                startedAt: '2026-10-19T16:30:00Z'
+                completedAt: '2026-10-19T16:31:12Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/system/audit-events:
+    get:
+      tags: [Admin system]
+      operationId: listGlobalAuditEvents
+      summary: Instance-wide audit log (super admin)
+      description: All tenants plus events without tenant (setup, admin management, maintenance, key rotation).
+      security:
+        - adminSession: []
+      parameters:
+        - name: tenantId
+          in: query
+          schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
+          example: ten_01JAB0000000000000ENTITYA
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/AuditAction' }
+          example: maintenance.enabled
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Audit events.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditEventList' }
+              example:
+                items:
+                  - id: aud_01JABCN9R0S1T2U3V4W5X6Y7Z8
+                    occurredAt: '2026-10-19T18:00:00Z'
+                    tenantId: null
+                    actor: { kind: admin, id: superadmin }
+                    ip: 10.10.1.5
+                    action: maintenance.enabled
+                    object: { kind: system, id: maintenance }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    depositSession:
+      type: apiKey
+      in: cookie
+      name: __Host-tt_deposit
+      description: Opaque session identifier set after email verification. Bound to one tenant and one address. Lifetime `TT_DEPOSIT_SESSION_TTL` (4 h by default).
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: __Host-tt_admin
+      description: Opaque admin session identifier (server-side session). Rotated after each authentication step. Idle timeout 30 min, absolute timeout 12 h by default.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Synchronizer token returned in the session payloads (`csrfToken`). Mandatory with cookie authentication on unsafe methods.
+    apiToken:
+      type: http
+      scheme: bearer
+      bearerFormat: tt_<random>
+      description: Per-tenant API token created by an admin. Only valid on the host of its tenant.
+    downloadGrant:
+      type: apiKey
+      in: cookie
+      name: __Host-tt_dl
+      description: Set after unlocking a password-protected transfer; lists the unlocked links for this browser. Lifetime 1 h.
+
+  parameters:
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      schema: { type: string }
+      example: fr-FR,fr;q=0.9,en;q=0.8
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional key making retries of transfer creation safe (24 h retention).
+      schema: { type: string, maxLength: 64 }
+      example: 5f0c6c1e-8b7a-4a8e-9f0d-2c3b4a5d6e7f
+    TusResumableHeader:
+      name: Tus-Resumable
+      in: header
+      required: true
+      schema: { type: string, enum: ['1.0.0'] }
+      example: 1.0.0
+    ChallengeId:
+      name: challengeId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^vch_[A-Za-z0-9]{16,32}$' }
+      example: vch_4Fq9Lm2Zx8Rt6Yb1
+    TransferId:
+      name: transferId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^trf_[0-9A-Z]{26}$' }
+      example: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+    FileId:
+      name: fileId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^fil_[0-9A-Z]{26}$' }
+      example: fil_01JABCD9F1A2B3C4D5E6F7G8H9
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^upl_[A-Za-z0-9]{24,43}$' }
+      example: upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd
+    LinkToken:
+      name: linkToken
+      in: path
+      required: true
+      description: Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+      schema: { type: string, pattern: '^dl_[A-Za-z0-9]{22,43}$' }
+      example: dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+    InvitationToken:
+      name: invitationToken
+      in: path
+      required: true
+      schema: { type: string, pattern: '^inv_[A-Za-z0-9]{22,43}$' }
+      example: inv_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+      schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
+      example: ten_01JAB0000000000000ENTITYA
+    AdminId:
+      name: adminId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^adm_[0-9A-Z]{26}$' }
+      example: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+    TemplateKey:
+      name: templateKey
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/EmailTemplateKey' }
+      example: transfer-notification
+    LanguagePath:
+      name: language
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Language' }
+      example: fr
+    LegalDocumentPath:
+      name: document
+      in: path
+      required: true
+      schema: { type: string, enum: [legal-notice, privacy-policy] }
+      example: privacy-policy
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      example: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+      example: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+
+  headers:
+    ContentLanguage:
+      schema: { type: string }
+      example: fr
+    ETag:
+      schema: { type: string }
+      example: '"a1b2c3d4"'
+    RetryAfter:
+      description: Seconds before retrying.
+      schema: { type: integer }
+      example: 900
+    TusResumable:
+      schema: { type: string }
+      example: 1.0.0
+    UploadOffset:
+      schema: { type: integer }
+      example: 1048576
+    UploadExpires:
+      description: RFC 9110 date after which an unfinished upload is purged.
+      schema: { type: string }
+      example: Tue, 20 Oct 2026 16:00:00 GMT
+    ContentLength:
+      schema: { type: integer }
+      example: 15728640
+    NoSniff:
+      schema: { type: string, enum: [nosniff] }
+      example: nosniff
+    ContentDispositionAttachment:
+      schema: { type: string }
+      example: attachment; filename="plans-v3.pdf"; filename*=UTF-8''plans-v3.pdf
+    SetDepositCookie:
+      schema: { type: string }
+      example: __Host-tt_deposit=ds_Qm2Zx8...; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=14400
+    SetAdminCookie:
+      schema: { type: string }
+      example: __Host-tt_admin=as_Hx7Lp1...; Path=/; Secure; HttpOnly; SameSite=Strict
+    SetDownloadGrantCookie:
+      schema: { type: string }
+      example: __Host-tt_dl=dg_Vb4Nt9...; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=3600
+
+  responses:
+    ValidationFailed:
+      description: The request is malformed or a field is invalid.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#validation-failed
+            title: Invalid request
+            status: 400
+            code: validation-failed
+            errors:
+              - { field: 'recipients[0]', code: invalid-email }
+              - { field: expiryDays, code: not-allowed, allowed: [1, 7, 30] }
+    Unauthenticated:
+      description: Missing, expired or invalid credentials.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#unauthenticated
+            title: Authentication required
+            status: 401
+            code: unauthenticated
+    InvalidCredentials:
+      description: Wrong username/password, TOTP code, or API token. Written to the security log.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invalid-credentials
+            title: Invalid credentials
+            status: 401
+            code: invalid-credentials
+    Forbidden:
+      description: Authenticated but not allowed (role).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#forbidden
+            title: Forbidden
+            status: 403
+            code: forbidden
+    CsrfInvalid:
+      description: Missing or invalid CSRF token.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+            title: Invalid CSRF token
+            status: 403
+            code: csrf-invalid
+    DepositForbidden:
+      description: |
+        Deposit not allowed: client outside internal IP ranges (`ip-not-allowed`), email domain not
+        internal (`domain-not-allowed`), address or domain blocklisted (`blocked-sender`), external
+        user trying to invite (`invitation-not-allowed`), or CSRF failure. Written to the security log.
+        The message is deliberately generic and identical for IP and domain refusals.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
+            title: Deposit not allowed
+            status: 403
+            code: deposit-not-allowed
+            detail: Deposits are only possible from the internal network with an internal address, or with an invitation.
+    InvitationGone:
+      description: Invitation expired, revoked or already used.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invitation-gone
+            title: Invitation no longer valid
+            status: 410
+            code: invitation-gone
+    NotFound:
+      description: Resource not found (or outside the caller's tenant / scope).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#not-found
+            title: Not found
+            status: 404
+            code: not-found
+    TransferGone:
+      description: Transfer expired or deleted.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#transfer-gone
+            title: Transfer no longer available
+            status: 410
+            code: transfer-gone
+    DownloadLocked:
+      description: The transfer is password protected and not unlocked for this browser.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#download-locked
+            title: Password required
+            status: 401
+            code: download-locked
+    StateConflict:
+      description: The operation is not allowed in the current state of the resource.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict
+            title: Operation not allowed in the current state
+            status: 409
+            code: state-conflict
+    AlreadyExists:
+      description: A resource with the same unique key already exists.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#already-exists
+            title: Already exists
+            status: 409
+            code: already-exists
+            detail: The FQDN transfer.entity-b.example.com is already used.
+    TransferTooLarge:
+      description: Declared total size exceeds the tenant per-transfer limit.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#transfer-too-large
+            title: Transfer too large
+            status: 413
+            code: transfer-too-large
+            maxTransferBytes: 21474836480
+    PayloadTooLarge:
+      description: Request body too large.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#payload-too-large
+            title: Payload too large
+            status: 413
+            code: payload-too-large
+    UnsupportedMediaType:
+      description: Unsupported content type.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#unsupported-media-type
+            title: Unsupported media type
+            status: 415
+            code: unsupported-media-type
+    QuotaExceeded:
+      description: The tenant storage quota is reached; new deposits are blocked until space is freed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#quota-exceeded
+            title: Storage quota reached
+            status: 507
+            code: quota-exceeded
+            detail: The storage space of this service is full. Please try again later.
+    RateLimited:
+      description: Too many requests. Written to the security log.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#rate-limited
+            title: Too many requests
+            status: 429
+            code: rate-limited
+            retryAfterSeconds: 1800
+    Maintenance:
+      description: Maintenance mode; deposits are temporarily refused.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#maintenance
+            title: Maintenance in progress
+            status: 503
+            code: maintenance
+            detail: Upgrade in progress, back around 8 pm.
+    UnknownTenant:
+      description: The `Host` header does not match any tenant. Written to the security log.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#unknown-tenant
+            title: Unknown host
+            status: 421
+            code: unknown-tenant
+
+  schemas:
+    # --- Common -----------------------------------------------------------
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with TransTeira extension members.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri, description: Documentation URL of the problem type. }
+        title: { type: string, description: Short localised summary. }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string, description: Localised human-readable explanation. }
+        instance: { type: string, description: Request identifier (also in the `X-Request-Id` header and in logs). }
+        code: { $ref: '#/components/schemas/ProblemCode' }
+        errors:
+          type: array
+          description: Field-level validation errors (`validation-failed` only).
+          items:
+            type: object
+            required: [field, code]
+            properties:
+              field: { type: string }
+              code: { type: string }
+              allowed: { type: array, items: {} }
+        attemptsRemaining: { type: integer, minimum: 0 }
+        retryAfterSeconds: { type: integer, minimum: 0 }
+        maxTransferBytes: { type: integer, format: int64 }
+        files: { type: array, items: { type: string } }
+      additionalProperties: false
+    ProblemCode:
+      type: string
+      x-extensible-enum: true
+      description: Stable error code. See `docs/api/errors.md`.
+      enum:
+        - validation-failed
+        - unauthenticated
+        - invalid-credentials
+        - forbidden
+        - csrf-invalid
+        - deposit-not-allowed
+        - ip-not-allowed
+        - domain-not-allowed
+        - blocked-sender
+        - blocked-file
+        - invitation-not-allowed
+        - invitation-gone
+        - verification-code-invalid
+        - verification-exhausted
+        - not-found
+        - transfer-gone
+        - download-locked
+        - transfer-password-invalid
+        - transfer-locked
+        - state-conflict
+        - already-exists
+        - upload-incomplete
+        - checksum-mismatch
+        - transfer-too-large
+        - payload-too-large
+        - unsupported-media-type
+        - quota-exceeded
+        - rate-limited
+        - maintenance
+        - unknown-tenant
+        - setup-already-done
+        - setup-token-invalid
+        - new-master-key-missing
+        - internal-error
+    Language:
+      type: string
+      x-extensible-enum: true
+      description: Supported UI language (ISO 639-1). New languages may be added.
+      enum: [fr, en]
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+    Sha256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    ByteSize:
+      type: integer
+      format: int64
+      minimum: 0
+    Cursor:
+      type: string
+      description: Opaque cursor for the next page; absent on the last page.
+
+    # --- Meta -------------------------------------------------------------
+    Health:
+      type: object
+      required: [status, version, maintenance, checks]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        maintenance: { type: boolean }
+        checks:
+          type: object
+          required: [database, antivirus, storage]
+          properties:
+            database: { $ref: '#/components/schemas/ComponentHealth' }
+            antivirus: { $ref: '#/components/schemas/ComponentHealth' }
+            storage: { $ref: '#/components/schemas/ComponentHealth' }
+    ComponentHealth:
+      type: string
+      enum: [ok, unavailable]
+    VersionInfo:
+      type: object
+      required: [version, apiVersion]
+      properties:
+        version: { type: string, description: SemVer of the application. }
+        apiVersion: { type: string, enum: [v1] }
+        commit: { type: string }
+    PublicTenant:
+      type: object
+      required: [name, language, availableLanguages, branding, limits, maintenance, legalDocuments]
+      properties:
+        name: { type: string }
+        language: { $ref: '#/components/schemas/Language' }
+        availableLanguages: { type: array, items: { $ref: '#/components/schemas/Language' } }
+        branding:
+          type: object
+          required: [primaryColor, accentColor, logoUrl, backgroundUrl]
+          properties:
+            primaryColor: { $ref: '#/components/schemas/HexColor' }
+            accentColor: { $ref: '#/components/schemas/HexColor' }
+            logoUrl: { type: string }
+            backgroundUrl: { type: string }
+        limits:
+          type: object
+          required: [maxTransferBytes, expiryDays]
+          properties:
+            maxTransferBytes: { $ref: '#/components/schemas/ByteSize' }
+            expiryDays: { type: array, items: { $ref: '#/components/schemas/ExpiryDays' } }
+        maintenance: { type: boolean }
+        maintenanceMessage: { type: string }
+        legalDocuments: { type: array, items: { type: string, enum: [legal-notice, privacy-policy] } }
+    LegalDocument:
+      type: object
+      required: [document, language, markdown]
+      properties:
+        document: { type: string, enum: [legal-notice, privacy-policy] }
+        language: { $ref: '#/components/schemas/Language' }
+        markdown: { type: string, maxLength: 100000 }
+        updatedAt: { type: string, format: date-time }
+    LegalDocumentUpdate:
+      type: object
+      required: [markdown]
+      properties:
+        markdown: { type: string, maxLength: 100000 }
+      additionalProperties: false
+
+    # --- Deposit sessions -------------------------------------------------
+    DepositSessionStart:
+      type: object
+      required: [email]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        invitationToken: { type: string, pattern: '^inv_[A-Za-z0-9]{22,43}$' }
+      additionalProperties: false
+    VerificationChallenge:
+      type: object
+      required: [challengeId, email, expiresAt, attemptsRemaining]
+      properties:
+        challengeId: { type: string }
+        email: { $ref: '#/components/schemas/Email' }
+        expiresAt: { type: string, format: date-time }
+        attemptsRemaining: { type: integer, minimum: 0, maximum: 2 }
+    VerificationCode:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+      additionalProperties: false
+    DepositorKind:
+      type: string
+      x-extensible-enum: true
+      description: |
+        `internal`: internal IP and domain. `external`: invited external.
+        Reserved for V1.1: `internal_remote` (verified internal depositing from outside),
+        `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
+      enum: [internal, external]
+    DepositSession:
+      type: object
+      required: [email, kind, csrfToken, expiresAt, limits, canInvite]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        kind: { $ref: '#/components/schemas/DepositorKind' }
+        csrfToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+        limits:
+          type: object
+          required: [maxTransferBytes, expiryDays]
+          properties:
+            maxTransferBytes: { $ref: '#/components/schemas/ByteSize' }
+            expiryDays: { type: array, items: { $ref: '#/components/schemas/ExpiryDays' } }
+        canInvite: { type: boolean }
+        invitation:
+          type: object
+          description: Present for external depositors.
+          required: [invitedBy, expiresAt]
+          properties:
+            invitedBy: { $ref: '#/components/schemas/Email' }
+            expiresAt: { type: string, format: date-time }
+
+    # --- Transfers --------------------------------------------------------
+    ExpiryDays:
+      type: integer
+      enum: [1, 7, 30]
+    TransferStatus:
+      type: string
+      x-extensible-enum: true
+      description: |
+        `uploading` → `scanning` → `available` → `expired` | `deleted`.
+        `rejected`: every file was infected or blocklisted.
+      enum: [uploading, scanning, available, rejected, expired, deleted]
+    ScanStatus:
+      type: string
+      x-extensible-enum: true
+      description: |
+        `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
+        `infected`: file deleted, kept in the list for the sender's information only.
+        `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
+        never downloadable) and the sender and super admin are informed.
+      enum: [pending, scanning, clean, infected, not_scanned_too_large, scan_error]
+    FileDeclaration:
+      type: object
+      required: [name, size]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Original file name (UTF-8). Stored in the database only; never used on disk. Control and bidirectional characters are rejected.
+        size: { $ref: '#/components/schemas/ByteSize' }
+        mediaType: { type: string, maxLength: 255, description: Informational only; downloads are always served as `application/octet-stream`. }
+        expectedSha256: { $ref: '#/components/schemas/Sha256' }
+      additionalProperties: false
+    TransferCreate:
+      type: object
+      required: [expiryDays, files]
+      properties:
+        senderEmail:
+          allOf: [{ $ref: '#/components/schemas/Email' }]
+          description: Mandatory with an API token, forbidden with a deposit session.
+        recipients:
+          type: array
+          description: Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient).
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Email' }
+        message: { type: string, maxLength: 5000, description: Plain text; never interpreted as HTML. }
+        expiryDays: { $ref: '#/components/schemas/ExpiryDays' }
+        password: { type: string, minLength: 1, maxLength: 1024, description: Optional; stored as an argon2id hash. }
+        deleteAfterFirstDownload: { type: boolean, default: false }
+        language: { $ref: '#/components/schemas/Language' }
+        files:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/FileDeclaration' }
+      additionalProperties: false
+    SenderFile:
+      type: object
+      required: [id, name, size, scanStatus]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        size: { $ref: '#/components/schemas/ByteSize' }
+        mediaType: { type: string }
+        sha256: { $ref: '#/components/schemas/Sha256' }
+        scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        uploadUrl: { type: string, description: tus upload URL (only while the transfer is `uploading`). }
+        uploadOffset: { $ref: '#/components/schemas/ByteSize' }
+    SenderTransfer:
+      type: object
+      required: [id, status, senderEmail, recipients, expiryDays, passwordProtected, deleteAfterFirstDownload, totalBytes, createdAt, files]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/TransferStatus' }
+        senderEmail: { $ref: '#/components/schemas/Email' }
+        recipients: { type: array, items: { $ref: '#/components/schemas/Email' } }
+        message: { type: string }
+        expiryDays: { $ref: '#/components/schemas/ExpiryDays' }
+        expiresAt: { type: string, format: date-time, description: Set at finalization. }
+        passwordProtected: { type: boolean }
+        deleteAfterFirstDownload: { type: boolean }
+        totalBytes: { $ref: '#/components/schemas/ByteSize' }
+        createdAt: { type: string, format: date-time }
+        uploadExpiresAt: { type: string, format: date-time }
+        finalizedAt: { type: string, format: date-time }
+        downloadUrl: { type: string, format: uri, description: Public download page (available once the transfer is `available`). }
+        files: { type: array, items: { $ref: '#/components/schemas/SenderFile' } }
+
+    # --- Invitations ------------------------------------------------------
+    InvitationStatus:
+      type: string
+      x-extensible-enum: true
+      enum: [pending, used, expired, revoked]
+    InvitationCreate:
+      type: object
+      required: [email]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        message: { type: string, maxLength: 2000 }
+        language: { $ref: '#/components/schemas/Language' }
+      additionalProperties: false
+    Invitation:
+      type: object
+      required: [id, email, invitedBy, status, createdAt, expiresAt]
+      properties:
+        id: { type: string }
+        email: { $ref: '#/components/schemas/Email' }
+        invitedBy: { $ref: '#/components/schemas/Email' }
+        status: { $ref: '#/components/schemas/InvitationStatus' }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastUsedAt: { type: string, format: date-time }
+    InvitationList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Invitation' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    PublicInvitation:
+      type: object
+      required: [email, invitedBy, expiresAt]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        invitedBy: { $ref: '#/components/schemas/Email' }
+        message: { type: string }
+        expiresAt: { type: string, format: date-time }
+
+    # --- Downloads --------------------------------------------------------
+    TransferPassword:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1, maxLength: 1024 }
+      additionalProperties: false
+    PublicFile:
+      type: object
+      required: [id, name, size, sha256, scanStatus, downloadUrl]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        size: { $ref: '#/components/schemas/ByteSize' }
+        mediaType: { type: string }
+        sha256: { $ref: '#/components/schemas/Sha256' }
+        scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        downloadUrl: { type: string }
+    PublicTransfer:
+      type: object
+      required: [senderEmail, expiresAt, passwordProtected, locked]
+      properties:
+        senderEmail: { $ref: '#/components/schemas/Email' }
+        message: { type: string, description: "Plain text, to be rendered as text (never HTML)." }
+        expiresAt: { type: string, format: date-time }
+        passwordProtected: { type: boolean }
+        locked: { type: boolean, description: True when a password is required and not yet provided. }
+        deleteAfterFirstDownload: { type: boolean }
+        totalBytes: { $ref: '#/components/schemas/ByteSize' }
+        archiveUrl: { type: string }
+        files:
+          type: array
+          description: Absent while `locked`. Infected files are not listed.
+          items: { $ref: '#/components/schemas/PublicFile' }
+
+    # --- Admin auth -------------------------------------------------------
+    SetupStatus:
+      type: object
+      required: [setupRequired]
+      properties:
+        setupRequired: { type: boolean }
+    Username:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9._-]{2,63}$'
+    AdminPassword:
+      type: string
+      minLength: 12
+      maxLength: 1024
+      description: At least 12 characters; checked against a list of common passwords.
+    SetupRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username: { $ref: '#/components/schemas/Username' }
+        email: { $ref: '#/components/schemas/Email' }
+        password: { $ref: '#/components/schemas/AdminPassword' }
+        setupToken: { type: string, maxLength: 128 }
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, maxLength: 64 }
+        password: { type: string, maxLength: 1024 }
+      additionalProperties: false
+    LoginState:
+      type: object
+      required: [status, csrfToken]
+      properties:
+        status:
+          type: string
+          x-extensible-enum: true
+          description: Reserved for V2 - `sso_redirect`.
+          enum: [totp_required, totp_enrollment_required, password_change_required, authenticated]
+        csrfToken: { type: string }
+    TotpCode:
+      type: object
+      description: Exactly one of `code` or `recoveryCode`.
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+        recoveryCode: { type: string, maxLength: 32 }
+      oneOf:
+        - required: [code]
+        - required: [recoveryCode]
+      additionalProperties: false
+    TotpEnrollment:
+      type: object
+      required: [secret, otpauthUri, qrCodePng]
+      properties:
+        secret: { type: string, description: Base32 secret (shown once). }
+        otpauthUri: { type: string }
+        qrCodePng: { type: string, contentEncoding: base64 }
+        csrfToken: { type: string }
+    TotpConfirmed:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes: { type: array, items: { type: string }, minItems: 8, maxItems: 10, description: "Single-use codes, shown once, stored hashed." }
+        csrfToken: { type: string }
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, maxLength: 1024 }
+        newPassword: { $ref: '#/components/schemas/AdminPassword' }
+      additionalProperties: false
+    PasswordConfirmation:
+      type: object
+      required: [currentPassword]
+      properties:
+        currentPassword: { type: string, maxLength: 1024 }
+      additionalProperties: false
+    ActivationRequest:
+      type: object
+      required: [activationToken, password]
+      properties:
+        activationToken: { type: string, maxLength: 128 }
+        password: { $ref: '#/components/schemas/AdminPassword' }
+      additionalProperties: false
+    AdminRole:
+      type: string
+      x-extensible-enum: true
+      description: Reserved for V2 - `auditor` (read-only on assigned tenants).
+      enum: [super_admin, delegated_admin]
+    TenantRef:
+      type: object
+      required: [id, name, fqdn]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        fqdn: { type: string }
+    AdminMe:
+      type: object
+      required: [id, username, email, role, totpEnabled, tenants, csrfToken]
+      properties:
+        id: { type: string }
+        username: { $ref: '#/components/schemas/Username' }
+        email: { $ref: '#/components/schemas/Email' }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        totpEnabled: { type: boolean }
+        tenants: { type: array, items: { $ref: '#/components/schemas/TenantRef' } }
+        csrfToken: { type: string }
+        language: { $ref: '#/components/schemas/Language' }
+    Admin:
+      type: object
+      required: [id, username, email, role, tenantIds, totpEnabled, disabled, createdAt]
+      properties:
+        id: { type: string }
+        username: { $ref: '#/components/schemas/Username' }
+        email: { $ref: '#/components/schemas/Email' }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        tenantIds: { type: array, items: { type: string }, description: Empty for super admins (implicit access to all tenants). }
+        totpEnabled: { type: boolean }
+        requireTotp: { type: boolean, description: Always true for super admins. }
+        disabled: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    AdminList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Admin' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    AdminCreate:
+      type: object
+      required: [username, email, role]
+      properties:
+        username: { $ref: '#/components/schemas/Username' }
+        email: { $ref: '#/components/schemas/Email' }
+        role: { $ref: '#/components/schemas/AdminRole' }
+        tenantIds: { type: array, items: { type: string }, uniqueItems: true }
+        requireTotp: { type: boolean, default: true }
+      additionalProperties: false
+    AdminUpdate:
+      type: object
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        tenantIds: { type: array, items: { type: string }, uniqueItems: true }
+        requireTotp: { type: boolean }
+        disabled: { type: boolean }
+      additionalProperties: false
+
+    # --- Admin tenants ----------------------------------------------------
+    HexColor:
+      type: string
+      pattern: '^#[0-9A-Fa-f]{6}$'
+    Fqdn:
+      type: string
+      maxLength: 253
+      pattern: '^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'
+    Tenant:
+      type: object
+      required: [id, name, fqdn, defaultLanguage, maxTransferBytes, storageQuotaBytes, storageUsedBytes, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        fqdn: { $ref: '#/components/schemas/Fqdn' }
+        defaultLanguage: { $ref: '#/components/schemas/Language' }
+        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+        storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
+        storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TenantList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Tenant' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    TenantCreate:
+      type: object
+      required: [name, fqdn, defaultLanguage, storageQuotaBytes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        fqdn: { $ref: '#/components/schemas/Fqdn' }
+        defaultLanguage: { $ref: '#/components/schemas/Language' }
+        storageQuotaBytes: { type: integer, format: int64, minimum: 1 }
+        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480, default: 21474836480 }
+      additionalProperties: false
+    TenantUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        fqdn: { $ref: '#/components/schemas/Fqdn' }
+        defaultLanguage: { $ref: '#/components/schemas/Language' }
+        storageQuotaBytes: { type: integer, format: int64, minimum: 1 }
+        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+      additionalProperties: false
+    ContrastResult:
+      type: object
+      required: [pair, ratio, level]
+      properties:
+        pair:
+          type: string
+          x-extensible-enum: true
+          enum: [primary-on-light, accent-on-light, text-on-primary]
+          description: V1.1 adds `*-on-dark` pairs for the dark theme.
+        ratio: { type: number }
+        level: { type: string, enum: [AAA, AA, fail] }
+    Branding:
+      type: object
+      required: [primaryColor, accentColor, hasLogo, hasBackground, contrast]
+      properties:
+        primaryColor: { $ref: '#/components/schemas/HexColor' }
+        accentColor: { $ref: '#/components/schemas/HexColor' }
+        hasLogo: { type: boolean }
+        hasBackground: { type: boolean }
+        contrast: { type: array, items: { $ref: '#/components/schemas/ContrastResult' } }
+    BrandingUpdate:
+      type: object
+      required: [primaryColor, accentColor]
+      properties:
+        primaryColor: { $ref: '#/components/schemas/HexColor' }
+        accentColor: { $ref: '#/components/schemas/HexColor' }
+      additionalProperties: false
+    NetworkRules:
+      type: object
+      required: [internalCidrs, internalDomains]
+      properties:
+        internalCidrs:
+          type: array
+          maxItems: 500
+          items: { type: string, description: IPv4 or IPv6 CIDR. }
+        internalDomains:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 253, description: Exact domain match (subdomains must be listed explicitly). }
+      additionalProperties: false
+    SmtpSecurity:
+      type: string
+      enum: [none, starttls, tls]
+      description: '`none` is intended for an unauthenticated relay on the internal Docker network.'
+    SmtpSettings:
+      type: object
+      required: [host, port, security, passwordSet, fromAddress]
+      properties:
+        host: { type: string, maxLength: 253 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        security: { $ref: '#/components/schemas/SmtpSecurity' }
+        username: { type: [string, 'null'], maxLength: 320 }
+        passwordSet: { type: boolean }
+        fromAddress: { $ref: '#/components/schemas/Email' }
+        fromName: { type: [string, 'null'], maxLength: 100 }
+    SmtpSettingsUpdate:
+      type: object
+      required: [host, port, security, fromAddress]
+      properties:
+        host: { type: string, maxLength: 253 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        security: { $ref: '#/components/schemas/SmtpSecurity' }
+        username: { type: [string, 'null'], maxLength: 320 }
+        password: { type: [string, 'null'], maxLength: 1024, description: "Omit to keep, `null` to remove." }
+        fromAddress: { $ref: '#/components/schemas/Email' }
+        fromName: { type: [string, 'null'], maxLength: 100 }
+      additionalProperties: false
+    SmtpTest:
+      type: object
+      required: [to]
+      properties:
+        to: { $ref: '#/components/schemas/Email' }
+      additionalProperties: false
+    SmtpTestResult:
+      type: object
+      required: [success, durationMs]
+      properties:
+        success: { type: boolean }
+        durationMs: { type: integer }
+        error: { type: string, description: SMTP error message (never contains credentials). }
+    DnsRecordCheck:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, warning, missing, error] }
+        record: { type: string }
+        message: { type: string }
+    MailDnsCheck:
+      type: object
+      required: [domain, spf, dkim, dmarc]
+      properties:
+        domain: { type: string }
+        spf: { $ref: '#/components/schemas/DnsRecordCheck' }
+        dkim:
+          type: object
+          required: [status, selectors]
+          properties:
+            status: { type: string, enum: [ok, warning, missing, error] }
+            selectors:
+              type: array
+              items:
+                type: object
+                required: [selector, found]
+                properties:
+                  selector: { type: string }
+                  found: { type: boolean }
+        dmarc: { $ref: '#/components/schemas/DnsRecordCheck' }
+    EmailTemplateKey:
+      type: string
+      x-extensible-enum: true
+      description: |
+        Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
+        `recipient-verification-code`.
+      enum:
+        - verification-code
+        - transfer-notification
+        - transfer-confirmation
+        - first-download
+        - virus-detected
+        - file-not-scanned
+        - invitation
+        - quota-warning
+        - quota-reached
+        - disk-alert
+        - antivirus-unavailable
+        - admin-activation
+    EmailTemplateSummary:
+      type: object
+      required: [key, language, customised]
+      properties:
+        key: { $ref: '#/components/schemas/EmailTemplateKey' }
+        language: { $ref: '#/components/schemas/Language' }
+        customised: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    EmailTemplate:
+      type: object
+      required: [key, language, customised, subject, bodyHtml, bodyText, variables]
+      properties:
+        key: { $ref: '#/components/schemas/EmailTemplateKey' }
+        language: { $ref: '#/components/schemas/Language' }
+        customised: { type: boolean }
+        subject: { type: string, maxLength: 255 }
+        bodyHtml: { type: string, maxLength: 100000 }
+        bodyText: { type: string, maxLength: 100000 }
+        variables: { type: array, items: { type: string } }
+        updatedAt: { type: string, format: date-time }
+    EmailTemplateUpdate:
+      type: object
+      required: [subject, bodyHtml, bodyText]
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 255 }
+        bodyHtml: { type: string, maxLength: 100000 }
+        bodyText: { type: string, maxLength: 100000 }
+      additionalProperties: false
+    EmailPreview:
+      type: object
+      required: [subject, bodyHtml, bodyText]
+      properties:
+        subject: { type: string }
+        bodyHtml: { type: string }
+        bodyText: { type: string }
+
+    # --- Admin operations -------------------------------------------------
+    TransferOrigin:
+      type: string
+      x-extensible-enum: true
+      description: Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
+      enum: [internal, external, api]
+    AdminTransfer:
+      type: object
+      required: [id, status, origin, senderEmail, recipients, fileCount, totalBytes, passwordProtected, deleteAfterFirstDownload, createdAt, downloadCount]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/TransferStatus' }
+        origin: { $ref: '#/components/schemas/TransferOrigin' }
+        senderEmail: { $ref: '#/components/schemas/Email' }
+        recipients: { type: array, items: { $ref: '#/components/schemas/Email' } }
+        invitationId: { type: string }
+        apiTokenId: { type: string }
+        fileCount: { type: integer }
+        totalBytes: { $ref: '#/components/schemas/ByteSize' }
+        passwordProtected: { type: boolean }
+        deleteAfterFirstDownload: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        firstDownloadedAt: { type: [string, 'null'], format: date-time }
+        downloadCount: { type: integer }
+    AdminTransferDetail:
+      allOf:
+        - $ref: '#/components/schemas/AdminTransfer'
+        - type: object
+          required: [files]
+          properties:
+            senderIp: { type: string }
+            files:
+              type: array
+              items:
+                type: object
+                required: [id, name, size, scanStatus]
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  size: { $ref: '#/components/schemas/ByteSize' }
+                  mediaType: { type: string }
+                  sha256: { $ref: '#/components/schemas/Sha256' }
+                  scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+    AdminTransferList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminTransfer' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    AdminReason:
+      type: object
+      properties:
+        reason: { type: string, maxLength: 500, description: Recorded in the audit log. }
+      additionalProperties: false
+    ResendRequest:
+      type: object
+      properties:
+        recipients:
+          type: array
+          description: Subset of the original recipients; all of them when omitted.
+          items: { $ref: '#/components/schemas/Email' }
+      additionalProperties: false
+    BlocklistKind:
+      type: string
+      enum: [email, domain, sha256]
+    BlocklistEntryCreate:
+      type: object
+      required: [kind, value]
+      properties:
+        kind: { $ref: '#/components/schemas/BlocklistKind' }
+        value: { type: string, maxLength: 320, description: Normalised to lower case. }
+        comment: { type: string, maxLength: 500 }
+      additionalProperties: false
+    BlocklistEntry:
+      type: object
+      required: [id, kind, value, createdBy, createdAt]
+      properties:
+        id: { type: string }
+        kind: { $ref: '#/components/schemas/BlocklistKind' }
+        value: { type: string }
+        comment: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+    BlocklistList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/BlocklistEntry' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    AllowedCidrs:
+      type: array
+      minItems: 1
+      maxItems: 100
+      uniqueItems: true
+      description: IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
+      items: { type: string, maxLength: 43 }
+    ApiToken:
+      type: object
+      required: [id, name, prefix, allowedCidrs, createdBy, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string, description: "First characters of the token, to recognise it." }
+        allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+    ApiTokenCreate:
+      type: object
+      required: [name, allowedCidrs]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+        expiresAt: { type: [string, 'null'], format: date-time }
+      additionalProperties: false
+    ApiTokenUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+      additionalProperties: false
+    ApiTokenCreated:
+      allOf:
+        - $ref: '#/components/schemas/ApiToken'
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, description: "Secret value, returned only once." }
+    AuditAction:
+      type: string
+      x-extensible-enum: true
+      enum:
+        - transfer.created
+        - transfer.finalized
+        - transfer.downloaded
+        - transfer.expired
+        - transfer.deleted
+        - transfer.notification_resent
+        - file.infected
+        - file.not_scanned
+        - address.verified
+        - invitation.created
+        - invitation.used
+        - invitation.revoked
+        - quota.warning
+        - quota.reached
+        - api_token.created
+        - api_token.used
+        - api_token.revoked
+        - admin.login
+        - admin.logout
+        - admin.created
+        - admin.updated
+        - admin.deleted
+        - tenant.created
+        - tenant.updated
+        - tenant.deleted
+        - config.updated
+        - blocklist.updated
+        - data_subject.erased
+        - maintenance.enabled
+        - maintenance.disabled
+        - master_key.rotation_started
+        - master_key.rotation_completed
+        - setup.completed
+    AuditEvent:
+      type: object
+      required: [id, occurredAt, actor, action, object]
+      properties:
+        id: { type: string }
+        occurredAt: { type: string, format: date-time }
+        tenantId: { type: [string, 'null'] }
+        actor:
+          type: object
+          required: [kind, id]
+          properties:
+            kind: { type: string, x-extensible-enum: true, enum: [depositor, recipient, admin, api_token, system] }
+            id: { type: string }
+        ip: { type: string }
+        action: { $ref: '#/components/schemas/AuditAction' }
+        object:
+          type: object
+          required: [kind, id]
+          properties:
+            kind: { type: string }
+            id: { type: string }
+        details: { type: object, additionalProperties: true }
+    AuditEventList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+        nextCursor: { $ref: '#/components/schemas/Cursor' }
+    TenantStats:
+      type: object
+      required: [period, transferCount, bytesUploaded, downloadCount, bytesDownloaded, virusDetections, storageUsedBytes, storageQuotaBytes, storageUsedRatio, series]
+      properties:
+        period: { type: string, enum: [7d, 30d, 12m] }
+        transferCount: { type: integer }
+        bytesUploaded: { $ref: '#/components/schemas/ByteSize' }
+        downloadCount: { type: integer }
+        bytesDownloaded: { $ref: '#/components/schemas/ByteSize' }
+        virusDetections: { type: integer }
+        storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
+        storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
+        storageUsedRatio: { type: number, minimum: 0 }
+        series:
+          type: array
+          items:
+            type: object
+            required: [date, transfers, bytesUploaded]
+            properties:
+              date: { type: string, format: date }
+              transfers: { type: integer }
+              bytesUploaded: { $ref: '#/components/schemas/ByteSize' }
+    DataSubjectRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+      additionalProperties: false
+    DataSubjectSummary:
+      type: object
+      required: [email, verifiedAddress, transfersAsSender, transfersAsRecipient, invitations, auditEvents, securityEvents]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        verifiedAddress: { type: boolean }
+        transfersAsSender: { type: integer }
+        transfersAsRecipient: { type: integer }
+        invitations: { type: integer }
+        auditEvents: { type: integer }
+        securityEvents: { type: integer }
+    DataSubjectEraseReport:
+      type: object
+      required: [transfersDeleted, recipientEntriesRemoved, verifiedAddressDeleted, invitationsDeleted, logEntriesPseudonymised]
+      properties:
+        transfersDeleted: { type: integer }
+        recipientEntriesRemoved: { type: integer }
+        verifiedAddressDeleted: { type: boolean }
+        invitationsDeleted: { type: integer }
+        logEntriesPseudonymised: { type: integer }
+
+    # --- System -----------------------------------------------------------
+    GlobalStats:
+      type: object
+      required: [period, disk, tenants]
+      properties:
+        period: { type: string, enum: [7d, 30d, 12m] }
+        disk:
+          type: object
+          required: [totalBytes, usedBytes, usedRatio, alertThreshold]
+          properties:
+            totalBytes: { $ref: '#/components/schemas/ByteSize' }
+            usedBytes: { $ref: '#/components/schemas/ByteSize' }
+            usedRatio: { type: number }
+            alertThreshold: { type: number }
+        tenants:
+          type: array
+          items:
+            type: object
+            required: [tenantId, name, transferCount, bytesUploaded, storageUsedBytes, storageQuotaBytes, storageUsedRatio]
+            properties:
+              tenantId: { type: string }
+              name: { type: string }
+              transferCount: { type: integer }
+              bytesUploaded: { $ref: '#/components/schemas/ByteSize' }
+              storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
+              storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
+              storageUsedRatio: { type: number }
+    SystemSettings:
+      type: object
+      properties:
+        diskAlertThreshold: { type: number, minimum: 0.5, maximum: 0.99, default: 0.85 }
+        alertEmail: { $ref: '#/components/schemas/Email' }
+      additionalProperties: false
+    Maintenance:
+      type: object
+      required: [enabled, source]
+      properties:
+        enabled: { type: boolean }
+        source: { type: string, enum: [none, environment, admin] }
+        since: { type: string, format: date-time }
+        message:
+          type: object
+          description: Message per language.
+          additionalProperties: { type: string, maxLength: 500 }
+    MaintenanceUpdate:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        message:
+          type: object
+          additionalProperties: { type: string, maxLength: 500 }
+      additionalProperties: false
+    KeyRotation:
+      type: object
+      required: [id, status, fromKeyId, toKeyId, totalKeys, rewrappedKeys, startedAt]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [running, completed, failed] }
+        fromKeyId: { type: string }
+        toKeyId: { type: string }
+        totalKeys: { type: integer }
+        rewrappedKeys: { type: integer }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        error: { type: string }
