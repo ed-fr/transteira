@@ -112,6 +112,7 @@ type envConfig struct {
 	opts     []Option
 	trusted  func(netip.Addr) bool
 	sessions DepositSessions
+	idle     time.Duration
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -130,11 +131,12 @@ func newEnv(t *testing.T, c envConfig) *env {
 			Antivirus: health.Check{Checker: ok},
 			Storage:   health.Check{Checker: ok},
 		},
-		Maintenance: e.maintenance,
-		API:         c.api,
-		Sessions:    c.sessions,
-		Spec:        []byte("openapi: 3.1.0\n"),
-		Logger:      slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Maintenance:       e.maintenance,
+		API:               c.api,
+		Sessions:          c.sessions,
+		UploadIdleTimeout: c.idle,
+		Spec:              []byte("openapi: 3.1.0\n"),
+		Logger:            slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, c.opts...)
 	return e
 }
@@ -266,9 +268,9 @@ func TestNotFound(t *testing.T) {
 		{"unknown outside api", http.MethodGet, "/nope", hostA},
 		{"unknown api path", http.MethodGet, "/api/v1/nope", hostA},
 		{"stub operation", http.MethodGet, "/api/v1/tenant", hostA},
-		{"stub with path parameter", http.MethodDelete, "/api/v1/transfers/trf_x", hostA},
+		{"stub with path parameter", http.MethodGet, "/api/v1/admin/tenants/ten_x", hostA},
 		{"unknown api path under known prefix", http.MethodPost, "/api/v1/version/x", hostA},
-		{"stub with JSON body", http.MethodPost, "/api/v1/transfers", hostA},
+		{"stub with JSON body", http.MethodPost, "/api/v1/admin/tenants", hostA},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -507,8 +509,9 @@ func TestMaintenance(t *testing.T) {
 		t.Errorf("stub in maintenance: %d", rec.Code)
 	}
 	e.maintenance.Store(false)
+	// The operation is reached again: its deposit session is checked.
 	rec = e.do(t, http.MethodPost, "/api/v1/transfers", hostA, strings.NewReader(`{}`), "Content-Type", "application/json")
-	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	decodeProblem(t, rec, http.StatusUnauthorized, problem.CodeUnauthenticated)
 }
 
 func TestMaintenanceTusPatchBodyless(t *testing.T) {
@@ -600,7 +603,7 @@ func TestMaintenanceBeforeBody(t *testing.T) {
 func TestRequireJSON(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, envConfig{})
-	rec := e.do(t, http.MethodPost, "/api/v1/transfers", hostA, strings.NewReader("{}"), "Content-Type", "text/plain")
+	rec := e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader("{}"), "Content-Type", "text/plain")
 	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
 
 	// JSON merge patch is accepted (the stub then answers 404).
@@ -643,29 +646,36 @@ func TestBodyLimit(t *testing.T) {
 	rec = e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader(`{`), "Content-Type", "application/json")
 	decodeProblem(t, rec, http.StatusBadRequest, problem.CodeValidationFailed)
 
-	// tus PATCH is exempt: the stub answers its bodyless tus 404, not 413.
+	// tus PATCH is exempt: it reaches the session check (a bodyless tus
+	// 401), not 413.
 	rec = e.do(t, http.MethodPatch, "/api/v1/uploads/upl_x", hostA, strings.NewReader(big),
 		"Tus-Resumable", "1.0.0", "Upload-Offset", "0", "Content-Type", "application/offset+octet-stream")
-	if rec.Code != http.StatusNotFound {
+	if rec.Code != http.StatusUnauthorized || rec.Body.Len() != 0 {
 		t.Errorf("tus PATCH: %d %s", rec.Code, rec.Body.String())
 	}
 	assertSecurityHeaders(t, rec)
 	if rec.Header().Get(middleware.HeaderRequestID) == "" {
-		t.Error("tus 404 lacks X-Request-Id")
+		t.Error("tus 401 lacks X-Request-Id")
 	}
 }
 
 func TestRoutePolicies(t *testing.T) {
 	t.Parallel()
 	cases := map[string]routePolicy{
-		"PATCH /api/v1/uploads/{uploadId}":                      {bodyLimit: middleware.NoBodyLimit, rawBody: true},
+		"PATCH /api/v1/uploads/{uploadId}": {
+			bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, tus: true, idleBody: true,
+		},
+		"HEAD /api/v1/uploads/{uploadId}":                       tusPolicy(false),
+		"DELETE /api/v1/uploads/{uploadId}":                     tusPolicy(true),
+		"OPTIONS /api/v1/uploads":                               defaultPolicy,
 		"GET /api/v1/downloads/{linkToken}/files/{fileId}":      {bodyLimit: middleware.DefaultJSONBodyLimit},
 		"GET /api/v1/downloads/{linkToken}/archive":             {bodyLimit: middleware.DefaultJSONBodyLimit},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding/{asset}": {bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline},
 		"GET /api/v1/tenant/assets/{asset}":                     {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding":         defaultPolicy,
 		"GET /api/v1/downloads/{linkToken}":                     defaultPolicy,
-		"POST /api/v1/transfers":                                defaultPolicy,
+		"POST /api/v1/transfers":                                sessionPolicy(true),
+		"GET /api/v1/transfers/{transferId}":                    sessionPolicy(false),
 		"":                                                      defaultPolicy,
 	}
 	for pattern, want := range cases {
@@ -761,7 +771,9 @@ type deadlineSpy struct {
 }
 
 func (d *deadlineSpy) SetWriteDeadline(t time.Time) error {
-	d.set.Store(true)
+	if !t.IsZero() {
+		d.set.Store(true)
+	}
 	return http.NewResponseController(d.ResponseWriter).SetWriteDeadline(t)
 }
 
@@ -807,10 +819,16 @@ func TestParamErrors(t *testing.T) {
 	if len(p.Errors) != 1 || p.Errors[0].Field != "limit" || p.Errors[0].Code != fieldInvalidFormat {
 		t.Errorf("field errors %+v", p.Errors)
 	}
+	// tus operations answer parameter errors without body: 412 for the
+	// Tus-Resumable header, 400 otherwise.
 	rec = e.do(t, http.MethodPatch, "/api/v1/uploads/upl_x", hostA, strings.NewReader("x"))
-	p = decodeProblem(t, rec, http.StatusBadRequest, problem.CodeValidationFailed)
-	if len(p.Errors) != 1 || p.Errors[0].Code != fieldRequired {
-		t.Errorf("field errors %+v", p.Errors)
+	if rec.Code != http.StatusPreconditionFailed || rec.Body.Len() != 0 || rec.Header().Get("Tus-Version") != "1.0.0" ||
+		rec.Header().Get("Tus-Resumable") != "1.0.0" {
+		t.Errorf("tus PATCH without Tus-Resumable: %d %v %q", rec.Code, rec.Header(), rec.Body)
+	}
+	rec = e.do(t, http.MethodPatch, "/api/v1/uploads/upl_x", hostA, strings.NewReader("x"), "Tus-Resumable", "1.0.0")
+	if rec.Code != http.StatusBadRequest || rec.Body.Len() != 0 || rec.Header().Get("Content-Type") != "" {
+		t.Errorf("tus PATCH without Upload-Offset: %d %v %q", rec.Code, rec.Header(), rec.Body)
 	}
 }
 

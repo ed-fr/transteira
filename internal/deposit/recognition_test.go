@@ -169,23 +169,6 @@ func TestRecognition(t *testing.T) {
 	})
 }
 
-func TestSanitizeMessage(t *testing.T) {
-	t.Parallel()
-	cases := map[string]string{
-		"Hello,\r\nplease send\tit.":                      "Hello,\nplease send\tit.",
-		"nul\x00 bell\x07 esc\x1b del\x7f c1\u0085\u009f": "nul bell esc del c1",
-		"zw\u200bj\u200cn\u200d lrm\u200e rlm\u200f":      "zwjn lrm rlm",
-		"bidi \u202aa\u202bb\u202cc\u202dd\u202ee":        "bidi abcde",
-		"iso \u2066a\u2067b\u2068c\u2069 bom\ufeff":       "iso abc bom",
-		"kept: é 漢字 ‐ \u2028 ⁰":                           "kept: é 漢字 ‐ \u2028 ⁰",
-	}
-	for in, want := range cases {
-		if got := sanitizeMessage(in); got != want {
-			t.Errorf("sanitizeMessage(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestInviteRules(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()

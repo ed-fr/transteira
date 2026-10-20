@@ -14,10 +14,15 @@
     "internal/authz": 100,
     "internal/crypto": 100,
     "internal/deposit": 100,
+    "internal/filename": 100,
     "internal/httpserver/middleware": 100,
     "internal/masterkey": 100,
     "internal/netpolicy": 100,
     "internal/store": 100,
-    "internal/tenant": 100
+    "internal/storage": 100,
+    "internal/tenant": 100,
+    "internal/textsafe": 100,
+    "internal/transfer": 100,
+    "internal/upload": 100
   }
 }

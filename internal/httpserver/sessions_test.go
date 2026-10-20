@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/api/public"
-	"github.com/ed-fr/transteira/internal/api/stubs"
 	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -240,12 +238,10 @@ func TestSessionResolverWithoutTenant(t *testing.T) {
 
 // --- Route policies versus the OpenAPI security requirements -------------
 
-// pendingSessionOperations are the cookie-authenticated operations still
-// answered by stubs: their route policy is added with their implementation.
-var pendingSessionOperations = map[string]bool{
-	"createTransfer": true, "getTransfer": true, "cancelTransfer": true, "finalizeTransfer": true,
-	"getUploadOffset": true, "appendUploadChunk": true, "terminateUpload": true,
-}
+// unimplementedSchemes are the security schemes of the OpenAPI document
+// that no middleware implements yet: an alternative made of them only is
+// ignored, so that the operation requires the deposit session meanwhile.
+var unimplementedSchemes = map[string]bool{"apiToken": true}
 
 // specOperation is the part of an OpenAPI operation the test reads.
 type specOperation struct {
@@ -279,7 +275,7 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 					_, s := alt["depositSession"]
 					_, c := alt["csrfToken"]
 					session, csrf = session || s, csrf || c
-					only = only && s
+					only = only && (s || pendingOnly(alt))
 				}
 			}
 			pattern := method + " " + APIBaseURL + path
@@ -289,10 +285,6 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 			case !session:
 				if declared && (p.depositSession || p.csrf) {
 					t.Errorf("%s (%s): route policy requires a deposit session, the spec does not", pattern, op.OperationID)
-				}
-			case pendingSessionOperations[op.OperationID]:
-				if !isStubOperation(t, op.OperationID) {
-					t.Errorf("%s is implemented: declare its route policy and remove it from pendingSessionOperations", op.OperationID)
 				}
 			case !only:
 				t.Errorf("%s (%s): deposit session as one of several alternatives is not supported yet", pattern, op.OperationID)
@@ -308,18 +300,13 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 	}
 }
 
-// isStubOperation reports whether the default server answers the operation
-// exactly like stubs.Unimplemented, for a zero request.
-func isStubOperation(t *testing.T, operationID string) bool {
-	t.Helper()
-	name := strings.ToUpper(operationID[:1]) + operationID[1:]
-	call := func(recv any) []any {
-		m := reflect.ValueOf(recv).MethodByName(name)
-		if !m.IsValid() {
-			t.Fatalf("no method %s", name)
+// pendingOnly reports whether every scheme of the security alternative alt
+// is unimplemented.
+func pendingOnly(alt map[string][]string) bool {
+	for scheme := range alt {
+		if !unimplementedSchemes[scheme] {
+			return false
 		}
-		out := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.Zero(m.Type().In(1))})
-		return []any{out[0].Interface(), out[1].Interface()}
 	}
-	return reflect.DeepEqual(call(public.NewServer()), call(stubs.Unimplemented{}))
+	return len(alt) > 0
 }

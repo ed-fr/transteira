@@ -26,7 +26,6 @@
 package httpserver
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -111,6 +110,12 @@ type routePolicy struct {
 	// csrf requires the CSRF checks on unsafe methods (OpenAPI security
 	// scheme csrfToken); it implies depositSession.
 	csrf bool
+	// tus applies the tus protocol rules (tusMiddleware): Tus-Resumable on
+	// every response, 412 and 415 checks, bodyless error responses.
+	tus bool
+	// idleBody reads the request body with an idle read timeout
+	// (idleBodyHandler) instead of a deadline.
+	idleBody bool
 }
 
 // defaultPolicy applies to every operation absent from routePolicies.
@@ -124,6 +129,13 @@ func sessionPolicy(csrf bool) routePolicy {
 	return p
 }
 
+// tusPolicy is sessionPolicy for a tus operation on an upload resource.
+func tusPolicy(csrf bool) routePolicy {
+	p := sessionPolicy(csrf)
+	p.tus = true
+	return p
+}
+
 // routePolicies is the single place declaring the routes that depart from
 // defaultPolicy, keyed by the pattern set in Request.Pattern by the API
 // router (more robust than matching the raw path). The streaming routes,
@@ -132,11 +144,22 @@ func sessionPolicy(csrf bool) routePolicy {
 // downloads.
 //
 // The authentication flags mirror the security requirements of the
-// OpenAPI document for the implemented operations (a test checks it); the
-// cookie-authenticated operations that are still stubs get theirs when
-// they are implemented.
+// OpenAPI document (a test checks it). The apiToken alternative of the
+// transfer and upload operations is not implemented yet: they require the
+// deposit session, and a request without its cookie gets 401.
+//
+// The tus PATCH reads its body with an idle read timeout
+// (Deps.UploadIdleTimeout) rather than a deadline.
 var routePolicies = map[string]routePolicy{
-	tusUploadPattern: {bodyLimit: middleware.NoBodyLimit, rawBody: true},
+	tusUploadPattern: {
+		bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, tus: true, idleBody: true,
+	},
+	tusHeadPattern:   tusPolicy(false),
+	tusDeletePattern: tusPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/transfers":                           sessionPolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/transfers/{transferId}":               sessionPolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/transfers/{transferId}":            sessionPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize":     sessionPolicy(true),
 	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/files/{fileId}": {bodyLimit: middleware.DefaultJSONBodyLimit},
 	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/archive":        {bodyLimit: middleware.DefaultJSONBodyLimit},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
@@ -152,7 +175,12 @@ var routePolicies = map[string]routePolicy{
 
 // policyOf returns the policy of the operation matched for r.
 func policyOf(r *http.Request) routePolicy {
-	if p, ok := routePolicies[r.Pattern]; ok {
+	return policyOfPattern(r.Pattern)
+}
+
+// policyOfPattern returns the policy of the route pattern.
+func policyOfPattern(pattern string) routePolicy {
+	if p, ok := routePolicies[pattern]; ok {
 		return p
 	}
 	return defaultPolicy
@@ -178,6 +206,9 @@ type Deps struct {
 	// Sessions resolves the deposit session cookies and checks the CSRF
 	// tokens (*deposit.Service); nil authenticates no session.
 	Sessions DepositSessions
+	// UploadIdleTimeout is the idle read timeout of a tus PATCH body
+	// (TT_UPLOAD_IDLE_TIMEOUT); DefaultUploadIdleTimeout when zero.
+	UploadIdleTimeout time.Duration
 	// Spec is the OpenAPI document served at SpecPath (api.OpenAPISpec).
 	Spec []byte
 	// Logger is the application logger; nil discards.
@@ -233,6 +264,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if api == nil {
 		api = public.NewServer()
 	}
+	idle := deps.UploadIdleTimeout
+	if idle <= 0 {
+		idle = DefaultUploadIdleTimeout
+	}
 	sessions := middleware.SessionResolver(noSessions{})
 	if deps.Sessions != nil {
 		sessions = sessionResolver{svc: deps.Sessions}
@@ -250,9 +285,11 @@ func New(deps Deps, opts ...Option) http.Handler {
 	gen.HandlerWithOptions(strict, gen.StdHTTPServerOptions{
 		BaseURL:    APIBaseURL,
 		BaseRouter: apiMux,
-		// The last middleware is the outermost one: deadlines, maintenance,
-		// deposit session and CSRF, then the body limit and the JSON media
-		// type check, all before the body is decoded.
+		// The last middleware is the outermost one: the tus protocol rules,
+		// deadlines, maintenance, deposit session and CSRF, then the body
+		// limit and the JSON media type check, all before the body is
+		// decoded. The idle read timeout of the tus PATCH is set even
+		// earlier, around the router (idleBodyHandler).
 		Middlewares: []gen.MiddlewareFunc{
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(func(r *http.Request) int64 { return policyOf(r).bodyLimit }),
@@ -263,6 +300,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 			}, logger),
 			maintenanceMiddleware(maintenance),
 			deadlineMiddleware(logger),
+			tusMiddleware,
 		},
 		ErrorHandlerFunc: eh.paramError,
 	})
@@ -280,7 +318,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// Tenant-scoped routes. The bare APIBaseURL would otherwise be
 	// redirected by the mux to APIBaseURL + "/".
 	tenantMux := http.NewServeMux()
-	tenantMux.Handle(APIBaseURL+"/", withProblemFallback(apiMux))
+	tenantMux.Handle(APIBaseURL+"/", idleBodyHandler(apiMux, withProblemFallback(apiMux), idle, logger))
 	tenantMux.Handle(APIBaseURL, http.HandlerFunc(notFound))
 	tenantScoped := middleware.Chain(withProblemFallback(tenantMux),
 		middleware.Tenant(deps.Resolver, events, o.unknownHostLimiter, logger),
@@ -349,25 +387,27 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 // deadlineMiddleware sets the read and write deadlines of the matched
-// operation (see routePolicies) on the connection; streaming routes get
-// none. A writer that does not support deadlines (http.ErrNotSupported, as
-// in tests) is accepted silently; any other failure is logged at debug
-// level and the request proceeds.
+// operation (see routePolicies) on the connection. Streaming routes get
+// none: their deadlines are cleared, since net/http does not reset a
+// deadline that an earlier request on a keep-alive connection set. A
+// writer that does not support deadlines (http.ErrNotSupported, as in
+// tests) is accepted silently; any other failure is logged at debug level
+// and the request proceeds.
 func deadlineMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if d := policyOf(r).deadline; d > 0 {
-				deadline := time.Now().Add(d)
-				rc := http.NewResponseController(w)
-				for _, err := range []error{rc.SetReadDeadline(deadline), rc.SetWriteDeadline(deadline)} {
-					if err != nil && !errors.Is(err, http.ErrNotSupported) {
-						logger.DebugContext(r.Context(), "cannot set request deadline",
-							slog.String("request_id", middleware.RequestID(r.Context())),
-							slog.String("route", r.Pattern),
-							slog.String("error", err.Error()))
-					}
-				}
+			p := policyOf(r)
+			var deadline time.Time
+			if p.deadline > 0 {
+				deadline = time.Now().Add(p.deadline)
 			}
+			rc := http.NewResponseController(w)
+			// The read deadline of an idle-timeout body belongs to
+			// idleBodyHandler.
+			if !p.idleBody {
+				logDeadlineError(r, logger, rc.SetReadDeadline(deadline))
+			}
+			logDeadlineError(r, logger, rc.SetWriteDeadline(deadline))
 			next.ServeHTTP(w, r)
 		})
 	}

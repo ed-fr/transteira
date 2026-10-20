@@ -145,3 +145,18 @@ func TestDepositTokenConstants(t *testing.T) {
 		}
 	}
 }
+
+func TestUploadToken(t *testing.T) {
+	tok, err := NewUploadToken()
+	if err != nil || !UploadTokenValid(tok) || len(tok) != len(UploadTokenPrefix)+1+TokenLen(UploadTokenBytes) {
+		t.Fatalf("NewUploadToken = %q, %v", tok, err)
+	}
+	if UploadTokenBytes < MinTokenBytes || TokenLen(UploadTokenBytes) > MaxTokenBodyLen {
+		t.Errorf("upload token entropy %d out of the deposit token bounds", UploadTokenBytes)
+	}
+	for _, bad := range []string{"", "upl_short", "dl_" + tok[4:], tok + "-", "upl_" + strings.Repeat("a", 44)} {
+		if UploadTokenValid(bad) {
+			t.Errorf("UploadTokenValid(%q) = true", bad)
+		}
+	}
+}

@@ -44,10 +44,14 @@ const (
 const (
 	minUploadTTL                = time.Hour
 	maxUploadTTL                = 7 * 24 * time.Hour
+	minUploadMaxAge             = 24 * time.Hour
+	maxUploadMaxAge             = 90 * 24 * time.Hour
 	minDepositSessionTTL        = 15 * time.Minute
 	maxDepositSessionTTL        = 24 * time.Hour
 	minDeleteAfterDownloadGrace = 0
 	maxDeleteAfterDownloadGrace = 24 * time.Hour
+	minUploadIdleTimeout        = 5 * time.Second
+	maxUploadIdleTimeout        = 10 * time.Minute
 	minSMTPTimeout              = time.Second
 	maxSMTPTimeout              = 5 * time.Minute
 )
@@ -56,6 +60,18 @@ const (
 const (
 	minMailQueueSize = 1
 	maxMailQueueSize = 100000
+)
+
+// Recipient ceiling bounds (the OpenAPI TransferCreate allows at most 100).
+const (
+	minMaxRecipients = 1
+	maxMaxRecipients = 100
+)
+
+// Open transfer cap bounds.
+const (
+	minMaxOpenTransfers = 1
+	maxMaxOpenTransfers = 1000
 )
 
 // unixPrefix introduces a Unix socket address in TT_CLAMAV_ADDR.
@@ -126,11 +142,23 @@ type Config struct {
 
 	// UploadTTL is the time after which an unfinished upload is discarded.
 	UploadTTL time.Duration
+	// UploadMaxAge is the longest life of an unfinished upload after the
+	// creation of its transfer, whatever its activity (at least UploadTTL).
+	UploadMaxAge time.Duration
 	// DepositSessionTTL is the lifetime of a deposit session.
 	DepositSessionTTL time.Duration
 	// DeleteAfterDownloadGrace delays the erasure of delete-after-download
 	// transfers so that an interrupted download can resume.
 	DeleteAfterDownloadGrace time.Duration
+	// UploadIdleTimeout is the longest wait between two reads of an upload
+	// request body; every read resets it.
+	UploadIdleTimeout time.Duration
+	// MaxRecipients is the largest number of recipients of one transfer
+	// (decision P15).
+	MaxRecipients int
+	// MaxOpenTransfers is the largest number of unfinished transfers of one
+	// internal sender.
+	MaxOpenTransfers int
 
 	// ClamAV is the clamd address.
 	ClamAV ClamAVAddr
@@ -464,10 +492,26 @@ func (l *loader) duration(name, def string, lowest, highest time.Duration) time.
 // loadDurations reads the duration variables.
 func (l *loader) loadDurations(c *Config) {
 	c.UploadTTL = l.duration(EnvUploadTTL, DefaultUploadTTL, minUploadTTL, maxUploadTTL)
+	c.UploadMaxAge = l.duration(EnvUploadMaxAge, DefaultUploadMaxAge, minUploadMaxAge, maxUploadMaxAge)
+	if c.UploadMaxAge != 0 && c.UploadTTL != 0 && c.UploadMaxAge < c.UploadTTL {
+		l.fail(EnvUploadMaxAge, "must not be shorter than %s (%s)", EnvUploadTTL, c.UploadTTL)
+	}
 	c.DepositSessionTTL = l.duration(EnvDepositSessionTTL, DefaultDepositSessionTTL,
 		minDepositSessionTTL, maxDepositSessionTTL)
 	c.DeleteAfterDownloadGrace = l.duration(EnvDeleteAfterDownloadGrace, DefaultDeleteAfterDownloadGrace,
 		minDeleteAfterDownloadGrace, maxDeleteAfterDownloadGrace)
+	c.UploadIdleTimeout = l.duration(EnvUploadIdleTimeout, DefaultUploadIdleTimeout,
+		minUploadIdleTimeout, maxUploadIdleTimeout)
+	n, err := parseInt(l.getOr(EnvMaxRecipients, DefaultMaxRecipients), minMaxRecipients, maxMaxRecipients)
+	if err != nil {
+		l.fail(EnvMaxRecipients, "%v", err)
+	}
+	c.MaxRecipients = n
+	n, err = parseInt(l.getOr(EnvMaxOpenTransfers, DefaultMaxOpenTransfers), minMaxOpenTransfers, maxMaxOpenTransfers)
+	if err != nil {
+		l.fail(EnvMaxOpenTransfers, "%v", err)
+	}
+	c.MaxOpenTransfers = n
 }
 
 // loadMail reads the SMTP timeout and the mail queue capacity.

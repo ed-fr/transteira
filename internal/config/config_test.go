@@ -74,12 +74,16 @@ func TestLoadDefaults(t *testing.T) {
 		{"APIDocsPublic", c.APIDocsPublic, false},
 		{"SetupToken", c.SetupToken.IsSet(), false},
 		{"UploadTTL", c.UploadTTL, 24 * time.Hour},
+		{"UploadMaxAge", c.UploadMaxAge, 7 * 24 * time.Hour},
 		{"DepositSessionTTL", c.DepositSessionTTL, 4 * time.Hour},
 		{"DeleteAfterDownloadGrace", c.DeleteAfterDownloadGrace, 15 * time.Minute},
 		{"ClamAV", c.ClamAV, ClamAVAddr{Network: "tcp", Address: DefaultClamAVAddr}},
 		{"BroadTrustedProxies", len(c.BroadTrustedProxies()), 0},
 		{"SMTPTimeout", c.SMTPTimeout, 30 * time.Second},
 		{"MailQueueSize", c.MailQueueSize, 1000},
+		{"UploadIdleTimeout", c.UploadIdleTimeout, 60 * time.Second},
+		{"MaxRecipients", c.MaxRecipients, 50},
+		{"MaxOpenTransfers", c.MaxOpenTransfers, 10},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {
@@ -235,6 +239,56 @@ func TestLoadValid(t *testing.T) {
 			},
 		},
 		{
+			name: "upload max age bounds and equal to the TTL",
+			vars: map[string]string{EnvUploadTTL: "48h", EnvUploadMaxAge: "48h"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.UploadMaxAge != 48*time.Hour {
+					t.Errorf("max age = %v", c.UploadMaxAge)
+				}
+			},
+		},
+		{
+			name: "upload max age bounds inclusive",
+			vars: map[string]string{EnvUploadTTL: "1h", EnvUploadMaxAge: "24h"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.UploadMaxAge != 24*time.Hour {
+					t.Errorf("max age = %v", c.UploadMaxAge)
+				}
+			},
+		},
+		{
+			name: "upload max age high bound",
+			vars: map[string]string{EnvUploadMaxAge: "2160h"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.UploadMaxAge != 90*24*time.Hour {
+					t.Errorf("max age = %v", c.UploadMaxAge)
+				}
+			},
+		},
+		{
+			name: "upload bounds inclusive low",
+			vars: map[string]string{EnvUploadIdleTimeout: "5s", EnvMaxRecipients: "1", EnvMaxOpenTransfers: "1"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.UploadIdleTimeout != 5*time.Second || c.MaxRecipients != 1 || c.MaxOpenTransfers != 1 {
+					t.Errorf("uploads = %v %d", c.UploadIdleTimeout, c.MaxRecipients)
+				}
+			},
+		},
+		{
+			name: "upload bounds inclusive high",
+			vars: map[string]string{EnvUploadIdleTimeout: "10m", EnvMaxRecipients: "100", EnvMaxOpenTransfers: "1000"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.UploadIdleTimeout != 10*time.Minute || c.MaxRecipients != 100 || c.MaxOpenTransfers != 1000 {
+					t.Errorf("uploads = %v %d", c.UploadIdleTimeout, c.MaxRecipients)
+				}
+			},
+		},
+		{
 			name: "mail bounds inclusive low",
 			vars: map[string]string{EnvSMTPTimeout: "1s", EnvMailQueueSize: " 1 "},
 			check: func(t *testing.T, c *Config) {
@@ -378,6 +432,16 @@ func TestLoadInvalid(t *testing.T) {
 		{"mail queue zero", map[string]string{EnvMailQueueSize: "0"}, []string{EnvMailQueueSize}},
 		{"mail queue too big", map[string]string{EnvMailQueueSize: "100001"}, []string{EnvMailQueueSize}},
 		{"mail queue malformed", map[string]string{EnvMailQueueSize: "lots"}, []string{EnvMailQueueSize}},
+		{"max age too short", map[string]string{EnvUploadMaxAge: "23h"}, []string{EnvUploadMaxAge}},
+		{"max age too long", map[string]string{EnvUploadMaxAge: "2161h"}, []string{EnvUploadMaxAge}},
+		{"max age below the TTL", map[string]string{EnvUploadTTL: "48h", EnvUploadMaxAge: "24h"}, []string{EnvUploadMaxAge}},
+		{"idle timeout too short", map[string]string{EnvUploadIdleTimeout: "4s"}, []string{EnvUploadIdleTimeout}},
+		{"idle timeout too long", map[string]string{EnvUploadIdleTimeout: "10m1s"}, []string{EnvUploadIdleTimeout}},
+		{"max recipients zero", map[string]string{EnvMaxRecipients: "0"}, []string{EnvMaxRecipients}},
+		{"max recipients too big", map[string]string{EnvMaxRecipients: "101"}, []string{EnvMaxRecipients}},
+		{"max recipients malformed", map[string]string{EnvMaxRecipients: "many"}, []string{EnvMaxRecipients}},
+		{"max open transfers zero", map[string]string{EnvMaxOpenTransfers: "0"}, []string{EnvMaxOpenTransfers}},
+		{"max open transfers too big", map[string]string{EnvMaxOpenTransfers: "1001"}, []string{EnvMaxOpenTransfers}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

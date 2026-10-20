@@ -1,6 +1,6 @@
 mode: count
 github.com/ed-fr/transteira/internal/crypto/aead.go:10.2,12.3 5 2
 mode: count
-github.com/ed-fr/transteira/internal/transfer/transfer.go:5.1,9.2 5 1
+github.com/ed-fr/transteira/internal/example/example.go:5.1,9.2 5 1
 mode: count
-github.com/ed-fr/transteira/internal/transfer/transfer.go:11.1,12.2 5 0
+github.com/ed-fr/transteira/internal/example/example.go:11.1,12.2 5 0

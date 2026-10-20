@@ -2298,7 +2298,9 @@ type GetTenantLegalDocumentParamsDocument string
 
 // CreateTransferParams defines parameters for CreateTransfer.
 type CreateTransferParams struct {
-	// IdempotencyKey Optional key making retries of transfer creation safe (24 h retention).
+	// IdempotencyKey Optional key making retries of transfer creation safe (24 h retention): a request with a
+	// key the same sender already used returns the transfer created then, provided the body is
+	// the same. A replay of the key with a different body gets `409 state-conflict`.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
@@ -2326,7 +2328,7 @@ type AppendUploadChunkParams struct {
 	TusResumable AppendUploadChunkParamsTusResumable `json:"Tus-Resumable"`
 
 	// UploadOffset Offset at which the bytes of this request start; must equal the current offset of the upload.
-	UploadOffset int `json:"Upload-Offset"`
+	UploadOffset int64 `json:"Upload-Offset"`
 }
 
 // AppendUploadChunkParamsTusResumable defines parameters for AppendUploadChunk.
@@ -5557,14 +5559,14 @@ func (siw *ServerInterfaceWrapper) AppendUploadChunk(w http.ResponseWriter, r *h
 
 	// ------------- Required header parameter "Upload-Offset" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("Upload-Offset")]; found {
-		var UploadOffset int
+		var UploadOffset int64
 		n := len(valueList)
 		if n != 1 {
 			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Upload-Offset", Count: n})
 			return
 		}
 
-		err = runtime.BindStyledParameterWithOptions("simple", "Upload-Offset", valueList[0], &UploadOffset, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""})
+		err = runtime.BindStyledParameterWithOptions("simple", "Upload-Offset", valueList[0], &UploadOffset, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: "int64"})
 		if err != nil {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Upload-Offset", Err: err})
 			return
@@ -5913,6 +5915,13 @@ type StateConflictApplicationProblemPlusJSONResponse Problem
 type TransferGoneApplicationProblemPlusJSONResponse Problem
 
 type TransferTooLargeApplicationProblemPlusJSONResponse Problem
+
+type TusVersionUnsupportedResponseHeaders struct {
+	TusVersion *string
+}
+type TusVersionUnsupportedResponse struct {
+	Headers TusVersionUnsupportedResponseHeaders
+}
 
 type UnauthenticatedApplicationProblemPlusJSONResponse Problem
 
@@ -12550,9 +12559,7 @@ func (response CreateTransfer401ApplicationProblemPlusJSONResponse) VisitCreateT
 	return err
 }
 
-type CreateTransfer403ApplicationProblemPlusJSONResponse struct {
-	DepositForbiddenApplicationProblemPlusJSONResponse
-}
+type CreateTransfer403ApplicationProblemPlusJSONResponse Problem
 
 func (response CreateTransfer403ApplicationProblemPlusJSONResponse) VisitCreateTransferResponse(w http.ResponseWriter) error {
 
@@ -12562,6 +12569,22 @@ func (response CreateTransfer403ApplicationProblemPlusJSONResponse) VisitCreateT
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTransfer409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTransfer409ApplicationProblemPlusJSONResponse) VisitCreateTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13008,7 +13031,7 @@ type GetTusCapabilitiesResponseObject interface {
 
 type GetTusCapabilities204ResponseHeaders struct {
 	TusExtension *string
-	TusMaxSize   *int
+	TusMaxSize   *int64
 	TusResumable *string
 	TusVersion   *string
 }
@@ -13099,6 +13122,14 @@ func (response TerminateUpload401Response) VisitTerminateUploadResponse(w http.R
 	return nil
 }
 
+type TerminateUpload403Response struct {
+}
+
+func (response TerminateUpload403Response) VisitTerminateUploadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
 type TerminateUpload404Response struct {
 }
 
@@ -13112,6 +13143,16 @@ type TerminateUpload409Response struct {
 
 func (response TerminateUpload409Response) VisitTerminateUploadResponse(w http.ResponseWriter) error {
 	w.WriteHeader(409)
+	return nil
+}
+
+type TerminateUpload412Response = TusVersionUnsupportedResponse
+
+func (response TerminateUpload412Response) VisitTerminateUploadResponse(w http.ResponseWriter) error {
+	if response.Headers.TusVersion != nil {
+		w.Header().Set("Tus-Version", fmt.Sprint(*response.Headers.TusVersion))
+	}
+	w.WriteHeader(412)
 	return nil
 }
 
@@ -13143,8 +13184,8 @@ type GetUploadOffsetResponseObject interface {
 type GetUploadOffset200ResponseHeaders struct {
 	TusResumable  *string
 	UploadExpires *string
-	UploadLength  *int
-	UploadOffset  *int
+	UploadLength  *int64
+	UploadOffset  *int64
 }
 
 type GetUploadOffset200Response struct {
@@ -13192,6 +13233,16 @@ func (response GetUploadOffset410Response) VisitGetUploadOffsetResponse(w http.R
 	return nil
 }
 
+type GetUploadOffset412Response = TusVersionUnsupportedResponse
+
+func (response GetUploadOffset412Response) VisitGetUploadOffsetResponse(w http.ResponseWriter) error {
+	if response.Headers.TusVersion != nil {
+		w.Header().Set("Tus-Version", fmt.Sprint(*response.Headers.TusVersion))
+	}
+	w.WriteHeader(412)
+	return nil
+}
+
 type GetUploadOffset500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -13221,7 +13272,7 @@ type AppendUploadChunkResponseObject interface {
 type AppendUploadChunk204ResponseHeaders struct {
 	TusResumable  *string
 	UploadExpires *string
-	UploadOffset  *int
+	UploadOffset  *int64
 }
 
 type AppendUploadChunk204Response struct {
@@ -13239,6 +13290,14 @@ func (response AppendUploadChunk204Response) VisitAppendUploadChunkResponse(w ht
 		w.Header().Set("Upload-Offset", fmt.Sprint(*response.Headers.UploadOffset))
 	}
 	w.WriteHeader(204)
+	return nil
+}
+
+type AppendUploadChunk400Response struct {
+}
+
+func (response AppendUploadChunk400Response) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
 	return nil
 }
 
@@ -13282,10 +13341,12 @@ func (response AppendUploadChunk410Response) VisitAppendUploadChunkResponse(w ht
 	return nil
 }
 
-type AppendUploadChunk412Response struct {
-}
+type AppendUploadChunk412Response = TusVersionUnsupportedResponse
 
 func (response AppendUploadChunk412Response) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+	if response.Headers.TusVersion != nil {
+		w.Header().Set("Tus-Version", fmt.Sprint(*response.Headers.TusVersion))
+	}
 	w.WriteHeader(412)
 	return nil
 }

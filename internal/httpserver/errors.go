@@ -33,11 +33,16 @@ type errorHandlers struct {
 }
 
 // paramError handles path, query and header parameters that failed to
-// parse: 400 validation-failed naming the parameter.
+// parse: 400 validation-failed naming the parameter, or the bodyless tus
+// answers of tusParamError for a tus operation.
 func (h errorHandlers) paramError(w http.ResponseWriter, r *http.Request, err error) {
 	h.logger.DebugContext(r.Context(), "invalid request parameter",
 		slog.String("request_id", middleware.RequestID(r.Context())),
 		slog.String("error", err.Error()))
+	if isTusPattern(r.Pattern) {
+		tusParamError(w, r, err)
+		return
+	}
 	opts := []problem.Option{}
 	if fe, ok := fieldErrorOf(err); ok {
 		opts = append(opts, problem.WithFieldErrors(fe))

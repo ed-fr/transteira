@@ -28,8 +28,12 @@ const (
 	EnvSetupToken               = "TT_SETUP_TOKEN"      //nolint:gosec // G101: variable name, not a credential
 	EnvSetupTokenFile           = "TT_SETUP_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
 	EnvUploadTTL                = "TT_UPLOAD_TTL"
+	EnvUploadMaxAge             = "TT_UPLOAD_MAX_AGE"
 	EnvDepositSessionTTL        = "TT_DEPOSIT_SESSION_TTL"
 	EnvDeleteAfterDownloadGrace = "TT_DELETE_AFTER_DOWNLOAD_GRACE"
+	EnvUploadIdleTimeout        = "TT_UPLOAD_IDLE_TIMEOUT"
+	EnvMaxRecipients            = "TT_MAX_RECIPIENTS"
+	EnvMaxOpenTransfers         = "TT_MAX_OPEN_TRANSFERS"
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
@@ -45,8 +49,12 @@ const (
 	DefaultListenAddr               = ":8080"
 	DefaultLogLevel                 = "info"
 	DefaultUploadTTL                = "24h"
+	DefaultUploadMaxAge             = "168h"
 	DefaultDepositSessionTTL        = "4h"
 	DefaultDeleteAfterDownloadGrace = "15m"
+	DefaultUploadIdleTimeout        = "60s"
+	DefaultMaxRecipients            = "50"
+	DefaultMaxOpenTransfers         = "10"
 	DefaultClamAVAddr               = "clamav:3310"
 	DefaultSMTPTimeout              = "30s"
 	DefaultMailQueueSize            = "1000"
@@ -213,6 +221,13 @@ func Variables() []Var {
 				"(Go duration, between 1h and 168h).",
 		},
 		{
+			Name: EnvUploadMaxAge, Group: "Uploads", Default: DefaultUploadMaxAge,
+			Description: "Longest life of an unfinished upload after the creation of its transfer, " +
+				"whatever its activity, so that an upload kept alive by tiny requests cannot hold " +
+				"the storage quota forever (Go duration, between 24h and 2160h, and at least " +
+				EnvUploadTTL + ").",
+		},
+		{
 			Name: EnvDepositSessionTTL, Group: "Uploads", Default: DefaultDepositSessionTTL,
 			Description: "Lifetime of a deposit session after e-mail verification " +
 				"(Go duration, between 15m and 24h).",
@@ -222,6 +237,23 @@ func Variables() []Var {
 			Default: DefaultDeleteAfterDownloadGrace,
 			Description: "Grace period before a delete-after-first-download transfer is erased, " +
 				"so that an interrupted download can be resumed (Go duration, between 0s and 24h).",
+		},
+		{
+			Name: EnvUploadIdleTimeout, Group: "Uploads", Default: DefaultUploadIdleTimeout,
+			Description: "Longest wait between two reads of an upload request body before the " +
+				"server cuts the connection; reset by every read, so that slow but active " +
+				"uploads continue (Go duration, between 5s and 10m).",
+		},
+		{
+			Name: EnvMaxRecipients, Group: "Uploads", Default: DefaultMaxRecipients,
+			Description: "Largest number of recipients of one transfer (anti-spam ceiling, " +
+				"between 1 and 100).",
+		},
+		{
+			Name: EnvMaxOpenTransfers, Group: "Uploads", Default: DefaultMaxOpenTransfers,
+			Description: "Largest number of unfinished (not yet finalized) transfers one internal " +
+				"sender may have at once, so that abandoned transfers cannot hold the storage " +
+				"quota (between 1 and 1000). Invited external senders are limited to 3.",
 		},
 	}
 }

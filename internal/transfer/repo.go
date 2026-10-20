@@ -1,0 +1,118 @@
+package transfer
+
+import (
+	"context"
+	"time"
+
+	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenant"
+)
+
+// repo is the part of the store the service uses. It exists so that the
+// tests can inject a failure at any step; [storeRepo] is the only real
+// implementation.
+type repo interface {
+	blocked(ctx context.Context, tid tenant.ID, email, sha256 string) (bool, error)
+	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
+	invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error)
+	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
+	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
+	transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error)
+	completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error
+	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
+}
+
+// txRepo is the part of the store used inside a tenant-scoped transaction.
+type txRepo interface {
+	usedBytes(ctx context.Context) (int64, error)
+	countUploading(ctx context.Context, sender string, since time.Time) (int, error)
+	listUploading(ctx context.Context, sender string, since time.Time, limit int) ([]store.Transfer, error)
+	listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error)
+	newDEK(ctx context.Context) (wkID string, dek []byte, err error)
+	createTransfer(ctx context.Context, t store.Transfer, recipients []string, files []store.TransferFile) error
+	finalize(ctx context.Context, trfID string, now time.Time) error
+	deleteTransfer(ctx context.Context, trfID string) error
+}
+
+// storeRepo implements repo over a *store.DB, creating the data keys with
+// keys.
+type storeRepo struct {
+	db   *store.DB
+	keys DataKeys
+}
+
+func (r storeRepo) blocked(ctx context.Context, tid tenant.ID, email, sha256 string) (bool, error) {
+	entries, err := r.db.Blocklist().Match(ctx, tid, email, sha256)
+	return len(entries) > 0, err
+}
+
+func (r storeRepo) networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error) {
+	return r.db.NetworkRules().Get(ctx, tid)
+}
+
+func (r storeRepo) invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error) {
+	return r.db.Invitations().Get(ctx, tid, invID)
+}
+
+func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	return r.db.Tenants().Get(ctx, tid)
+}
+
+func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error) {
+	return r.db.Transfers().Get(ctx, tid, trfID)
+}
+
+func (r storeRepo) transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error) {
+	return r.db.Transfers().GetByIdempotencyKey(ctx, tid, sender, key, since)
+}
+
+func (r storeRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error {
+	return r.db.TransferFiles().CompleteUpload(ctx, tid, fileID, sha256, ciphertextSize, now)
+}
+
+func (r storeRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
+	s, err := r.db.Scoped(tid)
+	if err != nil {
+		return err
+	}
+	return s.Tx(ctx, func(tx *store.ScopedTx) error { return fn(storeTx{db: r.db, keys: r.keys, tx: tx}) })
+}
+
+// storeTx implements txRepo over a *store.ScopedTx.
+type storeTx struct {
+	db   *store.DB
+	keys DataKeys
+	tx   *store.ScopedTx
+}
+
+func (t storeTx) usedBytes(ctx context.Context) (int64, error) {
+	return t.db.Transfers().UsedBytesTx(ctx, t.tx)
+}
+
+func (t storeTx) countUploading(ctx context.Context, sender string, since time.Time) (int, error) {
+	return t.db.Transfers().CountUploadingTx(ctx, t.tx, sender, since)
+}
+
+func (t storeTx) listUploading(ctx context.Context, sender string, since time.Time, limit int) ([]store.Transfer, error) {
+	return t.db.Transfers().ListUploadingTx(ctx, t.tx, sender, since, limit)
+}
+
+func (t storeTx) listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error) {
+	return t.db.TransferFiles().ListByTransferTx(ctx, t.tx, trfID)
+}
+
+func (t storeTx) newDEK(ctx context.Context) (string, []byte, error) {
+	return t.keys.NewDEKTx(ctx, t.tx)
+}
+
+func (t storeTx) createTransfer(ctx context.Context, tr store.Transfer, recipients []string, files []store.TransferFile) error {
+	return t.db.Transfers().CreateTx(ctx, t.tx, tr, recipients, files)
+}
+
+func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time) error {
+	return t.db.Transfers().FinalizeTx(ctx, t.tx, trfID, now)
+}
+
+func (t storeTx) deleteTransfer(ctx context.Context, trfID string) error {
+	return t.db.Transfers().DeleteTx(ctx, t.tx, trfID)
+}

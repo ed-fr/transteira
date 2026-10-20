@@ -83,6 +83,9 @@ type serverOptions struct {
 	flag *atomic.Bool
 	// shutdownTimeout, when set, is passed with app.WithShutdownTimeout.
 	shutdownTimeout time.Duration
+	// env holds extra environment variables of the server (for example
+	// TT_UPLOAD_IDLE_TIMEOUT); they override the defaults of testEnv.
+	env map[string]string
 }
 
 // server is a running app.Run instance.
@@ -95,6 +98,9 @@ type server struct {
 	stopped atomic.Bool
 	result  error
 	client  *http.Client
+	// cfg is the configuration the server runs with (data directory,
+	// master key file), for the tests that inspect the files on disk.
+	cfg     *config.Config
 	tenantA *tenant.Tenant
 	tenantB *tenant.Tenant
 }
@@ -123,6 +129,9 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 	}
 	if o.maintenance {
 		env[config.EnvMaintenance] = "true"
+	}
+	for k, v := range o.env {
+		env[k] = v
 	}
 	return env
 }
@@ -191,6 +200,7 @@ func startServer(t *testing.T, e storetest.Engine, o serverOptions) *server {
 		logDir:  cfg.LogDir,
 		appLog:  newWatchBuffer(),
 		done:    make(chan error, 1),
+		cfg:     cfg,
 		tenantA: a,
 		tenantB: b,
 		client: &http.Client{

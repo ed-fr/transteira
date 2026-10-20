@@ -30,6 +30,10 @@ type Server struct {
 	version func() version.Info
 	// deposit identifies depositors; nil until WithDeposit.
 	deposit DepositService
+	// transfers manages transfers; nil until WithTransfers.
+	transfers TransferService
+	// uploads runs the tus uploads; nil until WithUploads.
+	uploads UploadService
 	// now is the clock deriving the Max-Age of the session cookie from the
 	// session expiry (replaceable in tests).
 	now func() time.Time
@@ -37,6 +41,18 @@ type Server struct {
 
 // Option customizes NewServer.
 type Option func(*Server)
+
+// WithTransfers serves the transfer operations with svc. Without it they
+// answer 500.
+func WithTransfers(svc TransferService) Option {
+	return func(s *Server) { s.transfers = svc }
+}
+
+// WithUploads serves the tus upload operations (HEAD, PATCH, DELETE) with
+// svc. Without it they answer 500; OPTIONS needs no service.
+func WithUploads(svc UploadService) Option {
+	return func(s *Server) { s.uploads = svc }
+}
 
 // WithDeposit serves the deposit session and invitation operations with
 // svc. Without it these operations answer 500.

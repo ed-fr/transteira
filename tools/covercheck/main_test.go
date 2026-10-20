@@ -29,7 +29,7 @@ func TestRun(t *testing.T) {
 			wantOut: []string{
 				"internal/crypto", "100.0%", "ok",
 				"internal/tenant", "MISSING (not yet implemented)",
-				"internal/transfer", "90.9%",
+				"internal/example", "90.9%",
 				"TOTAL", "94.1%",
 				"coverage gate: PASS",
 			},

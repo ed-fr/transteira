@@ -50,6 +50,20 @@ info:
     The tus `creation` extension is intentionally not exposed: uploads are always attached to a
     transfer whose limits and quota have been checked beforehand.
 
+    As tus requires, every request but `OPTIONS` carries `Tus-Resumable: 1.0.0` (otherwise
+    `412`, with the supported versions in `Tus-Version`), and every response of `HEAD`,
+    `PATCH` and `DELETE` carries `Tus-Resumable`. Their error responses (`4xx`, and the `503`
+    of maintenance) have **no body**: the status code is the whole answer. Only `500` carries
+    a Problem. A `PATCH` body must be `application/offset+octet-stream` (otherwise `415`).
+    A `PATCH` whose body stalls for `TT_UPLOAD_IDLE_TIMEOUT` (60 s by default) between two
+    reads is cut; the bytes received until then are kept and `HEAD` returns the offset to
+    resume from.
+
+    Upload resources are reached with the deposit session of the sender of the transfer (same
+    address and, for an external depositor, same invitation); any other caller gets `404`.
+    The `apiToken` alternative of these operations, and of the transfer operations, is not
+    implemented yet: until it is, a request without a deposit session cookie gets `401`.
+
     ## Pagination
     List endpoints use opaque cursors: `?limit=50&cursor=...`; responses contain `items` and
     `nextCursor` (absent on the last page).
@@ -494,8 +508,17 @@ paths:
         An invited external depositor cannot choose recipients: files are addressed to the
         internal user who issued the invitation.
 
-        An unfinished transfer (never finalized) is purged after `TT_UPLOAD_TTL` (24 h by default),
-        releasing its quota reservation.
+        The uploads of an unfinished transfer (never finalized) expire (`410`) after
+        `TT_UPLOAD_TTL` (24 h by default) without activity on any file of the transfer, or
+        `TT_UPLOAD_MAX_AGE` (7 days by default) after the creation of the transfer, whatever its
+        activity. Its quota reservation is released when the sender cancels it, or by the
+        periodic cleanup.
+
+        A sender may have only a limited number of unfinished (uploading) transfers at once:
+        `TT_MAX_OPEN_TRANSFERS` (10 by default) for an internal depositor, 3 for an invited
+        external one; transfers whose uploads have expired do not count. Beyond it the creation
+        gets `429 rate-limited` with `Retry-After`; finalizing or cancelling a transfer frees a
+        slot.
       security:
         - depositSession: []
           csrfToken: []
@@ -568,7 +591,34 @@ paths:
                     scanStatus: pending
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/DepositForbidden' }
+        '403':
+          description: |
+            The depositor is not allowed to deposit (`deposit-not-allowed`: eligibility is checked
+            again), an API token is used outside its ranges (`ip-not-allowed`), or the CSRF check
+            failed (`csrf-invalid`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                depositNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
+                    title: Deposit not allowed
+                    status: 403
+                    code: deposit-not-allowed
+                ipNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+                    title: Address not allowed for this token
+                    status: 403
+                    code: ip-not-allowed
+                csrfInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
+        '409': { $ref: '#/components/responses/StateConflict' }
         '413': { $ref: '#/components/responses/TransferTooLarge' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -584,8 +634,9 @@ paths:
       operationId: getTransfer
       summary: Follow a transfer as its sender
       description: |
-        Returns the state of a transfer created by the same deposit session or by an API token of
-        the same tenant. Used to poll antivirus progress after finalization.
+        Returns the state of a transfer to any deposit session of the same sender (same
+        address, kind and invitation) or to an API token of the same tenant; anyone else gets
+        `404`. Used to poll antivirus progress after finalization.
       security:
         - depositSession: []
         - apiToken: []
@@ -631,8 +682,9 @@ paths:
       summary: Cancel or delete a transfer as its sender
       description: |
         Deletes the transfer, its uploads and files, with crypto-erase of the file keys.
-        In V1 a sender may only cancel a transfer that is not yet `available`; deleting an
-        available transfer is reserved to admins (and to the V1.1 "My transfers" feature).
+        In V1 a sender may only cancel a transfer that is still `uploading` (`409 state-conflict`
+        otherwise, and while one of its uploads is in progress); deleting a finalized transfer is
+        reserved to admins (and to the V1.1 "My transfers" feature).
         API tokens may delete any transfer they created.
       security:
         - depositSession: []
@@ -696,19 +748,39 @@ paths:
                     scanStatus: scanning
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403':
-          description: CSRF failure, or a file hash is on the tenant blocklist (`blocked-file`).
+          description: |
+            A file hash is on the tenant blocklist (`blocked-file`), the depositor is no longer
+            allowed to deposit (`deposit-not-allowed`: eligibility is checked again), or the CSRF
+            check failed (`csrf-invalid`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example:
-                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#blocked-file
-                title: File refused
-                status: 403
-                code: blocked-file
-                detail: One of the files is not allowed by the administrators of this service.
+              examples:
+                blockedFile:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#blocked-file
+                    title: File refused
+                    status: 403
+                    code: blocked-file
+                    detail: One of the files is not allowed by the administrators of this service.
+                depositNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
+                    title: Deposit not allowed
+                    status: 403
+                    code: deposit-not-allowed
+                csrfInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: Some files are not fully uploaded, a checksum mismatched, or the transfer is not in `uploading` state.
+          description: |
+            Some files are not fully uploaded (`upload-incomplete`), a checksum mismatched
+            (`checksum-mismatch`), or the transfer is not in `uploading` state, has no file left,
+            or one of its uploads is in progress (`state-conflict`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -727,6 +799,12 @@ paths:
                     status: 409
                     code: checksum-mismatch
                     files: [fil_01JABCD9F1A2B3C4D5E6F7G8H9]
+                stateConflict:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict
+                    title: Operation not allowed in the current state
+                    status: 409
+                    code: state-conflict
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '503': { $ref: '#/components/responses/MaintenanceMode' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -754,7 +832,7 @@ paths:
               example: expiration,termination
             Tus-Max-Size:
               description: Maximum size of a single upload resource, in bytes (the per-transfer limit of the tenant).
-              schema: { type: integer }
+              schema: { type: integer, format: int64, minimum: 0 }
               example: 21474836480
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -779,12 +857,13 @@ paths:
             Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
             Upload-Offset: { $ref: '#/components/headers/UploadOffset' }
             Upload-Length:
-              schema: { type: integer }
+              schema: { type: integer, format: int64, minimum: 0 }
               example: 12884901888
             Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
         '401': { description: Unauthenticated. }
-        '404': { description: "Unknown upload, or upload belonging to another session or tenant." }
-        '410': { description: Upload expired and purged. }
+        '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
+        '410': { description: 'Upload expired, or transfer no longer being uploaded.' }
+        '412': { $ref: '#/components/responses/TusVersionUnsupported' }
         '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Uploads (tus)]
@@ -806,7 +885,7 @@ paths:
           in: header
           description: "Offset at which the bytes of this request start; must equal the current offset of the upload."
           required: true
-          schema: { type: integer, minimum: 0 }
+          schema: { type: integer, format: int64, minimum: 0 }
           example: 0
       requestBody:
         required: true
@@ -821,13 +900,14 @@ paths:
             Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
             Upload-Offset: { $ref: '#/components/headers/UploadOffset' }
             Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
+        '400': { description: '`Upload-Offset` header missing or malformed, or request body interrupted (the bytes received are kept; resume after `HEAD`).' }
         '401': { description: Unauthenticated. }
         '403': { description: CSRF failure. }
-        '404': { description: "Unknown upload, or upload belonging to another session or tenant." }
-        '409': { description: '`Upload-Offset` does not match the current offset.' }
-        '410': { description: Upload expired and purged. }
-        '412': { description: Unsupported `Tus-Resumable` version. }
-        '413': { description: Bytes beyond the declared `Upload-Length`. }
+        '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
+        '409': { description: '`Upload-Offset` does not match the current offset, another request is uploading to this resource, or the transfer is no longer being uploaded.' }
+        '410': { description: Upload expired. }
+        '412': { $ref: '#/components/responses/TusVersionUnsupported' }
+        '413': { description: 'Bytes beyond the declared `Upload-Length`: the bytes up to `Upload-Length` are kept, the rest is discarded. An empty `PATCH` at `Upload-Offset` = `Upload-Length` then completes the upload.' }
         '415': { description: 'Content-Type is not `application/offset+octet-stream`.' }
         '503': { description: Maintenance mode; retry after `Retry-After`. Uploads already started may be resumed after maintenance. }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -848,8 +928,10 @@ paths:
           headers:
             Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
         '401': { description: Unauthenticated. }
-        '404': { description: Unknown upload. }
-        '409': { description: Transfer already finalized. }
+        '403': { description: CSRF failure. }
+        '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
+        '409': { description: 'Transfer no longer being uploaded, or another request is uploading to this resource.' }
+        '412': { $ref: '#/components/responses/TusVersionUnsupported' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
@@ -3159,7 +3241,10 @@ components:
       name: Idempotency-Key
       in: header
       required: false
-      description: Optional key making retries of transfer creation safe (24 h retention).
+      description: |
+        Optional key making retries of transfer creation safe (24 h retention): a request with a
+        key the same sender already used returns the transfer created then, provided the body is
+        the same. A replay of the key with a different body gets `409 state-conflict`.
       schema: { type: string, maxLength: 64 }
       example: 5f0c6c1e-8b7a-4a8e-9f0d-2c3b4a5d6e7f
     TusResumableHeader:
@@ -3287,10 +3372,13 @@ components:
       schema: { type: string }
       example: 1.0.0
     UploadOffset:
-      schema: { type: integer }
+      schema: { type: integer, format: int64, minimum: 0 }
       example: 1048576
     UploadExpires:
-      description: RFC 9110 date after which an unfinished upload is purged.
+      description: |
+        RFC 9110 date after which the unfinished upload expires (`410`): `TT_UPLOAD_TTL` after the
+        latest activity on any file of the transfer, but never later than `TT_UPLOAD_MAX_AGE`
+        after the creation of the transfer.
       schema: { type: string }
       example: Tue, 20 Oct 2026 16:00:00 GMT
     ContentLength:
@@ -3323,7 +3411,10 @@ components:
 
   responses:
     ValidationFailed:
-      description: The request is malformed or a field is invalid.
+      description: |
+        The request is malformed or a field is invalid. Each entry of `errors` names the field by
+        its JSON pointer (RFC 6901) in the request body, such as `/recipients/0` or
+        `/files/2/name`, or by the header name for a header (`Idempotency-Key`).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -3333,8 +3424,8 @@ components:
             status: 400
             code: validation-failed
             errors:
-              - { field: 'recipients[0]', code: invalid-email }
-              - { field: expiryDays, code: not-allowed, allowed: [1, 7, 30] }
+              - { field: /recipients/0, code: invalid-email }
+              - { field: /expiryDays, code: not-allowed }
     Unauthenticated:
       description: Missing, expired or invalid credentials.
       content:
@@ -3560,6 +3651,13 @@ components:
                 title: Email cannot be sent
                 status: 503
                 code: mail-unavailable
+    TusVersionUnsupported:
+      description: '`Tus-Resumable` missing or not a supported version; no body.'
+      headers:
+        Tus-Version:
+          description: Supported tus versions.
+          schema: { type: string }
+          example: 1.0.0
     InternalError:
       description: Unexpected server error. The response never contains internal details; the `instance` identifier allows correlation with the server logs.
       content:

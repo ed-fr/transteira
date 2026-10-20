@@ -76,7 +76,7 @@ func TestMaintenanceMode(t *testing.T) {
 				t.Errorf("getVersion in maintenance: %d, want 200", resp.status)
 			}
 			// Downloads and other reads are not refused (still stubs here).
-			expectProblem(t, s.get(t, host, "/api/v1/transfers/"+exampleTransferID), http.StatusNotFound, "not-found")
+			expectProblem(t, s.get(t, host, exampleDownload), http.StatusNotFound, "not-found")
 		}
 
 		var h healthBody

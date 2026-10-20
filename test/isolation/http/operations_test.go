@@ -91,6 +91,18 @@ var isolationCases = map[string]isolationCase{
 	"endDepositSession":            endWithForeignSession,
 	"createInvitation":             inviteWithForeignSession,
 	"getInvitation":                getForeignInvitation,
+	// Transfers and tus uploads (transfer_test.go): a transfer or upload of
+	// tenant A's owner is never reached by another sender of A nor, under
+	// B's Host, by a sender of B (404), while its owner reaches it. The tus
+	// capabilities carry no tenant data.
+	"createTransfer":     createWithForeignSession,
+	"getTransfer":        getForeignTransfer,
+	"cancelTransfer":     cancelForeignTransfer,
+	"finalizeTransfer":   finalizeForeignTransfer,
+	"getTusCapabilities": tusCapabilities,
+	"getUploadOffset":    headForeignUpload,
+	"appendUploadChunk":  patchForeignUpload,
+	"terminateUpload":    terminateForeignUpload,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -116,7 +128,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
-			case "createTransfer", "appendUploadChunk": // error stub and typed-404 stub
+			case "getDownload", "listTenants": // stubs answering not-implemented
 				if !isStub(t, op) {
 					t.Errorf("isStub(%s) = false, want true", op.id)
 				}
@@ -367,6 +379,8 @@ type harness struct {
 	nextIP  atomic.Uint32
 	// fixtures are deposit resources of tenant A.
 	fixtures depositFixtures
+	// transfers are the other sessions of the transfer cases.
+	transfers transferFixtures
 }
 
 // writeMasterKey writes a new random master key to dir and returns its
@@ -410,6 +424,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 		},
 	}
 	h.fixtures = seedDeposit(t, db, h.tenantA.ID)
+	h.transfers = seedTransfers(t, db, h.tenantA.ID, h.tenantB.ID)
 	_ = db.Close()
 
 	root := t.TempDir()

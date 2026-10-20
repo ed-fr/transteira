@@ -31,6 +31,9 @@ const (
 	SessionTokenPrefix = "ds"
 	// InvitationTokenPrefix starts an invitation link token.
 	InvitationTokenPrefix = "inv"
+	// UploadTokenPrefix starts a tus upload identifier, which appears in
+	// the upload URL of a file and is looked up by value.
+	UploadTokenPrefix = "upl"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -39,11 +42,27 @@ const (
 	// InvitationTokenBytes is the entropy of an invitation token (256
 	// bits, long-lived).
 	InvitationTokenBytes = 32
+	// UploadTokenBytes is the entropy of an upload identifier (256 bits):
+	// it is looked up by value and lives as long as the upload.
+	UploadTokenBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
 	MaxTokenBodyLen = 43
 )
+
+// NewUploadToken returns a new tus upload identifier: UploadTokenPrefix
+// followed by UploadTokenBytes of crypto/rand entropy in base62 (matching the
+// OpenAPI pattern "^upl_[A-Za-z0-9]{22,43}$").
+func NewUploadToken() (string, error) {
+	return NewToken(UploadTokenPrefix, UploadTokenBytes)
+}
+
+// UploadTokenValid reports whether s has the shape of an upload identifier
+// ("upl_" + 22 to 43 base62 characters).
+func UploadTokenValid(s string) bool {
+	return TokenValid(UploadTokenPrefix, s, MinTokenBodyLen, MaxTokenBodyLen)
+}
 
 // base62 is the alphabet produced by big.Int.Text(62).
 const base62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"

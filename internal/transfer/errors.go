@@ -1,0 +1,175 @@
+package transfer
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Errors returned by the [Service]. Callers test them with errors.Is; the
+// comment of each one gives the HTTP status and problem code it maps to.
+// Any other error is an internal failure (500) whose message never contains
+// an address, a password or a file name.
+var (
+	// ErrInvalid reports a malformed request (400 validation-failed). The
+	// error is a *[ValidationError] listing every invalid field.
+	ErrInvalid = errors.New("transfer: invalid request")
+	// ErrForbidden reports a sender who may no longer deposit (403
+	// deposit-not-allowed): blocklisted address or domain, client IP or
+	// domain outside the internal rule, or invitation no longer active. It
+	// is deliberately generic; the reason goes to the security log only.
+	ErrForbidden = errors.New("transfer: deposit not allowed")
+	// ErrTooLarge reports a declared total above the per-transfer limit of
+	// the tenant (413 transfer-too-large). The error is a *[TooLargeError]
+	// carrying the limit.
+	ErrTooLarge = errors.New("transfer: transfer too large")
+	// ErrQuotaExceeded reports a transfer that does not fit in the storage
+	// quota of the tenant (507 quota-exceeded).
+	ErrQuotaExceeded = errors.New("transfer: storage quota exceeded")
+	// ErrNotFound reports an unknown transfer, including a transfer of
+	// another tenant or of another sender (404 not-found).
+	ErrNotFound = errors.New("transfer: not found")
+	// ErrConflict reports an operation not allowed in the current state of
+	// the transfer (409 state-conflict): canceling or finalizing a transfer
+	// that is no longer uploading, finalizing a transfer without files or
+	// with a file whose key was destroyed by an interrupted cancellation,
+	// or replaying an idempotency key of the same address under another
+	// invitation.
+	ErrConflict = errors.New("transfer: operation not allowed in the current state")
+	// ErrIdempotencyMismatch reports an Idempotency-Key the sender already
+	// used in the last 24 hours for a different request (409
+	// state-conflict). It matches ErrConflict.
+	ErrIdempotencyMismatch = fmt.Errorf("%w: idempotency key reused with a different request", ErrConflict)
+	// ErrRateLimited reports a sender who already has the maximum number
+	// of unfinished transfers (429 rate-limited, with Retry-After). The
+	// error is a *[RateLimitError].
+	ErrRateLimited = errors.New("transfer: too many unfinished transfers")
+	// ErrBusy reports an upload of one of the files in progress while
+	// canceling or finalizing (409 state-conflict). It matches ErrConflict.
+	ErrBusy = fmt.Errorf("%w: an upload of the transfer is in progress", ErrConflict)
+	// ErrIncomplete reports files whose upload is not complete at
+	// finalization (409 upload-incomplete). The error is a *[FilesError]
+	// listing them.
+	ErrIncomplete = errors.New("transfer: upload incomplete")
+	// ErrChecksumMismatch reports files whose computed SHA-256 differs from
+	// the expectedSha256 declared at creation (409 checksum-mismatch). The
+	// error is a *[FilesError] listing them.
+	ErrChecksumMismatch = errors.New("transfer: checksum mismatch")
+	// ErrBlockedFile reports a file whose SHA-256 is on the tenant blocklist
+	// (403 blocked-file, threat T-27).
+	ErrBlockedFile = errors.New("transfer: file refused by the blocklist")
+)
+
+// JSON pointers of the request fields named by a [FieldError]. The file
+// fields are indexed: /files/<i>/name and so on, /recipients/<i> likewise.
+// FieldIdempotencyKey names the Idempotency-Key header, not a body field.
+const (
+	FieldSenderEmail    = "/senderEmail"
+	FieldRecipients     = "/recipients"
+	FieldMessage        = "/message"
+	FieldExpiryDays     = "/expiryDays"
+	FieldPassword       = "/password"
+	FieldLanguage       = "/language"
+	FieldFiles          = "/files"
+	FieldIdempotencyKey = "Idempotency-Key"
+)
+
+// Codes of a [FieldError] (the code member of the validation-failed
+// problem's errors).
+const (
+	// CodeRequired: the field is missing or empty.
+	CodeRequired = "required"
+	// CodeInvalidFormat: the value is malformed.
+	CodeInvalidFormat = "invalid-format"
+	// CodeInvalidEmail: the value is not an acceptable mail address.
+	CodeInvalidEmail = "invalid-email"
+	// CodeInvalidFileName: the file name is refused by the file name policy
+	// (decision P8).
+	CodeInvalidFileName = "invalid-file-name"
+	// CodeNotAllowed: the value is not one of the accepted values, or the
+	// field is not accepted in this context (senderEmail with a session).
+	CodeNotAllowed = "not-allowed"
+	// CodeTooLong: the text exceeds its maximum length.
+	CodeTooLong = "too-long"
+	// CodeTooMany: the list exceeds its maximum number of items.
+	CodeTooMany = "too-many"
+	// CodeDuplicate: the item repeats an earlier one.
+	CodeDuplicate = "duplicate"
+)
+
+// FieldError is one invalid field of a request.
+type FieldError struct {
+	// Pointer is the JSON pointer of the field (FieldMessage,
+	// "/files/0/name"...), or FieldIdempotencyKey.
+	Pointer string
+	// Code is the reason (CodeRequired...).
+	Code string
+}
+
+// ValidationError lists the invalid fields of a request, in the order of
+// the request. It matches [ErrInvalid].
+type ValidationError struct {
+	// Fields are the invalid fields, at least one.
+	Fields []FieldError
+}
+
+// Error implements error; it names the fields, never their values.
+func (e *ValidationError) Error() string {
+	parts := make([]string, len(e.Fields))
+	for i, f := range e.Fields {
+		parts[i] = f.Pointer + " (" + f.Code + ")"
+	}
+	return "transfer: invalid request: " + strings.Join(parts, ", ")
+}
+
+// Is makes errors.Is(err, ErrInvalid) true.
+func (e *ValidationError) Is(target error) bool { return target == ErrInvalid }
+
+// TooLargeError reports a transfer above the per-transfer limit. It matches
+// [ErrTooLarge].
+type TooLargeError struct {
+	// MaxTransferBytes is the limit of the tenant, the maxTransferBytes
+	// member of the problem.
+	MaxTransferBytes int64
+}
+
+// Error implements error.
+func (e *TooLargeError) Error() string {
+	return fmt.Sprintf("transfer: transfer too large (limit %d bytes)", e.MaxTransferBytes)
+}
+
+// Is makes errors.Is(err, ErrTooLarge) true.
+func (e *TooLargeError) Is(target error) bool { return target == ErrTooLarge }
+
+// FilesError reports the files that block a finalization. It matches its
+// Kind: [ErrIncomplete] or [ErrChecksumMismatch].
+type FilesError struct {
+	// Kind is ErrIncomplete or ErrChecksumMismatch.
+	Kind error
+	// FileIDs are the identifiers of the files concerned ("fil_" + ULID),
+	// by position: the files member of the problem.
+	FileIDs []string
+}
+
+// Error implements error.
+func (e *FilesError) Error() string {
+	return fmt.Sprintf("%v: %d file(s)", e.Kind, len(e.FileIDs))
+}
+
+// Is makes errors.Is(err, e.Kind) true.
+func (e *FilesError) Is(target error) bool { return target == e.Kind }
+
+// RateLimitError reports a rate limit. It matches [ErrRateLimited].
+type RateLimitError struct {
+	// RetryAfter is the hint for the Retry-After header.
+	RetryAfter time.Duration
+}
+
+// Error implements error.
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("transfer: too many unfinished transfers, retry after %s", e.RetryAfter)
+}
+
+// Is makes errors.Is(err, ErrRateLimited) true.
+func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }

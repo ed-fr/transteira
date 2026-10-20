@@ -5,8 +5,8 @@ github.com/ed-fr/transteira/internal/crypto/aead.go:14.2,15.3 2 0
 mode: atomic
 github.com/ed-fr/transteira/internal/crypto/aead.go:14.2,15.3 2 3
 mode: atomic
-github.com/ed-fr/transteira/internal/transfer/transfer.go:5.1,9.2 10 1
+github.com/ed-fr/transteira/internal/example/example.go:5.1,9.2 10 1
 mode: atomic
-github.com/ed-fr/transteira/internal/transfer/transfer.go:11.1,12.2 1 0
+github.com/ed-fr/transteira/internal/example/example.go:11.1,12.2 1 0
 mode: atomic
 github.com/ed-fr/transteira/internal/api/gen/api.gen.go:1.1,500.2 400 0

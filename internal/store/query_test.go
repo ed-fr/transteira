@@ -416,6 +416,43 @@ var tenantAllowlist = map[string]int{
 	`SELECT count(*) FROM invitations WHERE tenant_id = ? AND invited_by = ? AND created_at >= ?`: 0,
 	`DELETE FROM invitations WHERE tenant_id = ? AND id = ?`:                                      0,
 	`UPDATE invitations SET revoked_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 1,
+	// Transfers and recipients.
+	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
+		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
+		`created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`UPDATE transfers SET idempotency_key = NULL ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at < ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND id = ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at >= ?`: 0,
+	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND id = ?`: 0,
+	`SELECT count(*) FROM transfers ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ? ` +
+		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
+		`WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`: 0,
+	`UPDATE transfers SET status = ? WHERE tenant_id = ? AND id = ? AND status = ?`: 1,
+	`UPDATE transfers SET status = 'scanning', finalized_at = ?, expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'uploading'`: 2,
+	`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`:               1,
+	`DELETE FROM transfers WHERE tenant_id = ? AND id = ?`:                                            0,
+	`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`:   0,
+	`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
+	// Transfer files.
+	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, name, size, media_type, expected_sha256, ` +
+		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
+	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND upload_id = ?`:                     0,
+	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND id = ?`:                                       0,
+	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? AND dek_key_id IS NOT NULL`:   0,
+	`UPDATE transfer_files SET sha256 = ?, ciphertext_size = ?, uploaded_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NULL`: 3,
+	`UPDATE transfer_files SET dek_key_id = ?, storage_name = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NULL`: 2,
+	`DELETE FROM transfer_files WHERE tenant_id = ? AND id = ? AND dek_key_id IS NULL RETURNING transfer_id, size`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,

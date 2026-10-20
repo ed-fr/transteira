@@ -54,6 +54,10 @@ var (
 	// ErrRotationInUse reports a rotation that cannot be abandoned: wrapped
 	// keys already use its target, which is not a registered active key.
 	ErrRotationInUse = errors.New("store: wrapped keys already use the target key of the rotation")
+	// ErrKeysRemain reports the deletion of a transfer or a file whose data
+	// keys still exist: the cryptographic erasure (spec 16.1, T-110)
+	// destroys the keys first, then deletes the rows. Nothing is deleted.
+	ErrKeysRemain = errors.New("store: data keys must be destroyed before the files they protect")
 	// ErrScrubBusy reports a WAL checkpoint that could not complete because
 	// readers were active: deleted data may remain in the SQLite WAL until
 	// the next [DB.ScrubDeleted]. It is not fatal.

@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/store"
@@ -31,38 +30,6 @@ func FuzzParseRecognition(f *testing.F) {
 					t.Fatal("duplicate entry")
 				}
 			}
-		}
-	})
-}
-
-// forbiddenInMessage reports whether r must never survive sanitizeMessage.
-func forbiddenInMessage(r rune) bool {
-	switch {
-	case r == '\n', r == '\t':
-		return false
-	case r < 0x20, r >= 0x7f && r <= 0x9f,
-		r >= 0x200b && r <= 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
-		return true
-	}
-	return false
-}
-
-func FuzzSanitizeMessage(f *testing.F) {
-	f.Add("Hello,\r\nplease send\tit.")
-	f.Add("a\u202eb\u2066c\u200bd\ufeffe\x00f\u0085")
-	f.Fuzz(func(t *testing.T, msg string) {
-		if !utf8.ValidString(msg) {
-			return // Invite refuses invalid UTF-8 before sanitizing
-		}
-		out := sanitizeMessage(msg)
-		if !utf8.ValidString(out) {
-			t.Fatal("invalid UTF-8 output")
-		}
-		if strings.ContainsFunc(out, forbiddenInMessage) {
-			t.Fatalf("forbidden character kept in %q", out)
-		}
-		if utf8.RuneCountInString(out) > utf8.RuneCountInString(msg) {
-			t.Fatal("output longer than input")
 		}
 	})
 }

@@ -90,6 +90,22 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `internal/crypto`: keyed MACs per purpose (verification codes, CSRF tokens).
 - Configuration: `TT_SMTP_TIMEOUT`, `TT_MAIL_QUEUE_SIZE`.
 - Problem code `mail-unavailable` (503).
+- Transfers and resumable uploads (step 6): operations `createTransfer`, `getTransfer`,
+  `cancelTransfer`, `finalizeTransfer` (checks, then `scanning`; antivirus comes next) and tus
+  `OPTIONS`/`HEAD`/`PATCH`/`DELETE` on `/uploads/{uploadId}`. Eligibility re-checked at creation and
+  finalization, quota reserved at creation, recipient forced to the inviter for external
+  depositors, `Idempotency-Key`, argon2id transfer passwords.
+- `internal/upload`: tus engine with a per-file lock, streaming encryption and SHA-256, sealed
+  checkpoints written atomically after fsync, reset with a new key after a crash, upload expiry
+  (`TT_UPLOAD_TTL`) and idle read timeout (`TT_UPLOAD_IDLE_TIMEOUT`).
+- `internal/storage` (files confined with `os.Root`, one directory per tenant, random names),
+  `internal/filename` (file name rules, decision P8), argon2id in `internal/crypto`.
+- Migration `0004_transfers`: transfers, recipients and files with row-level security.
+- Configuration: `TT_MAX_RECIPIENTS`, `TT_UPLOAD_IDLE_TIMEOUT`, `TT_MAX_OPEN_TRANSFERS` (open, non-expired
+  uploading transfers per internal sender; 3 for invited externals), `TT_UPLOAD_MAX_AGE` (an upload
+  expires at most 7 days after its transfer was created, whatever its activity).
+- `internal/textsafe`: one sanitiser for free text (control, format, bidirectional and invisible
+  characters), shared by invitations and transfers.
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -110,5 +126,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `startDepositSession` answers `201` (session without a code) only for an internal verified address
   presented with a valid recognition cookie; the cookie is documented as the `RecognitionCookie`
   parameter and the `SetDepositCookies` header (formerly `SetDepositCookie`).
+- OpenAPI: tus errors are bodyless and always carry `Tus-Resumable` (new `412` response with
+  `Tus-Version`); validation errors use JSON pointers; `cancelTransfer` is limited to transfers still
+  `uploading`.
 - Tenant queries may reference `tenant_id` only in the tenant slot; an alias named `tenant_id` is
   refused.

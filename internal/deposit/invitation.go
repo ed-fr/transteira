@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/textsafe"
 )
 
 // InvitationStatus is the state of an invitation (OpenAPI InvitationStatus).
@@ -60,9 +60,10 @@ type PublicInvitation struct {
 // files for them (OpenAPI createInvitation), from clientIP. The invitation
 // mail is written in language when given, otherwise in the language
 // negotiated from acceptLanguage and the tenant default. message is an
-// optional text for the invited person: its control characters (except
-// line feed and tab) and its bidirectional and invisible formatting
-// characters are removed (see sanitizeMessage), then it must hold at most
+// optional text for the invited person: its hidden characters (control
+// characters except line feed and tab, line separators, format and
+// invisible characters) are removed (textsafe.SanitizeMessage), then it
+// must hold at most
 // MaxMessageRunes characters.
 //
 // Checks, in order: the session is internal; the address, message and
@@ -93,7 +94,7 @@ func (s *Service) Invite(ctx context.Context, t *tenant.Tenant, session SessionI
 	if !utf8.ValidString(message) {
 		return Invitation{}, invalid(FieldMessage)
 	}
-	if message = sanitizeMessage(message); utf8.RuneCountInString(message) > MaxMessageRunes {
+	if message = textsafe.SanitizeMessage(message); utf8.RuneCountInString(message) > MaxMessageRunes {
 		return Invitation{}, invalid(FieldMessage)
 	}
 	if language == "" {
@@ -162,26 +163,6 @@ func (s *Service) Invite(ctx context.Context, t *tenant.Tenant, session SessionI
 		ID: rec.ID, Email: rec.Email, InvitedBy: rec.InvitedBy, Status: InvitationPending,
 		Language: rec.Language, CreatedAt: rec.CreatedAt, ExpiresAt: rec.ExpiresAt,
 	}, nil
-}
-
-// sanitizeMessage removes from an invitation message the characters that
-// could hide or disguise text in the mail or on the landing page: the C0
-// and C1 control characters (CR included) except line feed and tab, the
-// zero-width and directional marks (U+200B to U+200F), the bidirectional
-// embeddings and overrides (U+202A to U+202E), the bidirectional isolates
-// (U+2066 to U+2069) and the byte order mark (U+FEFF). s must be valid
-// UTF-8.
-func sanitizeMessage(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\n', r == '\t':
-			return r
-		case r < 0x20, r >= 0x7f && r <= 0x9f,
-			r >= 0x200b && r <= 0x200f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0xfeff:
-			return -1
-		}
-		return r
-	}, s)
 }
 
 // invitationLink returns the absolute invitation URL, built from the FQDN

@@ -51,8 +51,13 @@ transteira/
 │   ├── deposit/                     # Identification des déposants : éligibilité (blocage, invitation, règle interne),
 │   │                                # codes de vérification, adresses vérifiées, cookie technique de reconnaissance
 │   │                                # (__Host-tt_known), sessions de dépôt et CSRF, invitations (limite par invitant)
-│   ├── transfer/                    # Cycle de vie d'un transfert (uploading, scanning, available, expired…)
-│   ├── upload/                      # Serveur tus (HEAD/PATCH/DELETE/OPTIONS), progression sur disque
+│   ├── transfer/                    # Création (éligibilité revérifiée, quota réservé sous verrou, destinataire imposé
+│   │                                # pour un externe, idempotence), consultation, annulation, finalisation
+│   ├── upload/                      # Moteur tus : verrou par fichier, flux chiffré + SHA-256, points de reprise scellés,
+│   │                                # réinitialisation après crash, expiration
+│   ├── filename/                    # Assainissement des noms de fichiers (P8) et noms uniques dans le ZIP
+│   ├── textsafe/                    # Caractères qui masquent ou déguisent du texte (contrôle, bidi, invisibles) :
+│   │                                # définition unique, retrait dans les messages, refus dans les noms (filename)
 │   ├── download/                    # Téléchargement unitaire (Range), ZIP64 en flux en mode store, mot de passe
 │   ├── (blocklist → store)          # Liste de blocage (adresse, domaine, SHA-256) : pas de package dédié,
 │   │                                # dépôt store/blocklist.go, appliquée par deposit (et transfer pour les empreintes)
@@ -62,11 +67,13 @@ transteira/
 │   ├── authz/                       # Rôles et périmètres (super_admin, delegated_admin ; auditor en V2)
 │   ├── apitoken/                    # Jetons d'API par entité (hachés, expiration optionnelle, révocation)
 │   ├── crypto/                      # Primitives pures : clé maître, enveloppe (DEK chiffrée par la clé maître),
-│   │                                # format de fichier AES-256-GCM par blocs, points de reprise tus
+│   │                                # format de fichier AES-256-GCM par blocs, points de reprise tus, clés MAC
+│   │                                # dérivées, hachage des mots de passe argon2id (PHC, parallélisme borné)
 │   ├── masterkey/                   # Trousseau (clé courante + nouvelle), contrôle au démarrage, rotation
 │   │   │                            # reprenable, effacement cryptographique (table wrapped_keys)
 │   │   └── masterkeytest/           # Clés maîtres et fichiers de clé pour les tests (hors seuils de couverture)
-│   ├── storage/                     # Stockage des fichiers : un dossier par tenant, noms aléatoires, écriture atomique
+│   ├── storage/                     # Stockage des fichiers confiné par os.Root : un dossier par tenant, noms aléatoires,
+│   │                                # points de reprise écrits de façon atomique
 │   ├── antivirus/                   # Client clamd (INSTREAM), file d'analyse, gestion des fichiers trop gros
 │   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
 │   │                                # (templates/), file d'envoi asynchrone ; QR code CID à l'étape des notifications
@@ -89,6 +96,8 @@ transteira/
 │   │   ├── dialect.go               # Différences de moteur (placeholders, pragmas SQLite, set_config PostgreSQL)
 │   │   ├── migrate.go               # Migrateur (checksum, verrou, refus d'une base plus récente)
 │   │   ├── tenants.go, networkrules.go, blocklist.go, … # Dépôts ; chaque méthode à portée d'entité exige un tenant.ID
+│   │   ├── depositor.go             # store.Depositor (adresse, type, invitation) : l'identité d'un déposant partagée
+│   │                                # par transfer (Sender) et upload (Principal), et sa règle de propriété (Owns)
 │   │   ├── migrations/
 │   │   │   ├── sqlite/              # 0001_init.sql, … (versionnées, appliquées au démarrage)
 │   │   │   └── postgres/            # Mêmes versions ; ENABLE + FORCE ROW LEVEL SECURITY

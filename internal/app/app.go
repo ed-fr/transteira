@@ -1,7 +1,7 @@
 // Package app wires the TransTeira server together and runs it: logging,
 // master keys, database, migrations, master key check, tenant resolution,
-// security log, health checks, mail queue, depositor identification and the
-// HTTP server, with a graceful shutdown.
+// security log, health checks, mail queue, depositor identification,
+// transfers and tus uploads, and the HTTP server, with a graceful shutdown.
 package app
 
 import (
@@ -21,14 +21,18 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/api/public"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/securitylog"
+	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/transfer"
+	"github.com/ed-fr/transteira/internal/upload"
 	"github.com/ed-fr/transteira/internal/version"
 )
 
@@ -196,8 +200,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// serve has returned, so that no handler can enqueue a mail any more.
 	mailQueue := mail.NewQueue(newSMTPSender(cfg), cfg.MailQueueSize, logger, mailQueueOptions(cfg)) //nolint:contextcheck // see above
 	defer closeMailQueue(ctx, mailQueue, logger)
-	deposits := deposit.New(db, keys, masterkey.NewVault(db, keys, logger), mailQueue, secLog,
+	vault := masterkey.NewVault(db, keys, logger)
+	deposits := deposit.New(db, keys, vault, mailQueue, secLog,
 		deposit.Options{SessionTTL: cfg.DepositSessionTTL, Logger: logger})
+	files, err := storage.New(cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// Deferred after db.Close, so it runs before it, once the handlers
+	// have drained.
+	defer func() { err = errors.Join(err, closeWith(files.Close, "data directory")) }()
+	uploads, transfers := newTransferServices(cfg, db, vault, files, secLog, logger)
 
 	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address)
 	handler := httpserver.New(httpserver.Deps{
@@ -211,10 +224,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			Logger:    logger,
 		},
 		Maintenance: maintenance,
-		API:         public.NewServer(public.WithDeposit(deposits)),
-		Sessions:    deposits,
-		Spec:        api.OpenAPISpec,
-		Logger:      logger,
+		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
+			public.WithUploads(uploads)),
+		Sessions:          deposits,
+		UploadIdleTimeout: cfg.UploadIdleTimeout,
+		Spec:              api.OpenAPISpec,
+		Logger:            logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)
 }
@@ -373,6 +388,19 @@ func drain(counter *atomic.Int64, timeout time.Duration) bool {
 		time.Sleep(drainPoll)
 	}
 	return true
+}
+
+// newTransferServices builds the tus upload engine and the transfer service
+// over the file store files. The uploads in flight at shutdown stop with
+// the base context of their request (canceled by serve): the engine saves
+// a checkpoint, and the client resumes after a HEAD.
+func newTransferServices(cfg *config.Config, db *store.DB, vault *masterkey.Vault, files *storage.Store, secLog *securitylog.Logger, logger *slog.Logger) (*upload.Engine, *transfer.Service) {
+	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
+	transfers := transfer.New(db, vault, uploads, secLog, transfer.Options{
+		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
+		Hasher: crypto.NewPasswordHasher(transfer.DefaultHashConcurrency), Logger: logger,
+	})
+	return uploads, transfers
 }
 
 // newSMTPSender returns the SMTP sender of the mail queue. The EHLO name

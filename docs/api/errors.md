@@ -30,7 +30,7 @@ Some codes carry extension members:
 
 | Member | Used by | Meaning |
 |---|---|---|
-| `errors` | `validation-failed` | List of `{field, code, allowed?}` objects, one per invalid field. |
+| `errors` | `validation-failed` | List of `{field, code, allowed?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`). |
 | `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid` | Number of attempts left before lockout or invalidation. |
 | `retryAfterSeconds` | `rate-limited`, `transfer-locked`, `maintenance` | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
 | `maxTransferBytes` | `transfer-too-large` | Per-transfer size limit of the entity, in bytes. |
@@ -204,9 +204,13 @@ use to ban the client IP.
 ### state-conflict
 
 - **HTTP status:** 409 Conflict
-- **Meaning:** the operation is not allowed in the current state of the resource (for example
-  deleting a transfer that is already being deleted, or resending an expired transfer).
-- **Typical endpoints:** `DELETE /transfers/{transferId}`,
+- **Meaning:** the operation is not allowed in the current state of the resource. Examples:
+  cancelling or finalizing a transfer that is no longer being uploaded, or while one of its
+  uploads is in progress (another request holds it); finalizing a transfer that has no file
+  left because every upload was terminated, or one of whose files has no key any more; an
+  `Idempotency-Key` replayed with a different request body; resending an expired transfer.
+- **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
+  `POST /transfers/{transferId}/finalize`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
   `PUT /admin/system/maintenance`.
 - **What to do:** reload the resource to get its current state before deciding what to do.
@@ -275,9 +279,12 @@ use to ban the client IP.
 - **Meaning:** too many requests were made from this client, for this address or by this user,
   or the service is temporarily saturated. Examples: verification codes (5 per hour per
   address, 20 per hour per client IP), invitations (20 per hour per inviting address), sign-in
-  attempts, API calls, or the mail queue of the service (or of the entity) being full.
+  attempts, API calls, the mail queue of the service (or of the entity) being full, or the
+  open-transfer cap: a sender may have only a limited number of unfinished transfers at once
+  (`TT_MAX_OPEN_TRANSFERS`, 10 by default, for an internal user; 3 for an invited external
+  depositor); finalizing or cancelling one frees a slot.
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
-  `POST /admin/auth/login`.
+  `POST /transfers`, `POST /admin/auth/login`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
