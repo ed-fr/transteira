@@ -235,6 +235,17 @@ The rotation is recorded in the database (`key_rotations`) and in the
 application log; it will also appear in the audit log once that log is
 available.
 
+**Effect of step 4 on users.** The master key also derives the MAC keys
+that protect three values: the stored hashes of email verification codes
+(valid 15 minutes), the CSRF tokens of deposit sessions (4 hours) and the
+entries of the browser recognition cookie `__Host-tt_known` (up to 12
+months). They always use the key named by `TT_MASTER_KEY_FILE` and are not
+re-wrapped, so they stay valid during the rotation but stop verifying at the
+restart of step 4: a user who was entering a code must request a new one, an
+open deposit page must be reloaded (or the session reopened), and every
+internal depositor is asked for a verification code once more on their next
+visit. Switch at a quiet time; no data is lost.
+
 ### Abandoning a rotation
 
 A running rotation can be given up when nothing depends on it:

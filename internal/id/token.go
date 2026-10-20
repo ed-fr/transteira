@@ -13,6 +13,38 @@ const MinTokenBytes = 16
 // MaxTokenBytes bounds the entropy of a public token to keep outputs short.
 const MaxTokenBytes = 64
 
+// Public token prefixes of the deposit flow and their entropy, shared by the
+// store (which validates the shape of the identifiers it keeps) and the
+// deposit service (which generates them). Every one of them matches the
+// OpenAPI pattern "^<prefix>_[A-Za-z0-9]{22,43}$".
+//
+// The session ("ds") and invitation ("inv") prefixes are also entity
+// identifier prefixes ([DepositSession], [Invitation]): a record ID
+// ("ds_" + 26-character ULID) and a bearer token ("ds_" + 43 base62
+// characters) can look alike. They are never confused because a token is
+// only ever looked up by its SHA-256 hash, and a record by its ID.
+const (
+	// ChallengeTokenPrefix starts a verification challenge ID, which
+	// appears in the confirmation URL.
+	ChallengeTokenPrefix = "vch"
+	// SessionTokenPrefix starts a deposit session token (cookie value).
+	SessionTokenPrefix = "ds"
+	// InvitationTokenPrefix starts an invitation link token.
+	InvitationTokenPrefix = "inv"
+	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
+	// lives 15 minutes and allows 2 attempts.
+	ChallengeTokenBytes = MinTokenBytes
+	// SessionTokenBytes is the entropy of a session token (256 bits).
+	SessionTokenBytes = 32
+	// InvitationTokenBytes is the entropy of an invitation token (256
+	// bits, long-lived).
+	InvitationTokenBytes = 32
+	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
+	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
+	MinTokenBodyLen = 22
+	MaxTokenBodyLen = 43
+)
+
 // base62 is the alphabet produced by big.Int.Text(62).
 const base62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 

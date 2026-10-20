@@ -23,6 +23,9 @@ TEST_POSTGRES_DSN         ?= postgres://transteira_app:transteira_app@127.0.0.1:
 TEST_POSTGRES_MIGRATE_DSN ?= postgres://transteira_owner:transteira_owner@127.0.0.1:55432/transteira_test?sslmode=disable
 # Test container superuser, only used by isolation tests that need to create extra roles.
 TEST_POSTGRES_SUPERUSER_DSN ?= postgres://transteira_test:transteira_test@127.0.0.1:55432/transteira_test?sslmode=disable
+# Mailpit captures the mails sent by the tests (SMTP and HTTP API).
+TEST_MAILPIT_SMTP ?= 127.0.0.1:51025
+TEST_MAILPIT_API  ?= http://127.0.0.1:58025
 GO_TEST           := $(GO) test $(RACE) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
 
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -92,6 +95,8 @@ test: test-env-up ## Unit and integration tests with coverage, on SQLite and Pos
 	TT_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
 	TT_TEST_POSTGRES_MIGRATE_DSN='$(TEST_POSTGRES_MIGRATE_DSN)' \
 	TT_TEST_POSTGRES_SUPERUSER_DSN='$(TEST_POSTGRES_SUPERUSER_DSN)' \
+	TT_TEST_MAILPIT_SMTP='$(TEST_MAILPIT_SMTP)' \
+	TT_TEST_MAILPIT_API='$(TEST_MAILPIT_API)' \
 	TT_TEST_REQUIRE_POSTGRES=1 $(GO_TEST)
 
 test-pg: test ## Alias of test (PostgreSQL is mandatory there)
@@ -99,8 +104,8 @@ test-pg: test ## Alias of test (PostgreSQL is mandatory there)
 test-sqlite: ## Quick loop: tests without PostgreSQL (not part of check)
 	$(GO_TEST)
 
-test-env-up: ## Start the test PostgreSQL and wait until healthy
-	$(TEST_COMPOSE) up -d --wait postgres
+test-env-up: ## Start the test PostgreSQL and Mailpit and wait until healthy
+	$(TEST_COMPOSE) up -d --wait postgres mailpit
 
 test-env-down: ## Stop the test PostgreSQL and drop its volumes
 	$(TEST_COMPOSE) down -v

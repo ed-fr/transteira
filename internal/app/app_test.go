@@ -308,8 +308,9 @@ func TestRunMaintenance(t *testing.T) {
 		t.Error("maintenance flag not initialized from the configuration")
 	}
 	flag.Store(false)
-	if code, _ := s.do(t, http.MethodPost, "/api/v1/deposit-sessions", tenantHost, strings.NewReader(`{}`)); code != http.StatusNotFound {
-		t.Errorf("deposit after maintenance = %d", code)
+	// The handler is reached again: the empty body lacks the address.
+	if code, body := s.do(t, http.MethodPost, "/api/v1/deposit-sessions", tenantHost, strings.NewReader(`{}`)); code != http.StatusBadRequest {
+		t.Errorf("deposit after maintenance = %d %s, want 400 from the handler", code, body)
 	}
 	if !strings.Contains(s.logs.String(), "maintenance mode is active") {
 		t.Errorf("logs %s", s.logs.String())

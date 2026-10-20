@@ -113,7 +113,7 @@ func TestUnimplementedAndUnknownRoutes(t *testing.T) {
 			allow  string
 		}{
 			{"stub GET", request{path: "/api/v1/transfers/" + exampleTransferID}, 404, "not-found", ""},
-			{"stub POST with JSON body", request{method: http.MethodPost, path: "/api/v1/deposit-sessions", body: []byte(`{}`)}, 404, "not-found", ""},
+			{"stub POST with JSON body", request{method: http.MethodPost, path: "/api/v1/transfers", body: []byte(`{}`)}, 404, "not-found", ""},
 			{"stub admin route", request{path: exampleTenantPath}, 404, "not-found", ""},
 			{"unknown API route", request{path: "/api/v1/nope"}, 404, "not-found", ""},
 			{"unknown API version", request{path: "/api/v2/version"}, 404, "not-found", ""},
@@ -199,7 +199,7 @@ func TestJSONBodyLimit(t *testing.T) {
 		t.Run("just under the limit reaches the handler", func(t *testing.T) {
 			// An unknown member: decoding succeeds and the stub answers.
 			body := append(append([]byte(`{"padding":"`), bytes.Repeat([]byte("a"), oneMiB-20)...), `"}`...)
-			resp := s.do(t, request{method: http.MethodPost, host: hostA, path: "/api/v1/deposit-sessions", body: body})
+			resp := s.do(t, request{method: http.MethodPost, host: hostA, path: "/api/v1/transfers", body: body})
 			expectProblem(t, resp, http.StatusNotFound, "not-found") // still a stub
 		})
 

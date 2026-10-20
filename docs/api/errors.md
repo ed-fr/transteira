@@ -87,7 +87,9 @@ use to ban the client IP.
 - **Meaning:** the CSRF token of a cookie-authenticated, state-changing request is missing or
   invalid.
 - **Typical endpoints:** state-changing requests made from the browser with a session cookie,
-  e.g. `DELETE /transfers/{transferId}`, `DELETE /deposit-sessions/current`.
+  e.g. `DELETE /transfers/{transferId}`, `DELETE /deposit-sessions/current`. The request is
+  also refused when its `Origin` header is present and differs from `https://<entity host>`, or
+  when its `Sec-Fetch-Site` header is present and is not `same-origin`.
 - **What to do:** send the `csrfToken` returned in the session payload in the `X-CSRF-Token`
   header; reload the page to obtain a fresh one, then retry.
 
@@ -98,7 +100,8 @@ use to ban the client IP.
   every reason (client outside the internal IP ranges of the entity, email domain not internal,
   address or domain on the blocklist), so that the response does not reveal which check failed.
   The precise reason is written to the security log only.
-- **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`, `POST /invitations`.
+- **Typical endpoints:** `POST /deposit-sessions`,
+  `POST /verification-challenges/{challengeId}/confirm`, `POST /transfers`, `POST /invitations`.
 - **What to do:** deposit from the internal network with an internal address, or ask an internal
   user for an invitation.
 
@@ -129,8 +132,10 @@ use to ban the client IP.
 ### invitation-gone
 
 - **HTTP status:** 410 Gone
-- **Meaning:** the invitation has expired, been revoked or already been used.
-- **Typical endpoints:** `GET /invitations/{invitationToken}`, `POST /deposit-sessions`.
+- **Meaning:** the invitation has expired or been revoked. An invitation can be used several
+  times; each use extends its validity to 12 months after that use.
+- **Typical endpoints:** `GET /invitations/{invitationToken}`, `POST /deposit-sessions`,
+  `POST /verification-challenges/{challengeId}/confirm`.
 - **What to do:** ask the person who invited you for a new invitation.
 
 ### verification-code-invalid
@@ -267,9 +272,11 @@ use to ban the client IP.
 ### rate-limited
 
 - **HTTP status:** 429 Too Many Requests
-- **Meaning:** too many requests (verification codes, sign-in attempts, API calls) were made
-  from this client or for this address.
-- **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`,
+- **Meaning:** too many requests were made from this client, for this address or by this user,
+  or the service is temporarily saturated. Examples: verification codes (5 per hour per
+  address, 20 per hour per client IP), invitations (20 per hour per inviting address), sign-in
+  attempts, API calls, or the mail queue of the service (or of the entity) being full.
+- **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /admin/auth/login`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
@@ -282,6 +289,17 @@ use to ban the client IP.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`,
   `POST /transfers/{transferId}/finalize`, `POST /invitations`.
 - **What to do:** retry later, after `Retry-After` when present.
+
+### mail-unavailable
+
+- **HTTP status:** 503 Service Unavailable
+- **Meaning:** the verification or invitation email cannot be sent right now: no SMTP server
+  is configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity
+  is open (its server failed several times in a row and is not tried again for a minute), or
+  the mail queue is shutting down. Nothing was sent.
+- **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`.
+- **What to do:** retry later. If the error persists, contact the administrators of the service:
+  the SMTP settings of the entity are probably missing.
 
 ### unknown-tenant
 

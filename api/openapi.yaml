@@ -28,7 +28,13 @@ info:
     | `apiToken` | Automated deposits by scripts and third-party software | `Authorization: Bearer tt_...` |
     | `downloadGrant` | Recipients who unlocked a password-protected transfer | Cookie `__Host-tt_dl` |
 
-    Only strictly technical cookies are used (`Secure`, `HttpOnly`, `SameSite=Strict`).
+    Only strictly technical cookies are used (`Secure`, `HttpOnly`, `SameSite=Strict`, no
+    `Domain`). Besides the schemes above, the technical recognition cookie `__Host-tt_known`
+    (not an authentication scheme, lifetime 1 year) is set for internal depositors who entered a
+    code: it lets an already verified address skip the code on that browser only. It never
+    contains an address: its entries are opaque values keyed by the master key and bound to the
+    tenant and the address, worthless under another tenant. It proves nothing by itself; the
+    database remains authoritative.
 
     ## Errors
     All errors use **RFC 9457 Problem Details** (`application/problem+json`). Each problem carries
@@ -281,16 +287,22 @@ paths:
         `invitationToken` (external depositor) or the internal-user rule (client IP in a tenant
         CIDR range **and** email domain in the tenant's allowed domains).
 
-        - If the address has already been verified for this tenant, a deposit session is
-          created immediately (`201`) and the address' last-use date is refreshed.
-        - Otherwise a 6-digit code is sent through the tenant SMTP server and a verification
-          challenge is returned (`202`). The code is valid 15 minutes and allows 2 wrong attempts.
+        - For an **internal** depositor whose address is already verified for this tenant **and**
+          whose browser presents the recognition cookie `__Host-tt_known` naming that address
+          (set after a code was confirmed on this browser), a deposit session is created
+          immediately (`201`), the address' last-use date is refreshed and the recognition
+          cookie is renewed.
+        - Otherwise, including **every deposit through an invitation** (even for a verified
+          address) and any missing, foreign or invalid recognition cookie, a 6-digit code is sent
+          through the tenant SMTP server and a verification challenge is returned (`202`). The
+          code is valid 15 minutes and allows 2 wrong attempts.
 
         Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
         Refused deposits are written to the security log.
       security: []
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
+        - $ref: '#/components/parameters/RecognitionCookie'
       requestBody:
         required: true
         content:
@@ -305,9 +317,9 @@ paths:
                 value: { email: bob@partner.example.org, invitationToken: inv_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ }
       responses:
         '201':
-          description: Address already verified; deposit session created.
+          description: Internal address already verified and recognized on this browser; deposit session created.
           headers:
-            Set-Cookie: { $ref: '#/components/headers/SetDepositCookie' }
+            Set-Cookie: { $ref: '#/components/headers/SetDepositCookies' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DepositSession' }
@@ -333,7 +345,7 @@ paths:
         '410': { $ref: '#/components/responses/InvitationGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /verification-challenges/{challengeId}/confirm:
@@ -343,11 +355,15 @@ paths:
       summary: Submit the verification code
       description: |
         Validates the 6-digit code. On success the address is stored as verified for the tenant
-        (it will not be asked again for 12 months of inactivity) and a deposit session is created.
+        and a deposit session is created. For an internal depositor the recognition cookie
+        `__Host-tt_known` is set (or renewed, keeping the other addresses it names) so that this
+        browser may skip the code next time; an external (invited) depositor's cookie is left
+        unchanged, since invitation deposits always require a code.
         After 2 wrong codes the challenge is invalidated and a new code must be requested.
       security: []
       parameters:
         - $ref: '#/components/parameters/ChallengeId'
+        - $ref: '#/components/parameters/RecognitionCookie'
       requestBody:
         required: true
         content:
@@ -358,7 +374,7 @@ paths:
         '201':
           description: Code accepted; deposit session created.
           headers:
-            Set-Cookie: { $ref: '#/components/headers/SetDepositCookie' }
+            Set-Cookie: { $ref: '#/components/headers/SetDepositCookies' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DepositSession' }
@@ -373,18 +389,30 @@ paths:
                   invitedBy: alice@entity-a.example.com
                   expiresAt: '2027-10-01T08:00:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/DepositForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '410':
-          description: Challenge expired or invalidated after too many wrong attempts.
+          description: |
+            Challenge expired, already used or invalidated after too many wrong attempts
+            (`verification-exhausted`), or invitation of an external depositor expired or revoked
+            since the code was sent (`invitation-gone`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example:
-                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#verification-exhausted
-                title: Verification code invalidated
-                status: 410
-                code: verification-exhausted
-                detail: Too many wrong attempts. Please request a new code.
+              examples:
+                verificationExhausted:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#verification-exhausted
+                    title: Verification code invalidated
+                    status: 410
+                    code: verification-exhausted
+                    detail: Too many wrong attempts. Please request a new code.
+                invitationGone:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invitation-gone
+                    title: Invitation no longer valid
+                    status: 410
+                    code: invitation-gone
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '422':
           description: Wrong code; at least one attempt remains.
@@ -435,6 +463,8 @@ paths:
       responses:
         '204':
           description: Session ended; cookie cleared.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/ClearDepositCookie' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/CsrfInvalid' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
@@ -835,9 +865,15 @@ paths:
         containing a unique link. Files deposited through it are addressed to the inviter.
         The invitation expires after 12 months if unused. The inviter is recorded in the
         database and in the audit log.
+
+        Rate limit: 20 invitations per hour per inviting address (`429 rate-limited` with
+        `Retry-After`). Control and invisible characters (bidirectional overrides, zero-width
+        characters...) are removed from `message` before it is stored and mailed.
       security:
         - depositSession: []
           csrfToken: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
         required: true
         content:
@@ -865,7 +901,7 @@ paths:
         '403': { $ref: '#/components/responses/DepositForbidden' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/MaintenanceMode' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /invitations/{invitationToken}:
@@ -3168,6 +3204,17 @@ components:
       description: Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
       schema: { type: string, pattern: '^dl_[A-Za-z0-9]{22,43}$' }
       example: dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+    RecognitionCookie:
+      name: __Host-tt_known
+      in: cookie
+      required: false
+      description: |
+        Technical recognition cookie set by `confirmVerificationChallenge` (and renewed by a
+        `201` of `startDepositSession`) for internal depositors. It holds up to 5 dot-separated
+        opaque entries keyed by the master key, never an address. Invalid, expired, foreign or
+        oversized values are ignored.
+      schema: { type: string, maxLength: 1024 }
+      example: Xq3Lm8Zx2Vb7Kd0RPq1Lm8Zx3Vb7Kd0RJd83kLm0Qp2
     InvitationToken:
       name: invitationToken
       in: path
@@ -3255,9 +3302,18 @@ components:
     ContentDispositionAttachment:
       schema: { type: string }
       example: attachment; filename="plans-v3.pdf"; filename*=UTF-8''plans-v3.pdf
-    SetDepositCookie:
+    SetDepositCookies:
+      description: |
+        One `Set-Cookie` header per cookie (RFC 6265 forbids folding them): always the session
+        cookie `__Host-tt_deposit` (Max-Age = remaining session lifetime), and for an internal
+        depositor the recognition cookie `__Host-tt_known` (Max-Age 31536000, one year). Both
+        are `Path=/; Secure; HttpOnly; SameSite=Strict`, without `Domain`.
       schema: { type: string }
-      example: __Host-tt_deposit=ds_Qm2Zx8...; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=14400
+      example: __Host-tt_deposit=ds_Qm2Zx8...; Path=/; Max-Age=14400; HttpOnly; Secure; SameSite=Strict
+    ClearDepositCookie:
+      description: Expires the deposit session cookie.
+      schema: { type: string }
+      example: __Host-tt_deposit=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
     SetAdminCookie:
       schema: { type: string }
       example: __Host-tt_admin=as_Hx7Lp1...; Path=/; Secure; HttpOnly; SameSite=Strict
@@ -3479,6 +3535,31 @@ components:
             status: 503
             code: maintenance
             detail: Upgrade in progress, back around 8 pm.
+    ServiceUnavailable:
+      description: |
+        The operation cannot be performed right now: either maintenance mode is active (code
+        `maintenance`, with `Retry-After`), or the verification or invitation email cannot be sent
+        (code `mail-unavailable`, for example no SMTP server is configured for the tenant or the
+        mail queue is shut down). Clients must branch on `code`.
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            maintenance:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#maintenance
+                title: Maintenance in progress
+                status: 503
+                code: maintenance
+                retryAfterSeconds: 300
+            mailUnavailable:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
+                title: Email cannot be sent
+                status: 503
+                code: mail-unavailable
     InternalError:
       description: Unexpected server error. The response never contains internal details; the `instance` identifier allows correlation with the server logs.
       content:
@@ -3562,6 +3643,7 @@ components:
         - quota-exceeded
         - rate-limited
         - maintenance
+        - mail-unavailable
         - unknown-tenant
         - setup-already-done
         - setup-token-invalid
@@ -3804,7 +3886,10 @@ components:
       required: [email]
       properties:
         email: { $ref: '#/components/schemas/Email' }
-        message: { type: string, maxLength: 2000 }
+        message:
+          type: string
+          maxLength: 2000
+          description: Optional text for the invited person. Control and invisible characters are removed.
         language: { $ref: '#/components/schemas/Language' }
       additionalProperties: false
     Invitation:

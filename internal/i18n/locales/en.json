@@ -1,0 +1,4 @@
+{
+  "mail.footer.automated": "This message was sent automatically by {tenant}. Please do not reply to it.",
+  "mail.footer.ignore": "If you were not expecting this message, you can safely ignore it."
+}

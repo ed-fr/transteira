@@ -370,6 +370,52 @@ var tenantAllowlist = map[string]int{
 	`INSERT INTO wrapped_keys (tenant_id, id, purpose, key_id, blob, created_at) VALUES (?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + wrappedKeyColumns + ` FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                     0,
 	`DELETE FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                                               0,
+	// SMTP settings.
+	`SELECT ` + smtpColumns + ` FROM tenant_smtp_settings WHERE tenant_id = ?`: 0,
+	`UPDATE tenant_smtp_settings SET host = ?, port = ?, security = ?, username = ?, password_key_id = ?, ` +
+		`from_address = ?, from_name = ?, updated_at = ? WHERE tenant_id = ?`: 8,
+	`INSERT INTO tenant_smtp_settings (tenant_id, host, port, security, username, password_key_id, ` +
+		`from_address, from_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	// Verification challenges.
+	`INSERT INTO verification_challenges (tenant_id, id, email, code_mac, attempts_remaining, invitation_id, ` +
+		`client_ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`:            0,
+	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND email = ? AND created_at >= ?`:     0,
+	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND client_ip = ? AND created_at >= ?`: 0,
+	`DELETE FROM verification_challenges WHERE tenant_id = ? AND id = ?`:                                     0,
+	`UPDATE verification_challenges SET attempts_remaining = attempts_remaining - 1 ` +
+		`WHERE tenant_id = ? AND id = ? AND attempts_remaining > 0 AND consumed_at IS NULL AND expires_at > ? ` +
+		`RETURNING attempts_remaining`: 0,
+	`UPDATE verification_challenges SET consumed_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND attempts_remaining > 0 AND consumed_at IS NULL AND expires_at > ?`: 1,
+	// Verified addresses.
+	`SELECT ` + verifiedColumns + ` FROM verified_addresses WHERE tenant_id = ? AND email = ?`:        0,
+	`SELECT last_used_at, recognition_salt FROM verified_addresses WHERE tenant_id = ? AND email = ?`: 0,
+	`UPDATE verified_addresses SET last_used_at = ? WHERE tenant_id = ? AND email = ?`:                1,
+	`UPDATE verified_addresses SET last_used_at = ?, internal_verified_at = COALESCE(internal_verified_at, ?), ` +
+		`internal_verified_ip = COALESCE(internal_verified_ip, ?) WHERE tenant_id = ? AND email = ?`: 3,
+	`UPDATE verified_addresses SET first_verified_at = ?, first_verified_ip = ?, internal_verified_at = ?, ` +
+		`internal_verified_ip = ?, recognition_salt = ?, last_used_at = ? WHERE tenant_id = ? AND email = ?`: 6,
+	`INSERT INTO verified_addresses (tenant_id, email, first_verified_at, first_verified_ip, ` +
+		`internal_verified_at, internal_verified_ip, recognition_salt, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`UPDATE verified_addresses SET recognition_salt = ? WHERE tenant_id = ? AND email = ?`: 1,
+	// Deposit sessions.
+	`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + sessionColumns + ` FROM deposit_sessions ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND ended_at IS NULL AND expires_at > ?`: 0,
+	`UPDATE deposit_sessions SET ended_at = ? ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND ended_at IS NULL AND expires_at > ?`: 1,
+	// Invitations.
+	`INSERT INTO invitations (tenant_id, id, token_hash, email, invited_by, message, language, created_at, expires_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND id = ?`:         0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND token_hash = ?`: 0,
+	`UPDATE invitations SET last_used_at = ?, expires_at = (CASE WHEN expires_at < ? THEN ? ELSE expires_at END) ` +
+		`WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL AND expires_at > ?`: 3,
+	`SELECT count(*) FROM invitations WHERE tenant_id = ? AND invited_by = ? AND created_at >= ?`: 0,
+	`DELETE FROM invitations WHERE tenant_id = ? AND id = ?`:                                      0,
+	`UPDATE invitations SET revoked_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 1,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,

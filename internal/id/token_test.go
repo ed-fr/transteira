@@ -132,3 +132,16 @@ func TestTokenValid(t *testing.T) {
 		})
 	}
 }
+
+func TestDepositTokenConstants(t *testing.T) {
+	if MinTokenBodyLen != TokenLen(ChallengeTokenBytes) || MaxTokenBodyLen != TokenLen(SessionTokenBytes) ||
+		MaxTokenBodyLen != TokenLen(InvitationTokenBytes) {
+		t.Errorf("token body bounds %d..%d do not match the token sizes", MinTokenBodyLen, MaxTokenBodyLen)
+	}
+	for _, p := range []string{ChallengeTokenPrefix, SessionTokenPrefix, InvitationTokenPrefix} {
+		tok, err := NewToken(p, MinTokenBytes)
+		if err != nil || !TokenValid(p, tok, MinTokenBodyLen, MaxTokenBodyLen) {
+			t.Errorf("NewToken(%s) = %q, %v", p, tok, err)
+		}
+	}
+}

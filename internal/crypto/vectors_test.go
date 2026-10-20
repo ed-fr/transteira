@@ -17,13 +17,17 @@ import (
 var update = flag.Bool("update", false, "regenerate testdata/vectors.json")
 
 const (
-	vectorsFile   = "testdata/vectors.json"
-	vectorTenant  = "ten_01JVECTOR0000000000000000"
-	vectorFile    = "fil_01JVECTOR0000000000000000"
-	vectorRow     = "wk_01JVECTOR0000000000000000"
-	vectorChunk   = MinChunkSize
-	vectorStream  = 2*vectorChunk + vectorChunk/2 // 2.5 chunks
-	vectorPartial = vectorChunk + 300             // checkpoint offset
+	vectorsFile     = "testdata/vectors.json"
+	vectorTenant    = "ten_01JVECTOR0000000000000000"
+	vectorFile      = "fil_01JVECTOR0000000000000000"
+	vectorRow       = "wk_01JVECTOR0000000000000000"
+	vectorChunk     = MinChunkSize
+	vectorStream    = 2*vectorChunk + vectorChunk/2 // 2.5 chunks
+	vectorPartial   = vectorChunk + 300             // checkpoint offset
+	vectorChallenge = "vch_01JVECTOR00000000000000000000"
+	vectorCode      = "042137"
+	vectorSession   = "ds_01JVECTOR000000000000000000000000000000000"
+	vectorEmail     = "alice@entity-a.example.com"
 )
 
 // vectors freezes the formats. Any unintended change of a format, label,
@@ -49,6 +53,13 @@ type vectors struct {
 	CheckpointExtra      string `json:"checkpoint_extra_hex"`
 	CheckpointState      string `json:"checkpoint_state_hex"`
 	CheckpointCiphertext string `json:"checkpoint_ciphertext_hex"`
+	MACChallengeID       string `json:"mac_challenge_id"`
+	MACCode              string `json:"mac_code"`
+	MACOTP               string `json:"mac_otp_hex"`
+	MACSessionToken      string `json:"mac_session_token"`
+	MACCSRF              string `json:"mac_csrf_hex"`
+	MACRecognitionEmail  string `json:"mac_recognition_email"`
+	MACRecognition       string `json:"mac_recognition_hex"`
 }
 
 // sha256State returns the marshaled SHA-256 state after hashing data, the
@@ -123,6 +134,22 @@ func generateVectors(t *testing.T) vectors {
 	v.CheckpointExtra = hex.EncodeToString(extra)
 	v.CheckpointState = hex.EncodeToString(sb)
 	v.CheckpointCiphertext = hex.EncodeToString(out.Bytes())
+
+	v.MACChallengeID, v.MACCode, v.MACSessionToken = vectorChallenge, vectorCode, vectorSession
+	mac, err := k.MAC(MACPurposeOTP, []byte(vectorChallenge), []byte(vectorCode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.MACOTP = hex.EncodeToString(mac)
+	if mac, err = k.MAC(MACPurposeCSRF, []byte(vectorSession)); err != nil {
+		t.Fatal(err)
+	}
+	v.MACCSRF = hex.EncodeToString(mac)
+	v.MACRecognitionEmail = vectorEmail
+	if mac, err = k.MAC(MACPurposeRecognition, []byte(vectorTenant), []byte(vectorEmail)); err != nil {
+		t.Fatal(err)
+	}
+	v.MACRecognition = hex.EncodeToString(mac)
 	return v
 }
 
@@ -219,5 +246,16 @@ func TestVectors(t *testing.T) {
 	}
 	if plain, err := io.ReadAll(r); err != nil || !bytes.Equal(plain, full) {
 		t.Fatalf("resumed checkpoint: %v", err)
+	}
+
+	if ok, err := k.VerifyMAC(MACPurposeOTP, mustHex(t, want.MACOTP), []byte(want.MACChallengeID), []byte(want.MACCode)); !ok || err != nil {
+		t.Fatalf("OTP MAC: %v, %v", ok, err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeCSRF, mustHex(t, want.MACCSRF), []byte(want.MACSessionToken)); !ok || err != nil {
+		t.Fatalf("CSRF MAC: %v, %v", ok, err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeRecognition, mustHex(t, want.MACRecognition),
+		[]byte(want.TenantID), []byte(want.MACRecognitionEmail)); !ok || err != nil {
+		t.Fatalf("recognition MAC: %v, %v", ok, err)
 	}
 }

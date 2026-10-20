@@ -13,6 +13,11 @@
 //     that grant access by themselves (download links, invitation links,
 //     upload sessions). They carry at least 128 bits of crypto/rand entropy,
 //     encoded in base62, and contain no timestamp (see NewToken).
+//
+// Some prefixes are shared by both families: "ds_" and "inv_" name a record
+// (deposit session, invitation) and the bearer token that goes with it. The
+// two never collide in practice because tokens are looked up by their
+// SHA-256 hash only, never by value, and records by their ID only.
 package id
 
 import (
@@ -50,6 +55,9 @@ const (
 	// WrappedKey identifies a wrapped (encrypted) data key or secret. It is
 	// internal: the API never exposes it.
 	WrappedKey Prefix = "wk"
+	// DepositSession identifies a deposit session record. It is internal:
+	// the cookie carries a separate bearer token, never this identifier.
+	DepositSession Prefix = "ds"
 	// Audit identifies an audit log entry.
 	Audit Prefix = "aud"
 	// Request identifies an HTTP request (Problem Details "instance").

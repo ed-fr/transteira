@@ -39,6 +39,13 @@ type extVectors struct {
 	CheckpointExtra      string `json:"checkpoint_extra_hex"`
 	CheckpointState      string `json:"checkpoint_state_hex"`
 	CheckpointCiphertext string `json:"checkpoint_ciphertext_hex"`
+	MACChallengeID       string `json:"mac_challenge_id"`
+	MACCode              string `json:"mac_code"`
+	MACOTP               string `json:"mac_otp_hex"`
+	MACSessionToken      string `json:"mac_session_token"`
+	MACCSRF              string `json:"mac_csrf_hex"`
+	MACRecognitionEmail  string `json:"mac_recognition_email"`
+	MACRecognition       string `json:"mac_recognition_hex"`
 }
 
 // lp returns the big-endian uint32 length of s followed by s.
@@ -226,5 +233,34 @@ func TestVectorsIndependent(t *testing.T) {
 		if err != nil || !bytes.Equal(pt, full[int(c)*cs:int(c+1)*cs]) {
 			t.Fatalf("checkpoint chunk %d: %v", c, err)
 		}
+	}
+
+	// Keyed MACs: HMAC-SHA256 under HKDF(master, "transteira/v1/mac/"+purpose)
+	// of lp("transteira/v1/mac") | lp(purpose) | lp(part)...
+	macOf := func(purpose string, parts ...string) string {
+		key := hkdf32(t, master, "transteira/v1/mac/"+purpose)
+		m := hmac.New(sha256.New, key)
+		m.Write(lp("transteira/v1/mac"))
+		m.Write(lp(purpose))
+		for _, p := range parts {
+			m.Write(lp(p))
+		}
+		return hex.EncodeToString(m.Sum(nil))
+	}
+	if v.MACChallengeID == "" || v.MACCode == "" || v.MACSessionToken == "" || v.MACRecognitionEmail == "" {
+		t.Fatal("MAC vector inputs missing")
+	}
+	if got := macOf("otp", v.MACChallengeID, v.MACCode); got != v.MACOTP {
+		t.Fatalf("OTP MAC %s, vectors %s", got, v.MACOTP)
+	}
+	if got := macOf("csrf", v.MACSessionToken); got != v.MACCSRF {
+		t.Fatalf("CSRF MAC %s, vectors %s", got, v.MACCSRF)
+	}
+	if got := macOf("recognition", v.TenantID, v.MACRecognitionEmail); got != v.MACRecognition {
+		t.Fatalf("recognition MAC %s, vectors %s", got, v.MACRecognition)
+	}
+	// The MAC keys are not the wrapping keys of the same name space.
+	if bytes.Equal(hkdf32(t, master, "transteira/v1/mac/otp"), hkdf32(t, master, "transteira/v1/wrap/dek")) {
+		t.Fatal("MAC key equals a wrapping key")
 	}
 }

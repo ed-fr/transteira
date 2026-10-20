@@ -78,6 +78,8 @@ func TestLoadDefaults(t *testing.T) {
 		{"DeleteAfterDownloadGrace", c.DeleteAfterDownloadGrace, 15 * time.Minute},
 		{"ClamAV", c.ClamAV, ClamAVAddr{Network: "tcp", Address: DefaultClamAVAddr}},
 		{"BroadTrustedProxies", len(c.BroadTrustedProxies()), 0},
+		{"SMTPTimeout", c.SMTPTimeout, 30 * time.Second},
+		{"MailQueueSize", c.MailQueueSize, 1000},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {
@@ -232,6 +234,26 @@ func TestLoadValid(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "mail bounds inclusive low",
+			vars: map[string]string{EnvSMTPTimeout: "1s", EnvMailQueueSize: " 1 "},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.SMTPTimeout != time.Second || c.MailQueueSize != 1 {
+					t.Errorf("mail = %v %d", c.SMTPTimeout, c.MailQueueSize)
+				}
+			},
+		},
+		{
+			name: "mail bounds inclusive high",
+			vars: map[string]string{EnvSMTPTimeout: "5m", EnvMailQueueSize: "100000"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.SMTPTimeout != 5*time.Minute || c.MailQueueSize != 100000 {
+					t.Errorf("mail = %v %d", c.SMTPTimeout, c.MailQueueSize)
+				}
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -350,6 +372,12 @@ func TestLoadInvalid(t *testing.T) {
 		{"session TTL too long", map[string]string{EnvDepositSessionTTL: "25h"}, []string{EnvDepositSessionTTL}},
 		{"grace negative", map[string]string{EnvDeleteAfterDownloadGrace: "-1s"}, []string{EnvDeleteAfterDownloadGrace}},
 		{"grace too long", map[string]string{EnvDeleteAfterDownloadGrace: "24h1s"}, []string{EnvDeleteAfterDownloadGrace}},
+		{"smtp timeout too short", map[string]string{EnvSMTPTimeout: "999ms"}, []string{EnvSMTPTimeout}},
+		{"smtp timeout too long", map[string]string{EnvSMTPTimeout: "5m1s"}, []string{EnvSMTPTimeout}},
+		{"smtp timeout malformed", map[string]string{EnvSMTPTimeout: "soon"}, []string{EnvSMTPTimeout}},
+		{"mail queue zero", map[string]string{EnvMailQueueSize: "0"}, []string{EnvMailQueueSize}},
+		{"mail queue too big", map[string]string{EnvMailQueueSize: "100001"}, []string{EnvMailQueueSize}},
+		{"mail queue malformed", map[string]string{EnvMailQueueSize: "lots"}, []string{EnvMailQueueSize}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

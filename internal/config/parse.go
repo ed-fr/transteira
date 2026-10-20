@@ -106,6 +106,19 @@ func parseDuration(raw string, lowest, highest time.Duration) (time.Duration, er
 	return d, nil
 }
 
+// parseInt parses a decimal integer and checks that it lies within
+// [lowest, highest].
+func parseInt(raw string, lowest, highest int) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a valid integer", raw)
+	}
+	if n < lowest || n > highest {
+		return 0, fmt.Errorf("%d is out of range [%d, %d]", n, lowest, highest)
+	}
+	return n, nil
+}
+
 // validHostname reports whether name is a syntactically valid lowercase DNS
 // name made of LDH labels (letters, digits, hyphens). IP literals are rejected.
 func validHostname(name string) bool {

@@ -34,7 +34,8 @@ transteira/
 │   ├── httpserver/                  # Serveur HTTP (net/http.ServeMux, motifs Go 1.22+), montage des espaces public / admin / API
 │   │   └── middleware/              # request-id, IP réelle (proxys de confiance), résolution du tenant,
 │   │                                # en-têtes de sécurité / CSP, limitation de débit, limite de corps
-│   │                                # et type JSON, récupération des panics (CSRF : à venir).
+│   │                                # et type JSON, récupération des panics, cookie de session de dépôt et CSRF
+│   │                                # (jeton X-CSRF-Token, Origin, Sec-Fetch-Site).
 │   │                                # Mode maintenance et délais par opération : httpserver/
 │   ├── api/
 │   │   ├── gen/                     # Code généré depuis openapi.yaml (ne pas modifier à la main)
@@ -44,13 +45,17 @@ transteira/
 │   │   └── problem/                 # Construction des réponses RFC 9457 et catalogue des codes d'erreur
 │   │
 │   ├── tenant/                      # Modèle Tenant, contexte (tenant.FromContext), résolution par Host
-│   ├── netpolicy/                   # Plages CIDR, domaines internes, règle « utilisateur interne »
-│   ├── identity/                    # Codes de vérification, adresses vérifiées, sessions de dépôt
+│   ├── netpolicy/                   # Règle « utilisateur interne » (§ 6.2), pure : IP dans une plage CIDR de l'entité
+│   │                                # ET domaine de l'adresse parmi ses domaines internes ; réévaluée à chaque action
+│   │                                # (session, confirmation, invitation, transfert). Les règles sont lues via store
+│   ├── deposit/                     # Identification des déposants : éligibilité (blocage, invitation, règle interne),
+│   │                                # codes de vérification, adresses vérifiées, cookie technique de reconnaissance
+│   │                                # (__Host-tt_known), sessions de dépôt et CSRF, invitations (limite par invitant)
 │   ├── transfer/                    # Cycle de vie d'un transfert (uploading, scanning, available, expired…)
 │   ├── upload/                      # Serveur tus (HEAD/PATCH/DELETE/OPTIONS), progression sur disque
 │   ├── download/                    # Téléchargement unitaire (Range), ZIP64 en flux en mode store, mot de passe
-│   ├── invitation/                  # Invitations externes
-│   ├── blocklist/                   # Liste de blocage (adresse, domaine, SHA-256)
+│   ├── (blocklist → store)          # Liste de blocage (adresse, domaine, SHA-256) : pas de package dédié,
+│   │                                # dépôt store/blocklist.go, appliquée par deposit (et transfer pour les empreintes)
 │   ├── quota/                       # Limite par envoi, quota par entité, réservations, seuils 80 % / 100 %
 │   ├── adminauth/                   # Comptes admin, argon2id, TOTP, codes de secours, sessions, premier lancement
 │   │                                # (couche d'authentification prévue pour accueillir un fournisseur OIDC en V2)
@@ -63,7 +68,8 @@ transteira/
 │   │   └── masterkeytest/           # Clés maîtres et fichiers de clé pour les tests (hors seuils de couverture)
 │   ├── storage/                     # Stockage des fichiers : un dossier par tenant, noms aléatoires, écriture atomique
 │   ├── antivirus/                   # Client clamd (INSTREAM), file d'analyse, gestion des fichiers trop gros
-│   ├── notify/                      # Rendu des mails (modèles par entité et par langue), envoi SMTP, QR code CID
+│   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
+│   │                                # (templates/), file d'envoi asynchrone ; QR code CID à l'étape des notifications
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
 │   ├── audit/                       # Journal d'audit (en base, cloisonné par tenant)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
@@ -72,7 +78,7 @@ transteira/
 │   ├── backup/                      # VACUUM INTO (SQLite) / pg_dump (PostgreSQL)
 │   ├── gdpr/                        # Recherche et effacement des données d'une adresse
 │   ├── stats/                       # Statistiques par entité et globales, espace disque
-│   ├── i18n/                        # Négociation de langue, chargement des traductions
+│   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/)
 │   ├── ratelimit/                   # Paniers par clé et fenêtres de verrouillage (bornés, horloge injectable)
 │   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage)
 │   ├── id/                          # Identifiants préfixés (ULID) et jetons à forte entropie

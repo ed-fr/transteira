@@ -13,8 +13,10 @@
     "internal/apitoken": 100,
     "internal/authz": 100,
     "internal/crypto": 100,
+    "internal/deposit": 100,
     "internal/httpserver/middleware": 100,
     "internal/masterkey": 100,
+    "internal/netpolicy": 100,
     "internal/store": 100,
     "internal/tenant": 100
   }

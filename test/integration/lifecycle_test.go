@@ -29,7 +29,7 @@ func inFlight(t *testing.T, s *server, body string) (net.Conn, *bufio.Reader) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	_ = conn.SetDeadline(time.Now().Add(waitTimeout))
-	head := "POST /api/v1/deposit-sessions HTTP/1.1\r\nHost: " + hostA +
+	head := "POST /api/v1/transfers HTTP/1.1\r\nHost: " + hostA +
 		"\r\nContent-Type: application/json\r\nExpect: 100-continue\r\nContent-Length: " +
 		strconv.Itoa(len(body)) + "\r\n\r\n"
 	if _, err := io.WriteString(conn, head); err != nil {

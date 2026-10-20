@@ -1,0 +1,20 @@
+Bonjour,
+
+{{.InviterEmail}} vous invite à envoyer des fichiers via le service de transfert {{.TenantName}}.
+{{- if .Message}}
+
+Son message :
+
+{{quote .Message}}
+{{- end}}
+
+Pour envoyer vos fichiers, ouvrez ce lien :
+
+{{.Link}}
+
+Vous confirmerez d'abord votre adresse e-mail à l'aide d'un code qui vous sera envoyé. Cette invitation expire le {{date .ExpiresAt}} si elle n'est pas utilisée.
+
+{{t "mail.footer.ignore"}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

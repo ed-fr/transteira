@@ -570,6 +570,7 @@ const (
 	ProblemCodeInvitationGone          ProblemCode = "invitation-gone"
 	ProblemCodeInvitationNotAllowed    ProblemCode = "invitation-not-allowed"
 	ProblemCodeIpNotAllowed            ProblemCode = "ip-not-allowed"
+	ProblemCodeMailUnavailable         ProblemCode = "mail-unavailable"
 	ProblemCodeMaintenance             ProblemCode = "maintenance"
 	ProblemCodeMethodNotAllowed        ProblemCode = "method-not-allowed"
 	ProblemCodeNewMasterKeyMissing     ProblemCode = "new-master-key-missing"
@@ -619,6 +620,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeInvitationNotAllowed:
 		return true
 	case ProblemCodeIpNotAllowed:
+		return true
+	case ProblemCodeMailUnavailable:
 		return true
 	case ProblemCodeMaintenance:
 		return true
@@ -1479,7 +1482,9 @@ type InvitationCreate struct {
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language *Language `json:"language,omitempty"`
-	Message  *string   `json:"message,omitempty"`
+
+	// Message Optional text for the invited person. Control and invisible characters are removed.
+	Message *string `json:"message,omitempty"`
 }
 
 // InvitationList defines model for InvitationList.
@@ -2041,6 +2046,9 @@ type Limit = int
 // LinkToken defines model for LinkToken.
 type LinkToken = string
 
+// RecognitionCookie defines model for RecognitionCookie.
+type RecognitionCookie = string
+
 // TemplateKey Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type TemplateKey = EmailTemplateKey
@@ -2095,6 +2103,9 @@ type QuotaExceeded = Problem
 
 // RateLimited RFC 9457 Problem Details with TransTeira extension members.
 type RateLimited = Problem
+
+// ServiceUnavailable RFC 9457 Problem Details with TransTeira extension members.
+type ServiceUnavailable = Problem
 
 // StateConflict RFC 9457 Problem Details with TransTeira extension members.
 type StateConflict = Problem
@@ -2247,12 +2258,24 @@ type ListTenantTransfersParams struct {
 type StartDepositSessionParams struct {
 	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
 	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+
+	// UnderscoreUnderscoreHostTtKnown Technical recognition cookie set by `confirmVerificationChallenge` (and renewed by a
+	// `201` of `startDepositSession`) for internal depositors. It holds up to 5 dot-separated
+	// opaque entries keyed by the master key, never an address. Invalid, expired, foreign or
+	// oversized values are ignored.
+	UnderscoreUnderscoreHostTtKnown *RecognitionCookie `form:"__Host-tt_known,omitempty" json:"__Host-tt_known,omitempty"`
 }
 
 // DownloadFileParams defines parameters for DownloadFile.
 type DownloadFileParams struct {
 	// Range Optional single byte range (RFC 9110) to resume a download.
 	Range *string `json:"Range,omitempty"`
+}
+
+// CreateInvitationParams defines parameters for CreateInvitation.
+type CreateInvitationParams struct {
+	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
 }
 
 // GetPublicTenantParams defines parameters for GetPublicTenant.
@@ -2308,6 +2331,15 @@ type AppendUploadChunkParams struct {
 
 // AppendUploadChunkParamsTusResumable defines parameters for AppendUploadChunk.
 type AppendUploadChunkParamsTusResumable string
+
+// ConfirmVerificationChallengeParams defines parameters for ConfirmVerificationChallenge.
+type ConfirmVerificationChallengeParams struct {
+	// UnderscoreUnderscoreHostTtKnown Technical recognition cookie set by `confirmVerificationChallenge` (and renewed by a
+	// `201` of `startDepositSession`) for internal depositors. It holds up to 5 dot-separated
+	// opaque entries keyed by the master key, never an address. Invalid, expired, foreign or
+	// oversized values are ignored.
+	UnderscoreUnderscoreHostTtKnown *RecognitionCookie `form:"__Host-tt_known,omitempty" json:"__Host-tt_known,omitempty"`
+}
 
 // ActivateAdminJSONRequestBody defines body for ActivateAdmin for application/json ContentType.
 type ActivateAdminJSONRequestBody = ActivationRequest
@@ -2738,7 +2770,7 @@ type ServerInterface interface {
 	GetHealth(w http.ResponseWriter, r *http.Request)
 	// CreateInvitation Invite an external user to deposit files
 	// (POST /invitations)
-	CreateInvitation(w http.ResponseWriter, r *http.Request)
+	CreateInvitation(w http.ResponseWriter, r *http.Request, params CreateInvitationParams)
 	// GetInvitation Check an invitation link
 	// (GET /invitations/{invitationToken})
 	GetInvitation(w http.ResponseWriter, r *http.Request, invitationToken InvitationToken)
@@ -2780,7 +2812,7 @@ type ServerInterface interface {
 	AppendUploadChunk(w http.ResponseWriter, r *http.Request, uploadId UploadId, params AppendUploadChunkParams)
 	// ConfirmVerificationChallenge Submit the verification code
 	// (POST /verification-challenges/{challengeId}/confirm)
-	ConfirmVerificationChallenge(w http.ResponseWriter, r *http.Request, challengeId ChallengeId)
+	ConfirmVerificationChallenge(w http.ResponseWriter, r *http.Request, challengeId ChallengeId, params ConfirmVerificationChallengeParams)
 	// GetVersion Application version
 	// (GET /version)
 	GetVersion(w http.ResponseWriter, r *http.Request)
@@ -4836,6 +4868,21 @@ func (siw *ServerInterfaceWrapper) StartDepositSession(w http.ResponseWriter, r 
 
 	}
 
+	{
+		var cookie *http.Cookie
+
+		if cookie, err = r.Cookie("__Host-tt_known"); err == nil {
+			var value RecognitionCookie
+			err = runtime.BindStyledParameterWithOptions("simple", "__Host-tt_known", cookie.Value, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: false, Type: "string", Format: ""})
+			if err != nil {
+				siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "__Host-tt_known", Err: err})
+				return
+			}
+			params.UnderscoreUnderscoreHostTtKnown = &value
+
+		}
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartDepositSession(w, r, params)
 	}))
@@ -5029,8 +5076,35 @@ func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Requ
 // CreateInvitation operation middleware
 func (siw *ServerInterfaceWrapper) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateInvitationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Accept-Language" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Accept-Language")]; found {
+		var AcceptLanguage AcceptLanguage
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Accept-Language", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Accept-Language", valueList[0], &AcceptLanguage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Accept-Language", Err: err})
+			return
+		}
+
+		params.AcceptLanguage = &AcceptLanguage
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateInvitation(w, r)
+		siw.Handler.CreateInvitation(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5530,8 +5604,26 @@ func (siw *ServerInterfaceWrapper) ConfirmVerificationChallenge(w http.ResponseW
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmVerificationChallengeParams
+
+	{
+		var cookie *http.Cookie
+
+		if cookie, err = r.Cookie("__Host-tt_known"); err == nil {
+			var value RecognitionCookie
+			err = runtime.BindStyledParameterWithOptions("simple", "__Host-tt_known", cookie.Value, &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationCookie, Explode: true, Required: false, Type: "string", Format: ""})
+			if err != nil {
+				siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "__Host-tt_known", Err: err})
+				return
+			}
+			params.UnderscoreUnderscoreHostTtKnown = &value
+
+		}
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ConfirmVerificationChallenge(w, r, challengeId)
+		siw.Handler.ConfirmVerificationChallenge(w, r, challengeId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5805,6 +5897,15 @@ type RateLimitedApplicationProblemPlusJSONResponse struct {
 	Body Problem
 
 	Headers RateLimitedResponseHeaders
+}
+
+type ServiceUnavailableResponseHeaders struct {
+	RetryAfter *int
+}
+type ServiceUnavailableApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers ServiceUnavailableResponseHeaders
 }
 
 type StateConflictApplicationProblemPlusJSONResponse Problem
@@ -11039,7 +11140,7 @@ func (response StartDepositSession500ApplicationProblemPlusJSONResponse) VisitSt
 }
 
 type StartDepositSession503ApplicationProblemPlusJSONResponse struct {
-	MaintenanceModeApplicationProblemPlusJSONResponse
+	ServiceUnavailableApplicationProblemPlusJSONResponse
 }
 
 func (response StartDepositSession503ApplicationProblemPlusJSONResponse) VisitStartDepositSessionResponse(w http.ResponseWriter) error {
@@ -11064,10 +11165,18 @@ type EndDepositSessionResponseObject interface {
 	VisitEndDepositSessionResponse(w http.ResponseWriter) error
 }
 
+type EndDepositSession204ResponseHeaders struct {
+	SetCookie *string
+}
+
 type EndDepositSession204Response struct {
+	Headers EndDepositSession204ResponseHeaders
 }
 
 func (response EndDepositSession204Response) VisitEndDepositSessionResponse(w http.ResponseWriter) error {
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
 	w.WriteHeader(204)
 	return nil
 }
@@ -11803,7 +11912,8 @@ func (response GetHealth503JSONResponse) VisitGetHealthResponse(w http.ResponseW
 }
 
 type CreateInvitationRequestObject struct {
-	Body *CreateInvitationJSONRequestBody
+	Params CreateInvitationParams
+	Body   *CreateInvitationJSONRequestBody
 }
 
 type CreateInvitationResponseObject interface {
@@ -11924,7 +12034,7 @@ func (response CreateInvitation500ApplicationProblemPlusJSONResponse) VisitCreat
 }
 
 type CreateInvitation503ApplicationProblemPlusJSONResponse struct {
-	MaintenanceModeApplicationProblemPlusJSONResponse
+	ServiceUnavailableApplicationProblemPlusJSONResponse
 }
 
 func (response CreateInvitation503ApplicationProblemPlusJSONResponse) VisitCreateInvitationResponse(w http.ResponseWriter) error {
@@ -13222,6 +13332,7 @@ func (response AppendUploadChunk503Response) VisitAppendUploadChunkResponse(w ht
 
 type ConfirmVerificationChallengeRequestObject struct {
 	ChallengeId ChallengeId `json:"challengeId"`
+	Params      ConfirmVerificationChallengeParams
 	Body        *ConfirmVerificationChallengeJSONRequestBody
 }
 
@@ -13265,6 +13376,22 @@ func (response ConfirmVerificationChallenge400ApplicationProblemPlusJSONResponse
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmVerificationChallenge403ApplicationProblemPlusJSONResponse struct {
+	DepositForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmVerificationChallenge403ApplicationProblemPlusJSONResponse) VisitConfirmVerificationChallengeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -15807,8 +15934,10 @@ func (sh *strictHandler) GetHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateInvitation operation middleware
-func (sh *strictHandler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateInvitation(w http.ResponseWriter, r *http.Request, params CreateInvitationParams) {
 	var request CreateInvitationRequestObject
+
+	request.Params = params
 
 	var body CreateInvitationJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -16185,10 +16314,11 @@ func (sh *strictHandler) AppendUploadChunk(w http.ResponseWriter, r *http.Reques
 }
 
 // ConfirmVerificationChallenge operation middleware
-func (sh *strictHandler) ConfirmVerificationChallenge(w http.ResponseWriter, r *http.Request, challengeId ChallengeId) {
+func (sh *strictHandler) ConfirmVerificationChallenge(w http.ResponseWriter, r *http.Request, challengeId ChallengeId, params ConfirmVerificationChallengeParams) {
 	var request ConfirmVerificationChallengeRequestObject
 
 	request.ChallengeId = challengeId
+	request.Params = params
 
 	var body ConfirmVerificationChallengeJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

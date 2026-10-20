@@ -1,0 +1,20 @@
+Hello,
+
+alice@entity-a.example.com invites you to send files through the Entity A & Co transfer service.
+
+Their message:
+
+> Hello <b>Bob</b>,
+> please send the files.
+> <script>alert(1)</script> https://phishing.example.com
+
+To send your files, open this link:
+
+https://transfer.entity-a.example.com/invitations/inv_abc123
+
+You will first confirm your e-mail address with a code sent to you. This invitation expires on October 20, 2027 if it is not used.
+
+If you were not expecting this message, you can safely ignore it.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

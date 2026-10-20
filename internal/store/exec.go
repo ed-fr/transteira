@@ -242,11 +242,16 @@ func (r *Row) Scan(dest ...any) error {
 	return err
 }
 
-// runTx begins a transaction on pool, runs the scope statement (if any) with
+// runTx begins a transaction on pool (at the isolation level of the
+// dialect, if any), runs the scope statement (if any) with
 // scopeArgs, then fn, and commits. The transaction is rolled back when any
 // step fails or fn panics. Errors from fn are returned unchanged.
 func (db *DB) runTx(ctx context.Context, pool *sql.DB, scope string, scopeArgs []any, fn func(*sql.Tx) error) (err error) {
-	tx, err := pool.BeginTx(ctx, nil)
+	var opts *sql.TxOptions
+	if db.dialect.isolation != sql.LevelDefault {
+		opts = &sql.TxOptions{Isolation: db.dialect.isolation}
+	}
+	tx, err := pool.BeginTx(ctx, opts)
 	if err != nil {
 		return wrap("begin transaction", err)
 	}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,6 +37,14 @@ type dialect struct {
 	// already excludes every other writer, in this process (single writer
 	// connection) and in others (database lock).
 	lockWrappedKeys string
+	// isolation, when not sql.LevelDefault, is the isolation level every
+	// transaction is opened with, whatever the server default
+	// (default_transaction_isolation). The tenant lock followed by a count
+	// (rate limits, upserts) relies on READ COMMITTED: each statement sees
+	// the rows committed before it, including those committed while it
+	// waited for the lock. SQLite has a single isolation level and needs
+	// none.
+	isolation sql.IsolationLevel
 	// scrubDeleted, when set, is run by [DB.ScrubDeleted] on the write pool
 	// and returns (busy, log frames, checkpointed frames).
 	scrubDeleted string
@@ -107,6 +116,7 @@ var postgresDialect = &dialect{
 	// the tenants policies only let the system scope update that row.
 	lockTenant:      `SELECT pg_advisory_xact_lock(hashtext('transteira.tenant.' || current_schema() || '.' || $1))`,
 	lockWrappedKeys: `LOCK TABLE wrapped_keys IN SHARE ROW EXCLUSIVE MODE`,
+	isolation:       sql.LevelReadCommitted,
 	migrationLock:   `SELECT pg_advisory_xact_lock(hashtext('transteira.migrate.' || current_schema()))`,
 	migrationsTableExists: `SELECT count(*) FROM pg_catalog.pg_tables ` +
 		`WHERE schemaname = current_schema() AND tablename = 'schema_migrations'`,

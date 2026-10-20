@@ -1,0 +1,12 @@
+Bonjour,
+
+Votre code de vérification pour {{.TenantName}} est :
+
+    {{.Code}}
+
+Il est valable {{.ValidityMinutes}} minutes. Saisissez-le sur la page où vous l'avez demandé.
+
+{{t "mail.footer.ignore"}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

@@ -9,6 +9,7 @@ package public
 
 import (
 	"context"
+	"time"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
@@ -27,14 +28,32 @@ type Server struct {
 
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
+	// deposit identifies depositors; nil until WithDeposit.
+	deposit DepositService
+	// now is the clock deriving the Max-Age of the session cookie from the
+	// session expiry (replaceable in tests).
+	now func() time.Time
+}
+
+// Option customizes NewServer.
+type Option func(*Server)
+
+// WithDeposit serves the deposit session and invitation operations with
+// svc. Without it these operations answer 500.
+func WithDeposit(svc DepositService) Option {
+	return func(s *Server) { s.deposit = svc }
 }
 
 // Compile-time check that Server implements the strict server interface.
 var _ gen.StrictServerInterface = (*Server)(nil)
 
 // NewServer returns a Server.
-func NewServer() *Server {
-	return &Server{version: version.Get}
+func NewServer(opts ...Option) *Server {
+	s := &Server{version: version.Get, now: time.Now}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // GetVersion returns the version of the running instance and the API major

@@ -1,6 +1,7 @@
 // Package app wires the TransTeira server together and runs it: logging,
 // master keys, database, migrations, master key check, tenant resolution,
-// security log, health checks and the HTTP server, with a graceful shutdown.
+// security log, health checks, mail queue, depositor identification and the
+// HTTP server, with a graceful shutdown.
 package app
 
 import (
@@ -18,9 +19,12 @@ import (
 
 	"github.com/ed-fr/transteira/api"
 	"github.com/ed-fr/transteira/internal/antivirus"
+	"github.com/ed-fr/transteira/internal/api/public"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
+	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
@@ -37,16 +41,23 @@ const (
 	IdleTimeout = 120 * time.Second
 	// MaxHeaderBytes bounds the size of request headers.
 	MaxHeaderBytes = 64 << 10
-	// ShutdownTimeout bounds the graceful shutdown. It stays below Docker's
-	// default 10 s stop grace period (stop_grace_period in docker-compose) so
-	// that connections still open are closed by TransTeira itself, with a
-	// warning, before Docker sends SIGKILL. Raise stop_grace_period before
-	// raising this value.
-	ShutdownTimeout = 8 * time.Second
+	// ShutdownTimeout bounds the graceful shutdown of the HTTP server. With
+	// HandlerDrainTimeout and MailDrainTimeout it makes a worst-case
+	// shutdown of 9 s, strictly below Docker's default 10 s stop grace
+	// period (stop_grace_period in docker-compose), so that connections
+	// still open are closed by TransTeira itself, with a warning, and the
+	// database is closed cleanly before Docker sends SIGKILL. Raise
+	// stop_grace_period before raising any of the three values.
+	ShutdownTimeout = 7 * time.Second
 	// HandlerDrainTimeout bounds the wait for handlers to return once the
 	// connections have been forcibly closed, before the database and the
 	// security log are closed.
 	HandlerDrainTimeout = time.Second
+	// MailDrainTimeout bounds the delivery of the mails still queued at
+	// shutdown, once the HTTP server has stopped. Jobs left after it are
+	// dropped (a code or an invitation can be requested again). See
+	// ShutdownTimeout for the overall budget.
+	MailDrainTimeout = time.Second
 	// SecurityLogName is the file name of the security log in the log
 	// directory.
 	SecurityLogName = "security.log"
@@ -104,7 +115,10 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // SQLite; with PostgreSQL only when cfg.DBMigrateDSN is set, otherwise they
 // are expected to be applied by "transteira migrate"), drop of the owner
 // credentials and role verification, master key check (masterkey.Check),
-// tenant resolver, security log, health checks, HTTP server.
+// tenant resolver, security log, mail queue and depositor identification
+// service, health checks, HTTP server. At shutdown the mail queue is drained
+// (at most MailDrainTimeout) after the HTTP server has stopped and before
+// the database is closed.
 func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	o := runOptions{logOutput: os.Stdout, shutdownTimeout: ShutdownTimeout}
 	for _, opt := range opts {
@@ -177,6 +191,14 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		logger.WarnContext(ctx, "maintenance mode is active: deposits are refused")
 	}
 
+	// The queue owns the context of its deliveries, canceled by Close. Its
+	// close is deferred after db.Close, so it runs before it, and after
+	// serve has returned, so that no handler can enqueue a mail any more.
+	mailQueue := mail.NewQueue(newSMTPSender(cfg), cfg.MailQueueSize, logger, mailQueueOptions(cfg)) //nolint:contextcheck // see above
+	defer closeMailQueue(ctx, mailQueue, logger)
+	deposits := deposit.New(db, keys, masterkey.NewVault(db, keys, logger), mailQueue, secLog,
+		deposit.Options{SessionTTL: cfg.DepositSessionTTL, Logger: logger})
+
 	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address)
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
@@ -189,6 +211,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			Logger:    logger,
 		},
 		Maintenance: maintenance,
+		API:         public.NewServer(public.WithDeposit(deposits)),
+		Sessions:    deposits,
 		Spec:        api.OpenAPISpec,
 		Logger:      logger,
 	})
@@ -349,6 +373,43 @@ func drain(counter *atomic.Int64, timeout time.Duration) bool {
 		time.Sleep(drainPoll)
 	}
 	return true
+}
+
+// newSMTPSender returns the SMTP sender of the mail queue. The EHLO name
+// stays the mail package default ("localhost"): the instance serves several
+// tenant FQDNs and knows no single public host name of its own, and the
+// relays TransTeira targets (internal relay, Microsoft 365, classic
+// authenticated SMTP) do not check it.
+func newSMTPSender(cfg *config.Config) *mail.SMTPSender {
+	return mail.NewSMTPSender(mail.SMTPOptions{Timeout: cfg.SMTPTimeout})
+}
+
+// mailQueueOptions returns the explicit tuning of the mail queue: the mail
+// package defaults (4 workers, one delivery in flight per tenant, circuit
+// opened after 3 consecutive failures for 1 minute), and a per-tenant
+// backlog of a quarter of TT_MAIL_QUEUE_SIZE (at least 1), so that one
+// tenant cannot fill the whole queue.
+func mailQueueOptions(cfg *config.Config) mail.QueueOptions {
+	return mail.QueueOptions{
+		Workers:           mail.DefaultWorkers,
+		TenantConcurrency: mail.DefaultTenantConcurrency,
+		TenantQueued:      max(cfg.MailQueueSize/4, 1),
+		RetryDelay:        mail.DefaultRetryDelay,
+		BreakerThreshold:  mail.DefaultBreakerThreshold,
+		BreakerCooldown:   mail.DefaultBreakerCooldown,
+	}
+}
+
+// closeMailQueue drains the mail queue for at most MailDrainTimeout. A
+// drain cut short is logged, not returned: the lost mails can be requested
+// again and the shutdown must go on.
+// The drain is not canceled with ctx, which is already done at shutdown.
+func closeMailQueue(ctx context.Context, q *mail.Queue, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), MailDrainTimeout)
+	defer cancel()
+	if err := q.Close(ctx); err != nil {
+		logger.WarnContext(ctx, "mail queue not drained at shutdown: queued mails dropped", slog.String("error", err.Error()))
+	}
 }
 
 // closeWith calls closeFn and labels its error.

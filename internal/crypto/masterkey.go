@@ -72,6 +72,7 @@ type keyMaterial struct {
 	key       [MasterKeySize]byte
 	id        string
 	wrap      map[Purpose]cipher.AEAD
+	mac       map[MACPurpose][]byte
 	destroyed bool
 }
 
@@ -120,8 +121,8 @@ func LoadMasterKey(path string) (*MasterKey, error) {
 	return ParseMasterKey(data)
 }
 
-// newMasterKey builds a MasterKey from 32 raw bytes, deriving its identifier
-// and its wrapping keys once.
+// newMasterKey builds a MasterKey from 32 raw bytes, deriving its identifier,
+// its wrapping keys and its MAC keys once.
 func newMasterKey(raw []byte) *MasterKey {
 	m := &keyMaterial{wrap: make(map[Purpose]cipher.AEAD, len(purposes))}
 	copy(m.key[:], raw)
@@ -137,6 +138,7 @@ func newMasterKey(raw []byte) *MasterKey {
 		m.wrap[p] = newAEAD(wk)
 		clear(wk)
 	}
+	m.mac = deriveMACKeys(m.key[:])
 	return &MasterKey{m: m}
 }
 
@@ -152,16 +154,20 @@ func (k *MasterKey) ID() string {
 	return k.m.id
 }
 
-// Destroy zeroes the key bytes and drops the derived wrapping keys, on a best
-// effort basis (the Go runtime may have copied them). The key is unusable
-// afterwards; its ID remains available. Destroy must not be called
-// concurrently with other methods.
+// Destroy zeroes the key bytes and the derived MAC keys and drops the derived
+// wrapping keys, on a best effort basis (the Go runtime may have copied
+// them). The key is unusable afterwards; its ID remains available. Destroy
+// must not be called concurrently with other methods.
 func (k *MasterKey) Destroy() {
 	if k == nil || k.m == nil {
 		return
 	}
 	clear(k.m.key[:])
 	k.m.wrap = nil
+	for _, mk := range k.m.mac {
+		clear(mk)
+	}
+	k.m.mac = nil
 	k.m.destroyed = true
 }
 

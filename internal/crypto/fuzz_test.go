@@ -122,3 +122,38 @@ func FuzzUnmarshalState(f *testing.F) {
 		}
 	})
 }
+
+func FuzzVerifyMAC(f *testing.F) {
+	k := testKey(f)
+	mac, err := k.MAC(MACPurposeOTP, []byte("vch_1"), []byte("123456"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(mac, "otp", []byte("vch_1"), []byte("123456"))
+	f.Add(mac, "otp", []byte("vch_11"), []byte("23456"))
+	f.Add(mac, "csrf", []byte("vch_1"), []byte("123456"))
+	f.Add([]byte{}, "", []byte{}, []byte{})
+	f.Fuzz(func(t *testing.T, tag []byte, purpose string, a, b []byte) {
+		if len(a) > MaxMACPartSize || len(b) > MaxMACPartSize {
+			return // covered by TestMACErrors
+		}
+		ok, err := k.VerifyMAC(MACPurpose(purpose), tag, a, b)
+		if err != nil {
+			if ok || !errors.Is(err, ErrUnknownMACPurpose) || purpose == "otp" || purpose == "csrf" {
+				t.Fatalf("VerifyMAC failure: %v, %v", ok, err)
+			}
+			return
+		}
+		if ok && (purpose != "otp" || !bytes.Equal(a, []byte("vch_1")) || !bytes.Equal(b, []byte("123456"))) {
+			t.Fatalf("forged MAC accepted: %q %q %q", purpose, a, b)
+		}
+		// A freshly computed MAC always verifies.
+		own, err := k.MAC(MACPurpose(purpose), a, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := k.VerifyMAC(MACPurpose(purpose), own, a, b); !ok || err != nil {
+			t.Fatalf("own MAC rejected: %v, %v", ok, err)
+		}
+	})
+}

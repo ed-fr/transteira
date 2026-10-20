@@ -5,8 +5,8 @@
 //
 //   - MasterKey: the 32-byte master key read from a file mounted outside the
 //     data volumes. Its bytes are never exposed: it only derives one wrapping
-//     key per Purpose (HKDF-SHA256) and a public identifier (ID) used to detect
-//     a wrong key at startup.
+//     key per Purpose and one MAC key per MACPurpose (HKDF-SHA256), and a
+//     public identifier (ID) used to detect a wrong key at startup.
 //   - Envelope encryption: MasterKey.Wrap and MasterKey.Unwrap seal small
 //     secrets (per-file data encryption keys, SMTP passwords) with
 //     AES-256-GCM, bound to their purpose, tenant and database row so that a
@@ -27,6 +27,31 @@
 // "transteira/v1/wrap/" + purpose). The additional authenticated data is
 // lp("transteira/v1/envelope") | lp(purpose) | lp(tenantID) | lp(rowID),
 // where lp(x) is the big-endian uint32 length of x followed by x.
+//
+// # Keyed MACs
+//
+// MasterKey.MAC and MasterKey.VerifyMAC compute HMAC-SHA256 tags for short
+// values that must not be recomputable without the master key: the stored
+// hashes of the one-time verification codes (MACPurposeOTP), the CSRF
+// tokens derived from deposit session tokens (MACPurposeCSRF) and the
+// entries of the browser recognition cookie of verified depositors
+// (MACPurposeRecognition, over a tenant ID, a normalized address, its
+// recognition salt and an issue day).
+//
+//	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
+//	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))
+//
+// # Domain separation
+//
+// Every key derived from the master key has its own HKDF info string, and the
+// prefixes "transteira/v1/wrap/" and "transteira/v1/mac/" cannot collide: a
+// wrapping key and a MAC key are never equal, and each purpose of either kind
+// has its own key. The key identifier uses a third, distinct HMAC message
+// ("transteira/v1/key-id"). Every authenticated message also starts with the
+// length-prefixed domain label of its use ("transteira/v1/envelope",
+// "transteira/v1/stream-chunk", "transteira/v1/stream-tail",
+// "transteira/v1/mac"), and every variable field is length-prefixed, so that
+// no input of one use can be reinterpreted as an input of another.
 //
 // # File format
 //

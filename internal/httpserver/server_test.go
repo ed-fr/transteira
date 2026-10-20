@@ -111,6 +111,7 @@ type envConfig struct {
 	resolver middleware.TenantResolver
 	opts     []Option
 	trusted  func(netip.Addr) bool
+	sessions DepositSessions
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -131,6 +132,7 @@ func newEnv(t *testing.T, c envConfig) *env {
 		},
 		Maintenance: e.maintenance,
 		API:         c.api,
+		Sessions:    c.sessions,
 		Spec:        []byte("openapi: 3.1.0\n"),
 		Logger:      slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, c.opts...)
@@ -266,7 +268,7 @@ func TestNotFound(t *testing.T) {
 		{"stub operation", http.MethodGet, "/api/v1/tenant", hostA},
 		{"stub with path parameter", http.MethodDelete, "/api/v1/transfers/trf_x", hostA},
 		{"unknown api path under known prefix", http.MethodPost, "/api/v1/version/x", hostA},
-		{"stub with JSON body", http.MethodPost, "/api/v1/deposit-sessions", hostA},
+		{"stub with JSON body", http.MethodPost, "/api/v1/transfers", hostA},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -456,15 +458,16 @@ func TestGlobalRateLimit(t *testing.T) {
 func TestDefaultGlobalLimiter(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, envConfig{})
-	limited := 0
-	for range GlobalBurst + 20 {
+	// The bucket refills at GlobalRate per second: on a loaded machine a
+	// burst of GlobalBurst+20 requests may take long enough to be refilled.
+	// Keep sending (well above GlobalRate in practice) until one is refused.
+	const attempts = 20 * GlobalBurst
+	for range attempts {
 		if e.do(t, http.MethodGet, "/api/openapi.yaml", hostA, nil).Code == http.StatusTooManyRequests {
-			limited++
+			return
 		}
 	}
-	if limited == 0 {
-		t.Error("the default global limiter never refused a burst above GlobalBurst")
-	}
+	t.Errorf("the default global limiter never refused any of %d requests", attempts)
 }
 
 func TestTrustedProxy(t *testing.T) {
@@ -504,7 +507,7 @@ func TestMaintenance(t *testing.T) {
 		t.Errorf("stub in maintenance: %d", rec.Code)
 	}
 	e.maintenance.Store(false)
-	rec = e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader(`{}`), "Content-Type", "application/json")
+	rec = e.do(t, http.MethodPost, "/api/v1/transfers", hostA, strings.NewReader(`{}`), "Content-Type", "application/json")
 	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 }
 

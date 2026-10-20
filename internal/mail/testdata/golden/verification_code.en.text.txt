@@ -1,0 +1,12 @@
+Hello,
+
+Your verification code for Entity A & Co is:
+
+    123456
+
+It is valid for 15 minutes. Enter it on the page where you requested it.
+
+If you were not expecting this message, you can safely ignore it.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

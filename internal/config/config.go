@@ -48,6 +48,14 @@ const (
 	maxDepositSessionTTL        = 24 * time.Hour
 	minDeleteAfterDownloadGrace = 0
 	maxDeleteAfterDownloadGrace = 24 * time.Hour
+	minSMTPTimeout              = time.Second
+	maxSMTPTimeout              = 5 * time.Minute
+)
+
+// Mail queue capacity bounds.
+const (
+	minMailQueueSize = 1
+	maxMailQueueSize = 100000
 )
 
 // unixPrefix introduces a Unix socket address in TT_CLAMAV_ADDR.
@@ -126,6 +134,11 @@ type Config struct {
 
 	// ClamAV is the clamd address.
 	ClamAV ClamAVAddr
+
+	// SMTPTimeout bounds one SMTP delivery attempt.
+	SMTPTimeout time.Duration
+	// MailQueueSize is the capacity of the in-memory mail queue.
+	MailQueueSize int
 }
 
 // IsTrustedProxy reports whether addr belongs to a trusted proxy prefix.
@@ -168,6 +181,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadNetwork(c)
 	l.loadOperations(c)
 	l.loadDurations(c)
+	l.loadMail(c)
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
@@ -454,4 +468,14 @@ func (l *loader) loadDurations(c *Config) {
 		minDepositSessionTTL, maxDepositSessionTTL)
 	c.DeleteAfterDownloadGrace = l.duration(EnvDeleteAfterDownloadGrace, DefaultDeleteAfterDownloadGrace,
 		minDeleteAfterDownloadGrace, maxDeleteAfterDownloadGrace)
+}
+
+// loadMail reads the SMTP timeout and the mail queue capacity.
+func (l *loader) loadMail(c *Config) {
+	c.SMTPTimeout = l.duration(EnvSMTPTimeout, DefaultSMTPTimeout, minSMTPTimeout, maxSMTPTimeout)
+	n, err := parseInt(l.getOr(EnvMailQueueSize, DefaultMailQueueSize), minMailQueueSize, maxMailQueueSize)
+	if err != nil {
+		l.fail(EnvMailQueueSize, "%v", err)
+	}
+	c.MailQueueSize = n
 }

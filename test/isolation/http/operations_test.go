@@ -82,6 +82,15 @@ var isolationCases = map[string]isolationCase{
 	// Served at /api/openapi.yaml outside any tenant: the same document is
 	// returned whatever the Host, even unknown.
 	"getOpenApiSpec": tenantAgnostic,
+	// Deposit sessions and invitations (deposit_test.go): a session cookie,
+	// a challenge identifier or an invitation token of tenant A is refused
+	// under tenant B's Host (401, 403 or 404), while tenant A recognizes it.
+	"startDepositSession":          startWithForeignInvitation,
+	"confirmVerificationChallenge": confirmForeignChallenge,
+	"getCurrentDepositSession":     currentWithForeignSession,
+	"endDepositSession":            endWithForeignSession,
+	"createInvitation":             inviteWithForeignSession,
+	"getInvitation":                getForeignInvitation,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -300,7 +309,7 @@ func loadOperations(t *testing.T) []operation {
 // --- Stub detection ------------------------------------------------------
 
 // isStub reports whether the implementation wired by the server
-// (public.NewServer, the default of httpserver.Deps.API used by app.Run)
+// (public.NewServer, which app.Run builds with its deposit service only)
 // answers op exactly like stubs.Unimplemented, for a zero request and a
 // context without tenant. A panic or any difference means implemented.
 func isStub(t *testing.T, op operation) bool {
@@ -356,6 +365,8 @@ type harness struct {
 	tenantB *tenant.Tenant
 	client  *http.Client
 	nextIP  atomic.Uint32
+	// fixtures are deposit resources of tenant A.
+	fixtures depositFixtures
 }
 
 // writeMasterKey writes a new random master key to dir and returns its
@@ -398,6 +409,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 			Transport:     &http.Transport{Proxy: nil},
 		},
 	}
+	h.fixtures = seedDeposit(t, db, h.tenantA.ID)
 	_ = db.Close()
 
 	root := t.TempDir()
@@ -509,7 +521,14 @@ func (h *harness) send(t *testing.T, op operation, host string) response {
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
-	req, err := http.NewRequestWithContext(t.Context(), op.verb, target, body)
+	return h.do(t, op.verb, target, host, body, header)
+}
+
+// do sends a request under host with a fresh client IP and reads the whole
+// response.
+func (h *harness) do(t *testing.T, method, target, host string, body io.Reader, header http.Header) response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), method, target, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +538,7 @@ func (h *harness) send(t *testing.T, op operation, host string) response {
 	req.Header.Set("X-Forwarded-For", fmt.Sprintf("198.51.%d.%d", 100+n/250, 1+n%250))
 	resp, err := h.client.Do(req)
 	if err != nil {
-		t.Fatalf("%s under %s: %v", op, host, err)
+		t.Fatalf("%s %s under %s: %v", method, target, host, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(resp.Body)

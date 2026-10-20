@@ -67,6 +67,9 @@ const (
 	CodeRateLimited Code = "rate-limited"
 	// CodeMaintenance means maintenance mode is active.
 	CodeMaintenance Code = "maintenance"
+	// CodeMailUnavailable means the verification or invitation email cannot
+	// be sent right now (no SMTP settings for the tenant, mail queue closed).
+	CodeMailUnavailable Code = "mail-unavailable"
 	// CodeUnknownTenant means the Host header matches no tenant.
 	CodeUnknownTenant Code = "unknown-tenant"
 	// CodeSetupAlreadyDone means the first-run setup was already completed.
@@ -121,6 +124,7 @@ var catalog = map[Code]Definition{
 	CodeQuotaExceeded:           {http.StatusInsufficientStorage, "Storage quota reached"},
 	CodeRateLimited:             {http.StatusTooManyRequests, "Too many requests"},
 	CodeMaintenance:             {http.StatusServiceUnavailable, "Maintenance in progress"},
+	CodeMailUnavailable:         {http.StatusServiceUnavailable, "Email cannot be sent"},
 	CodeUnknownTenant:           {http.StatusMisdirectedRequest, "Unknown host"},
 	CodeSetupAlreadyDone:        {http.StatusConflict, "Setup already completed"},
 	CodeSetupTokenInvalid:       {http.StatusForbidden, "Invalid setup token"},

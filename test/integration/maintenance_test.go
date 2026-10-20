@@ -93,8 +93,10 @@ func TestMaintenanceMode(t *testing.T) {
 		flag.Store(false)
 		for name, req := range depositRequests() {
 			req.host = hostA
-			if resp := s.do(t, req); resp.status != http.StatusNotFound {
-				t.Errorf("%s after maintenance: %d, want 404 from the stub; body %s", name, resp.status, resp.body)
+			// The operation is reached again: a stub answers 404, an
+			// implemented operation refuses the empty request (400, 401).
+			if resp := s.do(t, req); resp.status == http.StatusServiceUnavailable {
+				t.Errorf("%s after maintenance: %d, want the operation to be reached; body %s", name, resp.status, resp.body)
 			}
 		}
 		mustJSON(t, s.get(t, "", "/healthz").body, &h)

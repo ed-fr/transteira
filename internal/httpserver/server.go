@@ -15,10 +15,11 @@
 //  7. tenant resolution from the Host header, for every other path, before
 //     any routing (an unknown host gets 421 whatever the path, including
 //     paths that would be 404, 405 or a redirect);
-//  8. per-operation middlewares of the API router, before any body is read:
-//     read and write deadlines (except streaming routes), maintenance mode
-//     (deposit operations get 503), body limit and JSON media type (415),
-//     both driven by the route policy table [routePolicies].
+//  8. per-operation middlewares of the API router, before any body is read,
+//     all driven by the route policy table [routePolicies]: read and write
+//     deadlines (except streaming routes), maintenance mode (deposit
+//     operations get 503), deposit session cookie (401) and CSRF protection
+//     of unsafe methods (403), body limit (413) and JSON media type (415).
 //
 // Every error is an RFC 9457 Problem whose instance is the request
 // identifier, except the bodyless answers of the tus PATCH operation.
@@ -104,10 +105,24 @@ type routePolicy struct {
 	// deadline is the read and write deadline of the request; zero means
 	// none, for streaming routes.
 	deadline time.Duration
+	// depositSession requires the deposit session cookie (OpenAPI security
+	// scheme depositSession as the only alternative).
+	depositSession bool
+	// csrf requires the CSRF checks on unsafe methods (OpenAPI security
+	// scheme csrfToken); it implies depositSession.
+	csrf bool
 }
 
 // defaultPolicy applies to every operation absent from routePolicies.
 var defaultPolicy = routePolicy{bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline}
+
+// sessionPolicy is defaultPolicy for an operation authenticated by the
+// deposit session cookie, with the CSRF checks when csrf is set.
+func sessionPolicy(csrf bool) routePolicy {
+	p := defaultPolicy
+	p.depositSession, p.csrf = true, csrf
+	return p
+}
 
 // routePolicies is the single place declaring the routes that depart from
 // defaultPolicy, keyed by the pattern set in Request.Pattern by the API
@@ -115,6 +130,11 @@ var defaultPolicy = routePolicy{bodyLimit: middleware.DefaultJSONBodyLimit, dead
 // without deadline, are the tus PATCH upload (also without body limit: it
 // enforces the declared Upload-Length itself) and the file and ZIP
 // downloads.
+//
+// The authentication flags mirror the security requirements of the
+// OpenAPI document for the implemented operations (a test checks it); the
+// cookie-authenticated operations that are still stubs get theirs when
+// they are implemented.
 var routePolicies = map[string]routePolicy{
 	tusUploadPattern: {bodyLimit: middleware.NoBodyLimit, rawBody: true},
 	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/files/{fileId}": {bodyLimit: middleware.DefaultJSONBodyLimit},
@@ -125,6 +145,9 @@ var routePolicies = map[string]routePolicy{
 	http.MethodGet + " " + APIBaseURL + "/tenant/assets/{asset}": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline,
 	},
+	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":    sessionPolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current": sessionPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/invitations":                sessionPolicy(true),
 }
 
 // policyOf returns the policy of the operation matched for r.
@@ -152,6 +175,9 @@ type Deps struct {
 	Maintenance *atomic.Bool
 	// API implements the operations; nil uses public.NewServer().
 	API gen.StrictServerInterface
+	// Sessions resolves the deposit session cookies and checks the CSRF
+	// tokens (*deposit.Service); nil authenticates no session.
+	Sessions DepositSessions
 	// Spec is the OpenAPI document served at SpecPath (api.OpenAPISpec).
 	Spec []byte
 	// Logger is the application logger; nil discards.
@@ -207,6 +233,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if api == nil {
 		api = public.NewServer()
 	}
+	sessions := middleware.SessionResolver(noSessions{})
+	if deps.Sessions != nil {
+		sessions = sessionResolver{svc: deps.Sessions}
+	}
 	events := NewSecurityEvents(deps.SecurityLog, logger)
 	eh := errorHandlers{logger: logger}
 
@@ -221,11 +251,16 @@ func New(deps Deps, opts ...Option) http.Handler {
 		BaseURL:    APIBaseURL,
 		BaseRouter: apiMux,
 		// The last middleware is the outermost one: deadlines, maintenance,
-		// then the body limit and the JSON media type check, all before the
-		// body is decoded.
+		// deposit session and CSRF, then the body limit and the JSON media
+		// type check, all before the body is decoded.
 		Middlewares: []gen.MiddlewareFunc{
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(func(r *http.Request) int64 { return policyOf(r).bodyLimit }),
+			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf }),
+			middleware.DepositSession(sessions, func(r *http.Request) bool {
+				p := policyOf(r)
+				return p.depositSession || p.csrf
+			}, logger),
 			maintenanceMiddleware(maintenance),
 			deadlineMiddleware(logger),
 		},

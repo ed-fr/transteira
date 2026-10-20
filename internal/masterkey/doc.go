@@ -9,7 +9,10 @@
 //   - [Keyring]: the current master key (TT_MASTER_KEY_FILE) and, during a
 //     rotation, the new one (TT_MASTER_KEY_NEW_FILE). New wrapped keys are
 //     wrapped with the new key when it is present; a wrapped key is always
-//     unwrapped with the master key whose ID is stored on its row.
+//     unwrapped with the master key whose ID is stored on its row. [Keyring.MAC]
+//     and [Keyring.VerifyMAC] key the verification code hashes, the CSRF
+//     tokens and the recognition cookie entries with the current key only,
+//     so finishing a rotation invalidates the outstanding ones.
 //   - [Vault]: the tenant-scoped operations the rest of the application uses:
 //     [Vault.Seal] wraps and stores a secret or a data encryption key,
 //     [Vault.Open] reads it back, [Vault.Destroy] crypto-erases it and

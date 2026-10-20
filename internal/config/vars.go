@@ -31,6 +31,8 @@ const (
 	EnvDepositSessionTTL        = "TT_DEPOSIT_SESSION_TTL"
 	EnvDeleteAfterDownloadGrace = "TT_DELETE_AFTER_DOWNLOAD_GRACE"
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
+	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
+	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
 )
 
 // Default values applied by [Load] when a variable is unset or empty.
@@ -46,6 +48,8 @@ const (
 	DefaultDepositSessionTTL        = "4h"
 	DefaultDeleteAfterDownloadGrace = "15m"
 	DefaultClamAVAddr               = "clamav:3310"
+	DefaultSMTPTimeout              = "30s"
+	DefaultMailQueueSize            = "1000"
 )
 
 // envPrefix is the prefix shared by every TransTeira variable.
@@ -165,6 +169,18 @@ func Variables() []Var {
 			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,
 			Description: "Address of the clamd daemon: host:port, or unix:/absolute/path for a " +
 				"Unix socket.",
+		},
+		{
+			Name: EnvSMTPTimeout, Group: "Mail", Default: DefaultSMTPTimeout,
+			Description: "Time limit of one SMTP delivery attempt, from connection to the end of " +
+				"the message (Go duration, between 1s and 5m). Mails are sent in the background " +
+				"and retried once, so a slow server never delays a request.",
+		},
+		{
+			Name: EnvMailQueueSize, Group: "Mail", Default: DefaultMailQueueSize,
+			Description: "Capacity of the in-memory queue of mails waiting to be sent (between 1 " +
+				"and 100000). When it is full, requests that send a mail (verification codes, " +
+				"invitations) are answered 429 Too Many Requests.",
 		},
 		{
 			Name: EnvLogLevel, Group: "Logging", Default: DefaultLogLevel,

@@ -68,6 +68,28 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `-recover-from` (re-wrap keys left under a retired key without loading it into the server).
 - `docs/operations/master-key.md`: key generation, storage, rotation, recovery, crypto-erase
   limits for backups, backup and restore; README links to it.
+- Depositor identification (`internal/deposit`): eligibility (blocklist, invitation bound to the
+  invited address, internal IP range and domain rule), 6-digit verification codes (HMAC-protected,
+  15 minutes, 2 attempts, 5 per address and 20 per IP per hour counted in the database), verified
+  addresses, deposit sessions (`__Host-tt_deposit` cookie, CSRF token, Origin and Sec-Fetch-Site
+  checks) and external invitations; operations `startDepositSession`,
+  `confirmVerificationChallenge`, `getCurrentDepositSession`, `endDepositSession`,
+  `createInvitation` and `getInvitation`.
+- Technical recognition cookie `__Host-tt_known` (decision P26): an already verified internal
+  address opens a session without a code only on a browser that confirmed a code for it before;
+  deposits through an invitation always require a code. At most 20 invitations per hour per
+  inviter.
+- `internal/netpolicy`: the internal-user rule (IP range and mail domain), re-evaluated on each
+  action.
+- Migration `0003_deposit`: SMTP settings, verification challenges, verified addresses, deposit
+  sessions and invitations, all tenant-scoped with row-level security.
+- `internal/mail`: per-tenant SMTP (plain relay, STARTTLS, implicit TLS), header-injection-proof
+  MIME builder, French and English templates, asynchronous queue fair between tenants (per-tenant
+  concurrency and backlog caps, per-tenant circuit breaker); `internal/i18n` language
+  negotiation. Mailpit in the test environment.
+- `internal/crypto`: keyed MACs per purpose (verification codes, CSRF tokens).
+- Configuration: `TT_SMTP_TIMEOUT`, `TT_MAIL_QUEUE_SIZE`.
+- Problem code `mail-unavailable` (503).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -81,5 +103,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - OpenAPI: `KeyRotation` identifiers follow the real formats (`rot_…`, `mk_` + 16 hex characters)
   and its counters are documented 64-bit integers.
 - Test PostgreSQL allows 300 connections (parallel test packages).
+- OpenAPI: `startDepositSession` and `createInvitation` share a `ServiceUnavailable` 503 response
+  (maintenance or mail unavailable); `createInvitation` accepts `Accept-Language`;
+  `confirmVerificationChallenge` documents `403 deposit-not-allowed` and `410 invitation-gone`;
+  `endDepositSession` documents the cookie-clearing `Set-Cookie`.
+- `startDepositSession` answers `201` (session without a code) only for an internal verified address
+  presented with a valid recognition cookie; the cookie is documented as the `RecognitionCookie`
+  parameter and the `SetDepositCookies` header (formerly `SetDepositCookie`).
 - Tenant queries may reference `tenant_id` only in the tenant slot; an alias named `tenant_id` is
   refused.
