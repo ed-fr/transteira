@@ -3547,6 +3547,7 @@ components:
         - verification-code-invalid
         - verification-exhausted
         - not-found
+        - method-not-allowed
         - transfer-gone
         - download-locked
         - transfer-password-invalid

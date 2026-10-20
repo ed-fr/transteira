@@ -157,6 +157,14 @@ use to ban the client IP.
 - **Typical endpoints:** any endpoint with an identifier in its path.
 - **What to do:** check the identifier or link. Do not retry unchanged.
 
+### method-not-allowed
+
+- **HTTP status:** 405 Method Not Allowed
+- **Meaning:** the path exists but does not accept this HTTP method. The `Allow` response
+  header lists the accepted methods.
+- **Typical endpoints:** any endpoint.
+- **What to do:** fix the HTTP method using the `Allow` header. Do not retry unchanged.
+
 ### transfer-gone
 
 - **HTTP status:** 410 Gone

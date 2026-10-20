@@ -33,6 +33,25 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - PostgreSQL test environment (`test/docker-compose.test.yml`) and adversarial tenant isolation
   tests (`test/isolation`); `make check` now requires PostgreSQL.
 - `docs/install/postgresql.md`: PostgreSQL role setup.
+- `transteira serve`: HTTP server on the standard library mux with the generated strict server
+  interface; middlewares for panic recovery, request IDs, real client IP from trusted proxies only,
+  tenant resolution by `Host` (unknown hosts → `421` and security log), security headers, per-IP
+  rate limiting, JSON body limit and maintenance mode for deposit operations. Unknown hosts are
+  rejected on every path except `/healthz` and `/api/openapi.yaml`. A trusted proxy that sends no
+  valid client address yields an unknown client (fail closed). Startup is refused when trusted
+  proxies cover every address or use a prefix shorter than /8 (IPv4) or /32 (IPv6).
+- Per-operation read and write deadlines (30 s, 2 min for images) on non-streaming routes;
+  graceful shutdown within Docker's default stop delay.
+- `rate_limited` security events are written at most once per client key and scope every 10 s;
+  unknown hosts have their own per-IP limiter (burst of 10, then one every 12 s, then `429`).
+- `/healthz` (database, ClamAV `PING`, storage; shared and cached for 3 s), `/api/openapi.yaml` and `GET /api/v1/version`;
+  `transteira healthcheck` for container health checks.
+- Security log (`TT_LOG_DIR/security.log`) in a stable, injection-proof line format, with
+  fail2ban (filter, jail, `DOCKER-USER` action) and CrowdSec (parser, scenarios) integrations and
+  `docs/operations/security-log.md`.
+- `internal/ratelimit` (keyed token buckets and sliding lockout windows whose locked entries are
+  never evicted) and `tools/genstubs` (generated not-implemented stubs for every API operation).
+- Problem code `method-not-allowed` (405).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -43,3 +62,5 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - OpenAPI: entity identifier patterns follow the strict ULID format
   (`^<prefix>_[0-7][0-9A-HJKMNP-TV-Z]{25}$`); `vch_` and `upl_` tokens carry at least 128 bits;
   FQDNs may end with a punycode label.
+- Tenant queries may reference `tenant_id` only in the tenant slot; an alias named `tenant_id` is
+  refused.

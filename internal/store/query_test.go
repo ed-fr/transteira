@@ -173,6 +173,11 @@ func TestValidateTenantQuery(t *testing.T) {
 		{"SELECT a FROM t WHERE tenant_id = ? AND (b, c) IN (VALUES (1, 2))", errQuerySingleTable},
 		{"SELECT a FROM t WHERE tenant_id = ? AND EXISTS (TABLE u)", errQuerySingleTable},
 		{"SELECT a AS tenant_id FROM t WHERE tenant_id = ?", errQuerySingleTable},
+		{"SELECT id || 'x' tenant_id FROM tenants WHERE tenant_id = ?", errQueryTenantColumn},
+		{"SELECT tenant_id FROM t WHERE tenant_id = ?", errQueryTenantColumn},
+		{"SELECT a FROM t WHERE tenant_id = ? ORDER BY tenant_id", errQueryTenantColumn},
+		{"SELECT a FROM t WHERE tenant_id = ? AND lower(tenant_id) = b", errQueryTenantColumn},
+		{"DELETE FROM t WHERE tenant_id = ? AND tenant_id IS NOT NULL", errQueryTenantColumn},
 		{"UPDATE blocklist_entries SET comment = ((?, 'cidr', '10.0.0.0/8') IN tenant_network_rules) WHERE tenant_id = ?", errQuerySingleTable},
 		{"INSERT INTO t (a, tenant_id) VALUES ((? IN u), ?)", errQuerySingleTable},
 		{"INSERT INTO t (a, tenant_id) VALUES ((SELECT 1), ?) VALUES", errQuerySingleTable},
@@ -568,5 +573,6 @@ var validatorSeeds = []string{
 	"SELECT count(*) FROM blocklist_entries WHERE tenant_id = ? AND (?, 'domain', ?) IN tenant_network_rules",
 	"UPDATE blocklist_entries SET comment = ((?, 'cidr', '10.0.0.0/8') IN tenant_network_rules) WHERE tenant_id = ?",
 	"SELECT a FROM t WHERE tenant_id = ? AND b IN (TABLE u)",
+	"SELECT id || 'x' tenant_id FROM tenants WHERE tenant_id = ?",
 	"(((", ")))", "'", "?",
 }

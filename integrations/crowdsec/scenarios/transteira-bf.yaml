@@ -1,0 +1,21 @@
+# Brute force against TransTeira: wrong verification codes, wrong transfer
+# passwords, failed admin logins (password, TOTP, recovery code), invalid API
+# tokens, refused deposits and rate limiting, per client IP.
+# 10 events in a burst (capacity 9, one event leaks per minute) trigger it.
+type: leaky
+name: ed-fr/transteira-bf
+description: "Detect brute force against TransTeira (codes, passwords, admin login, API tokens)"
+filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event in ['verification_code_invalid', 'transfer_password_invalid', 'admin_login_failed', 'api_token_invalid', 'deposit_refused', 'rate_limited']"
+groupby: evt.Meta.source_ip
+capacity: 9
+leakspeed: 1m
+blackhole: 5m
+labels:
+  service: transteira
+  confidence: 3
+  spoofable: 0
+  classification:
+    - attack.T1110
+  label: "TransTeira brute force"
+  behavior: "http:bruteforce"
+  remediation: true

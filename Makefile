@@ -71,11 +71,21 @@ generate: ## Regenerate code from the OpenAPI specification
 
 generate-check: ## Fail if generated code is out of date
 	@tmp=$$(mktemp -d .gencheck.XXXXXX); \
-	cp internal/api/gen/gen.go "$$tmp/current.go"; \
-	trap 'cp "$$tmp/current.go" internal/api/gen/gen.go; rm -rf "$$tmp"' EXIT; \
+	cp internal/api/gen/gen.go "$$tmp/gen.go"; \
+	stubs=/dev/null; \
+	if [ -f internal/api/stubs/stubs_gen.go ]; then \
+		cp internal/api/stubs/stubs_gen.go "$$tmp/stubs_gen.go"; stubs="$$tmp/stubs_gen.go"; \
+	fi; \
+	trap 'cp "$$tmp/gen.go" internal/api/gen/gen.go; \
+		if [ -f "$$tmp/stubs_gen.go" ]; then cp "$$tmp/stubs_gen.go" internal/api/stubs/stubs_gen.go; \
+		else rm -f internal/api/stubs/stubs_gen.go; fi; \
+		rm -rf "$$tmp"' EXIT; \
 	$(GO) generate ./api/; \
-	if ! diff -q "$$tmp/current.go" internal/api/gen/gen.go >/dev/null; then \
-		echo "internal/api/gen is out of date: run 'make generate'"; exit 1; \
+	stale=; \
+	diff -q "$$tmp/gen.go" internal/api/gen/gen.go >/dev/null || stale="$$stale internal/api/gen"; \
+	diff -q "$$stubs" internal/api/stubs/stubs_gen.go >/dev/null || stale="$$stale internal/api/stubs"; \
+	if [ -n "$$stale" ]; then \
+		echo "generated code is out of date:$$stale: run 'make generate'"; exit 1; \
 	fi; echo "generated code is up to date"
 
 test: test-env-up ## Unit and integration tests with coverage, on SQLite and PostgreSQL

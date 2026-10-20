@@ -1,0 +1,8 @@
+# CrowdSec acquisition for the TransTeira security log.
+# Path as seen by CrowdSec: mount the TransTeira logs volume read-only into
+# the CrowdSec container (or use the host path when CrowdSec runs on the
+# host). The "type" label routes the lines to the transteira parser.
+filenames:
+  - /var/log/transteira/security.log
+labels:
+  type: transteira

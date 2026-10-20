@@ -3,6 +3,7 @@
   "module": "github.com/ed-fr/transteira",
   "exclude": [
     "internal/api/gen",
+    "internal/api/stubs",
     "internal/store/storetest",
     "internal/testutil"
   ],

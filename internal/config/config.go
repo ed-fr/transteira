@@ -97,7 +97,8 @@ type Config struct {
 	MasterKeyNewFile string
 
 	// TrustedProxies lists the reverse proxies allowed to set the client IP
-	// through X-Forwarded-For / X-Real-IP. Empty means none.
+	// through X-Forwarded-For / X-Real-IP. Empty means none. Load refuses a
+	// list that is too broad (see [ValidateTrustedProxies]).
 	TrustedProxies []netip.Prefix
 	// ListenAddr is the host:port the HTTP server listens on.
 	ListenAddr string
@@ -125,18 +126,6 @@ type Config struct {
 
 	// ClamAV is the clamd address.
 	ClamAV ClamAVAddr
-}
-
-// TrustsEverything reports whether a trusted proxy prefix covers the whole
-// address space (0.0.0.0/0 or ::/0), which lets any client forge its IP. It is
-// allowed, but callers should log a prominent warning.
-func (c *Config) TrustsEverything() bool {
-	for _, p := range c.TrustedProxies {
-		if p.Bits() == 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // IsTrustedProxy reports whether addr belongs to a trusted proxy prefix.
@@ -208,6 +197,12 @@ func (l *loader) getOr(name, def string) string {
 // fail records a problem.
 func (l *loader) fail(name, format string, args ...any) {
 	l.problems = append(l.problems, Problem{Variable: name, Reason: fmt.Sprintf(format, args...)})
+}
+
+// failErr records a problem caused by err, which callers can match through
+// [ValidationError.Unwrap]. err must not contain a secret value.
+func (l *loader) failErr(name string, err error) {
+	l.problems = append(l.problems, Problem{Variable: name, Reason: err.Error(), Err: err})
 }
 
 // secret reads a secret given either directly (name) or through a file
@@ -348,6 +343,8 @@ func (l *loader) loadNetwork(c *Config) {
 	var err error
 	if c.TrustedProxies, err = parsePrefixes(l.get(EnvTrustedProxies)); err != nil {
 		l.fail(EnvTrustedProxies, "%v", err)
+	} else if err := ValidateTrustedProxies(c.TrustedProxies); err != nil {
+		l.failErr(EnvTrustedProxies, err)
 	}
 	c.ListenAddr = l.getOr(EnvListenAddr, DefaultListenAddr)
 	if err := validateHostPort(c.ListenAddr, false); err != nil {

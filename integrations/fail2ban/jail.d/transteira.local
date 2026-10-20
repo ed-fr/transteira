@@ -1,0 +1,52 @@
+# fail2ban jail for TransTeira. Copy to /etc/fail2ban/jail.d/ on the Docker
+# host, together with filter.d/transteira.conf. See README.md.
+
+[transteira]
+enabled  = true
+filter   = transteira
+
+# Host path of the security log: the logs volume of the TransTeira container
+# (TT_LOG_DIR, /var/log/transteira inside the container). Adjust to your
+# volume or bind mount; `docker volume inspect <name>` gives the host path.
+logpath  = /var/lib/docker/volumes/transteira_logs/_data/security.log
+backend  = auto
+
+# The log carries IP addresses only: never resolve names.
+usedns   = no
+
+# 10 failures within 10 minutes ban the address for 1 hour. Every counted
+# event is either an attack signal or already rate limited by TransTeira, so
+# a legitimate user stays far below this threshold.
+maxretry = 10
+findtime = 10m
+bantime  = 1h
+
+# Repeat offenders get longer bans (1 h, 2 h, 4 h ... up to 1 week).
+bantime.increment = true
+bantime.maxtime   = 1w
+
+# Why DOCKER-USER and not INPUT:
+# the reverse proxy runs in a container and its ports are published by
+# Docker. Traffic to a published port is DNATed and goes through the FORWARD
+# chain, never through INPUT, so the default fail2ban action (INPUT) would
+# have no effect at all. Docker reserves the DOCKER-USER chain, evaluated at
+# the start of FORWARD and never flushed by Docker, for user rules.
+#
+# Note: in DOCKER-USER the destination port has already been translated to
+# the container port. If your proxy publishes e.g. 8443:443, list the
+# container ports (port="443") below, or use iptables-allports instead.
+# If the reverse proxy runs on the host network (network_mode: host or not
+# in Docker), replace chain=DOCKER-USER with chain=INPUT.
+# The action is given explicitly, with all its parameters, on purpose: do
+# not add banaction/chain/port/protocol lines, which this line overrides.
+action = iptables-multiport[name=transteira, port="http,https", protocol=tcp, chain=DOCKER-USER]
+
+# Never ban your own users (see "Never ban your own users" in README.md):
+# list every tenant's internal ranges, the corporate egress (NAT) addresses
+# and your monitoring probes (space separated CIDRs). Many users share one
+# NAT IPv4 address or one IPv6 /64, so without this a single user, or a
+# malicious insider, could get the whole company banned. The ranges below
+# are documentation examples: replace them.
+# Do NOT list the reverse proxy address here: TransTeira already writes the
+# real client IP, read from the trusted proxies only.
+ignoreip = 127.0.0.1/8 ::1 192.0.2.0/24 198.51.100.10 2001:db8:10::/48

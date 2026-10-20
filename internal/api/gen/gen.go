@@ -571,6 +571,7 @@ const (
 	ProblemCodeInvitationNotAllowed    ProblemCode = "invitation-not-allowed"
 	ProblemCodeIpNotAllowed            ProblemCode = "ip-not-allowed"
 	ProblemCodeMaintenance             ProblemCode = "maintenance"
+	ProblemCodeMethodNotAllowed        ProblemCode = "method-not-allowed"
 	ProblemCodeNewMasterKeyMissing     ProblemCode = "new-master-key-missing"
 	ProblemCodeNotFound                ProblemCode = "not-found"
 	ProblemCodePayloadTooLarge         ProblemCode = "payload-too-large"
@@ -620,6 +621,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeIpNotAllowed:
 		return true
 	case ProblemCodeMaintenance:
+		return true
+	case ProblemCodeMethodNotAllowed:
 		return true
 	case ProblemCodeNewMasterKeyMissing:
 		return true

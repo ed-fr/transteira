@@ -37,6 +37,8 @@ const (
 	CodeVerificationExhausted Code = "verification-exhausted"
 	// CodeNotFound means the resource does not exist or is outside the caller scope.
 	CodeNotFound Code = "not-found"
+	// CodeMethodNotAllowed means the path exists but not for this HTTP method.
+	CodeMethodNotAllowed Code = "method-not-allowed"
 	// CodeTransferGone means the transfer expired or was deleted.
 	CodeTransferGone Code = "transfer-gone"
 	// CodeDownloadLocked means the transfer is password protected and not unlocked.
@@ -104,6 +106,7 @@ var catalog = map[Code]Definition{
 	CodeVerificationCodeInvalid: {http.StatusUnprocessableEntity, "Invalid verification code"},
 	CodeVerificationExhausted:   {http.StatusGone, "Verification code invalidated"},
 	CodeNotFound:                {http.StatusNotFound, "Not found"},
+	CodeMethodNotAllowed:        {http.StatusMethodNotAllowed, "Method not allowed"},
 	CodeTransferGone:            {http.StatusGone, "Transfer no longer available"},
 	CodeDownloadLocked:          {http.StatusUnauthorized, "Password required"},
 	CodeTransferPasswordInvalid: {http.StatusUnauthorized, "Wrong password"},

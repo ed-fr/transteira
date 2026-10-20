@@ -30,12 +30,14 @@ transteira/
 │   ├── config/                      # Lecture et validation des variables d'environnement (TT_*)
 │   ├── version/                     # Version SemVer injectée par -ldflags
 │   │
-│   ├── httpserver/                  # Serveur HTTP, routeur chi, montage des espaces public / admin / API
+│   ├── httpserver/                  # Serveur HTTP (net/http.ServeMux, motifs Go 1.22+), montage des espaces public / admin / API
 │   │   └── middleware/              # request-id, IP réelle (proxys de confiance), résolution du tenant,
-│   │                                # en-têtes de sécurité / CSP, CSRF, limitation de débit,
-│   │                                # mode maintenance, récupération des panics, Problem Details
+│   │                                # en-têtes de sécurité / CSP, limitation de débit, limite de corps
+│   │                                # et type JSON, récupération des panics (CSRF : à venir).
+│   │                                # Mode maintenance et délais par opération : httpserver/
 │   ├── api/
 │   │   ├── gen/                     # Code généré depuis openapi.yaml (ne pas modifier à la main)
+│   │   ├── stubs/                   # Stubs générés (tools/genstubs) : chaque opération non écrite → 404
 │   │   ├── public/                  # Handlers : meta, tenant public, sessions de dépôt, transferts, invitations, téléchargements
 │   │   ├── admin/                   # Handlers : auth admin, tenants, opérations, système
 │   │   └── problem/                 # Construction des réponses RFC 9457 et catalogue des codes d'erreur
@@ -67,6 +69,9 @@ transteira/
 │   ├── gdpr/                        # Recherche et effacement des données d'une adresse
 │   ├── stats/                       # Statistiques par entité et globales, espace disque
 │   ├── i18n/                        # Négociation de langue, chargement des traductions
+│   ├── ratelimit/                   # Paniers par clé et fenêtres de verrouillage (bornés, horloge injectable)
+│   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage)
+│   ├── id/                          # Identifiants préfixés (ULID) et jetons à forte entropie
 │   │
 │   ├── store/                       # Couche d'accès aux données (database/sql, SQLite et PostgreSQL)
 │   │   ├── query.go, lexer.go       # Registre des requêtes : tenantQuery (exactement un `tenant_id = ?`) / systemQuery (liste blanche)
@@ -144,6 +149,11 @@ transteira/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/
 │       └── project-structure.md     # Ce document
+│
+├── tools/
+│   ├── covercheck/                  # Seuils de couverture (section 24.3), appelé par make cover
+│   ├── envexample/                  # Génère .env.example depuis internal/config
+│   └── genstubs/                    # Génère internal/api/stubs depuis l'interface du serveur
 │
 ├── scripts/
 │   ├── hooks/pre-push               # gitleaks avant chaque envoi vers GitHub

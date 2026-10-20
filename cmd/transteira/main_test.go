@@ -35,13 +35,11 @@ func TestRun(t *testing.T) {
 		{name: "version help", args: []string{"version", "-h"}, wantCode: exitOK, wantStderr: []string{"-json"}, noStdout: true},
 		{name: "version bad flag", args: []string{"version", "--nope"}, wantCode: exitUsage, wantStderr: []string{"nope"}, noStdout: true},
 		{name: "version extra arg", args: []string{"version", "extra"}, wantCode: exitUsage, wantStderr: []string{`unexpected argument "extra"`}, noStdout: true},
-		{name: "serve", args: []string{"serve"}, wantCode: exitNotImplemented, wantStderr: []string{"serve: not implemented yet"}, noStdout: true},
 		{name: "migrate help", args: []string{"migrate", "-h"}, wantCode: exitOK, wantStderr: []string{"-status"}, noStdout: true},
 		{name: "migrate extra arg", args: []string{"migrate", "extra"}, wantCode: exitUsage, noStdout: true},
 		{name: "rotate-master-key", args: []string{"rotate-master-key"}, wantCode: exitNotImplemented, wantStderr: []string{"rotate-master-key: not implemented yet"}, noStdout: true},
 		{name: "backup", args: []string{"backup"}, wantCode: exitNotImplemented, wantStderr: []string{"backup: not implemented yet"}, noStdout: true},
-		{name: "healthcheck", args: []string{"healthcheck"}, wantCode: exitNotImplemented, wantStderr: []string{"healthcheck: not implemented yet"}, noStdout: true},
-		{name: "not implemented help", args: []string{"serve", "-h"}, wantCode: exitOK, noStdout: true},
+		{name: "not implemented help", args: []string{"backup", "-h"}, wantCode: exitOK, noStdout: true},
 		{name: "not implemented bad flag", args: []string{"backup", "-x"}, wantCode: exitUsage, noStdout: true},
 	}
 	for _, tt := range tests {

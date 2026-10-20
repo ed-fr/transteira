@@ -56,6 +56,7 @@ linters:
     generated: strict
     paths:
       - internal/api/gen
+      - internal/api/stubs
     rules:
       - path: _test\.go
         linters:
@@ -74,3 +75,4 @@ formatters:
     generated: strict
     paths:
       - internal/api/gen
+      - internal/api/stubs

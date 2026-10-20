@@ -1,0 +1,22 @@
+# Host scanning against TransTeira: requests whose Host header matches no
+# tenant (scanners hitting the bare IP or guessing names), per client IP.
+# Kept separate from the brute force scenario so it can be tuned or
+# disabled on its own. 10 events in a burst (capacity 9, one event leaks
+# every 30 seconds) trigger it.
+type: leaky
+name: ed-fr/transteira-fqdn-scan
+description: "Detect Host header scanning against TransTeira (unknown FQDN)"
+filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event == 'unknown_fqdn'"
+groupby: evt.Meta.source_ip
+capacity: 9
+leakspeed: 30s
+blackhole: 5m
+labels:
+  service: transteira
+  confidence: 2
+  spoofable: 0
+  classification:
+    - attack.T1595
+  label: "TransTeira Host scanning"
+  behavior: "http:scan"
+  remediation: true

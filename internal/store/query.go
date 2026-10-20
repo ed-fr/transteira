@@ -26,6 +26,7 @@ var (
 	errQueryParens        = errors.New("unbalanced parentheses")
 	errQuerySingleTable   = errors.New("tenant queries must read or write a single table: no JOIN, USING, subquery, " +
 		"second table or UPDATE ... FROM (use reviewedTenantQuery)")
+	errQueryTenantColumn = errors.New("tenant_id may only appear in the tenant slot (no alias, result column or other use)")
 	errQueryNoTenant     = errors.New("statement needs exactly one tenant_id = ? slot, as a conjunct of the top-level WHERE")
 	errQueryInsertShape  = errors.New("INSERT must be INSERT INTO t (..., tenant_id, ...) VALUES (..., ?, ...) with a single row and no other clause")
 	errQueryNoReason     = errors.New("system and reviewed queries need a non-empty reason")
@@ -280,10 +281,23 @@ func validateTenantQuery(sql string, singleTable bool) (slot, placeholders int, 
 	}
 	if toks[0].is("INSERT") {
 		slot, err = validateTenantInsert(toks)
-	} else {
-		slot, err = validateTenantWhere(toks, names)
+	} else if slot, err = validateTenantWhere(toks, names); err == nil && singleTable {
+		err = checkTenantColumnUses(toks)
 	}
 	return slot, placeholders, err
+}
+
+// checkTenantColumnUses rejects any tenant_id token of a SELECT, UPDATE or
+// DELETE other than the tenant slot itself: a result column named tenant_id
+// (an alias, with or without AS) or any other expression on tenant_id could
+// stand in for the real column.
+func checkTenantColumnUses(toks []token) error {
+	for i, t := range toks {
+		if isTenantColumn(t) && !isSlot(toks, i) {
+			return errQueryTenantColumn
+		}
+	}
+	return nil
 }
 
 // checkSingleTable enforces the single-table rule and returns the target

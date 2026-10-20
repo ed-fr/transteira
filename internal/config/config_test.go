@@ -77,7 +77,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"DepositSessionTTL", c.DepositSessionTTL, 4 * time.Hour},
 		{"DeleteAfterDownloadGrace", c.DeleteAfterDownloadGrace, 15 * time.Minute},
 		{"ClamAV", c.ClamAV, ClamAVAddr{Network: "tcp", Address: DefaultClamAVAddr}},
-		{"TrustsEverything", c.TrustsEverything(), false},
+		{"BroadTrustedProxies", len(c.BroadTrustedProxies()), 0},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {
@@ -156,7 +156,7 @@ func TestLoadValid(t *testing.T) {
 		{
 			name: "network settings",
 			vars: map[string]string{
-				EnvTrustedProxies: "172.18.0.2, 10.0.0.0/8,,fd00::/8, ::ffff:192.0.2.1",
+				EnvTrustedProxies: "172.18.0.2, 10.0.0.0/8,,2001:db8:1234::/48, ::ffff:192.0.2.1",
 				EnvListenAddr:     "127.0.0.1:9000",
 				EnvAdminHosts:     "Admin.Example.com., transfer.entity-a.example.com,admin.example.com",
 				EnvClamAVAddr:     "unix:/run/clamav/clamd.sock",
@@ -165,7 +165,7 @@ func TestLoadValid(t *testing.T) {
 				t.Helper()
 				want := []netip.Prefix{
 					netip.MustParsePrefix("172.18.0.2/32"), netip.MustParsePrefix("10.0.0.0/8"),
-					netip.MustParsePrefix("fd00::/8"), netip.MustParsePrefix("192.0.2.1/32"),
+					netip.MustParsePrefix("2001:db8:1234::/48"), netip.MustParsePrefix("192.0.2.1/32"),
 				}
 				if !slices.Equal(c.TrustedProxies, want) {
 					t.Errorf("TrustedProxies = %v, want %v", c.TrustedProxies, want)
@@ -531,26 +531,33 @@ func TestMasterKeySQLiteFolder(t *testing.T) {
 func TestTrustedProxyHelpers(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		proxies    string
-		everything bool
-		addr       string
-		trusted    bool
+		proxies string
+		broad   int
+		addr    string
+		trusted bool
 	}{
-		{"", false, "10.0.0.1", false},
-		{"10.0.0.0/8", false, "10.1.2.3", true},
-		{"10.0.0.0/8", false, "::ffff:10.1.2.3", true},
-		{"10.0.0.0/8", false, "11.0.0.1", false},
-		{"fe80::/10", false, "fe80::1%eth0", true},
-		{"10.0.0.0/8,0.0.0.0/0", true, "203.0.113.9", true},
-		{"::/0", true, "2001:db8::1", true},
-		{"::ffff:10.0.0.0/104", false, "10.1.2.3", true},
-		{"::ffff:10.0.0.0/104", false, "::ffff:10.1.2.3", true},
-		{"::ffff:0:0/96", true, "192.0.2.1", true},
+		{"", 0, "10.0.0.1", false},
+		{"10.0.0.0/8", 1, "10.1.2.3", true},
+		{"10.0.0.0/8", 1, "::ffff:10.1.2.3", true},
+		{"10.0.0.0/8", 1, "11.0.0.1", false},
+		{"fe80::/10", 0, "fe80::1%eth0", false},
+		{"fe80::/64", 0, "fe80::1%eth0", true},
+		{"::ffff:10.0.0.0/104", 1, "10.1.2.3", true},
+		{"::ffff:10.0.0.0/104", 1, "::ffff:10.1.2.3", true},
+		{"192.0.2.0/24, 2001:db8::/48, 198.51.100.7", 1, "2001:db8:0:1::1", true},
 	}
 	for _, tc := range tests {
-		c := mustLoad(t, map[string]string{EnvTrustedProxies: tc.proxies})
-		if got := c.TrustsEverything(); got != tc.everything {
-			t.Errorf("%q: TrustsEverything() = %v, want %v", tc.proxies, got, tc.everything)
+		vars := map[string]string{EnvTrustedProxies: tc.proxies}
+		if tc.proxies == "fe80::/10" {
+			// Shorter than the IPv6 minimum: refused.
+			if verr := mustFail(t, vars); !strings.Contains(verr.Error(), EnvTrustedProxies) {
+				t.Errorf("%q: error %v does not name %s", tc.proxies, verr, EnvTrustedProxies)
+			}
+			continue
+		}
+		c := mustLoad(t, vars)
+		if got := len(c.BroadTrustedProxies()); got != tc.broad {
+			t.Errorf("%q: BroadTrustedProxies() = %v, want %d prefixes", tc.proxies, c.BroadTrustedProxies(), tc.broad)
 		}
 		if got := c.IsTrustedProxy(netip.MustParseAddr(tc.addr)); got != tc.trusted {
 			t.Errorf("%q: IsTrustedProxy(%s) = %v, want %v", tc.proxies, tc.addr, got, tc.trusted)

@@ -142,7 +142,14 @@ func Variables() []Var {
 			Name: EnvTrustedProxies, Group: "Network",
 			Description: "Comma-separated list of IP addresses or CIDR prefixes of the trusted " +
 				"reverse proxies. X-Forwarded-For / X-Real-IP are only honored for requests " +
-				"coming from these addresses. Empty means no proxy is trusted.",
+				"coming from these addresses. List the reverse proxies by their exact IP " +
+				"address: every host inside a trusted range can forge the client IP. Startup " +
+				"fails on an IPv4 prefix shorter than /8, an IPv6 prefix shorter than /32, or " +
+				"prefixes that together cover the whole IPv4 or IPv6 space; a warning is " +
+				"logged for prefixes wider than /24 (IPv4) or /64 (IPv6). A trusted proxy " +
+				"must never sit inside a tenant's internal IP range. A request from a trusted " +
+				"proxy without a valid X-Forwarded-For / X-Real-IP is treated as coming from " +
+				"an unknown client (fail closed). Empty means no proxy is trusted.",
 		},
 		{
 			Name: EnvListenAddr, Group: "Network", Default: DefaultListenAddr,

@@ -5,6 +5,7 @@ package api
 import _ "embed"
 
 //go:generate go tool oapi-codegen -config oapi-codegen.yaml openapi.yaml
+//go:generate go run ../tools/genstubs -in ../internal/api/gen/gen.go -out ../internal/api/stubs/stubs_gen.go
 
 // OpenAPISpec is the raw OpenAPI 3.1 document (YAML).
 //

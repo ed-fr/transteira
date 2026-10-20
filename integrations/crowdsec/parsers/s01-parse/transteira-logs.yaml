@@ -1,0 +1,30 @@
+# CrowdSec parser for the TransTeira security log (stage s01-parse).
+# Format: docs/operations/security-log.md
+#   2026-10-20T07:41:00.123Z ip=203.0.113.7 tenant=transfer.entity-a.example.com event=unknown_fqdn host="evil.example.net"
+#
+# The pattern is anchored at the start of the line and reads the client IP
+# from the second token only (threat model T-99): free-form values come after
+# event=, quoted and escaped, and can never forge this prefix. Lines without
+# a client address ("ip=-") do not match %{IP} and are deliberately left
+# unparsed. The pattern is checked by internal/securitylog/crowdsec_test.go:
+# keep it on a single line in single quotes.
+onsuccess: next_stage
+filter: "evt.Parsed.program == 'transteira'"
+name: ed-fr/transteira-logs
+description: "Parse the TransTeira security log"
+grok:
+  pattern: '^%{TIMESTAMP_ISO8601:timestamp} ip=%{IP:source_ip} tenant=%{NOTSPACE:tenant} event=%{WORD:event}(?: %{GREEDYDATA:fields})?$'
+  apply_on: message
+statics:
+  - meta: log_type
+    value: transteira_security
+  - meta: service
+    value: transteira
+  - meta: source_ip
+    expression: evt.Parsed.source_ip
+  - meta: target_fqdn
+    expression: evt.Parsed.tenant
+  - meta: transteira_event
+    expression: evt.Parsed.event
+  - target: evt.StrTime
+    expression: evt.Parsed.timestamp
