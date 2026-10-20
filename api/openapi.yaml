@@ -2989,8 +2989,8 @@ paths:
               example:
                 id: rot_01JABCM8Q9R0S1T2V3V4W5X6Y7
                 status: running
-                fromKeyId: mk-2026-01
-                toKeyId: mk-2026-10
+                fromKeyId: mk_3f9a0c41d27be865
+                toKeyId: mk_b81e2d07c4a95f13
                 totalKeys: 18342
                 rewrappedKeys: 0
                 startedAt: '2026-10-19T16:30:00Z'
@@ -3032,8 +3032,8 @@ paths:
               example:
                 id: rot_01JABCM8Q9R0S1T2V3V4W5X6Y7
                 status: completed
-                fromKeyId: mk-2026-01
-                toKeyId: mk-2026-10
+                fromKeyId: mk_3f9a0c41d27be865
+                toKeyId: mk_b81e2d07c4a95f13
                 totalKeys: 18342
                 rewrappedKeys: 18342
                 startedAt: '2026-10-19T16:30:00Z'
@@ -4528,12 +4528,28 @@ components:
       type: object
       required: [id, status, fromKeyId, toKeyId, totalKeys, rewrappedKeys, startedAt]
       properties:
-        id: { type: string }
+        id: { type: string, pattern: '^rot_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
         status: { type: string, enum: [running, completed, failed] }
-        fromKeyId: { type: string }
-        toKeyId: { type: string }
-        totalKeys: { type: integer }
-        rewrappedKeys: { type: integer }
+        fromKeyId:
+          type: string
+          pattern: '^mk_[0-9a-f]{16}$'
+          description: Identifier of the master key being replaced, derived from the key (not secret).
+        toKeyId:
+          type: string
+          pattern: '^mk_[0-9a-f]{16}$'
+          description: Identifier of the new master key, derived from the key (not secret).
+        totalKeys:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of wrapped keys under the old master key when the rotation started.
+        rewrappedKeys:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Number of wrapped keys rewrapped so far. It can exceed totalKeys when keys were created
+            under the old master key while the rotation was running.
         startedAt: { type: string, format: date-time }
         completedAt: { type: string, format: date-time }
         error: { type: string }

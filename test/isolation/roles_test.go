@@ -41,6 +41,10 @@ func TestScopedTxExposesNoRawSQL(t *testing.T) {
 	}
 	for i := range typ.NumMethod() {
 		m := typ.Method(i)
+		// Tenant is a read-only accessor without arguments: it cannot run SQL.
+		if m.Name == "Tenant" && m.Type.NumIn() == 1 {
+			continue
+		}
 		takesQuery := false
 		for j := 1; j < m.Type.NumIn(); j++ {
 			in := m.Type.In(j)

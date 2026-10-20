@@ -126,7 +126,7 @@ func TestNewGeneratorDefaults(t *testing.T) {
 }
 
 func TestNewAllPrefixes(t *testing.T) {
-	for _, p := range []Prefix{Tenant, Transfer, File, Invitation, Blocklist, APIToken, Admin, Rotation, Audit, Request} {
+	for _, p := range []Prefix{Tenant, Transfer, File, Invitation, Blocklist, APIToken, Admin, Rotation, WrappedKey, Audit, Request} {
 		before := time.Now().Add(-time.Millisecond)
 		s := New(p)
 		if !strings.HasPrefix(s, string(p)+"_") || len(s) != len(p)+1+ulidLen {

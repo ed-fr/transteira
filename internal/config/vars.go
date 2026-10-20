@@ -130,13 +130,14 @@ func Variables() []Var {
 				"secret). It must NOT be located inside the data, backup or log directories, " +
 				"nor in the folder of the SQLite database. " +
 				"Keep a copy of the key in a password vault outside the VM: without it, " +
-				"files and backups cannot be decrypted.",
+				"files and backups cannot be decrypted. See docs/operations/master-key.md.",
 		},
 		{
 			Name: EnvMasterKeyNewFile, Group: "Encryption",
-			Description: "Absolute path of the new master key, only set while running the " +
-				"rotate-master-key command. Same location rules as " + EnvMasterKeyFile +
-				", and it must differ from it.",
+			Description: "Absolute path of the new master key during a rotation: set it and " +
+				"restart, run rotate-master-key, then move the new key to " + EnvMasterKeyFile +
+				" and remove this variable. Same location rules as " + EnvMasterKeyFile +
+				", and it must differ from it. See docs/operations/master-key.md.",
 		},
 		{
 			Name: EnvTrustedProxies, Group: "Network",

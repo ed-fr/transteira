@@ -20,6 +20,9 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/masterkey"
+	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -129,7 +132,16 @@ func testConfig(t *testing.T, e storetest.Engine) *config.Config {
 	cfg.BackupDir = filepath.Join(root, "backups")
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.ClamAV = config.ClamAVAddr{Network: "tcp", Address: "127.0.0.1:1"}
+	cfg.MasterKeyFile = writeMasterKey(t)
 	return cfg
+}
+
+// writeMasterKey writes a new random master key to a file outside every data
+// directory and returns its path.
+func writeMasterKey(t *testing.T) string {
+	t.Helper()
+	path, _ := masterkeytest.WriteKeyFile(t, t.TempDir())
+	return path
 }
 
 // prepare migrates the database of cfg and creates the test tenant.
@@ -398,6 +410,90 @@ func TestRunStartupErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRunMasterKeyFileErrors(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(cfg *config.Config){
+		"missing": func(cfg *config.Config) { cfg.MasterKeyFile = filepath.Join(t.TempDir(), "absent.key") },
+		"unset":   func(cfg *config.Config) { cfg.MasterKeyFile = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cfg := testConfig(t, storetest.SQLite(t))
+			mutate(cfg)
+			err := Run(context.Background(), cfg, WithListener(newMemListener()), WithLogOutput(io.Discard))
+			if err == nil || !strings.Contains(err.Error(), config.EnvMasterKeyFile) {
+				t.Errorf("Run = %v", err)
+			}
+			if _, err := os.Stat(cfg.DBDSN.Reveal()); !os.IsNotExist(err) {
+				t.Errorf("the database was opened before the key was loaded: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunMasterKeyCheck(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		cfg := testConfig(t, e)
+		prepare(t, cfg)
+
+		// First start: the key is registered; a wrapped key is stored.
+		first := *cfg
+		s := start(t, &first)
+		if code, _ := s.get(t, "/healthz", "x"); code == 0 {
+			t.Fatal("no answer")
+		}
+		if err := s.stop(t); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(s.logs.String(), "master key registered as active") {
+			t.Errorf("logs = %s", s.logs)
+		}
+		ctx := context.Background()
+		c := *cfg
+		db, err := store.Open(ctx, &c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = db.Close() }()
+		kr, err := masterkey.Load(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tn, err := db.Tenants().TenantByFQDN(ctx, tenantHost)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := masterkey.NewVault(db, kr, nil).Seal(ctx, tn.ID, crypto.PurposeSecret, []byte("smtp password")); err != nil {
+			t.Fatal(err)
+		}
+		kr.Close()
+
+		// Same key with a new key configured: the start goes on.
+		withNew := *cfg
+		withNew.MasterKeyNewFile = writeMasterKey(t)
+		s = start(t, &withNew)
+		if code, _ := s.get(t, "/healthz", "x"); code == 0 {
+			t.Fatal("no answer")
+		}
+		if err := s.stop(t); err != nil {
+			t.Fatal(err)
+		}
+		if logs := s.logs.String(); !strings.Contains(logs, "master key check passed") || !strings.Contains(logs, `"new":"mk_`) {
+			t.Errorf("logs = %s", logs)
+		}
+
+		// Another key: the start is refused with the typed error.
+		wrong := *cfg
+		wrong.MasterKeyFile = writeMasterKey(t)
+		err = Run(ctx, &wrong, WithListener(newMemListener()), WithLogOutput(io.Discard))
+		ce, ok := errors.AsType[*masterkey.CheckError](err)
+		if !ok || ce.Reason != masterkey.ReasonMissingKey || !errors.Is(err, masterkey.ErrKeyCheck) {
+			t.Fatalf("Run(wrong key) = %v", err)
+		}
+	})
 }
 
 func TestRunListenError(t *testing.T) {

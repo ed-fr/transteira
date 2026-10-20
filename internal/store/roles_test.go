@@ -78,7 +78,7 @@ func TestMigrateWithOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if n, err := db.Migrate(ctx); err != nil || n != 1 {
+	if n, err := db.Migrate(ctx); err != nil || n != len(mustMigrations(t, db)) {
 		t.Fatalf("Migrate = %d, %v", n, err)
 	}
 	if n, err := db.Migrate(ctx); err != nil || n != 0 {

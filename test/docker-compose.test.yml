@@ -28,6 +28,10 @@ services:
       - synchronous_commit=off
       - -c
       - full_page_writes=off
+      # Test packages run in parallel, each with its own pools: the default
+      # 100 connections are not enough.
+      - -c
+      - max_connections=300
     healthcheck:
       # TCP on purpose: the entrypoint's temporary init server only listens on
       # the Unix socket, so the check turns healthy once init scripts are done.

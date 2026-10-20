@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/id"
@@ -57,12 +58,6 @@ func (db *DB) Tenants() *Tenants { return &Tenants{db: db} }
 // compile-time check: Tenants resolves hosts for tenant.Resolver.
 var _ tenant.Lookup = (*Tenants)(nil)
 
-// system returns the system executor for reason (always non-empty here).
-func (r *Tenants) system(reason string) *System {
-	s, _ := r.db.System(reason)
-	return s
-}
-
 // scanTenant reads one row of tenantColumns.
 func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	var (
@@ -98,7 +93,7 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	c.ID = tenant.ID(newID)
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
-	err = r.system(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.StorageQuotaBytes, toMillis(now), toMillis(now))
 		return err
@@ -115,7 +110,7 @@ func (r *Tenants) Get(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error
 		return nil, fmt.Errorf("store: get tenant: %w", ErrNotFound)
 	}
 	var t *tenant.Tenant
-	err := r.system(reasonTenantAdmin).ReadTx(ctx, func(tx *SystemTx) error {
+	err := r.db.systemScope(reasonTenantAdmin).ReadTx(ctx, func(tx *SystemTx) error {
 		var err error
 		t, err = scanTenant(tx.QueryRow(ctx, qTenantGet, string(tid)))
 		return err
@@ -131,7 +126,7 @@ func (r *Tenants) Get(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error
 // both tenant.ErrUnknownTenant and ErrNotFound.
 func (r *Tenants) TenantByFQDN(ctx context.Context, fqdn string) (*tenant.Tenant, error) {
 	var t *tenant.Tenant
-	err := r.system(reasonTenantResolve).ReadTx(ctx, func(tx *SystemTx) error {
+	err := r.db.systemScope(reasonTenantResolve).ReadTx(ctx, func(tx *SystemTx) error {
 		var err error
 		t, err = scanTenant(tx.QueryRow(ctx, qTenantByFQDN, fqdn))
 		return err
@@ -163,7 +158,7 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 	}
 	limit := pageLimit(opts.Limit)
 	var items []*tenant.Tenant
-	err := r.system(reasonTenantAdmin).ReadTx(ctx, func(tx *SystemTx) error {
+	err := r.db.systemScope(reasonTenantAdmin).ReadTx(ctx, func(tx *SystemTx) error {
 		rows, err := tx.Query(ctx, qTenantList, opts.Cursor, limit+1)
 		if err != nil {
 			return err
@@ -191,7 +186,7 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	}
 	now := toMillis(r.db.now())
 	var out *tenant.Tenant
-	err := r.system(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
 			t.MaxTransferBytes, t.StorageQuotaBytes, now, string(t.ID))
 		if err != nil {
@@ -209,11 +204,15 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	return out, nil
 }
 
-// Delete removes the tenant tid and, by cascade, every row it owns. It
-// returns ErrNotFound when the tenant does not exist. Erasing the tenant's
-// files and keys is the caller's job.
+// Delete removes the tenant tid and, by cascade, every row it owns,
+// including its wrapped keys (the crypto-erase of its files and secrets),
+// then scrubs the database files ([DB.ScrubDeleted]). It returns
+// ErrNotFound when the tenant does not exist. A scrub left incomplete by
+// active readers (ErrScrubBusy) is logged as a warning, not returned; any
+// other scrub failure is returned, the tenant being deleted. Erasing the
+// tenant's files on disk is the caller's job.
 func (r *Tenants) Delete(ctx context.Context, tid tenant.ID) error {
-	err := r.system(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		res, err := tx.Exec(ctx, qTenantDelete, string(tid))
 		if err != nil {
 			return err
@@ -223,7 +222,13 @@ func (r *Tenants) Delete(ctx context.Context, tid tenant.ID) error {
 	if err != nil {
 		return wrap("delete tenant", err)
 	}
-	return nil
+	err = r.db.ScrubDeleted(ctx)
+	if errors.Is(err, ErrScrubBusy) {
+		r.db.logger.WarnContext(ctx, "deleted tenant data may remain in the database WAL until the next checkpoint",
+			slog.String("tenant", string(tid)))
+		return nil
+	}
+	return err
 }
 
 // expectOne returns ErrNotFound unless res reports at least one affected row.

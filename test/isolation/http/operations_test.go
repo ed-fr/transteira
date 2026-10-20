@@ -47,6 +47,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/stubs"
 	"github.com/ed-fr/transteira/internal/app"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -357,6 +358,14 @@ type harness struct {
 	nextIP  atomic.Uint32
 }
 
+// writeMasterKey writes a new random master key to dir and returns its
+// path.
+func writeMasterKey(t *testing.T, dir string) string {
+	t.Helper()
+	path, _ := masterkeytest.WriteKeyFile(t, dir)
+	return path
+}
+
 // startHarness creates the tenants and runs app.Run on a loopback port.
 // The loopback is a trusted proxy so that each request can carry its own
 // client IP in X-Forwarded-For and the per-IP rate limits never interfere
@@ -399,7 +408,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 		config.EnvDataDir:        filepath.Join(root, "data"),
 		config.EnvBackupDir:      filepath.Join(root, "backups"),
 		config.EnvLogDir:         filepath.Join(root, "logs"),
-		config.EnvMasterKeyFile:  filepath.Join(t.TempDir(), "master.key"),
+		config.EnvMasterKeyFile:  writeMasterKey(t, t.TempDir()),
 		config.EnvListenAddr:     "127.0.0.1:8080", // unused: WithListener
 		config.EnvTrustedProxies: "127.0.0.1",
 		config.EnvClamAVAddr:     fakeClamd(t),

@@ -1,6 +1,6 @@
 // Package app wires the TransTeira server together and runs it: logging,
-// database, migrations, tenant resolution, security log, health checks and
-// the HTTP server, with a graceful shutdown.
+// master keys, database, migrations, master key check, tenant resolution,
+// security log, health checks and the HTTP server, with a graceful shutdown.
 package app
 
 import (
@@ -21,6 +21,7 @@ import (
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
+	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -98,11 +99,12 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // in memory (in the caller's copy included) for the life of the server.
 //
 // Start-up sequence: refuse a too broad trusted proxy list (and warn about
-// broad prefixes), logger,
-// database, migrations (always with SQLite; with PostgreSQL only when
-// cfg.DBMigrateDSN is set, otherwise they are expected to be applied by
-// "transteira migrate"), drop of the owner credentials and role
-// verification, tenant resolver, security log, health checks, HTTP server.
+// broad prefixes), logger, master keys (TT_MASTER_KEY_FILE and, during a
+// rotation, TT_MASTER_KEY_NEW_FILE), database, migrations (always with
+// SQLite; with PostgreSQL only when cfg.DBMigrateDSN is set, otherwise they
+// are expected to be applied by "transteira migrate"), drop of the owner
+// credentials and role verification, master key check (masterkey.Check),
+// tenant resolver, security log, health checks, HTTP server.
 func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	o := runOptions{logOutput: os.Stdout, shutdownTimeout: ShutdownTimeout}
 	for _, opt := range opts {
@@ -128,11 +130,25 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			slog.String("prefix", p.String()))
 	}
 
-	db, err := openDatabase(ctx, cfg, logger)
+	// The master keys are read before the database is touched: a missing,
+	// unreadable or malformed key file refuses the start right away.
+	keys, err := masterkey.Load(cfg)
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// Deferred first, so it runs last: the keys are destroyed once the
+	// handlers have drained and the database is closed.
+	defer keys.Close()
+
+	db, err := OpenDatabase(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, closeWith(db.Close, "database")) }()
+
+	if err := checkKeys(ctx, db, keys, logger); err != nil {
+		return err
+	}
 
 	for _, dir := range []string{cfg.DataDir, cfg.LogDir} {
 		if err := os.MkdirAll(dir, dirMode); err != nil {
@@ -179,9 +195,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	return serve(ctx, cfg, &o, handler, logger)
 }
 
-// openDatabase opens the database, applies the migrations when this
-// process may, forgets the owner credentials and verifies the runtime role.
-func openDatabase(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*store.DB, error) {
+// OpenDatabase opens the database as the server does: it applies the
+// migrations when this process may (always with SQLite; with PostgreSQL only
+// when cfg.DBMigrateDSN is set), forgets the owner credentials (in db and in
+// cfg) and verifies the runtime role. Commands that work on a live database,
+// such as rotate-master-key, use it to follow the same policy.
+func OpenDatabase(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*store.DB, error) {
 	db, err := store.Open(ctx, cfg, store.WithLogger(logger))
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)
@@ -190,6 +209,26 @@ func openDatabase(ctx context.Context, cfg *config.Config, logger *slog.Logger) 
 		return nil, errors.Join(err, closeWith(db.Close, "database"))
 	}
 	return db, nil
+}
+
+// checkKeys runs the startup master key check (threat model T-36) and logs
+// the keys in use. The keyring then serves the later steps (wrapped keys of
+// files and secrets) through masterkey.NewVault.
+func checkKeys(ctx context.Context, db *store.DB, keys *masterkey.Keyring, logger *slog.Logger) error {
+	rep, err := masterkey.Check(ctx, db, keys, logger, time.Now())
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	attrs := []any{slog.String("active", rep.ActiveID), slog.String("current", rep.CurrentID)}
+	if rep.NewID != "" {
+		attrs = append(attrs, slog.String("new", rep.NewID))
+	}
+	if rep.Registered {
+		logger.InfoContext(ctx, "master key registered as active on a new database", attrs...)
+	} else {
+		logger.InfoContext(ctx, "master key check passed", attrs...)
+	}
+	return nil
 }
 
 // migrate applies the start-up migrations, then drops the owner

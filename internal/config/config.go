@@ -310,32 +310,57 @@ func (l *loader) loadPaths(c *Config) {
 	c.MasterKeyFile = l.path(EnvMasterKeyFile, "")
 	c.MasterKeyNewFile = l.path(EnvMasterKeyNewFile, "")
 
-	volumes := []struct{ name, dir string }{
-		{EnvDataDir, c.DataDir}, {EnvBackupDir, c.BackupDir}, {EnvLogDir, c.LogDir},
-	}
-	// The SQLite database lives in its own volume (spec 18.1). Only its folder
-	// is reported, never the DSN itself.
-	if c.DBDriver == DriverSQLite {
-		if dir, ok := sqliteDir(c.DBDSN.Reveal()); ok {
-			volumes = append(volumes, struct{ name, dir string }{"the folder of " + EnvDBDSN, dir})
-		}
-	}
 	for _, key := range []struct{ name, path string }{
 		{EnvMasterKeyFile, c.MasterKeyFile}, {EnvMasterKeyNewFile, c.MasterKeyNewFile},
 	} {
 		if key.path == "" {
 			continue
 		}
-		for _, vol := range volumes {
-			if vol.dir != "" && pathWithin(key.path, vol.dir) {
-				l.fail(key.name, "must not be located inside %s (%s): the master key must stay outside the data volumes",
-					vol.name, vol.dir)
-			}
+		if err := c.keyOutsideVolumes(key.path); err != nil {
+			l.fail(key.name, "%v", err)
 		}
 	}
 	if c.MasterKeyFile != "" && c.MasterKeyNewFile != "" && samePath(c.MasterKeyFile, c.MasterKeyNewFile) {
 		l.fail(EnvMasterKeyNewFile, "must differ from %s", EnvMasterKeyFile)
 	}
+}
+
+// CheckMasterKeyPath applies the location rules of TT_MASTER_KEY_FILE to
+// path, a master key file given outside the environment (for example the
+// old key of "rotate-master-key -recover-from"): it must be absolute and lie
+// outside the data, backup and log directories and the folder of the SQLite
+// database of c (spec 16.1 and 18.1). It returns the cleaned path.
+func (c *Config) CheckMasterKeyPath(path string) (string, error) {
+	clean, err := checkAbsPath(path)
+	if err != nil {
+		return "", fmt.Errorf("%q %w", path, err)
+	}
+	if err := c.keyOutsideVolumes(clean); err != nil {
+		return "", err
+	}
+	return clean, nil
+}
+
+// keyOutsideVolumes reports an error when the master key file path lies
+// inside one of the volumes of c. Only the folder of the SQLite database is
+// reported, never the DSN itself.
+func (c *Config) keyOutsideVolumes(path string) error {
+	volumes := []struct{ name, dir string }{
+		{EnvDataDir, c.DataDir}, {EnvBackupDir, c.BackupDir}, {EnvLogDir, c.LogDir},
+	}
+	// The SQLite database lives in its own volume (spec 18.1).
+	if c.DBDriver == DriverSQLite {
+		if dir, ok := sqliteDir(c.DBDSN.Reveal()); ok {
+			volumes = append(volumes, struct{ name, dir string }{"the folder of " + EnvDBDSN, dir})
+		}
+	}
+	for _, vol := range volumes {
+		if vol.dir != "" && pathWithin(path, vol.dir) {
+			return fmt.Errorf("must not be located inside %s (%s): the master key must stay outside the data volumes",
+				vol.name, vol.dir)
+		}
+	}
+	return nil
 }
 
 // loadNetwork reads the network-related variables.

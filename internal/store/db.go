@@ -43,14 +43,21 @@ const (
 )
 
 // sqliteCommonParams are the per-connection settings of every SQLite
-// connection: WAL journal, foreign keys enforced, a busy timeout and
+// connection: WAL journal, foreign keys enforced, a busy timeout,
 // synchronous=NORMAL (durable across application crashes; WAL keeps the
-// database consistent across power loss).
+// database consistent across power loss), secure_delete, which zeroes
+// deleted content in the pages it writes, and journal_size_limit(0), which
+// truncates the WAL whenever it is reset. secure_delete alone does not purge
+// the WAL: the frames written before a deletion keep the old page content
+// until a checkpoint resets the WAL. [DB.ScrubDeleted] forces that
+// checkpoint, completing the cryptographic erasure of spec 16.1.
 var sqliteCommonParams = []string{
 	fmt.Sprintf("_pragma=busy_timeout(%d)", sqliteBusyTimeoutMS),
 	"_pragma=journal_mode(WAL)",
 	"_pragma=foreign_keys(1)",
 	"_pragma=synchronous(NORMAL)",
+	"_pragma=secure_delete(1)",
+	"_pragma=journal_size_limit(0)",
 }
 
 // errInMemory rejects in-memory SQLite databases: the read and write pools
@@ -227,4 +234,27 @@ func (db *DB) Close() error {
 		err = errors.Join(err, db.read.Close())
 	}
 	return err
+}
+
+// ScrubDeleted purges deleted data from the files of the database. With
+// SQLite it checkpoints the WAL in TRUNCATE mode: the pages zeroed by
+// secure_delete reach the database file and the WAL, which still holds
+// frames written before the deletion, is emptied. Call it after
+// cryptographic erasures (deleted wrapped keys, deleted tenants); the
+// cleanup job of a later step will also run it periodically. It
+// returns ErrScrubBusy, which is not fatal, when active readers prevented a
+// complete checkpoint. With PostgreSQL it does nothing: dead tuples remain
+// until VACUUM (threat model T-109).
+func (db *DB) ScrubDeleted(ctx context.Context) error {
+	if db.dialect.scrubDeleted == "" {
+		return nil
+	}
+	var busy, logFrames, checkpointed int64
+	if err := db.write.QueryRowContext(ctx, db.dialect.scrubDeleted).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return wrap("scrub deleted data", err)
+	}
+	if busy != 0 {
+		return ErrScrubBusy
+	}
+	return nil
 }

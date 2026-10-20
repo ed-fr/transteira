@@ -77,6 +77,15 @@ func TestOpen(t *testing.T) {
 		if err := pool.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
 			t.Errorf("%s pool foreign_keys = %d, %v", name, fk, err)
 		}
+		var limit int64
+		if err := pool.QueryRowContext(ctx, "PRAGMA journal_size_limit").Scan(&limit); err != nil || limit != 0 {
+			t.Errorf("%s pool journal_size_limit = %d, %v", name, limit, err)
+		}
+		// secure_delete overwrites deleted content: cryptographic erasure.
+		var secure int
+		if err := pool.QueryRowContext(ctx, "PRAGMA secure_delete").Scan(&secure); err != nil || secure != 1 {
+			t.Errorf("%s pool secure_delete = %d, %v", name, secure, err)
+		}
 	}
 	if _, err := db.read.ExecContext(ctx, "CREATE TABLE x (a INT)"); err == nil {
 		t.Error("the read pool accepted a write")
@@ -130,6 +139,7 @@ func TestClassifyAndWrap(t *testing.T) {
 	}{
 		{&pgconn.PgError{Code: pgUniqueViolation}, ErrConflict},
 		{&pgconn.PgError{Code: pgForeignKeyViolation}, ErrNotFound},
+		{&pgconn.PgError{Code: pgKeyRetired}, ErrKeyRetired},
 		{&pgconn.PgError{Code: "42501"}, nil},
 		{fmt.Errorf("x: %w", &pgconn.PgError{Code: pgUniqueViolation}), ErrConflict},
 		{errors.New("plain"), nil},
@@ -163,11 +173,21 @@ func TestClassifySQLite(t *testing.T) {
 	if _, err := db.write.ExecContext(ctx, `INSERT INTO c (a, b, n) VALUES ('1', '1', 'x')`); err != nil {
 		t.Fatal(err)
 	}
+	for _, trig := range []string{
+		`CREATE TRIGGER c_other BEFORE INSERT ON c WHEN NEW.a = '5' BEGIN SELECT RAISE(ABORT, 'other'); END`,
+		`CREATE TRIGGER c_retired BEFORE INSERT ON c WHEN NEW.a = '6' BEGIN SELECT RAISE(ABORT, '` + retiredKeyMessage + `'); END`,
+	} {
+		if _, err := db.write.ExecContext(ctx, trig); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cases := map[string]error{
 		`INSERT INTO c (a, b, n) VALUES ('1', '2', 'x')`:         ErrConflict, // primary key
 		`INSERT INTO c (a, b, n) VALUES ('2', '1', 'x')`:         ErrConflict, // unique
 		`INSERT INTO c (a, b, f, n) VALUES ('3', '3', 'z', 'x')`: ErrNotFound, // foreign key
 		`INSERT INTO c (a, b) VALUES ('4', '4')`:                 nil,         // not null
+		`INSERT INTO c (a, b, n) VALUES ('5', '5', 'x')`:         nil,         // another trigger
+		`INSERT INTO c (a, b, n) VALUES ('6', '6', 'x')`:         ErrKeyRetired,
 	}
 	for q, want := range cases {
 		_, err := db.write.ExecContext(ctx, q)
@@ -199,6 +219,9 @@ func TestExecutorsRejectBadInput(t *testing.T) {
 		t.Fatalf("Scoped = %v, %v", s, err)
 	}
 	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
+		if tx.Tenant() != tid {
+			t.Errorf("ScopedTx.Tenant() = %q, want %q", tx.Tenant(), tid)
+		}
 		if _, err := tx.Exec(ctx, TenantQuery{}); !errors.Is(err, errQueryUnregistered) {
 			t.Errorf("Exec(zero query) = %v", err)
 		}
@@ -508,7 +531,7 @@ func TestMigrateFaults(t *testing.T) {
 	}
 	plan.reset()
 	// Nothing was half-applied: a clean run applies everything.
-	if n, err := db.Migrate(ctx); err != nil || n != 1 {
+	if n, err := db.Migrate(ctx); err != nil || n != len(mustMigrations(t, db)) {
 		t.Errorf("Migrate after faults = %d, %v", n, err)
 	}
 

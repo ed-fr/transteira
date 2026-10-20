@@ -1495,15 +1495,23 @@ type InvitationStatus string
 
 // KeyRotation defines model for KeyRotation.
 type KeyRotation struct {
-	CompletedAt   *time.Time        `json:"completedAt,omitempty"`
-	Error         *string           `json:"error,omitempty"`
-	FromKeyId     string            `json:"fromKeyId"`
-	Id            string            `json:"id"`
-	RewrappedKeys int               `json:"rewrappedKeys"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+	Error       *string    `json:"error,omitempty"`
+
+	// FromKeyId Identifier of the master key being replaced, derived from the key (not secret).
+	FromKeyId string `json:"fromKeyId"`
+	Id        string `json:"id"`
+
+	// RewrappedKeys Number of wrapped keys rewrapped so far. It can exceed totalKeys when keys were created under the old master key while the rotation was running.
+	RewrappedKeys int64             `json:"rewrappedKeys"`
 	StartedAt     time.Time         `json:"startedAt"`
 	Status        KeyRotationStatus `json:"status"`
-	ToKeyId       string            `json:"toKeyId"`
-	TotalKeys     int               `json:"totalKeys"`
+
+	// ToKeyId Identifier of the new master key, derived from the key (not secret).
+	ToKeyId string `json:"toKeyId"`
+
+	// TotalKeys Number of wrapped keys under the old master key when the rotation started.
+	TotalKeys int64 `json:"totalKeys"`
 }
 
 // KeyRotationStatus defines model for KeyRotation.Status.

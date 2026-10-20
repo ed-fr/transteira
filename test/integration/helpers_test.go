@@ -32,6 +32,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/app"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -109,7 +110,7 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 		config.EnvDataDir:       filepath.Join(root, "data"),
 		config.EnvBackupDir:     filepath.Join(root, "backups"),
 		config.EnvLogDir:        filepath.Join(root, "logs"),
-		config.EnvMasterKeyFile: filepath.Join(keyDir, "master.key"),
+		config.EnvMasterKeyFile: writeMasterKey(t, keyDir),
 		config.EnvListenAddr:    "127.0.0.1:8080", // unused: tests pass app.WithListener
 		config.EnvLogLevel:      "debug",
 		config.EnvClamAVAddr:    o.clamd,
@@ -124,6 +125,14 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 		env[config.EnvMaintenance] = "true"
 	}
 	return env
+}
+
+// writeMasterKey writes a new random master key to dir and returns its
+// path.
+func writeMasterKey(t *testing.T, dir string) string {
+	t.Helper()
+	path, _ := masterkeytest.WriteKeyFile(t, dir)
+	return path
 }
 
 // loadConfig turns env into a validated configuration.

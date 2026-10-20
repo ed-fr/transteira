@@ -318,3 +318,13 @@ func introspect(t *testing.T, db *DB, e storetest.Engine) (cols map[string]strin
 	}
 	return cols, tenantIndexed
 }
+
+// mustMigrations returns the migrations embedded for db's engine.
+func mustMigrations(t *testing.T, db *DB) []migration {
+	t.Helper()
+	known, err := db.migrations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return known
+}

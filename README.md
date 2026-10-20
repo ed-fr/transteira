@@ -33,6 +33,9 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - [API specification](api/openapi.yaml)
 - [Project structure](docs/architecture/project-structure.md)
 - [Threat model (STRIDE, in French)](docs/security/threat-model.md)
+- [Master key](docs/operations/master-key.md): generate the key and store a copy in a password
+  vault **before the first start**; without it, encrypted files cannot be recovered.
+- [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec)
 
 Installation, operation and user guides will be published with the first release.
 

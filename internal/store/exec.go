@@ -64,6 +64,11 @@ type ScopedTx struct {
 	dialect *dialect
 }
 
+// Tenant returns the tenant tx is bound to.
+func (t *ScopedTx) Tenant() tenant.ID {
+	return t.tid
+}
+
 // prepare checks that q is a registered tenant query and returns its SQL text and its full argument list: the
 // caller's arguments with the tenant ID inserted at the tenant slot. It
 // fails unless the caller passed exactly one argument per placeholder other
@@ -140,6 +145,13 @@ func (db *DB) System(reason string) (*System, error) {
 		return nil, invalid("system scope needs a reason")
 	}
 	return &System{db: db, reason: reason}, nil
+}
+
+// systemScope returns the system executor for reason, which must be a
+// non-empty constant: the repositories use it with their declared reasons.
+func (db *DB) systemScope(reason string) *System {
+	s, _ := db.System(reason)
+	return s
 }
 
 // Tx runs fn in a read-write transaction, committed when fn returns nil and

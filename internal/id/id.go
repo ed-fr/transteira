@@ -47,6 +47,9 @@ const (
 	Admin Prefix = "adm"
 	// Rotation identifies a master key rotation run.
 	Rotation Prefix = "rot"
+	// WrappedKey identifies a wrapped (encrypted) data key or secret. It is
+	// internal: the API never exposes it.
+	WrappedKey Prefix = "wk"
 	// Audit identifies an audit log entry.
 	Audit Prefix = "aud"
 	// Request identifies an HTTP request (Problem Details "instance").

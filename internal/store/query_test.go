@@ -367,6 +367,9 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM blocklist_entries WHERE tenant_id = ? AND id = ?`:                                                             0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND ( (kind = 'email' AND value = ?) ` +
 		`OR (kind = 'sha256' AND value = ?) OR (kind = 'domain' AND (value = ? OR ? LIKE ('%.' || value))) ) ORDER BY id`: 0,
+	`INSERT INTO wrapped_keys (tenant_id, id, purpose, key_id, blob, created_at) VALUES (?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + wrappedKeyColumns + ` FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                     0,
+	`DELETE FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                                               0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -433,6 +436,24 @@ var systemAllowlist = map[string]string{
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
 	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, storage_quota_bytes = ?, updated_at = ? WHERE id = ?`:                    reasonTenantAdmin,
 	`DELETE FROM tenants WHERE id = ?`: reasonTenantAdmin,
+	// Master keys (startup check and rotation).
+	`SELECT DISTINCT key_id FROM wrapped_keys ORDER BY key_id`:                                                                                    reasonKeyCheck,
+	`SELECT count(*) FROM wrapped_keys WHERE key_id = ?`:                                                                                          reasonKeyRotation,
+	`SELECT tenant_id, ` + wrappedKeyColumns + ` FROM wrapped_keys WHERE key_id = ? ORDER BY id LIMIT ?`:                                          reasonKeyRotation,
+	`UPDATE wrapped_keys SET blob = ?, key_id = ? WHERE id = ? AND key_id = ?`:                                                                    reasonKeyRotation,
+	`SELECT id, status, created_at, retired_at FROM master_keys ORDER BY created_at, id`:                                                          reasonKeyCheck,
+	`SELECT id FROM master_keys WHERE status = 'active'`:                                                                                          reasonKeyCheck,
+	`SELECT count(*) FROM master_keys`:                                                                                                            reasonKeyCheck,
+	`INSERT INTO master_keys (id, status, created_at, retired_at) VALUES (?, 'active', ?, NULL)`:                                                  reasonKeyCheck,
+	`UPDATE master_keys SET status = 'retired', retired_at = ? WHERE status = 'active' AND id <> ?`:                                               reasonKeyRotation,
+	`SELECT status FROM master_keys WHERE id = ?`:                                                                                                 reasonKeyRotation,
+	`INSERT INTO master_keys (id, status, created_at) VALUES (?, 'active', ?)`:                                                                    reasonKeyRotation,
+	`INSERT INTO key_rotations (id, from_key_id, to_key_id, status, total_keys, rewrapped_keys, started_at) VALUES (?, ?, ?, 'running', ?, 0, ?)`: reasonKeyRotation,
+	`SELECT ` + rotationColumns + ` FROM key_rotations WHERE id = ?`:                                                                              reasonKeyRotation,
+	`SELECT ` + rotationColumns + ` FROM key_rotations WHERE status = 'running'`:                                                                  reasonKeyRotation,
+	`SELECT ` + rotationColumns + ` FROM key_rotations ORDER BY started_at DESC, id DESC LIMIT 1`:                                                 reasonKeyRotation,
+	`UPDATE key_rotations SET rewrapped_keys = rewrapped_keys + ? WHERE id = ? AND status = 'running' AND from_key_id = ? AND to_key_id = ?`:      reasonKeyRotation,
+	`UPDATE key_rotations SET status = ?, completed_at = ?, error = ? WHERE id = ? AND status = 'running'`:                                        reasonKeyRotation,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

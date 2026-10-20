@@ -4,6 +4,7 @@
   "exclude": [
     "internal/api/gen",
     "internal/api/stubs",
+    "internal/masterkey/masterkeytest",
     "internal/store/storetest",
     "internal/testutil"
   ],
@@ -13,6 +14,7 @@
     "internal/authz": 100,
     "internal/crypto": 100,
     "internal/httpserver/middleware": 100,
+    "internal/masterkey": 100,
     "internal/store": 100,
     "internal/tenant": 100
   }

@@ -18,7 +18,8 @@
 transteira/
 ├── cmd/
 │   └── transteira/
-│       └── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
+│       ├── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
+│       └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from
 │
 ├── api/
 │   ├── openapi.yaml                 # Spécification OpenAPI 3.1 (source de vérité)
@@ -55,8 +56,11 @@ transteira/
 │   │                                # (couche d'authentification prévue pour accueillir un fournisseur OIDC en V2)
 │   ├── authz/                       # Rôles et périmètres (super_admin, delegated_admin ; auditor en V2)
 │   ├── apitoken/                    # Jetons d'API par entité (hachés, expiration optionnelle, révocation)
-│   ├── crypto/                      # AES-256-GCM par blocs, enveloppe (DEK chiffrée par la clé maître),
-│   │                                # trousseau de clés maîtres, rotation reprenable, effacement cryptographique
+│   ├── crypto/                      # Primitives pures : clé maître, enveloppe (DEK chiffrée par la clé maître),
+│   │                                # format de fichier AES-256-GCM par blocs, points de reprise tus
+│   ├── masterkey/                   # Trousseau (clé courante + nouvelle), contrôle au démarrage, rotation
+│   │   │                            # reprenable, effacement cryptographique (table wrapped_keys)
+│   │   └── masterkeytest/           # Clés maîtres et fichiers de clé pour les tests (hors seuils de couverture)
 │   ├── storage/                     # Stockage des fichiers : un dossier par tenant, noms aléatoires, écriture atomique
 │   ├── antivirus/                   # Client clamd (INSTREAM), file d'analyse, gestion des fichiers trop gros
 │   ├── notify/                      # Rendu des mails (modèles par entité et par langue), envoi SMTP, QR code CID
@@ -113,6 +117,8 @@ transteira/
 │
 ├── test/
 │   ├── integration/                 # Parcours complets contre un serveur réel (SQLite et PostgreSQL)
+│   │   ├── masterkey_test.go        # Cycle de vie de la clé maître, effacement cryptographique, reprise chiffrée
+│   │   └── recover_test.go          # Clés restées sous une clé retirée : refus au démarrage, -recover-from
 │   ├── contract/                    # Validation de chaque requête / réponse contre openapi.yaml (kin-openapi)
 │   ├── isolation/                   # Cloisonnement : chaque opération de la spécification est rejouée depuis un autre tenant
 │   ├── e2e/                         # Playwright (navigateur réel) + génération des captures pour docs/user
@@ -144,7 +150,8 @@ transteira/
 │   │   ├── en/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md
 │   │   └── screenshots/             # Générées par Playwright (ne pas modifier à la main)
 │   ├── install/                     # Docker, reverse proxy, SMTP (dont relais vers Microsoft 365), première installation
-│   ├── operations/                  # Sauvegarde / restauration, rotation de la clé maître, maintenance, journaux
+│   ├── operations/                  # master-key.md (clé maître, rotation), security-log.md ; à venir :
+│   │                                # sauvegarde / restauration, maintenance
 │   ├── security/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/
@@ -191,7 +198,8 @@ transteira/
 ### 3.2 Chiffrement (§16.1)
 
 - `internal/crypto` ne dépend d'aucun autre package interne, ce qui permet de le tester isolément à 100 %.
-- Format de fichier sur disque : en-tête versionné (identifiant de clé, taille de bloc), puis blocs AES-256-GCM, chacun avec un nonce dérivé (préfixe aléatoire + compteur) et un drapeau « dernier bloc » dans les données authentifiées, pour empêcher la troncature et la permutation des blocs.
+- `internal/masterkey` regroupe ce qui touche la base (trousseau, contrôle au démarrage, rotation) et s'appuie sur `internal/crypto` et `internal/store`.
+- Format de fichier sur disque (décision P7) : en-tête versionné de 16 octets (`TTEF`, version, taille de bloc, préfixe de nonce aléatoire de 7 octets), puis blocs AES-256-GCM. Nonce = préfixe | compteur 32 bits | octet « dernier bloc » ; données authentifiées = en-tête | tenant | identifiant de fichier. Le dernier bloc est toujours présent, ce qui empêche troncature et permutation. L'identifiant de la clé maître n'est pas dans le fichier mais sur la ligne `wrapped_keys` de la DEK, ce qui permet la rotation sans réécrire les fichiers. Spécification complète : GoDoc de `internal/crypto`.
 
 ### 3.3 Upload tus et base de données (§8.6, §17)
 

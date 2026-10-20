@@ -4,7 +4,9 @@
 //
 //	serve              Start the HTTP server (public, administration and API spaces).
 //	migrate            Apply the versioned database schema migrations.
-//	rotate-master-key  Re-encrypt the per-file keys with a new master key.
+//	rotate-master-key  Re-wrap the stored keys with the new master key (resumable;
+//	                   -abandon gives up a rotation, -recover-from re-wraps keys
+//	                   left under a retired key).
 //	backup             Write a consistent copy of the database to the backup volume.
 //	healthcheck        Probe the running server (Docker HEALTHCHECK without a shell).
 //	version            Print the build version (--json for machine-readable output).
@@ -56,7 +58,7 @@ func commands() []command {
 	return []command{
 		{"serve", "Start the HTTP server (stops on SIGINT or SIGTERM)", runServe},
 		{"migrate", "Apply the database schema migrations (--status to only print them)", runMigrate},
-		{"rotate-master-key", "Re-encrypt the per-file keys with a new master key", notImplemented("rotate-master-key")},
+		{"rotate-master-key", "Re-wrap the stored keys with the new master key of TT_MASTER_KEY_NEW_FILE (resumable)", runRotateMasterKey},
 		{"backup", "Write a consistent copy of the database to the backup volume", notImplemented("backup")},
 		{"healthcheck", "Probe the running server and exit non-zero when unhealthy (--url to override)", runHealthcheck},
 		{"version", "Print the build version (--json for JSON output)", runVersion},

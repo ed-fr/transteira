@@ -52,6 +52,22 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `internal/ratelimit` (keyed token buckets and sliding lockout windows whose locked entries are
   never evicted) and `tools/genstubs` (generated not-implemented stubs for every API operation).
 - Problem code `method-not-allowed` (405).
+- `internal/crypto`: master key file (base64, 32 bytes; degenerate keys refused) with a derived,
+  non-secret key ID; envelope encryption of per-file keys and secrets (AES-256-GCM, per-purpose
+  HKDF keys, AAD binding purpose, tenant and row); chunked AES-256-GCM file format (STREAM
+  construction, decision P7) with sequential and random-access (HTTP Range) readers, and
+  resumable checkpoints that seal the pending tail and caller data under a separate subkey and
+  never reuse a nonce; reference test vectors checked by an independent standard-library test.
+- Migration `0002_encryption`: `wrapped_keys` (tenant-scoped, row-level security),
+  `master_keys` (readable by tenants, IDs are not secret) and `key_rotations`; triggers refusing
+  to wrap a key under a retired master key; SQLite `secure_delete` and WAL truncation after
+  crypto-erase (`DB.ScrubDeleted`).
+- `internal/masterkey`: keyring, vault (seal, open and destroy wrapped keys, also inside a tenant
+  transaction), startup key check (start refused on missing, retired or unregistered keys and on
+  inconsistent rotations) and resumable `transteira rotate-master-key`, with `-abandon` and
+  `-recover-from` (re-wrap keys left under a retired key without loading it into the server).
+- `docs/operations/master-key.md`: key generation, storage, rotation, recovery, crypto-erase
+  limits for backups, backup and restore; README links to it.
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -62,5 +78,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - OpenAPI: entity identifier patterns follow the strict ULID format
   (`^<prefix>_[0-7][0-9A-HJKMNP-TV-Z]{25}$`); `vch_` and `upl_` tokens carry at least 128 bits;
   FQDNs may end with a punycode label.
+- OpenAPI: `KeyRotation` identifiers follow the real formats (`rot_…`, `mk_` + 16 hex characters)
+  and its counters are documented 64-bit integers.
+- Test PostgreSQL allows 300 connections (parallel test packages).
 - Tenant queries may reference `tenant_id` only in the tenant slot; an alias named `tenant_id` is
   refused.
