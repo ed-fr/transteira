@@ -45,8 +45,8 @@ func TestVariablesMatchLoad(t *testing.T) {
 	// Several environments exercise every code path (postgres, files...).
 	envs := []map[string]string{
 		nil,
-		{EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://x", EnvSetupToken: fakeToken},
-		{EnvDBDSNFile: "/nonexistent", EnvSetupTokenFile: "/nonexistent", EnvMasterKeyNewFile: "/run/k2"},
+		{EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://x", EnvDBMigrateDSN: "postgres://y", EnvSetupToken: fakeToken},
+		{EnvDBDSNFile: "/nonexistent", EnvDBMigrateDSNFile: "/nonexistent", EnvSetupTokenFile: "/nonexistent", EnvMasterKeyNewFile: "/run/k2"},
 	}
 	read := make(map[string]bool)
 	for _, vars := range envs {

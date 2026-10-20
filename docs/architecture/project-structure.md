@@ -68,14 +68,16 @@ transteira/
 │   ├── stats/                       # Statistiques par entité et globales, espace disque
 │   ├── i18n/                        # Négociation de langue, chargement des traductions
 │   │
-│   ├── store/                       # Couche d'accès aux données
-│   │   ├── store.go                 # Interfaces des dépôts ; chaque méthode exige un tenant.ID
-│   │   ├── scoped.go                # Exécuteur de requêtes qui impose le filtre tenant_id
-│   │   ├── sqlite/                  # Implémentation SQLite (WAL)
-│   │   │   └── migrations/          # 0001_init.up.sql, … (versionnées, appliquées au démarrage)
-│   │   ├── postgres/                # Implémentation PostgreSQL (row-level security via SET LOCAL app.tenant_id)
-│   │   │   └── migrations/
-│   │   └── storetest/               # Suite de conformité commune exécutée sur les deux moteurs
+│   ├── store/                       # Couche d'accès aux données (database/sql, SQLite et PostgreSQL)
+│   │   ├── query.go, lexer.go       # Registre des requêtes : tenantQuery (exactement un `tenant_id = ?`) / systemQuery (liste blanche)
+│   │   ├── exec.go                  # Exécuteurs typés Scoped(tenant.ID) et System(raison), injection du tenant
+│   │   ├── dialect.go               # Différences de moteur (placeholders, pragmas SQLite, set_config PostgreSQL)
+│   │   ├── migrate.go               # Migrateur (checksum, verrou, refus d'une base plus récente)
+│   │   ├── tenants.go, networkrules.go, blocklist.go, … # Dépôts ; chaque méthode à portée d'entité exige un tenant.ID
+│   │   ├── migrations/
+│   │   │   ├── sqlite/              # 0001_init.sql, … (versionnées, appliquées au démarrage)
+│   │   │   └── postgres/            # Mêmes versions ; ENABLE + FORCE ROW LEVEL SECURITY
+│   │   └── storetest/               # Moteurs de test (SQLite + PostgreSQL) pour les suites communes
 │   │
 │   └── testutil/                    # Fabriques de données, horloge simulée, SMTP de test, clamd simulé
 │
@@ -171,8 +173,9 @@ transteira/
 ### 3.1 Cloisonnement au plus bas niveau (§5)
 
 - Le tenant est résolu une seule fois par le middleware (en-tête `Host`) puis placé dans le contexte. `tenant.ID` est un **type dédié** qui ne s'obtient que par `tenant.FromContext` ou par le code d'administration, après contrôle du périmètre de l'admin.
-- Chaque méthode de dépôt dans `internal/store` prend un `tenant.ID` en **paramètre obligatoire**. L'exécuteur de `scoped.go` ajoute systématiquement `tenant_id = ?` aux requêtes. Une requête sans tenant n'est possible que via un exécuteur « système » explicite, réservé au nettoyage, aux statistiques globales et à la rotation de clé, et repéré par le linter.
-- Avec PostgreSQL, chaque transaction exécute `SET LOCAL app.tenant_id`, et des politiques RLS doublent le filtre.
+- Chaque méthode de dépôt à portée d'entité dans `internal/store` prend un `tenant.ID` en **paramètre obligatoire**.
+- Chaque requête SQL est déclarée dans un registre. Une `tenantQuery` doit contenir **exactement un** prédicat `tenant_id = ?` au premier niveau du `WHERE` (relié par `AND`), ou la colonne `tenant_id` d'un `INSERT`. Elle est validée au chargement du package, et l'exécuteur `Scoped` y injecte lui-même l'identifiant d'entité. Une `systemQuery` n'est exécutable que par l'exécuteur `System`, et la liste de ces requêtes est figée par un test. Les deux types sont distincts : le compilateur empêche de les mélanger.
+- Avec PostgreSQL, chaque transaction exécute `set_config('app.tenant_id', …, true)`, limité à la transaction, et des politiques RLS (`ENABLE` + `FORCE ROW LEVEL SECURITY`) doublent le filtre. Deux rôles : un rôle propriétaire (`TT_DB_MIGRATE_DSN`) qui applique les migrations et accorde les droits, et un rôle d'exécution (`TT_DB_DSN`) qui ne possède rien. Au démarrage, `store.Verify` refuse tout rôle d'exécution dangereux (voir `docs/install/postgresql.md`). Sous SQLite, le registre de requêtes est la seule couche.
 - `test/isolation` parcourt **toutes les opérations déclarées dans `openapi.yaml`** et vérifie qu'un appel depuis un autre tenant échoue. Un nouvel endpoint est donc couvert d'office.
 
 ### 3.2 Chiffrement (§16.1)

@@ -12,6 +12,8 @@ const (
 	EnvDBDriver                 = "TT_DB_DRIVER"
 	EnvDBDSN                    = "TT_DB_DSN"
 	EnvDBDSNFile                = "TT_DB_DSN_FILE"
+	EnvDBMigrateDSN             = "TT_DB_MIGRATE_DSN"
+	EnvDBMigrateDSNFile         = "TT_DB_MIGRATE_DSN_FILE"
 	EnvDataDir                  = "TT_DATA_DIR"
 	EnvBackupDir                = "TT_BACKUP_DIR"
 	EnvLogDir                   = "TT_LOG_DIR"
@@ -89,6 +91,22 @@ func Variables() []Var {
 			Description: "Path of a file (e.g. a Docker secret) containing the database connection " +
 				"string. Preferred over " + EnvDBDSN + " for postgres since it keeps the password " +
 				"out of the environment.",
+		},
+		{
+			Name: EnvDBMigrateDSN, Group: "Database", Secret: true,
+			Description: "PostgreSQL only (refused with sqlite): connection string of the owner " +
+				"role, used only to apply migrations and grant DML rights to the runtime role. " +
+				"Needed only by the process that applies migrations (transteira migrate, or serve " +
+				"when it migrates at startup); migrations fail with a clear error when it is " +
+				"absent. Prefer a one-shot migrate container so that the long-running server " +
+				"never holds the owner credentials. " + EnvDBDSN + " must use a different role " +
+				"that owns no table, is not superuser and has no BYPASSRLS, so that it cannot " +
+				"disable row-level security. Mutually exclusive with " + EnvDBMigrateDSNFile + ".",
+		},
+		{
+			Name: EnvDBMigrateDSNFile, Group: "Database",
+			Description: "Path of a file (e.g. a Docker secret) containing the migration connection " +
+				"string (alternative to " + EnvDBMigrateDSN + ").",
 		},
 		{
 			Name: EnvDataDir, Group: "Storage", Default: DefaultDataDir,

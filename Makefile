@@ -16,6 +16,15 @@ RACE := $(if $(shell command -v gcc 2>/dev/null),-race,)
 
 GITLEAKS    := $(GO) run github.com/zricethezav/gitleaks/v8@v8.30.1
 
+# Throwaway PostgreSQL for the tests (test/README.md). Local fake credentials.
+TEST_COMPOSE      := docker compose -f test/docker-compose.test.yml
+# App role (DML only) and owner role (runs migrations, owns the schema objects).
+TEST_POSTGRES_DSN         ?= postgres://transteira_app:transteira_app@127.0.0.1:55432/transteira_test?sslmode=disable
+TEST_POSTGRES_MIGRATE_DSN ?= postgres://transteira_owner:transteira_owner@127.0.0.1:55432/transteira_test?sslmode=disable
+# Test container superuser, only used by isolation tests that need to create extra roles.
+TEST_POSTGRES_SUPERUSER_DSN ?= postgres://transteira_test:transteira_test@127.0.0.1:55432/transteira_test?sslmode=disable
+GO_TEST           := $(GO) test $(RACE) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
+
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # SemVer without the leading "v": the exact tag of HEAD when there is one, a dev version otherwise.
 VERSION ?= $(or $(shell git describe --tags --exact-match 2>/dev/null | sed 's/^v//'),0.0.0-dev+$(COMMIT))
@@ -26,12 +35,13 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
 .PHONY: help check fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
-	test cover env-example env-example-check build hooks test-pg e2e bigfile clean
+	test test-sqlite test-pg test-env-up test-env-down cover env-example env-example-check build hooks \
+	e2e bigfile clean
 
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-18s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
-# test-pg, e2e and bigfile join this list when the database, web and upload layers arrive.
+# `test` covers SQLite and PostgreSQL. e2e and bigfile join this list when the web and upload layers arrive.
 check: fmt-check vet lint vuln secrets api-lint generate-check env-example-check test cover ## Run every quality gate (must be green before each commit)
 	@echo "make check: ALL GREEN"
 
@@ -68,8 +78,22 @@ generate-check: ## Fail if generated code is out of date
 		echo "internal/api/gen is out of date: run 'make generate'"; exit 1; \
 	fi; echo "generated code is up to date"
 
-test: ## Unit and integration tests with coverage
-	$(GO) test $(RACE) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
+test: test-env-up ## Unit and integration tests with coverage, on SQLite and PostgreSQL
+	TT_TEST_POSTGRES_DSN='$(TEST_POSTGRES_DSN)' \
+	TT_TEST_POSTGRES_MIGRATE_DSN='$(TEST_POSTGRES_MIGRATE_DSN)' \
+	TT_TEST_POSTGRES_SUPERUSER_DSN='$(TEST_POSTGRES_SUPERUSER_DSN)' \
+	TT_TEST_REQUIRE_POSTGRES=1 $(GO_TEST)
+
+test-pg: test ## Alias of test (PostgreSQL is mandatory there)
+
+test-sqlite: ## Quick loop: tests without PostgreSQL (not part of check)
+	$(GO_TEST)
+
+test-env-up: ## Start the test PostgreSQL and wait until healthy
+	$(TEST_COMPOSE) up -d --wait postgres
+
+test-env-down: ## Stop the test PostgreSQL and drop its volumes
+	$(TEST_COMPOSE) down -v
 
 cover: ## Enforce coverage thresholds (CLAUDE.md section 24.3)
 	$(GO) run ./tools/covercheck -profile $(COVERPROFILE) -config tools/covercheck/thresholds.json
@@ -91,9 +115,6 @@ hooks: ## Install the local git hooks (gitleaks on pre-push)
 	chmod +x scripts/hooks/*
 	git config core.hooksPath scripts/hooks
 	@echo "git hooks installed (core.hooksPath=scripts/hooks)"
-
-test-pg: ## Run the test suite on PostgreSQL (not available yet)
-	@echo "test-pg: NOT AVAILABLE YET (database layer arrives in a later step)"
 
 e2e: ## Playwright end-to-end tests (not available yet)
 	@echo "e2e: NOT AVAILABLE YET (web interface arrives in a later step)"

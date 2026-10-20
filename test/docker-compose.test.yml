@@ -1,0 +1,38 @@
+# TransTeira - local test environment (used by `make test`, see test/README.md).
+# Separate from any production compose file; nothing here is meant for deployment.
+name: transteira-test
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    # TEST-ONLY credentials: this throwaway database listens on loopback only
+    # and holds no real data. Never reuse these values anywhere else.
+    environment:
+      POSTGRES_USER: transteira_test
+      POSTGRES_PASSWORD: transteira_test
+      POSTGRES_DB: transteira_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    # Data lives in memory: every `down` / restart starts from an empty cluster.
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      # Creates the non-superuser role the tests connect as (see the script).
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    # Durability is pointless for a disposable test database: trade it for speed.
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+    healthcheck:
+      # TCP on purpose: the entrypoint's temporary init server only listens on
+      # the Unix socket, so the check turns healthy once init scripts are done.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "transteira_test", "-d", "transteira_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+      start_period: 5s

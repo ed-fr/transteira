@@ -95,11 +95,24 @@ func TestLoadValid(t *testing.T) {
 	}{
 		{
 			name: "postgres with DSN",
-			vars: map[string]string{EnvDBDriver: " Postgres ", EnvDBDSN: "postgres://u:p@db/tt"},
+			vars: map[string]string{
+				EnvDBDriver: " Postgres ", EnvDBDSN: "postgres://u:p@db/tt", EnvDBMigrateDSN: "postgres://owner@db/tt",
+			},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.DBDriver != DriverPostgres || c.DBDSN.Reveal() != "postgres://u:p@db/tt" {
+				if c.DBDriver != DriverPostgres || c.DBDSN.Reveal() != "postgres://u:p@db/tt" ||
+					c.DBMigrateDSN.Reveal() != "postgres://owner@db/tt" {
 					t.Errorf("got driver %q dsn %q", c.DBDriver, c.DBDSN.Reveal())
+				}
+			},
+		},
+		{
+			name: "postgres without migrate DSN (runtime server)",
+			vars: map[string]string{EnvDBDriver: "postgres", EnvDBDSN: "postgres://app@db/tt"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.DBMigrateDSN.IsSet() {
+					t.Error("DBMigrateDSN unexpectedly set")
 				}
 			},
 		},
@@ -236,7 +249,27 @@ func TestLoadInvalid(t *testing.T) {
 		want []string
 	}{
 		{"unknown driver", map[string]string{EnvDBDriver: "mysql"}, []string{EnvDBDriver}},
-		{"postgres without DSN", map[string]string{EnvDBDriver: "postgres"}, []string{EnvDBDSN}},
+		{"postgres without DSNs", map[string]string{EnvDBDriver: "postgres"}, []string{EnvDBDSN}},
+		{
+			"migrate DSN equals DSN",
+			map[string]string{EnvDBDriver: "postgres", EnvDBDSN: "postgres://db/tt", EnvDBMigrateDSN: "postgres://db/tt"},
+			[]string{EnvDBMigrateDSN},
+		},
+		{
+			"migrate DSN and file",
+			map[string]string{
+				EnvDBDriver: "postgres", EnvDBDSN: "postgres://app@db/tt",
+				EnvDBMigrateDSN: "postgres://owner@db/tt", EnvDBMigrateDSNFile: "/x",
+			},
+			[]string{EnvDBMigrateDSN},
+		},
+		{"migrate DSN with sqlite", map[string]string{EnvDBMigrateDSN: "/x.db"}, []string{EnvDBMigrateDSN}},
+		{
+			"migrate DSN file with sqlite",
+			map[string]string{EnvDBMigrateDSNFile: "/nonexistent/m"},
+			[]string{EnvDBMigrateDSNFile},
+		},
+		{"bad driver with migrate DSN", map[string]string{EnvDBDriver: "mysql", EnvDBMigrateDSN: "x"}, []string{EnvDBDriver}},
 		{"DSN and DSN file", map[string]string{EnvDBDSN: "x", EnvDBDSNFile: "/x"}, []string{EnvDBDSN}},
 		{"relative DSN file", map[string]string{EnvDBDSNFile: "secret.txt"}, []string{EnvDBDSNFile}},
 		{"missing DSN file", map[string]string{EnvDBDSNFile: "/nonexistent/dsn"}, []string{EnvDBDSNFile}},
@@ -376,7 +409,9 @@ func TestSecretsNeverInErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := []map[string]string{
-		{EnvDBDSN: dsn, EnvDBDSNFile: "/x", EnvDBDriver: "postgres"},
+		{EnvDBDSN: dsn, EnvDBDSNFile: "/x", EnvDBDriver: "postgres", EnvDBMigrateDSN: dsn},
+		{EnvDBDSN: dsn, EnvDBDriver: "postgres", EnvDBMigrateDSN: dsn},
+		{EnvDBMigrateDSN: dsn},
 		{EnvSetupToken: token},
 		{EnvSetupToken: "SuperSecret"},
 		{EnvSetupTokenFile: tokenFile},
@@ -400,14 +435,16 @@ func TestSecretFiles(t *testing.T) {
 		return p
 	}
 	dsnFile := write("dsn", "postgres://u:p@db/tt\n")
+	migrateFile := write("migrate", "postgres://owner@db/tt\n")
 	tokenFile := write("token", "  "+fakeToken+"xxxx\r\n")
 	emptyFile := write("empty", " \n")
 	shortFile := write("short", "abc")
 
 	c := mustLoad(t, map[string]string{
 		EnvDBDriver: "postgres", EnvDBDSNFile: dsnFile, EnvSetupTokenFile: tokenFile,
+		EnvDBMigrateDSNFile: migrateFile,
 	})
-	if c.DBDSN.Reveal() != "postgres://u:p@db/tt" {
+	if c.DBDSN.Reveal() != "postgres://u:p@db/tt" || c.DBMigrateDSN.Reveal() != "postgres://owner@db/tt" {
 		t.Errorf("DSN from file = %q", c.DBDSN.Reveal())
 	}
 	if c.SetupToken.Reveal() != fakeToken+"xxxx" {
@@ -420,6 +457,7 @@ func TestSecretFiles(t *testing.T) {
 		want string
 	}{
 		{"empty DSN file", map[string]string{EnvDBDSNFile: emptyFile}, EnvDBDSNFile},
+		{"migrate DSN file with sqlite", map[string]string{EnvDBMigrateDSNFile: migrateFile}, EnvDBMigrateDSNFile},
 		{"empty token file", map[string]string{EnvSetupTokenFile: emptyFile}, EnvSetupTokenFile},
 		{"short token file", map[string]string{EnvSetupTokenFile: shortFile}, EnvSetupTokenFile},
 		{"missing token file", map[string]string{EnvSetupTokenFile: filepath.Join(dir, "none")}, EnvSetupTokenFile},
@@ -441,7 +479,9 @@ func TestWithReadFile(t *testing.T) {
 		asked = name
 		return []byte("postgres://from-fake"), nil
 	}
-	c := mustLoad(t, map[string]string{EnvDBDriver: "postgres", EnvDBDSNFile: "/run/secrets/dsn"}, WithReadFile(read))
+	c := mustLoad(t, map[string]string{
+		EnvDBDriver: "postgres", EnvDBDSNFile: "/run/secrets/dsn", EnvDBMigrateDSN: "postgres://owner@db/tt",
+	}, WithReadFile(read))
 	if c.DBDSN.Reveal() != "postgres://from-fake" || asked != filepath.Clean("/run/secrets/dsn") {
 		t.Errorf("DSN = %q, asked = %q", c.DBDSN.Reveal(), asked)
 	}
@@ -476,7 +516,10 @@ func TestMasterKeySQLiteFolder(t *testing.T) {
 	}
 	// Not applicable to postgres, in-memory or relative SQLite databases.
 	for _, vars := range []map[string]string{
-		{EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://db/tt", EnvMasterKeyFile: "/var/lib/transteira/db/k"},
+		{
+			EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://db/tt", EnvDBMigrateDSN: "postgres://owner@db/tt",
+			EnvMasterKeyFile: "/var/lib/transteira/db/k",
+		},
 		{EnvDBDSN: ":memory:", EnvMasterKeyFile: "/var/lib/transteira/db/k"},
 		{EnvDBDSN: "file::memory:?cache=shared", EnvMasterKeyFile: "/var/lib/transteira/db/k"},
 		{EnvDBDSN: "tt.db", EnvMasterKeyFile: "/var/lib/transteira/db/k"},

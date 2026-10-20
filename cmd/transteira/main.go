@@ -55,7 +55,7 @@ type command struct {
 func commands() []command {
 	return []command{
 		{"serve", "Start the HTTP server", notImplemented("serve")},
-		{"migrate", "Apply the database schema migrations", notImplemented("migrate")},
+		{"migrate", "Apply the database schema migrations (--status to only print them)", runMigrate},
 		{"rotate-master-key", "Re-encrypt the per-file keys with a new master key", notImplemented("rotate-master-key")},
 		{"backup", "Write a consistent copy of the database to the backup volume", notImplemented("backup")},
 		{"healthcheck", "Probe the running server and exit non-zero when unhealthy", notImplemented("healthcheck")},

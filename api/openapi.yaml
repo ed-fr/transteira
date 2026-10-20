@@ -324,7 +324,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/VerificationChallenge' }
               example:
-                challengeId: vch_4Fq9Lm2Zx8Rt6Yb1
+                challengeId: vch_4Fq9Lm2Zx8Rt6Yb1Kd7Pw3
                 email: alice@entity-a.example.com
                 expiresAt: '2026-10-19T16:15:00Z'
                 attemptsRemaining: 2
@@ -529,7 +529,7 @@ paths:
                     uploadUrl: /api/v1/uploads/upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd
                     uploadOffset: 0
                     scanStatus: pending
-                  - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                  - id: fil_01JABCDA0K112M3N4P5Q6R7S8T
                     name: site-survey.mp4
                     size: 12884901888
                     mediaType: video/mp4
@@ -585,7 +585,7 @@ paths:
                     mediaType: application/pdf
                     sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
                     scanStatus: clean
-                  - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                  - id: fil_01JABCDA0K112M3N4P5Q6R7S8T
                     name: site-survey.mp4
                     size: 12884901888
                     mediaType: video/mp4
@@ -689,7 +689,7 @@ paths:
                     title: Upload incomplete
                     status: 409
                     code: upload-incomplete
-                    files: [fil_01JABCDA0K1L2M3N4P5Q6R7S8T]
+                    files: [fil_01JABCDA0K112M3N4P5Q6R7S8T]
                 checksum:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#checksum-mismatch
@@ -854,7 +854,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Invitation' }
               example:
-                id: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+                id: inv_01JABCF0Z9Y8X7W6V5V4T3S2R1
                 email: bob@partner.example.org
                 invitedBy: alice@entity-a.example.com
                 status: pending
@@ -935,13 +935,13 @@ paths:
                         sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
                         scanStatus: clean
                         downloadUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/files/fil_01JABCD9F1A2B3C4D5E6F7G8H9
-                      - id: fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                      - id: fil_01JABCDA0K112M3N4P5Q6R7S8T
                         name: site-survey.mp4
                         size: 12884901888
                         mediaType: video/mp4
                         sha256: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
                         scanStatus: not_scanned_too_large
-                        downloadUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/files/fil_01JABCDA0K1L2M3N4P5Q6R7S8T
+                        downloadUrl: /api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/files/fil_01JABCDA0K112M3N4P5Q6R7S8T
                 locked:
                   value:
                     senderEmail: alice@entity-a.example.com
@@ -1268,13 +1268,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AdminMe' }
               example:
-                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                id: adm_01JABCG1H2J3K415M6N7P8Q9R0
                 username: admin.entity-a
                 email: admin@entity-a.example.com
                 role: delegated_admin
                 totpEnabled: true
                 tenants:
-                  - { id: ten_01JAB00000000000000ENTITYA, name: Entity A, fqdn: transfer.entity-a.example.com }
+                  - { id: ten_01JAB00000000000000ENT1TYA, name: Entity A, fqdn: transfer.entity-a.example.com }
                 csrfToken: csrf_Zx98Yw76Vu54Ts32
                 language: en
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1398,7 +1398,7 @@ paths:
               schema: { $ref: '#/components/schemas/TenantList' }
               example:
                 items:
-                  - id: ten_01JAB00000000000000ENTITYA
+                  - id: ten_01JAB00000000000000ENT1TYA
                     name: Entity A
                     fqdn: transfer.entity-a.example.com
                     defaultLanguage: fr
@@ -1435,7 +1435,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB00000000000000ENTITYB
+                id: ten_01JAB00000000000000ENT1TYB
                 name: Entity B
                 fqdn: transfer.entity-b.example.com
                 defaultLanguage: en
@@ -1467,7 +1467,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB00000000000000ENTITYA
+                id: ten_01JAB00000000000000ENT1TYA
                 name: Entity A
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: fr
@@ -1503,7 +1503,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
               example:
-                id: ten_01JAB00000000000000ENTITYA
+                id: ten_01JAB00000000000000ENT1TYA
                 name: Entity A
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: en
@@ -2215,7 +2215,7 @@ paths:
               schema: { $ref: '#/components/schemas/InvitationList' }
               example:
                 items:
-                  - id: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+                  - id: inv_01JABCF0Z9Y8X7W6V5V4T3S2R1
                     email: bob@partner.example.org
                     invitedBy: alice@entity-a.example.com
                     status: pending
@@ -2232,8 +2232,8 @@ paths:
         in: path
         description: "Invitation identifier."
         required: true
-        schema: { type: string, pattern: '^inv_[0-9A-Z]{26}$' }
-        example: inv_01JABCF0Z9Y8X7W6V5U4T3S2R1
+        schema: { type: string, pattern: '^inv_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+        example: inv_01JABCF0Z9Y8X7W6V5V4T3S2R1
     delete:
       tags: [Admin operations]
       operationId: revokeInvitation
@@ -2274,8 +2274,8 @@ paths:
               schema: { $ref: '#/components/schemas/BlocklistList' }
               example:
                 items:
-                  - { id: blk_01JABCH2J3K4L5M6N7P8Q9R0S1, kind: domain, value: spam.example.net, comment: Repeated abuse, createdBy: admin.entity-a, createdAt: '2026-10-10T08:00:00Z' }
-                  - { id: blk_01JABCH3K4L5M6N7P8Q9R0S1T2, kind: sha256, value: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f, comment: Known malware sample, createdBy: admin.entity-a, createdAt: '2026-10-11T08:00:00Z' }
+                  - { id: blk_01JABCH2J3K415M6N7P8Q9R0S1, kind: domain, value: spam.example.net, comment: Repeated abuse, createdBy: admin.entity-a, createdAt: '2026-10-10T08:00:00Z' }
+                  - { id: blk_01JABCH3K415M6N7P8Q9R0S1T2, kind: sha256, value: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f, comment: Known malware sample, createdBy: admin.entity-a, createdAt: '2026-10-11T08:00:00Z' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2299,7 +2299,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BlocklistEntry' }
-              example: { id: blk_01JABCH4L5M6N7P8Q9R0S1T2U3, kind: email, value: mallory@example.net, comment: Phishing attempts, createdBy: admin.entity-a, createdAt: '2026-10-19T16:15:00Z' }
+              example: { id: blk_01JABCH415M6N7P8Q9R0S1T2V3, kind: email, value: mallory@example.net, comment: Phishing attempts, createdBy: admin.entity-a, createdAt: '2026-10-19T16:15:00Z' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2313,8 +2313,8 @@ paths:
         in: path
         description: "Blocklist entry identifier."
         required: true
-        schema: { type: string, pattern: '^blk_[0-9A-Z]{26}$' }
-        example: blk_01JABCH4L5M6N7P8Q9R0S1T2U3
+        schema: { type: string, pattern: '^blk_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+        example: blk_01JABCH415M6N7P8Q9R0S1T2V3
     delete:
       tags: [Admin operations]
       operationId: deleteBlocklistEntry
@@ -2348,7 +2348,7 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/ApiToken' }
               example:
-                - id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                - id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                   name: Nightly ERP export
                   prefix: tt_9fK2
                   allowedCidrs: [10.10.20.15/32]
@@ -2390,7 +2390,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ApiTokenCreated' }
               example:
-                id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                 name: Nightly ERP export
                 prefix: tt_9fK2
                 allowedCidrs: [10.10.20.15/32]
@@ -2412,8 +2412,8 @@ paths:
         in: path
         description: "API token identifier."
         required: true
-        schema: { type: string, pattern: '^tok_[0-9A-Z]{26}$' }
-        example: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+        schema: { type: string, pattern: '^tok_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+        example: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
     patch:
       tags: [Admin operations]
       operationId: updateApiToken
@@ -2435,7 +2435,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ApiToken' }
               example:
-                id: tok_01JABCJ5M6N7P8Q9R0S1T2U3V4
+                id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                 name: Nightly ERP export
                 prefix: tt_9fK2
                 allowedCidrs: [10.10.20.16/32]
@@ -2504,9 +2504,9 @@ paths:
               schema: { $ref: '#/components/schemas/AuditEventList' }
               example:
                 items:
-                  - id: aud_01JABCK6N7P8Q9R0S1T2U3V4W5
+                  - id: aud_01JABCK6N7P8Q9R0S1T2V3V4W5
                     occurredAt: '2026-10-19T16:20:00Z'
-                    tenantId: ten_01JAB00000000000000ENTITYA
+                    tenantId: ten_01JAB00000000000000ENT1TYA
                     actor: { kind: depositor, id: alice@entity-a.example.com }
                     ip: 10.10.4.21
                     action: transfer.finalized
@@ -2651,11 +2651,11 @@ paths:
               schema: { $ref: '#/components/schemas/AdminList' }
               example:
                 items:
-                  - id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                  - id: adm_01JABCG1H2J3K415M6N7P8Q9R0
                     username: admin.entity-a
                     email: admin@entity-a.example.com
                     role: delegated_admin
-                    tenantIds: [ten_01JAB00000000000000ENTITYA]
+                    tenantIds: [ten_01JAB00000000000000ENT1TYA]
                     totpEnabled: true
                     disabled: false
                     lastLoginAt: '2026-10-19T08:30:00Z'
@@ -2682,7 +2682,7 @@ paths:
               username: admin.entity-b
               email: admin@entity-b.example.com
               role: delegated_admin
-              tenantIds: [ten_01JAB00000000000000ENTITYB]
+              tenantIds: [ten_01JAB00000000000000ENT1TYB]
               requireTotp: true
       responses:
         '201':
@@ -2691,11 +2691,11 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Admin' }
               example:
-                id: adm_01JABCL7P8Q9R0S1T2U3V4W5X6
+                id: adm_01JABC17P8Q9R0S1T2V3V4W5X6
                 username: admin.entity-b
                 email: admin@entity-b.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB00000000000000ENTITYB]
+                tenantIds: [ten_01JAB00000000000000ENT1TYB]
                 totpEnabled: false
                 requireTotp: true
                 disabled: false
@@ -2724,11 +2724,11 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Admin' }
               example:
-                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                id: adm_01JABCG1H2J3K415M6N7P8Q9R0
                 username: admin.entity-a
                 email: admin@entity-a.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB00000000000000ENTITYA]
+                tenantIds: [ten_01JAB00000000000000ENT1TYA]
                 totpEnabled: true
                 requireTotp: true
                 disabled: false
@@ -2751,7 +2751,7 @@ paths:
         content:
           application/merge-patch+json:
             schema: { $ref: '#/components/schemas/AdminUpdate' }
-            example: { tenantIds: [ten_01JAB00000000000000ENTITYA, ten_01JAB00000000000000ENTITYB] }
+            example: { tenantIds: [ten_01JAB00000000000000ENT1TYA, ten_01JAB00000000000000ENT1TYB] }
       responses:
         '200':
           description: Updated admin.
@@ -2759,11 +2759,11 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Admin' }
               example:
-                id: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+                id: adm_01JABCG1H2J3K415M6N7P8Q9R0
                 username: admin.entity-a
                 email: admin@entity-a.example.com
                 role: delegated_admin
-                tenantIds: [ten_01JAB00000000000000ENTITYA, ten_01JAB00000000000000ENTITYB]
+                tenantIds: [ten_01JAB00000000000000ENT1TYA, ten_01JAB00000000000000ENT1TYB]
                 totpEnabled: true
                 requireTotp: true
                 disabled: false
@@ -2859,7 +2859,7 @@ paths:
                 period: 30d
                 disk: { totalBytes: 4398046511104, usedBytes: 1319413953331, usedRatio: 0.30, alertThreshold: 0.85 }
                 tenants:
-                  - tenantId: ten_01JAB00000000000000ENTITYA
+                  - tenantId: ten_01JAB00000000000000ENT1TYA
                     name: Entity A
                     transferCount: 412
                     bytesUploaded: 1932735283200
@@ -2987,7 +2987,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/KeyRotation' }
               example:
-                id: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+                id: rot_01JABCM8Q9R0S1T2V3V4W5X6Y7
                 status: running
                 fromKeyId: mk-2026-01
                 toKeyId: mk-2026-10
@@ -3021,8 +3021,8 @@ paths:
           in: path
           description: "Master key rotation identifier."
           required: true
-          schema: { type: string, pattern: '^rot_[0-9A-Z]{26}$' }
-          example: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+          schema: { type: string, pattern: '^rot_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+          example: rot_01JABCM8Q9R0S1T2V3V4W5X6Y7
       responses:
         '200':
           description: Rotation state.
@@ -3030,7 +3030,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/KeyRotation' }
               example:
-                id: rot_01JABCM8Q9R0S1T2U3V4W5X6Y7
+                id: rot_01JABCM8Q9R0S1T2V3V4W5X6Y7
                 status: completed
                 fromKeyId: mk-2026-01
                 toKeyId: mk-2026-10
@@ -3055,8 +3055,8 @@ paths:
         - name: tenantId
           in: query
           description: "Filter by tenant."
-          schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
-          example: ten_01JAB00000000000000ENTITYA
+          schema: { type: string, pattern: '^ten_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+          example: ten_01JAB00000000000000ENT1TYA
         - name: action
           in: query
           description: "Filter by audit action."
@@ -3072,7 +3072,7 @@ paths:
               schema: { $ref: '#/components/schemas/AuditEventList' }
               example:
                 items:
-                  - id: aud_01JABCN9R0S1T2U3V4W5X6Y7Z8
+                  - id: aud_01JABCN9R0S1T2V3V4W5X6Y7Z8
                     occurredAt: '2026-10-19T18:00:00Z'
                     tenantId: null
                     actor: { kind: admin, id: superadmin }
@@ -3138,28 +3138,28 @@ components:
       in: path
       description: "Verification challenge identifier returned by `startDepositSession`."
       required: true
-      schema: { type: string, pattern: '^vch_[A-Za-z0-9]{16,32}$' }
-      example: vch_4Fq9Lm2Zx8Rt6Yb1
+      schema: { type: string, pattern: '^vch_[A-Za-z0-9]{22,43}$' }
+      example: vch_4Fq9Lm2Zx8Rt6Yb1Kd7Pw3
     TransferId:
       name: transferId
       in: path
       description: "Transfer identifier."
       required: true
-      schema: { type: string, pattern: '^trf_[0-9A-Z]{26}$' }
+      schema: { type: string, pattern: '^trf_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
       example: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
     FileId:
       name: fileId
       in: path
       description: "File identifier within the transfer."
       required: true
-      schema: { type: string, pattern: '^fil_[0-9A-Z]{26}$' }
+      schema: { type: string, pattern: '^fil_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
       example: fil_01JABCD9F1A2B3C4D5E6F7G8H9
     UploadId:
       name: uploadId
       in: path
       description: "tus upload identifier, part of the `uploadUrl` returned at transfer creation."
       required: true
-      schema: { type: string, pattern: '^upl_[A-Za-z0-9]{24,43}$' }
+      schema: { type: string, pattern: '^upl_[A-Za-z0-9]{22,43}$' }
       example: upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd
     LinkToken:
       name: linkToken
@@ -3180,15 +3180,15 @@ components:
       in: path
       required: true
       description: Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
-      schema: { type: string, pattern: '^ten_[0-9A-Z]{26}$' }
-      example: ten_01JAB00000000000000ENTITYA
+      schema: { type: string, pattern: '^ten_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+      example: ten_01JAB00000000000000ENT1TYA
     AdminId:
       name: adminId
       in: path
       description: "Admin account identifier."
       required: true
-      schema: { type: string, pattern: '^adm_[0-9A-Z]{26}$' }
-      example: adm_01JABCG1H2J3K4L5M6N7P8Q9R0
+      schema: { type: string, pattern: '^adm_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+      example: adm_01JABCG1H2J3K415M6N7P8Q9R0
     TemplateKey:
       name: templateKey
       in: path
@@ -3489,7 +3489,7 @@ components:
             title: Internal error
             status: 500
             code: internal-error
-            instance: req_01JABCP0S1T2U3V4W5X6Y7Z8A9
+            instance: req_01JABCP0S1T2V3V4W5X6Y7Z8A9
     UnknownTenant:
       description: The `Host` header does not match any tenant. Written to the security log.
       content:
@@ -4021,7 +4021,7 @@ components:
     Fqdn:
       type: string
       maxLength: 253
-      pattern: '^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'
+      pattern: '^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$'
     Tenant:
       type: object
       required: [id, name, fqdn, defaultLanguage, maxTransferBytes, storageQuotaBytes, storageUsedBytes, createdAt, updatedAt]

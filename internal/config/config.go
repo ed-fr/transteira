@@ -75,6 +75,12 @@ type Config struct {
 	DBDriver string
 	// DBDSN is the database connection string (file path for SQLite).
 	DBDSN Secret
+	// DBMigrateDSN is the PostgreSQL connection string of the owner role, used
+	// only to apply migrations and grant DML rights to the runtime role. It is
+	// optional (only the process applying migrations needs it, so that the
+	// long-running server can run without owner credentials) and never set
+	// with SQLite.
+	DBMigrateDSN Secret
 
 	// DataDir holds the encrypted files, one sub-directory per tenant.
 	DataDir string
@@ -237,18 +243,20 @@ func (l *loader) secret(name, fileName string) (Secret, bool) {
 	}
 }
 
-// loadDatabase reads TT_DB_DRIVER, TT_DB_DSN and TT_DB_DSN_FILE.
+// loadDatabase reads TT_DB_DRIVER, TT_DB_DSN(_FILE) and
+// TT_DB_MIGRATE_DSN(_FILE). With PostgreSQL, migrations use a separate owner
+// role so that the runtime role owns nothing and cannot disable RLS; the
+// migration DSN is optional because only the migrating process needs it.
 func (l *loader) loadDatabase(c *Config) {
 	c.DBDriver = strings.ToLower(l.getOr(EnvDBDriver, DefaultDBDriver))
 	driverOK := c.DBDriver == DriverSQLite || c.DBDriver == DriverPostgres
 	if !driverOK {
 		l.fail(EnvDBDriver, "%q is not supported (use %s or %s)", c.DBDriver, DriverSQLite, DriverPostgres)
 	}
-	dsn, ok := l.secret(EnvDBDSN, EnvDBDSNFile)
-	if !ok {
-		return
-	}
-	if !dsn.IsSet() {
+	dsn, dsnOK := l.secret(EnvDBDSN, EnvDBDSNFile)
+	migrate, migrateOK := l.secret(EnvDBMigrateDSN, EnvDBMigrateDSNFile)
+
+	if dsnOK && !dsn.IsSet() {
 		switch {
 		case c.DBDriver == DriverPostgres:
 			l.fail(EnvDBDSN, "is required when %s is %s (or set %s)", EnvDBDriver, DriverPostgres, EnvDBDSNFile)
@@ -256,7 +264,27 @@ func (l *loader) loadDatabase(c *Config) {
 			dsn = NewSecret(DefaultSQLiteDSN)
 		}
 	}
+	if migrateOK {
+		switch {
+		case c.DBDriver == DriverSQLite && migrate.IsSet():
+			l.fail(l.setName(EnvDBMigrateDSN, EnvDBMigrateDSNFile), "is only allowed when %s is %s",
+				EnvDBDriver, DriverPostgres)
+		case dsnOK && migrate.IsSet() && migrate.Reveal() == dsn.Reveal():
+			l.fail(EnvDBMigrateDSN, "must differ from %s: migrations use the owner role, "+
+				"the application a runtime role with DML rights only", EnvDBDSN)
+		}
+	}
 	c.DBDSN = dsn
+	c.DBMigrateDSN = migrate
+}
+
+// setName returns fileName when it is set, name otherwise, to report a
+// problem on the variable the operator actually used.
+func (l *loader) setName(name, fileName string) string {
+	if l.get(fileName) != "" {
+		return fileName
+	}
+	return name
 }
 
 // path reads a directory or file path variable and returns its cleaned form.
@@ -382,11 +410,7 @@ func (l *loader) loadOperations(c *Config) {
 		return
 	}
 	if n := len(token.Reveal()); token.IsSet() && (n < minSetupTokenLength || n > maxSetupTokenLength) {
-		name := EnvSetupToken
-		if l.get(EnvSetupTokenFile) != "" {
-			name = EnvSetupTokenFile
-		}
-		l.fail(name, "must be between %d and %d characters long", minSetupTokenLength, maxSetupTokenLength)
+		l.fail(l.setName(EnvSetupToken, EnvSetupTokenFile), "must be between %d and %d characters long", minSetupTokenLength, maxSetupTokenLength)
 		return
 	}
 	c.SetupToken = token
