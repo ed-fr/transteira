@@ -653,15 +653,33 @@ func (ev *env) get(p published) store.TransferDetails {
 	return d
 }
 
-// setStatus moves the transfer p from available to st.
+// setStatus moves the transfer p from available to st, destroying its
+// keys first as the store requires (T-110); its files stay on disk.
 func (ev *env) setStatus(p published, st store.TransferStatus) {
 	ev.t.Helper()
 	s, err := ev.db.Scoped(p.tn.ID)
 	if err != nil {
 		ev.t.Fatal(err)
 	}
-	err = s.Tx(context.Background(), func(tx *store.ScopedTx) error {
-		return ev.db.Transfers().SetStatusTx(context.Background(), tx, p.id, store.TransferAvailable, st, time.Time{})
+	ctx := context.Background()
+	err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+		d, err := ev.db.Transfers().GetTx(ctx, tx, p.id)
+		if err != nil {
+			return err
+		}
+		keys := []string{d.DownloadTokenKeyID}
+		for _, f := range d.Files {
+			keys = append(keys, f.DEKKeyID)
+		}
+		for _, wk := range keys {
+			if wk == "" {
+				continue
+			}
+			if err := ev.db.WrappedKeys().DeleteTx(ctx, tx, wk); err != nil {
+				return err
+			}
+		}
+		return ev.db.Transfers().SetStatusTx(ctx, tx, p.id, store.TransferAvailable, st, time.Time{})
 	})
 	if err != nil {
 		ev.t.Fatal(err)

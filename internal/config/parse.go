@@ -126,6 +126,22 @@ func parseInt64(raw string, lowest, highest int64) (int64, error) {
 	return n, nil
 }
 
+// parseTimeOfDay parses a 24-hour "HH:MM" time of day (exactly two digits
+// each, 00:00 to 23:59) and returns it as an offset since midnight.
+func parseTimeOfDay(raw string) (time.Duration, error) {
+	s := strings.TrimSpace(raw)
+	bad := fmt.Errorf("%q is not a valid time of day (HH:MM, 24-hour clock, e.g. 02:30)", raw)
+	if len(s) != len("15:04") || s[2] != ':' {
+		return 0, bad
+	}
+	hours, err1 := strconv.ParseUint(s[:2], 10, 8)
+	minutes, err2 := strconv.ParseUint(s[3:], 10, 8)
+	if err1 != nil || err2 != nil || hours > 23 || minutes > 59 {
+		return 0, bad
+	}
+	return time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute, nil
+}
+
 // validHostname reports whether name is a syntactically valid lowercase DNS
 // name made of LDH labels (letters, digits, hyphens). IP literals are rejected.
 func validHostname(name string) bool {

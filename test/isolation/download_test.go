@@ -97,7 +97,7 @@ func TestDownloadIsolation(t *testing.T) {
 				t.Fatalf("MarkFirstDownloadTx: %v", err)
 			}
 		}
-		got, err := transfers.DueDeletions(ctx, now)
+		got, err := transfers.DueDeletions(ctx, now, store.SweepPage{Limit: store.DeletionSweepLimit})
 		want := map[store.TenantTransfer]bool{
 			{TenantID: a.ID, TransferID: da.ID}:  true,
 			{TenantID: b.ID, TransferID: dbB.ID}: true,
@@ -106,7 +106,7 @@ func TestDownloadIsolation(t *testing.T) {
 			t.Fatalf("DueDeletions = %+v, %v", got, err)
 		}
 		for _, tt := range got {
-			if !want[tt] {
+			if !want[store.TenantTransfer{TenantID: tt.TenantID, TransferID: tt.TransferID}] {
 				t.Errorf("DueDeletions returned %+v", tt)
 			}
 		}

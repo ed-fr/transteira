@@ -24,7 +24,17 @@ func execSystem(t *testing.T, e storetest.Engine, stmts ...string) {
 		driver = "pgx"
 		stmts = append([]string{`SELECT set_config('app.system_scope', 'on', true)`}, stmts...)
 	}
-	raw, err := sql.Open(driver, e.DSN)
+	dsn := e.DSN
+	if driver == "sqlite" {
+		// The running server writes concurrently: wait for its lock
+		// instead of failing with SQLITE_BUSY.
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		dsn += sep + "_pragma=busy_timeout(10000)"
+	}
+	raw, err := sql.Open(driver, dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

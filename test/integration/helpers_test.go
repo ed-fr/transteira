@@ -94,6 +94,9 @@ type serverOptions struct {
 	// lifecycleInterval, when set, is the sweep interval of the lifecycle
 	// sweeper (app.WithLifecycleOptions).
 	lifecycleInterval time.Duration
+	// lifecycle, when set, edits the options of the lifecycle sweeper
+	// after lifecycleInterval (app.WithLifecycleOptions).
+	lifecycle func(*lifecycle.Options)
 }
 
 // server is a running app.Run instance.
@@ -225,8 +228,15 @@ func startServer(t *testing.T, e storetest.Engine, o serverOptions) *server {
 	if o.shutdownTimeout > 0 {
 		opts = append(opts, app.WithShutdownTimeout(o.shutdownTimeout))
 	}
-	if o.lifecycleInterval > 0 {
-		opts = append(opts, app.WithLifecycleOptions(func(lo *lifecycle.Options) { lo.Interval = o.lifecycleInterval }))
+	if o.lifecycleInterval > 0 || o.lifecycle != nil {
+		opts = append(opts, app.WithLifecycleOptions(func(lo *lifecycle.Options) {
+			if o.lifecycleInterval > 0 {
+				lo.Interval = o.lifecycleInterval
+			}
+			if o.lifecycle != nil {
+				o.lifecycle(lo)
+			}
+		}))
 	}
 	if o.scanRetry > 0 {
 		opts = append(opts, app.WithScanOptions(func(so *scan.Options) {

@@ -100,7 +100,8 @@ const IdempotencyRetention = 24 * time.Hour
 // transferColumns is the column list read by the transfer queries.
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
-	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after`
+	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
+	`ended_at`
 
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
@@ -143,8 +144,13 @@ var (
 	qTransferUsedBytes = tenantQuery(
 		`SELECT CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers
 		WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`)
+	// qTransferSetStatus moves a transfer to a terminal status (every
+	// target but the finalization's) and records when it first ended. The
+	// sealed download token must be destroyed first (T-110); the store
+	// checks the file keys beforehand.
 	qTransferSetStatus = tenantQuery(
-		`UPDATE transfers SET status = ? WHERE tenant_id = ? AND id = ? AND status = ?`)
+		`UPDATE transfers SET status = ?, ended_at = COALESCE(ended_at, ?)
+		WHERE tenant_id = ? AND id = ? AND status = ? AND download_token_key_id IS NULL`)
 	// qTransferFinalize moves an uploading transfer to scanning and sets
 	// its finalization and expiry times (the CAST avoids an INTEGER
 	// overflow of expiry_days * milliseconds on PostgreSQL).
@@ -239,9 +245,10 @@ type Transfer struct {
 	// finalization sets a provisional value (FinalizedAt + ExpiryDays);
 	// [Transfers.MarkAvailableTx] replaces it with AvailableAt +
 	// ExpiryDays, so that the recipients get the whole chosen duration. The
-	// provisional value means nothing for a transfer still scanning: the
-	// cleanup must never expire a scanning transfer on it, and bounds such
-	// transfers on FinalizedAt instead.
+	// provisional value of a transfer still scanning is never enforced: the
+	// validity starts when the transfer becomes available, and the expiry
+	// sweep ([Transfers.DueExpirations]) bounds a stuck analysis on
+	// FinalizedAt instead (ScanningMaxAge).
 	ExpiresAt time.Time
 	// DownloadTokenHash is the SHA-256 (TokenHashSize bytes) of the
 	// download link token, set by [Transfers.MarkAvailableTx]; nil before.
@@ -261,6 +268,10 @@ type Transfer struct {
 	// due for deletion ([Transfers.DueDeletions]), set with
 	// FirstDownloadedAt; zero otherwise.
 	DeleteAfter time.Time
+	// EndedAt is when the transfer first reached a terminal status
+	// (rejected, expired or deleted), zero before. The cleanup task deletes
+	// its rows EndedAt + 30 days ([Transfers.ListEnded]).
+	EndedAt time.Time
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -443,6 +454,8 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("a new transfer cannot be available")
 	case !t.FirstDownloadedAt.IsZero() || !t.DeleteAfter.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be downloaded")
+	case !t.EndedAt.IsZero():
+		return Transfer{}, invalid("a new transfer cannot be ended")
 	}
 	t.Status, t.TotalBytes = TransferUploading, total
 	return t, nil
@@ -617,11 +630,11 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		inv, pwd, key, fp, tokenKey      sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
-		downloaded, deleteAfter          sql.NullInt64
+		downloaded, deleteAfter, ended   sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
-		&tokenKey, &available, &expiration, &downloaded, &deleteAfter)
+		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -629,7 +642,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.InvitationID, t.PasswordHash, t.IdempotencyKey, t.RequestFingerprint = inv.String, pwd.String, key.String, fp.String
 	t.CreatedAt, t.FinalizedAt, t.ExpiresAt = fromMillis(created), nullMillis(finalized), nullMillis(expiration)
 	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
-	t.FirstDownloadedAt, t.DeleteAfter = nullMillis(downloaded), nullMillis(deleteAfter)
+	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
 	return t, nil
 }
 
@@ -840,18 +853,25 @@ func probe(ctx context.Context, tx *ScopedTx, count TenantQuery, rowID string, c
 // SetStatusTx moves the transfer trfID of the tenant tx is bound to from
 // status from to status to, inside tx. Moving from TransferUploading to
 // TransferScanning is the finalization: it also sets FinalizedAt to now
-// and ExpiresAt to now + ExpiryDays; now is ignored otherwise. A transfer
+// and ExpiresAt to now + ExpiryDays. Every other allowed target is
+// terminal: EndedAt is set to now (the store's clock when now is zero),
+// unless the transfer had already ended. A transfer
 // reaches scanning only through the finalization, rejected only from
 // scanning, and never returns to uploading; it becomes available only
 // through [Transfers.MarkAvailableTx], which records its download link.
-// Any other status may move to expired or deleted.
+// Any other status may move to expired or deleted, once the data key of
+// every file and the sealed download token (DownloadTokenKeyID) are
+// destroyed (T-110), like [Transfers.MarkExpiredTx]; a rejected transfer
+// keeps its file keys until the expiry sweep erases them.
 //
 // It returns ErrInvalid for an unknown or disallowed transition,
 // ErrNotFound when the transfer does not exist or belongs to another
-// tenant, and ErrConflict when its status is not from. After an error, the
-// caller must abort the transaction.
+// tenant, ErrConflict when its status is not from, and [ErrKeysRemain]
+// when a key remains (a file key for expired or deleted, the token key for
+// any terminal target). After an error, the caller must abort the
+// transaction.
 func (r *Transfers) SetStatusTx(ctx context.Context, tx *ScopedTx, trfID string, from, to TransferStatus, now time.Time) error {
-	if err := setStatus(ctx, tx, trfID, from, to, now); err != nil {
+	if err := setStatus(ctx, tx, trfID, from, to, r.db.orNow(now)); err != nil {
 		return wrap("set transfer status", err)
 	}
 	return nil
@@ -872,23 +892,47 @@ func setStatus(ctx context.Context, tx *ScopedTx, trfID string, from, to Transfe
 	case to == TransferRejected && from != TransferScanning:
 		return invalid("only a scanning transfer can be rejected")
 	}
-	var (
-		res sql.Result
-		err error
-	)
 	if finalize {
 		ms := toMillis(now)
-		res, err = tx.Exec(ctx, qTransferFinalize, ms, ms, trfID)
-	} else {
-		res, err = tx.Exec(ctx, qTransferSetStatus, string(to), trfID, string(from))
+		res, err := tx.Exec(ctx, qTransferFinalize, ms, ms, trfID)
+		if err == nil {
+			err = expectOne(res)
+		}
+		if errors.Is(err, ErrNotFound) {
+			return probe(ctx, tx, qTransferCount, trfID, ErrConflict)
+		}
+		return err
 	}
-	if err == nil {
-		err = expectOne(res)
+	return endTransfer(ctx, tx, trfID, from, to, now)
+}
+
+// endTransfer moves the transfer trfID from from to the terminal status to
+// at now, refusing while a key remains (see [Transfers.SetStatusTx]).
+func endTransfer(ctx context.Context, tx *ScopedTx, trfID string, from, to TransferStatus, now time.Time) error {
+	keyed := 0
+	if to != TransferRejected {
+		if err := tx.QueryRow(ctx, qFileCountKeyed, trfID).Scan(&keyed); err != nil {
+			return err
+		}
 	}
-	if errors.Is(err, ErrNotFound) {
-		return probe(ctx, tx, qTransferCount, trfID, ErrConflict)
+	if keyed == 0 {
+		res, err := tx.Exec(ctx, qTransferSetStatus, string(to), toMillis(now), trfID, string(from))
+		if err == nil {
+			err = expectOne(res)
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
 	}
-	return err
+	t, err := scanTransfer(tx.QueryRow(ctx, qTransferGet, trfID))
+	switch {
+	case err != nil:
+		return err
+	case t.Status != from:
+		return ErrConflict
+	default:
+		return ErrKeysRemain
+	}
 }
 
 // FinalizeTx finalizes the transfer trfID inside tx at now: it moves from

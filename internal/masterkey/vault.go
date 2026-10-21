@@ -32,9 +32,10 @@ var generateDEK = crypto.GenerateDEK
 //
 // Rows are referenced by the objects they protect (files, tenant settings)
 // through their ID. A row whose owner disappeared without calling Destroy
-// (a crash between two transactions) is harmless but useless: the periodic
-// cleanup job will reconcile wrapped_keys with the rows referencing it and
-// destroy the orphans.
+// (a crash between two transactions) is harmless but useless. Data keys and
+// download token keys are created in the same transaction as the rows that
+// reference them, so such orphans are not expected; the cleanup task does
+// not reconcile wrapped_keys.
 type Vault struct {
 	keys   *store.WrappedKeys
 	kr     *Keyring

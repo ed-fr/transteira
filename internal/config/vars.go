@@ -41,6 +41,8 @@ const (
 	EnvScanWorkers              = "TT_SCAN_WORKERS"
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
+	EnvBackupTime               = "TT_BACKUP_TIME"
+	EnvBackupKeep               = "TT_BACKUP_KEEP"
 )
 
 // Default values applied by [Load] when a variable is unset or empty.
@@ -66,6 +68,8 @@ const (
 	DefaultScanWorkers              = "2"
 	DefaultSMTPTimeout              = "30s"
 	DefaultMailQueueSize            = "1000"
+	DefaultBackupTime               = "02:30"
+	DefaultBackupKeep               = "7"
 )
 
 // envPrefix is the prefix shared by every TransTeira variable.
@@ -136,7 +140,9 @@ func Variables() []Var {
 		{
 			Name: EnvBackupDir, Group: "Storage", Default: DefaultBackupDir,
 			Description: "Absolute path of the volume receiving the regular database backups " +
-				"(VACUUM INTO or pg_dump).",
+				"(VACUUM INTO or pg_dump). It must be separate from " + EnvDataDir + ", " + EnvLogDir +
+				" and the folder of the SQLite database (neither inside nor containing them), and must " +
+				"not contain \"?\" or \"#\".",
 		},
 		{
 			Name: EnvLogDir, Group: "Storage", Default: DefaultLogDir,
@@ -290,6 +296,19 @@ func Variables() []Var {
 			Description: "Longest wait for a client to accept the next part of a download before the " +
 				"server cuts the connection; reset by every write, so that slow but active " +
 				"downloads continue (Go duration, between 5s and 10m).",
+		},
+		{
+			Name: EnvBackupTime, Group: "Maintenance", Default: DefaultBackupTime,
+			Description: "UTC time of day (HH:MM, 24-hour clock) of the nightly copy of the database. " +
+				"SQLite only: the copy is written into " + EnvBackupDir + ". With PostgreSQL, a " +
+				"dedicated backup container runs pg_dump instead (see docs/operations/backup.md).",
+		},
+		{
+			Name: EnvBackupKeep, Group: "Maintenance", Default: DefaultBackupKeep,
+			Description: "Number of nightly database copies kept, the oldest being deleted first " +
+				"(between 1 and 90). A copy keeps the wrapped keys of the files present that day, " +
+				"so cryptographic erasure reaches the copies only once the oldest copy holding a " +
+				"key is rotated out (or after a master key rotation).",
 		},
 	}
 }

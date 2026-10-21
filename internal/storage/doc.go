@@ -42,6 +42,23 @@
 // plus Lstat checks, which are subject to time-of-check/time-of-use races.
 // Symbolic links that stay inside dataDir are followed.
 //
+// # Listing
+//
+// [Store.TenantDirs] and [Store.List] serve the reconciliation of the
+// periodic cleanup task, which compares the disk with the database to find
+// orphaned files, stale checkpoints and states, and temporary files left by
+// a crash during an atomic write. List classifies each entry of a tenant
+// directory by [Kind] and returns the storage name to pass back to
+// [Store.Remove], [Store.RemoveCheckpoint], [Store.RemoveState] or, for a
+// temporary file, the entry name to pass to [Store.RemoveTemp].
+//
+// Listing is conservative: symbolic links are never followed (entries are
+// inspected with Lstat, and a tenant directory replaced by a link is
+// refused), and anything the store did not create (invalid names, unknown
+// extensions, directories, links) is reported as [KindUnknown] for the
+// caller to log. This package never removes an unknown entry, and logs
+// nothing itself.
+//
 // # Errors
 //
 // Errors wrap [ErrInvalid], [ErrNotFound] or [ErrExists] when relevant.

@@ -125,6 +125,17 @@ and the project follows [Semantic Versioning](https://semver.org/).
   fail2ban and CrowdSec rules); write idle timeout `TT_DOWNLOAD_IDLE_TIMEOUT`.
 - `mail.Retrier` and `notify.ViewOf` shared by the scan and download services.
 - Go toolchain pinned to 1.27.3 (fix for GO-2026-6809 in `crypto/x509`).
+- Cleanup task (step 9): `internal/lifecycle` becomes the single periodic task of section 20 —
+  expiry of transfers (keys destroyed, files erased, status `expired`), abandoned tus uploads (quota
+  released), purge of ended transfers after 30 days, of used or expired verification codes, ended
+  sessions, stale password failure counters, addresses and invitations unused for 12 months, daily
+  reconciliation of orphan files on disk (24-hour grace).
+- Nightly SQLite copy (`VACUUM INTO`, `quick_check`, atomic rename, rotation): `TT_BACKUP_TIME`,
+  `TT_BACKUP_KEEP`; with PostgreSQL, a dedicated `pg_dump` container (`docs/operations/backup.md`).
+- Migration `0007_cleanup` (`transfers.ended_at`, purge and keyset sweep indexes); `storage`
+  listing for the reconciliation; sweeps paged by cursor; a transfer stuck in analysis expires
+  30 days after its finalization (never on its provisional expiry); `TT_BACKUP_DIR` must not
+  overlap the data, log or SQLite directories.
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
   now starts when it becomes available (`expiresAt` is set then); a file that times out, drops

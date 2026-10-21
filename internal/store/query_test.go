@@ -433,7 +433,8 @@ var tenantAllowlist = map[string]int{
 		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
 	`SELECT CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
 		`WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`: 0,
-	`UPDATE transfers SET status = ? WHERE tenant_id = ? AND id = ? AND status = ?`: 1,
+	`UPDATE transfers SET status = ?, ended_at = COALESCE(ended_at, ?) WHERE tenant_id = ? AND id = ? AND status = ? ` +
+		`AND download_token_key_id IS NULL`: 2,
 	`UPDATE transfers SET status = 'scanning', finalized_at = ?, expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) ` +
 		`WHERE tenant_id = ? AND id = ? AND status = 'uploading'`: 2,
 	`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`:               1,
@@ -468,8 +469,8 @@ var tenantAllowlist = map[string]int{
 		`AND first_downloaded_at IS NULL AND NOT delete_after_first_download`: 1,
 	`UPDATE transfers SET first_downloaded_at = ?, delete_after = ? WHERE tenant_id = ? AND id = ? ` +
 		`AND status = 'available' AND first_downloaded_at IS NULL AND delete_after_first_download`: 2,
-	`UPDATE transfers SET status = 'deleted' ` +
-		`WHERE tenant_id = ? AND id = ? AND status = 'available' AND download_token_key_id IS NULL`: 0,
+	`UPDATE transfers SET status = 'deleted', ended_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'available' AND download_token_key_id IS NULL`: 1,
 	// Transfer password failures.
 	`SELECT fail_1, fail_2, fail_3, locked_until FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
 	`INSERT INTO password_failures (tenant_id, scope, key, fail_1, fail_2, fail_3, locked_until) ` +
@@ -477,6 +478,34 @@ var tenantAllowlist = map[string]int{
 	`UPDATE password_failures SET fail_1 = ?, fail_2 = ?, fail_3 = ?, locked_until = ? ` +
 		`WHERE tenant_id = ? AND scope = ? AND key = ?`: 4,
 	`DELETE FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
+	// Periodic cleanup (cleanup.go): expiry, purges and disk reconciliation.
+	`UPDATE transfers SET status = 'expired', ended_at = ? WHERE tenant_id = ? AND id = ? ` +
+		`AND status IN ('uploading', 'scanning', 'available') AND download_token_key_id IS NULL`: 1,
+	`SELECT id FROM transfers WHERE tenant_id = ? AND status IN ('rejected', 'expired', 'deleted') AND ended_at <= ? ` +
+		`ORDER BY ended_at, id LIMIT ?`: 0,
+	`SELECT id FROM transfers WHERE tenant_id = ? AND status = ? ORDER BY id LIMIT ?`:                               0,
+	`SELECT id, status FROM transfers WHERE tenant_id = ? LIMIT ?`:                                                  0,
+	`SELECT storage_name, id, transfer_id, dek_key_id, uploaded_at FROM transfer_files WHERE tenant_id = ? LIMIT ?`: 0,
+	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND invitation_id = ?`:                                      0,
+	`DELETE FROM verified_addresses WHERE tenant_id = ? AND email = ? AND last_used_at = ?`:                         0,
+	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?)`:     0,
+	`SELECT id FROM verification_challenges WHERE tenant_id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) ` +
+		`AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM verification_challenges WHERE tenant_id = ? AND id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) ` +
+		`AND created_at < ?`: 0,
+	`SELECT id FROM deposit_sessions WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) AND id > ? ` +
+		`ORDER BY id LIMIT ?`: 0,
+	`SELECT key FROM password_failures WHERE tenant_id = ? AND scope = ? AND COALESCE(fail_1, 0) <= ? ` +
+		`AND COALESCE(fail_2, 0) <= ? AND COALESCE(fail_3, 0) <= ? AND COALESCE(locked_until, 0) <= ? AND key > ? ` +
+		`ORDER BY key LIMIT ?`: 0,
+	`DELETE FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ? AND COALESCE(fail_1, 0) <= ? ` +
+		`AND COALESCE(fail_2, 0) <= ? AND COALESCE(fail_3, 0) <= ? AND COALESCE(locked_until, 0) <= ?`: 0,
+	`SELECT email, last_used_at FROM verified_addresses WHERE tenant_id = ? AND last_used_at <= ? AND email > ? ` +
+		`ORDER BY email LIMIT ?`: 0,
+	`SELECT id FROM invitations WHERE tenant_id = ? AND (revoked_at IS NOT NULL OR expires_at <= ?) AND created_at < ? ` +
+		`AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM invitations WHERE tenant_id = ? AND id = ? AND (revoked_at IS NOT NULL OR expires_at <= ?) ` +
+		`AND created_at < ?`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -564,8 +593,23 @@ var systemAllowlist = map[string]string{
 	// Antivirus worker start-up sweep (identifiers only).
 	`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`: reasonAntivirusSweep,
 	// Deletion after the first download (identifiers only).
-	`SELECT tenant_id, id FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? AND status = 'available' ` +
-		`ORDER BY delete_after, id LIMIT ?`: reasonDeleteAfterDownload,
+	`SELECT tenant_id, id, delete_after FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? ` +
+		`AND status = 'available' AND (delete_after, tenant_id, id) > (?, ?, ?) ` +
+		`ORDER BY delete_after, tenant_id, id LIMIT ?`: reasonDeleteAfterDownload,
+	// Periodic cleanup (identifiers only).
+	`SELECT tenant_id, id, due_at FROM ( ` +
+		`SELECT tenant_id, id, expires_at AS due_at FROM transfers WHERE status = 'available' AND expires_at <= ? ` +
+		`UNION ALL ` +
+		`SELECT tenant_id, id, finalized_at + ? AS due_at FROM transfers WHERE status = 'scanning' AND finalized_at <= ? ` +
+		`) d WHERE (due_at, tenant_id, id) > (?, ?, ?) ORDER BY due_at, tenant_id, id LIMIT ?`: reasonExpirySweep,
+	`SELECT tenant_id, id, ended FROM ( ` +
+		`SELECT t.tenant_id, t.id, COALESCE(t.ended_at, 0) AS ended FROM transfers t ` +
+		`WHERE t.status = 'rejected' AND EXISTS (SELECT 1 FROM transfer_files f ` +
+		`WHERE f.tenant_id = t.tenant_id AND f.transfer_id = t.id AND f.dek_key_id IS NOT NULL) ` +
+		`) r WHERE (ended, tenant_id, id) > (?, ?, ?) ORDER BY ended, tenant_id, id LIMIT ?`: reasonExpirySweep,
+	`SELECT tenant_id, id, created_at FROM transfers WHERE status = 'uploading' AND created_at <= ? ` +
+		`AND (created_at, tenant_id, id) > (?, ?, ?) ORDER BY created_at, tenant_id, id LIMIT ?`: reasonAbandonedSweep,
+	`SELECT id FROM tenants ORDER BY id`: reasonCleanupTenants,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

@@ -261,8 +261,19 @@ func TestConcludeSkipsChangedTransfer(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			err = s.Tx(context.Background(), func(tx *store.ScopedTx) error {
-				return ev.db.Transfers().SetStatusTx(context.Background(), tx, trfID, store.TransferScanning, store.TransferDeleted, time.Now())
+			ctx := context.Background()
+			err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+				// The keys go first, as the store requires (T-110).
+				d, err := ev.db.Transfers().GetTx(ctx, tx, trfID)
+				if err != nil {
+					return err
+				}
+				for _, f := range d.Files {
+					if err := ev.db.WrappedKeys().DeleteTx(ctx, tx, f.DEKKeyID); err != nil {
+						return err
+					}
+				}
+				return ev.db.Transfers().SetStatusTx(ctx, tx, trfID, store.TransferScanning, store.TransferDeleted, time.Now())
 			})
 			if err != nil {
 				t.Error(err)

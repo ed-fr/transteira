@@ -47,6 +47,13 @@ message when clamd answers again. Transfers still `scanning` when TransTeira
 stops are resumed at the next start. `/healthz` reports `clamav: unavailable`
 meanwhile, so your monitoring (for example Uptime Kuma) can alert you.
 
+The validity of a transfer (1, 7 or 30 days) starts when it becomes
+available, so an outage never shortens it. A transfer still `scanning`
+30 days after its finalization is abandoned by the cleanup task: its keys
+and files are erased, it becomes `expired`, and a warning naming the tenant
+and transfer identifiers is logged. Its sender gets no mail: watch the
+health check and the logs so that an outage never lasts that long.
+
 ## Size limits
 
 ClamAV limits how much data it accepts and scans. Align its configuration

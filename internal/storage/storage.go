@@ -74,6 +74,8 @@ type ops struct {
 	close    func(f *os.File) error
 	readAll  func(r io.Reader) ([]byte, error)
 	statPath func(name string) (fs.FileInfo, error)
+	lstat    func(name string) (fs.FileInfo, error)
+	readDir  func(f *os.File) ([]fs.DirEntry, error)
 	sleep    func(d time.Duration)
 }
 
@@ -132,12 +134,17 @@ func New(dataDir string) (*Store, error) {
 			close:    (*os.File).Close,
 			readAll:  io.ReadAll,
 			statPath: root.Stat,
+			lstat:    root.Lstat,
+			readDir:  readAllDir,
 			sleep:    time.Sleep,
 		},
 		dirSync:       runtime.GOOS != "windows",
 		renameRetries: renameRetriesFor(runtime.GOOS),
 	}, nil
 }
+
+// readAllDir returns every entry of the directory f.
+func readAllDir(f *os.File) ([]fs.DirEntry, error) { return f.ReadDir(-1) }
 
 // renameRetriesFor returns the number of extra checkpoint rename attempts
 // on the platform goos.
@@ -161,18 +168,7 @@ func NewName() string {
 }
 
 // ValidName reports whether name is a well-formed storage name.
-func ValidName(name string) bool {
-	if len(name) != NameLen {
-		return false
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
+func ValidName(name string) bool { return validHex(name, NameLen) }
 
 // check validates the identifiers that make up a path.
 func check(tid tenant.ID, name string) error {

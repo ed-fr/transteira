@@ -182,11 +182,11 @@ func TestTransfersDeletionAfterDownload(t *testing.T) {
 
 		due := func(now time.Time) []store.TenantTransfer {
 			t.Helper()
-			got, err := transfers.DueDeletions(ctx, now)
+			got, err := transfers.DueDeletions(ctx, now, store.SweepPage{Limit: store.DeletionSweepLimit})
 			if err != nil {
 				t.Fatalf("DueDeletions: %v", err)
 			}
-			return got
+			return withoutKeys(got)
 		}
 		if got := due(base.Add(10*time.Minute - time.Millisecond)); len(got) != 0 {
 			t.Errorf("DueDeletions before any due time = %+v", got)

@@ -88,6 +88,8 @@ func TestLoadDefaults(t *testing.T) {
 		{"ClamAVMaxScanBytes", c.ClamAVMaxScanBytes, int64(2 << 30)},
 		{"ClamAVTimeout", c.ClamAVTimeout, 10 * time.Minute},
 		{"ScanWorkers", c.ScanWorkers, 2},
+		{"BackupTime", c.BackupTime, 2*time.Hour + 30*time.Minute},
+		{"BackupKeep", c.BackupKeep, 7},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {
@@ -293,6 +295,61 @@ func TestLoadValid(t *testing.T) {
 			},
 		},
 		{
+			name: "backup dir next to the other volumes",
+			vars: map[string]string{
+				EnvBackupDir: "/var/lib/transteira/backups-db", EnvDataDir: "/var/lib/transteira/data",
+				EnvLogDir: "/var/log/transteira", EnvDBDSN: "/var/lib/transteira/db/transteira.db",
+			},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.BackupDir != filepath.Clean("/var/lib/transteira/backups-db") {
+					t.Errorf("BackupDir = %q", c.BackupDir)
+				}
+			},
+		},
+		{
+			name: "backup dir containing the PostgreSQL DSN path is not checked",
+			vars: map[string]string{
+				EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://app@db/tt", EnvBackupDir: "/backups",
+			},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.BackupDir != filepath.Clean("/backups") {
+					t.Errorf("BackupDir = %q", c.BackupDir)
+				}
+			},
+		},
+		{
+			name: "backup bounds inclusive low",
+			vars: map[string]string{EnvBackupTime: "00:00", EnvBackupKeep: "1"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.BackupTime != 0 || c.BackupKeep != 1 {
+					t.Errorf("backup = %v %d", c.BackupTime, c.BackupKeep)
+				}
+			},
+		},
+		{
+			name: "backup bounds inclusive high",
+			vars: map[string]string{EnvBackupTime: " 23:59 ", EnvBackupKeep: "90"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.BackupTime != 23*time.Hour+59*time.Minute || c.BackupKeep != 90 {
+					t.Errorf("backup = %v %d", c.BackupTime, c.BackupKeep)
+				}
+			},
+		},
+		{
+			name: "backup custom values",
+			vars: map[string]string{EnvBackupTime: "14:05", EnvBackupKeep: "30"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.BackupTime != 14*time.Hour+5*time.Minute || c.BackupKeep != 30 {
+					t.Errorf("backup = %v %d", c.BackupTime, c.BackupKeep)
+				}
+			},
+		},
+		{
 			name: "mail bounds inclusive low",
 			vars: map[string]string{EnvSMTPTimeout: "1s", EnvMailQueueSize: " 1 "},
 			check: func(t *testing.T, c *Config) {
@@ -476,6 +533,30 @@ func TestLoadInvalid(t *testing.T) {
 		{"max recipients malformed", map[string]string{EnvMaxRecipients: "many"}, []string{EnvMaxRecipients}},
 		{"max open transfers zero", map[string]string{EnvMaxOpenTransfers: "0"}, []string{EnvMaxOpenTransfers}},
 		{"max open transfers too big", map[string]string{EnvMaxOpenTransfers: "1001"}, []string{EnvMaxOpenTransfers}},
+		{"backup time hour 24", map[string]string{EnvBackupTime: "24:00"}, []string{EnvBackupTime}},
+		{"backup time minute 60", map[string]string{EnvBackupTime: "02:60"}, []string{EnvBackupTime}},
+		{"backup time single digits", map[string]string{EnvBackupTime: "2:3"}, []string{EnvBackupTime}},
+		{"backup time single hour digit", map[string]string{EnvBackupTime: "2:30"}, []string{EnvBackupTime}},
+		{"backup time letters", map[string]string{EnvBackupTime: "ab"}, []string{EnvBackupTime}},
+		{"backup time letters in place", map[string]string{EnvBackupTime: "ab:cd"}, []string{EnvBackupTime}},
+		{"backup time no colon", map[string]string{EnvBackupTime: "02h30"}, []string{EnvBackupTime}},
+		{"backup time signed", map[string]string{EnvBackupTime: "+2:30"}, []string{EnvBackupTime}},
+		{"backup time with seconds", map[string]string{EnvBackupTime: "02:30:00"}, []string{EnvBackupTime}},
+		{"relative backup dir", map[string]string{EnvBackupDir: "backups"}, []string{EnvBackupDir}},
+		{"backup dir is data dir", map[string]string{EnvBackupDir: DefaultDataDir}, []string{EnvBackupDir}},
+		{"backup dir inside data dir", map[string]string{EnvBackupDir: DefaultDataDir + "/backups"}, []string{EnvBackupDir}},
+		{"backup dir contains data dir", map[string]string{EnvBackupDir: "/var/lib", EnvDBDSN: "/srv/db/tt.db"}, []string{EnvBackupDir}},
+		{"backup dir is log dir", map[string]string{EnvBackupDir: DefaultLogDir + "/"}, []string{EnvBackupDir}},
+		{"backup dir inside log dir", map[string]string{EnvBackupDir: DefaultLogDir + "/copies"}, []string{EnvBackupDir}},
+		{"backup dir contains log dir", map[string]string{EnvBackupDir: "/var/log", EnvLogDir: "/var/log/tt"}, []string{EnvBackupDir}},
+		{"backup dir is the database folder", map[string]string{EnvBackupDir: "/var/lib/transteira/db"}, []string{EnvBackupDir}},
+		{"backup dir inside the database folder", map[string]string{EnvBackupDir: "/srv/db/copies", EnvDBDSN: "/srv/db/tt.db"}, []string{EnvBackupDir}},
+		{"backup dir contains the database folder", map[string]string{EnvBackupDir: "/srv", EnvDBDSN: "file:/srv/db/tt.db?_pragma=x"}, []string{EnvBackupDir}},
+		{"backup dir with a question mark", map[string]string{EnvBackupDir: "/backups?mode=rw"}, []string{EnvBackupDir}},
+		{"backup dir with a hash", map[string]string{EnvBackupDir: "/backups#1"}, []string{EnvBackupDir}},
+		{"backup keep zero", map[string]string{EnvBackupKeep: "0"}, []string{EnvBackupKeep}},
+		{"backup keep too big", map[string]string{EnvBackupKeep: "91"}, []string{EnvBackupKeep}},
+		{"backup keep malformed", map[string]string{EnvBackupKeep: "seven"}, []string{EnvBackupKeep}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -707,5 +788,33 @@ func TestClamAVAddrString(t *testing.T) {
 	t.Parallel()
 	if got := (ClamAVAddr{Network: "tcp", Address: "clamav:3310"}).String(); got != "clamav:3310" {
 		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestParseTimeOfDay(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		raw     string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"00:00", 0, false},
+		{"02:30", 2*time.Hour + 30*time.Minute, false},
+		{"23:59", 23*time.Hour + 59*time.Minute, false},
+		{" 12:00	", 12 * time.Hour, false},
+		{"24:00", 0, true},
+		{"12:60", 0, true},
+		{"2:3", 0, true},
+		{"ab", 0, true},
+		{"", 0, true},
+		{"-1:00", 0, true},
+		{"1 :00", 0, true},
+		{"12-30", 0, true},
+	}
+	for _, tc := range tests {
+		got, err := parseTimeOfDay(tc.raw)
+		if (err != nil) != tc.wantErr || got != tc.want {
+			t.Errorf("parseTimeOfDay(%q) = %v, %v; want %v, err %v", tc.raw, got, err, tc.want, tc.wantErr)
+		}
 	}
 }

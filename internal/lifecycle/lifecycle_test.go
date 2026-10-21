@@ -3,404 +3,206 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
-	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 func TestNewDefaults(t *testing.T) {
 	t.Parallel()
-	s := New(Deps{}, Options{})
-	if s.interval != DefaultInterval || s.now == nil || s.logger == nil || s.pageSize != store.DeletionSweepLimit {
-		t.Fatalf("defaults not applied: interval %v, page %d", s.interval, s.pageSize)
+	s := New(Deps{}, Options{UploadTTL: -time.Hour})
+	if s.now == nil || s.logger == nil || s.endedRetention != EndedRetention || s.orphanGrace != OrphanGrace ||
+		s.scanningMaxAge != store.ScanningMaxAge ||
+		s.uploadTTL != 0 || s.backupKeep != DefaultBackupKeep || s.purgeBatch != store.PurgeBatchSize ||
+		s.pageSizes != [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit} {
+		t.Fatalf("defaults not applied: %+v", s)
+	}
+	want := map[Task]time.Duration{
+		TaskDeleteAfterDownload: DefaultInterval, TaskExpire: DefaultInterval,
+		TaskAbandonedUploads: DefaultAbandonedInterval, TaskPurgeRows: DefaultPurgeInterval,
+		TaskOrphans: DefaultOrphansInterval, TaskBackup: 0,
+	}
+	for i, tk := range s.tasks {
+		if tk.name != allTasks[i] || tk.interval != want[tk.name] || tk.atStart != (tk.name != TaskBackup) {
+			t.Errorf("task %d = %s every %v (at start %v)", i, tk.name, tk.interval, tk.atStart)
+		}
 	}
 	if err := s.Close(context.Background()); err != nil {
 		t.Fatalf("Close before Start: %v", err)
 	}
+	s = New(Deps{}, Options{
+		Interval: time.Second, AbandonedInterval: 2 * time.Second, PurgeInterval: 3 * time.Second,
+		OrphansInterval: 4 * time.Second, EndedRetention: time.Hour, OrphanGrace: time.Minute, BackupKeep: 2,
+		ScanningMaxAge: 5 * time.Hour,
+	})
+	if s.tasks[1].interval != time.Second || s.tasks[2].interval != 2*time.Second || s.tasks[3].interval != 3*time.Second ||
+		s.tasks[4].interval != 4*time.Second || s.endedRetention != time.Hour || s.orphanGrace != time.Minute || s.backupKeep != 2 ||
+		s.scanningMaxAge != 5*time.Hour {
+		t.Fatalf("options not applied: %+v", s)
+	}
 }
 
-func TestDue(t *testing.T) {
+func TestNextBackup(t *testing.T) {
 	t.Parallel()
-	now := t0
+	at := 2*time.Hour + 30*time.Minute
+	paris := time.FixedZone("UTC+2", 2*3600)
 	cases := []struct {
-		name string
-		tr   store.Transfer
-		want bool
+		now, want time.Time
 	}{
-		{"past", store.Transfer{Status: store.TransferAvailable, DeleteAfter: now.Add(-time.Second)}, true},
-		{"exactly now", store.Transfer{Status: store.TransferAvailable, DeleteAfter: now}, true},
-		{"future", store.Transfer{Status: store.TransferAvailable, DeleteAfter: now.Add(time.Second)}, false},
-		{"no deletion time", store.Transfer{Status: store.TransferAvailable}, false},
-		{"deleted", store.Transfer{Status: store.TransferDeleted, DeleteAfter: now.Add(-time.Second)}, false},
+		{time.Date(2026, 10, 21, 1, 0, 0, 0, time.UTC), time.Date(2026, 10, 21, 2, 30, 0, 0, time.UTC)},
+		{time.Date(2026, 10, 21, 2, 30, 0, 0, time.UTC), time.Date(2026, 10, 22, 2, 30, 0, 0, time.UTC)},
+		{time.Date(2026, 10, 21, 23, 59, 0, 0, time.UTC), time.Date(2026, 10, 22, 2, 30, 0, 0, time.UTC)},
+		// 03:00 in UTC+2 is 01:00 UTC: today.
+		{time.Date(2026, 10, 21, 3, 0, 0, 0, paris), time.Date(2026, 10, 21, 2, 30, 0, 0, time.UTC)},
+		{time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 2, 30, 0, 0, time.UTC)},
 	}
 	for _, c := range cases {
-		if got := due(c.tr, now); got != c.want {
-			t.Errorf("%s: due = %v, want %v", c.name, got, c.want)
+		if got := nextBackup(c.now, at); !got.Equal(c.want) {
+			t.Errorf("nextBackup(%v) = %v, want %v", c.now, got, c.want)
 		}
 	}
 }
 
-func TestSweepDeletesDueTransfers(t *testing.T) {
-	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		ctx := context.Background()
-		dueA := ev.due(ev.a, 3)
-		dueB := ev.due(ev.b, 1)
-		// A file whose key was destroyed earlier, but left on disk (crash
-		// between the key and the file): skipped for the key, removed.
-		beforeA := ev.get(dueA)
-		ev.tx(ev.a, func(tx *store.ScopedTx) error {
-			return ev.vault.DestroyTx(ctx, tx, beforeA.Files[1].DEKKeyID)
-		})
-		beforeB := ev.get(dueB)
-		// Not yet due: downloaded later, still in its grace period.
-		pending := ev.available(ev.a, 1, true)
-		ev.download(pending, t0.Add(10*time.Minute), t0.Add(10*time.Minute+grace))
-		// Downloaded without the option: never due.
-		kept := ev.available(ev.b, 1, false)
-		ev.download(kept, t0, time.Time{})
-		// Never downloaded.
-		fresh := ev.available(ev.a, 1, true)
-
-		ev.sweep(Stats{Due: 2, Deleted: 2})
-		ev.assertDeleted(dueA, beforeA)
-		ev.assertDeleted(dueB, beforeB)
-		ev.assertIntact(pending)
-		ev.assertIntact(kept)
-		ev.assertIntact(fresh)
-		if n := ev.f.called("scrub"); n != 1 {
-			t.Fatalf("scrub called %d times, want once per sweep", n)
-		}
-
-		// Nothing more is due: nothing happens, nothing is scrubbed.
-		ev.sweep(Stats{})
-		if n := ev.f.called("scrub"); n != 1 {
-			t.Fatalf("scrub called %d times after an empty sweep", n)
-		}
-
-		// The fake clock reaches the end of the second grace period.
-		before := ev.get(pending)
-		ev.clock.set(t0.Add(10*time.Minute + grace))
-		ev.sweep(Stats{Due: 1, Deleted: 1})
-		ev.assertDeleted(pending, before)
-		ev.assertIntact(kept)
-		ev.assertIntact(fresh)
-		if ev.logs.count("deletion sweep done") != 2 {
-			t.Fatalf("summary lines:\n%s", ev.logs.all())
-		}
-	})
-}
-
-func TestSweepResumesAfterFailure(t *testing.T) {
-	cases := []struct {
-		name  string
-		fault string
-		// keysGone tells whether the file keys are destroyed after the
-		// failed sweep.
-		keysGone bool
-	}{
-		{"read transfer", "transfer", false},
-		{"lock files", "lock", false},
-		{"remove files", "remove", false},
-		{"file left on disk", "removeAfter", true},
-		{"remove state", "state", true},
-		{"destroy token key", "destroy", true},
-		{"final transaction", "finish", true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			storetest.Run(t, func(t *testing.T, e storetest.Engine) {
-				ev := newEnv(t, e)
-				fx := ev.due(ev.a, 2)
-				before := ev.get(fx)
-				ev.f.set(c.fault, 1, nil)
-				ev.sweep(Stats{Due: 1, Failed: 1})
-				d := ev.get(fx)
-				if d.Status != store.TransferAvailable || !ev.keyExists(ev.a, d.DownloadTokenKeyID) {
-					t.Fatalf("after a failed sweep: status %s, token key kept %v", d.Status, d.DownloadTokenKeyID != "")
-				}
-				if gone := d.Files[0].DEKKeyID == ""; gone != c.keysGone {
-					t.Fatalf("file keys destroyed = %v, want %v", gone, c.keysGone)
-				}
-				if ev.logs.count("left for the next sweep") != 1 {
-					t.Fatalf("logs:\n%s", ev.logs.all())
-				}
-				ev.sweep(Stats{Due: 1, Deleted: 1})
-				ev.assertDeleted(fx, before)
-			})
-		})
-	}
-}
-
-func TestSweepRefusedWhileFileKeysRemain(t *testing.T) {
-	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		before := ev.get(fx)
-		// The remover reports success without destroying anything: the
-		// store refuses the deletion and the token key destruction is
-		// rolled back with it.
-		ev.f.set("removeNoop", 1, nil)
-		ev.sweep(Stats{Due: 1, Failed: 1})
-		ev.assertIntact(fx)
-		if ev.logs.count("step=mark deleted") != 1 {
-			t.Fatalf("logs:\n%s", ev.logs.all())
-		}
-		ev.sweep(Stats{Due: 1, Deleted: 1})
-		ev.assertDeleted(fx, before)
-	})
-}
-
-// runEach runs fn as a sub-test name on a fresh database of every engine.
-func runEach(t *testing.T, name string, fn func(t *testing.T, e storetest.Engine)) {
-	t.Helper()
-	t.Run(name, func(t *testing.T) { storetest.Run(t, fn) })
-}
-
-func TestSweepSkipsTransfersNoLongerDue(t *testing.T) {
-	runEach(t, "gone", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		ev.f.set("transfer", 1, store.ErrNotFound)
-		ev.sweep(Stats{Due: 1, Skipped: 1})
-		ev.assertIntact(fx)
-	})
-	runEach(t, "deleted before the read", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		ev.f.onCall("transfer", func() { ev.deleteOutside(fx) })
-		ev.sweep(Stats{Due: 1, Skipped: 1})
-		if ev.f.called("lock") != 0 {
-			t.Fatal("files locked for a transfer no longer due")
-		}
-	})
-	runEach(t, "deleted before the final transaction", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		ev.f.onCall("finish", func() { ev.deleteOutside(fx) })
-		ev.sweep(Stats{Due: 1, Skipped: 1})
-		if ev.get(fx).Status != store.TransferDeleted {
-			t.Fatal("transfer not deleted")
-		}
-	})
-	runEach(t, "gone before the final transaction", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		// Another component erases the row once the file keys are gone.
-		ev.f.onCall("finish", func() {
-			ctx, tokenKey := context.Background(), ev.get(fx).DownloadTokenKeyID
-			ev.tx(fx.tn, func(tx *store.ScopedTx) error {
-				if err := ev.vault.DestroyTx(ctx, tx, tokenKey); err != nil {
-					return err
-				}
-				return ev.db.Transfers().DeleteTx(ctx, tx, fx.id)
-			})
-		})
-		ev.sweep(Stats{Due: 1, Skipped: 1})
-		if _, err := ev.db.Transfers().Get(context.Background(), fx.tn.ID, fx.id); !errors.Is(err, store.ErrNotFound) {
-			t.Fatalf("Get = %v, want ErrNotFound", err)
-		}
-	})
-}
-
-func TestSweepScrub(t *testing.T) {
-	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		ev.due(ev.a, 1)
-		ev.f.set("scrub", 1, store.ErrScrubBusy)
-		ev.sweep(Stats{Due: 1, Deleted: 1})
-		if ev.logs.count("WARN lifecycle: destroyed keys may remain") != 1 {
-			t.Fatalf("busy scrub not warned:\n%s", ev.logs.all())
-		}
-		ev.due(ev.b, 1)
-		ev.f.set("scrub", 1, nil)
-		ev.sweep(Stats{Due: 1, Deleted: 1})
-		if ev.logs.count("ERROR lifecycle: scrub of the destroyed keys failed") != 1 {
-			t.Fatalf("failed scrub not logged:\n%s", ev.logs.all())
-		}
-	})
-}
-
-func TestSweepPages(t *testing.T) {
-	runEach(t, "progress", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		ev.s.pageSize = 2
-		for range 3 {
-			ev.due(ev.a, 1)
-		}
-		ev.sweep(Stats{Due: 3, Deleted: 3})
-		if n := ev.f.called("due"); n != 2 {
-			t.Fatalf("listed %d times, want 2 (full page, then empty)", n)
-		}
-	})
-	runEach(t, "no progress", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		ev.s.pageSize = 2
-		for range 2 {
-			ev.due(ev.a, 1)
-		}
-		ev.f.set("lock", -1, nil)
-		ev.sweep(Stats{Due: 2, Failed: 2})
-		if n := ev.f.called("due"); n != 1 {
-			t.Fatalf("listed %d times, want 1: a full page without progress ends the sweep", n)
-		}
-	})
-}
-
-func TestSweepErrors(t *testing.T) {
-	runEach(t, "listing", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		ev.f.set("due", 1, nil)
-		if _, err := ev.s.Sweep(context.Background()); !errors.Is(err, errFault) {
-			t.Fatalf("Sweep = %v, want the listing error", err)
-		}
-	})
-	runEach(t, "canceled", func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		first := ev.due(ev.a, 1)
-		second := ev.due(ev.b, 1)
-		before := ev.get(first)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		ev.f.onCall("finish", cancel)
-		ev.f.onCall("scrub", func() {
-			if ctx.Err() == nil {
-				t.Error("scrub before the cancellation")
-			}
-		})
-		st, err := ev.s.Sweep(ctx)
-		if !errors.Is(err, context.Canceled) || st.Due != 1 {
-			t.Fatalf("Sweep = %+v, %v; want one transfer then context.Canceled", st, err)
-		}
-		// The canceled final transaction failed or committed; either way
-		// the next sweep completes the work.
-		if st.Deleted == 1 {
-			if ev.f.called("scrub") != 1 {
-				t.Fatal("deleted transfer not scrubbed after the cancellation")
-			}
-			ev.sweep(Stats{Due: 1, Deleted: 1})
-		} else {
-			ev.sweep(Stats{Due: 2, Deleted: 2})
-		}
-		ev.assertDeleted(first, before)
-		if ev.get(second).Status != store.TransferDeleted {
-			t.Fatal("second transfer not deleted")
-		}
-	})
-}
-
-func TestFinishInvalidTenant(t *testing.T) {
-	t.Parallel()
+func TestRunTask(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
-	r := storeRepo{db: ev.db, vault: ev.vault}
-	if err := r.finish(context.Background(), tenant.ID("bad"), "trf_x", t0); !errors.Is(err, store.ErrInvalid) {
-		t.Fatalf("finish = %v, want ErrInvalid", err)
+	if err := ev.s.RunTask(context.Background(), "nope"); !errors.Is(err, ErrUnknownTask) {
+		t.Fatalf("RunTask(nope) = %v, want ErrUnknownTask", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ev.s.RunTask(ctx, TaskPurgeRows); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunTask(canceled) = %v", err)
+	}
+	if err := ev.s.RunTask(context.Background(), TaskBackup); !errors.Is(err, ErrBackupDisabled) {
+		t.Fatalf("RunTask(backup) without a directory = %v", err)
+	}
+	for _, tk := range allTasks[:5] {
+		ev.runTask(tk)
+		if !ev.s.LastRun(tk).Equal(ev.clock.Now()) {
+			t.Errorf("LastRun(%s) = %v", tk, ev.s.LastRun(tk))
+		}
+	}
+	if !ev.s.LastRun(TaskBackup).IsZero() {
+		t.Fatal("LastRun(backup) recorded without a backup")
 	}
 }
 
-// TestSweepOpenFile holds a stored file open, as a download stream would.
-// Where an open file cannot be removed (Windows without shared delete
-// access), the transfer stays due with its file keys destroyed and the next
-// sweep completes it once the file is closed; elsewhere it is removed at
-// once and the open handle may keep reading the unlinked ciphertext.
-func TestSweepOpenFile(t *testing.T) {
-	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
-		ev := newEnv(t, e)
-		fx := ev.due(ev.a, 1)
-		before := ev.get(fx)
-		f, _, err := ev.files.OpenRead(ev.a.ID, before.Files[0].StorageName)
-		if err != nil {
-			t.Fatal(err)
+// startEnv starts the sweeper of ev with fake timers and returns them with
+// the channel of the scheduled runs.
+func startEnv(t *testing.T, ev *env, ctx context.Context) (*fakeTimers, <-chan runResult) {
+	t.Helper()
+	ft := newFakeTimers()
+	ev.s.newTimer = ft.new
+	results := make(chan runResult, 32)
+	ev.s.afterRun = func(tk Task, err error) { results <- runResult{tk, err} }
+	if err := ev.s.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	return ft, results
+}
+
+// next returns the next scheduled run.
+func next(t *testing.T, ev *env, results <-chan runResult) runResult {
+	t.Helper()
+	select {
+	case r := <-results:
+		return r
+	case <-time.After(waitFor):
+		t.Fatalf("no run\nlogs:\n%s", ev.logs.all())
+		return runResult{}
+	}
+}
+
+// waitTimers waits until n timers were created.
+func waitTimers(t *testing.T, ft *fakeTimers, n int) map[Task]int {
+	t.Helper()
+	got := map[Task]int{}
+	for range n {
+		select {
+		case tk := <-ft.created:
+			got[tk]++
+		case <-time.After(waitFor):
+			t.Fatalf("timers created: %v, want %d", got, n)
 		}
-		defer func() { _ = f.Close() }()
-		st, err := ev.s.Sweep(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
-		switch st {
-		case Stats{Due: 1, Deleted: 1}:
-			_, rerr := f.ReadAt(make([]byte, 8), 0)
-			t.Logf("open file removed at once (%s); reading it afterwards: %v", runtime.GOOS, rerr)
-		case Stats{Due: 1, Failed: 1}:
-			d := ev.get(fx)
-			if d.Status != store.TransferAvailable || d.Files[0].DEKKeyID != "" {
-				t.Fatalf("status %s, file key kept %v; want available with the key destroyed",
-					d.Status, d.Files[0].DEKKeyID != "")
-			}
-			if ev.logs.count("step=remove files") != 1 {
-				t.Fatalf("logs:\n%s", ev.logs.all())
-			}
-			_ = f.Close()
-			ev.sweep(Stats{Due: 1, Deleted: 1})
-		default:
-			t.Fatalf("Sweep stats = %+v\nlogs:\n%s", st, ev.logs.all())
-		}
-		ev.assertDeleted(fx, before)
-	})
+	}
+	return got
 }
 
 func TestStartClose(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
-		ft := newFakeTicker()
-		ev.s.newTicker = ft.new
-		results := make(chan sweepResult, 4)
-		ev.s.afterSweep = func(st Stats, err error) { results <- sweepResult{st, err} }
-		next := func() sweepResult {
-			t.Helper()
-			select {
-			case r := <-results:
-				return r
-			case <-time.After(waitFor):
-				t.Fatalf("no sweep\nlogs:\n%s", ev.logs.all())
-				return sweepResult{}
-			}
-		}
+		dir := t.TempDir()
+		ev.s = ev.newSweeper(Options{BackupDir: dir, BackupTime: 11 * time.Hour})
 		ev.clock.set(t0)
 		fx := ev.due(ev.a, 1)
 		before := ev.get(fx)
 
-		if err := ev.s.Start(context.Background()); err != nil {
-			t.Fatalf("Start: %v", err)
-		}
+		ft, results := startEnv(t, ev, context.Background())
 		if err := ev.s.Start(context.Background()); !errors.Is(err, ErrStarted) {
 			t.Fatalf("second Start = %v, want ErrStarted", err)
 		}
-		// The first sweep runs at once; the transfer is not due yet.
-		if r := next(); r.err != nil || r.st != (Stats{}) {
-			t.Fatalf("first sweep = %+v", r)
+		// Every task but the backup runs at once, in order.
+		for _, tk := range allTasks[:5] {
+			if r := next(t, ev, results); r.task != tk || r.err != nil {
+				t.Fatalf("first runs: got %s (%v), want %s", r.task, r.err, tk)
+			}
 		}
-		if ft.period != DefaultInterval {
-			t.Fatalf("ticker period %v, want %v", ft.period, DefaultInterval)
+		sqlite := e.Driver == "sqlite"
+		nTimers := 5
+		if sqlite {
+			nTimers = 6
 		}
-		// The fake clock passes the grace period; the next tick deletes it.
+		created := waitTimers(t, ft, nTimers)
+		if created[TaskBackup] != boolInt(sqlite) {
+			t.Fatalf("backup timers %d on %s", created[TaskBackup], e.Driver)
+		}
+		if got := ev.logs.count("backups are made by the dedicated PostgreSQL container"); got != boolInt(!sqlite) {
+			t.Fatalf("PostgreSQL backup notice logged %d times", got)
+		}
+		if ft.lastDelay(TaskExpire) != DefaultInterval || ft.lastDelay(TaskOrphans) != DefaultOrphansInterval {
+			t.Fatalf("delays %v %v", ft.lastDelay(TaskExpire), ft.lastDelay(TaskOrphans))
+		}
+		if sqlite && ft.lastDelay(TaskBackup) != time.Hour {
+			t.Fatalf("backup delay %v, want 1h (10:00 to 11:00 UTC)", ft.lastDelay(TaskBackup))
+		}
+
+		// The fake clock passes the grace period; the next timer deletes it.
 		ev.clock.set(t0.Add(grace))
-		ft.c <- t0.Add(grace)
-		if r := next(); r.err != nil || r.st != (Stats{Due: 1, Deleted: 1}) {
-			t.Fatalf("second sweep = %+v", r)
+		ft.c[TaskDeleteAfterDownload] <- t0
+		if r := next(t, ev, results); r.task != TaskDeleteAfterDownload || r.err != nil {
+			t.Fatalf("second run = %+v", r)
 		}
 		ev.assertDeleted(fx, before)
-		// A listing failure is logged and the loop goes on.
-		ev.f.set("due", 1, nil)
-		ft.c <- t0.Add(grace + time.Minute)
-		if r := next(); !errors.Is(r.err, errFault) {
-			t.Fatalf("third sweep = %+v", r)
+		// A failure is logged and the loop goes on.
+		ev.f.set("tenantIDs", 1, nil)
+		ft.c[TaskPurgeRows] <- t0
+		if r := next(t, ev, results); r.task != TaskPurgeRows || !errors.Is(r.err, errFault) {
+			t.Fatalf("failed run = %+v", r)
 		}
-		if ev.logs.count("ERROR lifecycle: sweep failed") != 1 {
+		if ev.logs.count("ERROR lifecycle: task failed task=purge-rows") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		if sqlite {
+			ev.clock.set(t0.Add(time.Hour))
+			ft.c[TaskBackup] <- t0
+			if r := next(t, ev, results); r.task != TaskBackup || r.err != nil {
+				t.Fatalf("backup run = %+v", r)
+			}
+			waitTimers(t, ft, 3) // delete, purge, backup again
+			if ft.lastDelay(TaskBackup) != 24*time.Hour {
+				t.Fatalf("next backup delay %v, want 24h", ft.lastDelay(TaskBackup))
+			}
 		}
 
 		if err := ev.s.Close(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-		select {
-		case <-ft.stopped:
-		case <-time.After(waitFor):
-			t.Fatal("ticker not stopped")
+		for _, tk := range allTasks[:5] {
+			if ft.stops(tk) == 0 {
+				t.Errorf("timer of %s not stopped", tk)
+			}
 		}
 		if err := ev.s.Close(context.Background()); err != nil {
 			t.Fatalf("second Close: %v", err)
@@ -411,9 +213,27 @@ func TestStartClose(t *testing.T) {
 	})
 }
 
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func TestStartWithoutBackupDir(t *testing.T) {
+	ev := newEnv(t, storetest.SQLite(t))
+	ft, results := startEnv(t, ev, context.Background())
+	for range 5 {
+		next(t, ev, results)
+	}
+	if got := waitTimers(t, ft, 5); got[TaskBackup] != 0 {
+		t.Fatalf("backup scheduled without a directory: %v", got)
+	}
+}
+
 func TestCloseTimeout(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
-	ev.s.newTicker = newFakeTicker().new
+	ev.s.newTimer = newFakeTimers().new
 	entered, release := make(chan struct{}), make(chan struct{})
 	ev.f.onCall("due", func() {
 		close(entered)
@@ -426,51 +246,58 @@ func TestCloseTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := ev.s.Close(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Close = %v, want context.Canceled while a sweep runs", err)
+		t.Fatalf("Close = %v, want context.Canceled while a run is in progress", err)
 	}
 	close(release)
 	if err := ev.s.Close(context.Background()); err != nil {
-		t.Fatalf("Close after the sweep: %v", err)
+		t.Fatalf("Close after the run: %v", err)
 	}
-	if ev.logs.count("sweep failed") != 0 {
-		t.Fatalf("a sweep interrupted by Close was logged as failed:\n%s", ev.logs.all())
+	if ev.logs.count("task failed") != 0 {
+		t.Fatalf("a run interrupted by Close was logged as failed:\n%s", ev.logs.all())
 	}
 }
 
 func TestStartStopsWithContext(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
-	ft := newFakeTicker()
-	ev.s.newTicker = ft.new
 	ctx, cancel := context.WithCancel(context.Background())
-	if err := ev.s.Start(ctx); err != nil {
+	ft, results := startEnv(t, ev, ctx)
+	for range 5 {
+		next(t, ev, results)
+	}
+	waitTimers(t, ft, 5)
+	cancel()
+	if err := ev.s.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	cancel()
-	select {
-	case <-ft.stopped:
-	case <-time.After(waitFor):
-		t.Fatal("loop not stopped by its context")
+	for _, tk := range allTasks[:5] {
+		if ft.stops(tk) != 1 {
+			t.Errorf("timer of %s stopped %d times", tk, ft.stops(tk))
+		}
 	}
 }
 
-func TestRealTicker(t *testing.T) {
+func TestRealTimer(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
-	ev.s.interval = 5 * time.Millisecond
-	sweeps := make(chan struct{}, 8)
-	ev.s.afterSweep = func(Stats, error) {
+	ev.s = ev.newSweeper(Options{Interval: 5 * time.Millisecond})
+	runs := make(chan Task, 64)
+	ev.s.afterRun = func(tk Task, _ error) {
 		select {
-		case sweeps <- struct{}{}:
+		case runs <- tk:
 		default:
 		}
 	}
 	if err := ev.s.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
+	expires := 0
+	for expires < 3 {
 		select {
-		case <-sweeps:
+		case tk := <-runs:
+			if tk == TaskExpire {
+				expires++
+			}
 		case <-time.After(waitFor):
-			t.Fatal("the real ticker does not drive the sweeps")
+			t.Fatal("the real timers do not drive the runs")
 		}
 	}
 }

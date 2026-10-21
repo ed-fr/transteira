@@ -94,6 +94,13 @@ func TestTransferDriverFaults(t *testing.T) {
 			return f.tx(ctx, func(tx *ScopedTx) error { return f.db.Transfers().SetStatusTx(ctx, tx, f.trf.ID, from, to, now) })
 		}
 	}
+	// setStatusUnkeyed destroys the fixture's file key first.
+	setStatusUnkeyed := func(f *transferFixture, from, to TransferStatus) func() error {
+		if err := f.db.WrappedKeys().Delete(ctx, f.tid, f.file.DEKKeyID); err != nil {
+			panic(err)
+		}
+		return setStatus(f, from, to)
+	}
 	deleteTransfer := func(f *transferFixture) func() error {
 		return func() error {
 			return f.tx(ctx, func(tx *ScopedTx) error { return f.db.Transfers().DeleteTx(ctx, tx, f.trf.ID) })
@@ -151,7 +158,7 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"insert recipient", faultExec, "INSERT INTO transfer_recipients", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"check key", faultQuery, "FROM wrapped_keys WHERE tenant_id", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"insert file", faultExec, "INSERT INTO transfer_files", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
-		{"get transfer scan", faultScanNil, "delete_after FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
+		{"get transfer scan", faultScanNil, "ended_at FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list recipients", faultQuery, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"scan recipients", faultScanNil, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list files", faultQuery, "scan_status FROM transfer_files WHERE tenant_id = ? AND transfer_id", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
@@ -164,10 +171,19 @@ func TestTransferDriverFaults(t *testing.T) {
 			return setStatus(f, TransferUploading, TransferScanning)
 		}},
 		{"set status", faultExec, "SET status = ?", func(_ *testing.T, f *transferFixture) func() error {
+			return setStatusUnkeyed(f, TransferUploading, TransferDeleted)
+		}},
+		{"set status count keys", faultQuery, "dek_key_id IS NOT NULL", func(_ *testing.T, f *transferFixture) func() error {
 			return setStatus(f, TransferUploading, TransferDeleted)
 		}},
-		{"status probe", faultQuery, "SELECT count(*) FROM transfers", func(_ *testing.T, f *transferFixture) func() error {
-			return setStatus(f, TransferAvailable, TransferExpired)
+		{"set status read", faultQuery, "ended_at FROM transfers WHERE tenant_id = ? AND id = ?", func(_ *testing.T, f *transferFixture) func() error {
+			return setStatusUnkeyed(f, TransferAvailable, TransferExpired)
+		}},
+		{"finalize probe", faultQuery, "SELECT count(*) FROM transfers", func(_ *testing.T, f *transferFixture) func() error {
+			if err := setStatus(f, TransferUploading, TransferScanning)(); err != nil {
+				panic(err)
+			}
+			return setStatus(f, TransferUploading, TransferScanning)
 		}},
 		{"count keyed files", faultQuery, "dek_key_id IS NOT NULL", func(_ *testing.T, f *transferFixture) func() error { return deleteTransfer(f) }},
 		{"delete transfer", faultExec, "DELETE FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return eraseTransfer(f) }},

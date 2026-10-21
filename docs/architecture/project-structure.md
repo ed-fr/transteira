@@ -61,9 +61,10 @@ transteira/
 │   ├── download/                    # Accès par jeton, mot de passe et blocage, cookie de déverrouillage, fichier avec
 │   │                                # Range, archive, suivi des plages servies et premier téléchargement
 │   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
-│   ├── lifecycle/                   # Tâche périodique unique (§20) : suppression après premier téléchargement ;
-│   │                                # à venir : expirations, uploads abandonnés, purges RGPD, adresses et défis
-│   │                                # périmés, compteurs password_failures, fichiers d'état et orphelins, WAL
+│   ├── lifecycle/                   # Tâche périodique unique (§20, §23) : suppression après premier téléchargement,
+│   │                                # expirations, uploads abandonnés, purge des lignes (transferts terminés depuis
+│   │                                # 30 jours, codes, sessions, compteurs, adresses et invitations à 12 mois),
+│   │                                # réconciliation des orphelins sur disque, copie nocturne SQLite (VACUUM INTO)
 │   ├── (blocklist → store)          # Liste de blocage (adresse, domaine, SHA-256) : pas de package dédié,
 │   │                                # dépôt store/blocklist.go, appliquée par deposit (et transfer pour les empreintes)
 │   ├── quota/                       # Limite par envoi, quota par entité, réservations, seuils 80 % / 100 %
@@ -89,7 +90,7 @@ transteira/
 │   ├── audit/                       # Journal d'audit (en base, cloisonné par tenant)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
 │   ├── maintenance/                 # État du mode maintenance (variable d'environnement + administration)
-│   ├── backup/                      # VACUUM INTO (SQLite) / pg_dump (PostgreSQL)
+│   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
 │   ├── gdpr/                        # Recherche et effacement des données d'une adresse
 │   ├── stats/                       # Statistiques par entité et globales, espace disque
 │   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/)

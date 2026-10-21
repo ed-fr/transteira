@@ -184,12 +184,18 @@ func TestDownloadAdapter(t *testing.T) {
 
 func TestLifecycleOptions(t *testing.T) {
 	t.Parallel()
-	if got := lifecycleOptions(&runOptions{}, nil); got.Interval != 0 {
+	cfg := &config.Config{
+		UploadTTL: 24 * time.Hour, UploadMaxAge: 12 * time.Hour,
+		BackupDir: "/backups", BackupTime: 150 * time.Minute, BackupKeep: 9,
+	}
+	got := lifecycleOptions(cfg, &runOptions{}, nil)
+	if got.Interval != 0 || got.UploadTTL != 12*time.Hour || got.BackupDir != "/backups" ||
+		got.BackupTime != 150*time.Minute || got.BackupKeep != 9 {
 		t.Errorf("default lifecycle options = %+v", got)
 	}
 	var o runOptions
 	WithLifecycleOptions(func(lo *lifecycle.Options) { lo.Interval = 50 * time.Millisecond })(&o)
-	if got := lifecycleOptions(&o, nil); got.Interval != 50*time.Millisecond {
+	if got := lifecycleOptions(cfg, &o, nil); got.Interval != 50*time.Millisecond || got.BackupKeep != 9 {
 		t.Errorf("edited lifecycle options = %+v", got)
 	}
 }

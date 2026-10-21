@@ -95,7 +95,7 @@ func TestDownloadDriverFaults(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		return func() error { _, err := f.db.Transfers().DueDeletions(ctx, now); return err }
+		return func() error { _, err := f.db.Transfers().DueDeletions(ctx, now, SweepPage{Limit: 1}); return err }
 	}
 	failures := func(op string) func(*testing.T, *transferFixture) func() error {
 		return func(t *testing.T, f *transferFixture) func() error {

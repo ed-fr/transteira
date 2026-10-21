@@ -47,7 +47,7 @@ func TestMigrateCommand(t *testing.T) {
 		t.Fatalf("migrate --status (fresh) = %d, %q, %q", code, out, errOut)
 	}
 	code, out, errOut = runCmd("migrate")
-	if code != exitOK || !strings.Contains(out, "Applied 6 migration(s) on sqlite") || !strings.Contains(out, "applied") {
+	if code != exitOK || !strings.Contains(out, "Applied 7 migration(s) on sqlite") || !strings.Contains(out, "applied") {
 		t.Fatalf("migrate = %d, %q, %q", code, out, errOut)
 	}
 	code, out, _ = runCmd("migrate")

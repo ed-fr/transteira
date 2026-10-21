@@ -73,7 +73,9 @@ const (
 	//   - the download service: its pending first-download mail retries are
 	//     dropped (logged);
 	//   - the lifecycle sweeper: an erasure in progress stops before its next
-	//     transfer and is completed by a later sweep.
+	//     transfer and is completed by a later run; a SQLite copy in progress
+	//     is interrupted (VACUUM INTO under a canceled context) and its
+	//     temporary file removed, the next night writes a new one.
 	// It takes one second from the former 7 s of ShutdownTimeout.
 	BackgroundCloseTimeout = time.Second
 	// MailDrainTimeout bounds the delivery of the mails still queued at
@@ -258,8 +260,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
 		SecurityLog: secLog,
 	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger})
-	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, States: files},
-		lifecycleOptions(&o, logger))
+	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, Files: files},
+		lifecycleOptions(cfg, &o, logger))
 	// Deferred after closeMailQueue, the data directory and the database, so
 	// it runs before them: the workers stop enqueueing mails and touching
 	// the files before the queue drains.
@@ -507,10 +509,16 @@ func (a downloadAdapter) PrepareArchive(ctx context.Context, t *tenant.Tenant, r
 	return archive, nil
 }
 
-// lifecycleOptions returns the options of the lifecycle sweeper, edited by
-// WithLifecycleOptions when given.
-func lifecycleOptions(o *runOptions, logger *slog.Logger) lifecycle.Options {
-	opts := lifecycle.Options{Logger: logger}
+// lifecycleOptions returns the options of the lifecycle sweeper (the
+// nightly copy settings, and the shortest life of an upload, which bounds
+// the abandoned upload candidates), edited by WithLifecycleOptions when
+// given.
+func lifecycleOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) lifecycle.Options {
+	opts := lifecycle.Options{
+		UploadTTL: min(cfg.UploadTTL, cfg.UploadMaxAge),
+		BackupDir: cfg.BackupDir, BackupTime: cfg.BackupTime, BackupKeep: cfg.BackupKeep,
+		Logger: logger,
+	}
 	if o.lifecycleOpts != nil {
 		o.lifecycleOpts(&opts)
 	}

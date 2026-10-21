@@ -53,13 +53,16 @@ var (
 )
 
 // TenantTransfer identifies a transfer and its tenant, as returned by the
-// cross-tenant [Transfers.ScanningSweep]: the caller reads the transfer in
-// the scope of its tenant.
+// cross-tenant sweeps ([Transfers.ScanningSweep] and the cleanup sweeps):
+// the caller reads the transfer in the scope of its tenant.
 type TenantTransfer struct {
 	// TenantID is the tenant of the transfer.
 	TenantID tenant.ID
 	// TransferID is the transfer ("trf_" + ULID).
 	TransferID string
+	// SortKey is the time the keyset-paginated sweeps order by (see
+	// [SweepPage]), zero for the other listings.
+	SortKey time.Time
 }
 
 // final reports whether s is a final scan status, recorded by
@@ -127,11 +130,11 @@ func markAvailable(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []
 
 // MarkRejectedTx moves the scanning transfer trfID of the tenant tx is
 // bound to to rejected, inside tx: every file was infected or could not be
-// analyzed. It returns ErrNotFound when the transfer does not exist or
+// analyzed. EndedAt is set from the store's clock. It returns ErrNotFound when the transfer does not exist or
 // belongs to another tenant, and ErrConflict when it is not scanning. After
 // an error, the caller must abort the transaction.
 func (r *Transfers) MarkRejectedTx(ctx context.Context, tx *ScopedTx, trfID string) error {
-	if err := setStatus(ctx, tx, trfID, TransferScanning, TransferRejected, time.Time{}); err != nil {
+	if err := setStatus(ctx, tx, trfID, TransferScanning, TransferRejected, r.db.now()); err != nil {
 		return wrap("mark transfer rejected", err)
 	}
 	return nil

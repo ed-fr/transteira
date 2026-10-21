@@ -466,6 +466,18 @@ func TestTransfersStatus(t *testing.T) {
 		}
 		wantErr(t, "SetStatusTx(scanning -> available)", setStatus(tr.ID, store.TransferScanning, store.TransferAvailable), store.ErrInvalid)
 		markAvailable(t, db, a.ID, tr.ID)
+		// Expiry and deletion refuse while a key remains: file keys first,
+		// then the sealed download token (T-110).
+		wantErr(t, "SetStatusTx(available -> expired) with file keys", setStatus(tr.ID, store.TransferAvailable, store.TransferExpired), store.ErrKeysRemain)
+		av, err := transfers.Get(ctx, a.ID, tr.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deleteFileKeys(t, db, a.ID, av)
+		wantErr(t, "SetStatusTx(available -> deleted) with the token key", setStatus(tr.ID, store.TransferAvailable, store.TransferDeleted), store.ErrKeysRemain)
+		if err := db.WrappedKeys().Delete(ctx, a.ID, av.DownloadTokenKeyID); err != nil {
+			t.Fatal(err)
+		}
 		if err := setStatus(tr.ID, store.TransferAvailable, store.TransferExpired); err != nil {
 			t.Fatalf("SetStatusTx(available -> expired): %v", err)
 		}
@@ -480,6 +492,8 @@ func TestTransfersStatus(t *testing.T) {
 
 		// An unfinalized transfer may be deleted or expire.
 		up := mustTransfer(t, db, a.ID, newTransfer())
+		wantErr(t, "SetStatusTx(uploading -> deleted) with a file key", setStatus(up.ID, store.TransferUploading, store.TransferDeleted), store.ErrKeysRemain)
+		deleteFileKeys(t, db, a.ID, up)
 		if err := setStatus(up.ID, store.TransferUploading, store.TransferDeleted); err != nil {
 			t.Errorf("SetStatusTx(uploading -> deleted): %v", err)
 		}

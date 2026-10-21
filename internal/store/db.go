@@ -84,6 +84,10 @@ type DB struct {
 	// Migrate on engines with a separate owner role (PostgreSQL).
 	driverName string
 	ownerDSN   config.Secret
+	// purgeBatch and reconcileRows are PurgeBatchSize and MaxReconcileRows,
+	// lowered by the internal tests to reach their boundaries.
+	purgeBatch    int
+	reconcileRows int
 }
 
 // Option customizes [Open].
@@ -129,7 +133,9 @@ func newDB(d *dialect, write, read *sql.DB, opts []Option) *DB {
 		now:     time.Now,
 		newID:   id.NewGenerator(nil, nil).New,
 
-		migrationsFS: migrationFiles,
+		migrationsFS:  migrationFiles,
+		purgeBatch:    PurgeBatchSize,
+		reconcileRows: MaxReconcileRows,
 	}
 	for _, o := range opts {
 		o(db)

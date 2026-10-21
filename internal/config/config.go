@@ -91,6 +91,12 @@ const (
 	maxMaxOpenTransfers = 1000
 )
 
+// Nightly database copy retention bounds.
+const (
+	minBackupKeep = 1
+	maxBackupKeep = 90
+)
+
 // unixPrefix introduces a Unix socket address in TT_CLAMAV_ADDR.
 const unixPrefix = "unix:"
 
@@ -195,6 +201,12 @@ type Config struct {
 	SMTPTimeout time.Duration
 	// MailQueueSize is the capacity of the in-memory mail queue.
 	MailQueueSize int
+
+	// BackupTime is the UTC time of day of the nightly SQLite copy, as an
+	// offset since midnight in [0, 24h).
+	BackupTime time.Duration
+	// BackupKeep is the number of nightly database copies kept.
+	BackupKeep int
 }
 
 // IsTrustedProxy reports whether addr belongs to a trusted proxy prefix.
@@ -239,6 +251,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadDurations(c)
 	l.loadMail(c)
 	l.loadAntivirus(c)
+	l.loadMaintenance(c)
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
@@ -369,11 +382,13 @@ func (l *loader) path(name, def string) string {
 
 // loadPaths reads the volume paths and the master key paths, and checks that
 // the master keys live outside the data, backup, log and SQLite database
-// volumes (spec 16.1 and 18.1). It must run after loadDatabase.
+// volumes (spec 16.1 and 18.1), and that the backup directory is separate
+// from the other volumes. It must run after loadDatabase.
 func (l *loader) loadPaths(c *Config) {
 	c.DataDir = l.path(EnvDataDir, DefaultDataDir)
 	c.BackupDir = l.path(EnvBackupDir, DefaultBackupDir)
 	c.LogDir = l.path(EnvLogDir, DefaultLogDir)
+	l.checkBackupDir(c)
 
 	if l.get(EnvMasterKeyFile) == "" {
 		l.fail(EnvMasterKeyFile, "is required")
@@ -396,6 +411,47 @@ func (l *loader) loadPaths(c *Config) {
 	}
 }
 
+// checkBackupDir checks TT_BACKUP_DIR: no "?" or "#", which the SQLite
+// DSN that checks each nightly copy would interpret, and no overlap with the
+// data, log and SQLite database volumes, in either direction: the rotation
+// of the copies must never see the files of another volume, and the copies
+// (which hold the wrapped file keys) must not land in a volume backed up or
+// exposed differently.
+func (l *loader) checkBackupDir(c *Config) {
+	if c.BackupDir == "" {
+		return
+	}
+	if strings.ContainsAny(c.BackupDir, "?#") {
+		l.fail(EnvBackupDir, "must not contain \"?\" or \"#\"")
+	}
+	for _, vol := range c.volumes(false) {
+		if vol.dir != "" && (pathWithin(c.BackupDir, vol.dir) || pathWithin(vol.dir, c.BackupDir)) {
+			l.fail(EnvBackupDir, "must not be, contain or lie inside %s (%s): the database copies need their own volume",
+				vol.name, vol.dir)
+		}
+	}
+}
+
+// volume is a directory of the installation, named by its variable.
+type volume struct{ name, dir string }
+
+// volumes returns the data and log directories, the backup directory when
+// withBackup is set, and the folder of the SQLite database. Only the folder
+// of the SQLite database is named, never the DSN itself.
+func (c *Config) volumes(withBackup bool) []volume {
+	vols := []volume{{EnvDataDir, c.DataDir}, {EnvLogDir, c.LogDir}}
+	if withBackup {
+		vols = append(vols, volume{EnvBackupDir, c.BackupDir})
+	}
+	// The SQLite database lives in its own volume (spec 18.1).
+	if c.DBDriver == DriverSQLite {
+		if dir, ok := sqliteDir(c.DBDSN.Reveal()); ok {
+			vols = append(vols, volume{"the folder of " + EnvDBDSN, dir})
+		}
+	}
+	return vols
+}
+
 // CheckMasterKeyPath applies the location rules of TT_MASTER_KEY_FILE to
 // path, a master key file given outside the environment (for example the
 // old key of "rotate-master-key -recover-from"): it must be absolute and lie
@@ -416,16 +472,7 @@ func (c *Config) CheckMasterKeyPath(path string) (string, error) {
 // inside one of the volumes of c. Only the folder of the SQLite database is
 // reported, never the DSN itself.
 func (c *Config) keyOutsideVolumes(path string) error {
-	volumes := []struct{ name, dir string }{
-		{EnvDataDir, c.DataDir}, {EnvBackupDir, c.BackupDir}, {EnvLogDir, c.LogDir},
-	}
-	// The SQLite database lives in its own volume (spec 18.1).
-	if c.DBDriver == DriverSQLite {
-		if dir, ok := sqliteDir(c.DBDSN.Reveal()); ok {
-			volumes = append(volumes, struct{ name, dir string }{"the folder of " + EnvDBDSN, dir})
-		}
-	}
-	for _, vol := range volumes {
+	for _, vol := range c.volumes(true) {
 		if vol.dir != "" && pathWithin(path, vol.dir) {
 			return fmt.Errorf("must not be located inside %s (%s): the master key must stay outside the data volumes",
 				vol.name, vol.dir)
@@ -570,4 +617,19 @@ func (l *loader) loadAntivirus(c *Config) {
 		l.fail(EnvScanWorkers, "%v", err)
 	}
 	c.ScanWorkers = w
+}
+
+// loadMaintenance reads the time and the retention of the nightly database
+// copy.
+func (l *loader) loadMaintenance(c *Config) {
+	t, err := parseTimeOfDay(l.getOr(EnvBackupTime, DefaultBackupTime))
+	if err != nil {
+		l.fail(EnvBackupTime, "%v", err)
+	}
+	c.BackupTime = t
+	n, err := parseInt(l.getOr(EnvBackupKeep, DefaultBackupKeep), minBackupKeep, maxBackupKeep)
+	if err != nil {
+		l.fail(EnvBackupKeep, "%v", err)
+	}
+	c.BackupKeep = n
 }

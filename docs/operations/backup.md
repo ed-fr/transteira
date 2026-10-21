@@ -1,0 +1,158 @@
+# Backup and restore
+
+TransTeira keeps two kinds of data: the **database** (metadata, wrapped
+keys, settings) and the **data volume** (the encrypted files). The VM
+backup (for example Veeam) captures the Docker volumes; TransTeira adds a
+**clean nightly copy of the database**, so that the VM backup never has to
+rely on a database file caught in the middle of a write (CLAUDE.md
+section 23, threat model T-114).
+
+- Variables: `TT_BACKUP_DIR`, `TT_BACKUP_TIME`, `TT_BACKUP_KEEP`, see
+  `.env.example`.
+- Implementation: the `backup` task of the cleanup task
+  (`internal/lifecycle`), `store.DB.Backup`.
+- Related: [Master key](master-key.md) (the key a restore needs, and
+  crypto-erase in backups).
+
+> A backup without the master key that was active when it was taken is
+> useless: every file and every stored secret stays encrypted. Keep the key
+> in a password vault, never in the same backup job as the volumes.
+
+## SQLite: nightly copy by TransTeira
+
+Every day at `TT_BACKUP_TIME` (UTC, `02:30` by default), TransTeira:
+
+1. writes a copy of the live database with `VACUUM INTO` to a temporary
+   file in `TT_BACKUP_DIR` (`.transteira-<timestamp>.db.tmp`), created
+   empty with mode `0600` beforehand so that the copy is never readable by
+   others;
+2. checks the copy with `PRAGMA quick_check`;
+3. flushes it to disk, sets its mode to `0600` and renames it atomically to
+   `transteira-YYYYMMDDTHHMMSSZ.db`;
+4. keeps the `TT_BACKUP_KEEP` newest copies (7 by default) and deletes the
+   older ones and any temporary file left by an interrupted copy.
+
+A failure is logged at `ERROR` and the temporary file is removed; the
+previous copies are kept. `VACUUM INTO` copies the live pages only: data
+already deleted (including destroyed keys, thanks to `secure_delete`) is
+never carried into a copy.
+
+Mount `TT_BACKUP_DIR` as its own volume so that the VM backup captures it.
+TransTeira refuses to start when it overlaps the data directory, the log
+directory or the folder of the SQLite database (equal, inside or
+containing), or when its path contains `?` or `#`; the master key file must
+not be located under any of these directories either. At each copy the
+directory is created with mode `0700` if missing, set back to `0700` (with a
+warning) if group or others can access it, and refused if it is a symbolic
+link.
+
+## PostgreSQL: dedicated backup container
+
+The TransTeira image is minimal (no shell, no PostgreSQL client), so it does
+not run `pg_dump`. With PostgreSQL, the `backup` task does nothing (it says
+so once at startup) and a **dedicated container** based on the official
+`postgres` image (same major version as the server) takes the dumps. The
+Docker step of the project provides it in the compose file; its principle:
+
+```yaml
+  db-backup:
+    image: postgres:17.6
+    restart: unless-stopped
+    networks: [internal]
+    volumes:
+      - backups:/backups
+    environment:
+      PGHOST: postgres
+      PGDATABASE: transteira
+      PGUSER: transteira_owner
+      PGPASSFILE: /run/secrets/pgpass
+      # Every table forces row-level security, even for its owner: the
+      # system scope lets the dump read the rows of every tenant.
+      PGOPTIONS: "-c app.system_scope=on"
+      KEEP: "7"
+    secrets: [pgpass]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        while true; do
+          sleep $$(( ( $$(date -u -d 02:30 +%s) - $$(date -u +%s) + 86400 ) % 86400 ))
+          f=/backups/transteira-$$(date -u +%Y%m%dT%H%M%SZ).dump
+          if pg_dump --enable-row-security --format=custom --file="$$f.tmp"; then
+            mv "$$f.tmp" "$$f"
+          else
+            rm -f "$$f.tmp"
+          fi
+          ls -1t /backups/transteira-*.dump | tail -n +$$((KEEP + 1)) | xargs -r rm -f
+          sleep 60
+        done
+```
+
+Every table uses `FORCE ROW LEVEL SECURITY`, so even the owner role only
+sees the rows its session is allowed to see. A plain `pg_dump` therefore
+stops with "query would be affected by row-level security policy": the
+dump needs `--enable-row-security` and the system scope
+(`PGOPTIONS="-c app.system_scope=on"`), as above. Use the owner role, which
+owns the schema; keep the application role (DML only, checked at startup)
+for TransTeira. The `pgpass` secret file must have mode `0600`, or libpq
+ignores it. Give the dumps the same retention as `TT_BACKUP_KEEP`.
+
+## Crypto-erase and copies
+
+Each copy holds the wrapped keys of the files that existed when it was
+taken. A deleted or expired transfer is therefore still recoverable from a
+copy, with the current master key, until that copy is rotated out
+(`TT_BACKUP_KEEP` days) **and** the VM backups that captured it have
+expired. A master key rotation followed by the destruction of the old key
+makes all older copies unreadable (decision P25, threat model T-109); see
+[Crypto-erase](master-key.md#crypto-erase).
+
+## Restore
+
+You need, from the **same point in time** as far as possible:
+
+1. a database copy (`transteira-*.db` for SQLite, `transteira-*.dump` for
+   PostgreSQL);
+2. the data volume (the encrypted files);
+3. the master key active when the copy was taken (see
+   [Backup and restore](master-key.md#backup-and-restore)).
+
+### SQLite
+
+1. Stop the TransTeira container.
+2. Restore the data volume from the VM backup.
+3. Replace the file named by `TT_DB_DSN` by the chosen copy, and delete
+   any `-wal` and `-shm` files next to it.
+4. The copy has mode `0600`: make sure its owner is the container user,
+   then start TransTeira. The migrations bring an older copy up to date.
+
+### PostgreSQL
+
+1. Stop the TransTeira container.
+2. Restore the data volume from the VM backup.
+3. Recreate an empty database owned by the owner role, then restore the
+   dump with that role and the system scope:
+   `PGOPTIONS="-c app.system_scope=on" pg_restore --no-owner --exit-on-error -U transteira_owner -d transteira transteira-<ts>.dump`.
+   The grants to the application role and the row-level security policies
+   are part of the dump.
+4. Start TransTeira.
+
+### After a restore
+
+The nightly copy and the data volume are usually a few hours apart:
+
+- files uploaded after the copy are on disk but unknown to the database:
+  the cleanup task removes them once their modification time is more than
+  24 hours old, which can be at the first run after startup;
+- transfers deleted after the copy come back in the database without their
+  files (their keys were destroyed after the copy, but the copy still holds
+  them): downloading them fails, and they expire normally.
+
+Tell the users concerned to send their most recent transfers again.
+
+## Deleted tenants
+
+Deleting a tenant destroys its keys by cascade, so its files can no longer
+be decrypted, but its directory under `TT_DATA_DIR` is not removed: the
+cleanup task only logs it. Remove that directory by hand once the tenant is
+gone.

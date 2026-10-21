@@ -48,6 +48,9 @@ type dialect struct {
 	// scrubDeleted, when set, is run by [DB.ScrubDeleted] on the write pool
 	// and returns (busy, log frames, checkpointed frames).
 	scrubDeleted string
+	// backup, when set, is run by [DB.Backup] on the write pool, outside
+	// any transaction, with the destination path as its only argument.
+	backup string
 	// migrationLock, when set, serializes concurrent migrators. It runs at
 	// the start of each migration transaction and is released at its end.
 	migrationLock string
@@ -95,6 +98,7 @@ type dialect struct {
 var sqliteDialect = &dialect{
 	name:                  config.DriverSQLite,
 	scrubDeleted:          `PRAGMA wal_checkpoint(TRUNCATE)`,
+	backup:                `VACUUM INTO ?`,
 	migrationsTableExists: `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`,
 }
 
