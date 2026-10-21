@@ -46,6 +46,9 @@ type extVectors struct {
 	MACCSRF              string `json:"mac_csrf_hex"`
 	MACRecognitionEmail  string `json:"mac_recognition_email"`
 	MACRecognition       string `json:"mac_recognition_hex"`
+	MACGrantTransferID   string `json:"mac_download_grant_transfer_id"`
+	MACGrantExpiry       string `json:"mac_download_grant_expiry_hex"`
+	MACDownloadGrant     string `json:"mac_download_grant_hex"`
 }
 
 // lp returns the big-endian uint32 length of s followed by s.
@@ -247,7 +250,8 @@ func TestVectorsIndependent(t *testing.T) {
 		}
 		return hex.EncodeToString(m.Sum(nil))
 	}
-	if v.MACChallengeID == "" || v.MACCode == "" || v.MACSessionToken == "" || v.MACRecognitionEmail == "" {
+	if v.MACChallengeID == "" || v.MACCode == "" || v.MACSessionToken == "" || v.MACRecognitionEmail == "" ||
+		v.MACGrantTransferID == "" || v.MACGrantExpiry == "" {
 		t.Fatal("MAC vector inputs missing")
 	}
 	if got := macOf("otp", v.MACChallengeID, v.MACCode); got != v.MACOTP {
@@ -258,6 +262,17 @@ func TestVectorsIndependent(t *testing.T) {
 	}
 	if got := macOf("recognition", v.TenantID, v.MACRecognitionEmail); got != v.MACRecognition {
 		t.Fatalf("recognition MAC %s, vectors %s", got, v.MACRecognition)
+	}
+	grantExpiry, err := hex.DecodeString(v.MACGrantExpiry)
+	if err != nil || len(grantExpiry) != 8 {
+		t.Fatalf("download grant expiry %q: %v", v.MACGrantExpiry, err)
+	}
+	if got := macOf("download-grant", v.TenantID, v.MACGrantTransferID, string(grantExpiry)); got != v.MACDownloadGrant {
+		t.Fatalf("download grant MAC %s, vectors %s", got, v.MACDownloadGrant)
+	}
+	// The same parts under another purpose give another MAC.
+	if macOf("recognition", v.TenantID, v.MACGrantTransferID, string(grantExpiry)) == v.MACDownloadGrant {
+		t.Fatal("download grant MAC equals a recognition MAC")
 	}
 	// The MAC keys are not the wrapping keys of the same name space.
 	if bytes.Equal(hkdf32(t, master, "transteira/v1/mac/otp"), hkdf32(t, master, "transteira/v1/wrap/dek")) {

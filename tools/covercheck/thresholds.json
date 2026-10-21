@@ -16,8 +16,10 @@
     "internal/authz": 100,
     "internal/crypto": 100,
     "internal/deposit": 100,
+    "internal/download": 100,
     "internal/filename": 100,
     "internal/httpserver/middleware": 100,
+    "internal/lifecycle": 100,
     "internal/masterkey": 100,
     "internal/netpolicy": 100,
     "internal/scan": 100,
@@ -26,6 +28,7 @@
     "internal/tenant": 100,
     "internal/textsafe": 100,
     "internal/transfer": 100,
-    "internal/upload": 100
+    "internal/upload": 100,
+    "internal/zipstream": 100
   }
 }

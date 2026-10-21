@@ -304,7 +304,7 @@ func TestMailRetryLostAtShutdown(t *testing.T) {
 			t.Errorf("logs:\n%s", ev.logs.all())
 		}
 		// A retry scheduled once closed is dropped and logged too.
-		ev.w.schedule(context.Background(), task{mails: &mailBatch{k: key{tid: ev.a.ID, id: trfID}, jobs: make([]mail.Job, 2)}}, time.Millisecond)
+		ev.w.mails.Send(context.Background(), make([]mail.Job, 2))
 		if ev.logs.count("dropped at shutdown") != 2 {
 			t.Errorf("logs:\n%s", ev.logs.all())
 		}
@@ -534,7 +534,7 @@ func TestDefaults(t *testing.T) {
 	w := New(Deps{}, Options{RetryMin: time.Minute})
 	o := w.opts
 	if o.Workers != DefaultWorkers || o.RetryMin != time.Minute || o.RetryMax != DefaultRetryMax ||
-		o.MaxFileErrors != DefaultMaxFileErrors || o.MailRetryFor != DefaultMailRetryFor || w.sweepLimit != store.ScanSweepLimit {
+		o.MaxFileErrors != DefaultMaxFileErrors || w.sweepLimit != store.ScanSweepLimit {
 		t.Errorf("options %+v", o)
 	}
 	w = New(Deps{}, Options{RetryMin: time.Hour, RetryMax: time.Second})

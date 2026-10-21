@@ -690,7 +690,7 @@ func (ev *env) waitIdle() {
 	ev.waitUntil("idle worker", func() bool {
 		ev.w.mu.Lock()
 		defer ev.w.mu.Unlock()
-		return len(ev.w.fifo) == 0 && ev.w.running == 0 && len(ev.w.known) == 0 && len(ev.w.timers) == 0
+		return len(ev.w.fifo) == 0 && ev.w.running == 0 && len(ev.w.known) == 0 && len(ev.w.timers) == 0 && ev.w.mails.Pending() == 0
 	})
 }
 

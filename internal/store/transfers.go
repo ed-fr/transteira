@@ -18,7 +18,9 @@ import (
 type TransferStatus string
 
 // Transfer statuses: uploading -> scanning -> available -> expired |
-// deleted; rejected when every file was infected or blocklisted.
+// deleted; rejected when every file was infected or blocklisted. An
+// available transfer deleted after its first download goes through
+// [Transfers.MarkDeletedTx].
 const (
 	// TransferUploading is a declared transfer whose files are being sent.
 	TransferUploading TransferStatus = "uploading"
@@ -98,7 +100,7 @@ const IdempotencyRetention = 24 * time.Hour
 // transferColumns is the column list read by the transfer queries.
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
-	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at`
+	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after`
 
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
@@ -252,6 +254,13 @@ type Transfer struct {
 	// AvailableAt is when the analysis made the transfer available, zero
 	// before.
 	AvailableAt time.Time
+	// FirstDownloadedAt is when the transfer was downloaded completely for
+	// the first time ([Transfers.MarkFirstDownloadTx]), zero before.
+	FirstDownloadedAt time.Time
+	// DeleteAfter is when a transfer with DeleteAfterFirstDownload becomes
+	// due for deletion ([Transfers.DueDeletions]), set with
+	// FirstDownloadedAt; zero otherwise.
+	DeleteAfter time.Time
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -432,6 +441,8 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("a new transfer cannot be finalized")
 	case t.DownloadTokenHash != nil || t.DownloadTokenKeyID != "" || !t.AvailableAt.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be available")
+	case !t.FirstDownloadedAt.IsZero() || !t.DeleteAfter.IsZero():
+		return Transfer{}, invalid("a new transfer cannot be downloaded")
 	}
 	t.Status, t.TotalBytes = TransferUploading, total
 	return t, nil
@@ -606,10 +617,11 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		inv, pwd, key, fp, tokenKey      sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
+		downloaded, deleteAfter          sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
-		&tokenKey, &available, &expiration)
+		&tokenKey, &available, &expiration, &downloaded, &deleteAfter)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -617,6 +629,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.InvitationID, t.PasswordHash, t.IdempotencyKey, t.RequestFingerprint = inv.String, pwd.String, key.String, fp.String
 	t.CreatedAt, t.FinalizedAt, t.ExpiresAt = fromMillis(created), nullMillis(finalized), nullMillis(expiration)
 	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
+	t.FirstDownloadedAt, t.DeleteAfter = nullMillis(downloaded), nullMillis(deleteAfter)
 	return t, nil
 }
 

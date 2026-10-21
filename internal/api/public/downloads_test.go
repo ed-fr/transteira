@@ -1,0 +1,576 @@
+package public
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
+	"strings"
+	"testing"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ed-fr/transteira/internal/api/gen"
+	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/download"
+	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenant"
+)
+
+const linkToken = "dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf" // gitleaks:allow (fictitious download token)
+
+// fakeContent is a DownloadContent over a byte slice.
+type fakeContent struct {
+	*bytes.Reader
+	delivered, closed bool
+}
+
+func (c *fakeContent) Delivered()                  { c.delivered = true }
+func (c *fakeContent) Close(context.Context) error { c.closed = true; return nil }
+
+// fakeArchive is a DownloadArchive writing data.
+type fakeArchive struct {
+	data    []byte
+	written bool
+	closed  bool
+	err     error
+}
+
+func (a *fakeArchive) Close() { a.closed = true }
+
+func (a *fakeArchive) Size() int64 { return int64(len(a.data)) }
+func (a *fakeArchive) Write(_ context.Context, w io.Writer) error {
+	a.written = true
+	if a.err != nil {
+		return a.err
+	}
+	_, err := w.Write(a.data)
+	return err
+}
+
+// fakeDownloads records its calls.
+type fakeDownloads struct {
+	err     error
+	view    download.View
+	cookie  string
+	content *fakeContent
+	name    string
+	sha     string
+	archive *fakeArchive
+
+	gotToken, gotGrant, gotPassword, gotFile string
+	gotIP                                    netip.Addr
+}
+
+func (f *fakeDownloads) Resolve(_ context.Context, _ *tenant.Tenant, token, grant string) (download.View, error) {
+	f.gotToken, f.gotGrant = token, grant
+	return f.view, f.err
+}
+
+func (f *fakeDownloads) Unlock(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, password, grant string) (string, error) {
+	f.gotToken, f.gotIP, f.gotPassword, f.gotGrant = token, ip, password, grant
+	return f.cookie, f.err
+}
+
+func (f *fakeDownloads) OpenFile(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, grant, fileID string) (DownloadFile, error) {
+	f.gotToken, f.gotIP, f.gotGrant, f.gotFile = token, ip, grant, fileID
+	if f.err != nil {
+		return DownloadFile{}, f.err
+	}
+	return DownloadFile{Name: f.name, SHA256: f.sha, Content: f.content}, nil
+}
+
+func (f *fakeDownloads) PrepareArchive(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, grant string) (DownloadArchive, error) {
+	f.gotToken, f.gotIP, f.gotGrant = token, ip, grant
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.archive, nil
+}
+
+// downloadCtx returns the context of a request r under tenant A (with the
+// request, as RequestMiddleware puts it, and a client IP).
+func downloadCtx(t *testing.T, r *http.Request) context.Context {
+	t.Helper()
+	ctx := depositCtx(t, nil)
+	if r != nil {
+		var got context.Context
+		_, _ = RequestMiddleware(func(ctx context.Context, _ http.ResponseWriter, _ *http.Request, _ any) (any, error) {
+			got = ctx
+			return nil, nil
+		}, "DownloadFile")(ctx, nil, r, nil)
+		ctx = got
+	}
+	return ctx
+}
+
+func withGrant(r *http.Request) *http.Request {
+	r.AddCookie(&http.Cookie{Name: download.GrantCookieName, Value: "dg_grant"})
+	return r
+}
+
+func TestDownloadOperationsRequireTenantAndService(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	calls := map[string]func(*Server, context.Context) error{
+		"get": func(s *Server, ctx context.Context) error {
+			_, err := s.GetDownload(ctx, gen.GetDownloadRequestObject{})
+			return err
+		},
+		"unlock": func(s *Server, ctx context.Context) error {
+			_, err := s.UnlockDownload(ctx, gen.UnlockDownloadRequestObject{})
+			return err
+		},
+		"file": func(s *Server, ctx context.Context) error {
+			_, err := s.DownloadFile(ctx, gen.DownloadFileRequestObject{})
+			return err
+		},
+		"archive": func(s *Server, ctx context.Context) error {
+			_, err := s.DownloadArchive(ctx, gen.DownloadArchiveRequestObject{})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			wantProblem(t, call(NewServer(WithDownloads(&fakeDownloads{})), context.Background()), problem.CodeUnknownTenant)
+			if err := call(NewServer(), downloadCtx(t, r)); !errors.Is(err, errNoDownloadService) {
+				t.Errorf("without download service: %v", err)
+			}
+		})
+	}
+	// The streaming operations need the request.
+	srv := NewServer(WithDownloads(&fakeDownloads{}))
+	if _, err := srv.DownloadFile(downloadCtx(t, nil), gen.DownloadFileRequestObject{}); !errors.Is(err, errNoRequest) {
+		t.Errorf("file without request: %v", err)
+	}
+	if _, err := srv.DownloadArchive(downloadCtx(t, nil), gen.DownloadArchiveRequestObject{}); !errors.Is(err, errNoRequest) {
+		t.Errorf("archive without request: %v", err)
+	}
+}
+
+func TestGetDownload(t *testing.T) {
+	t.Parallel()
+	expires := time.Date(2026, 10, 26, 16, 20, 0, 0, time.UTC)
+	unlocked := download.View{
+		TransferID: "trf_secret", SenderEmail: "alice@entity-a.example.com", Message: "Hello", ExpiresAt: expires,
+		PasswordProtected: true, TotalBytes: 30, ArchiveAvailable: true,
+		Files: []download.FileView{
+			{ID: "fil_1", Name: "plans.pdf", Size: 10, MediaType: "application/pdf", SHA256: "aa", ScanStatus: store.ScanClean},
+			{ID: "fil_2", Name: "big.bin", Size: 20, SHA256: "bb", ScanStatus: store.ScanNotScannedEncrypted},
+		},
+	}
+	f := &fakeDownloads{view: unlocked}
+	r := withGrant(httptest.NewRequest(http.MethodGet, "/", nil))
+	resp, err := NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, r), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	if f.gotToken != linkToken || f.gotGrant != "dg_grant" {
+		t.Errorf("service called with %q %q", f.gotToken, f.gotGrant)
+	}
+	if got.Locked || got.Message == nil || *got.Message != "Hello" || got.TotalBytes == nil || *got.TotalBytes != 30 ||
+		got.DeleteAfterFirstDownload == nil || got.ArchiveUrl == nil || *got.ArchiveUrl != "/api/v1/downloads/"+linkToken+"/archive" ||
+		got.Files == nil || len(*got.Files) != 2 || !got.ExpiresAt.Equal(expires) {
+		t.Fatalf("unlocked view = %+v", got)
+	}
+	f1, f2 := (*got.Files)[0], (*got.Files)[1]
+	if f1.DownloadUrl != "/api/v1/downloads/"+linkToken+"/files/fil_1" || f1.MediaType == nil || f1.ScanStatus != "clean" ||
+		f2.MediaType != nil || f2.ScanStatus != "not_scanned_encrypted" {
+		t.Errorf("files = %+v", *got.Files)
+	}
+
+	// No archive: no archiveUrl. Locked: only four fields.
+	f.view.ArchiveAvailable = false
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if got := resp.(gen.GetDownload200JSONResponse); got.ArchiveUrl != nil || f.gotGrant != "" {
+		t.Errorf("without archive: %+v (grant %q)", got, f.gotGrant)
+	}
+	f.view = download.View{SenderEmail: "alice@entity-a.example.com", ExpiresAt: expires, PasswordProtected: true, Locked: true}
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse)); !got.Locked || got.Files != nil || got.Message != nil ||
+		got.TotalBytes != nil || got.ArchiveUrl != nil || got.DeleteAfterFirstDownload != nil {
+		t.Errorf("locked view = %+v", got)
+	}
+
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrGone})).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{})
+	wantProblem(t, err, problem.CodeTransferGone)
+}
+
+func TestUnlockDownload(t *testing.T) {
+	t.Parallel()
+	f := &fakeDownloads{cookie: "dg_new"}
+	r := withGrant(httptest.NewRequest(http.MethodPost, "/", nil))
+	resp, err := NewServer(WithDownloads(f)).UnlockDownload(downloadCtx(t, r), gen.UnlockDownloadRequestObject{
+		LinkToken: linkToken, Body: &gen.TransferPassword{Password: "secret"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.(gen.UnlockDownload204Response)
+	want := "__Host-tt_dl=dg_new; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict"
+	if got.Headers.SetCookie == nil || *got.Headers.SetCookie != want {
+		t.Errorf("Set-Cookie = %v, want %q", got.Headers.SetCookie, want)
+	}
+	if f.gotPassword != "secret" || f.gotGrant != "dg_grant" || f.gotIP != netip.MustParseAddr("192.0.2.7") {
+		t.Errorf("service called with %+v", f)
+	}
+	// A transfer without password: no cookie.
+	resp, _ = NewServer(WithDownloads(&fakeDownloads{})).UnlockDownload(downloadCtx(t, nil), gen.UnlockDownloadRequestObject{
+		Body: &gen.TransferPassword{Password: "x"},
+	})
+	if resp.(gen.UnlockDownload204Response).Headers.SetCookie != nil {
+		t.Error("cookie set without grant")
+	}
+	_, err = NewServer(WithDownloads(f)).UnlockDownload(downloadCtx(t, nil), gen.UnlockDownloadRequestObject{})
+	if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != "/password" || p.Errors[0].Code != "required" {
+		t.Errorf("errors = %+v", p.Errors)
+	}
+	_, err = NewServer(WithDownloads(f)).UnlockDownload(downloadCtx(t, nil), gen.UnlockDownloadRequestObject{Body: &gen.TransferPassword{}})
+	if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Code != "required" {
+		t.Errorf("empty password: errors = %+v", p.Errors)
+	}
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: &download.WrongPasswordError{Remaining: 1}})).UnlockDownload(downloadCtx(t, nil),
+		gen.UnlockDownloadRequestObject{Body: &gen.TransferPassword{Password: "x"}})
+	wantProblem(t, err, problem.CodeTransferPasswordInvalid)
+}
+
+func TestDownloadError(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("db down")
+	tests := []struct {
+		err   error
+		code  problem.Code
+		check func(t *testing.T, p *problem.Problem)
+	}{
+		{err: &download.WrongPasswordError{Remaining: 2}, code: problem.CodeTransferPasswordInvalid, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.AttemptsRemaining == nil || *p.AttemptsRemaining != 2 {
+				t.Errorf("attemptsRemaining = %v", p.AttemptsRemaining)
+			}
+		}},
+		{err: fmt.Errorf("w: %w", &download.LockedError{RetryAfter: 15 * time.Minute}), code: problem.CodeTransferLocked, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.RetryAfterSeconds == nil || *p.RetryAfterSeconds != 900 {
+				t.Errorf("retryAfterSeconds = %v", p.RetryAfterSeconds)
+			}
+		}},
+		{err: download.ErrInvalid, code: problem.CodeValidationFailed, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.Errors[0].Field != "/password" || p.Errors[0].Code != "invalid-format" {
+				t.Errorf("errors = %+v", p.Errors)
+			}
+		}},
+		{err: fmt.Errorf("w: %w", download.ErrPasswordRequired), code: problem.CodeValidationFailed, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.Errors[0].Field != "/password" || p.Errors[0].Code != "required" {
+				t.Errorf("errors = %+v", p.Errors)
+			}
+		}},
+		{err: &download.TooManyStreamsError{RetryAfter: 30 * time.Second}, code: problem.CodeRateLimited, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.RetryAfterSeconds == nil || *p.RetryAfterSeconds != 30 {
+				t.Errorf("retryAfterSeconds = %v", p.RetryAfterSeconds)
+			}
+		}},
+		{err: download.ErrNotFound, code: problem.CodeNotFound},
+		{err: download.ErrGone, code: problem.CodeTransferGone},
+		{err: download.ErrDownloadLocked, code: problem.CodeDownloadLocked},
+		{err: download.ErrNoClientIP, code: problem.CodeInternalError},
+		{err: boom, code: problem.CodeInternalError},
+	}
+	for _, tt := range tests {
+		p := problem.From(downloadError(tt.err))
+		if p.Code != tt.code {
+			t.Errorf("%v: code %s, want %s", tt.err, p.Code, tt.code)
+			continue
+		}
+		if tt.check != nil {
+			tt.check(t, p)
+		}
+	}
+	if !errors.Is(downloadError(boom), boom) {
+		t.Error("unknown error not passed through")
+	}
+}
+
+// serveFile runs DownloadFile for r and renders its response.
+func serveFile(t *testing.T, f *fakeDownloads, r *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	resp, err := NewServer(WithDownloads(f)).DownloadFile(downloadCtx(t, r), gen.DownloadFileRequestObject{LinkToken: linkToken, FileId: "fil_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	if err := resp.VisitDownloadFileResponse(rec); err != nil {
+		t.Fatal(err)
+	}
+	return rec
+}
+
+func TestDownloadFile(t *testing.T) {
+	t.Parallel()
+	data := []byte("0123456789")
+	newFake := func() *fakeDownloads {
+		return &fakeDownloads{name: `plans "été".pdf`, content: &fakeContent{Reader: bytes.NewReader(data)}}
+	}
+
+	f := newFake()
+	rec := serveFile(t, f, withGrant(httptest.NewRequest(http.MethodGet, "/", nil)))
+	h := rec.Header()
+	if rec.Code != http.StatusOK || rec.Body.String() != string(data) || h.Get("Content-Type") != "application/octet-stream" ||
+		h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Content-Security-Policy") != attachmentCSP ||
+		h.Get("Cache-Control") != "no-store" || len(h.Values("Accept-Ranges")) != 1 || h.Get("Accept-Ranges") != "bytes" || h.Get("ETag") != "" ||
+		h.Get("Content-Disposition") != `attachment; filename="plans __t__.pdf"; filename*=UTF-8''plans%20%22%C3%A9t%C3%A9%22.pdf` {
+		t.Errorf("full file: %d %q %v", rec.Code, rec.Body, h)
+	}
+	if !f.content.delivered || !f.content.closed || f.gotGrant != "dg_grant" || f.gotFile != "fil_1" {
+		t.Errorf("content delivered %v closed %v, grant %q file %q", f.content.delivered, f.content.closed, f.gotGrant, f.gotFile)
+	}
+
+	// A single range.
+	f = newFake()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=2-4")
+	if rec := serveFile(t, f, r); rec.Code != http.StatusPartialContent || rec.Body.String() != "234" {
+		t.Errorf("single range: %d %q", rec.Code, rec.Body)
+	}
+	// Several ranges: the full file, without modifying the request.
+	f = newFake()
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=0-1,4-5")
+	if rec := serveFile(t, f, r); rec.Code != http.StatusOK || rec.Body.String() != string(data) {
+		t.Errorf("multiple ranges: %d %q", rec.Code, rec.Body)
+	}
+	if r.Header.Get("Range") != "bytes=0-1,4-5" {
+		t.Error("the request was modified")
+	}
+
+	// An unsatisfiable range: a Problem with Content-Range, nothing credited.
+	f = newFake()
+	f.sha = "abc"
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=50-60")
+	rec = serveFile(t, f, r)
+	if rec.Code != http.StatusRequestedRangeNotSatisfiable || rec.Header().Get("Content-Range") != "bytes */10" ||
+		rec.Header().Get("Content-Disposition") != "" || rec.Header().Get("ETag") != "" || rec.Header().Get("Cache-Control") != "no-store" ||
+		rec.Header().Get("Content-Type") != problem.ContentType || !strings.Contains(rec.Body.String(), `"code":"range-not-satisfiable"`) {
+		t.Errorf("416: %d %q %v", rec.Code, rec.Body, rec.Header())
+	}
+	if f.content.delivered || !f.content.closed {
+		t.Errorf("416: delivered %v closed %v", f.content.delivered, f.content.closed)
+	}
+
+	// HEAD: headers only, nothing credited.
+	f = newFake()
+	if rec := serveFile(t, f, httptest.NewRequest(http.MethodHead, "/", nil)); rec.Code != http.StatusOK || f.content.delivered {
+		t.Errorf("HEAD: %d, delivered %v", rec.Code, f.content.delivered)
+	}
+
+	// ETag: If-Range with the ETag resumes, with another ETag serves all.
+	f = newFake()
+	f.sha = "abc"
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=2-4")
+	r.Header.Set("If-Range", `"abc"`)
+	if rec := serveFile(t, f, r); rec.Code != http.StatusPartialContent || rec.Header().Get("ETag") != `"abc"` {
+		t.Errorf("If-Range matching: %d %v", rec.Code, rec.Header())
+	}
+	f = newFake()
+	f.sha = "abc"
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=2-4")
+	r.Header.Set("If-Range", `"other"`)
+	if rec := serveFile(t, f, r); rec.Code != http.StatusOK || rec.Body.String() != string(data) {
+		t.Errorf("If-Range not matching: %d %q", rec.Code, rec.Body)
+	}
+
+	// A flush failure: not credited, error returned.
+	f = newFake()
+	resp, err := NewServer(WithDownloads(f)).DownloadFile(downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)),
+		gen.DownloadFileRequestObject{LinkToken: linkToken, FileId: "fil_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resp.VisitDownloadFileResponse(flushFailWriter{httptest.NewRecorder()}); err == nil || f.content.delivered {
+		t.Errorf("flush failure: err %v, delivered %v", err, f.content.delivered)
+	}
+
+	// A write error: not credited, still closed, error returned.
+	f = newFake()
+	resp, err = NewServer(WithDownloads(f)).DownloadFile(downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)),
+		gen.DownloadFileRequestObject{LinkToken: linkToken, FileId: "fil_1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resp.VisitDownloadFileResponse(failingWriter{httptest.NewRecorder()}); err == nil {
+		t.Error("write error not returned")
+	}
+	if f.content.delivered || !f.content.closed {
+		t.Errorf("after a write error: delivered %v closed %v", f.content.delivered, f.content.closed)
+	}
+
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrDownloadLocked})).DownloadFile(
+		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadFileRequestObject{})
+	wantProblem(t, err, problem.CodeDownloadLocked)
+}
+
+// flushFailWriter fails the flush.
+type flushFailWriter struct{ *httptest.ResponseRecorder }
+
+func (flushFailWriter) FlushError() error { return errors.New("flush failed") }
+
+func TestErrorWriter(t *testing.T) {
+	t.Parallel()
+	rec := httptest.NewRecorder()
+	w := &errorWriter{ResponseWriter: rec}
+	if _, err := w.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	w.WriteHeader(http.StatusTeapot) // superfluous: ignored
+	if rec.Code != http.StatusOK || w.status != http.StatusOK {
+		t.Errorf("implicit 200: %d %d", rec.Code, w.status)
+	}
+}
+
+func TestRequestMiddlewareScope(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	for op, want := range map[string]bool{"DownloadFile": true, "GetDownload": true, "CreateTransfer": false} {
+		var got bool
+		_, _ = RequestMiddleware(func(ctx context.Context, _ http.ResponseWriter, _ *http.Request, _ any) (any, error) {
+			_, got = requestOf(ctx)
+			return nil, nil
+		}, op)(context.Background(), nil, r, nil)
+		if got != want {
+			t.Errorf("%s: request in context %v, want %v", op, got, want)
+		}
+	}
+}
+
+// failingWriter fails every write.
+type failingWriter struct{ *httptest.ResponseRecorder }
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("client gone") }
+
+func TestErrorWriterUnwrap(t *testing.T) {
+	t.Parallel()
+	rec := httptest.NewRecorder()
+	if (&errorWriter{ResponseWriter: rec}).Unwrap() != rec {
+		t.Error("Unwrap does not return the wrapped writer")
+	}
+}
+
+func TestDownloadArchive(t *testing.T) {
+	t.Parallel()
+	a := &fakeArchive{data: []byte("PK-zip-bytes")}
+	f := &fakeDownloads{archive: a}
+	r := withGrant(httptest.NewRequest(http.MethodGet, "/", nil))
+	resp, err := NewServer(WithDownloads(f)).DownloadArchive(downloadCtx(t, r), gen.DownloadArchiveRequestObject{LinkToken: linkToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	if err := resp.VisitDownloadArchiveResponse(rec); err != nil {
+		t.Fatal(err)
+	}
+	h := rec.Header()
+	if rec.Code != http.StatusOK || rec.Body.String() != "PK-zip-bytes" || h.Get("Content-Type") != "application/zip" ||
+		h.Get("Content-Length") != "12" || h.Get("Content-Security-Policy") != attachmentCSP || h.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.HasPrefix(h.Get("Content-Disposition"), `attachment; filename="transfer.zip"`) || f.gotGrant != "dg_grant" {
+		t.Errorf("archive: %d %q %v", rec.Code, rec.Body, h)
+	}
+	if !a.closed || !rec.Flushed || f.gotIP != netip.MustParseAddr("192.0.2.7") {
+		t.Errorf("archive closed %v, flushed %v, client IP %v", a.closed, rec.Flushed, f.gotIP)
+	}
+
+	// A failed flush of the last bytes fails the write (no completion).
+	a = &fakeArchive{data: []byte("PK")}
+	resp, _ = NewServer(WithDownloads(&fakeDownloads{archive: a})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
+	if err := resp.VisitDownloadArchiveResponse(flushFailWriter{httptest.NewRecorder()}); err == nil || !a.closed {
+		t.Errorf("flush failure: %v, closed %v", err, a.closed)
+	}
+
+	// HEAD: headers only.
+	a = &fakeArchive{data: []byte("PK")}
+	resp, _ = NewServer(WithDownloads(&fakeDownloads{archive: a})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodHead, "/", nil)), gen.DownloadArchiveRequestObject{})
+	rec = httptest.NewRecorder()
+	if err := resp.VisitDownloadArchiveResponse(rec); err != nil || a.written || !a.closed || rec.Header().Get("Content-Length") != "2" {
+		t.Errorf("HEAD archive: %v written %v closed %v %v", err, a.written, a.closed, rec.Header())
+	}
+	// A write failure is returned (the connection is then aborted).
+	a = &fakeArchive{data: []byte("PK"), err: errors.New("disk")}
+	resp, _ = NewServer(WithDownloads(&fakeDownloads{archive: a})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
+	if err := resp.VisitDownloadArchiveResponse(httptest.NewRecorder()); err == nil {
+		t.Error("archive failure not returned")
+	}
+
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrNotFound})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
+	wantProblem(t, err, problem.CodeNotFound)
+}
+
+func TestAttachment(t *testing.T) {
+	t.Parallel()
+	tests := map[string]string{
+		"report.pdf":         `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
+		"a\\b\x01c.txt":      `attachment; filename="a_b_c.txt"; filename*=UTF-8''a%5Cb%01c.txt`,
+		"":                   `attachment; filename="download"; filename*=UTF-8''download`,
+		"\xff":               `attachment; filename="download"; filename*=UTF-8''download`,
+		"résumé ~!#$&+^`|.x": "attachment; filename=\"r_sum_ ~!#$&+^`|.x\"; filename*=UTF-8''r%C3%A9sum%C3%A9%20~!#$&+^`|.x",
+	}
+	for name, want := range tests {
+		if got := attachment(name); got != want {
+			t.Errorf("attachment(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
+
+// FuzzAttachment checks that the Content-Disposition built for any file
+// name is a single, pure-ASCII header line whose quoted filename fallback
+// cannot be broken out of, and which parses back to the original name.
+func FuzzAttachment(f *testing.F) {
+	for _, seed := range []string{
+		"report.pdf", "", "résumé.txt", `a"b\c.txt`, "line\r\nInjected: 1", "\x00\x7f\xff",
+		"\u202etxt.exe", "\U0001F600.png", "%41%22.txt", "a;b=c", "\xc3\x28",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, name string) {
+		got := attachment(name)
+		for i := range len(got) {
+			if c := got[i]; c == '\r' || c == '\n' || c >= 0x80 {
+				t.Fatalf("attachment(%q) = %q: byte %#x at %d", name, got, c, i)
+			}
+		}
+		const prefix, sep = `attachment; filename="`, `"; filename*=UTF-8''`
+		rest, ok := strings.CutPrefix(got, prefix)
+		fallback, _, found := strings.Cut(rest, sep)
+		if !ok || !found {
+			t.Fatalf("attachment(%q) = %q: unexpected layout", name, got)
+		}
+		if strings.ContainsAny(fallback, `"\`) {
+			t.Fatalf("attachment(%q): fallback %q holds a quote or a backslash", name, fallback)
+		}
+		mediaType, params, err := mime.ParseMediaType(got)
+		if err != nil || mediaType != "attachment" {
+			t.Fatalf("attachment(%q) = %q: parsed %q, %v", name, got, mediaType, err)
+		}
+		want := name
+		if want == "" || !utf8.ValidString(want) {
+			want = "download"
+		}
+		if params["filename"] != want {
+			t.Fatalf("attachment(%q) parses back to %q, want %q", name, params["filename"], want)
+		}
+	})
+}

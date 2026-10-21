@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -113,6 +114,8 @@ type envConfig struct {
 	trusted  func(netip.Addr) bool
 	sessions DepositSessions
 	idle     time.Duration
+	// downloadIdle is Deps.DownloadIdleTimeout.
+	downloadIdle time.Duration
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -131,12 +134,13 @@ func newEnv(t *testing.T, c envConfig) *env {
 			Antivirus: health.Check{Checker: ok},
 			Storage:   health.Check{Checker: ok},
 		},
-		Maintenance:       e.maintenance,
-		API:               c.api,
-		Sessions:          c.sessions,
-		UploadIdleTimeout: c.idle,
-		Spec:              []byte("openapi: 3.1.0\n"),
-		Logger:            slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Maintenance:         e.maintenance,
+		API:                 c.api,
+		Sessions:            c.sessions,
+		UploadIdleTimeout:   c.idle,
+		DownloadIdleTimeout: c.downloadIdle,
+		Spec:                []byte("openapi: 3.1.0\n"),
+		Logger:              slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, c.opts...)
 	return e
 }
@@ -420,6 +424,26 @@ func TestResponseErrorAfterStartClientGone(t *testing.T) {
 	}
 }
 
+func TestResponseErrorAfterStartIdleTimeout(t *testing.T) {
+	t.Parallel()
+	var logs lockedBuffer
+	h := errorHandlers{logger: slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	middleware.Recover(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		defer func() {
+			if v := recover(); v != http.ErrAbortHandler { //nolint:errorlint // sentinel comparison as in net/http
+				t.Errorf("recovered %v", v)
+			}
+		}()
+		h.responseError(w, r, fmt.Errorf("write body: %w", os.ErrDeadlineExceeded))
+	})).ServeHTTP(rec, req)
+	if got := logs.String(); !strings.Contains(got, `"level":"INFO"`) || strings.Contains(got, `"level":"ERROR"`) {
+		t.Errorf("idle-timeout cut not logged at info level: %s", got)
+	}
+}
+
 func TestSharedProblemNotMutated(t *testing.T) {
 	t.Parallel()
 	shared := problem.New(problem.CodeForbidden)
@@ -668,8 +692,8 @@ func TestRoutePolicies(t *testing.T) {
 		"HEAD /api/v1/uploads/{uploadId}":                       tusPolicy(false),
 		"DELETE /api/v1/uploads/{uploadId}":                     tusPolicy(true),
 		"OPTIONS /api/v1/uploads":                               defaultPolicy,
-		"GET /api/v1/downloads/{linkToken}/files/{fileId}":      {bodyLimit: middleware.DefaultJSONBodyLimit},
-		"GET /api/v1/downloads/{linkToken}/archive":             {bodyLimit: middleware.DefaultJSONBodyLimit},
+		"GET /api/v1/downloads/{linkToken}/files/{fileId}":      {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
+		"GET /api/v1/downloads/{linkToken}/archive":             {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding/{asset}": {bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline},
 		"GET /api/v1/tenant/assets/{asset}":                     {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding":         defaultPolicy,
@@ -780,8 +804,9 @@ func (d *deadlineSpy) SetWriteDeadline(t time.Time) error {
 func (d *deadlineSpy) Unwrap() http.ResponseWriter { return d.ResponseWriter }
 
 // TestDeadlineOnRealConnection checks, through the whole chain and a real
-// connection, that an ordinary operation gets a deadline and a download
-// does not.
+// connection, that every operation gets a write deadline: a fixed one for
+// an ordinary operation, an idle one, moved forward by every write, for a
+// download.
 func TestDeadlineOnRealConnection(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, envConfig{})
@@ -790,7 +815,9 @@ func TestDeadlineOnRealConnection(t *testing.T) {
 		want   bool
 	}{
 		{"/api/v1/version", true},
-		{"/api/v1/downloads/dl_x/archive", false},
+		// A download has no fixed deadline but an idle write deadline,
+		// set before the operation runs (here it fails: no service).
+		{"/api/v1/downloads/dl_x/archive", true},
 	}
 	for _, tt := range tests {
 		var set atomic.Bool

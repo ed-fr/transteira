@@ -1,0 +1,13 @@
+Hello,
+
+Your transfer was downloaded in full for the first time on October 14, 2027 at 16:05 UTC.
+
+Files:
+- <script>alert(1)</script> report.pdf (1.5 KB)
+- video.mp4 (3.0 GB)
+- secret.zip (4.0 MB)
+
+As you requested, the transfer is deleted after its first download: it will be permanently erased on October 14, 2027 at 16:20 UTC.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

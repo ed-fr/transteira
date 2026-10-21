@@ -316,6 +316,34 @@ func (n *Notifier) FileNotScanned(ctx context.Context, t *tenant.Tenant, tr Tran
 	return n.senderJob(ctx, t, tr, sender, mail.TemplateFileNotScanned, data)
 }
 
+// FirstDownload builds the first_download mail to the sender: the transfer
+// was downloaded in full for the first time at at (CLAUDE.md section 12.2,
+// sent once per transfer; the caller guarantees the once). It lists the
+// delivered files and, when deleteAt is set (deletion after the first
+// download), tells when the transfer is erased; deleteAt is zero when the
+// transfer stays until its expiry. No recipient is named: in V1 the single
+// download link of a transfer does not identify who downloaded. It fails
+// with ErrInvalidTransfer for an invalid sender, a zero time, a deletion
+// time before at or a transfer without a delivered file.
+func (n *Notifier) FirstDownload(ctx context.Context, t *tenant.Tenant, tr TransferView, at, deleteAt time.Time) (mail.Job, error) {
+	sender, err := mail.ParseAddress(tr.SenderEmail)
+	if err != nil {
+		return mail.Job{}, fmt.Errorf("%w: sender: %w", ErrInvalidTransfer, err)
+	}
+	if at.IsZero() || (!deleteAt.IsZero() && deleteAt.Before(at)) {
+		return mail.Job{}, fmt.Errorf("%w: first download or deletion time", ErrInvalidTransfer)
+	}
+	files, err := deliveredFiles(tr.Files)
+	if err != nil {
+		return mail.Job{}, err
+	}
+	if len(files) == 0 {
+		return mail.Job{}, fmt.Errorf("%w: no delivered file", ErrInvalidTransfer)
+	}
+	data := mail.FirstDownloadData{TenantName: t.Name, Files: files, DownloadedAt: at, DeleteAt: deleteAt}
+	return n.senderJob(ctx, t, tr, sender, mail.TemplateFirstDownload, data)
+}
+
 // downloadView is the validated part of a transfer shared by the download
 // mails.
 type downloadView struct {
@@ -529,4 +557,35 @@ func oneLine(s string, maxRunes int) string {
 	}
 	r := []rune(s)
 	return string(r[:maxRunes-1]) + "\u2026"
+}
+
+// ViewOf returns what the mails show of the transfer d: every file, with
+// its antivirus outcome. A file in scan_error, or in any status without a
+// verdict (pending, scanning), is withheld under fail-closed: never
+// delivered, left out of the recipient mails and reported to the sender.
+// The signature of an infected file is kept for the sender's alert only.
+// It is the single mapping shared by the antivirus worker and the download
+// service.
+func ViewOf(d store.TransferDetails) TransferView {
+	v := TransferView{
+		ID: d.ID, Language: d.Language, SenderEmail: d.SenderEmail, Recipients: d.Recipients,
+		Message: d.Message, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
+	}
+	for _, f := range d.Files {
+		fv := FileView{Name: f.Name, Size: f.Size, SHA256: f.SHA256}
+		switch f.ScanStatus {
+		case store.ScanClean:
+			fv.Scan = ScanClean
+		case store.ScanNotScannedTooLarge:
+			fv.Scan = ScanTooLarge
+		case store.ScanNotScannedEncrypted:
+			fv.Scan = ScanEncrypted
+		case store.ScanInfected:
+			fv.Scan, fv.Signature = ScanInfected, f.ScanSignature
+		default:
+			fv.Scan = ScanWithheld
+		}
+		v.Files = append(v.Files, fv)
+	}
+	return v
 }

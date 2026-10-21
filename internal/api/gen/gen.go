@@ -577,6 +577,7 @@ const (
 	ProblemCodeNotFound                ProblemCode = "not-found"
 	ProblemCodePayloadTooLarge         ProblemCode = "payload-too-large"
 	ProblemCodeQuotaExceeded           ProblemCode = "quota-exceeded"
+	ProblemCodeRangeNotSatisfiable     ProblemCode = "range-not-satisfiable"
 	ProblemCodeRateLimited             ProblemCode = "rate-limited"
 	ProblemCodeSetupAlreadyDone        ProblemCode = "setup-already-done"
 	ProblemCodeSetupTokenInvalid       ProblemCode = "setup-token-invalid"
@@ -634,6 +635,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodePayloadTooLarge:
 		return true
 	case ProblemCodeQuotaExceeded:
+		return true
+	case ProblemCodeRangeNotSatisfiable:
 		return true
 	case ProblemCodeRateLimited:
 		return true
@@ -1385,7 +1388,9 @@ type EmailTemplate struct {
 	// `file-not-scanned` tells the sender that files were released unscanned because they were
 	// too large, too complex or encrypted to be analysed; `transfer-notification` and
 	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
-	// available.
+	// available; `first-download` tells the sender, only once, that the transfer has been
+	// downloaded in full for the first time, and when it will be erased if it is deleted after
+	// its first download.
 	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
@@ -1402,7 +1407,9 @@ type EmailTemplate struct {
 // `file-not-scanned` tells the sender that files were released unscanned because they were
 // too large, too complex or encrypted to be analysed; `transfer-notification` and
 // `transfer-confirmation` go to the recipients and to the sender once a transfer is
-// available.
+// available; `first-download` tells the sender, only once, that the transfer has been
+// downloaded in full for the first time, and when it will be erased if it is deleted after
+// its first download.
 // Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type EmailTemplateKey string
@@ -1416,7 +1423,9 @@ type EmailTemplateSummary struct {
 	// `file-not-scanned` tells the sender that files were released unscanned because they were
 	// too large, too complex or encrypted to be analysed; `transfer-notification` and
 	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
-	// available.
+	// available; `first-download` tells the sender, only once, that the transfer has been
+	// downloaded in full for the first time, and when it will be erased if it is deleted after
+	// its first download.
 	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
@@ -1686,16 +1695,7 @@ type PublicFile struct {
 	MediaType   *string `json:"mediaType,omitempty"`
 	Name        string  `json:"name"`
 
-	// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
-	// back: the antivirus is fail-closed).
-	// `clean`: analyzed, no threat found.
-	// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
-	// (the sender is told and the download page says so).
-	// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
-	// unscanned and flagged like `not_scanned_too_large`.
-	// `infected`: file erased, kept in the list for the sender's information only.
-	// `scan_error`: the file could not be analyzed after several attempts; it is withheld
-	// (fail-closed, never downloadable) and the sender is informed.
+	// ScanStatus `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` (delivered unscanned: the page must say so).
 	ScanStatus ScanStatus `json:"scanStatus"`
 	Sha256     Sha256     `json:"sha256"`
 	Size       ByteSize   `json:"size"`
@@ -1736,21 +1736,25 @@ type PublicTenantLegalDocuments string
 
 // PublicTransfer defines model for PublicTransfer.
 type PublicTransfer struct {
+	// ArchiveUrl URL of the ZIP archive of the listed files; absent while `locked`.
 	ArchiveUrl               *string   `json:"archiveUrl,omitempty"`
 	DeleteAfterFirstDownload *bool     `json:"deleteAfterFirstDownload,omitempty"`
 	ExpiresAt                time.Time `json:"expiresAt"`
 
-	// Files Absent while `locked`. Infected files are not listed.
+	// Files Absent while `locked`. Only the deliverable files: infected files and files withheld
+	// after an analysis error (`scan_error`) are never listed.
 	Files *[]PublicFile `json:"files,omitempty"`
 
 	// Locked True when a password is required and not yet provided.
 	Locked bool `json:"locked"`
 
 	// Message Plain text, to be rendered as text (never HTML).
-	Message           *string   `json:"message,omitempty"`
-	PasswordProtected bool      `json:"passwordProtected"`
-	SenderEmail       Email     `json:"senderEmail"`
-	TotalBytes        *ByteSize `json:"totalBytes,omitempty"`
+	Message           *string `json:"message,omitempty"`
+	PasswordProtected bool    `json:"passwordProtected"`
+	SenderEmail       Email   `json:"senderEmail"`
+
+	// TotalBytes Total size of the listed files; absent while `locked`.
+	TotalBytes *ByteSize `json:"totalBytes,omitempty"`
 }
 
 // ResendRequest defines model for ResendRequest.
@@ -2029,6 +2033,7 @@ type TransferOrigin string
 
 // TransferPassword defines model for TransferPassword.
 type TransferPassword struct {
+	// Password An empty or missing password gets `400` with the field code `required`.
 	Password string `json:"password"`
 }
 
@@ -2105,7 +2110,9 @@ type RecognitionCookie = string
 // `file-not-scanned` tells the sender that files were released unscanned because they were
 // too large, too complex or encrypted to be analysed; `transfer-notification` and
 // `transfer-confirmation` go to the recipients and to the sender once a transfer is
-// available.
+// available; `first-download` tells the sender, only once, that the transfer has been
+// downloaded in full for the first time, and when it will be erased if it is deleted after
+// its first download.
 // Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type TemplateKey = EmailTemplateKey
@@ -2166,6 +2173,9 @@ type ServiceUnavailable = Problem
 
 // StateConflict RFC 9457 Problem Details with TransTeira extension members.
 type StateConflict = Problem
+
+// TooManyStreams RFC 9457 Problem Details with TransTeira extension members.
+type TooManyStreams = Problem
 
 // TransferGone RFC 9457 Problem Details with TransTeira extension members.
 type TransferGone = Problem
@@ -2325,7 +2335,7 @@ type StartDepositSessionParams struct {
 
 // DownloadFileParams defines parameters for DownloadFile.
 type DownloadFileParams struct {
-	// Range Optional single byte range (RFC 9110) to resume a download.
+	// Range Optional single byte range (RFC 9110) to resume a download. Several ranges are not supported: the full file is then served with `200`.
 	Range *string `json:"Range,omitempty"`
 }
 
@@ -5968,6 +5978,15 @@ type ServiceUnavailableApplicationProblemPlusJSONResponse struct {
 }
 
 type StateConflictApplicationProblemPlusJSONResponse Problem
+
+type TooManyStreamsResponseHeaders struct {
+	RetryAfter *int
+}
+type TooManyStreamsApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers TooManyStreamsResponseHeaders
+}
 
 type TransferGoneApplicationProblemPlusJSONResponse Problem
 
@@ -11475,9 +11494,11 @@ type DownloadArchiveResponseObject interface {
 }
 
 type DownloadArchive200ResponseHeaders struct {
-	ContentDisposition  *string
-	ContentLength       *int
-	XContentTypeOptions *string
+	CacheControl          *string
+	ContentDisposition    *string
+	ContentLength         *int
+	ContentSecurityPolicy *string
+	XContentTypeOptions   *string
 }
 
 type DownloadArchive200ApplicationzipResponse struct {
@@ -11492,11 +11513,17 @@ func (response DownloadArchive200ApplicationzipResponse) VisitDownloadArchiveRes
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
 	if response.Headers.ContentDisposition != nil {
 		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
 	}
 	if response.Headers.ContentLength != nil {
 		w.Header().Set("Content-Length", fmt.Sprint(*response.Headers.ContentLength))
+	}
+	if response.Headers.ContentSecurityPolicy != nil {
+		w.Header().Set("Content-Security-Policy", fmt.Sprint(*response.Headers.ContentSecurityPolicy))
 	}
 	if response.Headers.XContentTypeOptions != nil {
 		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
@@ -11574,6 +11601,25 @@ func (response DownloadArchive421ApplicationProblemPlusJSONResponse) VisitDownlo
 	return err
 }
 
+type DownloadArchive429ApplicationProblemPlusJSONResponse struct {
+	TooManyStreamsApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadArchive429ApplicationProblemPlusJSONResponse) VisitDownloadArchiveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DownloadArchive500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -11601,10 +11647,13 @@ type DownloadFileResponseObject interface {
 }
 
 type DownloadFile200ResponseHeaders struct {
-	AcceptRanges        *string
-	ContentDisposition  *string
-	ContentLength       *int
-	XContentTypeOptions *string
+	AcceptRanges          *string
+	CacheControl          *string
+	ContentDisposition    *string
+	ContentLength         *int
+	ContentSecurityPolicy *string
+	ETag                  *string
+	XContentTypeOptions   *string
 }
 
 type DownloadFile200ApplicationoctetStreamResponse struct {
@@ -11622,11 +11671,20 @@ func (response DownloadFile200ApplicationoctetStreamResponse) VisitDownloadFileR
 	if response.Headers.AcceptRanges != nil {
 		w.Header().Set("Accept-Ranges", fmt.Sprint(*response.Headers.AcceptRanges))
 	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
 	if response.Headers.ContentDisposition != nil {
 		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
 	}
 	if response.Headers.ContentLength != nil {
 		w.Header().Set("Content-Length", fmt.Sprint(*response.Headers.ContentLength))
+	}
+	if response.Headers.ContentSecurityPolicy != nil {
+		w.Header().Set("Content-Security-Policy", fmt.Sprint(*response.Headers.ContentSecurityPolicy))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
 	}
 	if response.Headers.XContentTypeOptions != nil {
 		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
@@ -11641,9 +11699,14 @@ func (response DownloadFile200ApplicationoctetStreamResponse) VisitDownloadFileR
 }
 
 type DownloadFile206ResponseHeaders struct {
-	ContentDisposition  *string
-	ContentRange        *string
-	XContentTypeOptions *string
+	AcceptRanges          *string
+	CacheControl          *string
+	ContentDisposition    *string
+	ContentLength         *int
+	ContentRange          *string
+	ContentSecurityPolicy *string
+	ETag                  *string
+	XContentTypeOptions   *string
 }
 
 type DownloadFile206ApplicationoctetStreamResponse struct {
@@ -11658,11 +11721,26 @@ func (response DownloadFile206ApplicationoctetStreamResponse) VisitDownloadFileR
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
+	if response.Headers.AcceptRanges != nil {
+		w.Header().Set("Accept-Ranges", fmt.Sprint(*response.Headers.AcceptRanges))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
 	if response.Headers.ContentDisposition != nil {
 		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
 	}
+	if response.Headers.ContentLength != nil {
+		w.Header().Set("Content-Length", fmt.Sprint(*response.Headers.ContentLength))
+	}
 	if response.Headers.ContentRange != nil {
 		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	if response.Headers.ContentSecurityPolicy != nil {
+		w.Header().Set("Content-Security-Policy", fmt.Sprint(*response.Headers.ContentSecurityPolicy))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
 	}
 	if response.Headers.XContentTypeOptions != nil {
 		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
@@ -11724,12 +11802,28 @@ func (response DownloadFile410ApplicationProblemPlusJSONResponse) VisitDownloadF
 	return err
 }
 
-type DownloadFile416Response struct {
+type DownloadFile416ResponseHeaders struct {
+	ContentRange *string
 }
 
-func (response DownloadFile416Response) VisitDownloadFileResponse(w http.ResponseWriter) error {
+type DownloadFile416ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers DownloadFile416ResponseHeaders
+}
+
+func (response DownloadFile416ApplicationProblemPlusJSONResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
 	w.WriteHeader(416)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type DownloadFile421ApplicationProblemPlusJSONResponse struct {
@@ -11744,6 +11838,25 @@ func (response DownloadFile421ApplicationProblemPlusJSONResponse) VisitDownloadF
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadFile429ApplicationProblemPlusJSONResponse struct {
+	TooManyStreamsApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadFile429ApplicationProblemPlusJSONResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11815,6 +11928,22 @@ func (response UnlockDownload401ApplicationProblemPlusJSONResponse) VisitUnlockD
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnlockDownload403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UnlockDownload403ApplicationProblemPlusJSONResponse) VisitUnlockDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }

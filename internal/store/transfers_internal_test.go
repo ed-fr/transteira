@@ -151,7 +151,7 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"insert recipient", faultExec, "INSERT INTO transfer_recipients", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"check key", faultQuery, "FROM wrapped_keys WHERE tenant_id", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"insert file", faultExec, "INSERT INTO transfer_files", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
-		{"get transfer scan", faultScanNil, "expires_at FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
+		{"get transfer scan", faultScanNil, "delete_after FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list recipients", faultQuery, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"scan recipients", faultScanNil, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list files", faultQuery, "scan_status FROM transfer_files WHERE tenant_id = ? AND transfer_id", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},

@@ -11,8 +11,9 @@
 //     wrapped with the new key when it is present; a wrapped key is always
 //     unwrapped with the master key whose ID is stored on its row. [Keyring.MAC]
 //     and [Keyring.VerifyMAC] key the verification code hashes, the CSRF
-//     tokens and the recognition cookie entries with the current key only,
-//     so finishing a rotation invalidates the outstanding ones.
+//     tokens, the recognition cookie entries and the download grant cookie
+//     entries with the current key only, so finishing a rotation
+//     invalidates the outstanding ones.
 //   - [Vault]: the tenant-scoped operations the rest of the application uses:
 //     [Vault.Seal] wraps and stores a secret or a data encryption key,
 //     [Vault.Open] reads it back, [Vault.Destroy] crypto-erases it and

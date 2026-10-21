@@ -19,11 +19,14 @@ const goAddr = `(?P<host>(?:\d{1,3}\.){3}\d{1,3}|[0-9A-Fa-f]{0,4}:[0-9A-Fa-f:.]*
 
 // fail2banSim reproduces how fail2ban applies a filter to a line: find the
 // date with datepattern, remove it, then search each failregex in what
-// remains (fail2ban keeps the text around the date, leading space included).
+// remains (fail2ban keeps the text around the date, leading space
+// included); a line matched by a failregex is dropped when an ignoreregex
+// also matches it.
 type fail2banSim struct {
-	date  *regexp.Regexp
-	fails []*regexp.Regexp
-	event []string // events of the _events alternation
+	date    *regexp.Regexp
+	fails   []*regexp.Regexp
+	ignores []*regexp.Regexp
+	event   []string // events of the _events alternation
 }
 
 // match returns the address banned for line, or "" when no failregex matches.
@@ -36,6 +39,11 @@ func (s *fail2banSim) match(line string) string {
 	rest := line[:loc[0]] + line[loc[1]:]
 	for _, re := range s.fails {
 		if m := re.FindStringSubmatch(rest); m != nil {
+			for _, ig := range s.ignores {
+				if ig.MatchString(rest) {
+					return ""
+				}
+			}
 			return m[re.SubexpIndex("host")]
 		}
 	}
@@ -113,6 +121,16 @@ func buildFail2ban() (*fail2banSim, string) {
 		}
 		sim.fails = append(sim.fails, re)
 	}
+	if ir := expand(defs["ignoreregex"]); ir != "" {
+		for ig := range strings.SplitSeq(ir, "\n") {
+			ig = strings.NewReplacer("<ADDR>", goAddr, "<HOST>", goAddr).Replace(ig)
+			re, err := regexp.Compile(ig)
+			if err != nil {
+				return nil, "ignoreregex: " + err.Error()
+			}
+			sim.ignores = append(sim.ignores, re)
+		}
+	}
 	if len(sim.fails) == 0 || defs["failregex"] == "" {
 		return nil, "no failregex"
 	}
@@ -179,6 +197,63 @@ func TestFail2banForgedLines(t *testing.T) {
 	} {
 		if got := sim.match(line); got != "" {
 			t.Errorf("forged line %q banned %q", line, got)
+		}
+	}
+}
+
+// downloadStreamsLines are rate_limited lines checked against the
+// exclusion of the download_streams scope by both integrations: banned
+// tells whether the line must still count as a failure.
+var downloadStreamsLines = []struct {
+	name   string
+	ev     Event
+	banned bool
+}{
+	{"download_streams", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.30"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}},
+	}, false},
+	{"transfer_password", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.31"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "transfer_password"}},
+	}, true},
+	{"scope smuggled in the transfer", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.32"),
+		Fields: []Field{{"transfer", `trf_01JABCD8E3" scope="download_streams`}, {KeyScope, "global"}},
+	}, true},
+	{"scope smuggled in the scope", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.33"),
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, `x" scope="download_streams`}},
+	}, true},
+	{"scope smuggled before the scope", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.34"),
+		Fields: []Field{{"transfer", `trf_01JABCD8E3" scope="download_streams"`}, {KeyScope, "download_streams"}},
+	}, true},
+	{"extra field after the scope", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.35"),
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}, {"x", "y"}},
+	}, true},
+	{"scope first", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.36"),
+		Fields: []Field{{KeyScope, "download_streams"}, {"x", `" scope="download_streams`}},
+	}, true},
+	{"another event", Event{
+		Type: TransferPasswordInvalid, IP: netip.MustParseAddr("198.51.100.37"),
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}},
+	}, true},
+}
+
+func TestFail2banDownloadStreamsIgnored(t *testing.T) {
+	t.Parallel()
+	sim := loadFail2ban(t)
+	for _, tc := range downloadStreamsLines {
+		line := render(t, tc.ev)
+		want := ""
+		if tc.banned {
+			want = tc.ev.IP.String()
+		}
+		if got := sim.match(line); got != want {
+			t.Errorf("%s: banned %q, want %q (line %q)", tc.name, got, want, line)
 		}
 	}
 }

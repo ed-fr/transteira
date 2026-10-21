@@ -82,6 +82,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"SMTPTimeout", c.SMTPTimeout, 30 * time.Second},
 		{"MailQueueSize", c.MailQueueSize, 1000},
 		{"UploadIdleTimeout", c.UploadIdleTimeout, 60 * time.Second},
+		{"DownloadIdleTimeout", c.DownloadIdleTimeout, 60 * time.Second},
 		{"MaxRecipients", c.MaxRecipients, 50},
 		{"MaxOpenTransfers", c.MaxOpenTransfers, 10},
 		{"ClamAVMaxScanBytes", c.ClamAVMaxScanBytes, int64(2 << 30)},
@@ -273,20 +274,20 @@ func TestLoadValid(t *testing.T) {
 		},
 		{
 			name: "upload bounds inclusive low",
-			vars: map[string]string{EnvUploadIdleTimeout: "5s", EnvMaxRecipients: "1", EnvMaxOpenTransfers: "1"},
+			vars: map[string]string{EnvUploadIdleTimeout: "5s", EnvDownloadIdleTimeout: "5s", EnvMaxRecipients: "1", EnvMaxOpenTransfers: "1"},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.UploadIdleTimeout != 5*time.Second || c.MaxRecipients != 1 || c.MaxOpenTransfers != 1 {
+				if c.UploadIdleTimeout != 5*time.Second || c.DownloadIdleTimeout != 5*time.Second || c.MaxRecipients != 1 || c.MaxOpenTransfers != 1 {
 					t.Errorf("uploads = %v %d", c.UploadIdleTimeout, c.MaxRecipients)
 				}
 			},
 		},
 		{
 			name: "upload bounds inclusive high",
-			vars: map[string]string{EnvUploadIdleTimeout: "10m", EnvMaxRecipients: "100", EnvMaxOpenTransfers: "1000"},
+			vars: map[string]string{EnvUploadIdleTimeout: "10m", EnvDownloadIdleTimeout: "10m", EnvMaxRecipients: "100", EnvMaxOpenTransfers: "1000"},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.UploadIdleTimeout != 10*time.Minute || c.MaxRecipients != 100 || c.MaxOpenTransfers != 1000 {
+				if c.UploadIdleTimeout != 10*time.Minute || c.DownloadIdleTimeout != 10*time.Minute || c.MaxRecipients != 100 || c.MaxOpenTransfers != 1000 {
 					t.Errorf("uploads = %v %d", c.UploadIdleTimeout, c.MaxRecipients)
 				}
 			},
@@ -468,6 +469,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"max age below the TTL", map[string]string{EnvUploadTTL: "48h", EnvUploadMaxAge: "24h"}, []string{EnvUploadMaxAge}},
 		{"idle timeout too short", map[string]string{EnvUploadIdleTimeout: "4s"}, []string{EnvUploadIdleTimeout}},
 		{"idle timeout too long", map[string]string{EnvUploadIdleTimeout: "10m1s"}, []string{EnvUploadIdleTimeout}},
+		{"download idle timeout too short", map[string]string{EnvDownloadIdleTimeout: "4s"}, []string{EnvDownloadIdleTimeout}},
+		{"download idle timeout too long", map[string]string{EnvDownloadIdleTimeout: "10m1s"}, []string{EnvDownloadIdleTimeout}},
 		{"max recipients zero", map[string]string{EnvMaxRecipients: "0"}, []string{EnvMaxRecipients}},
 		{"max recipients too big", map[string]string{EnvMaxRecipients: "101"}, []string{EnvMaxRecipients}},
 		{"max recipients malformed", map[string]string{EnvMaxRecipients: "many"}, []string{EnvMaxRecipients}},

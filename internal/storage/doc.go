@@ -4,8 +4,16 @@
 //
 // # Layout
 //
-//	<dataDir>/<tenantID>/<name>.ttef   encrypted file (TransTeira encrypted format)
-//	<dataDir>/<tenantID>/<name>.ckpt   sealed resume checkpoint of an upload
+//	<dataDir>/<tenantID>/<name>.ttef     encrypted file (TransTeira encrypted format)
+//	<dataDir>/<tenantID>/<name>.ckpt     sealed resume checkpoint of an upload
+//	<dataDir>/<tenantID>/<name>.dlstate  download state of a transfer
+//
+// A state file holds small bookkeeping of the download layer (the byte
+// ranges served per file of a transfer, at most [MaxStateSize] bytes). It
+// is named with [StateName], which hashes a server generated identifier
+// (the transfer ID) into the storage name format. Each extension is its own
+// namespace: removing a stored file never removes a state file of the same
+// name, and the reverse.
 //
 // Tenant directories are created on demand with mode 0750 and files with
 // mode 0640 (both subject to the process umask on Unix).
@@ -19,7 +27,9 @@
 //     ([tenant.ID.Validate]);
 //   - the storage name must be exactly 32 lowercase hexadecimal characters,
 //     as produced by [NewName] (128 bits from crypto/rand), so that it can
-//     neither be guessed nor reveal the original file name.
+//     neither be guessed nor reveal the original file name. State names
+//     ([StateName]) have the same format; they derive from a transfer ID
+//     and are not secret, which is harmless since they hold no file data.
 //
 // Any other value is refused with [ErrInvalid] before the file system is
 // touched.
@@ -41,9 +51,9 @@
 //
 // # Durability
 //
-// Checkpoints are written atomically: temporary file created with O_EXCL in
-// the same directory, fsync, rename over the checkpoint, then fsync of the
-// directory so that the rename itself is durable. Windows does not support
+// Checkpoints and state files are written atomically: temporary file
+// created with O_EXCL in the same directory, fsync, rename over the entry,
+// then fsync of the directory so that the rename itself is durable. Windows does not support
 // fsync on a directory handle; there the directory sync is a documented
 // no-op (NTFS journals the rename metadata).
 //

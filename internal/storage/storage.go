@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,9 +20,9 @@ import (
 // Errors returned by the store. Callers test them with errors.Is.
 var (
 	// ErrInvalid reports a malformed tenant identifier or storage name, an
-	// oversized checkpoint, or an entry that is not a regular file.
+	// oversized checkpoint or state, or an entry that is not a regular file.
 	ErrInvalid = errors.New("storage: invalid argument")
-	// ErrNotFound reports a missing file or checkpoint.
+	// ErrNotFound reports a missing file, checkpoint or state.
 	ErrNotFound = errors.New("storage: not found")
 	// ErrExists reports a file that already exists.
 	ErrExists = errors.New("storage: already exists")
@@ -40,12 +41,18 @@ const (
 	// size. internal/upload checks that its worst case fits.
 	MaxCheckpointSize = 128 << 10
 
+	// MaxStateSize bounds the size of a state file. The download layer keeps
+	// in it the byte ranges already served per file of a transfer, merged
+	// into disjoint intervals; it checks that its encoding fits.
+	MaxStateSize = 64 << 10
+
 	// NameLen is the length of a storage name: 128 bits in lowercase hex.
 	NameLen = 32
 
-	fileExt = ".ttef"
-	ckptExt = ".ckpt"
-	tmpExt  = ".tmp"
+	fileExt  = ".ttef"
+	ckptExt  = ".ckpt"
+	stateExt = ".dlstate"
+	tmpExt   = ".tmp"
 )
 
 // openRoot opens the data directory; tests replace it to cover its failure,
@@ -300,8 +307,10 @@ func (s *Store) removeIfExists(op, path, name string) error {
 }
 
 // Remove deletes a stored file and its checkpoint. Missing entries are not
-// an error, so Remove is idempotent. Following threat model T-110, callers
-// destroy the file key in the database before calling Remove.
+// an error, so Remove is idempotent. It never removes a state file, even
+// one of the same name: states are removed with [Store.RemoveState].
+// Following threat model T-110, callers destroy the file key in the
+// database before calling Remove.
 func (s *Store) Remove(tid tenant.ID, name string) error {
 	if err := check(tid, name); err != nil {
 		return err
@@ -316,36 +325,45 @@ func (s *Store) Remove(tid tenant.ID, name string) error {
 // the new checkpoint is present, never a partial one. The temporary file is
 // removed on any failure.
 func (s *Store) WriteCheckpoint(tid tenant.ID, name string, data []byte) error {
+	return s.writeAtomic("write checkpoint", tid, name, ckptExt, data, MaxCheckpointSize)
+}
+
+// writeAtomic atomically replaces the entry name+ext of tenant tid with
+// data, at most maxSize bytes: temporary file created with O_EXCL in the
+// same directory, fsync, rename over the entry, then fsync of the
+// directory. The temporary file is removed on any failure. op names the
+// operation in errors.
+func (s *Store) writeAtomic(op string, tid tenant.ID, name, ext string, data []byte, maxSize int) error {
 	if err := check(tid, name); err != nil {
 		return err
 	}
-	if len(data) > MaxCheckpointSize {
-		return fmt.Errorf("storage: write checkpoint %s: %w: too large", name, ErrInvalid)
+	if len(data) > maxSize {
+		return fmt.Errorf("storage: %s %s: %w: too large", op, name, ErrInvalid)
 	}
 	if err := s.ensureTenantDir(tid); err != nil {
 		return err
 	}
 	var suffix [8]byte
 	_, _ = rand.Read(suffix[:]) // never fails
-	tmp := rel(tid, name, ckptExt+"."+hex.EncodeToString(suffix[:])+tmpExt)
+	tmp := rel(tid, name, ext+"."+hex.EncodeToString(suffix[:])+tmpExt)
 
 	f, err := s.ops.openFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, FileMode)
 	if err != nil {
-		return wrap("write checkpoint", name, err)
+		return wrap(op, name, err)
 	}
 	err = s.writeSyncClose(f, data)
 	if err == nil {
-		err = s.rename(tmp, rel(tid, name, ckptExt))
+		err = s.rename(tmp, rel(tid, name, ext))
 	}
 	if err != nil {
 		_ = s.ops.remove(tmp)
-		return wrap("write checkpoint", name, err)
+		return wrap(op, name, err)
 	}
 	return s.SyncDir(tid)
 }
 
 // rename renames oldname over newname. On Windows, replacing a file that
-// another handle holds open (a concurrent ReadCheckpoint) fails with
+// another handle holds open (a concurrent ReadCheckpoint or ReadState) fails with
 // ERROR_ACCESS_DENIED or ERROR_SHARING_VIOLATION: the rename is then
 // retried up to renameRetries times, renameBackoff apart.
 func (s *Store) rename(oldname, newname string) error {
@@ -381,20 +399,28 @@ func (s *Store) writeSyncClose(f *os.File, data []byte) error {
 // fails with ErrNotFound when there is no checkpoint and with ErrInvalid
 // when it exceeds MaxCheckpointSize.
 func (s *Store) ReadCheckpoint(tid tenant.ID, name string) ([]byte, time.Time, error) {
+	return s.readBounded("read checkpoint", tid, name, ckptExt, MaxCheckpointSize)
+}
+
+// readBounded returns the content of the entry name+ext of tenant tid and
+// its modification time. It fails with ErrNotFound when the entry is
+// missing and with ErrInvalid when it is not a regular file or exceeds
+// maxSize bytes. op names the operation in errors.
+func (s *Store) readBounded(op string, tid tenant.ID, name, ext string, maxSize int) ([]byte, time.Time, error) {
 	if err := check(tid, name); err != nil {
 		return nil, time.Time{}, err
 	}
-	f, info, err := s.openRegular("read checkpoint", rel(tid, name, ckptExt), name, os.O_RDONLY)
+	f, info, err := s.openRegular(op, rel(tid, name, ext), name, os.O_RDONLY)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	defer func() { _ = f.Close() }()
-	data, err := s.ops.readAll(io.LimitReader(f, MaxCheckpointSize+1))
+	data, err := s.ops.readAll(io.LimitReader(f, int64(maxSize)+1))
 	if err != nil {
-		return nil, time.Time{}, wrap("read checkpoint", name, err)
+		return nil, time.Time{}, wrap(op, name, err)
 	}
-	if len(data) > MaxCheckpointSize {
-		return nil, time.Time{}, fmt.Errorf("storage: read checkpoint %s: %w: too large", name, ErrInvalid)
+	if len(data) > maxSize {
+		return nil, time.Time{}, fmt.Errorf("storage: %s %s: %w: too large", op, name, ErrInvalid)
 	}
 	return data, info.ModTime(), nil
 }
@@ -425,6 +451,55 @@ func (s *Store) RemoveCheckpoint(tid tenant.ID, name string) error {
 		return err
 	}
 	return s.removeIfExists("remove checkpoint", rel(tid, name, ckptExt), name)
+}
+
+// stateDomain prefixes the key hashed by StateName, so that a state name
+// can never coincide with another hash of the same key.
+const stateDomain = "transteira.storage.state\x00"
+
+// StateName returns the storage name of the state file of the server
+// generated identifier key (for example a transfer ID): the first 128 bits,
+// in lowercase hex, of the SHA-256 of key under a fixed domain prefix. It is
+// deterministic, so that every request on the same transfer finds the same
+// state, and always a valid storage name, so that the state goes through
+// the same path checks as every other entry. The name is not secret (it
+// derives from an identifier the server already knows); it only gives a key
+// of any shape a confined, fixed-format file name. A state file and a
+// stored file of the same name are distinct entries (different
+// extensions): [Store.Remove] never touches a state file, and
+// [Store.RemoveState] never touches a stored file or checkpoint.
+func StateName(key string) string {
+	sum := sha256.Sum256([]byte(stateDomain + key))
+	return hex.EncodeToString(sum[:NameLen/2])
+}
+
+// WriteState atomically replaces the state file of name with data (at most
+// MaxStateSize bytes), exactly as [Store.WriteCheckpoint] does for
+// checkpoints: after a crash, either the previous or the new state is
+// present, never a partial one. name is a storage name, normally obtained
+// with [StateName]. The download layer keeps the byte ranges served for a
+// transfer in it, written at most once per request; callers serialize the
+// writes of a given state (read-modify-write).
+func (s *Store) WriteState(tid tenant.ID, name string, data []byte) error {
+	return s.writeAtomic("write state", tid, name, stateExt, data, MaxStateSize)
+}
+
+// ReadState returns the state file of name. It fails with ErrNotFound when
+// there is none and with ErrInvalid when it is not a regular file or
+// exceeds MaxStateSize.
+func (s *Store) ReadState(tid tenant.ID, name string) ([]byte, error) {
+	data, _, err := s.readBounded("read state", tid, name, stateExt, MaxStateSize)
+	return data, err
+}
+
+// RemoveState deletes the state file of name. A missing state is not an
+// error, so RemoveState is idempotent. It removes neither a stored file nor
+// a checkpoint of the same name.
+func (s *Store) RemoveState(tid tenant.ID, name string) error {
+	if err := check(tid, name); err != nil {
+		return err
+	}
+	return s.removeIfExists("remove state", rel(tid, name, stateExt), name)
 }
 
 // Sync flushes the content of f, obtained from this Store, to stable

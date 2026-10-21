@@ -78,12 +78,12 @@ lines usually mean a reverse proxy that does not forward the client address
 | Event | Meaning | Fields |
 |---|---|---|
 | `verification_code_invalid` | Wrong e-mail verification code entered. | Optional context. |
-| `transfer_password_invalid` | Wrong transfer password entered. | Optional context. |
+| `transfer_password_invalid` | Wrong password entered to unlock a download. | `transfer`: the first 14 characters of the transfer identifier (`trf_` and the time part of the ULID): enough to group the attempts on one transfer, not enough to identify it. The download token and the password are never written. |
 | `admin_login_failed` | Failed admin authentication. | `reason`: `password`, `totp` or `recovery_code`. |
 | `api_token_invalid` | Unknown, revoked or expired API token. | Optional context. |
 | `unknown_fqdn` | `Host` header matching no tenant: the request is rejected with `421 Misdirected Request` on every path except `/healthz` and `/api/openapi.yaml`, which answer without a tenant. | `host`: the received Host (escaped, truncated). |
 | `deposit_refused` | Deposit refused. | `reason`: `ip` (outside the tenant's IP ranges), `domain` (address outside the allowed domains), `blocklist`, `invitation` (missing, unknown or expired). |
-| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`). |
+| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). |
 
 See [Log throttling](#log-throttling) for the events that are not written
 for every occurrence.
@@ -98,6 +98,9 @@ Examples:
 2026-10-20T07:41:00.123Z ip=192.0.2.13 tenant=transfer.entity-a.example.com event=deposit_refused reason="ip"
 2026-10-20T07:41:00.123Z ip=203.0.113.8 tenant=- event=unknown_fqdn host="198.51.100.1:443"
 2026-10-20T07:41:00.123Z ip=- tenant=- event=rate_limited scope="global"
+2026-10-20T07:41:00.123Z ip=198.51.100.7 tenant=transfer.entity-a.example.com event=transfer_password_invalid transfer="trf_01JABCD8E3"
+2026-10-20T07:41:00.123Z ip=198.51.100.7 tenant=transfer.entity-a.example.com event=rate_limited transfer="trf_01JABCD8E3" scope="transfer_password"
+2026-10-20T07:41:00.123Z ip=198.51.100.7 tenant=transfer.entity-a.example.com event=rate_limited transfer="trf_01JABCD8E3" scope="download_streams"
 ```
 
 ## Log throttling
@@ -131,6 +134,17 @@ settings take this into account:
 
 Counting rate-limit lines therefore measures the *duration* of an abuse, not
 its number of requests.
+
+Note on download streams: the per-client caps (2 streams per transfer, 8 per
+tenant) count an IPv4 address or an IPv6 /64, so recipients behind one NAT
+(an office, a corporate proxy) share them. Several colleagues downloading at
+the same time, or a download manager opening many parallel connections, may
+then get `429` and produce `rate_limited` lines with
+`scope="download_streams"`. The shipped fail2ban filter (`ignoreregex`) and
+CrowdSec scenario deliberately do not count these lines, so such sites are
+never banned for it; the other `rate_limited` scopes still count. The ignore
+rules match the exact line layout (`transfer` then `scope`, nothing after):
+keep that field order if you write your own rules.
 
 ## Volume
 

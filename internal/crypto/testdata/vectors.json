@@ -22,5 +22,8 @@
   "mac_session_token": "ds_01JVECTOR000000000000000000000000000000000",
   "mac_csrf_hex": "5d75fc1a2d5aad8810facbc3fedb436729a475d5417d8d78243d969256630a06",
   "mac_recognition_email": "alice@entity-a.example.com",
-  "mac_recognition_hex": "25a90c9b0f12b1ab53a0e7694154fe36a3272949541d68ddbd665b76e1462ae8"
+  "mac_recognition_hex": "25a90c9b0f12b1ab53a0e7694154fe36a3272949541d68ddbd665b76e1462ae8",
+  "mac_download_grant_transfer_id": "tr_01JVECTOR0000000000000000",
+  "mac_download_grant_expiry_hex": "000000006955b900",
+  "mac_download_grant_hex": "d97d05fe9a2186026a84e21b860f39a698edd95fc7fd4bf353ac74012784b4f8"
 }

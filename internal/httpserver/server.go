@@ -116,6 +116,12 @@ type routePolicy struct {
 	// idleBody reads the request body with an idle read timeout
 	// (idleBodyHandler) instead of a deadline.
 	idleBody bool
+	// sameOrigin applies the Origin and Sec-Fetch-Site checks of the CSRF
+	// protection, without session nor token (middleware.SameOrigin).
+	sameOrigin bool
+	// idleWrite writes the response with an idle write timeout
+	// (idleWriteMiddleware) instead of a deadline.
+	idleWrite bool
 }
 
 // defaultPolicy applies to every operation absent from routePolicies.
@@ -160,8 +166,14 @@ var routePolicies = map[string]routePolicy{
 	http.MethodGet + " " + APIBaseURL + "/transfers/{transferId}":               sessionPolicy(false),
 	http.MethodDelete + " " + APIBaseURL + "/transfers/{transferId}":            sessionPolicy(true),
 	http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize":     sessionPolicy(true),
-	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/files/{fileId}": {bodyLimit: middleware.DefaultJSONBodyLimit},
-	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/archive":        {bodyLimit: middleware.DefaultJSONBodyLimit},
+	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/files/{fileId}": {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
+	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/archive":        {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
+	// The unlock of a download needs no session, but its wrong passwords
+	// count against the client IP: it must not be triggered cross-site
+	// (RequireJSON already refuses the bodies a form can send).
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/unlock": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
 		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline,
 	},
@@ -209,6 +221,9 @@ type Deps struct {
 	// UploadIdleTimeout is the idle read timeout of a tus PATCH body
 	// (TT_UPLOAD_IDLE_TIMEOUT); DefaultUploadIdleTimeout when zero.
 	UploadIdleTimeout time.Duration
+	// DownloadIdleTimeout is the idle write timeout of a download response
+	// (TT_DOWNLOAD_IDLE_TIMEOUT); DefaultDownloadIdleTimeout when zero.
+	DownloadIdleTimeout time.Duration
 	// Spec is the OpenAPI document served at SpecPath (api.OpenAPISpec).
 	Spec []byte
 	// Logger is the application logger; nil discards.
@@ -268,6 +283,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if idle <= 0 {
 		idle = DefaultUploadIdleTimeout
 	}
+	idleDownload := deps.DownloadIdleTimeout
+	if idleDownload <= 0 {
+		idleDownload = DefaultDownloadIdleTimeout
+	}
 	sessions := middleware.SessionResolver(noSessions{})
 	if deps.Sessions != nil {
 		sessions = sessionResolver{svc: deps.Sessions}
@@ -275,8 +294,11 @@ func New(deps Deps, opts ...Option) http.Handler {
 	events := NewSecurityEvents(deps.SecurityLog, logger)
 	eh := errorHandlers{logger: logger}
 
+	// RequestMiddleware gives the operations the HTTP request (the download
+	// operations read the grant cookie and serve the files with
+	// http.ServeContent).
 	strict := gen.NewStrictHandlerWithOptions(api,
-		nil,
+		[]gen.StrictMiddlewareFunc{public.RequestMiddleware},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  eh.requestError,
 			ResponseErrorHandlerFunc: eh.responseError,
@@ -294,11 +316,13 @@ func New(deps Deps, opts ...Option) http.Handler {
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(func(r *http.Request) int64 { return policyOf(r).bodyLimit }),
 			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf }),
+			middleware.SameOrigin(func(r *http.Request) bool { return policyOf(r).sameOrigin }),
 			middleware.DepositSession(sessions, func(r *http.Request) bool {
 				p := policyOf(r)
 				return p.depositSession || p.csrf
 			}, logger),
 			maintenanceMiddleware(maintenance),
+			idleWriteMiddleware(idleDownload, logger),
 			deadlineMiddleware(logger),
 			tusMiddleware,
 		},

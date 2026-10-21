@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 )
 
@@ -132,6 +133,7 @@ func FuzzVerifyMAC(f *testing.F) {
 	f.Add(mac, "otp", []byte("vch_1"), []byte("123456"))
 	f.Add(mac, "otp", []byte("vch_11"), []byte("23456"))
 	f.Add(mac, "csrf", []byte("vch_1"), []byte("123456"))
+	f.Add(mac, "download-grant", []byte("vch_1"), []byte("123456"))
 	f.Add([]byte{}, "", []byte{}, []byte{})
 	f.Fuzz(func(t *testing.T, tag []byte, purpose string, a, b []byte) {
 		if len(a) > MaxMACPartSize || len(b) > MaxMACPartSize {
@@ -139,7 +141,7 @@ func FuzzVerifyMAC(f *testing.F) {
 		}
 		ok, err := k.VerifyMAC(MACPurpose(purpose), tag, a, b)
 		if err != nil {
-			if ok || !errors.Is(err, ErrUnknownMACPurpose) || purpose == "otp" || purpose == "csrf" {
+			if ok || !errors.Is(err, ErrUnknownMACPurpose) || slices.Contains(macPurposes, MACPurpose(purpose)) {
 				t.Fatalf("VerifyMAC failure: %v, %v", ok, err)
 			}
 			return

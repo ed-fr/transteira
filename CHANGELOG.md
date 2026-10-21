@@ -111,6 +111,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Migration `0005_scan`: scan results, download token and availability date.
 - Configuration: `TT_CLAMAV_MAX_SCAN_BYTES`, `TT_CLAMAV_TIMEOUT`, `TT_SCAN_WORKERS`.
 - `docs/operations/antivirus.md`: scan flow, fail-closed behaviour, clamd limits, signatures.
+- Downloads (step 8): operations `getDownload`, `unlockDownload`, `downloadFile` (single range,
+  forced attachment headers, `Content-Security-Policy: default-src 'none'; sandbox; frame-ancestors 'none'`, strong `ETag`, `416` as Problem Details) and `downloadArchive` (ZIP64 in store
+  mode with an exact `Content-Length`); transfer passwords checked with argon2id and locked for
+  15 minutes after 3 failures within a sliding 15-minute window, per transfer and per IP (counted
+  before hashing, stored in the database; a right password refunds only its own IP attempt); `__Host-tt_dl` unlock cookie; first download detected from the union of served ranges
+  or a complete archive, acknowledged once to the sender (`first_download` mail); deletion after the
+  first download once `TT_DELETE_AFTER_DOWNLOAD_GRACE` has passed (`internal/lifecycle`).
+- `internal/zipstream`, `internal/download`, `internal/lifecycle`; migration `0006_download`
+  (first download, scheduled deletion, password failure counters).
+- Download stream caps (2 per client per transfer, 4 per transfer, 8 per client, `429` with
+  `Retry-After`, logged as `rate_limited` scope `download_streams`, not counted by the shipped
+  fail2ban and CrowdSec rules); write idle timeout `TT_DOWNLOAD_IDLE_TIMEOUT`.
+- `mail.Retrier` and `notify.ViewOf` shared by the scan and download services.
 - Go toolchain pinned to 1.27.3 (fix for GO-2026-6809 in `crypto/x509`).
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity

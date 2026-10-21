@@ -96,6 +96,14 @@ administrators, not by the firewall.
   `maxretry = 10` within `findtime = 10m` still bans it in under two
   minutes. Do not lower `findtime` below about 2 minutes, or a sustained
   flood may never reach `maxretry`.
+- The `rate_limited` lines of the download stream limits
+  (`scope="download_streams"`: too many downloads open at once) never count:
+  recipients behind one NAT, or a download manager opening parallel
+  connections, reach these limits without any attack. The filter's
+  `ignoreregex` matches only the exact line TransTeira writes for them
+  (truncated transfer ID, then the scope, nothing after), so a value forged
+  elsewhere on the line cannot use it to escape a ban. Every other
+  `rate_limited` scope still counts.
 - Add trusted networks and monitoring probes to `ignoreip` (see above). Do
   **not** add the reverse proxy: TransTeira logs the real client IP, taken from
   `X-Forwarded-For` only when the request comes from a proxy declared in

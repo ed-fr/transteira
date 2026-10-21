@@ -32,6 +32,7 @@ const (
 	EnvDepositSessionTTL        = "TT_DEPOSIT_SESSION_TTL"
 	EnvDeleteAfterDownloadGrace = "TT_DELETE_AFTER_DOWNLOAD_GRACE"
 	EnvUploadIdleTimeout        = "TT_UPLOAD_IDLE_TIMEOUT"
+	EnvDownloadIdleTimeout      = "TT_DOWNLOAD_IDLE_TIMEOUT"
 	EnvMaxRecipients            = "TT_MAX_RECIPIENTS"
 	EnvMaxOpenTransfers         = "TT_MAX_OPEN_TRANSFERS"
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
@@ -56,6 +57,7 @@ const (
 	DefaultDepositSessionTTL        = "4h"
 	DefaultDeleteAfterDownloadGrace = "15m"
 	DefaultUploadIdleTimeout        = "60s"
+	DefaultDownloadIdleTimeout      = "60s"
 	DefaultMaxRecipients            = "50"
 	DefaultMaxOpenTransfers         = "10"
 	DefaultClamAVAddr               = "clamav:3310"
@@ -282,6 +284,12 @@ func Variables() []Var {
 			Description: "Largest number of unfinished (not yet finalized) transfers one internal " +
 				"sender may have at once, so that abandoned transfers cannot hold the storage " +
 				"quota (between 1 and 1000). Invited external senders are limited to 3.",
+		},
+		{
+			Name: EnvDownloadIdleTimeout, Group: "Downloads", Default: DefaultDownloadIdleTimeout,
+			Description: "Longest wait for a client to accept the next part of a download before the " +
+				"server cuts the connection; reset by every write, so that slow but active " +
+				"downloads continue (Go duration, between 5s and 10m).",
 		},
 	}
 }

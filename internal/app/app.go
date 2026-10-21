@@ -12,8 +12,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,8 +25,10 @@ import (
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/deposit"
+	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
+	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/notify"
@@ -48,9 +52,9 @@ const (
 	// MaxHeaderBytes bounds the size of request headers.
 	MaxHeaderBytes = 64 << 10
 	// ShutdownTimeout bounds the graceful shutdown of the HTTP server. With
-	// HandlerDrainTimeout, ScanCloseTimeout and MailDrainTimeout it makes a
-	// worst-case shutdown of 9 s, strictly below Docker's default 10 s stop
-	// grace period (stop_grace_period in docker-compose), so that
+	// HandlerDrainTimeout, BackgroundCloseTimeout and MailDrainTimeout it
+	// makes a worst-case shutdown of 9 s, strictly below Docker's default
+	// 10 s stop grace period (stop_grace_period in docker-compose), so that
 	// connections still open are closed by TransTeira itself, with a
 	// warning, and the database is closed cleanly before Docker sends
 	// SIGKILL. Raise stop_grace_period before raising any of the four
@@ -60,12 +64,18 @@ const (
 	// connections have been forcibly closed, before the database and the
 	// security log are closed.
 	HandlerDrainTimeout = time.Second
-	// ScanCloseTimeout bounds the wait for the antivirus workers to stop at
-	// shutdown, after the HTTP server and before the mail queue. An analysis
-	// in progress is abandoned without counting an attempt; the transfers
-	// still scanning are resumed by the sweep of the next start. It takes
-	// one second from the former 7 s of ShutdownTimeout.
-	ScanCloseTimeout = time.Second
+	// BackgroundCloseTimeout bounds the wait for the background workers to
+	// stop at shutdown, after the HTTP server and before the mail queue and
+	// the database. They are closed at once, under this one deadline:
+	//   - the antivirus workers: an analysis in progress is abandoned
+	//     without counting an attempt, and resumed by the sweep of the next
+	//     start;
+	//   - the download service: its pending first-download mail retries are
+	//     dropped (logged);
+	//   - the lifecycle sweeper: an erasure in progress stops before its next
+	//     transfer and is completed by a later sweep.
+	// It takes one second from the former 7 s of ShutdownTimeout.
+	BackgroundCloseTimeout = time.Second
 	// MailDrainTimeout bounds the delivery of the mails still queued at
 	// shutdown, once the HTTP server has stopped. Jobs left after it are
 	// dropped (a code or an invitation can be requested again). See
@@ -88,6 +98,7 @@ type runOptions struct {
 	shutdownTimeout time.Duration
 	maintenance     *atomic.Bool
 	scanOptions     func(*scan.Options)
+	lifecycleOpts   func(*lifecycle.Options)
 }
 
 // WithScanOptions lets edit change the options of the antivirus worker
@@ -95,6 +106,12 @@ type runOptions struct {
 // values are already set when edit runs.
 func WithScanOptions(edit func(*scan.Options)) Option {
 	return func(o *runOptions) { o.scanOptions = edit }
+}
+
+// WithLifecycleOptions lets edit change the options of the lifecycle
+// sweeper before it is created (tests: a short sweep interval).
+func WithLifecycleOptions(edit func(*lifecycle.Options)) Option {
+	return func(o *runOptions) { o.lifecycleOpts = edit }
 }
 
 // WithListener serves on l instead of listening on cfg.ListenAddr (tests).
@@ -230,16 +247,29 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address,
 		antivirus.WithMaxScanBytes(cfg.ClamAVMaxScanBytes), antivirus.WithScanTimeout(cfg.ClamAVTimeout))
 	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
+	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger})
+	// One hasher bounds the argon2id computations of the transfer passwords,
+	// at creation (transfer) and at unlock (download).
+	passwords := crypto.NewPasswordHasher(transfer.DefaultHashConcurrency)
 	worker := scan.New(scan.Deps{
-		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads,
-		Notifier: notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger}), Mail: mailQueue,
+		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
 	}, scanOptions(cfg, &o, logger))
-	// Deferred after closeMailQueue, so it runs before it: the workers stop
-	// enqueueing mails before the queue drains.
-	defer closeScanWorker(ctx, worker, logger)
-	transfers := newTransferService(cfg, db, vault, uploads, secLog, worker.Enqueue, logger)
+	downloads := download.New(download.Deps{
+		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
+		SecurityLog: secLog,
+	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger})
+	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, States: files},
+		lifecycleOptions(&o, logger))
+	// Deferred after closeMailQueue, the data directory and the database, so
+	// it runs before them: the workers stop enqueueing mails and touching
+	// the files before the queue drains.
+	defer closeBackground(ctx, logger, worker, downloads, sweeper)
+	transfers := newTransferService(cfg, db, vault, uploads, secLog, passwords, worker.Enqueue, logger)
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)
+	}
+	if err := sweeper.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the lifecycle sweeper: %w", err)
 	}
 
 	handler := httpserver.New(httpserver.Deps{
@@ -254,11 +284,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		},
 		Maintenance: maintenance,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
-			public.WithUploads(uploads)),
-		Sessions:          deposits,
-		UploadIdleTimeout: cfg.UploadIdleTimeout,
-		Spec:              api.OpenAPISpec,
-		Logger:            logger,
+			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads})),
+		Sessions:            deposits,
+		UploadIdleTimeout:   cfg.UploadIdleTimeout,
+		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
+		Spec:                api.OpenAPISpec,
+		Logger:              logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)
 }
@@ -425,12 +456,65 @@ func drain(counter *atomic.Int64, timeout time.Duration) bool {
 // base context of their request (canceled by serve): the engine saves a
 // checkpoint, and the client resumes after a HEAD.
 func newTransferService(cfg *config.Config, db *store.DB, vault *masterkey.Vault, uploads *upload.Engine,
-	secLog *securitylog.Logger, onFinalized func(tenant.ID, string), logger *slog.Logger,
+	secLog *securitylog.Logger, passwords *crypto.PasswordHasher, onFinalized func(tenant.ID, string), logger *slog.Logger,
 ) *transfer.Service {
 	return transfer.New(db, vault, uploads, secLog, transfer.Options{
 		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
-		Hasher: crypto.NewPasswordHasher(transfer.DefaultHashConcurrency), OnFinalized: onFinalized, Logger: logger,
+		Hasher: passwords, OnFinalized: onFinalized, Logger: logger,
 	})
+}
+
+// downloadBackend is the part of *download.Service the HTTP layer uses.
+type downloadBackend interface {
+	Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (download.View, error)
+	Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error)
+	OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (*download.File, error)
+	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (*download.Archive, error)
+}
+
+// downloadAdapter adapts the download service to public.DownloadService:
+// the opened file and the archive are handed over as the narrow views the
+// handlers use.
+type downloadAdapter struct {
+	svc downloadBackend
+}
+
+// Resolve implements public.DownloadService.
+func (a downloadAdapter) Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (download.View, error) {
+	return a.svc.Resolve(ctx, t, rawToken, grantCookie)
+}
+
+// Unlock implements public.DownloadService.
+func (a downloadAdapter) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error) {
+	return a.svc.Unlock(ctx, t, rawToken, clientIP, password, grantCookie)
+}
+
+// OpenFile implements public.DownloadService.
+func (a downloadAdapter) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (public.DownloadFile, error) {
+	f, err := a.svc.OpenFile(ctx, t, rawToken, clientIP, grantCookie, fileID)
+	if err != nil {
+		return public.DownloadFile{}, err
+	}
+	return public.DownloadFile{Name: f.Name, SHA256: f.SHA256, Content: f.Content}, nil
+}
+
+// PrepareArchive implements public.DownloadService.
+func (a downloadAdapter) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (public.DownloadArchive, error) {
+	archive, err := a.svc.PrepareArchive(ctx, t, rawToken, clientIP, grantCookie)
+	if err != nil {
+		return nil, err
+	}
+	return archive, nil
+}
+
+// lifecycleOptions returns the options of the lifecycle sweeper, edited by
+// WithLifecycleOptions when given.
+func lifecycleOptions(o *runOptions, logger *slog.Logger) lifecycle.Options {
+	opts := lifecycle.Options{Logger: logger}
+	if o.lifecycleOpts != nil {
+		o.lifecycleOpts(&opts)
+	}
+	return opts
 }
 
 // scanOptions returns the options of the antivirus worker: the configured
@@ -443,15 +527,27 @@ func scanOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) scan.Op
 	return opts
 }
 
-// closeScanWorker stops the antivirus workers for at most ScanCloseTimeout.
-// A stop cut short is logged, not returned: the transfers still scanning
-// are resumed at the next start.
-func closeScanWorker(ctx context.Context, w *scan.Worker, logger *slog.Logger) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ScanCloseTimeout)
+// closer is a background component stopped at shutdown.
+type closer interface {
+	Close(ctx context.Context) error
+}
+
+// closeBackground stops the background components at once, all within
+// BackgroundCloseTimeout. A stop cut short is logged, not returned: what
+// was interrupted is resumed at the next start.
+func closeBackground(ctx context.Context, logger *slog.Logger, closers ...closer) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), BackgroundCloseTimeout)
 	defer cancel()
-	if err := w.Close(ctx); err != nil {
-		logger.WarnContext(ctx, "antivirus workers still running at shutdown", slog.String("error", err.Error()))
+	var wg sync.WaitGroup
+	for _, c := range closers {
+		wg.Go(func() {
+			if err := c.Close(ctx); err != nil {
+				logger.WarnContext(ctx, "background worker still running at shutdown",
+					slog.String("worker", fmt.Sprintf("%T", c)), slog.String("error", err.Error()))
+			}
+		})
 	}
+	wg.Wait()
 }
 
 // newSMTPSender returns the SMTP sender of the mail queue. The EHLO name

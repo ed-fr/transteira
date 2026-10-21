@@ -28,6 +28,10 @@ const (
 	vectorCode      = "042137"
 	vectorSession   = "ds_01JVECTOR000000000000000000000000000000000"
 	vectorEmail     = "alice@entity-a.example.com"
+	vectorTransfer  = "tr_01JVECTOR0000000000000000"
+	// vectorGrantExpiry is an expiry encoded as the big-endian uint64 Unix
+	// time in seconds (2026-01-01T00:00:00Z).
+	vectorGrantExpiry = "000000006955b900"
 )
 
 // vectors freezes the formats. Any unintended change of a format, label,
@@ -60,6 +64,9 @@ type vectors struct {
 	MACCSRF              string `json:"mac_csrf_hex"`
 	MACRecognitionEmail  string `json:"mac_recognition_email"`
 	MACRecognition       string `json:"mac_recognition_hex"`
+	MACGrantTransferID   string `json:"mac_download_grant_transfer_id"`
+	MACGrantExpiry       string `json:"mac_download_grant_expiry_hex"`
+	MACDownloadGrant     string `json:"mac_download_grant_hex"`
 }
 
 // sha256State returns the marshaled SHA-256 state after hashing data, the
@@ -150,6 +157,11 @@ func generateVectors(t *testing.T) vectors {
 		t.Fatal(err)
 	}
 	v.MACRecognition = hex.EncodeToString(mac)
+	v.MACGrantTransferID, v.MACGrantExpiry = vectorTransfer, vectorGrantExpiry
+	if mac, err = k.MAC(MACPurposeDownloadGrant, []byte(vectorTenant), []byte(vectorTransfer), mustHex(t, vectorGrantExpiry)); err != nil {
+		t.Fatal(err)
+	}
+	v.MACDownloadGrant = hex.EncodeToString(mac)
 	return v
 }
 
@@ -257,5 +269,9 @@ func TestVectors(t *testing.T) {
 	if ok, err := k.VerifyMAC(MACPurposeRecognition, mustHex(t, want.MACRecognition),
 		[]byte(want.TenantID), []byte(want.MACRecognitionEmail)); !ok || err != nil {
 		t.Fatalf("recognition MAC: %v, %v", ok, err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeDownloadGrant, mustHex(t, want.MACDownloadGrant),
+		[]byte(want.TenantID), []byte(want.MACGrantTransferID), mustHex(t, want.MACGrantExpiry)); !ok || err != nil {
+		t.Fatalf("download grant MAC: %v, %v", ok, err)
 	}
 }

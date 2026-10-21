@@ -120,6 +120,26 @@ var goldenCases = []goldenCase{
 		banIP: "192.0.2.17",
 	},
 	{
+		name: "rate limited transfer password",
+		ev: Event{
+			Type: RateLimited, IP: netip.MustParseAddr("198.51.100.7"), Tenant: tenantA,
+			Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "transfer_password"}},
+		},
+		line:  `2026-10-20T07:41:00.123Z ip=198.51.100.7 tenant=transfer.entity-a.example.com event=rate_limited transfer="trf_01JABCD8E3" scope="transfer_password"`,
+		banIP: "198.51.100.7",
+	},
+	{
+		// Download stream limits never feed bans (shared NAT, download
+		// managers): the integrations ignore this exact line.
+		name: "rate limited download streams",
+		ev: Event{
+			Type: RateLimited, IP: netip.MustParseAddr("198.51.100.8"), Tenant: tenantA,
+			Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}},
+		},
+		line:  `2026-10-20T07:41:00.123Z ip=198.51.100.8 tenant=transfer.entity-a.example.com event=rate_limited transfer="trf_01JABCD8E3" scope="download_streams"`,
+		banIP: "",
+	},
+	{
 		name:  "ipv4-mapped ipv6 is unmapped",
 		ev:    Event{Type: RateLimited, IP: netip.MustParseAddr("::ffff:192.0.2.18"), Fields: []Field{{KeyScope, "global"}}},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.18 tenant=- event=rate_limited scope="global"`,

@@ -36,7 +36,9 @@
 // tokens derived from deposit session tokens (MACPurposeCSRF) and the
 // entries of the browser recognition cookie of verified depositors
 // (MACPurposeRecognition, over a tenant ID, a normalized address, its
-// recognition salt and an issue day).
+// recognition salt and an issue day) and the entries of the download grant
+// cookie set once a transfer password has been entered
+// (MACPurposeDownloadGrant, over a tenant ID, a transfer ID and an expiry).
 //
 //	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
 //	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))
@@ -46,7 +48,10 @@
 // Every key derived from the master key has its own HKDF info string, and the
 // prefixes "transteira/v1/wrap/" and "transteira/v1/mac/" cannot collide: a
 // wrapping key and a MAC key are never equal, and each purpose of either kind
-// has its own key. The key identifier uses a third, distinct HMAC message
+// has its own key: for instance, a recognition cookie entry is never a valid
+// download grant, even for the same parts, since "recognition" and
+// "download-grant" derive distinct keys and appear in the MAC message. The
+// key identifier uses a third, distinct HMAC message
 // ("transteira/v1/key-id"). Every authenticated message also starts with the
 // length-prefixed domain label of its use ("transteira/v1/envelope",
 // "transteira/v1/stream-chunk", "transteira/v1/stream-tail",

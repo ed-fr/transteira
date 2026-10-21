@@ -58,7 +58,12 @@ transteira/
 │   ├── filename/                    # Assainissement des noms de fichiers (P8) et noms uniques dans le ZIP
 │   ├── textsafe/                    # Caractères qui masquent ou déguisent du texte (contrôle, bidi, invisibles) :
 │   │                                # définition unique, retrait dans les messages, refus dans les noms (filename)
-│   ├── download/                    # Téléchargement unitaire (Range), ZIP64 en flux en mode store, mot de passe
+│   ├── download/                    # Accès par jeton, mot de passe et blocage, cookie de déverrouillage, fichier avec
+│   │                                # Range, archive, suivi des plages servies et premier téléchargement
+│   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
+│   ├── lifecycle/                   # Tâche périodique unique (§20) : suppression après premier téléchargement ;
+│   │                                # à venir : expirations, uploads abandonnés, purges RGPD, adresses et défis
+│   │                                # périmés, compteurs password_failures, fichiers d'état et orphelins, WAL
 │   ├── (blocklist → store)          # Liste de blocage (adresse, domaine, SHA-256) : pas de package dédié,
 │   │                                # dépôt store/blocklist.go, appliquée par deposit (et transfer pour les empreintes)
 │   ├── quota/                       # Limite par envoi, quota par entité, réservations, seuils 80 % / 100 %
@@ -84,7 +89,6 @@ transteira/
 │   ├── audit/                       # Journal d'audit (en base, cloisonné par tenant)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
 │   ├── maintenance/                 # État du mode maintenance (variable d'environnement + administration)
-│   ├── cleanup/                     # Tâche périodique unique : expirations, uploads abandonnés, purges RGPD
 │   ├── backup/                      # VACUUM INTO (SQLite) / pg_dump (PostgreSQL)
 │   ├── gdpr/                        # Recherche et effacement des données d'une adresse
 │   ├── stats/                       # Statistiques par entité et globales, espace disque

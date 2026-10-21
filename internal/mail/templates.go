@@ -40,6 +40,10 @@ const (
 	// delivered anyway;
 	// data: [FileNotScannedData].
 	TemplateFileNotScanned = "file_not_scanned"
+	// TemplateFirstDownload tells the sender that the transfer has been
+	// downloaded in full for the first time (CLAUDE.md section 12.2), sent
+	// once per transfer; data: [FirstDownloadData].
+	TemplateFirstDownload = "first_download"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -182,6 +186,24 @@ type FileNotScannedData struct {
 	TenantName string
 	// Files lists the files the antivirus could not analyze.
 	Files []FileInfo
+}
+
+// FirstDownloadData is the data of [TemplateFirstDownload]. It names no
+// recipient: in V1 a transfer has a single download link, so the download
+// cannot be attributed to one recipient.
+type FirstDownloadData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// Files lists the files of the transfer (name and size; SHA256 and
+	// NotScanned are not shown).
+	Files []FileInfo
+	// DownloadedAt is when the transfer was first downloaded in full,
+	// formatted by the templates ("datetime").
+	DownloadedAt time.Time
+	// DeleteAt is when the transfer is erased, formatted like DownloadedAt,
+	// when the sender asked for deletion after the first download; zero
+	// when the transfer stays until its expiry.
+	DeleteAt time.Time
 }
 
 //go:embed templates

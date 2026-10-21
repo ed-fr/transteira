@@ -48,10 +48,14 @@ const (
 	// MACPurposeRecognition keys the entries of the browser recognition
 	// cookie, each one a MAC of a tenant ID and a verified mail address.
 	MACPurposeRecognition MACPurpose = "recognition"
+	// MACPurposeDownloadGrant keys the entries of the download grant cookie
+	// set after a transfer password has been entered, each one a MAC of a
+	// tenant ID, a transfer ID and an expiry.
+	MACPurposeDownloadGrant MACPurpose = "download-grant"
 )
 
 // macPurposes lists every valid MACPurpose.
-var macPurposes = []MACPurpose{MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition}
+var macPurposes = []MACPurpose{MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant}
 
 // deriveMACKeys derives the MAC key of every purpose from the master key
 // bytes: HKDF-SHA256(master, salt = none, info = "transteira/v1/mac/" +

@@ -39,7 +39,7 @@ timestamp.
 
 | Scenario | Events | Trigger (per client IP) |
 |---|---|---|
-| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `rate_limited` | 10 events in a burst, one leaks per minute |
+| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
 | `ed-fr/transteira-fqdn-scan` | `unknown_fqdn` | 10 events in a burst, one leaks every 30 s |
 
 Both carry `remediation: true`: a decision (ban, 4 h by default profile) is
@@ -53,6 +53,15 @@ flood thus feeds about 6 events per minute into a bucket: still well above
 the leak rates above (1 per minute and 2 per minute), so both scenarios
 overflow within about two minutes of sustained abuse. Keep the leak speed
 below 6 events per minute if you tune them.
+
+The `rate_limited` lines of the download stream limits
+(`scope="download_streams"`: too many downloads open at once) are excluded
+from `ed-fr/transteira-bf`: recipients behind one NAT, or a download manager
+opening parallel connections, reach these limits without any attack. The
+exclusion matches the whole `fields` part of the exact line TransTeira
+writes for them (truncated transfer ID, then the scope, nothing after), so a
+value forged elsewhere on the line cannot use it to escape a ban. Every
+other `rate_limited` scope still counts.
 
 ## Never ban your own users
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
@@ -104,11 +105,17 @@ func (h errorHandlers) requestError(w http.ResponseWriter, r *http.Request, err 
 // sent cleanly: the error is logged and the handler panics with
 // [http.ErrAbortHandler] so that net/http aborts the connection and the
 // client sees a truncated response rather than a seemingly complete one.
+// A client that went away is logged at Debug level, and a client cut for
+// not reading within the write idle timeout ([os.ErrDeadlineExceeded]) at
+// Info level, since neither is a server fault.
 func (h errorHandlers) responseError(w http.ResponseWriter, r *http.Request, err error) {
 	if middleware.ResponseStarted(w) {
 		level := slog.LevelError
-		if ctx := r.Context(); ctx.Err() != nil {
+		switch {
+		case r.Context().Err() != nil:
 			level = slog.LevelDebug // the client went away
+		case errors.Is(err, os.ErrDeadlineExceeded):
+			level = slog.LevelInfo // the client stopped reading (idle timeout)
 		}
 		h.logger.Log(r.Context(), level, "response failed after it started",
 			slog.String("request_id", middleware.RequestID(r.Context())),

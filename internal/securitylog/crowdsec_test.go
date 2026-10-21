@@ -112,21 +112,30 @@ func TestCrowdsecForgedLines(t *testing.T) {
 	}
 }
 
-// scenarioEvents returns the event names quoted in the filter of a scenario.
-func scenarioEvents(t *testing.T, path string) []string {
+// scenarioFilter returns the filter of a scenario, YAML escapes of double
+// quotes removed.
+func scenarioFilter(t *testing.T, path string) string {
 	t.Helper()
 	m := regexp.MustCompile(`(?m)^filter:\s*"(.*)"\s*$`).FindStringSubmatch(readFile(t, path))
 	if m == nil {
 		t.Fatalf("%s: no filter", path)
 	}
+	return strings.ReplaceAll(m[1], `\"`, `"`)
+}
+
+// scenarioEvents returns the distinct event names quoted in the filter of
+// a scenario.
+func scenarioEvents(t *testing.T, path string) []string {
+	t.Helper()
+	filter := scenarioFilter(t, path)
 	var out []string
-	for _, q := range regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(m[1], -1) {
+	for _, q := range regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(filter, -1) {
 		if q[1] != "transteira_security" {
 			out = append(out, q[1])
 		}
 	}
 	slices.Sort(out)
-	return out
+	return slices.Compact(out)
 }
 
 func TestCrowdsecScenariosCoverCatalogue(t *testing.T) {
@@ -143,5 +152,29 @@ func TestCrowdsecScenariosCoverCatalogue(t *testing.T) {
 	}
 	if got := scenarioEvents(t, crowdsecFQDNScan); !slices.Equal(got, []string{string(UnknownFQDN)}) {
 		t.Errorf("scan scenario events = %v", got)
+	}
+}
+
+func TestCrowdsecDownloadStreamsExcluded(t *testing.T) {
+	t.Parallel()
+	re := loadCrowdsecPattern(t)
+	filter := scenarioFilter(t, crowdsecBF)
+	m := regexp.MustCompile(`!\(evt\.Meta\.transteira_event == 'rate_limited' && evt\.Parsed\.fields matches '([^']*)'\)`).FindStringSubmatch(filter)
+	if m == nil {
+		t.Fatalf("no download_streams exclusion in %q", filter)
+	}
+	excluded := regexp.MustCompile(m[1])
+	events := scenarioEvents(t, crowdsecBF)
+	for _, tc := range downloadStreamsLines {
+		line := strings.TrimRight(render(t, tc.ev), "\n")
+		sub := re.FindStringSubmatch(line)
+		if sub == nil {
+			t.Fatalf("%s: line %q not parsed", tc.name, line)
+		}
+		event, fields := sub[re.SubexpIndex("event")], sub[re.SubexpIndex("fields")]
+		counted := slices.Contains(events, event) && (event != string(RateLimited) || !excluded.MatchString(fields))
+		if counted != tc.banned {
+			t.Errorf("%s: counted %v, want %v (line %q)", tc.name, counted, tc.banned, line)
+		}
 	}
 }

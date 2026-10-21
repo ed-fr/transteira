@@ -61,6 +61,12 @@ func goldenData() map[string]any {
 			TenantName: "Entity A & Co",
 			Files:      goldenFiles()[1:],
 		},
+		TemplateFirstDownload: FirstDownloadData{
+			TenantName:   "Entity A & Co",
+			Files:        goldenFiles(),
+			DownloadedAt: time.Date(2027, time.October, 14, 16, 5, 0, 0, time.UTC),
+			DeleteAt:     time.Date(2027, time.October, 14, 16, 20, 0, 0, time.UTC),
+		},
 	}
 }
 
@@ -86,7 +92,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,invitation,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,first_download,invitation,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -154,6 +160,32 @@ func TestTemplatesEscaping(t *testing.T) {
 	m, err = Render(TemplateInvitation, "fr", data)
 	if err != nil || strings.Contains(m.Text, "Son message") || strings.Contains(m.HTML, "blockquote") {
 		t.Errorf("empty message: %v\n%s", err, m.Text)
+	}
+}
+
+func TestTemplatesFirstDownloadVariants(t *testing.T) {
+	data := goldenData()[TemplateFirstDownload].(FirstDownloadData)
+	// The golden data covers the deletion time; check the transfer kept
+	// until its expiry.
+	for lang, want := range map[string]string{"en": "erased on October 14, 2027 at 16:20 UTC.", "fr": "effacé le 14 octobre 2027 à 16:20 UTC."} {
+		m, err := Render(TemplateFirstDownload, lang, data)
+		if err != nil || !strings.Contains(m.Text, want) || !strings.Contains(m.HTML, want) {
+			t.Errorf("%s deletion time: %v\n%s", lang, err, m.Text)
+		}
+	}
+	data.DeleteAt = time.Time{}
+	for lang, want := range map[string]string{"en": "sent only once", "fr": "envoyé qu'une fois"} {
+		m, err := Render(TemplateFirstDownload, lang, data)
+		if err != nil || !strings.Contains(m.Text, want) || strings.Contains(m.Text, "16:20") {
+			t.Errorf("%s kept: %v\n%s", lang, err, m.Text)
+		}
+		if !strings.Contains(m.HTML, want) || strings.Contains(m.HTML, "16:20") {
+			t.Errorf("%s kept HTML:\n%s", lang, m.HTML)
+		}
+		// File names are escaped in HTML and no recipient is named.
+		if strings.Contains(m.HTML, "<script>") || !strings.Contains(m.HTML, "&lt;script&gt;") || strings.Contains(m.Text, "@") {
+			t.Errorf("%s: escaping or recipient:\n%s", lang, m.HTML)
+		}
 	}
 }
 

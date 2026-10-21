@@ -463,6 +463,20 @@ var tenantAllowlist = map[string]int{
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 3,
 	`UPDATE transfer_files SET scan_attempts = scan_attempts + 1 ` +
 		`WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`: 0,
+	// First download and deletion after it.
+	`UPDATE transfers SET first_downloaded_at = ? WHERE tenant_id = ? AND id = ? AND status = 'available' ` +
+		`AND first_downloaded_at IS NULL AND NOT delete_after_first_download`: 1,
+	`UPDATE transfers SET first_downloaded_at = ?, delete_after = ? WHERE tenant_id = ? AND id = ? ` +
+		`AND status = 'available' AND first_downloaded_at IS NULL AND delete_after_first_download`: 2,
+	`UPDATE transfers SET status = 'deleted' ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'available' AND download_token_key_id IS NULL`: 0,
+	// Transfer password failures.
+	`SELECT fail_1, fail_2, fail_3, locked_until FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
+	`INSERT INTO password_failures (tenant_id, scope, key, fail_1, fail_2, fail_3, locked_until) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
+	`UPDATE password_failures SET fail_1 = ?, fail_2 = ?, fail_3 = ?, locked_until = ? ` +
+		`WHERE tenant_id = ? AND scope = ? AND key = ?`: 4,
+	`DELETE FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -549,6 +563,9 @@ var systemAllowlist = map[string]string{
 	`UPDATE key_rotations SET status = ?, completed_at = ?, error = ? WHERE id = ? AND status = 'running'`:                                        reasonKeyRotation,
 	// Antivirus worker start-up sweep (identifiers only).
 	`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`: reasonAntivirusSweep,
+	// Deletion after the first download (identifiers only).
+	`SELECT tenant_id, id FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? AND status = 'available' ` +
+		`ORDER BY delete_after, id LIMIT ?`: reasonDeleteAfterDownload,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

@@ -257,6 +257,14 @@ use to ban the client IP.
 - **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/{asset}`.
 - **What to do:** send a smaller body.
 
+### range-not-satisfiable
+
+- **HTTP status:** 416 Range Not Satisfiable
+- **Meaning:** the byte range requested to resume a download is outside the file. The
+  `Content-Range` header (`bytes */<size>`) gives the size of the file.
+- **Typical endpoints:** `GET /downloads/{linkToken}/files/{fileId}`.
+- **What to do:** request a range within the file, or the whole file without `Range`.
+
 ### unsupported-media-type
 
 - **HTTP status:** 415 Unsupported Media Type
@@ -282,9 +290,12 @@ use to ban the client IP.
   attempts, API calls, the mail queue of the service (or of the entity) being full, or the
   open-transfer cap: a sender may have only a limited number of unfinished transfers at once
   (`TT_MAX_OPEN_TRANSFERS`, 10 by default, for an internal user; 3 for an invited external
-  depositor); finalizing or cancelling one frees a slot.
+  depositor; finalizing or cancelling one frees a slot), or too many simultaneous download
+  streams (2 per client for one transfer, 4 for one transfer, 8 per client across the
+  transfers of the entity; a client is an IP address, an IPv6 address counting as its /64).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
-  `POST /transfers`, `POST /admin/auth/login`.
+  `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
+  `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 

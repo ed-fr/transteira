@@ -57,6 +57,9 @@ const (
 	CodeChecksumMismatch Code = "checksum-mismatch"
 	// CodeTransferTooLarge means the transfer exceeds the per-transfer size limit.
 	CodeTransferTooLarge Code = "transfer-too-large"
+	// CodeRangeNotSatisfiable means the requested byte range is outside the
+	// file.
+	CodeRangeNotSatisfiable Code = "range-not-satisfiable"
 	// CodePayloadTooLarge means the request body is too large.
 	CodePayloadTooLarge Code = "payload-too-large"
 	// CodeUnsupportedMediaType means the request content type is not supported.
@@ -120,6 +123,7 @@ var catalog = map[Code]Definition{
 	CodeChecksumMismatch:        {http.StatusConflict, "Checksum mismatch"},
 	CodeTransferTooLarge:        {http.StatusRequestEntityTooLarge, "Transfer too large"},
 	CodePayloadTooLarge:         {http.StatusRequestEntityTooLarge, "Payload too large"},
+	CodeRangeNotSatisfiable:     {http.StatusRequestedRangeNotSatisfiable, "Range not satisfiable"},
 	CodeUnsupportedMediaType:    {http.StatusUnsupportedMediaType, "Unsupported media type"},
 	CodeQuotaExceeded:           {http.StatusInsufficientStorage, "Storage quota reached"},
 	CodeRateLimited:             {http.StatusTooManyRequests, "Too many requests"},

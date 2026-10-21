@@ -107,8 +107,6 @@ const (
 	// DefaultMaxFileErrors is the number of file-specific failures that
 	// gives a file the scan_error status.
 	DefaultMaxFileErrors = 3
-	// DefaultMailRetryFor is how long refused mails are retried.
-	DefaultMailRetryFor = time.Hour
 )
 
 // ErrStarted is returned by [Worker.Start] when the worker was already
@@ -184,7 +182,8 @@ type Options struct {
 	// scan_error (DefaultMaxFileErrors).
 	MaxFileErrors int
 	// MailRetryFor is how long mails refused by the queue are retried
-	// (DefaultMailRetryFor).
+	// (mail.DefaultRetryFor when <= 0). They are retried with the
+	// RetryMin and RetryMax backoff.
 	MailRetryFor time.Duration
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
@@ -199,11 +198,9 @@ type key struct {
 	id  string
 }
 
-// task is a unit of work: a transfer to process, or a batch of mails to
-// enqueue again when mails is set.
+// task is a unit of work: a transfer to process.
 type task struct {
-	k     key
-	mails *mailBatch
+	k key
 }
 
 // Worker is the antivirus worker. Create it with [New], start it with
@@ -217,7 +214,7 @@ type Worker struct {
 	scanner  Scanner
 	remover  Remover
 	notifier Notifier
-	mail     MailQueue
+	mails    *mail.Retrier
 	opts     Options
 	logger   *slog.Logger
 	now      func() time.Time
@@ -268,9 +265,6 @@ func New(deps Deps, opts Options) *Worker {
 	if opts.MaxFileErrors <= 0 {
 		opts.MaxFileErrors = DefaultMaxFileErrors
 	}
-	if opts.MailRetryFor <= 0 {
-		opts.MailRetryFor = DefaultMailRetryFor
-	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -279,7 +273,10 @@ func New(deps Deps, opts Options) *Worker {
 	}
 	w := &Worker{
 		repo: storeRepo{db: deps.DB, vault: deps.Vault}, vault: deps.Vault, files: deps.Files,
-		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier, mail: deps.Mail,
+		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier,
+		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
+			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
+		}),
 		opts: opts, logger: opts.Logger, now: opts.Now, newToken: id.NewDownloadToken,
 		sweepLimit: store.ScanSweepLimit,
 		known:      map[key]bool{}, retries: map[key]int{}, timers: map[*time.Timer]task{},
@@ -328,7 +325,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 	w.mu.Unlock()
-	context.AfterFunc(ctx, func() { w.shutdown(context.WithoutCancel(ctx)) })
+	context.AfterFunc(ctx, w.shutdown)
 	for range w.opts.Workers {
 		w.wg.Go(func() { w.loop(ctx) })
 	}
@@ -356,16 +353,17 @@ func (w *Worker) Close(ctx context.Context) error {
 	if cancel != nil {
 		cancel()
 	} else {
-		w.shutdown(ctx)
+		w.shutdown()
 	}
 	done := make(chan struct{})
 	go func() {
 		w.wg.Wait()
 		close(done)
 	}()
+	mailErr := w.mails.Close(ctx)
 	select {
 	case <-done:
-		return nil
+		return mailErr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -373,18 +371,15 @@ func (w *Worker) Close(ctx context.Context) error {
 
 // shutdown marks the worker closed, stops the retry timers and wakes the
 // idle workers.
-func (w *Worker) shutdown(ctx context.Context) {
+func (w *Worker) shutdown() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
 		return
 	}
 	w.closed = true
-	for timer, t := range w.timers {
+	for timer := range w.timers {
 		timer.Stop()
-		if t.mails != nil {
-			w.logDroppedMails(ctx, t.mails)
-		}
 	}
 	clear(w.timers)
 	w.changed.Broadcast()
@@ -396,11 +391,6 @@ func (w *Worker) loop(ctx context.Context) {
 		t, ok := w.next()
 		if !ok {
 			return
-		}
-		if t.mails != nil {
-			w.sendMails(ctx, t.mails)
-			w.finishTask(t, 0)
-			continue
 		}
 		w.finishTask(t, w.process(ctx, t.k))
 	}
@@ -430,9 +420,6 @@ func (w *Worker) finishTask(t task, retry time.Duration) {
 	defer w.mu.Unlock()
 	w.running--
 	defer w.changed.Broadcast()
-	if t.mails != nil {
-		return
-	}
 	if retry > 0 && !w.closed {
 		w.scheduleLocked(task{k: t.k}, retry)
 		return
@@ -440,17 +427,6 @@ func (w *Worker) finishTask(t task, retry time.Duration) {
 	delete(w.known, t.k)
 	delete(w.retries, t.k)
 	w.released++
-}
-
-// schedule queues t after delay. Mail batches are not deduplicated.
-func (w *Worker) schedule(ctx context.Context, t task, delay time.Duration) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.closed {
-		w.logDroppedMails(ctx, t.mails)
-		return
-	}
-	w.scheduleLocked(t, delay)
 }
 
 // scheduleLocked arms the retry timer of t. w.mu must be held and the
@@ -470,20 +446,10 @@ func (w *Worker) scheduleLocked(t task, delay time.Duration) {
 	w.timers[timer] = t
 }
 
-// logDroppedMails logs the mails of b lost because the worker closed.
-func (w *Worker) logDroppedMails(ctx context.Context, b *mailBatch) {
-	w.log(ctx, slog.LevelError, "notification mails dropped at shutdown", b.k,
-		slog.Int("count", len(b.jobs)))
-}
-
 // backoff returns the n-th retry delay: RetryMin doubled n-1 times, at most
 // RetryMax.
 func (w *Worker) backoff(n int) time.Duration {
-	d := w.opts.RetryMin
-	for i := 1; i < n && d < w.opts.RetryMax; i++ {
-		d *= 2
-	}
-	return min(d, w.opts.RetryMax)
+	return mail.Backoff(w.opts.RetryMin, w.opts.RetryMax, n)
 }
 
 // retryTransfer returns the next retry delay of the transfer k after a

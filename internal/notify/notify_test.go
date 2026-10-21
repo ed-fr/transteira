@@ -379,6 +379,65 @@ func TestSenderMails(t *testing.T) {
 	build(t, j)
 }
 
+func TestFirstDownload(t *testing.T) {
+	e := newEnv(t)
+	tr := testTransfer()
+	ctx := context.Background()
+	at := testNow.Add(90 * time.Minute)
+
+	// Deletion after the first download: the deletion time is shown.
+	j, err := e.n.FirstDownload(ctx, e.t, tr, at, at.Add(15*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Template != mail.TemplateFirstDownload || j.TenantID != "ten_a" || len(j.Message.To) != 1 ||
+		j.Message.To[0] != "alice@entity-a.example.com" || j.Message.Language != "fr" || len(j.Message.Inline) != 0 {
+		t.Errorf("first download job %+v", j)
+	}
+	for _, s := range []string{"21 octobre 2026 à 11:30 UTC", "- report.pdf (2,0\u00a0Mo)", "big.iso", "vault.7z", "effacé le 21 octobre 2026 à 11:45 UTC"} {
+		if !strings.Contains(j.Message.Text, s) {
+			t.Errorf("first download mail lacks %q:\n%s", s, j.Message.Text)
+		}
+	}
+	// Only delivered files are listed, and no recipient is named.
+	for _, s := range []string{"eicar", "locked.zip", "bob@", "carol@", "dave@", testLink} {
+		if strings.Contains(j.Message.Text, s) || strings.Contains(j.Message.HTML, s) {
+			t.Errorf("first download mail contains %q", s)
+		}
+	}
+	if j.Settings.Password != "s3cret-pass" || e.vault.calls != 1 {
+		t.Errorf("settings %+v, vault calls %d", j.Settings, e.vault.calls)
+	}
+	for _, b := range e.vault.issued {
+		if !bytes.Equal(b, make([]byte, len(b))) {
+			t.Error("password buffer not wiped")
+		}
+	}
+	build(t, j)
+
+	// A deletion due at once is shown as such.
+	tr.Language = "en"
+	j, err = e.n.FirstDownload(ctx, e.t, tr, at, at)
+	if err != nil || j.Message.Language != "en" || !strings.Contains(j.Message.Text, "erased on October 21, 2026 at 11:30 UTC.") ||
+		!strings.Contains(j.Message.Text, "October 21, 2026 at 11:30 UTC") {
+		t.Errorf("one minute: %v\n%s", err, j.Message.Text)
+	}
+
+	// No deletion: the once-only notice, no deletion time.
+	j, err = e.n.FirstDownload(ctx, e.t, tr, at, time.Time{})
+	if err != nil || strings.Contains(j.Message.Text, "erased") || !strings.Contains(j.Message.Text, "sent only once") {
+		t.Errorf("no deletion: %v\n%s", err, j.Message.Text)
+	}
+
+	// File names are reduced to one line and escaped in HTML.
+	tr.Files = []FileView{{Name: "<b>x</b>\n\u202eevil.txt", Size: 1, SHA256: strings.Repeat("ab", 32), Scan: ScanClean}}
+	j, err = e.n.FirstDownload(ctx, e.t, tr, at, time.Time{})
+	if err != nil || !strings.Contains(j.Message.Text, "- <b>x</b> evil.txt (1\u00a0B)") ||
+		!strings.Contains(j.Message.HTML, "&lt;b&gt;x&lt;/b&gt; evil.txt") || strings.Contains(j.Message.HTML, "<b>x") {
+		t.Errorf("hostile name: %v\n%s\n%s", err, j.Message.Text, j.Message.HTML)
+	}
+}
+
 func TestNoPasswordKey(t *testing.T) {
 	e := newEnv(t)
 	e.smtp.cfg = store.SMTPConfig{Host: "relay", Port: 25, Security: store.SMTPSecurityNone, FromAddress: "transfer@entity-a.example.com"}
@@ -400,7 +459,17 @@ func TestErrors(t *testing.T) {
 	}
 	problems := func(e *env, tr TransferView) error { _, err := e.n.FileProblems(ctx, e.t, tr); return err }
 	notScanned := func(e *env, tr TransferView) error { _, err := e.n.FileNotScanned(ctx, e.t, tr); return err }
-	all := map[string]call{"recipients": recipients(testLink), "confirm": confirm, "problems": problems, "notScanned": notScanned}
+	firstDownload := func(at, deleteAt time.Time) call {
+		return func(e *env, tr TransferView) error {
+			_, err := e.n.FirstDownload(ctx, e.t, tr, at, deleteAt)
+			return err
+		}
+	}
+	first := firstDownload(testNow, time.Time{})
+	all := map[string]call{
+		"recipients": recipients(testLink), "confirm": confirm, "problems": problems, "notScanned": notScanned,
+		"first": first, "firstDelete": firstDownload(testNow, testNow.Add(time.Minute)),
+	}
 
 	storeBoom := errors.New("db down")
 	cases := []struct {
@@ -422,7 +491,7 @@ func TestErrors(t *testing.T) {
 		},
 		{
 			"bad digest",
-			map[string]call{"recipients": recipients(testLink), "confirm": confirm, "notScanned": notScanned},
+			map[string]call{"recipients": recipients(testLink), "confirm": confirm, "notScanned": notScanned, "first": first},
 			func(_ *env, tr *TransferView) { tr.Files[1].SHA256 = strings.Repeat("zz", 32) }, ErrInvalidTransfer,
 		},
 		{
@@ -437,8 +506,18 @@ func TestErrors(t *testing.T) {
 		},
 		{
 			"no delivered file",
-			map[string]call{"recipients": recipients(testLink), "confirm": confirm, "notScanned": notScanned},
+			map[string]call{"recipients": recipients(testLink), "confirm": confirm, "notScanned": notScanned, "first": first},
 			func(_ *env, tr *TransferView) { tr.Files = tr.Files[2:4] }, ErrInvalidTransfer,
+		},
+		{
+			"zero first download time",
+			map[string]call{"first": firstDownload(time.Time{}, time.Time{})},
+			func(*env, *TransferView) {}, ErrInvalidTransfer,
+		},
+		{
+			"deletion before the first download",
+			map[string]call{"first": firstDownload(testNow, testNow.Add(-time.Second))},
+			func(*env, *TransferView) {}, ErrInvalidTransfer,
 		},
 		{
 			"no problem file",

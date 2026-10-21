@@ -34,6 +34,8 @@ type Server struct {
 	transfers TransferService
 	// uploads runs the tus uploads; nil until WithUploads.
 	uploads UploadService
+	// downloads serves the recipients; nil until WithDownloads.
+	downloads DownloadService
 	// now is the clock deriving the Max-Age of the session cookie from the
 	// session expiry (replaceable in tests).
 	now func() time.Time
@@ -46,6 +48,12 @@ type Option func(*Server)
 // answer 500.
 func WithTransfers(svc TransferService) Option {
 	return func(s *Server) { s.transfers = svc }
+}
+
+// WithDownloads serves the download operations with svc. Without it they
+// answer 500. The strict handler must run RequestMiddleware.
+func WithDownloads(svc DownloadService) Option {
+	return func(s *Server) { s.downloads = svc }
 }
 
 // WithUploads serves the tus upload operations (HEAD, PATCH, DELETE) with

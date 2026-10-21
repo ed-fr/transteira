@@ -257,3 +257,46 @@ func TestCSRF(t *testing.T) {
 		})
 	}
 }
+
+func TestSameOrigin(t *testing.T) {
+	t.Parallel()
+	const host = "transfer.entity-a.example.com"
+	tests := []struct {
+		name     string
+		method   string
+		required func(*http.Request) bool
+		header   http.Header
+		pass     bool
+	}{
+		{name: "no header", method: http.MethodPost, required: always, pass: true},
+		{
+			name: "same origin", method: http.MethodPost, required: always,
+			header: http.Header{"Origin": {"https://" + host}, "Sec-Fetch-Site": {"same-origin"}}, pass: true,
+		},
+		{name: "foreign origin", method: http.MethodPost, required: always, header: http.Header{"Origin": {"https://evil.example.net"}}},
+		{name: "cross-site fetch", method: http.MethodPost, required: always, header: http.Header{"Sec-Fetch-Site": {"cross-site"}}},
+		{name: "not required", method: http.MethodPost, required: never, header: http.Header{"Origin": {"https://evil.example.net"}}, pass: true},
+		{name: "safe method", method: http.MethodGet, required: always, header: http.Header{"Origin": {"https://evil.example.net"}}, pass: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := withRID(httptest.NewRequest(tt.method, "/api/v1/downloads/dl_x/unlock", nil), "req_3")
+			req.Host = host
+			for k, vs := range tt.header {
+				req.Header[k] = vs
+			}
+			rec := httptest.NewRecorder()
+			SameOrigin(tt.required)(okHandler).ServeHTTP(rec, req)
+			if tt.pass {
+				if rec.Code != http.StatusNoContent {
+					t.Fatalf("status %d, want 204", rec.Code)
+				}
+				return
+			}
+			if p := decodeProblem(t, rec); rec.Code != http.StatusForbidden || p.Code != problem.CodeCSRFInvalid {
+				t.Errorf("status %d problem %+v, want 403 csrf-invalid", rec.Code, p)
+			}
+		})
+	}
+}

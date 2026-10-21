@@ -103,6 +103,13 @@ var isolationCases = map[string]isolationCase{
 	"getUploadOffset":    headForeignUpload,
 	"appendUploadChunk":  patchForeignUpload,
 	"terminateUpload":    terminateForeignUpload,
+	// Downloads (download_test.go): tenant A's link token, with A's grant
+	// cookie, under B's Host is unknown (404); unlock attempts under B
+	// never count against A's transfer.
+	"getDownload":     getForeignDownload,
+	"unlockDownload":  unlockForeignDownload,
+	"downloadFile":    fileOfForeignDownload,
+	"downloadArchive": archiveOfForeignDownload,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -128,7 +135,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
-			case "getDownload", "listTenants": // stubs answering not-implemented
+			case "listTenants", "getTenant": // stubs answering not-implemented
 				if !isStub(t, op) {
 					t.Errorf("isStub(%s) = false, want true", op.id)
 				}
@@ -381,13 +388,20 @@ type harness struct {
 	fixtures depositFixtures
 	// transfers are the other sessions of the transfer cases.
 	transfers transferFixtures
+	// engine is the database of the server, which the download cases
+	// open to make a transfer available as the antivirus would.
+	engine storetest.Engine
 }
 
-// writeMasterKey writes a new random master key to dir and returns its
-// path.
+// masterKeyLabel names the master key of the server
+// (masterkeytest.Key gives the same key to the download cases).
+const masterKeyLabel = "isolation-http"
+
+// writeMasterKey writes the master key masterKeyLabel to dir and returns
+// its path.
 func writeMasterKey(t *testing.T, dir string) string {
 	t.Helper()
-	path, _ := masterkeytest.WriteKeyFile(t, dir)
+	path, _ := masterkeytest.WriteLabeledKeyFile(t, dir, masterKeyLabel)
 	return path
 }
 
@@ -415,6 +429,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 		return tn
 	}
 	h := &harness{
+		engine:  e,
 		tenantA: mk(nameA, hostA),
 		tenantB: mk(nameB, hostB),
 		client: &http.Client{

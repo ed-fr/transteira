@@ -1,5 +1,5 @@
-// Package notify builds the mails that follow the antivirus analysis of a
-// transfer (CLAUDE.md section 12.2):
+// Package notify builds the mails that follow the antivirus analysis and the
+// first download of a transfer (CLAUDE.md section 12.2):
 //
 //   - transfer_notification, to each recipient, with the download link, the
 //     QR code of that link as an inline PNG (CID, never a remote image:
@@ -9,7 +9,10 @@
 //     comes through another channel (T-88);
 //   - transfer_confirmation (listing the withheld files), file_problems
 //     (infected files deleted, files that could not be analyzed withheld)
-//     and file_not_scanned, to the sender.
+//     and file_not_scanned, to the sender;
+//   - first_download, to the sender, once the transfer has been downloaded
+//     in full for the first time, with the date and, when the transfer is
+//     deleted after its first download, the grace period before erasure.
 //
 // A [Notifier] only builds [mail.Job] values, with the SMTP settings of the
 // tenant and its password unsealed for the job; the caller enqueues them

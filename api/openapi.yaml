@@ -1036,8 +1036,14 @@ paths:
       summary: Download page content
       description: |
         Returns the transfer as seen by a recipient. When the transfer is password protected and
-        not yet unlocked by this browser, only `locked: true`, the sender and the expiry date are
-        returned (no file list).
+        not yet unlocked by this browser (no valid `__Host-tt_dl` grant), only `senderEmail`,
+        `expiresAt`, `passwordProtected` and `locked: true` are returned: no message, no file
+        list, no archive URL. Only the deliverable files are listed (`clean`,
+        `not_scanned_too_large`, `not_scanned_encrypted`): infected files and files withheld
+        after an analysis error are never listed, and neither the other recipients nor the scan
+        signatures are exposed. A known link whose transfer is no longer available (expired,
+        deleted after its first download, rejected) gets `410`; an unknown link, or one of another
+        entity, `404`.
       security:
         - {}
         - downloadGrant: []
@@ -1097,6 +1103,14 @@ paths:
         - **per transfer**, all client IPs combined: the transfer is locked for everyone;
         - **per client IP**, all transfers of the tenant combined: the IP is locked on every transfer.
         Each failure is written to the security log.
+
+        On success the grant cookie `__Host-tt_dl` (valid 1 hour, bound to this transfer and
+        entity) is set; a transfer without password answers `204` without cookie. The operation
+        needs no session, but it is protected from cross-site use, which could otherwise burn
+        the per-IP counter of a victim: the body must be JSON (a cross-site form cannot send it
+        without a CORS preflight, which is never approved), and an `Origin` header other than
+        `https://<entity host>` or a `Sec-Fetch-Site` other than `same-origin` gets
+        `403 csrf-invalid`.
       security: []
       requestBody:
         required: true
@@ -1106,10 +1120,11 @@ paths:
             example: { password: correct horse battery staple }
       responses:
         '204':
-          description: Unlocked; the download grant cookie is set.
+          description: Unlocked; the download grant cookie is set (no cookie for a transfer without password).
           headers:
             Set-Cookie: { $ref: '#/components/headers/SetDownloadGrantCookie' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '401':
           description: Wrong password.
           content:
@@ -1150,8 +1165,18 @@ paths:
       description: |
         Streams the decrypted file. Always sent as an attachment
         (`Content-Disposition: attachment` with RFC 6266 `filename*`, `X-Content-Type-Options: nosniff`,
-        `Content-Type: application/octet-stream`). Single byte ranges are supported so that
-        download managers can resume, including on transfers with `deleteAfterFirstDownload`.
+        `Content-Type: application/octet-stream`, `Content-Security-Policy: default-src 'none'; sandbox; frame-ancestors 'none'`,
+        `Cache-Control: no-store`). A single byte range is supported so that download managers
+        can resume, including on transfers with `deleteAfterFirstDownload`; a request for
+        several ranges at once gets the full file with `200`, and a range outside the file
+        `416 range-not-satisfiable`. The strong `ETag` is the SHA-256 of the file, so that
+        `If-Range` resumes only an unchanged file and `If-None-Match` is honoured.
+
+        Downloads are cut when the client stops reading for `TT_DOWNLOAD_IDLE_TIMEOUT` (60 s by
+        default), and simultaneous streams are capped: 2 per client per transfer, 4 per transfer
+        across all clients and 8 per client across all transfers of the tenant, where a client is
+        an IP address (an IPv6 address counts as its /64). Above a cap the answer is `429` with
+        `Retry-After`.
 
         The transfer counts as downloaded once every byte of every file has been served at least
         once (the union of served ranges is tracked on disk, never per chunk in the database), or
@@ -1165,7 +1190,7 @@ paths:
       parameters:
         - name: Range
           in: header
-          description: "Optional single byte range (RFC 9110) to resume a download."
+          description: "Optional single byte range (RFC 9110) to resume a download. Several ranges are not supported: the full file is then served with `200`."
           required: false
           schema: { type: string }
           example: bytes=1048576-
@@ -1175,10 +1200,11 @@ paths:
           headers:
             Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
             Content-Length: { $ref: '#/components/headers/ContentLength' }
-            Accept-Ranges:
-              schema: { type: string, enum: [bytes] }
-              example: bytes
+            Accept-Ranges: { $ref: '#/components/headers/AcceptRangesBytes' }
+            ETag: { $ref: '#/components/headers/FileETag' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
             X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+            Content-Security-Policy: { $ref: '#/components/headers/SandboxCSP' }
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
@@ -1189,8 +1215,13 @@ paths:
             Content-Range:
               schema: { type: string }
               example: bytes 1048576-15728639/15728640
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
             Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Accept-Ranges: { $ref: '#/components/headers/AcceptRangesBytes' }
+            ETag: { $ref: '#/components/headers/FileETag' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
             X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+            Content-Security-Policy: { $ref: '#/components/headers/SandboxCSP' }
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
@@ -1198,8 +1229,22 @@ paths:
         '401': { $ref: '#/components/responses/DownloadLocked' }
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/TransferGone' }
-        '416': { description: Range not satisfiable. }
+        '416':
+          description: The requested range is outside the file; `Content-Range` gives its size.
+          headers:
+            Content-Range:
+              schema: { type: string }
+              example: bytes */15728640
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#range-not-satisfiable
+                title: Range not satisfiable
+                status: 416
+                code: range-not-satisfiable
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/TooManyStreams' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /downloads/{linkToken}/archive:
@@ -1213,7 +1258,13 @@ paths:
         Generates a ZIP64 archive on the fly in store mode (no compression, no temporary copy
         on disk). The `Content-Length` is computed in advance. File names inside the archive are
         sanitised (no absolute paths, no `..`, no control or bidirectional characters).
-        Range requests are not supported on the archive.
+        Range requests are not supported on the archive. Sent as an attachment
+        (`Content-Disposition: attachment; filename="transfer.zip"`, `Content-Type:
+        application/zip`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox; frame-ancestors 'none'`,
+        `Cache-Control: no-store`). An archive streamed to its end counts as a complete download.
+        The stream is cut when the client stops reading for `TT_DOWNLOAD_IDLE_TIMEOUT`, and
+        simultaneous streams are capped as for `downloadFile` (2 per client per transfer, 4 per
+        transfer, 8 per client per tenant; `429` with `Retry-After`).
       security:
         - {}
         - downloadGrant: []
@@ -1223,7 +1274,9 @@ paths:
           headers:
             Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
             Content-Length: { $ref: '#/components/headers/ContentLength' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
             X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+            Content-Security-Policy: { $ref: '#/components/headers/SandboxCSP' }
           content:
             application/zip:
               schema: { type: string, format: binary }
@@ -1232,6 +1285,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '410': { $ref: '#/components/responses/TransferGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/TooManyStreams' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
@@ -3400,7 +3454,24 @@ components:
     NoSniff:
       schema: { type: string, enum: [nosniff] }
       example: nosniff
+    AcceptRangesBytes:
+      schema: { type: string, enum: [bytes] }
+      example: bytes
+    NoStore:
+      schema: { type: string, enum: [no-store] }
+      example: no-store
+    FileETag:
+      description: Strong entity tag, the quoted SHA-256 of the file (for `If-Range` and `If-None-Match`).
+      schema: { type: string }
+      example: '"3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b"'
+    SandboxCSP:
+      description: Should a browser ever render downloaded content, it loads nothing, runs in a sandbox and cannot be framed.
+      schema: { type: string, enum: ["default-src 'none'; sandbox; frame-ancestors 'none'"] }
+      example: "default-src 'none'; sandbox; frame-ancestors 'none'"
     ContentDispositionAttachment:
+      description: |
+        Always `attachment`: an ASCII `filename` fallback (non-ASCII characters, quotes,
+        backslashes and control characters replaced) and the exact name as RFC 5987 `filename*`.
       schema: { type: string }
       example: attachment; filename="plans-v3.pdf"; filename*=UTF-8''plans-v3.pdf
     SetDepositCookies:
@@ -3420,7 +3491,7 @@ components:
       example: __Host-tt_admin=as_Hx7Lp1...; Path=/; Secure; HttpOnly; SameSite=Strict
     SetDownloadGrantCookie:
       schema: { type: string }
-      example: __Host-tt_dl=dg_Vb4Nt9...; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=3600
+      example: __Host-tt_dl=dg_Vb4Nt9...; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict
 
   responses:
     ValidationFailed:
@@ -3671,6 +3742,29 @@ components:
           description: Supported tus versions.
           schema: { type: string }
           example: 1.0.0
+    TooManyStreams:
+      description: |
+        Too many simultaneous download streams; retry after `Retry-After`. Three caps apply, and
+        exceeding any of them returns this response:
+
+        - 2 concurrent streams per client for one transfer;
+        - 4 concurrent streams for one transfer, across all clients;
+        - 8 concurrent streams per client, across all transfers of the tenant.
+
+        A client is identified by its IP address, an IPv6 address being grouped by its /64
+        prefix, so that recipients behind one NAT share the per-client caps. Written to the
+        security log (`rate_limited`, scope `download_streams`).
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#rate-limited
+            title: Too many requests
+            status: 429
+            code: rate-limited
+            retryAfterSeconds: 30
     InternalError:
       description: Unexpected server error. The response never contains internal details; the `instance` identifier allows correlation with the server logs.
       content:
@@ -3750,6 +3844,7 @@ components:
         - checksum-mismatch
         - transfer-too-large
         - payload-too-large
+        - range-not-satisfiable
         - unsupported-media-type
         - quota-exceeded
         - rate-limited
@@ -4053,7 +4148,11 @@ components:
       type: object
       required: [password]
       properties:
-        password: { type: string, minLength: 1, maxLength: 1024 }
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: An empty or missing password gets `400` with the field code `required`.
       additionalProperties: false
     PublicFile:
       type: object
@@ -4064,7 +4163,9 @@ components:
         size: { $ref: '#/components/schemas/ByteSize' }
         mediaType: { type: string }
         sha256: { $ref: '#/components/schemas/Sha256' }
-        scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        scanStatus:
+          allOf: [{ $ref: '#/components/schemas/ScanStatus' }]
+          description: '`clean`, or `not_scanned_too_large` / `not_scanned_encrypted` (delivered unscanned: the page must say so).'
         downloadUrl: { type: string }
     PublicTransfer:
       type: object
@@ -4076,11 +4177,15 @@ components:
         passwordProtected: { type: boolean }
         locked: { type: boolean, description: True when a password is required and not yet provided. }
         deleteAfterFirstDownload: { type: boolean }
-        totalBytes: { $ref: '#/components/schemas/ByteSize' }
-        archiveUrl: { type: string }
+        totalBytes:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: Total size of the listed files; absent while `locked`.
+        archiveUrl: { type: string, description: 'URL of the ZIP archive of the listed files; absent while `locked`.' }
         files:
           type: array
-          description: Absent while `locked`. Infected files are not listed.
+          description: |
+            Absent while `locked`. Only the deliverable files: infected files and files withheld
+            after an analysis error (`scan_error`) are never listed.
           items: { $ref: '#/components/schemas/PublicFile' }
 
     # --- Admin auth -------------------------------------------------------
@@ -4395,7 +4500,9 @@ components:
         `file-not-scanned` tells the sender that files were released unscanned because they were
         too large, too complex or encrypted to be analysed; `transfer-notification` and
         `transfer-confirmation` go to the recipients and to the sender once a transfer is
-        available.
+        available; `first-download` tells the sender, only once, that the transfer has been
+        downloaded in full for the first time, and when it will be erased if it is deleted after
+        its first download.
         Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
         `recipient-verification-code`.
       enum:

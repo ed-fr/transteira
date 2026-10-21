@@ -52,6 +52,8 @@ const (
 	maxDeleteAfterDownloadGrace = 24 * time.Hour
 	minUploadIdleTimeout        = 5 * time.Second
 	maxUploadIdleTimeout        = 10 * time.Minute
+	minDownloadIdleTimeout      = 5 * time.Second
+	maxDownloadIdleTimeout      = 10 * time.Minute
 	minSMTPTimeout              = time.Second
 	maxSMTPTimeout              = 5 * time.Minute
 	minClamAVTimeout            = 10 * time.Second
@@ -168,6 +170,9 @@ type Config struct {
 	// UploadIdleTimeout is the longest wait between two reads of an upload
 	// request body; every read resets it.
 	UploadIdleTimeout time.Duration
+	// DownloadIdleTimeout is the longest wait for the client to accept the
+	// next write of a download response; every write resets it.
+	DownloadIdleTimeout time.Duration
 	// MaxRecipients is the largest number of recipients of one transfer
 	// (decision P15).
 	MaxRecipients int
@@ -526,6 +531,8 @@ func (l *loader) loadDurations(c *Config) {
 		minDeleteAfterDownloadGrace, maxDeleteAfterDownloadGrace)
 	c.UploadIdleTimeout = l.duration(EnvUploadIdleTimeout, DefaultUploadIdleTimeout,
 		minUploadIdleTimeout, maxUploadIdleTimeout)
+	c.DownloadIdleTimeout = l.duration(EnvDownloadIdleTimeout, DefaultDownloadIdleTimeout,
+		minDownloadIdleTimeout, maxDownloadIdleTimeout)
 	n, err := parseInt(l.getOr(EnvMaxRecipients, DefaultMaxRecipients), minMaxRecipients, maxMaxRecipients)
 	if err != nil {
 		l.fail(EnvMaxRecipients, "%v", err)

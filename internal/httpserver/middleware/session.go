@@ -130,6 +130,23 @@ func CSRF(checker SessionResolver, required func(*http.Request) bool) func(http.
 	}
 }
 
+// SameOrigin applies the Sec-Fetch-Site and Origin rules of [CSRF],
+// without any token, to the unsafe requests for which required returns
+// true: operations that need no session but must not be triggered
+// cross-site (the unlock of a download, whose failures count against the
+// client IP). A failure gets a 403 csrf-invalid Problem.
+func SameOrigin(required func(*http.Request) bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !isSafeMethod(r.Method) && required(r) && (!sameSite(r) || !sameOrigin(r)) {
+				writeProblem(w, r, problem.CodeCSRFInvalid)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // isSafeMethod reports whether method is safe in the sense of RFC 9110.
 func isSafeMethod(method string) bool {
 	switch method {
