@@ -189,12 +189,21 @@ func TestEmbeddedMigrationsMatch(t *testing.T) {
 // createTable matches a CREATE TABLE statement and its body.
 var createTable = regexp.MustCompile(`(?is)CREATE TABLE\s+(\w+)\s*\((.*?)\n\)`)
 
+// rebuiltTable matches the temporary copy of a table rebuilt by a SQLite
+// migration ("name_NNNN", NNNN the migration version): SQLite cannot alter a
+// check in place, PostgreSQL alters the table instead. TestLiveSchemaMatches
+// compares the resulting schemas.
+var rebuiltTable = regexp.MustCompile(`_\d{4}$`)
+
 // schemaOf extracts "table -> sorted columns" from migration SQL. Table
 // constraints (PRIMARY KEY, UNIQUE, CHECK, FOREIGN KEY, CONSTRAINT) are not
-// columns.
+// columns, and SQLite rebuild copies are skipped.
 func schemaOf(body string) map[string]string {
 	out := map[string]string{}
 	for _, m := range createTable.FindAllStringSubmatch(body, -1) {
+		if rebuiltTable.MatchString(m[1]) {
+			continue
+		}
 		var cols []string
 		for _, line := range strings.Split(m[2], "\n") {
 			f := strings.Fields(line)

@@ -304,6 +304,13 @@ func (r *faultRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, s
 	return r.inner.completeUpload(ctx, tid, fileID, sum, size, now)
 }
 
+func (r *faultRepo) downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error) {
+	if err := r.check("downloadToken"); err != nil {
+		return nil, err
+	}
+	return r.inner.downloadToken(ctx, tid, wkID)
+}
+
 func (r *faultRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	return r.inner.tx(ctx, tid, func(tx txRepo) error { return fn(faultTx{inner: tx, r: r}) })
 }

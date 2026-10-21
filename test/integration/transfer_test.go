@@ -149,9 +149,9 @@ func TestTransferFullFlow(t *testing.T) {
 			t.Fatalf("finalize: %d %s", resp.status, resp.body)
 		}
 		fin := parseTransfer(t, resp.body)
-		if fin.Status != "scanning" || fin.FinalizedAt == nil || fin.ExpiresAt == nil ||
-			!fin.ExpiresAt.Equal(fin.FinalizedAt.AddDate(0, 0, 7)) || fin.UploadExpiresAt != nil {
-			t.Errorf("finalized transfer = %s, want scanning, finalizedAt, expiresAt 7 days later, no uploadExpiresAt", resp.body)
+		// expiresAt comes with the availability, after the analysis.
+		if fin.Status != "scanning" || fin.FinalizedAt == nil || fin.ExpiresAt != nil || fin.UploadExpiresAt != nil {
+			t.Errorf("finalized transfer = %s, want scanning, finalizedAt, no expiresAt yet, no uploadExpiresAt", resp.body)
 		}
 		got := alice.mustGet(t, tr.ID)
 		for i, f := range got.Files {

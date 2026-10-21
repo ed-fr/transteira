@@ -54,6 +54,21 @@ const (
 	maxUploadIdleTimeout        = 10 * time.Minute
 	minSMTPTimeout              = time.Second
 	maxSMTPTimeout              = 5 * time.Minute
+	minClamAVTimeout            = 10 * time.Second
+	maxClamAVTimeout            = 2 * time.Hour
+)
+
+// Antivirus scan size bounds: 4 GiB - 1 is the largest StreamMaxLength clamd
+// accepts.
+const (
+	minClamAVMaxScanBytes = 1 << 20
+	maxClamAVMaxScanBytes = 1<<32 - 1
+)
+
+// Antivirus worker count bounds.
+const (
+	minScanWorkers = 1
+	maxScanWorkers = 16
 )
 
 // Mail queue capacity bounds.
@@ -162,6 +177,14 @@ type Config struct {
 
 	// ClamAV is the clamd address.
 	ClamAV ClamAVAddr
+	// ClamAVMaxScanBytes is the largest file size sent to clamd; larger
+	// files are not analyzed.
+	ClamAVMaxScanBytes int64
+	// ClamAVTimeout bounds the analysis of one file.
+	ClamAVTimeout time.Duration
+	// ScanWorkers is the number of antivirus workers, each analyzing one
+	// file at a time.
+	ScanWorkers int
 
 	// SMTPTimeout bounds one SMTP delivery attempt.
 	SMTPTimeout time.Duration
@@ -210,6 +233,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadOperations(c)
 	l.loadDurations(c)
 	l.loadMail(c)
+	l.loadAntivirus(c)
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
@@ -522,4 +546,21 @@ func (l *loader) loadMail(c *Config) {
 		l.fail(EnvMailQueueSize, "%v", err)
 	}
 	c.MailQueueSize = n
+}
+
+// loadAntivirus reads the scan size limit, the scan timeout and the number
+// of scan workers.
+func (l *loader) loadAntivirus(c *Config) {
+	n, err := parseInt64(l.getOr(EnvClamAVMaxScanBytes, DefaultClamAVMaxScanBytes),
+		minClamAVMaxScanBytes, maxClamAVMaxScanBytes)
+	if err != nil {
+		l.fail(EnvClamAVMaxScanBytes, "%v", err)
+	}
+	c.ClamAVMaxScanBytes = n
+	c.ClamAVTimeout = l.duration(EnvClamAVTimeout, DefaultClamAVTimeout, minClamAVTimeout, maxClamAVTimeout)
+	w, err := parseInt(l.getOr(EnvScanWorkers, DefaultScanWorkers), minScanWorkers, maxScanWorkers)
+	if err != nil {
+		l.fail(EnvScanWorkers, "%v", err)
+	}
+	c.ScanWorkers = w
 }

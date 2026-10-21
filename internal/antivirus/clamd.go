@@ -1,10 +1,10 @@
 // Package antivirus talks to a ClamAV clamd daemon over TCP or a Unix socket.
 //
-// Only the PING command is implemented for now; it backs the health check.
-// The Client keeps the dial parameters (network, address, dialer, timeout)
-// rather than a live connection, so that the INSTREAM scanning command can be
-// added later as another method opening its own short-lived connection, with
-// its own (longer) deadline and the same error conventions.
+// Two commands are implemented: PING, which backs the health check, and
+// INSTREAM ([Client.Scan]), which analyzes a stream. The Client keeps the
+// dial parameters (network, address, dialer, timeouts) rather than a live
+// connection: every command opens its own short-lived connection, with its
+// own deadlines.
 //
 // Errors returned by this package may contain the clamd address (dial errors
 // from the net package do). Callers exposing results over HTTP must map them
@@ -37,9 +37,6 @@ var (
 	pongReply   = []byte("PONG")
 )
 
-// ErrUnexpectedReply is returned when clamd answers something unexpected.
-var ErrUnexpectedReply = errors.New("antivirus: unexpected clamd reply")
-
 // DialFunc opens a connection to clamd. It has the signature of
 // (*net.Dialer).DialContext.
 type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
@@ -47,17 +44,20 @@ type DialFunc func(ctx context.Context, network, address string) (net.Conn, erro
 // Client is a clamd client. It is safe for concurrent use: every command opens
 // its own connection.
 type Client struct {
-	network string
-	address string
-	timeout time.Duration
-	dial    DialFunc
+	network      string
+	address      string
+	timeout      time.Duration
+	maxScanBytes int64
+	scanTimeout  time.Duration
+	idleTimeout  time.Duration
+	dial         DialFunc
 }
 
 // Option customizes a Client.
 type Option func(*Client)
 
-// WithTimeout sets the maximum duration of a PING exchange. Non-positive
-// values are ignored.
+// WithTimeout sets the maximum duration of a PING exchange (see
+// WithScanTimeout for INSTREAM). Non-positive values are ignored.
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		if d > 0 {
@@ -81,10 +81,13 @@ func WithDialer(dial DialFunc) Option {
 // path). No connection is opened until a command is sent.
 func NewClient(network, address string, opts ...Option) *Client {
 	c := &Client{
-		network: network,
-		address: address,
-		timeout: DefaultTimeout,
-		dial:    (&net.Dialer{}).DialContext,
+		network:      network,
+		address:      address,
+		timeout:      DefaultTimeout,
+		maxScanBytes: DefaultMaxScanBytes,
+		scanTimeout:  DefaultScanTimeout,
+		idleTimeout:  DefaultIdleTimeout,
+		dial:         (&net.Dialer{}).DialContext,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -118,7 +121,7 @@ func (c *Client) Ping(ctx context.Context) (err error) {
 	if _, err := conn.Write(pingCommand); err != nil {
 		return fmt.Errorf("antivirus: ping: write: %w", err)
 	}
-	reply, err := readReply(conn)
+	reply, err := readReply(conn, maxReplyLen)
 	if err != nil {
 		return fmt.Errorf("antivirus: ping: read: %w", err)
 	}
@@ -128,13 +131,18 @@ func (c *Client) Ping(ctx context.Context) (err error) {
 	return nil
 }
 
-// readReply reads one NUL-terminated clamd reply, without the terminator.
-func readReply(r io.Reader) ([]byte, error) {
-	br := bufio.NewReaderSize(io.LimitReader(r, maxReplyLen), maxReplyLen)
+// readReply reads one NUL-terminated clamd reply of at most limit bytes,
+// without the terminator. A connection closed before any byte gives
+// errClosedNoData; a reply cut or longer than limit gives an ErrProtocol.
+func readReply(r io.Reader, limit int) ([]byte, error) {
+	br := bufio.NewReaderSize(io.LimitReader(r, int64(limit)), limit)
 	reply, err := br.ReadBytes(0)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%w: missing terminator", ErrUnexpectedReply)
+			if len(reply) == 0 {
+				return nil, errClosedNoData
+			}
+			return nil, fmt.Errorf("%w: missing terminator", ErrProtocol)
 		}
 		return nil, err
 	}

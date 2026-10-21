@@ -33,6 +33,7 @@ import (
 	"github.com/ed-fr/transteira/internal/app"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
+	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -86,6 +87,9 @@ type serverOptions struct {
 	// env holds extra environment variables of the server (for example
 	// TT_UPLOAD_IDLE_TIMEOUT); they override the defaults of testEnv.
 	env map[string]string
+	// scanRetry, when set, is the first retry delay of the antivirus worker
+	// after a clamd outage (app.WithScanOptions); the longest is 4 times it.
+	scanRetry time.Duration
 }
 
 // server is a running app.Run instance.
@@ -216,6 +220,11 @@ func startServer(t *testing.T, e storetest.Engine, o serverOptions) *server {
 	}
 	if o.shutdownTimeout > 0 {
 		opts = append(opts, app.WithShutdownTimeout(o.shutdownTimeout))
+	}
+	if o.scanRetry > 0 {
+		opts = append(opts, app.WithScanOptions(func(so *scan.Options) {
+			so.RetryMin, so.RetryMax = o.scanRetry, 4*o.scanRetry
+		}))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel

@@ -34,6 +34,9 @@ const (
 	// UploadTokenPrefix starts a tus upload identifier, which appears in
 	// the upload URL of a file and is looked up by value.
 	UploadTokenPrefix = "upl"
+	// DownloadTokenPrefix starts a download link token, which appears in
+	// the download URL of a transfer and is looked up by its SHA-256 hash.
+	DownloadTokenPrefix = "dl"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -45,6 +48,9 @@ const (
 	// UploadTokenBytes is the entropy of an upload identifier (256 bits):
 	// it is looked up by value and lives as long as the upload.
 	UploadTokenBytes = 32
+	// DownloadTokenBytes is the entropy of a download token (256 bits): it
+	// lives as long as the transfer, up to 30 days.
+	DownloadTokenBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
@@ -62,6 +68,32 @@ func NewUploadToken() (string, error) {
 // ("upl_" + 22 to 43 base62 characters).
 func UploadTokenValid(s string) bool {
 	return TokenValid(UploadTokenPrefix, s, MinTokenBodyLen, MaxTokenBodyLen)
+}
+
+// NewDownloadToken returns a new download link token: DownloadTokenPrefix
+// followed by DownloadTokenBytes of crypto/rand entropy in base62 (matching
+// the OpenAPI LinkToken pattern "^dl_[A-Za-z0-9]{22,43}$").
+func NewDownloadToken() (string, error) {
+	return NewToken(DownloadTokenPrefix, DownloadTokenBytes)
+}
+
+// DownloadTokenValid reports whether s has the shape of a download token
+// ("dl_" + 22 to 43 base62 characters).
+func DownloadTokenValid(s string) bool {
+	return TokenValid(DownloadTokenPrefix, s, MinTokenBodyLen, MaxTokenBodyLen)
+}
+
+// DownloadPath is the path of the web download page, followed by the
+// download token: the link mailed to the recipients is
+// "https://" + FQDN + DownloadPath + token (see DownloadURL).
+const DownloadPath = "/d/"
+
+// DownloadURL returns the download link of token for the tenant served on
+// fqdn: "https://" + fqdn + DownloadPath + token. fqdn must be the host name
+// stored for the tenant, never one taken from a request (threat T-03); it
+// and token are used as they are, without validation.
+func DownloadURL(fqdn, token string) string {
+	return "https://" + fqdn + DownloadPath + token
 }
 
 // base62 is the alphabet produced by big.Int.Text(62).

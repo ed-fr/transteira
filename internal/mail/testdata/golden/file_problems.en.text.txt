@@ -1,0 +1,21 @@
+Hello,
+
+The antivirus found a threat in the following files of your transfer. They have been deleted.
+
+- eicar.com
+  Detected threat: Win.Test.EICAR_HDB-1
+- <img src=x onerror=alert(1)>.exe
+  Detected threat: <b>Evil</b>
+
+The following files could not be analyzed by the antivirus and are withheld for safety: they cannot be downloaded.
+
+- <i>archive</i>.zip (3.0 MB)
+
+The other files of the transfer have been sent to the recipients.
+
+Check the device the files come from with an up-to-date antivirus before sending them again.
+
+To share a withheld file, send it again in a new transfer.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

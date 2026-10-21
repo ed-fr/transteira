@@ -74,9 +74,12 @@ transteira/
 │   │   └── masterkeytest/           # Clés maîtres et fichiers de clé pour les tests (hors seuils de couverture)
 │   ├── storage/                     # Stockage des fichiers confiné par os.Root : un dossier par tenant, noms aléatoires,
 │   │                                # points de reprise écrits de façon atomique
-│   ├── antivirus/                   # Client clamd (INSTREAM), file d'analyse, gestion des fichiers trop gros
+│   ├── antivirus/                   # Client clamd (PING, INSTREAM), verdicts, limite de taille ; antivirustest : faux clamd
+│   ├── scan/                        # Worker d'analyse : file, balayage au démarrage, fail-closed, effacement des fichiers
+│   │                                # infectés, lien de téléchargement, envoi des notifications
+│   ├── notify/                      # Construction des mails de transfert (QR code inline, empreintes, alertes expéditeur)
 │   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
-│   │                                # (templates/), file d'envoi asynchrone ; QR code CID à l'étape des notifications
+│   │                                # (templates/), file d'envoi asynchrone ; les mails de transfert sont construits par notify
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
 │   ├── audit/                       # Journal d'audit (en base, cloisonné par tenant)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)

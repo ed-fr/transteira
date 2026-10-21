@@ -1,0 +1,29 @@
+Bonjour,
+{{- if .Infected}}
+
+L'antivirus a détecté une menace dans les fichiers suivants de votre transfert. Ils ont été supprimés.
+{{range .Infected}}
+- {{.Name}}
+  Menace détectée : {{.Signature}}
+{{- end}}
+{{- end}}
+{{- if .Withheld}}
+
+Les fichiers suivants n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : ils ne peuvent pas être téléchargés.
+{{range .Withheld}}
+- {{.Name}} ({{size .Size}})
+{{- end}}
+{{- end}}
+
+{{if .Rejected}}Aucun fichier du transfert n'a pu être remis : le transfert n'a pas été envoyé et les destinataires n'ont pas été prévenus.{{else}}Les autres fichiers du transfert ont été envoyés aux destinataires.{{end}}
+{{- if .Infected}}
+
+Vérifiez l'appareil d'où proviennent les fichiers avec un antivirus à jour avant de les envoyer de nouveau.
+{{- end}}
+{{- if .Withheld}}
+
+Pour partager un fichier retenu, envoyez-le de nouveau dans un autre transfert.
+{{- end}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

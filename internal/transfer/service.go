@@ -75,8 +75,12 @@ type Uploads interface {
 
 // DataKeys creates the data key of a file in the transaction that creates
 // the file (decision P6). *masterkey.Vault implements it.
+//
+// Open unseals a sealed secret: the download token of an available
+// transfer (crypto.PurposeSecret), to give its sender the download link.
 type DataKeys interface {
 	NewDEKTx(ctx context.Context, tx *store.ScopedTx) (wkID string, dek []byte, err error)
+	Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID string) ([]byte, error)
 }
 
 // PasswordHasher hashes transfer passwords with argon2id, bounding the

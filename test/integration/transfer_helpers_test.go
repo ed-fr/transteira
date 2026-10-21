@@ -84,6 +84,7 @@ type senderFileJSON struct {
 	MediaType    string `json:"mediaType"`
 	Sha256       string `json:"sha256"`
 	ScanStatus   string `json:"scanStatus"`
+	ScanSig      string `json:"scanSignature"`
 	UploadURL    string `json:"uploadUrl"`
 	UploadOffset *int64 `json:"uploadOffset"`
 }
@@ -112,7 +113,7 @@ type senderTransferJSON struct {
 var (
 	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files"}
 	transferRequiredMembers = []string{"id", "status", "senderEmail", "recipients", "expiryDays", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "files"}
-	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "uploadUrl", "uploadOffset"}
+	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset"}
 	fileRequiredMembers     = []string{"id", "name", "size", "scanStatus"}
 )
 

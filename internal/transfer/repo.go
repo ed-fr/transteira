@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -19,6 +20,7 @@ type repo interface {
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
 	transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error)
 	completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error
+	downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
 	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
 }
 
@@ -68,6 +70,10 @@ func (r storeRepo) transferByKey(ctx context.Context, tid tenant.ID, sender, key
 
 func (r storeRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error {
 	return r.db.TransferFiles().CompleteUpload(ctx, tid, fileID, sha256, ciphertextSize, now)
+}
+
+func (r storeRepo) downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error) {
+	return r.keys.Open(ctx, tid, crypto.PurposeSecret, wkID)
 }
 
 func (r storeRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {

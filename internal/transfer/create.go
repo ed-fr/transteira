@@ -445,7 +445,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	if err != nil {
 		return Details{}, fmt.Errorf("transfer: read created transfer: %w", err)
 	}
-	return s.details(ctx, t.ID, d)
+	return s.details(ctx, t, d)
 }
 
 // checkOpenCap refuses a new transfer of sender (normalized address email)
@@ -543,6 +543,6 @@ func (s *Service) replay(ctx context.Context, t *tenant.Tenant, sender Sender, e
 	case d.RequestFingerprint != fp:
 		return Details{}, false, ErrIdempotencyMismatch
 	}
-	out, err := s.details(ctx, t.ID, d)
+	out, err := s.details(ctx, t, d)
 	return out, true, err
 }

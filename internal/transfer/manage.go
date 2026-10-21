@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -25,7 +27,9 @@ type Details struct {
 	Message string
 	// ExpiryDays is the validity chosen by the sender.
 	ExpiryDays int
-	// ExpiresAt is the expiry, set at finalization (zero before).
+	// ExpiresAt is the expiry of the download link, known once the transfer
+	// became available (the chosen duration starts then): zero while it is
+	// uploading or scanning, and for a rejected transfer.
 	ExpiresAt time.Time
 	// PasswordProtected reports whether the transfer has a password.
 	PasswordProtected bool
@@ -43,6 +47,10 @@ type Details struct {
 	UploadExpiresAt time.Time
 	// FinalizedAt is the finalization time (zero before).
 	FinalizedAt time.Time
+	// DownloadURL is the public download page of an available transfer,
+	// built from the FQDN stored for the tenant and the unsealed download
+	// token ("" otherwise). It carries a bearer token: never log it.
+	DownloadURL string
 	// Files are the files, by position.
 	Files []File
 }
@@ -62,6 +70,9 @@ type File struct {
 	SHA256 string
 	// ScanStatus is the antivirus state.
 	ScanStatus store.ScanStatus
+	// ScanSignature is the name of the signature detected in an infected
+	// file, "" otherwise. It comes from clamd: escape it when displaying.
+	ScanSignature string
 	// UploadID is the tus upload identifier ("upl_" + base62), only while
 	// the transfer is uploading ("" otherwise): the HTTP layer builds the
 	// uploadUrl from it.
@@ -71,15 +82,25 @@ type File struct {
 	UploadOffset int64
 }
 
-// details converts d. While d is uploading, the upload engine gives the
-// last activity of the transfer and its upload expiry, and every file
-// carries its upload identifier and offset (Size for a completed file).
-func (s *Service) details(ctx context.Context, tid tenant.ID, d store.TransferDetails) (Details, error) {
+// details converts d, a transfer of tenant t. While d is uploading, the
+// upload engine gives the last activity of the transfer and its upload
+// expiry, and every file carries its upload identifier and offset (Size
+// for a completed file). Once d is available, its download token is
+// unsealed to build the download link (id.DownloadURL); a token that cannot
+// be unsealed is logged and the transfer is returned without link, rather
+// than failing the whole view.
+func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.TransferDetails) (Details, error) {
+	tid := t.ID
 	out := Details{
 		ID: d.ID, Status: d.Status, SenderEmail: d.SenderEmail, Recipients: d.Recipients, Message: d.Message,
-		ExpiryDays: d.ExpiryDays, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
+		ExpiryDays: d.ExpiryDays, PasswordProtected: d.PasswordProtected(),
 		DeleteAfterFirstDownload: d.DeleteAfterFirstDownload, TotalBytes: d.TotalBytes,
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
+	}
+	// The expires_at written at finalization is provisional: it becomes
+	// the expiry when the antivirus makes the transfer available.
+	if !d.AvailableAt.IsZero() {
+		out.ExpiresAt = d.ExpiresAt
 	}
 	uploading := d.Status == store.TransferUploading
 	var activity time.Time
@@ -92,6 +113,7 @@ func (s *Service) details(ctx context.Context, tid tenant.ID, d store.TransferDe
 	for i, f := range d.Files {
 		file := File{
 			ID: f.ID, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+			ScanSignature: f.ScanSignature,
 		}
 		if uploading {
 			file.UploadID, file.UploadOffset = f.UploadID, f.Size
@@ -104,6 +126,16 @@ func (s *Service) details(ctx context.Context, tid tenant.ID, d store.TransferDe
 			}
 		}
 		out.Files[i] = file
+	}
+	if d.Status == store.TransferAvailable && d.DownloadTokenKeyID != "" {
+		token, err := s.repo.downloadToken(ctx, tid, d.DownloadTokenKeyID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "transfer: cannot open the download token: download link omitted",
+				slog.String("tenant", tid.String()), slog.String("transfer", d.ID), slog.String("error", err.Error()))
+		} else {
+			out.DownloadURL = id.DownloadURL(t.FQDN, string(token))
+			clear(token)
+		}
 	}
 	return out, nil
 }
@@ -122,7 +154,7 @@ func (s *Service) Get(ctx context.Context, t *tenant.Tenant, sender Sender, trfI
 	if err != nil {
 		return Details{}, err
 	}
-	return s.details(ctx, t.ID, d)
+	return s.details(ctx, t, d)
 }
 
 // Cancel deletes the transfer trfID of tenant t on behalf of its sender
@@ -226,7 +258,7 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	if d, err = s.load(ctx, t.ID, sender, trfID); err != nil {
 		return Details{}, err
 	}
-	return s.details(ctx, t.ID, d)
+	return s.details(ctx, t, d)
 }
 
 // checkBlockedFiles refuses files whose SHA-256 is on the blocklist of t.

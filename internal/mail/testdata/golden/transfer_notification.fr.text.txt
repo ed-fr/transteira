@@ -1,0 +1,36 @@
+Bonjour,
+
+alice@entity-a.example.com vous a envoyé des fichiers via le service de transfert Entity A & Co.
+
+Son message :
+
+> Hello <b>Bob</b>,
+> please see https://phishing.example.com/login
+> <a href="https://evil.example">click</a>
+
+Pour télécharger les fichiers, ouvrez ce lien :
+
+https://transfer.entity-a.example.com/d/dl_abc123
+
+Les fichiers sont disponibles jusqu'au 20 octobre 2027 à 08:30 UTC.
+
+Ce transfert est protégé par un mot de passe. Le mot de passe vous sera transmis par un autre canal ; il ne figure jamais dans ce message.
+
+Fichiers :
+- <script>alert(1)</script> report.pdf (1,5 Ko)
+  SHA-256 : abababababababababababababababababababababababababababababababab
+- video.mp4 (3,0 Go)
+  SHA-256 : 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
+  Non analysé par l'antivirus : le fichier est trop volumineux ou trop complexe pour être entièrement analysé.
+- secret.zip (4,0 Mo)
+  SHA-256 : e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
+  N'a pas pu être analysé par l'antivirus : archive chiffrée.
+
+L'empreinte SHA-256 de chaque fichier vous permet de vérifier que le fichier téléchargé est intact.
+
+Ne transférez pas ce message : toute personne disposant du lien peut télécharger les fichiers.
+
+Si vous n'attendiez pas ce message, vous pouvez l'ignorer sans risque.
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

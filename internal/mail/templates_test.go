@@ -30,12 +30,63 @@ func goldenData() map[string]any {
 			Link:         "https://transfer.entity-a.example.com/invitations/inv_abc123",
 			ExpiresAt:    time.Date(2027, time.October, 20, 8, 0, 0, 0, time.UTC),
 		},
+		TemplateTransferNotification: TransferNotificationData{
+			TenantName:       "Entity A & Co",
+			SenderEmail:      "alice@entity-a.example.com",
+			Message:          hostileMessage,
+			Link:             goldenLink,
+			Files:            goldenFiles(),
+			ExpiresAt:        goldenExpiry,
+			PasswordRequired: true,
+			QR:               true,
+		},
+		TemplateTransferConfirmation: TransferConfirmationData{
+			TenantName:       "Entity A & Co",
+			Link:             goldenLink,
+			Recipients:       []string{"bob@example.com", "carol@example.org"},
+			Files:            goldenFiles(),
+			ExpiresAt:        goldenExpiry,
+			PasswordRequired: true,
+			Withheld:         []FileInfo{{Name: "<i>archive</i>.zip", Size: 3 << 20}},
+		},
+		TemplateFileProblems: FileProblemsData{
+			TenantName: "Entity A & Co",
+			Infected: []InfectedFile{
+				{Name: "eicar.com", Signature: "Win.Test.EICAR_HDB-1"},
+				{Name: "<img src=x onerror=alert(1)>.exe", Signature: "<b>Evil</b>"},
+			},
+			Withheld: []FileInfo{{Name: "<i>archive</i>.zip", Size: 3 << 20}},
+		},
+		TemplateFileNotScanned: FileNotScannedData{
+			TenantName: "Entity A & Co",
+			Files:      goldenFiles()[1:],
+		},
+	}
+}
+
+// Shared golden values of the transfer templates.
+const (
+	hostileMessage = "Hello <b>Bob</b>,\nplease see https://phishing.example.com/login\n" +
+		`<a href="https://evil.example">click</a>` + "\n"
+	goldenLink = "https://transfer.entity-a.example.com/d/dl_abc123"
+)
+
+var goldenExpiry = time.Date(2027, time.October, 20, 8, 30, 0, 0, time.UTC)
+
+// goldenFiles returns the files of the transfer golden tests: a hostile
+// name, then a file too large or complex to be scanned and an encrypted
+// archive.
+func goldenFiles() []FileInfo {
+	return []FileInfo{
+		{Name: "<script>alert(1)</script> report.pdf", Size: 1536, SHA256: strings.Repeat("ab", 32)},
+		{Name: "video.mp4", Size: 3 << 30, SHA256: strings.Repeat("0f", 32), NotScanned: NotScannedTooLarge},
+		{Name: "secret.zip", Size: 4 << 20, SHA256: strings.Repeat("e1", 32), NotScanned: NotScannedEncrypted},
 	}
 }
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "invitation,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,invitation,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {

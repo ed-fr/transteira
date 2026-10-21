@@ -304,6 +304,7 @@ const (
 	EmailTemplateKeyAntivirusUnavailable EmailTemplateKey = "antivirus-unavailable"
 	EmailTemplateKeyDiskAlert            EmailTemplateKey = "disk-alert"
 	EmailTemplateKeyFileNotScanned       EmailTemplateKey = "file-not-scanned"
+	EmailTemplateKeyFileProblems         EmailTemplateKey = "file-problems"
 	EmailTemplateKeyFirstDownload        EmailTemplateKey = "first-download"
 	EmailTemplateKeyInvitation           EmailTemplateKey = "invitation"
 	EmailTemplateKeyQuotaReached         EmailTemplateKey = "quota-reached"
@@ -311,7 +312,6 @@ const (
 	EmailTemplateKeyTransferConfirmation EmailTemplateKey = "transfer-confirmation"
 	EmailTemplateKeyTransferNotification EmailTemplateKey = "transfer-notification"
 	EmailTemplateKeyVerificationCode     EmailTemplateKey = "verification-code"
-	EmailTemplateKeyVirusDetected        EmailTemplateKey = "virus-detected"
 )
 
 // Valid indicates whether the value is a known member of the EmailTemplateKey enum.
@@ -324,6 +324,8 @@ func (e EmailTemplateKey) Valid() bool {
 	case EmailTemplateKeyDiskAlert:
 		return true
 	case EmailTemplateKeyFileNotScanned:
+		return true
+	case EmailTemplateKeyFileProblems:
 		return true
 	case EmailTemplateKeyFirstDownload:
 		return true
@@ -338,8 +340,6 @@ func (e EmailTemplateKey) Valid() bool {
 	case EmailTemplateKeyTransferNotification:
 		return true
 	case EmailTemplateKeyVerificationCode:
-		return true
-	case EmailTemplateKeyVirusDetected:
 		return true
 	default:
 		return false
@@ -690,12 +690,13 @@ func (e PublicTenantLegalDocuments) Valid() bool {
 
 // Defines values for ScanStatus.
 const (
-	ScanStatusClean              ScanStatus = "clean"
-	ScanStatusInfected           ScanStatus = "infected"
-	ScanStatusNotScannedTooLarge ScanStatus = "not_scanned_too_large"
-	ScanStatusPending            ScanStatus = "pending"
-	ScanStatusScanError          ScanStatus = "scan_error"
-	ScanStatusScanning           ScanStatus = "scanning"
+	ScanStatusClean               ScanStatus = "clean"
+	ScanStatusInfected            ScanStatus = "infected"
+	ScanStatusNotScannedEncrypted ScanStatus = "not_scanned_encrypted"
+	ScanStatusNotScannedTooLarge  ScanStatus = "not_scanned_too_large"
+	ScanStatusPending             ScanStatus = "pending"
+	ScanStatusScanError           ScanStatus = "scan_error"
+	ScanStatusScanning            ScanStatus = "scanning"
 )
 
 // Valid indicates whether the value is a known member of the ScanStatus enum.
@@ -704,6 +705,8 @@ func (e ScanStatus) Valid() bool {
 	case ScanStatusClean:
 		return true
 	case ScanStatusInfected:
+		return true
+	case ScanStatusNotScannedEncrypted:
 		return true
 	case ScanStatusNotScannedTooLarge:
 		return true
@@ -1094,10 +1097,16 @@ type AdminTransferDetail struct {
 		MediaType *string `json:"mediaType,omitempty"`
 		Name      string  `json:"name"`
 
-		// ScanStatus `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
-		// `infected`: file deleted, kept in the list for the sender's information only.
-		// `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
-		// never downloadable) and the sender and super admin are informed.
+		// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+		// back: the antivirus is fail-closed).
+		// `clean`: analyzed, no threat found.
+		// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+		// (the sender is told and the download page says so).
+		// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+		// unscanned and flagged like `not_scanned_too_large`.
+		// `infected`: file erased, kept in the list for the sender's information only.
+		// `scan_error`: the file could not be analyzed after several attempts; it is withheld
+		// (fail-closed, never downloadable) and the sender is informed.
 		ScanStatus ScanStatus `json:"scanStatus"`
 		Sha256     *Sha256    `json:"sha256,omitempty"`
 		Size       ByteSize   `json:"size"`
@@ -1371,7 +1380,13 @@ type EmailTemplate struct {
 	BodyText   string `json:"bodyText"`
 	Customised bool   `json:"customised"`
 
-	// Key Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
+	// Key Mail template of an entity. `file-problems` is the alert sent to the sender when files of
+	// a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
+	// `file-not-scanned` tells the sender that files were released unscanned because they were
+	// too large, too complex or encrypted to be analysed; `transfer-notification` and
+	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
+	// available.
+	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
 
@@ -1382,7 +1397,13 @@ type EmailTemplate struct {
 	Variables []string   `json:"variables"`
 }
 
-// EmailTemplateKey Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
+// EmailTemplateKey Mail template of an entity. `file-problems` is the alert sent to the sender when files of
+// a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
+// `file-not-scanned` tells the sender that files were released unscanned because they were
+// too large, too complex or encrypted to be analysed; `transfer-notification` and
+// `transfer-confirmation` go to the recipients and to the sender once a transfer is
+// available.
+// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type EmailTemplateKey string
 
@@ -1390,7 +1411,13 @@ type EmailTemplateKey string
 type EmailTemplateSummary struct {
 	Customised bool `json:"customised"`
 
-	// Key Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
+	// Key Mail template of an entity. `file-problems` is the alert sent to the sender when files of
+	// a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
+	// `file-not-scanned` tells the sender that files were released unscanned because they were
+	// too large, too complex or encrypted to be analysed; `transfer-notification` and
+	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
+	// available.
+	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
 
@@ -1659,10 +1686,16 @@ type PublicFile struct {
 	MediaType   *string `json:"mediaType,omitempty"`
 	Name        string  `json:"name"`
 
-	// ScanStatus `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
-	// `infected`: file deleted, kept in the list for the sender's information only.
-	// `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
-	// never downloadable) and the sender and super admin are informed.
+	// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+	// back: the antivirus is fail-closed).
+	// `clean`: analyzed, no threat found.
+	// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+	// (the sender is told and the download page says so).
+	// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+	// unscanned and flagged like `not_scanned_too_large`.
+	// `infected`: file erased, kept in the list for the sender's information only.
+	// `scan_error`: the file could not be analyzed after several attempts; it is withheld
+	// (fail-closed, never downloadable) and the sender is informed.
 	ScanStatus ScanStatus `json:"scanStatus"`
 	Sha256     Sha256     `json:"sha256"`
 	Size       ByteSize   `json:"size"`
@@ -1726,10 +1759,16 @@ type ResendRequest struct {
 	Recipients *[]Email `json:"recipients,omitempty"`
 }
 
-// ScanStatus `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
-// `infected`: file deleted, kept in the list for the sender's information only.
-// `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
-// never downloadable) and the sender and super admin are informed.
+// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+// back: the antivirus is fail-closed).
+// `clean`: analyzed, no threat found.
+// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+// (the sender is told and the download page says so).
+// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+// unscanned and flagged like `not_scanned_too_large`.
+// `infected`: file erased, kept in the list for the sender's information only.
+// `scan_error`: the file could not be analyzed after several attempts; it is withheld
+// (fail-closed, never downloadable) and the sender is informed.
 type ScanStatus string
 
 // SenderFile defines model for SenderFile.
@@ -1738,10 +1777,21 @@ type SenderFile struct {
 	MediaType *string `json:"mediaType,omitempty"`
 	Name      string  `json:"name"`
 
-	// ScanStatus `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
-	// `infected`: file deleted, kept in the list for the sender's information only.
-	// `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
-	// never downloadable) and the sender and super admin are informed.
+	// ScanSignature Name of the signature ClamAV detected in an `infected` file; absent otherwise. Shown to
+	// the sender only, never to recipients. It comes from the antivirus: clients must escape
+	// it when displaying it.
+	ScanSignature *string `json:"scanSignature,omitempty"`
+
+	// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+	// back: the antivirus is fail-closed).
+	// `clean`: analyzed, no threat found.
+	// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+	// (the sender is told and the download page says so).
+	// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+	// unscanned and flagged like `not_scanned_too_large`.
+	// `infected`: file erased, kept in the list for the sender's information only.
+	// `scan_error`: the file could not be analyzed after several attempts; it is withheld
+	// (fail-closed, never downloadable) and the sender is informed.
 	ScanStatus   ScanStatus `json:"scanStatus"`
 	Sha256       *Sha256    `json:"sha256,omitempty"`
 	Size         ByteSize   `json:"size"`
@@ -1759,7 +1809,8 @@ type SenderTransfer struct {
 	// DownloadUrl Public download page (available once the transfer is `available`).
 	DownloadUrl *string `json:"downloadUrl,omitempty"`
 
-	// ExpiresAt Set at finalization.
+	// ExpiresAt Set when the transfer becomes `available`: the full chosen duration (`expiryDays`)
+	// starts then, so a delayed analysis does not shorten it.
 	ExpiresAt         *time.Time   `json:"expiresAt,omitempty"`
 	ExpiryDays        ExpiryDays   `json:"expiryDays"`
 	Files             []SenderFile `json:"files"`
@@ -2049,7 +2100,13 @@ type LinkToken = string
 // RecognitionCookie defines model for RecognitionCookie.
 type RecognitionCookie = string
 
-// TemplateKey Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
+// TemplateKey Mail template of an entity. `file-problems` is the alert sent to the sender when files of
+// a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
+// `file-not-scanned` tells the sender that files were released unscanned because they were
+// too large, too complex or encrypted to be analysed; `transfer-notification` and
+// `transfer-confirmation` go to the recipients and to the sender once a transfer is
+// available.
+// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type TemplateKey = EmailTemplateKey
 

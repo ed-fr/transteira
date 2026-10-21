@@ -108,8 +108,15 @@ func parseDuration(raw string, lowest, highest time.Duration) (time.Duration, er
 
 // parseInt parses a decimal integer and checks that it lies within
 // [lowest, highest].
-func parseInt(raw string, lowest, highest int) (int, error) {
-	n, err := strconv.Atoi(strings.TrimSpace(raw))
+func parseInt(raw string, lowest, highest int) (int, error) { //nolint:unparam // generic bounds helper; every current variable happens to start at 1
+	n, err := parseInt64(raw, int64(lowest), int64(highest))
+	return int(n), err
+}
+
+// parseInt64 parses a decimal 64-bit integer and checks that it lies within
+// [lowest, highest].
+func parseInt64(raw string, lowest, highest int64) (int64, error) {
+	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%q is not a valid integer", raw)
 	}

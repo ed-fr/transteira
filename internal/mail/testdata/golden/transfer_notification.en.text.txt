@@ -1,0 +1,36 @@
+Hello,
+
+alice@entity-a.example.com sent you files through the Entity A & Co transfer service.
+
+Their message:
+
+> Hello <b>Bob</b>,
+> please see https://phishing.example.com/login
+> <a href="https://evil.example">click</a>
+
+To download the files, open this link:
+
+https://transfer.entity-a.example.com/d/dl_abc123
+
+The files are available until October 20, 2027 at 08:30 UTC.
+
+This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.
+
+Files:
+- <script>alert(1)</script> report.pdf (1.5 KB)
+  SHA-256: abababababababababababababababababababababababababababababababab
+- video.mp4 (3.0 GB)
+  SHA-256: 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
+  Not scanned by the antivirus: the file is too large or too complex to be fully analyzed.
+- secret.zip (4.0 MB)
+  SHA-256: e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
+  Could not be analyzed by the antivirus: encrypted archive.
+
+The SHA-256 fingerprint of each file lets you check that the downloaded file is intact.
+
+Do not forward this message: anyone who has the link can download the files.
+
+If you were not expecting this message, you can safely ignore it.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

@@ -38,7 +38,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
 .PHONY: help check fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
-	test test-sqlite test-pg test-env-up test-env-down cover env-example env-example-check build hooks \
+	test test-sqlite test-pg test-clamav test-env-up test-env-down cover env-example env-example-check build hooks \
 	e2e bigfile clean
 
 help: ## Show available targets
@@ -100,6 +100,10 @@ test: test-env-up ## Unit and integration tests with coverage, on SQLite and Pos
 	TT_TEST_REQUIRE_POSTGRES=1 $(GO_TEST)
 
 test-pg: test ## Alias of test (PostgreSQL is mandatory there)
+
+test-clamav: ## Live antivirus test against a real clamd (set TT_TEST_CLAMAV_ADDR; not part of check)
+	TT_TEST_CLAMAV_ADDR="$${TT_TEST_CLAMAV_ADDR:?set TT_TEST_CLAMAV_ADDR, see docs/operations/antivirus.md}" \
+		$(GO) test -count=1 -run TestScanLive -v ./internal/antivirus/
 
 test-sqlite: ## Quick loop: tests without PostgreSQL (not part of check)
 	$(GO_TEST)

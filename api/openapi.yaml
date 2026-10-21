@@ -709,16 +709,29 @@ paths:
       summary: Finalize a transfer after all files are uploaded
       description: |
         Checks that every declared file is fully uploaded, compares `expectedSha256` when it was
-        provided, checks file hashes against the blocklist, then queues the antivirus scan.
-        Once every file is scanned, infected files are deleted (sender alerted), and notifications
-        are sent: recipients receive the link, a QR code (inline CID) and SHA-256 fingerprints;
-        the sender receives a confirmation. If every file is infected, the transfer ends in
-        `rejected` state and no recipient is notified.
+        provided and checks the file hashes against the blocklist, then hands the transfer to the
+        antivirus: the answer (`202`, status `scanning`) comes at once and the analysis runs
+        **asynchronously**; poll `GET /transfers/{transferId}` to follow it.
 
-        Antivirus availability is **fail-closed**: while clamd is unreachable, files stay in
-        `scanning`, the scan is retried with back-off, the super admin is alerted, and nothing is
-        made available. Only files above the ClamAV size limits are released unscanned
-        (`not_scanned_too_large`), as required by the specification.
+        Each file is decrypted on the fly and streamed to ClamAV, then gets its final
+        `scanStatus`: `clean`, `infected` (with `scanSignature`, shown to the sender only),
+        `not_scanned_too_large` (above the ClamAV size limits) or `not_scanned_encrypted` (an
+        encrypted archive ClamAV cannot read), both delivered unscanned and flagged (the sender is
+        told and the download page says so), or `scan_error` (could not be analyzed after several
+        attempts: withheld, never downloadable). Infected files are **erased** (their key is
+        destroyed, then their content), and the sender is alerted; their entries stay in the file
+        list for the sender's information.
+
+        When at least one file can be delivered, the transfer becomes `available`: the recipients
+        receive the link, a QR code (inline CID) and the SHA-256 fingerprints, the sender a
+        confirmation, and `downloadUrl` appears in the sender's view; `expiresAt` is set then, so
+        the chosen duration runs from the availability, not from the finalization. When no file
+        can be delivered (every file infected or in `scan_error`), the transfer ends `rejected`,
+        the sender is alerted and no recipient is notified.
+
+        The antivirus is **fail-closed**: while ClamAV is unreachable, files stay `scanning`, the
+        analysis is retried with back-off (and resumed after a restart), and nothing is made
+        available.
       security:
         - depositSession: []
           csrfToken: []
@@ -3899,11 +3912,17 @@ components:
       type: string
       x-extensible-enum: true
       description: |
-        `not_scanned_too_large`: file above ClamAV limits, accepted and flagged.
-        `infected`: file deleted, kept in the list for the sender's information only.
-        `scan_error`: the file could not be scanned after all retries; it is withheld (fail-closed,
-        never downloadable) and the sender and super admin are informed.
-      enum: [pending, scanning, clean, infected, not_scanned_too_large, scan_error]
+        `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+        back: the antivirus is fail-closed).
+        `clean`: analyzed, no threat found.
+        `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+        (the sender is told and the download page says so).
+        `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+        unscanned and flagged like `not_scanned_too_large`.
+        `infected`: file erased, kept in the list for the sender's information only.
+        `scan_error`: the file could not be analyzed after several attempts; it is withheld
+        (fail-closed, never downloadable) and the sender is informed.
+      enum: [pending, scanning, clean, infected, not_scanned_too_large, not_scanned_encrypted, scan_error]
     FileDeclaration:
       type: object
       required: [name, size]
@@ -3952,6 +3971,14 @@ components:
         mediaType: { type: string }
         sha256: { $ref: '#/components/schemas/Sha256' }
         scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        scanSignature:
+          type: string
+          maxLength: 200
+          description: |
+            Name of the signature ClamAV detected in an `infected` file; absent otherwise. Shown to
+            the sender only, never to recipients. It comes from the antivirus: clients must escape
+            it when displaying it.
+          example: Eicar-Test-Signature
         uploadUrl: { type: string, description: tus upload URL (only while the transfer is `uploading`). }
         uploadOffset: { $ref: '#/components/schemas/ByteSize' }
     SenderTransfer:
@@ -3964,7 +3991,12 @@ components:
         recipients: { type: array, items: { $ref: '#/components/schemas/Email' } }
         message: { type: string }
         expiryDays: { $ref: '#/components/schemas/ExpiryDays' }
-        expiresAt: { type: string, format: date-time, description: Set at finalization. }
+        expiresAt:
+          type: string
+          format: date-time
+          description: |
+            Set when the transfer becomes `available`: the full chosen duration (`expiryDays`)
+            starts then, so a delayed analysis does not shorten it.
         passwordProtected: { type: boolean }
         deleteAfterFirstDownload: { type: boolean }
         totalBytes: { $ref: '#/components/schemas/ByteSize' }
@@ -4358,6 +4390,12 @@ components:
       type: string
       x-extensible-enum: true
       description: |
+        Mail template of an entity. `file-problems` is the alert sent to the sender when files of
+        a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
+        `file-not-scanned` tells the sender that files were released unscanned because they were
+        too large, too complex or encrypted to be analysed; `transfer-notification` and
+        `transfer-confirmation` go to the recipients and to the sender once a transfer is
+        available.
         Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
         `recipient-verification-code`.
       enum:
@@ -4365,7 +4403,7 @@ components:
         - transfer-notification
         - transfer-confirmation
         - first-download
-        - virus-detected
+        - file-problems
         - file-not-scanned
         - invitation
         - quota-warning

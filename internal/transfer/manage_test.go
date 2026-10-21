@@ -2,12 +2,14 @@ package transfer
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
@@ -372,8 +374,9 @@ func TestFinalize(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Finalize: %v", err)
 		}
+		// No expiry until the antivirus makes the transfer available.
 		if got.Status != store.TransferScanning || !got.FinalizedAt.Equal(now) ||
-			!got.ExpiresAt.Equal(now.Add(7*24*time.Hour)) || !got.UploadExpiresAt.IsZero() {
+			!got.ExpiresAt.IsZero() || !got.UploadExpiresAt.IsZero() {
 			t.Errorf("finalized = %+v", got)
 		}
 		for _, f := range got.Files {
@@ -495,4 +498,108 @@ func (ev *env) dropFiles(t *testing.T, trfID string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// makeAvailable moves the finalized transfer trfID of A to available, as
+// the antivirus worker does: the first file infected (with a signature),
+// the others clean, and the download token sealed. It returns the token.
+func (ev *env) makeAvailable(t *testing.T, trfID string) string {
+	t.Helper()
+	ctx := context.Background()
+	d, err := ev.db.Transfers().Get(ctx, ev.a.ID, trfID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const token = "dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8JfAb5Cd7Ef9Gh1Jk3" // gitleaks:allow (fictitious test token)
+	s, err := ev.db.Scoped(ev.a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+		for i, f := range d.Files {
+			status, sig := store.ScanClean, ""
+			if i == 0 {
+				status, sig = store.ScanInfected, "Eicar-Test-Signature"
+			}
+			if err := ev.db.TransferFiles().SetScanResultTx(ctx, tx, f.ID, status, sig, ev.clock.Now()); err != nil {
+				return err
+			}
+		}
+		wkID, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+		if err != nil {
+			return err
+		}
+		h := sha256.Sum256([]byte(token))
+		return ev.db.Transfers().MarkAvailableTx(ctx, tx, trfID, h[:], wkID, ev.clock.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
+}
+
+func TestGetAvailableDownloadURL(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		d := ev.mustCreate(t, internalSender(), request())
+		ev.complete(t, d.ID, "")
+		ev.finalizeDirect(t, d.ID)
+		// Scanning: no link and no expiry yet (the expires_at written at
+		// finalization is provisional).
+		got, err := ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err != nil || got.DownloadURL != "" || !got.ExpiresAt.IsZero() || got.FinalizedAt.IsZero() {
+			t.Fatalf("scanning: link %q, expiresAt %v, finalizedAt %v, err %v", got.DownloadURL, got.ExpiresAt, got.FinalizedAt, err)
+		}
+		token := ev.makeAvailable(t, d.ID)
+		got, err = ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err == nil && got.ExpiresAt.IsZero() {
+			t.Error("available transfer without expiresAt")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := id.DownloadURL(hostA, token); got.DownloadURL != want {
+			t.Errorf("DownloadURL = %q, want %q", got.DownloadURL, want)
+		}
+		if got.Files[0].ScanStatus != store.ScanInfected || got.Files[0].ScanSignature != "Eicar-Test-Signature" ||
+			got.Files[1].ScanStatus != store.ScanClean || got.Files[1].ScanSignature != "" || got.Files[0].UploadID != "" {
+			t.Errorf("files = %+v", got.Files)
+		}
+		// A token that cannot be unsealed: the transfer without link.
+		ev.faults().fail["downloadToken"] = errFault
+		got, err = ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err != nil || got.DownloadURL != "" || got.Status != store.TransferAvailable {
+			t.Errorf("token failure: %q %v, want the transfer without link", got.DownloadURL, err)
+		}
+	})
+}
+
+func TestGetRejectedHasNoExpiry(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		d := ev.mustCreate(t, internalSender(), request())
+		ev.complete(t, d.ID, "")
+		ev.finalizeDirect(t, d.ID)
+		s, err := ev.db.Scoped(ev.a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+			for _, f := range d.Files {
+				if err := ev.db.TransferFiles().SetScanResultTx(ctx, tx, f.ID, store.ScanError, "", ev.clock.Now()); err != nil {
+					return err
+				}
+			}
+			return ev.db.Transfers().MarkRejectedTx(ctx, tx, d.ID)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err != nil || got.Status != store.TransferRejected || !got.ExpiresAt.IsZero() || got.DownloadURL != "" {
+			t.Errorf("rejected: status %s, expiresAt %v, link %q, err %v", got.Status, got.ExpiresAt, got.DownloadURL, err)
+		}
+	})
 }

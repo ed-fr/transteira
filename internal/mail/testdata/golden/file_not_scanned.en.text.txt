@@ -1,0 +1,13 @@
+Hello,
+
+The antivirus could not analyze the following files of your transfer. They have been sent anyway, and the recipients are told that they were not scanned.
+
+- video.mp4 (3.0 GB)
+  SHA-256: 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
+  Reason: the file is too large or too complex to be fully analyzed.
+- secret.zip (4.0 MB)
+  SHA-256: e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
+  Reason: encrypted archive, whose content the antivirus cannot read.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

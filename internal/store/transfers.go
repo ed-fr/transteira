@@ -43,12 +43,6 @@ func (s TransferStatus) valid() bool {
 	return false
 }
 
-// finalized reports whether s is a status only a finalized transfer can
-// have (finalized_at and expires_at set).
-func (s TransferStatus) finalized() bool {
-	return s == TransferScanning || s == TransferAvailable || s == TransferRejected
-}
-
 // ScanStatus is the antivirus state of a file (OpenAPI ScanStatus).
 type ScanStatus string
 
@@ -65,6 +59,9 @@ const (
 	// ScanNotScannedTooLarge is a file above the antivirus limits,
 	// accepted and flagged.
 	ScanNotScannedTooLarge ScanStatus = "not_scanned_too_large"
+	// ScanNotScannedEncrypted is a file the antivirus could not look
+	// inside (encrypted archive), accepted and flagged.
+	ScanNotScannedEncrypted ScanStatus = "not_scanned_encrypted"
 	// ScanError is a file that could not be analyzed (withheld).
 	ScanError ScanStatus = "scan_error"
 )
@@ -101,11 +98,11 @@ const IdempotencyRetention = 24 * time.Hour
 // transferColumns is the column list read by the transfer queries.
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
-	`finalized_at, expires_at`
+	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at`
 
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
-	`storage_name, upload_id, ciphertext_size, uploaded_at, scan_status`
+	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
 
 // Statements of the Transfers and TransferFiles repositories. All of them
 // are single-table tenant queries: a transfer and its files are read with
@@ -154,8 +151,10 @@ var (
 		WHERE tenant_id = ? AND id = ? AND status = 'uploading'`)
 	qTransferShrink = tenantQuery(
 		`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`)
+	// qTransferDelete only deletes a transfer whose sealed download token
+	// was destroyed first (T-110).
 	qTransferDelete = tenantQuery(
-		`DELETE FROM transfers WHERE tenant_id = ? AND id = ?`)
+		`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`)
 
 	qRecipientInsert = tenantQuery(
 		`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`)
@@ -234,9 +233,25 @@ type Transfer struct {
 	CreatedAt time.Time
 	// FinalizedAt is the finalization time, zero before.
 	FinalizedAt time.Time
-	// ExpiresAt is the expiry, set at finalization (FinalizedAt +
-	// ExpiryDays), zero before.
+	// ExpiresAt is the expiry, zero before the finalization. The
+	// finalization sets a provisional value (FinalizedAt + ExpiryDays);
+	// [Transfers.MarkAvailableTx] replaces it with AvailableAt +
+	// ExpiryDays, so that the recipients get the whole chosen duration. The
+	// provisional value means nothing for a transfer still scanning: the
+	// cleanup must never expire a scanning transfer on it, and bounds such
+	// transfers on FinalizedAt instead.
 	ExpiresAt time.Time
+	// DownloadTokenHash is the SHA-256 (TokenHashSize bytes) of the
+	// download link token, set by [Transfers.MarkAvailableTx]; nil before.
+	DownloadTokenHash []byte
+	// DownloadTokenKeyID is the wrapped key ("wk_" + ULID, purpose
+	// KeyPurposeSecret, same tenant) holding the raw download token sealed by
+	// the key vault, set by [Transfers.MarkAvailableTx]. It reads "" before,
+	// and once the key was destroyed (cryptographic erasure).
+	DownloadTokenKeyID string
+	// AvailableAt is when the analysis made the transfer available, zero
+	// before.
+	AvailableAt time.Time
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -284,6 +299,16 @@ type TransferFile struct {
 	// ScanStatus is the antivirus state; a new file is ScanPending (the
 	// zero value is accepted at creation).
 	ScanStatus ScanStatus
+	// ScannedAt is when the final scan status was recorded
+	// ([TransferFiles.SetScanResultTx]), zero while pending or scanning.
+	ScannedAt time.Time
+	// ScanSignature is the name of the signature detected in an infected
+	// file (at most MaxScanSignatureBytes bytes), "" otherwise. It is shown
+	// to the sender only, escaped.
+	ScanSignature string
+	// ScanAttempts counts the file-specific analysis failures
+	// ([TransferFiles.IncrementScanAttempt]); 0 for a new file.
+	ScanAttempts int
 }
 
 // Completed reports whether the upload of the file is complete.
@@ -405,6 +430,8 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("malformed request fingerprint")
 	case !t.FinalizedAt.IsZero() || !t.ExpiresAt.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be finalized")
+	case t.DownloadTokenHash != nil || t.DownloadTokenKeyID != "" || !t.AvailableAt.IsZero():
+		return Transfer{}, invalid("a new transfer cannot be available")
 	}
 	t.Status, t.TotalBytes = TransferUploading, total
 	return t, nil
@@ -455,6 +482,8 @@ func normalizeFile(f TransferFile, trfID string, pos int) (TransferFile, error) 
 		return TransferFile{}, invalid("malformed upload id")
 	case f.ScanStatus != "" && f.ScanStatus != ScanPending:
 		return TransferFile{}, invalid("a new file must be pending analysis")
+	case !f.ScannedAt.IsZero() || f.ScanSignature != "" || f.ScanAttempts != 0:
+		return TransferFile{}, invalid("a new file has no scan result")
 	case f.Completed() && (!isLowerHex(f.SHA256, sha256HexLen) || f.CiphertextSize < 0):
 		return TransferFile{}, invalid("a completed file needs its sha256 and ciphertext size")
 	case !f.Completed() && (f.SHA256 != "" || f.CiphertextSize != 0):
@@ -468,12 +497,18 @@ func normalizeFile(f TransferFile, trfID string, pos int) (TransferFile, error) 
 // is bound to: the foreign key only proves that the key exists, the
 // tenant-scoped read proves it belongs to this tenant.
 func checkDEK(ctx context.Context, tx *ScopedTx, keyID string) error {
+	return checkKey(ctx, tx, keyID, KeyPurposeDEK, "file key is not a data key")
+}
+
+// checkKey verifies, inside tx, that keyID is a wrapped key of purpose
+// purpose of the tenant tx is bound to; msg describes a purpose mismatch.
+func checkKey(ctx context.Context, tx *ScopedTx, keyID, purpose, msg string) error {
 	k, err := scanWrappedKey(tx.QueryRow(ctx, qWrappedKeyGet, keyID))
 	if err != nil {
 		return err
 	}
-	if k.Purpose != KeyPurposeDEK {
-		return invalid("file key is not a data key")
+	if k.Purpose != purpose {
+		return invalid("%s", msg)
 	}
 	return nil
 }
@@ -566,38 +601,41 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 // scanTransfer reads one row of transferColumns.
 func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	var (
-		t                     Transfer
-		status, kind          string
-		inv, pwd, key, fp     sql.NullString
-		created               int64
-		finalized, expiration sql.NullInt64
+		t                                Transfer
+		status, kind                     string
+		inv, pwd, key, fp, tokenKey      sql.NullString
+		created                          int64
+		finalized, available, expiration sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
-		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &expiration)
+		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
+		&tokenKey, &available, &expiration)
 	if err != nil {
 		return Transfer{}, err
 	}
 	t.Status, t.SenderKind = TransferStatus(status), DepositorKind(kind)
 	t.InvitationID, t.PasswordHash, t.IdempotencyKey, t.RequestFingerprint = inv.String, pwd.String, key.String, fp.String
 	t.CreatedAt, t.FinalizedAt, t.ExpiresAt = fromMillis(created), nullMillis(finalized), nullMillis(expiration)
+	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
 	return t, nil
 }
 
 // scanFile reads one row of fileColumns.
 func scanFile(row interface{ Scan(...any) error }) (TransferFile, error) {
 	var (
-		f                    TransferFile
-		expected, sum, keyID sql.NullString
-		ctSize, uploaded     sql.NullInt64
-		scan                 string
+		f                               TransferFile
+		expected, sum, keyID, signature sql.NullString
+		ctSize, uploaded, scanned       sql.NullInt64
+		scan                            string
 	)
 	err := row.Scan(&f.ID, &f.TransferID, &f.Position, &f.Name, &f.Size, &f.MediaType, &expected, &sum, &keyID,
-		&f.StorageName, &f.UploadID, &ctSize, &uploaded, &scan)
+		&f.StorageName, &f.UploadID, &ctSize, &uploaded, &scanned, &signature, &f.ScanAttempts, &scan)
 	if err != nil {
 		return TransferFile{}, err
 	}
 	f.ExpectedSHA256, f.SHA256, f.DEKKeyID = expected.String, sum.String, keyID.String
 	f.CiphertextSize, f.UploadedAt, f.ScanStatus = ctSize.Int64, nullMillis(uploaded), ScanStatus(scan)
+	f.ScannedAt, f.ScanSignature = nullMillis(scanned), signature.String
 	return f, nil
 }
 
@@ -790,8 +828,10 @@ func probe(ctx context.Context, tx *ScopedTx, count TenantQuery, rowID string, c
 // status from to status to, inside tx. Moving from TransferUploading to
 // TransferScanning is the finalization: it also sets FinalizedAt to now
 // and ExpiresAt to now + ExpiryDays; now is ignored otherwise. A transfer
-// reaches scanning, available or rejected only through the finalization or
-// from one of these states, and never returns to uploading.
+// reaches scanning only through the finalization, rejected only from
+// scanning, and never returns to uploading; it becomes available only
+// through [Transfers.MarkAvailableTx], which records its download link.
+// Any other status may move to expired or deleted.
 //
 // It returns ErrInvalid for an unknown or disallowed transition,
 // ErrNotFound when the transfer does not exist or belongs to another
@@ -812,8 +852,12 @@ func setStatus(ctx context.Context, tx *ScopedTx, trfID string, from, to Transfe
 		return invalid("unknown or empty status transition")
 	case to == TransferUploading:
 		return invalid("a transfer never returns to uploading")
-	case to.finalized() && !from.finalized() && !finalize:
-		return invalid("only the finalization leads to scanning from an unfinalized transfer")
+	case to == TransferAvailable:
+		return invalid("a transfer becomes available only with its download link")
+	case to == TransferScanning && !finalize:
+		return invalid("only the finalization leads to scanning")
+	case to == TransferRejected && from != TransferScanning:
+		return invalid("only a scanning transfer can be rejected")
 	}
 	var (
 		res sql.Result
@@ -846,9 +890,10 @@ func (r *Transfers) FinalizeTx(ctx context.Context, tx *ScopedTx, trfID string, 
 
 // DeleteTx deletes the transfer trfID of the tenant tx is bound to, with
 // (by cascade) its recipients and files, inside tx. The data key of every
-// file must have been destroyed first in the same transaction
-// ([WrappedKeys.DeleteTx]); otherwise it returns [ErrKeysRemain] and
-// deletes nothing. It returns ErrNotFound when the transfer does not exist
+// file, and the sealed download token of an available transfer
+// (DownloadTokenKeyID), must have been destroyed first in the same
+// transaction ([WrappedKeys.DeleteTx]); otherwise it returns
+// [ErrKeysRemain] and deletes nothing. It returns ErrNotFound when the transfer does not exist
 // or belongs to another tenant. Callers delete the files on disk once the
 // transaction is committed, then call [DB.ScrubDeleted]. After an error,
 // the caller must abort the transaction.
@@ -869,10 +914,13 @@ func deleteTransfer(ctx context.Context, tx *ScopedTx, trfID string) error {
 		return ErrKeysRemain
 	}
 	res, err := tx.Exec(ctx, qTransferDelete, trfID)
-	if err != nil {
-		return err
+	if err == nil {
+		err = expectOne(res)
 	}
-	return expectOne(res)
+	if errors.Is(err, ErrNotFound) {
+		return probe(ctx, tx, qTransferCount, trfID, ErrKeysRemain)
+	}
+	return err
 }
 
 // getByUploadID implements GetByUploadID inside tx, returning raw errors.

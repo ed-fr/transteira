@@ -437,7 +437,7 @@ var tenantAllowlist = map[string]int{
 	`UPDATE transfers SET status = 'scanning', finalized_at = ?, expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) ` +
 		`WHERE tenant_id = ? AND id = ? AND status = 'uploading'`: 2,
 	`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`:               1,
-	`DELETE FROM transfers WHERE tenant_id = ? AND id = ?`:                                            0,
+	`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`:          0,
 	`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`:   0,
 	`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
 	// Transfer files.
@@ -453,6 +453,16 @@ var tenantAllowlist = map[string]int{
 	`UPDATE transfer_files SET dek_key_id = ?, storage_name = ? ` +
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NULL`: 2,
 	`DELETE FROM transfer_files WHERE tenant_id = ? AND id = ? AND dek_key_id IS NULL RETURNING transfer_id, size`: 0,
+	// Antivirus analysis and download links.
+	`UPDATE transfers SET status = 'available', download_token_hash = ?, download_token_key_id = ?, available_at = ?, ` +
+		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) WHERE tenant_id = ? AND id = ? AND status = 'scanning'`: 4,
+	`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND download_token_hash = ?`: 0,
+	`UPDATE transfer_files SET scan_status = 'scanning' ` +
+		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 0,
+	`UPDATE transfer_files SET scan_status = ?, scan_signature = ?, scanned_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 3,
+	`UPDATE transfer_files SET scan_attempts = scan_attempts + 1 ` +
+		`WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -537,6 +547,8 @@ var systemAllowlist = map[string]string{
 	`SELECT ` + rotationColumns + ` FROM key_rotations ORDER BY started_at DESC, id DESC LIMIT 1`:                                                 reasonKeyRotation,
 	`UPDATE key_rotations SET rewrapped_keys = rewrapped_keys + ? WHERE id = ? AND status = 'running' AND from_key_id = ? AND to_key_id = ?`:      reasonKeyRotation,
 	`UPDATE key_rotations SET status = ?, completed_at = ?, error = ? WHERE id = ? AND status = 'running'`:                                        reasonKeyRotation,
+	// Antivirus worker start-up sweep (identifiers only).
+	`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`: reasonAntivirusSweep,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

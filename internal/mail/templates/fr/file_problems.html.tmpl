@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Infected}}Fichier infecté supprimé{{else}}Fichier retenu{{end}}</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#ffffff;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;">
+<div role="main" style="max-width:560px;margin:0 auto;">
+<h1 style="font-size:20px;margin:0 0 16px;">{{.TenantName}}</h1>
+<p>Bonjour,</p>
+{{- if .Infected}}
+<p>L'antivirus a détecté une menace dans les fichiers suivants de votre transfert. Ils ont été supprimés.</p>
+<ul style="padding-left:20px;margin:0 0 16px;">
+{{- range .Infected}}
+<li style="margin:0 0 12px;"><strong style="word-break:break-all;">{{.Name}}</strong><br>
+<span style="font-size:14px;">Menace détectée : <code style="font-family:Consolas,Menlo,monospace;word-break:break-all;">{{.Signature}}</code></span></li>
+{{- end}}
+</ul>
+{{- end}}
+{{- if .Withheld}}
+<p>Les fichiers suivants n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : ils ne peuvent pas être téléchargés.</p>
+<ul style="padding-left:20px;margin:0 0 16px;">
+{{- range .Withheld}}
+<li style="margin:0 0 12px;"><strong style="word-break:break-all;">{{.Name}}</strong> ({{size .Size}})</li>
+{{- end}}
+</ul>
+{{- end}}
+<p><strong>{{if .Rejected}}Aucun fichier du transfert n'a pu être remis : le transfert n'a pas été envoyé et les destinataires n'ont pas été prévenus.{{else}}Les autres fichiers du transfert ont été envoyés aux destinataires.{{end}}</strong></p>
+{{- if .Infected}}
+<p>Vérifiez l'appareil d'où proviennent les fichiers avec un antivirus à jour avant de les envoyer de nouveau.</p>
+{{- end}}
+{{- if .Withheld}}
+<p>Pour partager un fichier retenu, envoyez-le de nouveau dans un autre transfert.</p>
+{{- end}}
+<hr style="border:0;border-top:1px solid #767676;margin:24px 0 16px;">
+<p style="font-size:14px;color:#4a4a4a;">{{t "mail.footer.automated" "tenant" .TenantName}}</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+Bonjour,
+
+L'antivirus n'a pas pu analyser les fichiers suivants de votre transfert. Ils ont tout de même été envoyés, et les destinataires sont informés qu'ils n'ont pas été analysés.
+{{range .Files}}
+- {{.Name}} ({{size .Size}})
+  SHA-256 : {{.SHA256}}
+{{- if eq .NotScanned "encrypted"}}
+  Motif : archive chiffrée, dont l'antivirus ne peut pas lire le contenu.
+{{- else}}
+  Motif : le fichier est trop volumineux ou trop complexe pour être entièrement analysé.
+{{- end}}
+{{- end}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

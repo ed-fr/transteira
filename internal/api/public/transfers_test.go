@@ -192,13 +192,17 @@ func TestTransferBody(t *testing.T) {
 
 	// A finalized transfer: no upload URL, expiry and finalization set.
 	d := uploadingDetails()
-	d.Status, d.Message, d.ExpiresAt, d.FinalizedAt, d.UploadExpiresAt = store.TransferScanning, "Hi", created.AddDate(0, 0, 7), created, time.Time{}
+	d.Status, d.Message, d.ExpiresAt, d.FinalizedAt, d.UploadExpiresAt = store.TransferAvailable, "Hi", created.AddDate(0, 0, 7), created, time.Time{}
+	d.DownloadURL = "https://transfer.entity-a.example.com/d/dl_x"
+	d.Files[0].ScanStatus, d.Files[0].ScanSignature = store.ScanInfected, "Eicar-Test-Signature"
 	for i := range d.Files {
 		d.Files[i].UploadID, d.Files[i].UploadOffset = "", 0
 	}
 	b = transferBody(d)
 	if b.Message == nil || *b.Message != "Hi" || b.ExpiresAt == nil || b.FinalizedAt == nil || b.UploadExpiresAt != nil ||
-		b.Files[0].UploadUrl != nil || b.Files[0].UploadOffset != nil || b.Recipients[0] != "carol@customer.example.net" {
+		b.Files[0].UploadUrl != nil || b.Files[0].UploadOffset != nil || b.Recipients[0] != "carol@customer.example.net" ||
+		b.DownloadUrl == nil || *b.DownloadUrl != d.DownloadURL || b.Files[0].ScanSignature == nil ||
+		*b.Files[0].ScanSignature != "Eicar-Test-Signature" || b.Files[0].ScanStatus != "infected" || b.Files[1].ScanSignature != nil {
 		t.Errorf("finalized body = %+v", b)
 	}
 }

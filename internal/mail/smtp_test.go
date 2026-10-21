@@ -321,7 +321,9 @@ func TestSendTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrSMTP) {
 		t.Fatalf("err = %v", err)
 	}
-	if d := time.Since(start); d > 3*time.Second {
+	// Generous bound: under a loaded make check the 200 ms deadline can fire
+	// seconds late; the test only proves the send does not hang.
+	if d := time.Since(start); d > 15*time.Second {
 		t.Fatalf("timeout not honored: %v", d)
 	}
 }

@@ -3,6 +3,7 @@ package id
 import (
 	"bytes"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -158,5 +159,30 @@ func TestUploadToken(t *testing.T) {
 		if UploadTokenValid(bad) {
 			t.Errorf("UploadTokenValid(%q) = true", bad)
 		}
+	}
+}
+
+func TestDownloadToken(t *testing.T) {
+	tok, err := NewDownloadToken()
+	if err != nil || !DownloadTokenValid(tok) || len(tok) != len(DownloadTokenPrefix)+1+TokenLen(DownloadTokenBytes) {
+		t.Fatalf("NewDownloadToken = %q, %v", tok, err)
+	}
+	if DownloadTokenBytes < MinTokenBytes || TokenLen(DownloadTokenBytes) > MaxTokenBodyLen {
+		t.Errorf("download token entropy %d out of the token bounds", DownloadTokenBytes)
+	}
+	pattern := regexp.MustCompile(`^dl_[A-Za-z0-9]{22,43}$`) // OpenAPI LinkToken
+	if !pattern.MatchString(tok) {
+		t.Errorf("NewDownloadToken = %q does not match the OpenAPI pattern", tok)
+	}
+	for _, bad := range []string{"", "dl_short", "upl_" + tok[3:], tok + "-", "dl_" + strings.Repeat("a", 44)} {
+		if DownloadTokenValid(bad) {
+			t.Errorf("DownloadTokenValid(%q) = true", bad)
+		}
+	}
+}
+
+func TestDownloadURL(t *testing.T) {
+	if got, want := DownloadURL("transfer.entity-a.example.com", "dl_abc"), "https://transfer.entity-a.example.com/d/dl_abc"; got != want {
+		t.Errorf("DownloadURL = %q, want %q", got, want)
 	}
 }

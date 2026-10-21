@@ -133,6 +133,15 @@ func TestTransferDriverFaults(t *testing.T) {
 		return deleteTransfer(f)
 	}
 
+	// sweep finalizes the fixture's transfer, then sweeps the scanning
+	// transfers.
+	sweep := func(f *transferFixture) func() error {
+		if err := setStatus(f, TransferUploading, TransferScanning)(); err != nil {
+			panic(err)
+		}
+		return func() error { _, err := f.db.Transfers().ScanningSweep(ctx); return err }
+	}
+
 	steps := []struct {
 		name, op, match string
 		run             func(*testing.T, *transferFixture) func() error
@@ -175,6 +184,8 @@ func TestTransferDriverFaults(t *testing.T) {
 			return deleteKeyed(f)
 		}},
 		{"shrink transfer", faultExec, "SET total_bytes = total_bytes", func(_ *testing.T, f *transferFixture) func() error { return eraseFile(f) }},
+		{"sweep", faultQuery, "WHERE status = 'scanning' ORDER BY", func(_ *testing.T, f *transferFixture) func() error { return sweep(f) }},
+		{"sweep scan", faultScanNil, "WHERE status = 'scanning' ORDER BY", func(_ *testing.T, f *transferFixture) func() error { return sweep(f) }},
 	}
 	for _, s := range steps {
 		t.Run(s.name, func(t *testing.T) {

@@ -1,0 +1,21 @@
+Bonjour,
+
+L'antivirus a détecté une menace dans les fichiers suivants de votre transfert. Ils ont été supprimés.
+
+- eicar.com
+  Menace détectée : Win.Test.EICAR_HDB-1
+- <img src=x onerror=alert(1)>.exe
+  Menace détectée : <b>Evil</b>
+
+Les fichiers suivants n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : ils ne peuvent pas être téléchargés.
+
+- <i>archive</i>.zip (3,0 Mo)
+
+Les autres fichiers du transfert ont été envoyés aux destinataires.
+
+Vérifiez l'appareil d'où proviennent les fichiers avec un antivirus à jour avant de les envoyer de nouveau.
+
+Pour partager un fichier retenu, envoyez-le de nouveau dans un autre transfert.
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

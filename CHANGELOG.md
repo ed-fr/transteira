@@ -101,6 +101,21 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `internal/storage` (files confined with `os.Root`, one directory per tenant, random names),
   `internal/filename` (file name rules, decision P8), argon2id in `internal/crypto`.
 - Migration `0004_transfers`: transfers, recipients and files with row-level security.
+- Antivirus and notifications (step 7): `internal/antivirus` scans with clamd `INSTREAM` (size
+  limit, idle and overall timeouts); `internal/scan` takes finalized transfers to `available` or
+  `rejected`, fail-closed while clamd is unreachable (retry with back-off, resumed at start-up),
+  erases infected files (key first), withholds files that cannot be analysed (`scan_error`),
+  creates the `dl_` download link (hash stored, sealed copy for re-display) and sends the mails;
+  `internal/notify` builds them (one mail per recipient with an inline QR code and SHA-256
+  fingerprints, sender confirmation, `file_problems`, `file_not_scanned`).
+- Migration `0005_scan`: scan results, download token and availability date.
+- Configuration: `TT_CLAMAV_MAX_SCAN_BYTES`, `TT_CLAMAV_TIMEOUT`, `TT_SCAN_WORKERS`.
+- `docs/operations/antivirus.md`: scan flow, fail-closed behaviour, clamd limits, signatures.
+- Go toolchain pinned to 1.27.3 (fix for GO-2026-6809 in `crypto/x509`).
+- Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
+  partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
+  now starts when it becomes available (`expiresAt` is set then); a file that times out, drops
+  the clamd connection or crashes clamd is withheld after 3 attempts.
 - Configuration: `TT_MAX_RECIPIENTS`, `TT_UPLOAD_IDLE_TIMEOUT`, `TT_MAX_OPEN_TRANSFERS` (open, non-expired
   uploading transfers per internal sender; 3 for invited externals), `TT_UPLOAD_MAX_AGE` (an upload
   expires at most 7 days after its transfer was created, whatever its activity).
@@ -131,3 +146,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `uploading`.
 - Tenant queries may reference `tenant_id` only in the tenant slot; an alias named `tenant_id` is
   refused.
+- OpenAPI: the email template key `virus-detected` is renamed `file-problems` (one alert for the
+  infected files and the files withheld after an analysis error); `SenderFile` gains the optional
+  sender-only `scanSignature`, `SenderTransfer.downloadUrl` is returned once the transfer is
+  available, and `finalizeTransfer` documents the asynchronous, fail-closed analysis.

@@ -27,6 +27,8 @@ import (
 	"github.com/ed-fr/transteira/internal/httpserver"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
+	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
@@ -46,17 +48,24 @@ const (
 	// MaxHeaderBytes bounds the size of request headers.
 	MaxHeaderBytes = 64 << 10
 	// ShutdownTimeout bounds the graceful shutdown of the HTTP server. With
-	// HandlerDrainTimeout and MailDrainTimeout it makes a worst-case
-	// shutdown of 9 s, strictly below Docker's default 10 s stop grace
-	// period (stop_grace_period in docker-compose), so that connections
-	// still open are closed by TransTeira itself, with a warning, and the
-	// database is closed cleanly before Docker sends SIGKILL. Raise
-	// stop_grace_period before raising any of the three values.
-	ShutdownTimeout = 7 * time.Second
+	// HandlerDrainTimeout, ScanCloseTimeout and MailDrainTimeout it makes a
+	// worst-case shutdown of 9 s, strictly below Docker's default 10 s stop
+	// grace period (stop_grace_period in docker-compose), so that
+	// connections still open are closed by TransTeira itself, with a
+	// warning, and the database is closed cleanly before Docker sends
+	// SIGKILL. Raise stop_grace_period before raising any of the four
+	// values.
+	ShutdownTimeout = 6 * time.Second
 	// HandlerDrainTimeout bounds the wait for handlers to return once the
 	// connections have been forcibly closed, before the database and the
 	// security log are closed.
 	HandlerDrainTimeout = time.Second
+	// ScanCloseTimeout bounds the wait for the antivirus workers to stop at
+	// shutdown, after the HTTP server and before the mail queue. An analysis
+	// in progress is abandoned without counting an attempt; the transfers
+	// still scanning are resumed by the sweep of the next start. It takes
+	// one second from the former 7 s of ShutdownTimeout.
+	ScanCloseTimeout = time.Second
 	// MailDrainTimeout bounds the delivery of the mails still queued at
 	// shutdown, once the HTTP server has stopped. Jobs left after it are
 	// dropped (a code or an invitation can be requested again). See
@@ -78,6 +87,14 @@ type runOptions struct {
 	logOutput       io.Writer
 	shutdownTimeout time.Duration
 	maintenance     *atomic.Bool
+	scanOptions     func(*scan.Options)
+}
+
+// WithScanOptions lets edit change the options of the antivirus worker
+// before it is created (tests: shorter retry delays). The configured
+// values are already set when edit runs.
+func WithScanOptions(edit func(*scan.Options)) Option {
+	return func(o *runOptions) { o.scanOptions = edit }
 }
 
 // WithListener serves on l instead of listening on cfg.ListenAddr (tests).
@@ -210,9 +227,21 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// Deferred after db.Close, so it runs before it, once the handlers
 	// have drained.
 	defer func() { err = errors.Join(err, closeWith(files.Close, "data directory")) }()
-	uploads, transfers := newTransferServices(cfg, db, vault, files, secLog, logger)
+	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address,
+		antivirus.WithMaxScanBytes(cfg.ClamAVMaxScanBytes), antivirus.WithScanTimeout(cfg.ClamAVTimeout))
+	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
+	worker := scan.New(scan.Deps{
+		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads,
+		Notifier: notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger}), Mail: mailQueue,
+	}, scanOptions(cfg, &o, logger))
+	// Deferred after closeMailQueue, so it runs before it: the workers stop
+	// enqueueing mails before the queue drains.
+	defer closeScanWorker(ctx, worker, logger)
+	transfers := newTransferService(cfg, db, vault, uploads, secLog, worker.Enqueue, logger)
+	if err := worker.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the antivirus workers: %w", err)
+	}
 
-	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address)
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     tenant.NewResolver(db.Tenants()),
@@ -390,17 +419,39 @@ func drain(counter *atomic.Int64, timeout time.Duration) bool {
 	return true
 }
 
-// newTransferServices builds the tus upload engine and the transfer service
-// over the file store files. The uploads in flight at shutdown stop with
-// the base context of their request (canceled by serve): the engine saves
-// a checkpoint, and the client resumes after a HEAD.
-func newTransferServices(cfg *config.Config, db *store.DB, vault *masterkey.Vault, files *storage.Store, secLog *securitylog.Logger, logger *slog.Logger) (*upload.Engine, *transfer.Service) {
-	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
-	transfers := transfer.New(db, vault, uploads, secLog, transfer.Options{
+// newTransferService builds the transfer service over the tus upload
+// engine uploads; onFinalized (the antivirus worker's Enqueue) is called
+// after each finalization. The uploads in flight at shutdown stop with the
+// base context of their request (canceled by serve): the engine saves a
+// checkpoint, and the client resumes after a HEAD.
+func newTransferService(cfg *config.Config, db *store.DB, vault *masterkey.Vault, uploads *upload.Engine,
+	secLog *securitylog.Logger, onFinalized func(tenant.ID, string), logger *slog.Logger,
+) *transfer.Service {
+	return transfer.New(db, vault, uploads, secLog, transfer.Options{
 		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
-		Hasher: crypto.NewPasswordHasher(transfer.DefaultHashConcurrency), Logger: logger,
+		Hasher: crypto.NewPasswordHasher(transfer.DefaultHashConcurrency), OnFinalized: onFinalized, Logger: logger,
 	})
-	return uploads, transfers
+}
+
+// scanOptions returns the options of the antivirus worker: the configured
+// number of workers, edited by WithScanOptions when given.
+func scanOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) scan.Options {
+	opts := scan.Options{Workers: cfg.ScanWorkers, Logger: logger}
+	if o.scanOptions != nil {
+		o.scanOptions(&opts)
+	}
+	return opts
+}
+
+// closeScanWorker stops the antivirus workers for at most ScanCloseTimeout.
+// A stop cut short is logged, not returned: the transfers still scanning
+// are resumed at the next start.
+func closeScanWorker(ctx context.Context, w *scan.Worker, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ScanCloseTimeout)
+	defer cancel()
+	if err := w.Close(ctx); err != nil {
+		logger.WarnContext(ctx, "antivirus workers still running at shutdown", slog.String("error", err.Error()))
+	}
 }
 
 // newSMTPSender returns the SMTP sender of the mail queue. The EHLO name

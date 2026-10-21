@@ -35,6 +35,9 @@ const (
 	EnvMaxRecipients            = "TT_MAX_RECIPIENTS"
 	EnvMaxOpenTransfers         = "TT_MAX_OPEN_TRANSFERS"
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
+	EnvClamAVMaxScanBytes       = "TT_CLAMAV_MAX_SCAN_BYTES"
+	EnvClamAVTimeout            = "TT_CLAMAV_TIMEOUT"
+	EnvScanWorkers              = "TT_SCAN_WORKERS"
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
 )
@@ -56,6 +59,9 @@ const (
 	DefaultMaxRecipients            = "50"
 	DefaultMaxOpenTransfers         = "10"
 	DefaultClamAVAddr               = "clamav:3310"
+	DefaultClamAVMaxScanBytes       = "2147483648"
+	DefaultClamAVTimeout            = "10m"
+	DefaultScanWorkers              = "2"
 	DefaultSMTPTimeout              = "30s"
 	DefaultMailQueueSize            = "1000"
 )
@@ -177,6 +183,28 @@ func Variables() []Var {
 			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,
 			Description: "Address of the clamd daemon: host:port, or unix:/absolute/path for a " +
 				"Unix socket.",
+		},
+		{
+			Name: EnvClamAVMaxScanBytes, Group: "Antivirus", Default: DefaultClamAVMaxScanBytes,
+			Description: "Largest file size, in bytes, sent to clamd for analysis (between " +
+				"1048576 and 4294967295; default 2 GiB). Larger files are accepted without " +
+				"analysis, and the sender and recipients are told so. Align clamd's " +
+				"StreamMaxLength, MaxScanSize and MaxFileSize on this value: a file clamd " +
+				"refuses as too large is treated the same way.",
+		},
+		{
+			Name: EnvClamAVTimeout, Group: "Antivirus", Default: DefaultClamAVTimeout,
+			Description: "Time limit of the analysis of one file by clamd (Go duration, between " +
+				"10s and 2h). A stalled exchange is also cut after one minute without progress. " +
+				"A timed-out analysis counts against the file and is retried later; the file stays " +
+				"unavailable meanwhile, and after 3 timeouts it is withheld for good (scan_error).",
+		},
+		{
+			Name: EnvScanWorkers, Group: "Antivirus", Default: DefaultScanWorkers,
+			Description: "Number of antivirus workers (between 1 and 16). Each worker analyzes " +
+				"one file at a time; a transfer is never analyzed by two workers at once. Keep it at " +
+				"or below clamd's MaxThreads (10 by default): otherwise scans queued by clamd may " +
+				"time out and count against their files.",
 		},
 		{
 			Name: EnvSMTPTimeout, Group: "Mail", Default: DefaultSMTPTimeout,

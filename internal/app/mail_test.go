@@ -10,6 +10,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/scan"
 )
 
 // blockingSender blocks every delivery until its context ends.
@@ -24,11 +25,11 @@ func (b blockingSender) Send(ctx context.Context, _ mail.Settings, _ mail.Messag
 func TestShutdownBudget(t *testing.T) {
 	t.Parallel()
 	const dockerGrace = 10 * time.Second
-	if total := ShutdownTimeout + HandlerDrainTimeout + MailDrainTimeout; total >= dockerGrace {
+	if total := ShutdownTimeout + HandlerDrainTimeout + ScanCloseTimeout + MailDrainTimeout; total >= dockerGrace {
 		t.Errorf("worst-case shutdown %v, want strictly below Docker's %v grace period", total, dockerGrace)
 	}
-	if ShutdownTimeout != 7*time.Second {
-		t.Errorf("ShutdownTimeout = %v, want 7s", ShutdownTimeout)
+	if ShutdownTimeout != 6*time.Second || ScanCloseTimeout != time.Second {
+		t.Errorf("ShutdownTimeout = %v, ScanCloseTimeout = %v, want 6s and 1s", ShutdownTimeout, ScanCloseTimeout)
 	}
 }
 
@@ -79,4 +80,17 @@ func TestCloseMailQueue(t *testing.T) {
 			t.Errorf("logs = %q, want the drain warning", logs.String())
 		}
 	})
+}
+
+func TestScanOptions(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{ScanWorkers: 3}
+	if got := scanOptions(cfg, &runOptions{}, nil); got.Workers != 3 || got.RetryMin != 0 {
+		t.Errorf("default scan options = %+v", got)
+	}
+	var o runOptions
+	WithScanOptions(func(so *scan.Options) { so.RetryMin, so.RetryMax = time.Second, 2*time.Second })(&o)
+	if got := scanOptions(cfg, &o, nil); got.Workers != 3 || got.RetryMin != time.Second || got.RetryMax != 2*time.Second {
+		t.Errorf("edited scan options = %+v", got)
+	}
 }

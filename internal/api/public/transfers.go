@@ -162,7 +162,8 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		ExpiryDays: gen.ExpiryDays(d.ExpiryDays), ExpiresAt: optionalTime(d.ExpiresAt),
 		PasswordProtected: d.PasswordProtected, DeleteAfterFirstDownload: d.DeleteAfterFirstDownload,
 		TotalBytes: d.TotalBytes, CreatedAt: d.CreatedAt, UploadExpiresAt: optionalTime(d.UploadExpiresAt),
-		FinalizedAt: optionalTime(d.FinalizedAt), Files: make([]gen.SenderFile, len(d.Files)),
+		FinalizedAt: optionalTime(d.FinalizedAt), DownloadUrl: optional(d.DownloadURL),
+		Files: make([]gen.SenderFile, len(d.Files)),
 	}
 	for i, r := range d.Recipients {
 		body.Recipients[i] = gen.Email(r)
@@ -170,7 +171,7 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 	for i, f := range d.Files {
 		file := gen.SenderFile{
 			Id: f.ID, Name: f.Name, Size: f.Size, MediaType: optional(f.MediaType), Sha256: optional(f.SHA256),
-			ScanStatus: gen.ScanStatus(f.ScanStatus),
+			ScanStatus: gen.ScanStatus(f.ScanStatus), ScanSignature: optional(f.ScanSignature),
 		}
 		if f.UploadID != "" {
 			url, offset := uploadPath+f.UploadID, f.UploadOffset

@@ -84,6 +84,9 @@ func TestLoadDefaults(t *testing.T) {
 		{"UploadIdleTimeout", c.UploadIdleTimeout, 60 * time.Second},
 		{"MaxRecipients", c.MaxRecipients, 50},
 		{"MaxOpenTransfers", c.MaxOpenTransfers, 10},
+		{"ClamAVMaxScanBytes", c.ClamAVMaxScanBytes, int64(2 << 30)},
+		{"ClamAVTimeout", c.ClamAVTimeout, 10 * time.Minute},
+		{"ScanWorkers", c.ScanWorkers, 2},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {
@@ -308,6 +311,26 @@ func TestLoadValid(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "antivirus bounds inclusive low",
+			vars: map[string]string{EnvClamAVMaxScanBytes: "1048576", EnvClamAVTimeout: "10s", EnvScanWorkers: "1"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.ClamAVMaxScanBytes != 1<<20 || c.ClamAVTimeout != 10*time.Second || c.ScanWorkers != 1 {
+					t.Errorf("antivirus = %d %v", c.ClamAVMaxScanBytes, c.ClamAVTimeout)
+				}
+			},
+		},
+		{
+			name: "antivirus bounds inclusive high",
+			vars: map[string]string{EnvClamAVMaxScanBytes: " 4294967295 ", EnvClamAVTimeout: "2h", EnvScanWorkers: "16"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.ClamAVMaxScanBytes != 1<<32-1 || c.ClamAVTimeout != 2*time.Hour || c.ScanWorkers != 16 {
+					t.Errorf("antivirus = %d %v", c.ClamAVMaxScanBytes, c.ClamAVTimeout)
+				}
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -432,6 +455,14 @@ func TestLoadInvalid(t *testing.T) {
 		{"mail queue zero", map[string]string{EnvMailQueueSize: "0"}, []string{EnvMailQueueSize}},
 		{"mail queue too big", map[string]string{EnvMailQueueSize: "100001"}, []string{EnvMailQueueSize}},
 		{"mail queue malformed", map[string]string{EnvMailQueueSize: "lots"}, []string{EnvMailQueueSize}},
+		{"scan bytes too small", map[string]string{EnvClamAVMaxScanBytes: "1048575"}, []string{EnvClamAVMaxScanBytes}},
+		{"scan bytes too big", map[string]string{EnvClamAVMaxScanBytes: "4294967296"}, []string{EnvClamAVMaxScanBytes}},
+		{"scan bytes malformed", map[string]string{EnvClamAVMaxScanBytes: "2G"}, []string{EnvClamAVMaxScanBytes}},
+		{"clamav timeout too short", map[string]string{EnvClamAVTimeout: "9s"}, []string{EnvClamAVTimeout}},
+		{"scan workers zero", map[string]string{EnvScanWorkers: "0"}, []string{EnvScanWorkers}},
+		{"scan workers too many", map[string]string{EnvScanWorkers: "17"}, []string{EnvScanWorkers}},
+		{"scan workers malformed", map[string]string{EnvScanWorkers: "two"}, []string{EnvScanWorkers}},
+		{"clamav timeout too long", map[string]string{EnvClamAVTimeout: "2h1s"}, []string{EnvClamAVTimeout}},
 		{"max age too short", map[string]string{EnvUploadMaxAge: "23h"}, []string{EnvUploadMaxAge}},
 		{"max age too long", map[string]string{EnvUploadMaxAge: "2161h"}, []string{EnvUploadMaxAge}},
 		{"max age below the TTL", map[string]string{EnvUploadTTL: "48h", EnvUploadMaxAge: "24h"}, []string{EnvUploadMaxAge}},

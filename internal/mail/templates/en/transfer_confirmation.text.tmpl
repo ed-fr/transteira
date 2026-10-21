@@ -1,0 +1,41 @@
+Hello,
+
+Your transfer is ready: the recipients have received the download link.
+
+Download link:
+
+{{.Link}}
+
+The files are available until {{datetime .ExpiresAt}}.
+{{- if .PasswordRequired}}
+
+The transfer is protected by a password. Give it to the recipients through another channel (phone, text message...), never in the same e-mail as the link.
+{{- end}}
+
+Recipients:
+{{- range .Recipients}}
+- {{.}}
+{{- end}}
+
+Files:
+{{- range .Files}}
+- {{.Name}} ({{size .Size}})
+  SHA-256: {{.SHA256}}
+{{- if eq .NotScanned "too_large"}}
+  Not scanned by the antivirus: the file is too large or too complex to be fully analyzed.
+{{- else if eq .NotScanned "encrypted"}}
+  Could not be analyzed by the antivirus: encrypted archive.
+{{- end}}
+{{- end}}
+{{- if .Withheld}}
+
+Withheld files:
+{{- range .Withheld}}
+- {{.Name}} ({{size .Size}})
+{{- end}}
+
+These files could not be analyzed by the antivirus and are withheld for safety: the recipients cannot download them.
+{{- end}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

@@ -1,0 +1,39 @@
+Bonjour,
+
+{{.SenderEmail}} vous a envoyé des fichiers via le service de transfert {{.TenantName}}.
+{{- if .Message}}
+
+Son message :
+
+{{quote .Message}}
+{{- end}}
+
+Pour télécharger les fichiers, ouvrez ce lien :
+
+{{.Link}}
+
+Les fichiers sont disponibles jusqu'au {{datetime .ExpiresAt}}.
+{{- if .PasswordRequired}}
+
+Ce transfert est protégé par un mot de passe. Le mot de passe vous sera transmis par un autre canal ; il ne figure jamais dans ce message.
+{{- end}}
+
+Fichiers :
+{{- range .Files}}
+- {{.Name}} ({{size .Size}})
+  SHA-256 : {{.SHA256}}
+{{- if eq .NotScanned "too_large"}}
+  Non analysé par l'antivirus : le fichier est trop volumineux ou trop complexe pour être entièrement analysé.
+{{- else if eq .NotScanned "encrypted"}}
+  N'a pas pu être analysé par l'antivirus : archive chiffrée.
+{{- end}}
+{{- end}}
+
+L'empreinte SHA-256 de chaque fichier vous permet de vérifier que le fichier téléchargé est intact.
+
+Ne transférez pas ce message : toute personne disposant du lien peut télécharger les fichiers.
+
+{{t "mail.footer.ignore"}}
+
+-- 
+{{t "mail.footer.automated" "tenant" .TenantName}}

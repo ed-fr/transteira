@@ -464,13 +464,10 @@ func TestTransfersStatus(t *testing.T) {
 		if n := usedBytes(t, db, a.ID); n != d.TotalBytes {
 			t.Errorf("UsedBytesTx(scanning) = %d", n)
 		}
-		for _, step := range [][2]store.TransferStatus{
-			{store.TransferScanning, store.TransferAvailable},
-			{store.TransferAvailable, store.TransferExpired},
-		} {
-			if err := setStatus(tr.ID, step[0], step[1]); err != nil {
-				t.Fatalf("SetStatusTx(%s -> %s): %v", step[0], step[1], err)
-			}
+		wantErr(t, "SetStatusTx(scanning -> available)", setStatus(tr.ID, store.TransferScanning, store.TransferAvailable), store.ErrInvalid)
+		markAvailable(t, db, a.ID, tr.ID)
+		if err := setStatus(tr.ID, store.TransferAvailable, store.TransferExpired); err != nil {
+			t.Fatalf("SetStatusTx(available -> expired): %v", err)
 		}
 		if got, err := transfers.Get(ctx, a.ID, tr.ID); err != nil || got.Status != store.TransferExpired || !got.FinalizedAt.Equal(wantAt) {
 			t.Errorf("after SetStatusTx = %+v, %v", got.Transfer, err)
@@ -494,6 +491,8 @@ func TestTransfersStatus(t *testing.T) {
 			"uploading->available": {store.TransferUploading, store.TransferAvailable},
 			"uploading->rejected":  {store.TransferUploading, store.TransferRejected},
 			"deleted->scanning":    {store.TransferDeleted, store.TransferScanning},
+			"available->scanning":  {store.TransferAvailable, store.TransferScanning},
+			"available->rejected":  {store.TransferAvailable, store.TransferRejected},
 		} {
 			wantErr(t, "SetStatusTx("+name+")", setStatus(up.ID, step[0], step[1]), store.ErrInvalid)
 		}
