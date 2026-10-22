@@ -33,6 +33,7 @@ import (
 const (
 	hostA       = "transfer.entity-a.example.com"
 	hostUnknown = "transfer.unknown.example.com"
+	hostAdmin   = "admin.transfer.example.com"
 )
 
 // fakeResolver serves hostA only.
@@ -113,7 +114,11 @@ type envConfig struct {
 	opts     []Option
 	trusted  func(netip.Addr) bool
 	sessions DepositSessions
-	idle     time.Duration
+	// adminAPI and adminSessions are Deps.AdminAPI and Deps.AdminSessions;
+	// the admin host is always hostAdmin.
+	adminAPI      gen.StrictServerInterface
+	adminSessions AdminSessions
+	idle          time.Duration
 	// downloadIdle is Deps.DownloadIdleTimeout.
 	downloadIdle time.Duration
 }
@@ -137,6 +142,9 @@ func newEnv(t *testing.T, c envConfig) *env {
 		Maintenance:         e.maintenance,
 		API:                 c.api,
 		Sessions:            c.sessions,
+		AdminHosts:          []string{hostAdmin},
+		AdminAPI:            c.adminAPI,
+		AdminSessions:       c.adminSessions,
 		UploadIdleTimeout:   c.idle,
 		DownloadIdleTimeout: c.downloadIdle,
 		Spec:                []byte("openapi: 3.1.0\n"),
@@ -272,9 +280,9 @@ func TestNotFound(t *testing.T) {
 		{"unknown outside api", http.MethodGet, "/nope", hostA},
 		{"unknown api path", http.MethodGet, "/api/v1/nope", hostA},
 		{"stub operation", http.MethodGet, "/api/v1/tenant", hostA},
-		{"stub with path parameter", http.MethodGet, "/api/v1/admin/tenants/ten_x", hostA},
+		{"admin operation on a tenant host", http.MethodGet, "/api/v1/admin/tenants/ten_x", hostA},
 		{"unknown api path under known prefix", http.MethodPost, "/api/v1/version/x", hostA},
-		{"stub with JSON body", http.MethodPost, "/api/v1/admin/tenants", hostA},
+		{"admin operation with JSON body on a tenant host", http.MethodPost, "/api/v1/admin/tenants", hostA},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -626,30 +634,33 @@ func TestMaintenanceBeforeBody(t *testing.T) {
 
 func TestRequireJSON(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{})
+	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}})
 	rec := e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader("{}"), "Content-Type", "text/plain")
 	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
 
 	// JSON merge patch is accepted (the stub then answers 404).
-	rec = e.do(t, http.MethodPatch, "/api/v1/admin/tenants/ten_x", hostA, strings.NewReader("{}"), "Content-Type", "application/merge-patch+json")
+	rec = e.do(t, http.MethodPatch, "/api/v1/admin/tenants/ten_x", hostAdmin, strings.NewReader("{}"),
+		append(adminAuth(), "Content-Type", "application/merge-patch+json")...)
 	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 
 	// Branding image uploads are exempt.
-	rec = e.do(t, http.MethodPut, "/api/v1/admin/tenants/ten_x/branding/logo", hostA, strings.NewReader("PNG-bytes"), "Content-Type", "image/png")
-	if rec.Code == http.StatusUnsupportedMediaType {
-		t.Errorf("branding image refused: %s", rec.Body.String())
+	rec = e.do(t, http.MethodPut, "/api/v1/admin/tenants/ten_x/branding/logo", hostAdmin, strings.NewReader("PNG-bytes"),
+		append(adminAuth(), "Content-Type", "image/png")...)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("branding image refused: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestBrandingBodyLimit(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{})
+	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}})
 	const target = "/api/v1/admin/tenants/ten_x/branding/logo"
+	hdr := append(adminAuth(), "Content-Type", "image/png")
 	// Above the JSON limit but within the image limit: reaches the stub.
-	rec := e.do(t, http.MethodPut, target, hostA, strings.NewReader(strings.Repeat("x", int(middleware.DefaultJSONBodyLimit)+1)), "Content-Type", "image/png")
+	rec := e.do(t, http.MethodPut, target, hostAdmin, strings.NewReader(strings.Repeat("x", int(middleware.DefaultJSONBodyLimit)+1)), hdr...)
 	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 	// Above the image limit: refused upfront.
-	rec = e.do(t, http.MethodPut, target, hostA, strings.NewReader(strings.Repeat("x", int(middleware.ImageBodyLimit)+1)), "Content-Type", "image/png")
+	rec = e.do(t, http.MethodPut, target, hostAdmin, strings.NewReader(strings.Repeat("x", int(middleware.ImageBodyLimit)+1)), hdr...)
 	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
 }
 
@@ -841,7 +852,7 @@ func TestDeadlineOnRealConnection(t *testing.T) {
 func TestParamErrors(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, envConfig{})
-	rec := e.do(t, http.MethodGet, "/api/v1/admin/tenants?limit=abc", hostA, nil)
+	rec := e.do(t, http.MethodGet, "/api/v1/admin/tenants?limit=abc", hostAdmin, nil)
 	p := decodeProblem(t, rec, http.StatusBadRequest, problem.CodeValidationFailed)
 	if len(p.Errors) != 1 || p.Errors[0].Field != "limit" || p.Errors[0].Code != fieldInvalidFormat {
 		t.Errorf("field errors %+v", p.Errors)

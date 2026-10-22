@@ -53,10 +53,14 @@ const (
 	PurposeDEK Purpose = "dek"
 	// PurposeSecret wraps configuration secrets such as SMTP passwords.
 	PurposeSecret Purpose = "secret"
+	// PurposeAdminTOTP wraps the TOTP secrets of the administrators, stored
+	// on system records (not bound to an entity) and rewrapped by the master
+	// key rotation like every other wrapped blob.
+	PurposeAdminTOTP Purpose = "admin-totp"
 )
 
 // purposes lists every valid Purpose.
-var purposes = []Purpose{PurposeDEK, PurposeSecret}
+var purposes = []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP}
 
 // MasterKey is the master key of the instance. It never exposes its bytes:
 // every textual representation (String, GoString, Format, LogValue) only shows

@@ -21,10 +21,10 @@ type CheckReason string
 
 // Reasons of a CheckError.
 const (
-	// ReasonMissingKey: rows of wrapped_keys use master keys that are not
-	// provided (wrong key file, restored backup, TT_MASTER_KEY_NEW_FILE
-	// removed before the rotation completed, keys wrapped late under a
-	// retired key), or, on a database where no master key is registered
+	// ReasonMissingKey: rows of wrapped_keys or system_secrets use master
+	// keys that are not provided (wrong key file, restored backup,
+	// TT_MASTER_KEY_NEW_FILE removed before the rotation completed, keys
+	// wrapped late under a retired key), or, on a database where no master key is registered
 	// yet, rows wrapped under another key than the current one.
 	ReasonMissingKey CheckReason = "missing_key"
 	// ReasonActiveKeyMissing: the active master key recorded in the database
@@ -93,7 +93,8 @@ type Report struct {
 //   - a running rotation that does not match TT_MASTER_KEY_NEW_FILE
 //     (ReasonRotationMismatch);
 //   - a new key recorded as retired (ReasonRetiredKey);
-//   - a master key used by a row of wrapped_keys missing from the keyring
+//   - a master key used by a row of wrapped_keys or system_secrets (the
+//     store's KeyIDsInUse covers both) missing from the keyring
 //     (ReasonMissingKey; for a retired key the message points to
 //     "rotate-master-key -recover-from");
 //   - an active master key that is neither the current nor the new key
@@ -118,7 +119,8 @@ func Check(ctx context.Context, db *store.DB, kr *Keyring, logger *slog.Logger, 
 		others := slices.DeleteFunc(slices.Clone(inUse), func(s string) bool { return s == kr.CurrentID() })
 		return Report{}, &CheckError{
 			Reason: ReasonMissingKey, KeyIDs: others,
-			msg: fmt.Sprintf("no master key is registered yet, but wrapped keys in the database use master key(s) %s "+
+			msg: fmt.Sprintf("no master key is registered yet, but wrapped keys or system secrets in the database "+
+				"use master key(s) %s "+
 				"(%s): start with the key that wrapped them, from the vault", strings.Join(others, ", "), kr.describe()),
 		}
 	case err != nil:
@@ -258,7 +260,8 @@ func checkMissing(inUse []string, status map[string]store.MasterKeyStatus, kr *K
 	}
 	return &CheckError{
 		Reason: ReasonMissingKey, KeyIDs: missing,
-		msg: fmt.Sprintf("wrapped keys in the database use master key(s) %s, which are not provided (%s): %s",
+		msg: fmt.Sprintf("wrapped keys or system secrets in the database use master key(s) %s, "+
+			"which are not provided (%s): %s",
 			strings.Join(missing, ", "), kr.describe(), advice),
 	}
 }

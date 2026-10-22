@@ -471,7 +471,7 @@ func (r *KeyRotations) Complete(ctx context.Context, rotID string, now time.Time
 			return err
 		}
 		var left int64
-		if err := tx.QueryRow(ctx, qWrappedKeyCountByKey, rot.FromKeyID).Scan(&left); err != nil {
+		if err := tx.QueryRow(ctx, qWrappedKeyCountByKey, rot.FromKeyID, rot.FromKeyID).Scan(&left); err != nil {
 			return err
 		}
 		if left > 0 {
@@ -580,7 +580,7 @@ func (r *KeyRotations) Abandon(ctx context.Context, rotID, msg string, now time.
 		}
 		if status != MasterKeyActive {
 			var n int64
-			if err := tx.QueryRow(ctx, qWrappedKeyCountByKey, rot.ToKeyID).Scan(&n); err != nil {
+			if err := tx.QueryRow(ctx, qWrappedKeyCountByKey, rot.ToKeyID, rot.ToKeyID).Scan(&n); err != nil {
 				return err
 			}
 			if n > 0 {

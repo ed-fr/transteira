@@ -23,15 +23,29 @@ func RateLimit(limiter Limiter, events SecurityEvents, scope string) func(http.H
 	return rateLimit(limiter, events, scope, time.Now)
 }
 
+// RateLimitIf is [RateLimit] applied only to the requests for which
+// required returns true; the others pass without consuming a token. It
+// limits individual operations, such as the admin login steps, on top of
+// the global limit, and must run where the operation is known (a
+// per-operation middleware of the API router).
+func RateLimitIf(limiter Limiter, events SecurityEvents, scope string, required func(*http.Request) bool) func(http.Handler) http.Handler {
+	return rateLimitIf(limiter, events, scope, required, time.Now)
+}
+
 // rateLimit is RateLimit with an injectable clock for the event throttle.
 func rateLimit(limiter Limiter, events SecurityEvents, scope string, clock func() time.Time) func(http.Handler) http.Handler {
+	return rateLimitIf(limiter, events, scope, func(*http.Request) bool { return true }, clock)
+}
+
+// rateLimitIf implements RateLimit and RateLimitIf.
+func rateLimitIf(limiter Limiter, events SecurityEvents, scope string, required func(*http.Request) bool, clock func() time.Time) func(http.Handler) http.Handler {
 	if limiter == nil {
 		panic("middleware: RateLimit requires a limiter")
 	}
 	throttle := newEventThrottle(clock)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !allow(w, r, limiter, events, throttle, scope) {
+			if required(r) && !allow(w, r, limiter, events, throttle, scope) {
 				return
 			}
 			next.ServeHTTP(w, r)

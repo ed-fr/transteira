@@ -19,13 +19,14 @@ import (
 )
 
 // fixture is a database holding keys of three tenants and both purposes,
-// most under k1 and some under k2.
+// and system secrets, most under k1 and some under k2.
 type fixture struct {
 	db      *store.DB
 	k1, k2  *crypto.MasterKey
 	tenants []tenant.ID
 	keys    []sealed
-	// underOld counts the keys created under k1.
+	secrets []sealedSystem
+	// underOld counts the keys and system secrets created under k1.
 	underOld int64
 }
 
@@ -50,13 +51,16 @@ func newFixture(t *testing.T, e storetest.Engine) *fixture {
 		}
 		f.keys = append(f.keys, seal(t, both, tid, crypto.PurposeSecret))
 	}
+	f.secrets = append(f.secrets, sealSystem(t, f.db, old), sealSystem(t, f.db, both), sealSystem(t, f.db, old))
+	f.underOld += 2
 	return f
 }
 
 // both returns a keyring with k1 current and k2 new.
 func (f *fixture) both(t *testing.T) *masterkey.Keyring { return keyring(t, f.k1, f.k2) }
 
-// expectRotated checks that every key is under k2 and opens with k2 alone.
+// expectRotated checks that every key and system secret is under k2 and
+// opens with k2 alone.
 func (f *fixture) expectRotated(t *testing.T) {
 	t.Helper()
 	for _, k := range f.keys {
@@ -64,7 +68,13 @@ func (f *fixture) expectRotated(t *testing.T) {
 			t.Errorf("key %s is under %s after the rotation", k.id, got)
 		}
 	}
+	for _, s := range f.secrets {
+		if got := secretKeyIDOf(t, f.db, s); got != f.k2.ID() {
+			t.Errorf("system secret %s is under %s after the rotation", s.id, got)
+		}
+	}
 	expectOpens(t, vault(f.db, keyring(t, f.k2, nil)), f.keys)
+	expectSystemOpens(t, vault(f.db, keyring(t, f.k2, nil)), f.secrets)
 	keys, err := f.db.MasterKeys().List(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +108,8 @@ func TestRotate(t *testing.T) {
 			!rot.CompletedAt.Equal(done) {
 			t.Errorf("rotation = %+v", rot)
 		}
-		// 12 keys by 2, plus the final empty batch.
+		// 12 tenant keys then 2 system secrets by 2, plus the final empty
+		// batch (the empty batch ending the tenant keys is not reported).
 		if want := int(f.underOld/2) + 1; batches != want {
 			t.Errorf("batches = %d, want %d", batches, want)
 		}
@@ -115,6 +126,11 @@ func TestRotate(t *testing.T) {
 		for _, k := range f.keys {
 			if strings.Contains(logs.String(), fmt.Sprintf("%x", k.secret)) {
 				t.Fatal("the logs contain a secret")
+			}
+		}
+		for _, s := range f.secrets {
+			if strings.Contains(logs.String(), fmt.Sprintf("%x", s.secret)) {
+				t.Fatal("the logs contain a system secret")
 			}
 		}
 	})
@@ -136,6 +152,7 @@ func TestRotateInterruptedThenResumed(t *testing.T) {
 		}
 		// Every key is still readable while the rotation is half done.
 		expectOpens(t, vault(f.db, f.both(t)), f.keys)
+		expectSystemOpens(t, vault(f.db, f.both(t)), f.secrets)
 
 		logs := &syncBuffer{}
 		resumed, err := masterkey.Rotate(context.Background(), f.db, f.both(t), slog.New(slog.NewTextHandler(logs, nil)),
@@ -264,6 +281,7 @@ func TestRotateStoreFailures(t *testing.T) {
 		{"count", `DROP TABLE wrapped_keys`},
 		{"start", `CREATE TRIGGER f BEFORE INSERT ON key_rotations BEGIN SELECT RAISE(ABORT, 'fault'); END`},
 		{"rewrap", `CREATE TRIGGER f BEFORE UPDATE ON wrapped_keys BEGIN SELECT RAISE(ABORT, 'fault'); END`},
+		{"rewrap system secrets", `CREATE TRIGGER f BEFORE UPDATE ON system_secrets BEGIN SELECT RAISE(ABORT, 'fault'); END`},
 		{"complete", `CREATE TRIGGER f BEFORE UPDATE ON master_keys BEGIN SELECT RAISE(ABORT, 'fault'); END`},
 	}
 	for _, tt := range tests {

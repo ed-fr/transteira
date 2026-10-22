@@ -44,6 +44,9 @@ import (
 const (
 	hostA = "transfer.entity-a.localhost"
 	hostB = "transfer.entity-b.localhost"
+	// adminHost is the admin host (TT_ADMIN_HOSTS): the administration is
+	// served there only.
+	adminHost = "admin.localhost"
 	// nameA and nameB are the display names of the tenants; they must never
 	// appear in a response that is not about the tenant itself.
 	nameA = "Entity A Integration"
@@ -131,6 +134,7 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 		config.EnvListenAddr:    "127.0.0.1:8080", // unused: tests pass app.WithListener
 		config.EnvLogLevel:      "debug",
 		config.EnvClamAVAddr:    o.clamd,
+		config.EnvAdminHosts:    adminHost,
 	}
 	if e.MigrateDSN != "" {
 		env[config.EnvDBMigrateDSN] = e.MigrateDSN
@@ -200,8 +204,16 @@ func startServer(t *testing.T, e storetest.Engine, o serverOptions) *server {
 		o.clamd = fakeClamd(t)
 	}
 	a, b := createTenants(t, e)
-	cfg := loadConfig(t, testEnv(t, e, o))
+	return launchServer(t, loadConfig(t, testEnv(t, e, o)), a, b, o)
+}
 
+// launchServer runs app.Run with cfg on a random loopback port, for a
+// database whose tenants a and b already exist (startServer, or a restart
+// of a stopped server with another configuration). The server is stopped,
+// and its clean shutdown asserted, when the test ends (unless the test
+// stopped it itself).
+func launchServer(t *testing.T, cfg *config.Config, a, b *tenant.Tenant, o serverOptions) *server {
+	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)

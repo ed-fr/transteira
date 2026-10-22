@@ -10,9 +10,15 @@
 //     that a resource of tenant A requested under tenant B's Host is never
 //     served (404, never data), or document why the operation is
 //     tenant-agnostic;
-//   - any other operation must still be a stub: the implementation used by
-//     the server (public.NewServer) behaves exactly like
-//     stubs.Unimplemented, and the server answers 404 under both hosts.
+//   - any other operation must still be a stub: the implementations used by
+//     the server (public.NewServer on tenant hosts, admin.NewServer on the
+//     admin host) behave exactly like stubs.Unimplemented, and the server
+//     answers 404 under both hosts.
+//
+// The administration operations are served on the admin host only
+// (admin_test.go): under tenant A's and tenant B's hosts they answer 404
+// before any admin logic, and on the admin host the tenant operations
+// answer 404.
 //
 // Implementing an operation without adding its isolation case therefore
 // makes this test fail, as does a case for an operation that no longer
@@ -42,6 +48,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ed-fr/transteira/api"
+	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/public"
 	"github.com/ed-fr/transteira/internal/api/stubs"
@@ -110,6 +117,28 @@ var isolationCases = map[string]isolationCase{
 	"unlockDownload":  unlockForeignDownload,
 	"downloadFile":    fileOfForeignDownload,
 	"downloadArchive": archiveOfForeignDownload,
+	// Administration (admin_test.go): served on the admin host only, where
+	// no tenant is resolved; under tenant A's and B's hosts every one
+	// answers 404 before any admin logic. The cross-tenant checks of the
+	// admin operations themselves (a delegated admin of A never reaching
+	// B) are in TestAdminHostIsolation.
+	"getSetupStatus":        adminHostOnly,
+	"createSuperAdmin":      adminHostOnly,
+	"adminLogin":            adminHostOnly,
+	"adminVerifyTotp":       adminHostOnly,
+	"adminLogout":           adminHostOnly,
+	"getAdminMe":            adminHostOnly,
+	"changeAdminPassword":   adminHostOnly,
+	"startTotpEnrollment":   adminHostOnly,
+	"disableTotp":           adminHostOnly,
+	"confirmTotpEnrollment": adminHostOnly,
+	"listAdmins":            adminHostOnly,
+	"createAdmin":           adminHostOnly,
+	"getAdmin":              adminHostOnly,
+	"updateAdmin":           adminHostOnly,
+	"deleteAdmin":           adminHostOnly,
+	"resetAdminCredentials": adminHostOnly,
+	"activateAdmin":         adminHostOnly,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -131,7 +160,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 	t.Run("stub detector tells implemented operations apart", func(t *testing.T) {
 		for _, op := range ops {
 			switch op.id {
-			case "getVersion": // implemented by public.Server
+			case "getVersion", "getSetupStatus", "adminLogin": // implemented by public.Server or admin.Server
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
@@ -327,24 +356,30 @@ func loadOperations(t *testing.T) []operation {
 
 // --- Stub detection ------------------------------------------------------
 
-// isStub reports whether the implementation wired by the server
-// (public.NewServer, which app.Run builds with its deposit service only)
-// answers op exactly like stubs.Unimplemented, for a zero request and a
-// context without tenant. A panic or any difference means implemented.
+// isStub reports whether the implementations wired by the server
+// (public.NewServer on tenant hosts and admin.NewServer on the admin host,
+// built without their services) both answer op exactly like
+// stubs.Unimplemented, for a zero request and a context without tenant. A
+// panic or any difference means implemented.
 func isStub(t *testing.T, op operation) bool {
 	t.Helper()
-	got, gotOK := call(reflect.ValueOf(public.NewServer()), op.method())
 	want, wantOK := call(reflect.ValueOf(stubs.Unimplemented{}), op.method())
 	if !wantOK {
 		t.Fatalf("stubs.Unimplemented.%s panicked", op.method())
 	}
-	if !gotOK {
-		return false
+	for _, impl := range []any{public.NewServer(), admin.NewServer()} {
+		got, gotOK := call(reflect.ValueOf(impl), op.method())
+		if !gotOK {
+			return false
+		}
+		if errors.Is(got.err, stubs.ErrNotImplemented) != errors.Is(want.err, stubs.ErrNotImplemented) {
+			return false
+		}
+		if !reflect.DeepEqual(got.resp, want.resp) {
+			return false
+		}
 	}
-	if errors.Is(got.err, stubs.ErrNotImplemented) != errors.Is(want.err, stubs.ErrNotImplemented) {
-		return false
-	}
-	return reflect.DeepEqual(got.resp, want.resp)
+	return true
 }
 
 type callResult struct {
@@ -391,6 +426,8 @@ type harness struct {
 	// engine is the database of the server, which the download cases
 	// open to make a transfer available as the antivirus would.
 	engine storetest.Engine
+	// admins are the administrator accounts of the admin cases.
+	admins adminFixtures
 }
 
 // masterKeyLabel names the master key of the server
@@ -440,6 +477,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 	}
 	h.fixtures = seedDeposit(t, db, h.tenantA.ID)
 	h.transfers = seedTransfers(t, db, h.tenantA.ID, h.tenantB.ID)
+	h.admins = seedAdmins(t, db, h.tenantA.ID)
 	_ = db.Close()
 
 	root := t.TempDir()
@@ -454,6 +492,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 		config.EnvListenAddr:     "127.0.0.1:8080", // unused: WithListener
 		config.EnvTrustedProxies: "127.0.0.1",
 		config.EnvClamAVAddr:     fakeClamd(t),
+		config.EnvAdminHosts:     hostAdmin,
 	}
 	cfg, err := config.Load(func(k string) string { return env[k] })
 	if err != nil {

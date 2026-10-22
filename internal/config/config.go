@@ -58,6 +58,10 @@ const (
 	maxSMTPTimeout              = 5 * time.Minute
 	minClamAVTimeout            = 10 * time.Second
 	maxClamAVTimeout            = 2 * time.Hour
+	minAdminSessionIdleTimeout  = 5 * time.Minute
+	maxAdminSessionIdleTimeout  = 4 * time.Hour
+	minAdminSessionMaxAge       = time.Hour
+	maxAdminSessionMaxAge       = 7 * 24 * time.Hour
 )
 
 // Antivirus scan size bounds: 4 GiB - 1 is the largest StreamMaxLength clamd
@@ -149,9 +153,16 @@ type Config struct {
 	TrustedProxies []netip.Prefix
 	// ListenAddr is the host:port the HTTP server listens on.
 	ListenAddr string
-	// AdminHosts restricts the hosts serving the administration (lowercase
-	// FQDNs). Empty means every tenant host.
+	// AdminHosts lists the dedicated hosts serving the administration
+	// (lowercase FQDNs, at least one). The administration is never served on
+	// tenant FQDNs.
 	AdminHosts []string
+	// AdminSessionIdleTimeout ends an admin session after this inactivity;
+	// every authenticated request resets it.
+	AdminSessionIdleTimeout time.Duration
+	// AdminSessionMaxAge is the longest life of an admin session after
+	// sign-in, whatever its activity (at least AdminSessionIdleTimeout).
+	AdminSessionMaxAge time.Duration
 
 	// LogLevel is the minimum level of the application log.
 	LogLevel slog.Level
@@ -161,6 +172,8 @@ type Config struct {
 	// visitors.
 	APIDocsPublic bool
 	// SetupToken, when set, must be provided to create the first super admin.
+	// When it is unset, the server generates a random token at each start
+	// while no admin exists and prints it in its logs.
 	SetupToken Secret
 
 	// UploadTTL is the time after which an unfinished upload is discarded.
@@ -247,6 +260,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadDatabase(c)
 	l.loadPaths(c)
 	l.loadNetwork(c)
+	l.loadAdmin(c)
 	l.loadOperations(c)
 	l.loadDurations(c)
 	l.loadMail(c)
@@ -493,9 +507,6 @@ func (l *loader) loadNetwork(c *Config) {
 	if err := validateHostPort(c.ListenAddr, false); err != nil {
 		l.fail(EnvListenAddr, "%v", err)
 	}
-	if c.AdminHosts, err = parseHosts(l.get(EnvAdminHosts)); err != nil {
-		l.fail(EnvAdminHosts, "%v", err)
-	}
 	raw := l.getOr(EnvClamAVAddr, DefaultClamAVAddr)
 	if path, ok := strings.CutPrefix(raw, unixPrefix); ok {
 		clean, err := checkAbsPath(path)
@@ -511,6 +522,30 @@ func (l *loader) loadNetwork(c *Config) {
 		return
 	}
 	c.ClamAV = ClamAVAddr{Network: "tcp", Address: raw}
+}
+
+// loadAdmin reads the administration hosts and the admin session lifetimes.
+// At least one dedicated admin host is required: the administration is never
+// served on tenant FQDNs.
+func (l *loader) loadAdmin(c *Config) {
+	hosts, err := parseHosts(l.get(EnvAdminHosts))
+	switch {
+	case err != nil:
+		l.fail(EnvAdminHosts, "%v", err)
+	case len(hosts) == 0:
+		l.fail(EnvAdminHosts, "is required: set the dedicated host name(s) of the administration, "+
+			"e.g. admin.transfer.example.com (never a tenant FQDN)")
+	default:
+		c.AdminHosts = hosts
+	}
+	c.AdminSessionIdleTimeout = l.duration(EnvAdminSessionIdleTimeout, DefaultAdminSessionIdleTimeout,
+		minAdminSessionIdleTimeout, maxAdminSessionIdleTimeout)
+	c.AdminSessionMaxAge = l.duration(EnvAdminSessionMaxAge, DefaultAdminSessionMaxAge,
+		minAdminSessionMaxAge, maxAdminSessionMaxAge)
+	if c.AdminSessionMaxAge != 0 && c.AdminSessionIdleTimeout != 0 && c.AdminSessionMaxAge < c.AdminSessionIdleTimeout {
+		l.fail(EnvAdminSessionMaxAge, "must not be shorter than %s (%s)", EnvAdminSessionIdleTimeout,
+			c.AdminSessionIdleTimeout)
+	}
 }
 
 // logLevels maps TT_LOG_LEVEL values to slog levels.

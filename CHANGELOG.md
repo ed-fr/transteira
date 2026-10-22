@@ -136,6 +136,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
   listing for the reconciliation; sweeps paged by cursor; a transfer stuck in analysis expires
   30 days after its finalization (never on its provisional expiry); `TT_BACKUP_DIR` must not
   overlap the data, log or SQLite directories.
+- Admin accounts and authentication (step 10): dedicated admin host (`TT_ADMIN_HOSTS`, now
+  required), first-run setup protected by a setup token (configured, or generated and logged once
+  while no admin exists), argon2id passwords, TOTP (RFC 6238, replay refused, secrets sealed by the
+  master key and re-wrapped by its rotation), 8 single-use recovery codes, server-side sessions
+  (`__Host-tt_admin`, idle `TT_ADMIN_SESSION_IDLE_TIMEOUT`, absolute `TT_ADMIN_SESSION_MAX_AGE`,
+  rotated at each step, CSRF token), login lockouts stored in the database, delegated admins with
+  activation links shown once to the super admin (never mailed), last super admin protection,
+  `transteira admin list`, `transteira admin reset-totp` and `transteira admin reset-password`.
+- **Upgrade note**: `TT_ADMIN_HOSTS` is now required; set it to a dedicated admin host name that is
+  not a tenant FQDN before starting this version.
+- Audit log foundation (`audit_events`, `internal/audit`), purged after 12 months; migration
+  `0008_admin`; `docs/operations/admin.md`.
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
   now starts when it becomes available (`expiresAt` is set then); a file that times out, drops

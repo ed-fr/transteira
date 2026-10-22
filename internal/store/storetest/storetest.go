@@ -46,6 +46,11 @@ const (
 // connectTimeout bounds the PostgreSQL reachability check.
 const connectTimeout = 5 * time.Second
 
+// dropTimeout bounds the removal of a test schema. DROP SCHEMA ... CASCADE
+// takes catalog locks on every table, and many test packages share the
+// server, so it can wait well beyond the reachability check under load.
+const dropTimeout = time.Minute
+
 // Engine is a database a test can open with store.Open.
 type Engine struct {
 	// Name is the engine name used for sub-test names ("sqlite",
@@ -65,7 +70,10 @@ type Engine struct {
 
 // Config returns an installation configuration selecting the engine.
 func (e Engine) Config() *config.Config {
-	return &config.Config{DBDriver: e.Driver, DBDSN: config.NewSecret(e.DSN), DBMigrateDSN: config.NewSecret(e.MigrateDSN)}
+	return &config.Config{
+		DBDriver: e.Driver, DBDSN: config.NewSecret(e.DSN), DBMigrateDSN: config.NewSecret(e.MigrateDSN),
+		AdminHosts: []string{"admin.localhost"},
+	}
 }
 
 // SQLite returns a SQLite engine on a new file in a temporary directory
@@ -113,7 +121,7 @@ func Postgres(t testing.TB) (Engine, bool) {
 		t.Fatalf("storetest: creating schema: %v", err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), dropTimeout)
 		defer cancel()
 		if _, err := admin.ExecContext(ctx, `DROP SCHEMA `+schema+` CASCADE`); err != nil {
 			t.Errorf("storetest: dropping schema %s: %v", schema, err)

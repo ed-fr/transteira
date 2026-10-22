@@ -1,7 +1,8 @@
 // Package app wires the TransTeira server together and runs it: logging,
 // master keys, database, migrations, master key check, tenant resolution,
 // security log, health checks, mail queue, depositor identification,
-// transfers and tus uploads, and the HTTP server, with a graceful shutdown.
+// transfers and tus uploads, administrator authentication, and the HTTP
+// server, with a graceful shutdown.
 package app
 
 import (
@@ -20,7 +21,9 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/api"
+	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/antivirus"
+	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/public"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
@@ -28,6 +31,7 @@ import (
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
@@ -89,6 +93,11 @@ const (
 	// dirMode is the permission of the data and log directories created at
 	// start-up when missing.
 	dirMode = 0o750
+	// SetupTokenPrefix starts the setup token generated while no
+	// administrator exists and TT_SETUP_TOKEN is not set.
+	SetupTokenPrefix = "stp"
+	// setupTokenBytes is the entropy of a generated setup token (192 bits).
+	setupTokenBytes = 24
 )
 
 // Option customizes Run.
@@ -155,8 +164,11 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // SQLite; with PostgreSQL only when cfg.DBMigrateDSN is set, otherwise they
 // are expected to be applied by "transteira migrate"), drop of the owner
 // credentials and role verification, master key check (masterkey.Check),
-// tenant resolver, security log, mail queue and depositor identification
-// service, health checks, HTTP server. At shutdown the mail queue is drained
+// refusal of an admin host that is also a tenant FQDN, tenant resolver,
+// security log, mail queue and depositor identification service,
+// administrator authentication (with the setup token generated and logged
+// while no administrator exists, see newAdminService), health checks, HTTP
+// server. At shutdown the mail queue is drained
 // (at most MailDrainTimeout) after the HTTP server has stopped and before
 // the database is closed.
 func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
@@ -201,6 +213,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	defer func() { err = errors.Join(err, closeWith(db.Close, "database")) }()
 
 	if err := checkKeys(ctx, db, keys, logger); err != nil {
+		return err
+	}
+	if err := checkAdminHosts(ctx, db.Tenants(), cfg.AdminHosts); err != nil {
 		return err
 	}
 
@@ -251,7 +266,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
 	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger})
 	// One hasher bounds the argon2id computations of the transfer passwords,
-	// at creation (transfer) and at unlock (download).
+	// at creation (transfer) and at unlock (download), and of the admin
+	// passwords (login, setup, activation, change).
 	passwords := crypto.NewPasswordHasher(transfer.DefaultHashConcurrency)
 	worker := scan.New(scan.Deps{
 		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
@@ -267,6 +283,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// the files before the queue drains.
 	defer closeBackground(ctx, logger, worker, downloads, sweeper)
 	transfers := newTransferService(cfg, db, vault, uploads, secLog, passwords, worker.Enqueue, logger)
+	admins, err := newAdminService(ctx, cfg, db, adminDeps{
+		keys: keys, vault: vault, hasher: passwords, seclog: secLog,
+	}, logger)
+	if err != nil {
+		return err
+	}
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)
 	}
@@ -288,6 +310,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads})),
 		Sessions:            deposits,
+		AdminHosts:          cfg.AdminHosts,
+		AdminAPI:            admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants())),
+		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
 		Spec:                api.OpenAPISpec,
@@ -330,6 +355,87 @@ func checkKeys(ctx context.Context, db *store.DB, keys *masterkey.Keyring, logge
 		logger.InfoContext(ctx, "master key check passed", attrs...)
 	}
 	return nil
+}
+
+// tenantLookup finds the tenant served by a host. *store.Tenants
+// implements it.
+type tenantLookup interface {
+	TenantByFQDN(ctx context.Context, fqdn string) (*tenant.Tenant, error)
+}
+
+// checkAdminHosts refuses an admin host that is also the FQDN of a tenant:
+// the admin router would shadow the tenant, and the admin session cookie
+// would share its origin. The tenant creation refuses an admin host too.
+func checkAdminHosts(ctx context.Context, tenants tenantLookup, hosts []string) error {
+	for _, h := range hosts {
+		fqdn, err := tenant.NormalizeHost(h)
+		if err != nil {
+			return fmt.Errorf("app: %s: %w", config.EnvAdminHosts, err)
+		}
+		t, err := tenants.TenantByFQDN(ctx, fqdn)
+		switch {
+		case errors.Is(err, tenant.ErrUnknownTenant):
+			continue
+		case err != nil:
+			return fmt.Errorf("app: check %s: %w", config.EnvAdminHosts, err)
+		}
+		return fmt.Errorf("app: %s: %s is also the FQDN of tenant %s: an admin host must not serve a tenant",
+			config.EnvAdminHosts, fqdn, t.ID)
+	}
+	return nil
+}
+
+// adminDeps are the dependencies of the administrator authentication
+// service.
+type adminDeps struct {
+	keys   adminauth.Keys
+	vault  adminauth.Vault
+	hasher adminauth.PasswordHasher
+	seclog adminauth.SecurityLog
+}
+
+// newAdminService builds the administrator authentication service, with
+// the session lifetimes of cfg and the activation links pointing at the
+// first admin host.
+//
+// The first-run setup always needs a setup token: TT_SETUP_TOKEN when set;
+// otherwise, while no administrator exists, a random token generated at
+// each start and written ONCE to the application log, at WARN level, with
+// the setup address. Once an administrator exists, no token is generated
+// and nothing is logged (the setup is refused anyway).
+func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d adminDeps, logger *slog.Logger) (*adminauth.Service, error) {
+	if len(cfg.AdminHosts) == 0 {
+		return nil, fmt.Errorf("app: %s is required", config.EnvAdminHosts)
+	}
+	baseURL := "https://" + cfg.AdminHosts[0]
+	setupToken := cfg.SetupToken.Reveal()
+	if setupToken == "" {
+		n, err := db.Admins().CountAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("app: count admins: %w", err)
+		}
+		if n == 0 {
+			if setupToken, err = id.NewToken(SetupTokenPrefix, setupTokenBytes); err != nil {
+				return nil, fmt.Errorf("app: generate the setup token: %w", err)
+			}
+			// SECURITY (decision P11): this is the only place where a secret
+			// is written to a log. The token only allows the creation of the
+			// first super admin, only while no administrator exists, and only
+			// until the next restart, which generates a new one; the operator
+			// reads it from the container logs, which are as trusted as the
+			// TT_SETUP_TOKEN it replaces. Set TT_SETUP_TOKEN to avoid it.
+			logger.WarnContext(ctx, "No admin exists yet. Setup token: "+setupToken+
+				" (valid until restart). Open "+baseURL+"/admin/setup")
+		}
+	}
+	svc, err := adminauth.New(db, d.keys, d.vault, d.hasher, d.seclog, adminauth.Options{
+		IdleTimeout: cfg.AdminSessionIdleTimeout, MaxAge: cfg.AdminSessionMaxAge,
+		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app: %w", err)
+	}
+	return svc, nil
 }
 
 // migrate applies the start-up migrations, then drops the owner
@@ -515,8 +621,9 @@ func (a downloadAdapter) PrepareArchive(ctx context.Context, t *tenant.Tenant, r
 // given.
 func lifecycleOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) lifecycle.Options {
 	opts := lifecycle.Options{
-		UploadTTL: min(cfg.UploadTTL, cfg.UploadMaxAge),
-		BackupDir: cfg.BackupDir, BackupTime: cfg.BackupTime, BackupKeep: cfg.BackupKeep,
+		UploadTTL:               min(cfg.UploadTTL, cfg.UploadMaxAge),
+		AdminSessionIdleTimeout: cfg.AdminSessionIdleTimeout,
+		BackupDir:               cfg.BackupDir, BackupTime: cfg.BackupTime, BackupKeep: cfg.BackupKeep,
 		Logger: logger,
 	}
 	if o.lifecycleOpts != nil {

@@ -24,19 +24,27 @@ TransTeira uses **envelope encryption**:
 
 - each file is encrypted with its own random key (a *data encryption key*,
   DEK), in AES-256-GCM, chunk by chunk;
-- stored secrets (SMTP passwords, and later the TOTP secrets of admins) are
-  encrypted the same way;
-- the DEKs and the secrets are **wrapped** (encrypted) by keys derived from
+- the stored secrets of the entities (SMTP passwords) are encrypted the same
+  way;
+- the DEKs and these secrets are **wrapped** (encrypted) by keys derived from
   the master key, and stored in the database (table `wrapped_keys`, one row
-  per key, tagged with the ID of the master key that wraps it).
+  per key, tagged with the ID of the master key that wraps it);
+- the **TOTP secrets of the administrators**, which belong to no entity, are
+  wrapped the same way in a second table, `system_secrets` (one row per
+  secret, also tagged with the ID of its master key).
 
 Consequences:
 
 - The master key never touches file contents directly. A **rotation only
-  re-wraps the rows of `wrapped_keys`**: files are never read or rewritten,
-  whatever their size.
+  re-wraps the rows of `wrapped_keys` and `system_secrets`**: files are never
+  read or rewritten, whatever their size, and the administrators keep their
+  TOTP enrollment. The rotation completes only once both tables are
+  entirely under the new key.
 - Each wrapped key is bound to its tenant and its row: a wrapped key copied
-  to another row or another entity cannot be decrypted.
+  to another row or another entity cannot be decrypted. An administrator
+  TOTP secret is bound to its row and to a reserved `system` binding that no
+  entity ID can take: it cannot be moved to another row nor read as an
+  entity key.
 - Without the master key, the database and the data volume are useless to an
   attacker, and to you.
 

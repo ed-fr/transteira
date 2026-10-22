@@ -15,24 +15,32 @@ import (
 // FQDN of the tenant.
 const DepositCookie = "__Host-tt_deposit"
 
+// AdminCookie is the name of the admin session cookie (OpenAPI security
+// scheme adminSession). It is only set on the admin host: its __Host-
+// prefix binds it to that exact host, so a browser never sends it to a
+// tenant FQDN.
+const AdminCookie = "__Host-tt_admin"
+
 // HeaderCSRFToken is the request header carrying the CSRF token (OpenAPI
 // security scheme csrfToken).
 const HeaderCSRFToken = "X-CSRF-Token" //nolint:gosec // G101 false positive: a header name, not a credential.
 
-// SessionResolver resolves the deposit session cookie and checks CSRF
-// tokens. The httpserver package adapts internal/deposit.Service to it.
+// SessionResolver resolves a session cookie and checks CSRF tokens. The
+// httpserver package adapts internal/deposit.Service (deposit sessions) and
+// internal/adminauth.Service (admin sessions) to it.
 type SessionResolver interface {
-	// ResolveSession returns the session whose cookie token is rawToken, in
-	// the tenant carried by ctx. ok is false when there is no valid session
-	// (malformed, unknown, ended, expired or of another tenant); err reports
-	// an internal failure.
+	// ResolveSession returns the session whose cookie token is rawToken (for
+	// a deposit session, in the tenant carried by ctx). ok is false when
+	// there is no valid session (malformed, unknown, ended, expired or of
+	// another tenant); err reports an internal failure.
 	ResolveSession(ctx context.Context, rawToken string) (session any, ok bool, err error)
 	// CheckCSRF reports, in constant time, whether header is the CSRF token
 	// of the session token rawToken.
 	CheckCSRF(rawToken, header string) bool
 }
 
-// sessionValue is what [DepositSession] stores in the request context.
+// sessionValue is what [DepositSession] and [AdminSession] store in the
+// request context.
 type sessionValue struct {
 	session any
 	token   string
@@ -40,6 +48,22 @@ type sessionValue struct {
 
 // sessionKey is the context key of the deposit session.
 type sessionKey struct{}
+
+// adminSessionKey is the context key of the admin session.
+type adminSessionKey struct{}
+
+// cookieSpec describes one cookie-authenticated session scheme.
+type cookieSpec struct {
+	// cookie is the name of the session cookie.
+	cookie string
+	// key is the context key the session is stored under.
+	key any
+	// what names the scheme in the logs.
+	what string
+	// clearInvalid expires a cookie that no longer resolves to a session,
+	// in the 401 answer.
+	clearInvalid bool
+}
 
 // DepositSession authenticates the requests for which required returns true
 // with the deposit session cookie: the cookie is resolved through resolver,
@@ -51,6 +75,27 @@ type sessionKey struct{}
 // It runs as a per-operation middleware of the API router, after tenant
 // resolution and before the body is read.
 func DepositSession(resolver SessionResolver, required func(*http.Request) bool, logger *slog.Logger) func(http.Handler) http.Handler {
+	return cookieSession(cookieSpec{cookie: DepositCookie, key: sessionKey{}, what: "deposit"}, resolver, required, logger)
+}
+
+// AdminSession authenticates the requests for which required returns true
+// with the admin session cookie ([AdminCookie]), like [DepositSession]: the
+// session and its raw token are stored in the request context (see
+// [AdminSessionFrom] and [AdminSessionToken]). A missing cookie gets a 401
+// unauthenticated Problem; a cookie that resolves to no session also gets
+// it, with a Set-Cookie header expiring the cookie. A resolver failure gets
+// a 500 internal-error Problem, logged on logger (nil discards).
+//
+// The resolver decides which sessions are valid; the login state of the
+// session (authenticated, or an intermediate step) is enforced by the
+// operations.
+func AdminSession(resolver SessionResolver, required func(*http.Request) bool, logger *slog.Logger) func(http.Handler) http.Handler {
+	spec := cookieSpec{cookie: AdminCookie, key: adminSessionKey{}, what: "admin", clearInvalid: true}
+	return cookieSession(spec, resolver, required, logger)
+}
+
+// cookieSession implements [DepositSession] and [AdminSession].
+func cookieSession(spec cookieSpec, resolver SessionResolver, required func(*http.Request) bool, logger *slog.Logger) func(http.Handler) http.Handler {
 	logger = orDiscard(logger)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,41 +103,78 @@ func DepositSession(resolver SessionResolver, required func(*http.Request) bool,
 				next.ServeHTTP(w, r)
 				return
 			}
-			c, err := r.Cookie(DepositCookie)
+			c, err := r.Cookie(spec.cookie)
 			if err != nil || c.Value == "" {
 				writeProblem(w, r, problem.CodeUnauthenticated)
 				return
 			}
 			session, ok, err := resolver.ResolveSession(r.Context(), c.Value)
 			if err != nil {
-				logger.ErrorContext(r.Context(), "deposit session lookup failed",
+				logger.ErrorContext(r.Context(), spec.what+" session lookup failed",
 					slog.String("request_id", requestIDOf(w, r)),
 					slog.String("error", err.Error()))
 				writeProblem(w, r, problem.CodeInternalError)
 				return
 			}
 			if !ok {
+				if spec.clearInvalid {
+					w.Header().Add("Set-Cookie", ExpiredCookie(spec.cookie))
+				}
 				writeProblem(w, r, problem.CodeUnauthenticated)
 				return
 			}
-			ctx := context.WithValue(r.Context(), sessionKey{}, sessionValue{session: session, token: c.Value})
+			ctx := context.WithValue(r.Context(), spec.key, sessionValue{session: session, token: c.Value})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
+// ExpiredCookie returns the Set-Cookie value deleting the technical cookie
+// name: an empty value, Max-Age=0, and the same Path=/, Secure, HttpOnly
+// and SameSite=Strict attributes as when it was set, as the __Host- prefix
+// requires.
+func ExpiredCookie(name string) string {
+	c := http.Cookie{
+		Name: name, Value: "", Path: "/", MaxAge: -1,
+		Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode,
+	}
+	return c.String()
+}
+
 // SessionFrom returns the deposit session stored by [DepositSession], when
 // there is one of type S.
 func SessionFrom[S any](ctx context.Context) (S, bool) {
-	v, _ := ctx.Value(sessionKey{}).(sessionValue)
-	s, ok := v.session.(S)
-	return s, ok
+	return sessionFrom[S](ctx, sessionKey{})
 }
 
 // SessionToken returns the raw cookie token of the deposit session stored
 // by [DepositSession], or "" and false when there is none.
 func SessionToken(ctx context.Context) (string, bool) {
-	v, ok := ctx.Value(sessionKey{}).(sessionValue)
+	return sessionToken(ctx, sessionKey{})
+}
+
+// AdminSessionFrom returns the admin session stored by [AdminSession], when
+// there is one of type S.
+func AdminSessionFrom[S any](ctx context.Context) (S, bool) {
+	return sessionFrom[S](ctx, adminSessionKey{})
+}
+
+// AdminSessionToken returns the raw cookie token of the admin session
+// stored by [AdminSession], or "" and false when there is none.
+func AdminSessionToken(ctx context.Context) (string, bool) {
+	return sessionToken(ctx, adminSessionKey{})
+}
+
+// sessionFrom returns the session of type S stored under key.
+func sessionFrom[S any](ctx context.Context, key any) (S, bool) {
+	v, _ := ctx.Value(key).(sessionValue)
+	s, ok := v.session.(S)
+	return s, ok
+}
+
+// sessionToken returns the raw token of the session stored under key.
+func sessionToken(ctx context.Context, key any) (string, bool) {
+	v, ok := ctx.Value(key).(sessionValue)
 	return v.token, ok && v.token != ""
 }
 
@@ -114,13 +196,26 @@ func SessionToken(ctx context.Context) (string, bool) {
 // insecure development option, which does not exist. Clients that send no
 // Origin (scripts, tests) are checked on the token alone.
 func CSRF(checker SessionResolver, required func(*http.Request) bool) func(http.Handler) http.Handler {
+	return csrf(SessionToken, checker, required)
+}
+
+// AdminCSRF is [CSRF] for the admin session: it must run inside
+// [AdminSession] and checks the X-CSRF-Token header against the token of
+// the admin session in the context.
+func AdminCSRF(checker SessionResolver, required func(*http.Request) bool) func(http.Handler) http.Handler {
+	return csrf(AdminSessionToken, checker, required)
+}
+
+// csrf implements [CSRF] and [AdminCSRF]; tokenOf returns the session
+// token of the request.
+func csrf(tokenOf func(context.Context) (string, bool), checker SessionResolver, required func(*http.Request) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isSafeMethod(r.Method) || !required(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			token, ok := SessionToken(r.Context())
+			token, ok := tokenOf(r.Context())
 			if !ok || !sameSite(r) || !sameOrigin(r) || !checker.CheckCSRF(token, r.Header.Get(HeaderCSRFToken)) {
 				writeProblem(w, r, problem.CodeCSRFInvalid)
 				return
@@ -173,8 +268,9 @@ func sameOrigin(r *http.Request) bool {
 		return false
 	}
 	host, ok := strings.CutPrefix(v[0], "https://")
-	// r.Host passed tenant resolution, so it holds no path, userinfo or
-	// query: an Origin equal to it cannot carry any either.
+	// r.Host passed tenant resolution or matched an admin host, so it holds
+	// no path, userinfo or query: an Origin equal to it cannot carry any
+	// either.
 	return ok && host != "" && strings.EqualFold(stripHTTPSPort(host), stripHTTPSPort(r.Host))
 }
 

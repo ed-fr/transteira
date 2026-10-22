@@ -29,7 +29,9 @@ func inFlight(t *testing.T, s *server, body string) (net.Conn, *bufio.Reader) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	_ = conn.SetDeadline(time.Now().Add(waitTimeout))
-	head := "POST " + exampleStubPOST + " HTTP/1.1\r\nHost: " + hostA +
+	// The first-run setup reads its body and refuses an empty username
+	// before touching the database, whose requests the shutdown cancels.
+	head := "POST /api/v1/admin/setup HTTP/1.1\r\nHost: " + adminHost +
 		"\r\nContent-Type: application/json\r\nExpect: 100-continue\r\nContent-Length: " +
 		strconv.Itoa(len(body)) + "\r\n\r\n"
 	if _, err := io.WriteString(conn, head); err != nil {
@@ -87,8 +89,8 @@ func TestGracefulShutdown(t *testing.T) {
 			t.Fatalf("in-flight request aborted by shutdown: %v", err)
 		}
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound { // the stub
-			t.Errorf("in-flight request: status %d, want 404", resp.StatusCode)
+		if resp.StatusCode != http.StatusBadRequest { // the empty username, handled
+			t.Errorf("in-flight request: status %d, want 400", resp.StatusCode)
 		}
 
 		if err := s.stop(); err != nil {

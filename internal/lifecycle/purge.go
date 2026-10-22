@@ -43,24 +43,57 @@ var rowPurges = []rowPurge{
 	}},
 }
 
+// systemPurge is one global purge of TaskPurgeRows, run in the system
+// scope after the purges of the tenants: the rows it deletes belong to no
+// tenant (administrator sessions, activation links, login failures) or to
+// any tenant (the audit log).
+type systemPurge struct {
+	// name names the purge in the logs.
+	name string
+	run  func(ctx context.Context, db *store.DB, now time.Time) (int64, error)
+}
+
+// systemPurges returns the global purges of TaskPurgeRows, in order, with
+// the retention settings of s.
+func (s *Sweeper) systemPurges() []systemPurge {
+	return []systemPurge{
+		{"admin_sessions", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
+			return db.AdminSessions().Purge(ctx, now, s.adminIdleTimeout)
+		}},
+		{"admin_activations", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
+			return db.AdminActivations().Purge(ctx, now)
+		}},
+		{"admin_login_failures", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
+			return db.AdminLoginFailures().Purge(ctx, now, AdminLoginFailureWindow)
+		}},
+		{"audit_events", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
+			return db.AuditEvents().Purge(ctx, now.AddDate(0, -s.auditRetentionMonths, 0))
+		}},
+	}
+}
+
 // purgeRows is TaskPurgeRows: for each tenant, in its own scope, it deletes
-// the transfers ended more than EndedRetention ago, then runs rowPurges.
-// A failure is logged and the next purge and tenant go on; the failures
-// are returned joined. The database is scrubbed once at the end when
-// anything was deleted.
+// the transfers ended more than EndedRetention ago, then runs rowPurges;
+// then it runs the global systemPurges. A failure is logged and the next
+// purge and tenant go on; the failures are returned joined (a failed
+// listing of the tenants only skips the tenant phase). The database is
+// scrubbed once at the end when anything was deleted.
 func (s *Sweeper) purgeRows(ctx context.Context) error {
 	now := s.now()
+	var errs []error
 	tids, err := s.repo.tenantIDs(ctx)
 	if err != nil {
-		return fmt.Errorf("lifecycle: list the tenants: %w", err)
+		errs = append(errs, fmt.Errorf("lifecycle: list the tenants: %w", err))
 	}
-	counts := make(map[string]int64, len(rowPurges)+1)
-	var errs []error
+	counts := make(map[string]int64, len(rowPurges)+len(s.sysPurges)+1)
 	record := func(tid tenant.ID, name string, n int64, err error) {
 		counts[name] += n
 		if err != nil && ctx.Err() == nil {
-			s.logger.WarnContext(ctx, "lifecycle: purge failed, left for the next run",
-				slog.String("tenant", string(tid)), slog.String("kind", name), slog.Any("error", err))
+			attrs := []any{slog.String("kind", name), slog.Any("error", err)}
+			if tid != "" {
+				attrs = append([]any{slog.String("tenant", string(tid))}, attrs...)
+			}
+			s.logger.WarnContext(ctx, "lifecycle: purge failed, left for the next run", attrs...)
 			errs = append(errs, err)
 		}
 	}
@@ -75,9 +108,19 @@ func (s *Sweeper) purgeRows(ctx context.Context) error {
 			record(tid, p.name, n, err)
 		}
 	}
+	for _, p := range s.sysPurges {
+		if ctx.Err() != nil {
+			break
+		}
+		n, err := s.repo.purgeSystem(ctx, p, now)
+		record("", p.name, n, err)
+	}
 	var total int64
 	attrs := []any{slog.Int64(endedTransfers, counts[endedTransfers])}
 	for _, p := range rowPurges {
+		attrs = append(attrs, slog.Int64(p.name, counts[p.name]))
+	}
+	for _, p := range s.sysPurges {
 		attrs = append(attrs, slog.Int64(p.name, counts[p.name]))
 	}
 	for _, n := range counts {

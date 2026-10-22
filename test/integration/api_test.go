@@ -16,12 +16,15 @@ const (
 	exampleTransferID = "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS"
 	exampleUploadID   = "upl_7Hq2Wm9Zx4Lp1Vb8Rt3Yk6Nd"
 	exampleDownload   = "/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf"
-	// exampleStubPOST is an operation still answered by its stub that
-	// reads a JSON body (createTenant: admin authentication does not exist
-	// yet).
+	// exampleStubPOST is an administration operation (createTenant): under
+	// a tenant host it answers 404 before any admin logic.
 	exampleStubPOST   = "/api/v1/admin/tenants"
 	exampleTenantPath = "/api/v1/admin/tenants/ten_01JAB00000000000000ENT1TYA"
-	oneMiB            = 1 << 20
+	// exampleOpenPOST is an operation of the admin host served without a
+	// session that reads a JSON body (adminLogin): an empty login answers
+	// 401 invalid-credentials once the body is decoded.
+	exampleOpenPOST = "/api/v1/admin/auth/login"
+	oneMiB          = 1 << 20
 )
 
 // versionBody is the VersionInfo schema.
@@ -153,8 +156,9 @@ func TestUnimplementedAndUnknownRoutes(t *testing.T) {
 			allow  string
 		}{
 			{"stub GET", request{path: exampleDownload}, 404, "not-found", ""},
-			{"stub POST with JSON body", request{method: http.MethodPost, path: exampleStubPOST, body: []byte(`{}`)}, 404, "not-found", ""},
-			{"stub admin route", request{path: exampleTenantPath}, 404, "not-found", ""},
+			{"admin POST on a tenant host", request{method: http.MethodPost, path: exampleStubPOST, body: []byte(`{}`)}, 404, "not-found", ""},
+			{"admin route on a tenant host", request{path: exampleTenantPath}, 404, "not-found", ""},
+			{"admin stub on the admin host", request{host: adminHost, path: exampleTenantPath}, 401, "unauthenticated", ""},
 			{"unknown API route", request{path: "/api/v1/nope"}, 404, "not-found", ""},
 			{"unknown API version", request{path: "/api/v2/version"}, 404, "not-found", ""},
 			{"unknown root route", request{path: "/admin"}, 404, "not-found", ""},
@@ -164,10 +168,13 @@ func TestUnimplementedAndUnknownRoutes(t *testing.T) {
 			// Path patterns are not validated by the router: a malformed
 			// identifier simply matches nothing.
 			{"malformed identifier", request{path: "/api/v1/downloads/not-a-token"}, 404, "not-found", ""},
-			{"invalid header parameter", request{path: "/api/v1/admin/tenants?limit=abc"}, 400, "validation-failed", ""},
+			{"invalid query parameter", request{host: adminHost, path: "/api/v1/admin/tenants?limit=abc"}, 400, "validation-failed", ""},
+			{"tenant route on the admin host", request{host: adminHost, path: "/api/v1/tenant"}, 404, "not-found", ""},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				tc.req.host = hostA
+				if tc.req.host == "" {
+					tc.req.host = hostA
+				}
 				resp := s.do(t, tc.req)
 				expectProblem(t, resp, tc.status, tc.code)
 				expectSecurityHeaders(t, tc.name, resp.header)
@@ -230,10 +237,11 @@ func TestJSONBodyLimit(t *testing.T) {
 		})
 
 		t.Run("just under the limit reaches the handler", func(t *testing.T) {
-			// An unknown member: decoding succeeds and the stub answers.
+			// An unknown member: decoding succeeds and the empty login is
+			// refused by the handler.
 			body := append(append([]byte(`{"padding":"`), bytes.Repeat([]byte("a"), oneMiB-20)...), `"}`...)
-			resp := s.do(t, request{method: http.MethodPost, host: hostA, path: exampleStubPOST, body: body})
-			expectProblem(t, resp, http.StatusNotFound, "not-found") // still a stub
+			resp := s.do(t, request{method: http.MethodPost, host: adminHost, path: exampleOpenPOST, body: body})
+			expectProblem(t, resp, http.StatusUnauthorized, "invalid-credentials")
 		})
 
 		t.Run("tus PATCH is exempt", func(t *testing.T) {
@@ -250,25 +258,12 @@ func TestJSONBodyLimit(t *testing.T) {
 			}
 		})
 
-		t.Run("branding image upload has the image limit", func(t *testing.T) {
-			brandingHead := func(n int) string {
-				return "PUT " + exampleTenantPath + "/branding/logo HTTP/1.1\r\nHost: " + hostA +
-					"\r\nContent-Type: image/png\r\nContent-Length: " + fmt.Sprint(n) + "\r\n"
-			}
-			// Above the JSON limit but within the 10 MiB image limit: reaches
-			// the stub.
-			resp := s.raw(t, brandingHead(10*oneMiB), nil)
-			if resp.status == http.StatusRequestEntityTooLarge {
-				t.Fatalf("branding upload of 10 MiB refused by the JSON limit: %s", resp.body)
-			}
-			expectProblem(t, resp, http.StatusNotFound, "not-found")
-			// Above the image limit: refused upfront.
-			expectProblem(t, s.raw(t, brandingHead(10*oneMiB+1), nil), http.StatusRequestEntityTooLarge, "payload-too-large")
-		})
-
-		t.Run("PATCH on another route is not exempt", func(t *testing.T) {
-			head := "PATCH " + exampleTenantPath + " HTTP/1.1\r\nHost: " + hostA +
-				"\r\nContent-Type: application/merge-patch+json\r\nContent-Length: " + fmt.Sprint(2*oneMiB) + "\r\n"
+		// The image limit of the branding upload, an admin operation behind
+		// the admin session, is covered by the httpserver tests
+		// (TestBrandingBodyLimit) until the admin flows exist here.
+		t.Run("an admin host operation has the JSON limit", func(t *testing.T) {
+			head := "POST " + exampleOpenPOST + " HTTP/1.1\r\nHost: " + adminHost +
+				"\r\nContent-Type: application/json\r\nContent-Length: " + fmt.Sprint(2*oneMiB) + "\r\n"
 			expectProblem(t, s.raw(t, head, nil), http.StatusRequestEntityTooLarge, "payload-too-large")
 		})
 	})

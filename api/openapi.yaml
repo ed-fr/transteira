@@ -14,10 +14,24 @@ info:
     URLs. A request for an unknown host is rejected with `421 Misdirected Request`
     (problem code `unknown-tenant`) and recorded in the security log.
 
-    Administration endpoints are an exception: an admin may manage several tenants, so the
+    ## Admin host
+    Administration endpoints (`/admin/*`) are served **only on the dedicated admin host(s)**
+    listed in `TT_ADMIN_HOSTS` (see `.env.example`), for example `admin.transfer.example.com`,
+    never on a tenant FQDN: under a tenant host every `/admin/*` path answers `404 not-found`,
+    and under the admin host every tenant endpoint answers `404 not-found`. The admin host is
+    not a tenant: no tenant is resolved there, and an admin may manage several tenants, so the
     tenant is given explicitly in the path (`/admin/tenants/{tenantId}/...`) and checked
-    against the admin's assignments. The host used to reach the admin space is still
-    validated (see `TT_ADMIN_HOSTS` in `.env.example`).
+    against the admin's assignments. The admin host also serves `/healthz`, `/version` and
+    `/api/openapi.yaml`. The `421 unknown-tenant` answer only concerns hosts that are neither
+    a tenant FQDN nor an admin host. An admin host can never be the FQDN of a tenant: the
+    server refuses to start when one is.
+
+    The admin session cookie `__Host-tt_admin` is bound to the admin host by its `__Host-`
+    prefix, so it is never sent to a tenant FQDN. It is cleared by the server on logout and on
+    a `401 unauthenticated` answer to a request whose cookie no longer resolves to a session
+    (unknown, expired or revoked). A valid session whose login state does not open the
+    operation (TOTP or enrollment still awaited) also gets `401 unauthenticated`, but keeps
+    its cookie: the next login step remains possible.
 
     ## Authentication
     | Scheme | Used by | Transport |
@@ -93,7 +107,11 @@ info:
 
 servers:
   - url: /api/v1
-    description: Same origin as the tenant FQDN (for example https://transfer.entity-a.example.com/api/v1)
+    description: |
+      Same origin as the tenant FQDN (for example https://transfer.entity-a.example.com/api/v1)
+      for the tenant endpoints, and as the admin host (`TT_ADMIN_HOSTS`, for example
+      https://admin.transfer.example.com/api/v1) for the `/admin/*` endpoints, which answer 404
+      on any other host.
 
 tags:
   - name: Meta
@@ -182,7 +200,7 @@ paths:
       tags: [Meta]
       operationId: getVersion
       summary: Application version
-      description: "Returns the semantic version of the running instance and the API major version, so that clients can check compatibility."
+      description: "Returns the semantic version of the running instance and the API major version, so that clients can check compatibility. Served on every tenant FQDN and on the admin host; `421` only answers an unknown host."
       security: []
       responses:
         '200':
@@ -1305,16 +1323,19 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SetupStatus' }
               example: { setupRequired: true }
-        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin auth]
       operationId: createSuperAdmin
       summary: First-run setup - create the super admin
       description: |
-        Only available while no admin exists. If `TT_SETUP_TOKEN` is configured, the token must
-        be provided (protects the window between deployment and setup). Returns a pre-auth session
-        in `totp_enrollment_required` state: no other admin endpoint is usable until TOTP is confirmed.
+        Only available while no admin exists. The setup token is always required (it protects the
+        window between deployment and setup): `TT_SETUP_TOKEN` when configured, otherwise a random
+        token generated at each start while no admin exists and written once to the application
+        log. Returns a pre-auth session in `totp_enrollment_required` state: no other admin
+        endpoint is usable until TOTP is confirmed. Refused cross-site (`Origin` and
+        `Sec-Fetch-Site` checks, `403 csrf-invalid`) and rate limited per client IP.
       security: []
       requestBody:
         required: true
@@ -1341,15 +1362,23 @@ paths:
                 csrfToken: csrf_Ab12Cd34Ef56Gh78
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '403':
-          description: Invalid setup token.
+          description: Invalid setup token (`setup-token-invalid`), or a cross-site request (`csrf-invalid`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example:
-                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#setup-token-invalid
-                title: Invalid setup token
-                status: 403
-                code: setup-token-invalid
+              examples:
+                setupTokenInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#setup-token-invalid
+                    title: Invalid setup token
+                    status: 403
+                    code: setup-token-invalid
+                csrfInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
         '409':
           description: Setup already completed.
           content:
@@ -1390,6 +1419,7 @@ paths:
               example: { status: totp_required, csrfToken: csrf_Ab12Cd34Ef56Gh78 }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -1419,7 +1449,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LoginState' }
               example: { status: authenticated, csrfToken: csrf_Zx98Yw76Vu54Ts32 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -1435,7 +1467,10 @@ paths:
       responses:
         '204':
           description: Session revoked server side and cookie cleared.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/ClearAdminCookie' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me:
@@ -1443,7 +1478,7 @@ paths:
       tags: [Admin auth]
       operationId: getAdminMe
       summary: Current admin profile
-      description: "Returns the profile of the authenticated admin, their role, the tenants they may manage and the CSRF token for subsequent requests."
+      description: "Returns the profile of the authenticated admin, their role, the tenants they may manage (every tenant for a super admin) and the CSRF token for subsequent requests."
       security:
         - adminSession: []
       responses:
@@ -1486,6 +1521,8 @@ paths:
         '204': { description: Password changed. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me/totp:
@@ -1493,10 +1530,27 @@ paths:
       tags: [Admin auth]
       operationId: startTotpEnrollment
       summary: Start (or restart) TOTP enrollment
-      description: "Generates a new TOTP secret for the authenticated admin. The secret only becomes active once confirmed with a valid code."
+      description: |
+        Generates a new TOTP secret for the admin. The secret only becomes active once confirmed
+        with a valid code; the TOTP in use, if any, stays active until then.
+
+        From an authenticated session, enrolling (first enrollment or replacement of the TOTP in
+        use) requires the current password in the body (`400 validation-failed` when it is
+        missing, `401 invalid-credentials` when it is wrong), counted on the login limits like a
+        login (`429 rate-limited`), so that a stolen session alone cannot bind or swap the
+        second factor. Only the mandatory enrollment of a pre-auth session in state
+        `totp_enrollment_required`, whose password was just proven, needs no request body. The
+        new secret must be confirmed within 15 minutes. Confirming a re-enrollment revokes the
+        admin's other sessions.
       security:
         - adminSession: []
           csrfToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TotpReenrollment' }
+            example: { currentPassword: a-long-passphrase-of-at-least-12-characters }
       responses:
         '200':
           description: New TOTP secret to confirm.
@@ -1507,13 +1561,36 @@ paths:
                 secret: JBSWY3DPEHPK3PXP
                 otpauthUri: otpauth://totp/TransTeira:admin.entity-a?secret=JBSWY3DPEHPK3PXP&issuer=TransTeira
                 qrCodePng: iVBORw0KGgoAAAANSUhEUgAA...
-        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: |
+            `unauthenticated`: no session, or a session whose state does not open the enrollment.
+            `invalid-credentials`: wrong current password from an authenticated session
+            (written to the security log).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                unauthenticated:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#unauthenticated
+                    title: Authentication required
+                    status: 401
+                    code: unauthenticated
+                invalidCredentials:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invalid-credentials
+                    title: Invalid credentials
+                    status: 401
+                    code: invalid-credentials
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin auth]
       operationId: disableTotp
       summary: Disable TOTP (delegated admins only)
-      description: Refused for the super admin, for whom TOTP is mandatory. Requires the current password.
+      description: Refused for the super admin, for whom TOTP is mandatory, and when TOTP is required for the admin. Requires the current password. Revokes the admin's other sessions.
       security:
         - adminSession: []
           csrfToken: []
@@ -1525,8 +1602,10 @@ paths:
             example: { currentPassword: a-long-passphrase-of-at-least-12-characters }
       responses:
         '204': { description: TOTP disabled. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me/totp/confirm:
@@ -1536,8 +1615,17 @@ paths:
       summary: Confirm TOTP enrollment
       description: |
         Confirms the pending secret with a valid code. Returns single-use recovery codes, shown
-        once. When called from a pre-auth session (first-run setup or mandatory enrollment), the
-        session becomes fully authenticated.
+        once; they replace the previous ones. When called from a pre-auth session (first-run
+        setup or mandatory enrollment), the session becomes fully authenticated (new cookie and
+        CSRF token). When TOTP was already enabled (re-enrollment), the admin's other sessions are
+        revoked.
+
+        The pending secret expires 15 minutes after the enrollment started (`409
+        state-conflict`, like a confirmation without an enrollment started: restart it). Every
+        attempt is counted on the second factor limits, like a login: 5 wrong codes for an admin
+        within 15 minutes, from any IP, lock their second factor for 15 minutes, and the IP
+        limits of the login apply too (`429 rate-limited`). Every wrong code is written to the
+        security log (`admin_login_failed reason="totp"`).
       security:
         - adminSession: []
           csrfToken: []
@@ -1558,7 +1646,11 @@ paths:
               example:
                 recoveryCodes: [rc-7KQ2-9XLM-4PZD, rc-2HDF-8WQA-1MNB, rc-5TRE-3ZXC-0LKJ, rc-8YUI-6OPA-2SDF, rc-4GHJ-1KLZ-7XCV, rc-9BNM-5QWE-3RTY, rc-0UIO-2PAS-8DFG, rc-6HJK-4LZX-1CVB]
                 csrfToken: csrf_Zx98Yw76Vu54Ts32
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
@@ -1598,7 +1690,7 @@ paths:
       tags: [Admin tenants]
       operationId: createTenant
       summary: Create a tenant (super admin)
-      description: "Creates a tenant with its FQDN, default language and storage quota. Default branding, email templates and legal texts are provisioned. Reserved to the super admin."
+      description: "Creates a tenant with its FQDN, default language and storage quota. Default branding, email templates and legal texts are provisioned. The FQDN can never be an admin host (`TT_ADMIN_HOSTS`). Reserved to the super admin."
       security:
         - adminSession: []
           csrfToken: []
@@ -1669,7 +1761,8 @@ paths:
       operationId: updateTenant
       summary: Update tenant general settings
       description: |
-        `fqdn` and `storageQuotaBytes` can only be changed by the super admin. A delegated admin
+        `fqdn` and `storageQuotaBytes` can only be changed by the super admin; the FQDN can never
+        be an admin host (`TT_ADMIN_HOSTS`). A delegated admin
         may only lower `maxTransferBytes`, never above 20 GiB nor above the value set by the super admin.
         JSON Merge Patch semantics (RFC 7396).
       security:
@@ -2842,9 +2935,11 @@ paths:
                     role: delegated_admin
                     tenantIds: [ten_01JAB00000000000000ENT1TYA]
                     totpEnabled: true
+                    activated: true
                     disabled: false
                     lastLoginAt: '2026-10-19T08:30:00Z'
                     createdAt: '2026-09-01T08:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2853,8 +2948,11 @@ paths:
       operationId: createAdmin
       summary: Create a delegated admin (super admin)
       description: |
-        The account is created with a one-time activation link sent by email (through the SMTP
-        of the first assigned tenant); the admin chooses a password and enrolls TOTP on first login.
+        The account is created with a single-use activation link, valid 72 hours, returned once
+        in the response (`activationUrl`) and never sent by email: the super admin hands it to the
+        new admin out of band. The admin opens it, chooses a password and enrolls TOTP when it is
+        required. A super admin cannot be created directly: promote an activated delegated admin
+        with TOTP enabled (`updateAdmin`).
       security:
         - adminSession: []
           csrfToken: []
@@ -2871,10 +2969,10 @@ paths:
               requireTotp: true
       responses:
         '201':
-          description: Admin created; activation email sent.
+          description: Admin created, with its activation link (shown once).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Admin' }
+              schema: { $ref: '#/components/schemas/AdminWithActivation' }
               example:
                 id: adm_01JABC17P8Q9R0S1T2V3V4W5X6
                 username: admin.entity-b
@@ -2882,13 +2980,16 @@ paths:
                 role: delegated_admin
                 tenantIds: [ten_01JAB00000000000000ENT1TYB]
                 totpEnabled: false
+                activated: false
                 requireTotp: true
                 disabled: false
                 lastLoginAt: null
                 createdAt: '2026-10-19T16:25:00Z'
+                activationUrl: https://admin.transfer.example.com/admin/activate#act_Lm3Qz8Xv1Bn6Kd0R4Tp7Yw2HcF5Jg9Ns4Ue7Ai1ObZ
+                activationExpiresAt: '2026-10-22T16:25:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2915,6 +3016,7 @@ paths:
                 role: delegated_admin
                 tenantIds: [ten_01JAB00000000000000ENT1TYA]
                 totpEnabled: true
+                activated: true
                 requireTotp: true
                 disabled: false
                 lastLoginAt: '2026-10-19T08:30:00Z'
@@ -2926,8 +3028,13 @@ paths:
     patch:
       tags: [Admin system]
       operationId: updateAdmin
-      summary: Update assignments, TOTP requirement or disable an account (super admin)
-      description: Disabling an account or changing its assignments revokes its sessions.
+      summary: Update role, assignments, TOTP requirement or disable an account (super admin)
+      description: |
+        Disabling an account, changing its role or its assignments, or making TOTP mandatory while
+        it is not enrolled revokes its sessions. Changing its role, its assignments or its email
+        address revokes its pending activation links. Promotion to `super_admin` requires an
+        activated account (`activated`) with TOTP enabled (`totpEnabled`), otherwise `409
+        state-conflict`.
       security:
         - adminSession: []
           csrfToken: []
@@ -2950,27 +3057,29 @@ paths:
                 role: delegated_admin
                 tenantIds: [ten_01JAB00000000000000ENT1TYA, ten_01JAB00000000000000ENT1TYB]
                 totpEnabled: true
+                activated: true
                 requireTotp: true
                 disabled: false
                 lastLoginAt: '2026-10-19T08:30:00Z'
                 createdAt: '2026-09-01T08:00:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Admin system]
       operationId: deleteAdmin
       summary: Delete an admin account (super admin)
-      description: The last super admin cannot be deleted.
+      description: The last usable super admin (not disabled, activated, TOTP enabled) cannot be deleted, and nobody can delete their own account (`409 state-conflict`).
       security:
         - adminSession: []
           csrfToken: []
       responses:
         '204': { description: Admin deleted. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2982,22 +3091,47 @@ paths:
       tags: [Admin system]
       operationId: resetAdminCredentials
       summary: Reset password and TOTP of an admin (super admin)
-      description: Revokes sessions, clears TOTP and recovery codes, and sends a new activation link.
+      description: |
+        Clears the password, the TOTP enrollment and the recovery codes, revokes the sessions and
+        the pending activation links, and returns a new single-use activation link, valid 72
+        hours, shown once in the response (`activationUrl`) and never sent by email: the super
+        admin hands it to the admin out of band. A super admin can be reset by another super
+        admin. Refused with `409 state-conflict` for the caller's own account, a disabled account
+        and the last usable super admin.
       security:
         - adminSession: []
           csrfToken: []
       responses:
-        '202': { description: Reset done; activation email queued. }
+        '200':
+          description: Credentials reset; the account and its new activation link (shown once).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminWithActivation' }
+              example:
+                id: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                username: admin.entity-a
+                email: admin@entity-a.example.com
+                role: delegated_admin
+                tenantIds: [ten_01JAB00000000000000ENT1TYA]
+                totpEnabled: false
+                activated: false
+                requireTotp: true
+                disabled: false
+                lastLoginAt: '2026-10-19T08:30:00Z'
+                createdAt: '2026-09-01T08:00:00Z'
+                activationUrl: https://admin.transfer.example.com/admin/activate#act_Qp7Zx2Lm9Vb4Kd1R6Tn3Yw8HcF5Jg0Ns2Ue7Ai4ObZ
+                activationExpiresAt: '2026-10-25T10:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/activation:
     post:
       tags: [Admin auth]
       operationId: activateAdmin
-      summary: Activate an admin account from the emailed link
+      summary: Activate an admin account from its activation link
       description: Sets the password; the resulting pre-auth session must then enroll TOTP if required.
       security: []
       requestBody:
@@ -3016,6 +3150,7 @@ paths:
               schema: { $ref: '#/components/schemas/LoginState' }
               example: { status: totp_enrollment_required, csrfToken: csrf_Ab12Cd34Ef56Gh78 }
         '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -3279,12 +3414,12 @@ components:
       type: apiKey
       in: cookie
       name: __Host-tt_admin
-      description: Opaque admin session identifier (server-side session). Rotated after each authentication step. Idle timeout 30 min, absolute timeout 12 h by default.
+      description: Opaque admin session identifier (server-side session, only its SHA-256 is stored), set on the admin host only. Rotated after each authentication step. Idle timeout `TT_ADMIN_SESSION_IDLE_TIMEOUT` (30 min by default), absolute timeout `TT_ADMIN_SESSION_MAX_AGE` (12 h by default); an intermediate login state (TOTP or enrollment awaited) lasts 5 min and only opens the next step.
     csrfToken:
       type: apiKey
       in: header
       name: X-CSRF-Token
-      description: Synchronizer token returned in the session payloads (`csrfToken`). Mandatory with cookie authentication on unsafe methods.
+      description: Synchronizer token returned in the session payloads (`csrfToken`). Mandatory with cookie authentication on unsafe methods. The admin token is derived from the session token with a key of the current master key; after a master key rotation, the tokens of open admin sessions no longer verify and their unsafe requests get `403 csrf-invalid`. On `csrf-invalid`, the admin client must fetch `GET /admin/me` again to get the current token, then retry.
     apiToken:
       type: http
       scheme: bearer
@@ -3487,8 +3622,15 @@ components:
       schema: { type: string }
       example: __Host-tt_deposit=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
     SetAdminCookie:
+      description: |
+        Sets the admin session cookie, on the admin host only. Its `Max-Age` is the life left to
+        the session, at most 5 minutes while a login step (TOTP or enrollment) is awaited.
       schema: { type: string }
-      example: __Host-tt_admin=as_Hx7Lp1...; Path=/; Secure; HttpOnly; SameSite=Strict
+      example: __Host-tt_admin=as_Hx7Lp1...; Path=/; Max-Age=43200; HttpOnly; Secure; SameSite=Strict
+    ClearAdminCookie:
+      description: Expires the admin session cookie.
+      schema: { type: string }
+      example: __Host-tt_admin=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
     SetDownloadGrantCookie:
       schema: { type: string }
       example: __Host-tt_dl=dg_Vb4Nt9...; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict
@@ -3550,6 +3692,27 @@ components:
             title: Invalid CSRF token
             status: 403
             code: csrf-invalid
+    AdminForbidden:
+      description: |
+        The authenticated admin's role or tenants do not allow the operation (`forbidden`), or the
+        CSRF check of this unsafe method failed (`csrf-invalid`: missing or wrong `X-CSRF-Token`,
+        cross-site `Origin` or `Sec-Fetch-Site`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            forbidden:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#forbidden
+                title: Forbidden
+                status: 403
+                code: forbidden
+            csrfInvalid:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                title: Invalid CSRF token
+                status: 403
+                code: csrf-invalid
     DepositForbidden:
       description: |
         Deposit not allowed. For public deposits the code is always the generic
@@ -4265,6 +4428,12 @@ components:
       properties:
         currentPassword: { type: string, maxLength: 1024 }
       additionalProperties: false
+    TotpReenrollment:
+      type: object
+      description: Optional body of `startTotpEnrollment`. `currentPassword` is required to re-enroll (TOTP already enabled) and ignored for a first enrollment.
+      properties:
+        currentPassword: { type: string, maxLength: 1024 }
+      additionalProperties: false
     ActivationRequest:
       type: object
       required: [activationToken, password]
@@ -4298,7 +4467,7 @@ components:
         language: { $ref: '#/components/schemas/Language' }
     Admin:
       type: object
-      required: [id, username, email, role, tenantIds, totpEnabled, disabled, createdAt]
+      required: [id, username, email, role, tenantIds, totpEnabled, activated, disabled, createdAt]
       properties:
         id: { type: string }
         username: { $ref: '#/components/schemas/Username' }
@@ -4306,10 +4475,23 @@ components:
         role: { $ref: '#/components/schemas/AdminRole' }
         tenantIds: { type: array, items: { type: string }, description: Empty for super admins (implicit access to all tenants). }
         totpEnabled: { type: boolean }
+        activated: { type: boolean, description: True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used. }
         requireTotp: { type: boolean, description: Always true for super admins. }
         disabled: { type: boolean }
         lastLoginAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
+    AdminWithActivation:
+      description: An admin account with its new single-use activation link, returned once by `createAdmin` and `resetAdminCredentials`. Only a hash of the link token is stored; the link is never sent by email.
+      allOf:
+        - $ref: '#/components/schemas/Admin'
+        - type: object
+          required: [activationUrl, activationExpiresAt]
+          properties:
+            activationUrl:
+              type: string
+              format: uri
+              description: 'Activation link on the admin host: `https://<admin host>/admin/activate#<token>`. The token is in the fragment, so that it never reaches a server log; the page posts it to `activateAdmin`.'
+            activationExpiresAt: { type: string, format: date-time, description: End of validity of the link (72 hours). }
     AdminList:
       type: object
       required: [items]
@@ -4328,8 +4510,15 @@ components:
       additionalProperties: false
     AdminUpdate:
       type: object
+      description: |
+        Changes of an account; absent fields are left unchanged. Promoting to `super_admin`
+        requires an activated account with TOTP enabled and clears the tenant assignments (a super
+        admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Nobody
+        can disable or demote their own account, and the last usable super admin (not disabled,
+        activated, TOTP enabled) can be neither disabled nor demoted (`409 state-conflict`).
       properties:
         email: { $ref: '#/components/schemas/Email' }
+        role: { $ref: '#/components/schemas/AdminRole' }
         tenantIds: { type: array, items: { type: string }, uniqueItems: true }
         requireTotp: { type: boolean }
         disabled: { type: boolean }
@@ -4517,7 +4706,6 @@ components:
         - quota-reached
         - disk-alert
         - antivirus-unavailable
-        - admin-activation
     EmailTemplateSummary:
       type: object
       required: [key, language, customised]
@@ -4707,10 +4895,19 @@ components:
         - api_token.used
         - api_token.revoked
         - admin.login
+        - admin.login_failed
         - admin.logout
+        - admin.totp_enrolled
+        - admin.totp_disabled
+        - admin.recovery_code_used
+        - admin.password_changed
         - admin.created
         - admin.updated
         - admin.deleted
+        - admin.credentials_reset
+        - admin.activated
+        - admin.totp_reset_local
+        - admin.password_reset_local
         - tenant.created
         - tenant.updated
         - tenant.deleted

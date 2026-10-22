@@ -24,6 +24,8 @@ const (
 	EnvLogLevel                 = "TT_LOG_LEVEL"
 	EnvMaintenance              = "TT_MAINTENANCE"
 	EnvAdminHosts               = "TT_ADMIN_HOSTS"
+	EnvAdminSessionIdleTimeout  = "TT_ADMIN_SESSION_IDLE_TIMEOUT"
+	EnvAdminSessionMaxAge       = "TT_ADMIN_SESSION_MAX_AGE"
 	EnvAPIDocsPublic            = "TT_API_DOCS_PUBLIC"
 	EnvSetupToken               = "TT_SETUP_TOKEN"      //nolint:gosec // G101: variable name, not a credential
 	EnvSetupTokenFile           = "TT_SETUP_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
@@ -54,6 +56,8 @@ const (
 	DefaultLogDir                   = "/var/log/transteira"
 	DefaultListenAddr               = ":8080"
 	DefaultLogLevel                 = "info"
+	DefaultAdminSessionIdleTimeout  = "30m"
+	DefaultAdminSessionMaxAge       = "12h"
 	DefaultUploadTTL                = "24h"
 	DefaultUploadMaxAge             = "168h"
 	DefaultDepositSessionTTL        = "4h"
@@ -183,9 +187,23 @@ func Variables() []Var {
 			Description: "Address (host:port) the HTTP server listens on inside the container.",
 		},
 		{
-			Name: EnvAdminHosts, Group: "Network",
-			Description: "Comma-separated list of host names from which the administration is " +
-				"reachable. Empty means every tenant host.",
+			Name: EnvAdminHosts, Group: "Administration", Required: true,
+			Example: "admin.transfer.example.com",
+			Description: "Comma-separated list of the dedicated host names serving the " +
+				"administration, for example admin.transfer.example.com. The administration " +
+				"is served only on these hosts, never on tenant FQDNs: a host listed here must " +
+				"not be the FQDN of a tenant. Put the reverse proxy in front of it with TLS, " +
+				"like the tenant hosts.",
+		},
+		{
+			Name: EnvAdminSessionIdleTimeout, Group: "Administration", Default: DefaultAdminSessionIdleTimeout,
+			Description: "Inactivity after which an admin session ends; every authenticated " +
+				"request resets it (Go duration, between 5m and 4h).",
+		},
+		{
+			Name: EnvAdminSessionMaxAge, Group: "Administration", Default: DefaultAdminSessionMaxAge,
+			Description: "Longest life of an admin session after sign-in, whatever its activity " +
+				"(Go duration, between 1h and 168h, and at least " + EnvAdminSessionIdleTimeout + ").",
 		},
 		{
 			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,
@@ -242,14 +260,17 @@ func Variables() []Var {
 		},
 		{
 			Name: EnvSetupToken, Group: "Operations", Secret: true,
-			Description: "Optional token (16 to 128 characters) required to create the first " +
-				"super admin, protecting the window between deployment and setup. Mutually " +
-				"exclusive with " + EnvSetupTokenFile + ".",
+			Description: "Token (16 to 128 characters) required to create the first super " +
+				"admin, protecting the window between deployment and setup. When neither this " +
+				"variable nor " + EnvSetupTokenFile + " is set, TransTeira generates a random " +
+				"setup token at each start while no admin exists and prints it in the container " +
+				"logs (docker logs). Mutually exclusive with " + EnvSetupTokenFile + ".",
 		},
 		{
 			Name: EnvSetupTokenFile, Group: "Operations",
-			Description: "Path of a file containing the setup token (alternative to " +
-				EnvSetupToken + ").",
+			Description: "Path of a file (e.g. a Docker secret) containing the setup token " +
+				"(alternative to " + EnvSetupToken + "). When neither is set, a random token is " +
+				"generated at each start while no admin exists and printed in the container logs.",
 		},
 		{
 			Name: EnvUploadTTL, Group: "Uploads", Default: DefaultUploadTTL,

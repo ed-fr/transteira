@@ -18,10 +18,13 @@ var fakeToken = strings.Repeat("x", minSetupTokenLength)
 // testMasterKey is a valid master key path outside the default volumes.
 const testMasterKey = "/run/secrets/transteira_master_key"
 
+// testAdminHost is the dedicated administration host of the tests.
+const testAdminHost = "admin.localhost"
+
 // envFunc returns a getenv function backed by a map, with a valid master key
-// path unless overridden.
+// path and admin host unless overridden.
 func envFunc(vars map[string]string) func(string) string {
-	m := map[string]string{EnvMasterKeyFile: testMasterKey}
+	m := map[string]string{EnvMasterKeyFile: testMasterKey, EnvAdminHosts: testAdminHost}
 	for k, v := range vars {
 		m[k] = v
 	}
@@ -68,7 +71,9 @@ func TestLoadDefaults(t *testing.T) {
 		{"MasterKeyNewFile", c.MasterKeyNewFile, ""},
 		{"TrustedProxies", len(c.TrustedProxies), 0},
 		{"ListenAddr", c.ListenAddr, DefaultListenAddr},
-		{"AdminHosts", len(c.AdminHosts), 0},
+		{"AdminHosts", strings.Join(c.AdminHosts, ","), testAdminHost},
+		{"AdminSessionIdleTimeout", c.AdminSessionIdleTimeout, 30 * time.Minute},
+		{"AdminSessionMaxAge", c.AdminSessionMaxAge, 12 * time.Hour},
 		{"LogLevel", c.LogLevel, slog.LevelInfo},
 		{"Maintenance", c.Maintenance, false},
 		{"APIDocsPublic", c.APIDocsPublic, false},
@@ -192,6 +197,16 @@ func TestLoadValid(t *testing.T) {
 				wantAV := ClamAVAddr{Network: "unix", Address: "/run/clamav/clamd.sock"}
 				if c.ClamAV != wantAV || c.ClamAV.String() != "unix:/run/clamav/clamd.sock" {
 					t.Errorf("ClamAV = %+v (%s)", c.ClamAV, c.ClamAV)
+				}
+			},
+		},
+		{
+			name: "admin session bounds",
+			vars: map[string]string{EnvAdminSessionIdleTimeout: "1h", EnvAdminSessionMaxAge: "1h"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if c.AdminSessionIdleTimeout != time.Hour || c.AdminSessionMaxAge != time.Hour {
+					t.Errorf("admin sessions = %s / %s", c.AdminSessionIdleTimeout, c.AdminSessionMaxAge)
 				}
 			},
 		},
@@ -484,6 +499,17 @@ func TestLoadInvalid(t *testing.T) {
 		{"listen port text", map[string]string{EnvListenAddr: ":http"}, []string{EnvListenAddr}},
 		{"listen bad host", map[string]string{EnvListenAddr: "bad_host:80"}, []string{EnvListenAddr}},
 		{"listen zone", map[string]string{EnvListenAddr: "[fe80::1%eth0]:80"}, []string{EnvListenAddr}},
+		{"missing admin hosts", map[string]string{EnvAdminHosts: ""}, []string{EnvAdminHosts}},
+		{"blank admin hosts", map[string]string{EnvAdminHosts: " , ,"}, []string{EnvAdminHosts}},
+		{"admin idle timeout too short", map[string]string{EnvAdminSessionIdleTimeout: "4m59s"}, []string{EnvAdminSessionIdleTimeout}},
+		{"admin idle timeout too long", map[string]string{EnvAdminSessionIdleTimeout: "4h1s"}, []string{EnvAdminSessionIdleTimeout}},
+		{"admin max age too short", map[string]string{EnvAdminSessionMaxAge: "59m"}, []string{EnvAdminSessionMaxAge}},
+		{"admin max age too long", map[string]string{EnvAdminSessionMaxAge: "168h1s"}, []string{EnvAdminSessionMaxAge}},
+		{
+			"admin max age below the idle timeout",
+			map[string]string{EnvAdminSessionIdleTimeout: "4h", EnvAdminSessionMaxAge: "3h"},
+			[]string{EnvAdminSessionMaxAge},
+		},
 		{"admin host invalid", map[string]string{EnvAdminHosts: "ok.example.com,-bad.example.com"}, []string{EnvAdminHosts}},
 		{"admin host IP", map[string]string{EnvAdminHosts: "192.0.2.1"}, []string{EnvAdminHosts}},
 		{"admin host with port", map[string]string{EnvAdminHosts: "admin.example.com:443"}, []string{EnvAdminHosts}},
@@ -774,6 +800,7 @@ func TestTrustedProxyHelpers(t *testing.T) {
 
 func TestFromEnvironment(t *testing.T) {
 	t.Setenv(EnvMasterKeyFile, testMasterKey)
+	t.Setenv(EnvAdminHosts, testAdminHost)
 	t.Setenv(EnvLogLevel, "warn")
 	c, err := FromEnvironment()
 	if err != nil {

@@ -43,7 +43,7 @@ const (
 	VerificationCodeInvalid EventType = "verification_code_invalid"
 	// TransferPasswordInvalid: a wrong transfer password was entered.
 	TransferPasswordInvalid EventType = "transfer_password_invalid"
-	// AdminLoginFailed: an admin login failed; field reason=password|totp|recovery_code.
+	// AdminLoginFailed: an admin login failed; field reason=password|totp|recovery_code|setup_token.
 	AdminLoginFailed EventType = "admin_login_failed"
 	// APITokenInvalid: an unknown, revoked or expired API token was presented.
 	APITokenInvalid EventType = "api_token_invalid"
@@ -73,6 +73,8 @@ const (
 	ReasonTOTP = "totp"
 	// ReasonRecoveryCode: wrong admin recovery code.
 	ReasonRecoveryCode = "recovery_code"
+	// ReasonSetupToken: wrong or missing setup token at the first-run setup.
+	ReasonSetupToken = "setup_token"
 	// ReasonIP: deposit attempted from outside the tenant's IP ranges.
 	ReasonIP = "ip"
 	// ReasonDomain: deposit attempted with an address outside the allowed domains.

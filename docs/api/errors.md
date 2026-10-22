@@ -58,7 +58,11 @@ use to ban the client IP.
 
 - **HTTP status:** 401 Unauthorized
 - **Meaning:** credentials are missing or expired: no admin session, expired deposit session,
-  or missing API token.
+  or missing API token. On the admin host, it also answers an expired or revoked session
+  (logout, password change, TOTP re-enrollment or disabling from another session, account
+  disabled or reset) and a session of a disabled account, and the session cookie is then
+  cleared; and an admin session whose login step does not open the operation (a session still
+  waiting for its TOTP code or enrollment only opens that step), which keeps its cookie.
 - **Typical endpoints:** `/admin/*`, `/transfers`, `/invitations`, `/deposit-sessions/current`.
 - **What to do:** sign in again, verify the email address again, or send the
   `Authorization: Bearer <token>` header.
@@ -69,7 +73,8 @@ use to ban the client IP.
 - **Meaning:** wrong username or password, wrong TOTP code, or an invalid, revoked or expired
   API token. The response does not say which part was wrong.
 - **Typical endpoints:** `POST /admin/auth/login`, `POST /admin/auth/totp`,
-  `PUT /admin/me/password`, any endpoint called with an API token.
+  `POST /admin/me/totp` (from an authenticated session), `POST /admin/me/totp/confirm`,
+  `PUT /admin/me/password`, `DELETE /admin/me/totp`, any endpoint called with an API token.
 - **What to do:** check the credentials. Repeated failures lead to `rate-limited` and may get
   the client IP banned.
 
@@ -77,8 +82,10 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Meaning:** the caller is authenticated but its role does not allow the operation (for
-  example a delegated admin calling a super admin endpoint).
-- **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`.
+  example a delegated admin calling a super admin endpoint, or a super admin trying to disable
+  the TOTP that is mandatory for them).
+- **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`,
+  `DELETE /admin/me/totp`.
 - **What to do:** do not retry; ask a super admin if the access is legitimately needed.
 
 ### csrf-invalid
@@ -87,11 +94,17 @@ use to ban the client IP.
 - **Meaning:** the CSRF token of a cookie-authenticated, state-changing request is missing or
   invalid.
 - **Typical endpoints:** state-changing requests made from the browser with a session cookie,
-  e.g. `DELETE /transfers/{transferId}`, `DELETE /deposit-sessions/current`. The request is
-  also refused when its `Origin` header is present and differs from `https://<entity host>`, or
-  when its `Sec-Fetch-Site` header is present and is not `same-origin`.
+  e.g. `DELETE /transfers/{transferId}`, `DELETE /deposit-sessions/current`, and every
+  state-changing `/admin/*` request with the admin session. The request is also refused when its
+  `Origin` header is present and differs from `https://<entity host>` (`https://<admin host>`
+  on the admin host), or when its `Sec-Fetch-Site` header is present and is not `same-origin`.
+  These two header checks alone (no token yet) also protect `POST /admin/setup`,
+  `POST /admin/auth/login`, `POST /admin/activation` and `POST /downloads/{linkToken}/unlock`.
 - **What to do:** send the `csrfToken` returned in the session payload in the `X-CSRF-Token`
-  header; reload the page to obtain a fresh one, then retry.
+  header; reload the page to obtain a fresh one, then retry. On the admin host, the token is
+  derived from the session with a key of the current master key: after a master key rotation
+  the open sessions stay valid but their tokens do not, so fetch `GET /admin/me` again for the
+  current `csrfToken`, then retry.
 
 ### deposit-not-allowed
 
@@ -158,8 +171,14 @@ use to ban the client IP.
 
 - **HTTP status:** 404 Not Found
 - **Meaning:** the resource does not exist, or it belongs to another entity or is outside the
-  caller's scope. Both cases return the same response on purpose.
-- **Typical endpoints:** any endpoint with an identifier in its path.
+  caller's scope. Both cases return the same response on purpose. The administration
+  (`/admin/*`) exists only on the dedicated admin host (`TT_ADMIN_HOSTS`): under an entity
+  host every `/admin/*` path answers `not-found`, and under the admin host every entity
+  endpoint does. An unknown, used or expired activation link also answers `not-found`, and so
+  does an entity a delegated admin is not assigned to, exactly like an entity that does not
+  exist.
+- **Typical endpoints:** any endpoint with an identifier in its path, `/admin/*` on an entity
+  host, `POST /admin/activation`.
 - **What to do:** check the identifier or link. Do not retry unchanged.
 
 ### method-not-allowed
@@ -208,11 +227,18 @@ use to ban the client IP.
   cancelling or finalizing a transfer that is no longer being uploaded, or while one of its
   uploads is in progress (another request holds it); finalizing a transfer that has no file
   left because every upload was terminated, or one of whose files has no key any more; an
-  `Idempotency-Key` replayed with a different request body; resending an expired transfer.
+  `Idempotency-Key` replayed with a different request body; resending an expired transfer;
+  deleting, disabling, demoting or resetting the last usable super admin (not disabled,
+  activated, TOTP enabled); an admin deleting, disabling, demoting or resetting their own
+  account; promoting to super admin an account that is not activated or has no TOTP enabled;
+  resetting the credentials of a disabled account; confirming a TOTP enrollment that was not
+  started or whose secret expired (15 minutes after the start).
 - **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
   `POST /transfers/{transferId}/finalize`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
-  `PUT /admin/system/maintenance`.
+  `PUT /admin/system/maintenance`, `PATCH /admin/admins/{adminId}`,
+  `DELETE /admin/admins/{adminId}`, `POST /admin/admins/{adminId}/reset-credentials`,
+  `POST /admin/me/totp/confirm`.
 - **What to do:** reload the resource to get its current state before deciding what to do.
 
 ### already-exists
@@ -293,9 +319,16 @@ use to ban the client IP.
   depositor; finalizing or cancelling one frees a slot), or too many simultaneous download
   streams (2 per client for one transfer, 4 for one transfer, 8 per client across the
   transfers of the entity; a client is an IP address, an IPv6 address counting as its /64).
+  On the admin host: failed sign-ins (5 per username and client IP, 20 per client IP within
+  15 minutes lock for 15 minutes; 5 wrong second factors of one admin, TOTP enrollment
+  confirmations included, lock their second factor for 15 minutes), and a per-client limit of
+  the sign-in steps (setup, password, second factor, TOTP enrollment confirmation, activation:
+  20 at once, then one every 3 seconds).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
-  `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`.
+  `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
+  `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
+  `PUT /admin/me/password`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -311,10 +344,12 @@ use to ban the client IP.
 ### mail-unavailable
 
 - **HTTP status:** 503 Service Unavailable
-- **Meaning:** the verification or invitation email cannot be sent right now: no SMTP server
-  is configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity
-  is open (its server failed several times in a row and is not tried again for a minute), or
-  the mail queue is shutting down. Nothing was sent.
+- **Meaning:** the verification or invitation email cannot be sent right now: no SMTP server is
+  configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity is
+  open (its server failed several times in a row and is not tried again for a minute), or the
+  mail queue is shutting down. Nothing was sent, and nothing was changed. Admin activation
+  links are never mailed (they are returned by `POST /admin/admins` and
+  `POST /admin/admins/{adminId}/reset-credentials`), so the administration never answers it.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`.
 - **What to do:** retry later. If the error persists, contact the administrators of the service:
   the SMTP settings of the entity are probably missing.
@@ -322,7 +357,10 @@ use to ban the client IP.
 ### unknown-tenant
 
 - **HTTP status:** 421 Misdirected Request
-- **Meaning:** the `Host` header does not match any configured entity.
+- **Meaning:** the `Host` header matches neither a configured entity nor an admin host
+  (`TT_ADMIN_HOSTS`). The admin host never answers it. An admin host can never be the FQDN of
+  an entity: the server refuses to start when one is, and the creation of an entity with that
+  FQDN is refused.
 - **Typical endpoints:** any endpoint.
 - **What to do:** use the address of your entity (for example
   `https://transfer.entity-a.example.com`). Check the reverse proxy configuration if the address
@@ -338,10 +376,13 @@ use to ban the client IP.
 ### setup-token-invalid
 
 - **HTTP status:** 403 Forbidden
-- **Meaning:** the first-run setup token is missing or wrong (only checked when the
-  `TT_SETUP_TOKEN` environment variable is configured).
+- **Meaning:** the first-run setup token is missing or wrong. The setup always needs one: the
+  value of the `TT_SETUP_TOKEN` environment variable when it is configured, otherwise a random
+  token that the server generates at each start while no admin exists and writes once, at
+  warning level, to its application log (`docker logs`).
 - **Typical endpoints:** `POST /admin/setup`.
-- **What to do:** send the value of `TT_SETUP_TOKEN` in `setupToken`.
+- **What to do:** send the value of `TT_SETUP_TOKEN`, or the token of the last start found in
+  the application log, in `setupToken`.
 
 ### new-master-key-missing
 

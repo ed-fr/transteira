@@ -208,6 +208,23 @@ func execSystem(t *testing.T, e storetest.Engine, stmts ...string) {
 // (the database refuses it, so old is unregistered for the insert).
 func plantStraggler(t *testing.T, e storetest.Engine, db *store.DB, old *crypto.MasterKey, tid tenant.ID) sealed {
 	t.Helper()
+	var k sealed
+	whileUnregistered(t, e, db, old, func() { k = seal(t, vault(db, keyring(t, old, nil)), tid, crypto.PurposeDEK) })
+	return k
+}
+
+// plantSystemStraggler is plantStraggler for a system secret.
+func plantSystemStraggler(t *testing.T, e storetest.Engine, db *store.DB, old *crypto.MasterKey) sealedSystem {
+	t.Helper()
+	var s sealedSystem
+	whileUnregistered(t, e, db, old, func() { s = sealSystem(t, db, vault(db, keyring(t, old, nil))) })
+	return s
+}
+
+// whileUnregistered runs plant while old, a retired master key, is removed
+// from master_keys, then records it as retired again.
+func whileUnregistered(t *testing.T, e storetest.Engine, db *store.DB, old *crypto.MasterKey, plant func()) {
+	t.Helper()
 	records, err := db.MasterKeys().List(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -222,8 +239,58 @@ func plantStraggler(t *testing.T, e storetest.Engine, db *store.DB, old *crypto.
 		t.Fatalf("master key %s is not retired: %+v", old.ID(), records)
 	}
 	execSystem(t, e, `DELETE FROM master_keys WHERE id = '`+old.ID()+`'`)
-	k := seal(t, vault(db, keyring(t, old, nil)), tid, crypto.PurposeDEK)
+	plant()
 	execSystem(t, e, fmt.Sprintf(`INSERT INTO master_keys (id, status, created_at, retired_at) VALUES ('%s', 'retired', %d, %d)`,
 		old.ID(), rec.CreatedAt.UnixMilli(), rec.RetiredAt.UnixMilli()))
-	return k
+}
+
+// sealedSystem is a system secret created by a test with its expected
+// plaintext.
+type sealedSystem struct {
+	id     string
+	secret []byte
+}
+
+// sealSystem wraps a random admin TOTP secret through v and stores it in
+// db.
+func sealSystem(t *testing.T, db *store.DB, v *masterkey.Vault) sealedSystem {
+	t.Helper()
+	secret := make([]byte, 20)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatal(err)
+	}
+	row, err := v.WrapSystem(crypto.PurposeAdminTOTP, secret)
+	if err != nil {
+		t.Fatalf("WrapSystem: %v", err)
+	}
+	if err := db.SystemSecrets().Create(context.Background(), row); err != nil {
+		t.Fatalf("Create system secret: %v", err)
+	}
+	return sealedSystem{id: row.ID, secret: secret}
+}
+
+// expectSystemOpens checks that every system secret opens through v with
+// its plaintext. It never prints key material.
+func expectSystemOpens(t *testing.T, v *masterkey.Vault, secrets []sealedSystem) {
+	t.Helper()
+	for _, s := range secrets {
+		got, err := v.OpenSystem(context.Background(), crypto.PurposeAdminTOTP, s.id)
+		if err != nil {
+			t.Errorf("OpenSystem(%s): %v", s.id, err)
+			continue
+		}
+		if !bytes.Equal(got, s.secret) {
+			t.Errorf("OpenSystem(%s) returned another plaintext", s.id)
+		}
+	}
+}
+
+// secretKeyIDOf returns the master key ID recorded on a system secret.
+func secretKeyIDOf(t *testing.T, db *store.DB, s sealedSystem) string {
+	t.Helper()
+	row, err := db.SystemSecrets().Get(context.Background(), s.id)
+	if err != nil {
+		t.Fatalf("Get(%s): %v", s.id, err)
+	}
+	return row.KeyID
 }

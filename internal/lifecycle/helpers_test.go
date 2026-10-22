@@ -107,7 +107,7 @@ func (f *faults) called(name string) int {
 
 // faultRepo wraps a repo with a fault per method: "due" (the deletion
 // listing), "dueExpirations", "rejectedKeyed", "abandoned", "transfer", "finish", "scrub",
-// "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "storageRefs",
+// "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "purgeSystem:<name>", "storageRefs",
 // "availableIDs", "backup", and "backupUnsupported" (any fault makes
 // backupSupported false). refsHook, when set, edits the storage refs
 // returned.
@@ -192,6 +192,13 @@ func (r *faultRepo) purge(ctx context.Context, p rowPurge, tid tenant.ID, now ti
 		return 0, err
 	}
 	return r.inner.purge(ctx, p, tid, now)
+}
+
+func (r *faultRepo) purgeSystem(ctx context.Context, p systemPurge, now time.Time) (int64, error) {
+	if err := r.f.hit("purgeSystem:" + p.name); err != nil {
+		return 0, err
+	}
+	return r.inner.purgeSystem(ctx, p, now)
 }
 
 func (r *faultRepo) storageRefs(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, error) {

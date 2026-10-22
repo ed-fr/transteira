@@ -150,7 +150,7 @@ func TestRunRealThresholds(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", code, errOut.String())
 	}
 	for _, pkg := range []string{
-		"internal/adminauth", "internal/apitoken", "internal/authz",
+		"internal/adminauth", "internal/apitoken", "internal/audit",
 		"internal/httpserver/middleware", "internal/store", "internal/tenant",
 	} {
 		if !strings.Contains(out.String(), pkg) {

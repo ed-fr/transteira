@@ -58,6 +58,15 @@ const (
 	// DepositSession identifies a deposit session record. It is internal:
 	// the cookie carries a separate bearer token, never this identifier.
 	DepositSession Prefix = "ds"
+	// AdminSession identifies an administrator session record. It is
+	// internal: the cookie carries a separate bearer token.
+	AdminSession Prefix = "as"
+	// AdminActivation identifies an administrator activation link record. It
+	// is internal: the link carries a separate bearer token.
+	AdminActivation Prefix = "act"
+	// SystemSecret identifies a secret sealed by the master key that belongs
+	// to no tenant (administrator TOTP secrets). It is internal.
+	SystemSecret Prefix = "ss"
 	// Audit identifies an audit log entry.
 	Audit Prefix = "aud"
 	// Request identifies an HTTP request (Problem Details "instance").

@@ -25,5 +25,38 @@
   "mac_recognition_hex": "25a90c9b0f12b1ab53a0e7694154fe36a3272949541d68ddbd665b76e1462ae8",
   "mac_download_grant_transfer_id": "tr_01JVECTOR0000000000000000",
   "mac_download_grant_expiry_hex": "000000006955b900",
-  "mac_download_grant_hex": "d97d05fe9a2186026a84e21b860f39a698edd95fc7fd4bf353ac74012784b4f8"
+  "mac_download_grant_hex": "d97d05fe9a2186026a84e21b860f39a698edd95fc7fd4bf353ac74012784b4f8",
+  "mac_admin_session_token": "as_01JVECTOR000000000000000000000000000000000",
+  "mac_admin_csrf_hex": "b868b628cbd0b30ce246b73840d269e1897569f709ef31028a2e9d27ae37dd80",
+  "wrapped_admin_totp_hex": "0146812e84f812ff3d0fc0cb7f20684b23bb2e9a5d34295afa0df5d78de63e1e43bbc8f5e69c17101b6dd2ada371e578da",
+  "totp_secret_hex": "3132333435363738393031323334353637383930",
+  "totp_secret_base32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+  "totp_rfc6238": [
+    {
+      "time": 59,
+      "code": "287082"
+    },
+    {
+      "time": 1111111109,
+      "code": "081804"
+    },
+    {
+      "time": 1111111111,
+      "code": "050471"
+    },
+    {
+      "time": 1234567890,
+      "code": "005924"
+    },
+    {
+      "time": 2000000000,
+      "code": "279037"
+    },
+    {
+      "time": 20000000000,
+      "code": "353130"
+    }
+  ],
+  "recovery_code": "rc-0123-4567-89AB",
+  "recovery_code_mac_hex": "535e926b693fe3e54998ff28932fb8164dd7922435a787e974616bd9fe3909ac"
 }

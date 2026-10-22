@@ -29,6 +29,7 @@ func setMigrateEnv(t *testing.T) string {
 	t.Setenv("TT_DATA_DIR", filepath.Join(root, "data"))
 	t.Setenv("TT_BACKUP_DIR", filepath.Join(root, "backups"))
 	t.Setenv("TT_LOG_DIR", filepath.Join(root, "logs"))
+	t.Setenv("TT_ADMIN_HOSTS", "admin.localhost")
 	return dsn
 }
 
@@ -47,7 +48,7 @@ func TestMigrateCommand(t *testing.T) {
 		t.Fatalf("migrate --status (fresh) = %d, %q, %q", code, out, errOut)
 	}
 	code, out, errOut = runCmd("migrate")
-	if code != exitOK || !strings.Contains(out, "Applied 7 migration(s) on sqlite") || !strings.Contains(out, "applied") {
+	if code != exitOK || !strings.Contains(out, "Applied 8 migration(s) on sqlite") || !strings.Contains(out, "applied") {
 		t.Fatalf("migrate = %d, %q, %q", code, out, errOut)
 	}
 	code, out, _ = runCmd("migrate")

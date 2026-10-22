@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
@@ -401,3 +403,80 @@ func TestCleanupBackup(t *testing.T) {
 
 // backupName is the name of a database copy.
 var backupName = regexp.MustCompile(`^transteira-\d{8}T\d{6}Z\.db$`)
+
+// TestCleanupAdminRows: the global purges of the cleanup task delete an
+// expired admin session, a used activation link and an audit event older
+// than 12 months; the live session, the pending link and a recent event
+// are kept.
+func TestCleanupAdminRows(t *testing.T) {
+	t.Parallel()
+	forEngine(t, func(t *testing.T, e storetest.Engine) {
+		d, _ := startScanDeposit(t, e, serverOptions{lifecycle: cleanupEvery})
+		ctx := context.Background()
+		now := time.Now()
+		admin, err := d.db.Admins().Create(ctx, store.Admin{
+			Username: "cleanup.root", Email: "cleanup.root@example.com", Role: store.RoleSuperAdmin,
+			PasswordHash: "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHQ$aGFzaGhhc2hoYXNoaGFzaA",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash := func(s string) []byte { sum := sha256.Sum256([]byte(s)); return sum[:] }
+		session := func(created, expires time.Time) string {
+			t.Helper()
+			sid := id.New(id.AdminSession)
+			err := d.db.AdminSessions().Create(ctx, store.AdminSession{
+				ID: sid, TokenHash: hash(sid), AdminID: admin.ID, State: store.SessionAuthenticated,
+				CreatedAt: created, ExpiresAt: expires,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sid
+		}
+		expired := session(now.Add(-13*time.Hour), now.Add(-time.Hour))
+		live := session(now, now.Add(12*time.Hour))
+		activation := func() string {
+			t.Helper()
+			aid := id.New(id.AdminActivation)
+			err := d.db.AdminActivations().Create(ctx, store.AdminActivation{
+				ID: aid, AdminID: admin.ID, TokenHash: hash(aid), CreatedAt: now, ExpiresAt: now.Add(72 * time.Hour),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return aid
+		}
+		used, pending := activation(), activation()
+		if _, err := d.db.AdminActivations().Consume(ctx, hash(used), now); err != nil {
+			t.Fatal(err)
+		}
+		event := func(at time.Time) string {
+			t.Helper()
+			ev, err := d.db.AuditEvents().Append(ctx, store.AuditEvent{
+				At: at, TenantID: d.tenantA.ID, ActorKind: store.ActorSystem, Actor: "test",
+				Action: "admin.login", ObjectKind: "admin", ObjectID: admin.ID,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return ev.ID
+		}
+		old, recent := event(now.AddDate(0, -13, 0)), event(now.AddDate(0, -11, 0))
+
+		count := func(table, rowID string) int {
+			return countSystem(t, e, "SELECT count(*) FROM "+table+" WHERE id = '"+rowID+"'")
+		}
+		eventually(t, "stale admin and audit rows purged", func() bool {
+			return count("admin_sessions", expired) == 0 && count("admin_activations", used) == 0 &&
+				count("audit_events", old) == 0
+		})
+		for _, c := range []struct{ table, id string }{
+			{"admin_sessions", live}, {"admin_activations", pending}, {"audit_events", recent},
+		} {
+			if count(c.table, c.id) != 1 {
+				t.Errorf("%s %s: purged, want kept", c.table, c.id)
+			}
+		}
+	})
+}

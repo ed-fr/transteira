@@ -40,10 +40,19 @@ func (e AdminRole) Valid() bool {
 // Defines values for AuditAction.
 const (
 	AuditActionAddressVerified            AuditAction = "address.verified"
+	AuditActionAdminActivated             AuditAction = "admin.activated"
 	AuditActionAdminCreated               AuditAction = "admin.created"
+	AuditActionAdminCredentialsReset      AuditAction = "admin.credentials_reset"
 	AuditActionAdminDeleted               AuditAction = "admin.deleted"
 	AuditActionAdminLogin                 AuditAction = "admin.login"
+	AuditActionAdminLoginFailed           AuditAction = "admin.login_failed"
 	AuditActionAdminLogout                AuditAction = "admin.logout"
+	AuditActionAdminPasswordChanged       AuditAction = "admin.password_changed"
+	AuditActionAdminPasswordResetLocal    AuditAction = "admin.password_reset_local"
+	AuditActionAdminRecoveryCodeUsed      AuditAction = "admin.recovery_code_used"
+	AuditActionAdminTotpDisabled          AuditAction = "admin.totp_disabled"
+	AuditActionAdminTotpEnrolled          AuditAction = "admin.totp_enrolled"
+	AuditActionAdminTotpResetLocal        AuditAction = "admin.totp_reset_local"
 	AuditActionAdminUpdated               AuditAction = "admin.updated"
 	AuditActionApiTokenCreated            AuditAction = "api_token.created"
 	AuditActionApiTokenRevoked            AuditAction = "api_token.revoked"
@@ -79,13 +88,31 @@ func (e AuditAction) Valid() bool {
 	switch e {
 	case AuditActionAddressVerified:
 		return true
+	case AuditActionAdminActivated:
+		return true
 	case AuditActionAdminCreated:
+		return true
+	case AuditActionAdminCredentialsReset:
 		return true
 	case AuditActionAdminDeleted:
 		return true
 	case AuditActionAdminLogin:
 		return true
+	case AuditActionAdminLoginFailed:
+		return true
 	case AuditActionAdminLogout:
+		return true
+	case AuditActionAdminPasswordChanged:
+		return true
+	case AuditActionAdminPasswordResetLocal:
+		return true
+	case AuditActionAdminRecoveryCodeUsed:
+		return true
+	case AuditActionAdminTotpDisabled:
+		return true
+	case AuditActionAdminTotpEnrolled:
+		return true
+	case AuditActionAdminTotpResetLocal:
 		return true
 	case AuditActionAdminUpdated:
 		return true
@@ -300,7 +327,6 @@ func (e DnsRecordCheckStatus) Valid() bool {
 
 // Defines values for EmailTemplateKey.
 const (
-	EmailTemplateKeyAdminActivation      EmailTemplateKey = "admin-activation"
 	EmailTemplateKeyAntivirusUnavailable EmailTemplateKey = "antivirus-unavailable"
 	EmailTemplateKeyDiskAlert            EmailTemplateKey = "disk-alert"
 	EmailTemplateKeyFileNotScanned       EmailTemplateKey = "file-not-scanned"
@@ -317,8 +343,6 @@ const (
 // Valid indicates whether the value is a known member of the EmailTemplateKey enum.
 func (e EmailTemplateKey) Valid() bool {
 	switch e {
-	case EmailTemplateKeyAdminActivation:
-		return true
 	case EmailTemplateKeyAntivirusUnavailable:
 		return true
 	case EmailTemplateKeyDiskAlert:
@@ -998,6 +1022,8 @@ type ActivationRequest struct {
 
 // Admin defines model for Admin.
 type Admin struct {
+	// Activated True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used.
+	Activated   bool       `json:"activated"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	Disabled    bool       `json:"disabled"`
 	Email       Email      `json:"email"`
@@ -1139,12 +1165,47 @@ type AdminTransferList struct {
 	NextCursor *PageCursor `json:"nextCursor,omitempty"`
 }
 
-// AdminUpdate defines model for AdminUpdate.
+// AdminUpdate Changes of an account; absent fields are left unchanged. Promoting to `super_admin`
+// requires an activated account with TOTP enabled and clears the tenant assignments (a super
+// admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Nobody
+// can disable or demote their own account, and the last usable super admin (not disabled,
+// activated, TOTP enabled) can be neither disabled nor demoted (`409 state-conflict`).
 type AdminUpdate struct {
-	Disabled    *bool     `json:"disabled,omitempty"`
-	Email       *Email    `json:"email,omitempty"`
-	RequireTotp *bool     `json:"requireTotp,omitempty"`
-	TenantIds   *[]string `json:"tenantIds,omitempty"`
+	Disabled    *bool  `json:"disabled,omitempty"`
+	Email       *Email `json:"email,omitempty"`
+	RequireTotp *bool  `json:"requireTotp,omitempty"`
+
+	// Role Reserved for V2 - `auditor` (read-only on assigned tenants).
+	Role      *AdminRole `json:"role,omitempty"`
+	TenantIds *[]string  `json:"tenantIds,omitempty"`
+}
+
+// AdminWithActivation An admin account with its new single-use activation link, returned once by `createAdmin` and `resetAdminCredentials`. Only a hash of the link token is stored; the link is never sent by email.
+type AdminWithActivation struct {
+	// Activated True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used.
+	Activated bool `json:"activated"`
+
+	// ActivationExpiresAt End of validity of the link (72 hours).
+	ActivationExpiresAt time.Time `json:"activationExpiresAt"`
+
+	// ActivationUrl Activation link on the admin host: `https://<admin host>/admin/activate#<token>`. The token is in the fragment, so that it never reaches a server log; the page posts it to `activateAdmin`.
+	ActivationUrl string     `json:"activationUrl"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	Disabled      bool       `json:"disabled"`
+	Email         Email      `json:"email"`
+	Id            string     `json:"id"`
+	LastLoginAt   *time.Time `json:"lastLoginAt,omitempty"`
+
+	// RequireTotp Always true for super admins.
+	RequireTotp *bool `json:"requireTotp,omitempty"`
+
+	// Role Reserved for V2 - `auditor` (read-only on assigned tenants).
+	Role AdminRole `json:"role"`
+
+	// TenantIds Empty for super admins (implicit access to all tenants).
+	TenantIds   []string `json:"tenantIds"`
+	TotpEnabled bool     `json:"totpEnabled"`
+	Username    Username `json:"username"`
 }
 
 // AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
@@ -2006,6 +2067,11 @@ type TotpEnrollment struct {
 	Secret string `json:"secret"`
 }
 
+// TotpReenrollment Optional body of `startTotpEnrollment`. `currentPassword` is required to re-enroll (TOTP already enabled) and ignored for a first enrollment.
+type TotpReenrollment struct {
+	CurrentPassword *string `json:"currentPassword,omitempty"`
+}
+
 // TransferCreate defines model for TransferCreate.
 type TransferCreate struct {
 	DeleteAfterFirstDownload *bool             `json:"deleteAfterFirstDownload,omitempty"`
@@ -2128,6 +2194,9 @@ type TusResumableHeader string
 
 // UploadId defines model for UploadId.
 type UploadId = string
+
+// AdminForbidden RFC 9457 Problem Details with TransTeira extension members.
+type AdminForbidden = Problem
 
 // AlreadyExists RFC 9457 Problem Details with TransTeira extension members.
 type AlreadyExists = Problem
@@ -2431,6 +2500,9 @@ type ChangeAdminPasswordJSONRequestBody = PasswordChange
 // DisableTotpJSONRequestBody defines body for DisableTotp for application/json ContentType.
 type DisableTotpJSONRequestBody = PasswordConfirmation
 
+// StartTotpEnrollmentJSONRequestBody defines body for StartTotpEnrollment for application/json ContentType.
+type StartTotpEnrollmentJSONRequestBody = TotpReenrollment
+
 // ConfirmTotpEnrollmentJSONRequestBody defines body for ConfirmTotpEnrollment for application/json ContentType.
 type ConfirmTotpEnrollmentJSONRequestBody = TotpCode
 
@@ -2621,7 +2693,7 @@ func (t *TotpCode) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// ActivateAdmin Activate an admin account from the emailed link
+	// ActivateAdmin Activate an admin account from its activation link
 	// (POST /admin/activation)
 	ActivateAdmin(w http.ResponseWriter, r *http.Request)
 	// ListAdmins List admin accounts (super admin)
@@ -2636,7 +2708,7 @@ type ServerInterface interface {
 	// GetAdmin Get an admin account (super admin)
 	// (GET /admin/admins/{adminId})
 	GetAdmin(w http.ResponseWriter, r *http.Request, adminId AdminId)
-	// UpdateAdmin Update assignments, TOTP requirement or disable an account (super admin)
+	// UpdateAdmin Update role, assignments, TOTP requirement or disable an account (super admin)
 	// (PATCH /admin/admins/{adminId})
 	UpdateAdmin(w http.ResponseWriter, r *http.Request, adminId AdminId)
 	// ResetAdminCredentials Reset password and TOTP of an admin (super admin)
@@ -5928,6 +6000,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
+type AdminForbiddenApplicationProblemPlusJSONResponse Problem
+
 type AlreadyExistsApplicationProblemPlusJSONResponse Problem
 
 type CsrfInvalidApplicationProblemPlusJSONResponse Problem
@@ -6055,6 +6129,22 @@ func (response ActivateAdmin400ApplicationProblemPlusJSONResponse) VisitActivate
 	return err
 }
 
+type ActivateAdmin403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ActivateAdmin403ApplicationProblemPlusJSONResponse) VisitActivateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ActivateAdmin404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -6128,6 +6218,22 @@ func (response ListAdmins200JSONResponse) VisitListAdminsResponse(w http.Respons
 	return err
 }
 
+type ListAdmins400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListAdmins400ApplicationProblemPlusJSONResponse) VisitListAdminsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListAdmins401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -6184,7 +6290,7 @@ type CreateAdminResponseObject interface {
 	VisitCreateAdminResponse(w http.ResponseWriter) error
 }
 
-type CreateAdmin201JSONResponse Admin
+type CreateAdmin201JSONResponse AdminWithActivation
 
 func (response CreateAdmin201JSONResponse) VisitCreateAdminResponse(w http.ResponseWriter) error {
 
@@ -6231,7 +6337,7 @@ func (response CreateAdmin401ApplicationProblemPlusJSONResponse) VisitCreateAdmi
 }
 
 type CreateAdmin403ApplicationProblemPlusJSONResponse struct {
-	ForbiddenApplicationProblemPlusJSONResponse
+	AdminForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response CreateAdmin403ApplicationProblemPlusJSONResponse) VisitCreateAdminResponse(w http.ResponseWriter) error {
@@ -6311,7 +6417,7 @@ func (response DeleteAdmin401ApplicationProblemPlusJSONResponse) VisitDeleteAdmi
 }
 
 type DeleteAdmin403ApplicationProblemPlusJSONResponse struct {
-	ForbiddenApplicationProblemPlusJSONResponse
+	AdminForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response DeleteAdmin403ApplicationProblemPlusJSONResponse) VisitDeleteAdminResponse(w http.ResponseWriter) error {
@@ -6516,7 +6622,7 @@ func (response UpdateAdmin401ApplicationProblemPlusJSONResponse) VisitUpdateAdmi
 }
 
 type UpdateAdmin403ApplicationProblemPlusJSONResponse struct {
-	ForbiddenApplicationProblemPlusJSONResponse
+	AdminForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response UpdateAdmin403ApplicationProblemPlusJSONResponse) VisitUpdateAdminResponse(w http.ResponseWriter) error {
@@ -6547,6 +6653,22 @@ func (response UpdateAdmin404ApplicationProblemPlusJSONResponse) VisitUpdateAdmi
 	return err
 }
 
+type UpdateAdmin409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAdmin409ApplicationProblemPlusJSONResponse) VisitUpdateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateAdmin500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -6571,12 +6693,18 @@ type ResetAdminCredentialsResponseObject interface {
 	VisitResetAdminCredentialsResponse(w http.ResponseWriter) error
 }
 
-type ResetAdminCredentials202Response struct {
-}
+type ResetAdminCredentials200JSONResponse AdminWithActivation
 
-func (response ResetAdminCredentials202Response) VisitResetAdminCredentialsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(202)
-	return nil
+func (response ResetAdminCredentials200JSONResponse) VisitResetAdminCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type ResetAdminCredentials401ApplicationProblemPlusJSONResponse struct {
@@ -6596,7 +6724,7 @@ func (response ResetAdminCredentials401ApplicationProblemPlusJSONResponse) Visit
 }
 
 type ResetAdminCredentials403ApplicationProblemPlusJSONResponse struct {
-	ForbiddenApplicationProblemPlusJSONResponse
+	AdminForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response ResetAdminCredentials403ApplicationProblemPlusJSONResponse) VisitResetAdminCredentialsResponse(w http.ResponseWriter) error {
@@ -6623,6 +6751,22 @@ func (response ResetAdminCredentials404ApplicationProblemPlusJSONResponse) Visit
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetAdminCredentials409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ResetAdminCredentials409ApplicationProblemPlusJSONResponse) VisitResetAdminCredentialsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6707,6 +6851,22 @@ func (response AdminLogin401ApplicationProblemPlusJSONResponse) VisitAdminLoginR
 	return err
 }
 
+type AdminLogin403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response AdminLogin403ApplicationProblemPlusJSONResponse) VisitAdminLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AdminLogin429ApplicationProblemPlusJSONResponse struct {
 	RateLimitedApplicationProblemPlusJSONResponse
 }
@@ -6749,10 +6909,18 @@ type AdminLogoutResponseObject interface {
 	VisitAdminLogoutResponse(w http.ResponseWriter) error
 }
 
+type AdminLogout204ResponseHeaders struct {
+	SetCookie *string
+}
+
 type AdminLogout204Response struct {
+	Headers AdminLogout204ResponseHeaders
 }
 
 func (response AdminLogout204Response) VisitAdminLogoutResponse(w http.ResponseWriter) error {
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
 	w.WriteHeader(204)
 	return nil
 }
@@ -6769,6 +6937,22 @@ func (response AdminLogout401ApplicationProblemPlusJSONResponse) VisitAdminLogou
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminLogout403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response AdminLogout403ApplicationProblemPlusJSONResponse) VisitAdminLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6821,6 +7005,22 @@ func (response AdminVerifyTotp200JSONResponse) VisitAdminVerifyTotpResponse(w ht
 	return err
 }
 
+type AdminVerifyTotp400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response AdminVerifyTotp400ApplicationProblemPlusJSONResponse) VisitAdminVerifyTotpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AdminVerifyTotp401ApplicationProblemPlusJSONResponse struct {
 	InvalidCredentialsApplicationProblemPlusJSONResponse
 }
@@ -6833,6 +7033,22 @@ func (response AdminVerifyTotp401ApplicationProblemPlusJSONResponse) VisitAdminV
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdminVerifyTotp403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response AdminVerifyTotp403ApplicationProblemPlusJSONResponse) VisitAdminVerifyTotpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -6973,6 +7189,41 @@ func (response ChangeAdminPassword401ApplicationProblemPlusJSONResponse) VisitCh
 	return err
 }
 
+type ChangeAdminPassword403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ChangeAdminPassword403ApplicationProblemPlusJSONResponse) VisitChangeAdminPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ChangeAdminPassword429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ChangeAdminPassword429ApplicationProblemPlusJSONResponse) VisitChangeAdminPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ChangeAdminPassword500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -7005,6 +7256,22 @@ func (response DisableTotp204Response) VisitDisableTotpResponse(w http.ResponseW
 	return nil
 }
 
+type DisableTotp400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DisableTotp400ApplicationProblemPlusJSONResponse) VisitDisableTotpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DisableTotp401ApplicationProblemPlusJSONResponse struct {
 	InvalidCredentialsApplicationProblemPlusJSONResponse
 }
@@ -7022,7 +7289,7 @@ func (response DisableTotp401ApplicationProblemPlusJSONResponse) VisitDisableTot
 }
 
 type DisableTotp403ApplicationProblemPlusJSONResponse struct {
-	ForbiddenApplicationProblemPlusJSONResponse
+	AdminForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response DisableTotp403ApplicationProblemPlusJSONResponse) VisitDisableTotpResponse(w http.ResponseWriter) error {
@@ -7033,6 +7300,25 @@ func (response DisableTotp403ApplicationProblemPlusJSONResponse) VisitDisableTot
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DisableTotp429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response DisableTotp429ApplicationProblemPlusJSONResponse) VisitDisableTotpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -7054,6 +7340,7 @@ func (response DisableTotp500ApplicationProblemPlusJSONResponse) VisitDisableTot
 }
 
 type StartTotpEnrollmentRequestObject struct {
+	Body *StartTotpEnrollmentJSONRequestBody
 }
 
 type StartTotpEnrollmentResponseObject interface {
@@ -7074,9 +7361,23 @@ func (response StartTotpEnrollment200JSONResponse) VisitStartTotpEnrollmentRespo
 	return err
 }
 
-type StartTotpEnrollment401ApplicationProblemPlusJSONResponse struct {
-	UnauthenticatedApplicationProblemPlusJSONResponse
+type StartTotpEnrollment400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
 }
+
+func (response StartTotpEnrollment400ApplicationProblemPlusJSONResponse) VisitStartTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTotpEnrollment401ApplicationProblemPlusJSONResponse Problem
 
 func (response StartTotpEnrollment401ApplicationProblemPlusJSONResponse) VisitStartTotpEnrollmentResponse(w http.ResponseWriter) error {
 
@@ -7086,6 +7387,41 @@ func (response StartTotpEnrollment401ApplicationProblemPlusJSONResponse) VisitSt
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTotpEnrollment403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response StartTotpEnrollment403ApplicationProblemPlusJSONResponse) VisitStartTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTotpEnrollment429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response StartTotpEnrollment429ApplicationProblemPlusJSONResponse) VisitStartTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -7138,6 +7474,22 @@ func (response ConfirmTotpEnrollment200JSONResponse) VisitConfirmTotpEnrollmentR
 	return err
 }
 
+type ConfirmTotpEnrollment400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmTotpEnrollment400ApplicationProblemPlusJSONResponse) VisitConfirmTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ConfirmTotpEnrollment401ApplicationProblemPlusJSONResponse struct {
 	InvalidCredentialsApplicationProblemPlusJSONResponse
 }
@@ -7150,6 +7502,57 @@ func (response ConfirmTotpEnrollment401ApplicationProblemPlusJSONResponse) Visit
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTotpEnrollment403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmTotpEnrollment403ApplicationProblemPlusJSONResponse) VisitConfirmTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTotpEnrollment409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmTotpEnrollment409ApplicationProblemPlusJSONResponse) VisitConfirmTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmTotpEnrollment429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmTotpEnrollment429ApplicationProblemPlusJSONResponse) VisitConfirmTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -7191,18 +7594,21 @@ func (response GetSetupStatus200JSONResponse) VisitGetSetupStatusResponse(w http
 	return err
 }
 
-type GetSetupStatus421ApplicationProblemPlusJSONResponse struct {
-	UnknownTenantApplicationProblemPlusJSONResponse
+type GetSetupStatus429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
 }
 
-func (response GetSetupStatus421ApplicationProblemPlusJSONResponse) VisitGetSetupStatusResponse(w http.ResponseWriter) error {
+func (response GetSetupStatus429ApplicationProblemPlusJSONResponse) VisitGetSetupStatusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(421)
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13793,7 +14199,7 @@ func (response GetVersion500ApplicationProblemPlusJSONResponse) VisitGetVersionR
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// ActivateAdmin Activate an admin account from the emailed link
+	// ActivateAdmin Activate an admin account from its activation link
 	// (POST /admin/activation)
 	ActivateAdmin(ctx context.Context, request ActivateAdminRequestObject) (ActivateAdminResponseObject, error)
 	// ListAdmins List admin accounts (super admin)
@@ -13808,7 +14214,7 @@ type StrictServerInterface interface {
 	// GetAdmin Get an admin account (super admin)
 	// (GET /admin/admins/{adminId})
 	GetAdmin(ctx context.Context, request GetAdminRequestObject) (GetAdminResponseObject, error)
-	// UpdateAdmin Update assignments, TOTP requirement or disable an account (super admin)
+	// UpdateAdmin Update role, assignments, TOTP requirement or disable an account (super admin)
 	// (PATCH /admin/admins/{adminId})
 	UpdateAdmin(ctx context.Context, request UpdateAdminRequestObject) (UpdateAdminResponseObject, error)
 	// ResetAdminCredentials Reset password and TOTP of an admin (super admin)
@@ -14472,6 +14878,16 @@ func (sh *strictHandler) DisableTotp(w http.ResponseWriter, r *http.Request) {
 // StartTotpEnrollment operation middleware
 func (sh *strictHandler) StartTotpEnrollment(w http.ResponseWriter, r *http.Request) {
 	var request StartTotpEnrollmentRequestObject
+
+	var body StartTotpEnrollmentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.StartTotpEnrollment(ctx, request.(StartTotpEnrollmentRequestObject))

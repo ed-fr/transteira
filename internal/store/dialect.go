@@ -30,10 +30,15 @@ type dialect struct {
 	// none: its write transactions are already serialized (BEGIN IMMEDIATE
 	// on the single writer connection).
 	lockTenant string
+	// lockSystem, when set, takes a transaction-scoped lock named by its only
+	// argument, serializing the system transactions that take the same lock
+	// (administrator setup and last super admin rule, admin login failure
+	// counters). SQLite needs none, for the same reason as lockTenant.
+	lockSystem string
 	// lockWrappedKeys, when set, blocks every concurrent write to wrapped_keys
-	// until the end of the transaction, so that no key can be wrapped under
-	// the old master key after a completing rotation counted the remaining
-	// ones (PostgreSQL, READ COMMITTED). SQLite needs none: BEGIN IMMEDIATE
+	// and system_secrets until the end of the transaction, so that no key
+	// can be wrapped under the old master key after a completing rotation
+	// counted the remaining ones (PostgreSQL, READ COMMITTED). SQLite needs none: BEGIN IMMEDIATE
 	// already excludes every other writer, in this process (single writer
 	// connection) and in others (database lock).
 	lockWrappedKeys string
@@ -87,7 +92,8 @@ type dialect struct {
 	// tables).
 	verifyTemp string
 	// verifyRLS lists the tenant-scoped tables of the current schema (with a
-	// tenant_id column), plus the tenants registry and the system key tables,
+	// tenant_id column), plus the tenants registry and the system tables
+	// (master keys, rotations, system secrets, administrator tables),
 	// lacking ENABLE and FORCE row-level security or a policy.
 	verifyRLS string
 }
@@ -119,9 +125,11 @@ var postgresDialect = &dialect{
 	// Row locks (SELECT ... FOR UPDATE on the tenant row) are not an option:
 	// the tenants policies only let the system scope update that row.
 	lockTenant:      `SELECT pg_advisory_xact_lock(hashtext('transteira.tenant.' || current_schema() || '.' || $1))`,
-	lockWrappedKeys: `LOCK TABLE wrapped_keys IN SHARE ROW EXCLUSIVE MODE`,
-	isolation:       sql.LevelReadCommitted,
-	migrationLock:   `SELECT pg_advisory_xact_lock(hashtext('transteira.migrate.' || current_schema()))`,
+	lockWrappedKeys: `LOCK TABLE wrapped_keys, system_secrets IN SHARE ROW EXCLUSIVE MODE`,
+	// The name is a bound parameter, a constant of the store (lockName).
+	lockSystem:    `SELECT pg_advisory_xact_lock(hashtext('transteira.system.' || current_schema() || '.' || $1))`,
+	isolation:     sql.LevelReadCommitted,
+	migrationLock: `SELECT pg_advisory_xact_lock(hashtext('transteira.migrate.' || current_schema()))`,
 	migrationsTableExists: `SELECT count(*) FROM pg_catalog.pg_tables ` +
 		`WHERE schemaname = current_schema() AND tablename = 'schema_migrations'`,
 
@@ -148,7 +156,8 @@ var postgresDialect = &dialect{
 	verifyRLS: `SELECT c.relname::text FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
-		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
+		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		  AND NOT (c.relrowsecurity AND c.relforcerowsecurity
 		        AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid))

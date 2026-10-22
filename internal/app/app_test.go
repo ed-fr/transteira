@@ -28,7 +28,10 @@ import (
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
-const tenantHost = "transfer.entity-a.localhost"
+const (
+	tenantHost = "transfer.entity-a.localhost"
+	adminHost  = "admin.localhost"
+)
 
 // memListener is an in-memory net.Listener whose connections are net.Pipe
 // pairs.
@@ -133,6 +136,7 @@ func testConfig(t *testing.T, e storetest.Engine) *config.Config {
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.ClamAV = config.ClamAVAddr{Network: "tcp", Address: "127.0.0.1:1"}
 	cfg.MasterKeyFile = writeMasterKey(t)
+	cfg.AdminHosts = []string{adminHost}
 	return cfg
 }
 

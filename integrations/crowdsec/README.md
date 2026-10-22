@@ -31,7 +31,7 @@ timestamp.
 
    ```sh
    cscli explain --type transteira \
-     --log '2026-10-20T07:41:00.123Z ip=203.0.113.7 tenant=transfer.entity-a.example.com event=admin_login_failed reason="password"'
+     --log '2026-10-20T07:41:00.123Z ip=203.0.113.7 tenant=- event=admin_login_failed reason="password"'
    cscli metrics   # "transteira" lines parsed, scenarios overflowing
    ```
 

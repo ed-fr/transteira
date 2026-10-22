@@ -171,7 +171,11 @@ func TestRLSOwnerCannotDisablePolicies(t *testing.T) {
 	ctx := t.Context()
 	a := string(f.a.ID)
 
-	for _, table := range []string{"tenants", "tenant_network_rules", "blocklist_entries", "wrapped_keys", "master_keys", "key_rotations"} {
+	for _, table := range []string{
+		"tenants", "tenant_network_rules", "blocklist_entries", "wrapped_keys", "master_keys", "key_rotations",
+		"system_secrets", "admins", "admin_tenants", "admin_sessions", "admin_recovery_codes", "admin_activations",
+		"admin_login_failures", "audit_events",
+	} {
 		stmts := []string{
 			`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`,
 			`ALTER TABLE ` + table + ` DISABLE ROW LEVEL SECURITY`,
@@ -430,4 +434,59 @@ func policyNames(ctx context.Context, t *testing.T, raw *sql.DB, table string) [
 		t.Fatal(err)
 	}
 	return names
+}
+
+// TestRLSAuditAppendOnly checks the audit log policies (threat model T-63,
+// spec 21.1): a tenant-scoped raw transaction reads and appends its own
+// tenant's events only, and can neither update nor delete any event, its
+// own included; only the system scope (the 12-month purge) can.
+func TestRLSAuditAppendOnly(t *testing.T) {
+	t.Parallel()
+	f, raw := pgFixture(t)
+	ctx := t.Context()
+	a, b := string(f.a.ID), string(f.b.ID)
+	insert := `INSERT INTO audit_events (id, at, tenant_id, actor_kind, actor, action, object_kind, object_id)
+		VALUES ($1, 1, $2, 'admin', 'admin.a', 'config.updated', 'tenant', 'ten_x')`
+
+	err := inTenantTx(ctx, t, raw, &a, func(tx *sql.Tx) error {
+		if n := affected(ctx, t, tx, insert, "aud_01JAPPENDONLY0000000000000", a); n != 1 {
+			t.Errorf("own insert affected %d rows", n)
+		}
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM audit_events WHERE tenant_id = $1`, a); n != 1 {
+			t.Errorf("own events visible = %d, want 1", n)
+		}
+		for _, stmt := range []string{
+			`UPDATE audit_events SET actor = 'forged' WHERE tenant_id = $1`,
+			`UPDATE audit_events SET tenant_id = NULL WHERE tenant_id = $1`,
+			`DELETE FROM audit_events WHERE tenant_id = $1`,
+		} {
+			if n := affected(ctx, t, tx, stmt, a); n != 0 {
+				t.Errorf("tenant-scoped %q affected %d rows, want 0", stmt, n)
+			}
+		}
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM audit_events WHERE tenant_id = $1 AND actor = 'admin.a'`, a); n != 1 {
+			t.Errorf("own event after update/delete attempts = %d, want 1 unchanged", n)
+		}
+		// The system scope alone may update and delete (the purge).
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.system_scope', 'on', true)`); err != nil {
+			t.Fatal(err)
+		}
+		if n := affected(ctx, t, tx, `DELETE FROM audit_events WHERE tenant_id = $1`, a); n != 1 {
+			t.Errorf("system-scoped delete affected %d rows, want 1", n)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]any{
+		"insert an event of B":  {"aud_01JAPPENDONLYB000000000000", b},
+		"insert a global event": {"aud_01JAPPENDONLYG000000000000", nil},
+	} {
+		err := inTenantTx(ctx, t, raw, &a, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, insert, args...)
+			return err
+		})
+		assertRLSViolation(t, name, err)
+	}
 }

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 // fuzzPlain is the plaintext of every fuzz seed: any authenticated output must
@@ -156,6 +158,77 @@ func FuzzVerifyMAC(f *testing.F) {
 		}
 		if ok, err := k.VerifyMAC(MACPurpose(purpose), own, a, b); !ok || err != nil {
 			t.Fatalf("own MAC rejected: %v, %v", ok, err)
+		}
+	})
+}
+
+func FuzzVerifyTOTP(f *testing.F) {
+	secret := []byte(vectorTOTPSecret)
+	f.Add(secret, "287082", int64(59), uint64(0), false)
+	f.Add(secret, "287082", int64(59), uint64(1), true)
+	f.Add(secret, "287082", int64(89), uint64(0), true)
+	f.Add(secret, "28708", int64(59), uint64(0), false)
+	f.Add(secret, "2870820", int64(59), uint64(0), false)
+	f.Add([]byte{}, "000000", int64(-1), uint64(0), false)
+	f.Fuzz(func(t *testing.T, s []byte, code string, sec int64, last uint64, haveLast bool) {
+		now := time.Unix(sec, 0)
+		c, ok := VerifyTOTP(s, code, now, last, haveLast)
+		if !ok {
+			if c != 0 {
+				t.Fatalf("refused with counter %d", c)
+			}
+			return
+		}
+		cur := TOTPCounter(now)
+		switch {
+		case len(s) == 0 || !ValidTOTPCode(code):
+			t.Fatalf("accepted secret %x / code %q", s, code)
+		case c+1 < cur || c > cur+1:
+			t.Fatalf("counter %d outside the window of %d", c, cur)
+		case haveLast && c <= last:
+			t.Fatalf("replay: counter %d <= last %d", c, last)
+		case TOTPCode(s, c) != code:
+			t.Fatalf("counter %d does not produce %q", c, code)
+		}
+		// The accepted code is never accepted again.
+		if _, again := VerifyTOTP(s, code, now, c, true); again && TOTPCode(s, cur+1) != code {
+			t.Fatal("accepted code replayed")
+		}
+	})
+}
+
+func FuzzNormalizeRecoveryCode(f *testing.F) {
+	f.Add("rc-0123-4567-89AB")
+	f.Add("rc 0123 4567 89ab")
+	f.Add("0123456789AB")
+	f.Add("rc-0123-4567-89AI")
+	f.Add("RCRC23456789AB")
+	f.Add("")
+	f.Fuzz(func(t *testing.T, s string) {
+		n, ok := NormalizeRecoveryCode(s)
+		if !ok {
+			if n != "" {
+				t.Fatalf("refused with output %q", n)
+			}
+			return
+		}
+		if len(s) > maxRecoveryInput || len(n) != len(RecoveryCodePrefix)+recoverySymbols+recoveryGroups-1 ||
+			!strings.HasPrefix(n, RecoveryCodePrefix) {
+			t.Fatalf("Normalize(%q) = %q", s, n)
+		}
+		body := strings.ReplaceAll(n[len(RecoveryCodePrefix):], "-", "")
+		for i := range len(body) {
+			if strings.IndexByte(recoveryAlphabet, body[i]) < 0 {
+				t.Fatalf("symbol %q outside the alphabet in %q", body[i], n)
+			}
+		}
+		// Only case, dashes, spaces and the prefix may differ from the input.
+		stripped := strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(s))
+		if stripped != body && stripped != "RC"+body {
+			t.Fatalf("Normalize(%q) = %q changes symbols", s, n)
+		}
+		if again, ok := NormalizeRecoveryCode(n); !ok || again != n {
+			t.Fatalf("not idempotent: %q -> %q", n, again)
 		}
 	})
 }

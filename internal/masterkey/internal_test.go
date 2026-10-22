@@ -26,6 +26,15 @@ func TestNewDEKRandomFailure(t *testing.T) {
 	}
 }
 
+// TestWrapSystemKeyFailure covers a wrapping failure of WrapSystem, which
+// only an unusable master key can produce.
+func TestWrapSystemKeyFailure(t *testing.T) {
+	v := &Vault{kr: &Keyring{current: &crypto.MasterKey{}}}
+	if _, err := v.WrapSystem(crypto.PurposeAdminTOTP, []byte("x")); !errors.Is(err, crypto.ErrKeyUnavailable) {
+		t.Errorf("WrapSystem = %v", err)
+	}
+}
+
 // TestScrub covers the outcomes of the post-deletion scrub: a busy WAL is a
 // warning, any other failure an error (Vault.Scrub) or a warning (after a
 // rotation).

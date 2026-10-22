@@ -31,7 +31,8 @@ transteira/
 │   ├── config/                      # Lecture et validation des variables d'environnement (TT_*)
 │   ├── version/                     # Version SemVer injectée par -ldflags
 │   │
-│   ├── httpserver/                  # Serveur HTTP (net/http.ServeMux, motifs Go 1.22+), montage des espaces public / admin / API
+│   ├── httpserver/                  # Serveur HTTP (net/http.ServeMux, motifs Go 1.22+), routage par hôte : hôte admin dédié
+│   │                                # (admin.go, sans entité) ou FQDN d'entité (public / API), sinon 421
 │   │   └── middleware/              # request-id, IP réelle (proxys de confiance), résolution du tenant,
 │   │                                # en-têtes de sécurité / CSP, limitation de débit, limite de corps
 │   │                                # et type JSON, récupération des panics, cookie de session de dépôt et CSRF
@@ -70,7 +71,7 @@ transteira/
 │   ├── quota/                       # Limite par envoi, quota par entité, réservations, seuils 80 % / 100 %
 │   ├── adminauth/                   # Comptes admin, argon2id, TOTP, codes de secours, sessions, premier lancement
 │   │                                # (couche d'authentification prévue pour accueillir un fournisseur OIDC en V2)
-│   ├── authz/                       # Rôles et périmètres (super_admin, delegated_admin ; auditor en V2)
+│   ├── (authz → adminauth)          # Rôles et périmètres dans adminauth/authz.go (super_admin, delegated_admin ; auditor en V2)
 │   ├── apitoken/                    # Jetons d'API par entité (hachés, expiration optionnelle, révocation)
 │   ├── crypto/                      # Primitives pures : clé maître, enveloppe (DEK chiffrée par la clé maître),
 │   │                                # format de fichier AES-256-GCM par blocs, points de reprise tus, clés MAC
@@ -87,7 +88,7 @@ transteira/
 │   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
 │   │                                # (templates/), file d'envoi asynchrone ; les mails de transfert sont construits par notify
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
-│   ├── audit/                       # Journal d'audit (en base, cloisonné par tenant)
+│   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
 │   ├── maintenance/                 # État du mode maintenance (variable d'environnement + administration)
 │   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
@@ -239,4 +240,4 @@ transteira/
 | Interface web | **Svelte compilé avec Vite**, sortie statique embarquée dans le binaire | Décidé le 2026-10-19 |
 | Documentation interactive de l'API | **Scalar**, vendorisé dans `web/apidocs/`, sans CDN | Décidé le 2026-10-19 |
 | Génération de code | `oapi-codegen` (strict server) côté Go, client TypeScript généré pour le front | Proposé par défaut |
-| Hôte de l'administration | Accessible depuis tout FQDN d'entité, liste restrictive optionnelle (`TT_ADMIN_HOSTS`) ; cookie de session admin propre à chaque hôte | Proposé par défaut |
+| Hôte de l'administration | Hôte dédié obligatoire (`TT_ADMIN_HOSTS`), jamais un FQDN d'entité ; l'administration n'est servie que là, l'API publique jamais | Décidé le 2026-10-21 |

@@ -45,6 +45,11 @@
 //     session-level, so pooled connections cannot leak it) and the policies
 //     only expose rows of that tenant (its own tenants row read-only);
 //     system transactions set app.system_scope instead.
+//     The system tables (key rotations, system secrets and the
+//     administrator tables, admin_tenants included) are open to the system
+//     scope only (master key identifiers, not secret, are readable by
+//     all); the audit log is open to the system scope and, for its own
+//     rows, to each tenant scope.
 //
 // Repository methods take the tenant ID as an explicit parameter. A row of
 // another tenant is reported as [ErrNotFound], exactly like a missing row.

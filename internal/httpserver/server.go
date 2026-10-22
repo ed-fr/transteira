@@ -1,7 +1,7 @@
 // Package httpserver assembles the HTTP handler of TransTeira: the common
 // middleware chain, the routes that do not belong to a tenant (health check
-// and OpenAPI document) and the tenant-scoped API generated from
-// api/openapi.yaml.
+// and OpenAPI document), the router of the admin hosts and the
+// tenant-scoped API generated from api/openapi.yaml.
 //
 // Order of the layers, from outermost to innermost (see
 // internal/httpserver/middleware):
@@ -12,14 +12,22 @@
 //  4. security headers;
 //  5. global rate limit per client IP;
 //  6. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
-//  7. tenant resolution from the Host header, for every other path, before
-//     any routing (an unknown host gets 421 whatever the path, including
-//     paths that would be 404, 405 or a redirect);
+//  7. routing by the raw Host header (never X-Forwarded-Host):
+//     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
+//     tenant resolution: it serves /api/v1/admin/* and /api/v1/version
+//     only, everything else is 404 (see newAdminHandler);
+//     - any other host goes through tenant resolution, before any routing
+//     (an unknown host gets 421 whatever the path, including paths that
+//     would be 404, 405 or a redirect); a known tenant host answers 404
+//     for /api/v1/admin and below, before any admin logic;
 //  8. per-operation middlewares of the API router, before any body is read,
 //     all driven by the route policy table [routePolicies]: read and write
 //     deadlines (except streaming routes), maintenance mode (deposit
 //     operations get 503), deposit session cookie (401) and CSRF protection
 //     of unsafe methods (403), body limit (413) and JSON media type (415).
+//     The admin router has its own chain: deadlines, per-IP limit of the
+//     login steps (429), admin session cookie (401), CSRF and Origin
+//     checks (403), body limit and JSON media type.
 //
 // Every error is an RFC 9457 Problem whose instance is the request
 // identifier, except the bodyless answers of the tus PATCH operation.
@@ -218,6 +226,16 @@ type Deps struct {
 	// Sessions resolves the deposit session cookies and checks the CSRF
 	// tokens (*deposit.Service); nil authenticates no session.
 	Sessions DepositSessions
+	// AdminHosts are the dedicated hosts of the administration
+	// (config.Config.AdminHosts). Empty, no host serves it: the admin
+	// operations then answer 404 everywhere.
+	AdminHosts []string
+	// AdminAPI implements the admin operations served on the admin hosts;
+	// nil uses admin.NewServer().
+	AdminAPI gen.StrictServerInterface
+	// AdminSessions resolves the admin session cookies and checks their
+	// CSRF tokens (*adminauth.Service); nil authenticates no session.
+	AdminSessions AdminSessions
 	// UploadIdleTimeout is the idle read timeout of a tus PATCH body
 	// (TT_UPLOAD_IDLE_TIMEOUT); DefaultUploadIdleTimeout when zero.
 	UploadIdleTimeout time.Duration
@@ -236,6 +254,7 @@ type Option func(*options)
 type options struct {
 	globalLimiter      middleware.Limiter
 	unknownHostLimiter middleware.Limiter
+	adminAuthLimiter   middleware.Limiter
 }
 
 // WithGlobalLimiter replaces the global per-IP limiter (GlobalRate and
@@ -250,8 +269,15 @@ func WithUnknownHostLimiter(l middleware.Limiter) Option {
 	return func(o *options) { o.unknownHostLimiter = l }
 }
 
+// WithAdminAuthLimiter replaces the per-IP limiter of the admin login
+// steps (AdminAuthInterval and AdminAuthBurst), for tests.
+func WithAdminAuthLimiter(l middleware.Limiter) Option {
+	return func(o *options) { o.adminAuthLimiter = l }
+}
+
 // New builds the HTTP handler of the application. It panics when a
-// required dependency is missing, which is a wiring error.
+// required dependency is missing or an admin host is malformed, which are
+// wiring errors.
 func New(deps Deps, opts ...Option) http.Handler {
 	if deps.Resolver == nil || deps.SecurityLog == nil || deps.Health == nil {
 		panic("httpserver: New requires a resolver, a security log and a health service")
@@ -259,6 +285,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	o := options{
 		globalLimiter:      ratelimit.New(GlobalRate, GlobalBurst),
 		unknownHostLimiter: ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
+		adminAuthLimiter:   ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -344,17 +371,27 @@ func New(deps Deps, opts ...Option) http.Handler {
 	tenantMux := http.NewServeMux()
 	tenantMux.Handle(APIBaseURL+"/", idleBodyHandler(apiMux, withProblemFallback(apiMux), idle, logger))
 	tenantMux.Handle(APIBaseURL, http.HandlerFunc(notFound))
+	// The administration is never served on a tenant host: its whole
+	// prefix answers 404 before any admin middleware or handler.
+	tenantMux.Handle(AdminPrefix+"/", http.HandlerFunc(notFound))
+	tenantMux.Handle(AdminPrefix, http.HandlerFunc(notFound))
 	tenantScoped := middleware.Chain(withProblemFallback(tenantMux),
 		middleware.Tenant(deps.Resolver, events, o.unknownHostLimiter, logger),
 		rejectUncleanAPIPaths,
 	)
 
+	adminHosts := newHostSet(deps.AdminHosts)
+	adminScoped := newAdminHandler(deps, eh, events, o.adminAuthLimiter, logger)
+
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isTenantFree(r.URL.Path) {
+		switch {
+		case isTenantFree(r.URL.Path):
 			tenantFree.ServeHTTP(w, r)
-			return
+		case adminHosts.match(r.Host):
+			adminScoped.ServeHTTP(w, r)
+		default:
+			tenantScoped.ServeHTTP(w, r)
 		}
-		tenantScoped.ServeHTTP(w, r)
 	})
 
 	return middleware.Chain(dispatch,

@@ -118,10 +118,13 @@ func TestPurposeKeysDiffer(t *testing.T) {
 	// Same nonce, same AAD apart from the purpose: the per-purpose keys must
 	// differ, which the AAD alone would not show. Seal directly.
 	nonce := make([]byte, nonceSize)
-	a := k.m.wrap[PurposeDEK].Seal(nil, nonce, []byte("x"), nil)
-	b := k.m.wrap[PurposeSecret].Seal(nil, nonce, []byte("x"), nil)
-	if bytes.Equal(a, b) {
-		t.Fatal("purposes share a wrapping key")
+	seen := map[string]Purpose{}
+	for _, p := range purposes {
+		ct := string(k.m.wrap[p].Seal(nil, nonce, []byte("x"), nil))
+		if other, dup := seen[ct]; dup {
+			t.Fatalf("purposes %s and %s share a wrapping key", p, other)
+		}
+		seen[ct] = p
 	}
 }
 

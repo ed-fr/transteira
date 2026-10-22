@@ -32,6 +32,7 @@ type repo interface {
 	listEnded(ctx context.Context, tid tenant.ID, endedBefore time.Time, limit int) ([]string, error)
 	deleteEnded(ctx context.Context, tid tenant.ID, trfID string) error
 	purge(ctx context.Context, p rowPurge, tid tenant.ID, now time.Time) (int64, error)
+	purgeSystem(ctx context.Context, p systemPurge, now time.Time) (int64, error)
 
 	storageRefs(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, error)
 	availableIDs(ctx context.Context, tid tenant.ID) ([]string, error)
@@ -124,6 +125,10 @@ func (r storeRepo) deleteEnded(ctx context.Context, tid tenant.ID, trfID string)
 
 func (r storeRepo) purge(ctx context.Context, p rowPurge, tid tenant.ID, now time.Time) (int64, error) {
 	return p.run(ctx, r.db, tid, now)
+}
+
+func (r storeRepo) purgeSystem(ctx context.Context, p systemPurge, now time.Time) (int64, error) {
+	return p.run(ctx, r.db, now)
 }
 
 func (r storeRepo) storageRefs(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, error) {

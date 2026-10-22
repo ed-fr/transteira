@@ -61,6 +61,17 @@ const (
 	OrphanGrace = 24 * time.Hour
 	// DefaultBackupKeep is the default number of database copies kept.
 	DefaultBackupKeep = 7
+	// DefaultAdminSessionIdleTimeout is the default idle timeout of the
+	// administrator sessions (TT_ADMIN_SESSION_IDLE_TIMEOUT): TaskPurgeRows
+	// deletes a session idle for that long, or past its absolute expiry.
+	DefaultAdminSessionIdleTimeout = 30 * time.Minute
+	// AdminLoginFailureWindow is the longest window of the administrator
+	// login failure rules: TaskPurgeRows deletes a counter whose latest
+	// failure is that old and whose lock is over.
+	AdminLoginFailureWindow = 15 * time.Minute
+	// AuditRetentionMonths is how long, in calendar months, the audit
+	// events are kept (CLAUDE.md sections 20 and 21.1).
+	AuditRetentionMonths = 12
 )
 
 // Errors of the [Sweeper].
@@ -140,6 +151,13 @@ type Options struct {
 	OrphanGrace time.Duration
 	// ScanningMaxAge replaces the constant store.ScanningMaxAge (tests).
 	ScanningMaxAge time.Duration
+	// AdminSessionIdleTimeout is the idle timeout of the administrator
+	// sessions (TT_ADMIN_SESSION_IDLE_TIMEOUT,
+	// DefaultAdminSessionIdleTimeout).
+	AdminSessionIdleTimeout time.Duration
+	// AuditRetentionMonths replaces the constant AuditRetentionMonths
+	// (tests).
+	AuditRetentionMonths int
 	// UploadTTL is the shortest time after its creation at which the
 	// uploads of a transfer can expire, min(TT_UPLOAD_TTL,
 	// TT_UPLOAD_MAX_AGE): TaskAbandonedUploads only examines the uploading
@@ -188,9 +206,16 @@ type Sweeper struct {
 	orphanGrace    time.Duration
 	scanningMaxAge time.Duration
 	uploadTTL      time.Duration
-	backupDir      string
-	backupTime     time.Duration
-	backupKeep     int
+	// adminIdleTimeout is the idle timeout of the administrator sessions.
+	adminIdleTimeout time.Duration
+	// auditRetentionMonths is the retention of the audit events, in
+	// calendar months.
+	auditRetentionMonths int
+	// sysPurges are the global purges of TaskPurgeRows.
+	sysPurges  []systemPurge
+	backupDir  string
+	backupTime time.Duration
+	backupKeep int
 
 	// pageSizes are the page sizes of the store's listings, per erasure
 	// kind: a page this long means more transfers may be due after it.
@@ -239,18 +264,21 @@ func New(deps Deps, opts Options) *Sweeper {
 		repo:    storeRepo{db: deps.DB, vault: deps.Vault},
 		remover: deps.Remover, files: deps.Files, fs: osFS(),
 		now: opts.Now, logger: opts.Logger,
-		endedRetention: orDefault(opts.EndedRetention, EndedRetention),
-		orphanGrace:    orDefault(opts.OrphanGrace, OrphanGrace),
-		scanningMaxAge: orDefault(opts.ScanningMaxAge, store.ScanningMaxAge),
-		uploadTTL:      max(opts.UploadTTL, 0),
-		backupDir:      opts.BackupDir,
-		backupTime:     opts.BackupTime,
-		backupKeep:     orDefault(opts.BackupKeep, DefaultBackupKeep),
-		pageSizes:      [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit},
-		purgeBatch:     store.PurgeBatchSize,
-		newTimer:       realTimer,
-		last:           make(map[Task]time.Time),
+		endedRetention:       orDefault(opts.EndedRetention, EndedRetention),
+		orphanGrace:          orDefault(opts.OrphanGrace, OrphanGrace),
+		scanningMaxAge:       orDefault(opts.ScanningMaxAge, store.ScanningMaxAge),
+		uploadTTL:            max(opts.UploadTTL, 0),
+		adminIdleTimeout:     orDefault(opts.AdminSessionIdleTimeout, DefaultAdminSessionIdleTimeout),
+		auditRetentionMonths: orDefault(opts.AuditRetentionMonths, AuditRetentionMonths),
+		backupDir:            opts.BackupDir,
+		backupTime:           opts.BackupTime,
+		backupKeep:           orDefault(opts.BackupKeep, DefaultBackupKeep),
+		pageSizes:            [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit},
+		purgeBatch:           store.PurgeBatchSize,
+		newTimer:             realTimer,
+		last:                 make(map[Task]time.Time),
 	}
+	s.sysPurges = s.systemPurges()
 	interval := orDefault(opts.Interval, DefaultInterval)
 	s.tasks = []*task{
 		{TaskDeleteAfterDownload, interval, true, s.erasureTask(kindDelete)},

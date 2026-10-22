@@ -12,11 +12,14 @@ import (
 	"crypto/cipher"
 	"crypto/hkdf"
 	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 )
@@ -49,6 +52,17 @@ type extVectors struct {
 	MACGrantTransferID   string `json:"mac_download_grant_transfer_id"`
 	MACGrantExpiry       string `json:"mac_download_grant_expiry_hex"`
 	MACDownloadGrant     string `json:"mac_download_grant_hex"`
+	MACAdminSession      string `json:"mac_admin_session_token"`
+	MACAdminCSRF         string `json:"mac_admin_csrf_hex"`
+	WrappedAdminTOTP     string `json:"wrapped_admin_totp_hex"`
+	TOTPSecret           string `json:"totp_secret_hex"`
+	TOTPSecretBase32     string `json:"totp_secret_base32"`
+	TOTPRFC6238          []struct {
+		Time int64  `json:"time"`
+		Code string `json:"code"`
+	} `json:"totp_rfc6238"`
+	RecoveryCode    string `json:"recovery_code"`
+	RecoveryCodeMAC string `json:"recovery_code_mac_hex"`
 }
 
 // lp returns the big-endian uint32 length of s followed by s.
@@ -142,6 +156,9 @@ func TestVectorsIndependent(t *testing.T) {
 	}
 	if string(unwrap("secret", v.WrappedSecret)) != v.Secret {
 		t.Fatal("wrapped secret content")
+	}
+	if !bytes.Equal(unwrap("admin-totp", v.WrappedAdminTOTP), unhex(t, v.TOTPSecret)) {
+		t.Fatal("wrapped admin TOTP secret content")
 	}
 
 	// Stream: header "TTEF" | 1 | chunk size u32 | prefix(7); chunks sealed with
@@ -274,6 +291,49 @@ func TestVectorsIndependent(t *testing.T) {
 	if macOf("recognition", v.TenantID, v.MACGrantTransferID, string(grantExpiry)) == v.MACDownloadGrant {
 		t.Fatal("download grant MAC equals a recognition MAC")
 	}
+	if v.MACAdminSession == "" {
+		t.Fatal("admin CSRF vector input missing")
+	}
+	if got := macOf("admin-csrf", v.MACAdminSession); got != v.MACAdminCSRF {
+		t.Fatalf("admin CSRF MAC %s, vectors %s", got, v.MACAdminCSRF)
+	}
+	if macOf("csrf", v.MACAdminSession) == v.MACAdminCSRF {
+		t.Fatal("admin CSRF MAC equals a deposit CSRF MAC")
+	}
+
+	// TOTP (RFC 6238 over RFC 4226): HMAC-SHA1(secret, counter u64 BE) with
+	// counter = floor(time / 30), dynamic truncation, modulo 10^6, 6 digits.
+	totpSecret := unhex(t, v.TOTPSecret)
+	if string(totpSecret) != "12345678901234567890" {
+		t.Fatal("TOTP secret is not the RFC 6238 seed")
+	}
+	if b32 := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(totpSecret); b32 != v.TOTPSecretBase32 {
+		t.Fatalf("TOTP secret base32 %s, vectors %s", b32, v.TOTPSecretBase32)
+	}
+	if len(v.TOTPRFC6238) != 6 {
+		t.Fatal("TOTP vectors missing")
+	}
+	for _, tv := range v.TOTPRFC6238 {
+		m := hmac.New(sha1.New, totpSecret)
+		m.Write(binary.BigEndian.AppendUint64(nil, uint64(tv.Time)/30))
+		sum := m.Sum(nil)
+		off := sum[19] & 0x0f
+		code := fmt.Sprintf("%06d", (binary.BigEndian.Uint32(sum[off:])&0x7fffffff)%1000000)
+		if code != tv.Code {
+			t.Fatalf("TOTP at %d: %s, vectors %s", tv.Time, code, tv.Code)
+		}
+	}
+
+	// Recovery codes are stored as an HMAC-SHA256 of their normalized form,
+	// keyed by a key derived from the TOTP secret, with the MAC layout.
+	rm := hmac.New(sha256.New, hkdf32(t, totpSecret, "transteira/v1/mac/admin-recovery"))
+	rm.Write(lp("transteira/v1/mac"))
+	rm.Write(lp("admin-recovery"))
+	rm.Write(lp(v.RecoveryCode))
+	if hex.EncodeToString(rm.Sum(nil)) != v.RecoveryCodeMAC {
+		t.Fatal("recovery code MAC")
+	}
+
 	// The MAC keys are not the wrapping keys of the same name space.
 	if bytes.Equal(hkdf32(t, master, "transteira/v1/mac/otp"), hkdf32(t, master, "transteira/v1/wrap/dek")) {
 		t.Fatal("MAC key equals a wrapping key")

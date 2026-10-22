@@ -1,14 +1,16 @@
 // Package crypto implements TransTeira's encryption at rest (specification
 // section 16.1, threat model decisions P6 and P7, threats T-28 to T-40).
 //
-// It provides three building blocks and depends on no other internal package:
+// It provides the following building blocks and depends on no other internal
+// package:
 //
 //   - MasterKey: the 32-byte master key read from a file mounted outside the
 //     data volumes. Its bytes are never exposed: it only derives one wrapping
 //     key per Purpose and one MAC key per MACPurpose (HKDF-SHA256), and a
 //     public identifier (ID) used to detect a wrong key at startup.
 //   - Envelope encryption: MasterKey.Wrap and MasterKey.Unwrap seal small
-//     secrets (per-file data encryption keys, SMTP passwords) with
+//     secrets (per-file data encryption keys, SMTP passwords, administrator
+//     TOTP secrets) with
 //     AES-256-GCM, bound to their purpose, tenant and database row so that a
 //     blob copied to another row or tenant can no longer be opened.
 //   - Chunked file encryption: Writer, Reader and ReaderAt implement a
@@ -18,12 +20,17 @@
 //     supports resumable (tus) uploads
 //     through Writer.Checkpoint and ResumeWriter without ever writing
 //     plaintext to disk nor reusing a nonce.
+//   - Administrator authentication primitives (specification section 6.5):
+//     TOTP codes (RFC 6238) and single-use recovery codes, described in the
+//     "TOTP" and "Recovery codes" sections below.
 //
 // # Wrapped blob format
 //
 //	version (1 byte, = 1) | nonce (12 random bytes) | AES-256-GCM ciphertext and tag
 //
-// The key is HKDF-SHA256(master key, salt = none, info =
+// The purposes are "dek" (PurposeDEK), "secret" (PurposeSecret) and
+// "admin-totp" (PurposeAdminTOTP). The key is HKDF-SHA256(master key, salt =
+// none, info =
 // "transteira/v1/wrap/" + purpose). The additional authenticated data is
 // lp("transteira/v1/envelope") | lp(purpose) | lp(tenantID) | lp(rowID),
 // where lp(x) is the big-endian uint32 length of x followed by x.
@@ -33,12 +40,15 @@
 // MasterKey.MAC and MasterKey.VerifyMAC compute HMAC-SHA256 tags for short
 // values that must not be recomputable without the master key: the stored
 // hashes of the one-time verification codes (MACPurposeOTP), the CSRF
-// tokens derived from deposit session tokens (MACPurposeCSRF) and the
+// tokens derived from deposit session tokens (MACPurposeCSRF), the
 // entries of the browser recognition cookie of verified depositors
 // (MACPurposeRecognition, over a tenant ID, a normalized address, its
-// recognition salt and an issue day) and the entries of the download grant
+// recognition salt and an issue day), the entries of the download grant
 // cookie set once a transfer password has been entered
-// (MACPurposeDownloadGrant, over a tenant ID, a transfer ID and an expiry).
+// (MACPurposeDownloadGrant, over a tenant ID, a transfer ID and an expiry),
+// and the CSRF tokens derived from administrator session tokens
+// (MACPurposeAdminCSRF, distinct from the deposit CSRF purpose so that a
+// token of one kind of session is never valid for the other).
 //
 //	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
 //	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))
@@ -57,6 +67,34 @@
 // "transteira/v1/stream-chunk", "transteira/v1/stream-tail",
 // "transteira/v1/mac"), and every variable field is length-prefixed, so that
 // no input of one use can be reinterpreted as an input of another.
+//
+// # TOTP
+//
+// TOTPCode, TOTPCounter and VerifyTOTP implement RFC 6238 over RFC 4226 with
+// the parameters every authenticator app supports: HMAC-SHA1, 6 digits, a
+// 30-second step and T0 = 0.
+//
+//	counter = floor(Unix time / 30)
+//	code    = (31 low bits of HMAC-SHA1(secret, counter as uint64 BE) at offset low nibble of the last byte) mod 10^6, zero-padded
+//
+// GenerateTOTPSecret draws 20 bytes (160 bits) from crypto/rand,
+// EncodeTOTPSecret gives their unpadded uppercase base32 form and TOTPURI the
+// otpauth:// key URI for the enrollment QR code. VerifyTOTP accepts the steps
+// current-1 to current+1, refuses every step lower than or equal to the last
+// accepted one (no replay, threat T-60), checks the code format first and
+// compares all candidates in constant time. The secrets are stored wrapped
+// for PurposeAdminTOTP (threat T-61).
+//
+// # Recovery codes
+//
+// GenerateRecoveryCodes returns codes "rc-XXXX-XXXX-XXXX" made of 12 symbols
+// of Crockford's base32 alphabet without I, L, O and U, carrying 60 bits of
+// entropy each. NormalizeRecoveryCode turns a typed code into that canonical
+// form (case, dashes and spaces are tolerated) and RecoveryCodeMAC returns
+// the HMAC-SHA256 of the canonical form (purpose admin-recovery), keyed by
+// a key derived from the TOTP secret of the administrator, the only value
+// stored: the key survives a master key rotation, which rewraps the TOTP
+// secret.
 //
 // # File format
 //

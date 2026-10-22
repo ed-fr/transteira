@@ -52,10 +52,16 @@ const (
 	// set after a transfer password has been entered, each one a MAC of a
 	// tenant ID, a transfer ID and an expiry.
 	MACPurposeDownloadGrant MACPurpose = "download-grant"
+	// MACPurposeAdminCSRF keys the CSRF tokens derived from administrator
+	// session tokens. It is distinct from MACPurposeCSRF, so that a deposit
+	// CSRF token is never valid for an administrator session and vice versa.
+	MACPurposeAdminCSRF MACPurpose = "admin-csrf"
 )
 
 // macPurposes lists every valid MACPurpose.
-var macPurposes = []MACPurpose{MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant}
+var macPurposes = []MACPurpose{
+	MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant, MACPurposeAdminCSRF,
+}
 
 // deriveMACKeys derives the MAC key of every purpose from the master key
 // bytes: HKDF-SHA256(master, salt = none, info = "transteira/v1/mac/" +

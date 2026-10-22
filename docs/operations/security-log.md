@@ -29,7 +29,7 @@ line    = timestamp " ip=" ip " tenant=" tenant " event=" event *( " " key "=" v
 |---|---|---|
 | 1 | timestamp | RFC 3339, UTC, millisecond precision, always `YYYY-MM-DDTHH:MM:SS.mmmZ`. |
 | 2 | `ip=` | Real client IP: IPv4 dotted, or IPv6 in canonical form **without brackets**. IPv4-mapped IPv6 addresses are written as IPv4, IPv6 zones are dropped. `ip=-` when the event has no client address. |
-| 3 | `tenant=` | Normalised FQDN of the tenant (`[a-z0-9.-]`, at most 253 bytes), or `-` when the request is not bound to a tenant (unknown host, global endpoint). |
+| 3 | `tenant=` | Normalised FQDN of the tenant (`[a-z0-9.-]`, at most 253 bytes), or `-` when the request is not bound to a tenant (unknown host, global endpoint, and every event of the admin host, which belongs to no tenant). |
 | 4 | `event=` | Event type, `[a-z][a-z0-9_]*`, at most 64 bytes (catalogue below). |
 | 5+ | `key="value"` | Optional fields, in a fixed order per event. Keys are `[a-z_]+` (at most 32 bytes, never `ip`, `tenant` or `event`). |
 
@@ -79,14 +79,30 @@ lines usually mean a reverse proxy that does not forward the client address
 |---|---|---|
 | `verification_code_invalid` | Wrong e-mail verification code entered. | Optional context. |
 | `transfer_password_invalid` | Wrong password entered to unlock a download. | `transfer`: the first 14 characters of the transfer identifier (`trf_` and the time part of the ULID): enough to group the attempts on one transfer, not enough to identify it. The download token and the password are never written. |
-| `admin_login_failed` | Failed admin authentication. | `reason`: `password`, `totp` or `recovery_code`. |
+| `admin_login_failed` | Failed admin authentication, on the admin host (`tenant=-`): wrong password (also an unknown, disabled or not yet activated username, without telling them apart), wrong TOTP code, wrong recovery code, or wrong setup token on the first-run setup. | `reason`: `password`, `totp`, `recovery_code` or `setup_token`. The username is never written. |
 | `api_token_invalid` | Unknown, revoked or expired API token. | Optional context. |
-| `unknown_fqdn` | `Host` header matching no tenant: the request is rejected with `421 Misdirected Request` on every path except `/healthz` and `/api/openapi.yaml`, which answer without a tenant. | `host`: the received Host (escaped, truncated). |
+| `unknown_fqdn` | `Host` header matching neither a tenant nor an admin host (`TT_ADMIN_HOSTS`): the request is rejected with `421 Misdirected Request` on every path except `/healthz` and `/api/openapi.yaml`, which answer without a tenant. | `host`: the received Host (escaped, truncated). |
 | `deposit_refused` | Deposit refused. | `reason`: `ip` (outside the tenant's IP ranges), `domain` (address outside the allowed domains), `blocklist`, `invitation` (missing, unknown or expired). |
-| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). |
+| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). See [Admin host scopes](#admin-host-scopes) for `admin_login` and `admin_auth`. |
 
 See [Log throttling](#log-throttling) for the events that are not written
 for every occurrence.
+
+### Admin host scopes
+
+The administration is served on the dedicated admin host(s) only
+(`TT_ADMIN_HOSTS`), which belong to no tenant: its events carry `tenant=-`.
+Two `rate_limited` scopes concern it, both **counted** by the shipped
+fail2ban filter and CrowdSec scenario like every other scope but
+`download_streams`:
+
+| Scope | Limit | Answer |
+|---|---|---|
+| `admin_login` | Kept in the database by the authentication service: 5 failed logins per (username, client IP) and 20 failures (password or second factor) per client IP within 15 minutes lock for 15 minutes; 5 wrong second factors of one administrator, from any IP, lock their second factor for 15 minutes. One line per lock. | `429 rate-limited` with `Retry-After` until the lock ends. |
+| `admin_auth` | In memory, per client (IPv4 address or IPv6 /64), on the login steps only (first-run setup, password, second factor, activation link): a burst of 20 requests, then one every 3 seconds, successes included. A coarse flood guard in front of the password hashing; throttled like every `rate_limited` line (one per client every 10 seconds). | `429 rate-limited` with `Retry-After`. |
+
+The other admin operations need a session and only count against the
+`global` limit.
 
 New event types and new fields may be added in later versions; existing
 names never change. Parsers must ignore unknown fields.
@@ -94,7 +110,8 @@ names never change. Parsers must ignore unknown fields.
 Examples:
 
 ```text
-2026-10-20T07:41:00.123Z ip=2001:db8::1 tenant=transfer.entity-a.example.com event=admin_login_failed reason="password" user="admin"
+2026-10-20T07:41:00.123Z ip=2001:db8::1 tenant=- event=admin_login_failed reason="password"
+2026-10-20T07:41:00.123Z ip=2001:db8::1 tenant=- event=rate_limited scope="admin_auth"
 2026-10-20T07:41:00.123Z ip=192.0.2.13 tenant=transfer.entity-a.example.com event=deposit_refused reason="ip"
 2026-10-20T07:41:00.123Z ip=203.0.113.8 tenant=- event=unknown_fqdn host="198.51.100.1:443"
 2026-10-20T07:41:00.123Z ip=- tenant=- event=rate_limited scope="global"

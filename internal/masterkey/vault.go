@@ -13,22 +13,41 @@ import (
 )
 
 var (
-	// ErrUnknownKey is returned by Vault.Open when a row is wrapped with a
-	// master key the keyring does not hold. The message names that key ID.
+	// ErrUnknownKey is returned by Vault.Open and Vault.OpenSystem when a
+	// row is wrapped with a master key the keyring does not hold. The
+	// message names that key ID.
 	ErrUnknownKey = errors.New("masterkey: wrapped with a master key that is not provided")
-	// ErrPurposeMismatch is returned by Vault.Open when the stored purpose of
-	// a row is not the requested one.
+	// ErrPurposeMismatch is returned by Vault.Open and Vault.OpenSystem when
+	// the stored purpose of a row is not the requested one, and by
+	// Vault.WrapSystem for a purpose that is not a system secret purpose.
 	ErrPurposeMismatch = errors.New("masterkey: wrapped key purpose mismatch")
 )
+
+// systemBinding is the tenant binding of the system secrets (table
+// system_secrets), which belong to no tenant. The envelope binds every blob
+// to a tenant identifier and a row identifier; a system secret is bound to
+// this reserved value and to its own "ss_" ID, exactly as a tenant key is
+// bound to its tenant and its "wk_" ID. A tenant ID is always "ten_"
+// followed by a ULID (tenant.ID.Validate), so it can never equal this
+// value: a system secret never unwraps as a tenant key and conversely, even
+// for the same row ID and purpose. It is never empty, which the envelope
+// refuses.
+const systemBinding = "system"
+
+// systemPurposes lists the purposes a system secret may be wrapped for.
+var systemPurposes = map[crypto.Purpose]bool{crypto.PurposeAdminTOTP: true}
 
 // generateDEK creates data encryption keys; replaced in tests to cover a
 // failure of the random source.
 var generateDEK = crypto.GenerateDEK
 
 // Vault seals, opens and destroys the wrapped keys of tenants (table
-// wrapped_keys). Every operation is scoped to a tenant: a row of another
-// tenant is not found, and a blob copied to another row or tenant does not
-// unwrap. It is safe for concurrent use.
+// wrapped_keys), and wraps and opens the system secrets (table
+// system_secrets, WrapSystem and OpenSystem). Every tenant key operation is
+// scoped to a tenant: a row of another tenant is not found, and a blob copied
+// to another row or tenant does not unwrap. A system secret is bound to its
+// row and to the reserved system binding (systemBinding). It is safe for
+// concurrent use.
 //
 // Rows are referenced by the objects they protect (files, tenant settings)
 // through their ID. A row whose owner disappeared without calling Destroy
@@ -37,9 +56,10 @@ var generateDEK = crypto.GenerateDEK
 // reference them, so such orphans are not expected; the cleanup task does
 // not reconcile wrapped_keys.
 type Vault struct {
-	keys   *store.WrappedKeys
-	kr     *Keyring
-	logger *slog.Logger
+	keys    *store.WrappedKeys
+	secrets *store.SystemSecrets
+	kr      *Keyring
+	logger  *slog.Logger
 	// scrub purges deleted data from the database files (db.ScrubDeleted).
 	scrub func(context.Context) error
 }
@@ -48,7 +68,7 @@ type Vault struct {
 // logger receives the warnings of the post-deletion scrub (nil discards
 // them).
 func NewVault(db *store.DB, kr *Keyring, logger *slog.Logger) *Vault {
-	return &Vault{keys: db.WrappedKeys(), kr: kr, logger: orDiscard(logger), scrub: db.ScrubDeleted}
+	return &Vault{keys: db.WrappedKeys(), secrets: db.SystemSecrets(), kr: kr, logger: orDiscard(logger), scrub: db.ScrubDeleted}
 }
 
 // orDiscard returns logger, or a logger discarding everything when nil.
@@ -159,6 +179,55 @@ func (v *Vault) Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID 
 	plaintext, err := mk.Unwrap(p, string(tid), wkID, row.Blob)
 	if err != nil {
 		return nil, fmt.Errorf("masterkey: open wrapped key %s: %w", wkID, err)
+	}
+	return plaintext, nil
+}
+
+// WrapSystem wraps plaintext, a secret that belongs to no tenant (the TOTP
+// secret of an administrator), for purpose p with the wrapping key of the
+// keyring (the new master key during a rotation). It assigns a new
+// system secret ID ("ss_...") and binds the blob to it and to the reserved
+// system binding (see the package documentation), then returns the row
+// without storing it: the caller inserts it in its own transaction (for
+// instance store.Admins.SetPendingTOTPTx), and gets store.ErrKeyRetired
+// from the database if the wrapping key is retired. It returns an error
+// matching ErrPurposeMismatch when p is not a system secret purpose
+// (crypto.PurposeAdminTOTP). The caller keeps ownership of plaintext.
+func (v *Vault) WrapSystem(p crypto.Purpose, plaintext []byte) (store.SystemSecret, error) {
+	if !systemPurposes[p] {
+		return store.SystemSecret{}, fmt.Errorf("%w: %q is not a system secret purpose", ErrPurposeMismatch, p)
+	}
+	mk := v.kr.wrapKey()
+	ssID := id.New(id.SystemSecret)
+	blob, err := mk.Wrap(p, systemBinding, ssID, plaintext)
+	if err != nil {
+		return store.SystemSecret{}, fmt.Errorf("masterkey: seal system secret: %w", err)
+	}
+	return store.SystemSecret{ID: ssID, Purpose: string(p), KeyID: mk.ID(), Blob: blob}, nil
+}
+
+// OpenSystem reads the system secret secretID and unwraps it with the
+// master key recorded on its row (the old or the new key during a
+// rotation). It fails with store.ErrNotFound for an unknown secret,
+// ErrPurposeMismatch when the secret holds another purpose, ErrUnknownKey
+// when its master key is not provided, and crypto.ErrUnwrap when the blob
+// does not authenticate (tampered, or copied from another row).
+func (v *Vault) OpenSystem(ctx context.Context, p crypto.Purpose, secretID string) ([]byte, error) {
+	row, err := v.secrets.Get(ctx, secretID)
+	if err != nil {
+		return nil, fmt.Errorf("masterkey: open system secret: %w", err)
+	}
+	if row.Purpose != string(p) {
+		return nil, fmt.Errorf("%w: system secret %s is not a %q secret", ErrPurposeMismatch, secretID, p)
+	}
+	mk, ok := v.kr.key(row.KeyID)
+	if !ok {
+		return nil, fmt.Errorf("%w: system secret %s uses master key %s (%s); see %s",
+			ErrUnknownKey, secretID, row.KeyID, v.kr.describe(), DocLink)
+	}
+	plaintext, err := mk.Unwrap(p, systemBinding, secretID, row.Blob)
+	if err != nil {
+		return nil, fmt.Errorf("masterkey: open system secret %s: %w", secretID, err)
 	}
 	return plaintext, nil
 }

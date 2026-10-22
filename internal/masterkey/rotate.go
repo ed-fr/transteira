@@ -33,8 +33,8 @@ var (
 	// ErrRotationMismatch is returned by Rotate and Recover when a rotation
 	// between other keys than the requested ones is running.
 	ErrRotationMismatch = errors.New("masterkey: the running rotation does not match the configured keys")
-	// ErrRewrap is returned when a wrapped key cannot be unwrapped with the
-	// old master key; the rotation is then marked failed.
+	// ErrRewrap is returned when a wrapped key or a system secret cannot be
+	// unwrapped with the old master key; the rotation is then marked failed.
 	ErrRewrap = errors.New("masterkey: cannot re-wrap a wrapped key")
 	// ErrKeysStillCreated is returned when keys keep being created under the
 	// old master key, which means a process still runs without the new key.
@@ -107,9 +107,11 @@ func start(ctx context.Context, db *store.DB, from, to string, now time.Time) (s
 	return rot, nil
 }
 
-// Rotate re-wraps every wrapped key from the current master key to the new
-// one (threat model T-37), then marks the new key active, the old one
-// retired and the rotation completed. It returns the final rotation record.
+// Rotate re-wraps every wrapped key of the tenants (wrapped_keys) and every
+// system secret (system_secrets, the administrator TOTP secrets) from the
+// current master key to the new one (threat model T-37), then marks the new
+// key active, the old one retired and the rotation completed. It returns
+// the final rotation record.
 //
 // It resumes the running rotation when it goes from the current to the new
 // key, refuses (ErrRotationMismatch) a running rotation between other keys,
@@ -228,25 +230,30 @@ func run(ctx context.Context, db *store.DB, rot store.Rotation, from, to *crypto
 		"rotate-master-key again to resume rotation %s; see %s", ErrKeysStillCreated, from.ID(), rot.ID, DocLink)
 }
 
-// drain re-wraps batches until one re-wraps nothing, updating rot.
+// drain re-wraps, in batches, the tenant keys (wrapped_keys) and then the
+// system secrets (system_secrets) still under the old key, until a batch of
+// each source re-wraps nothing, updating rot. OnProgress is called after
+// every batch that re-wrapped keys and after the final empty one.
 func drain(ctx context.Context, rotations *store.KeyRotations, rot *store.Rotation, from, to *crypto.MasterKey,
 	logger *slog.Logger, opts Options,
 ) error {
-	rewrap := func(k store.WrappedKey, tid tenant.ID) ([]byte, error) {
-		p := crypto.Purpose(k.Purpose)
-		plaintext, err := from.Unwrap(p, string(tid), k.ID, k.Blob)
-		var blob []byte
-		if err == nil {
-			blob, err = to.Wrap(p, string(tid), k.ID, plaintext)
-			clear(plaintext)
-		}
-		if err != nil {
-			return nil, &rewrapError{keyID: k.ID, tid: tid, from: from.ID(), err: err}
-		}
-		return blob, nil
+	rewrapKey := func(k store.WrappedKey, tid tenant.ID) ([]byte, error) {
+		return rewrapBlob(from, to, crypto.Purpose(k.Purpose), string(tid), k.ID, k.Blob,
+			fmt.Sprintf("wrapped key %s of tenant %s", k.ID, tid))
 	}
-	for {
-		n, err := rotations.RewrapBatch(ctx, rot.ID, from.ID(), to.ID(), opts.BatchSize, rewrap)
+	rewrapSecret := func(s store.SystemSecret) ([]byte, error) {
+		return rewrapBlob(from, to, crypto.Purpose(s.Purpose), systemBinding, s.ID, s.Blob, "system secret "+s.ID)
+	}
+	sources := []func() (int, error){
+		func() (int, error) {
+			return rotations.RewrapBatch(ctx, rot.ID, from.ID(), to.ID(), opts.BatchSize, rewrapKey)
+		},
+		func() (int, error) {
+			return rotations.RewrapSystemSecretsBatch(ctx, rot.ID, from.ID(), to.ID(), opts.BatchSize, rewrapSecret)
+		},
+	}
+	for i := 0; ; {
+		n, err := sources[i]()
 		if rerr, ok := errors.AsType[*rewrapError](err); ok {
 			return fail(ctx, rotations, rot, rerr, logger, opts.Now())
 		}
@@ -259,6 +266,10 @@ func drain(ctx context.Context, rotations *store.KeyRotations, rot *store.Rotati
 			return fmt.Errorf("masterkey: rotate: %w", err)
 		}
 		rot.RewrappedKeys += int64(n)
+		if n == 0 && i < len(sources)-1 {
+			i++ // this source is drained: go on with the next one
+			continue
+		}
 		if opts.OnProgress != nil {
 			opts.OnProgress(*rot)
 		}
@@ -268,6 +279,22 @@ func drain(ctx context.Context, rotations *store.KeyRotations, rot *store.Rotati
 		logger.InfoContext(ctx, "master key rotation progress", slog.String("rotation", rot.ID),
 			slog.Int64("rewrapped", rot.RewrappedKeys), slog.Int64("total", rot.TotalKeys))
 	}
+}
+
+// rewrapBlob unwraps blob with from and wraps it with to, for purpose p and
+// the binding tenantID and rowID, which do not change. row names the row
+// in the error (a *rewrapError), which never includes key material.
+func rewrapBlob(from, to *crypto.MasterKey, p crypto.Purpose, tenantID, rowID string, blob []byte, row string) ([]byte, error) {
+	plaintext, err := from.Unwrap(p, tenantID, rowID, blob)
+	var out []byte
+	if err == nil {
+		out, err = to.Wrap(p, tenantID, rowID, plaintext)
+		clear(plaintext)
+	}
+	if err != nil {
+		return nil, &rewrapError{row: row, from: from.ID(), err: err}
+	}
+	return out, nil
 }
 
 // complete tries to complete rot. It reports false, without error, while
@@ -284,18 +311,19 @@ func complete(ctx context.Context, rotations *store.KeyRotations, rot *store.Rot
 	return true, nil
 }
 
-// rewrapError reports a wrapped key that could not be re-wrapped. Its
-// message names the row, the tenant and the master key, never key material.
+// rewrapError reports a wrapped key or a system secret that could not be
+// re-wrapped. Its message names the row (with its tenant for a tenant key)
+// and the master key, never key material.
 type rewrapError struct {
-	keyID string
-	tid   tenant.ID
-	from  string
-	err   error
+	// row names the row, such as "wrapped key wk_... of tenant ten_..." or
+	// "system secret ss_...".
+	row  string
+	from string
+	err  error
 }
 
 func (e *rewrapError) Error() string {
-	return fmt.Sprintf("wrapped key %s of tenant %s cannot be unwrapped with master key %s (wrong key or corrupted row)",
-		e.keyID, e.tid, e.from)
+	return fmt.Sprintf("%s cannot be unwrapped with master key %s (wrong key or corrupted row)", e.row, e.from)
 }
 
 func (e *rewrapError) Unwrap() []error { return []error{ErrRewrap, e.err} }

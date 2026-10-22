@@ -7,7 +7,8 @@
 //	delete-after-download   1 min             transfers deleted after their first download, once the grace period is over
 //	expire                  1 min             available transfers past their expiry, transfers scanning for 30 days; files of rejected transfers
 //	abandoned-uploads       15 min            uploading transfers whose uploads expired (upload TTL or maximum age)
-//	purge-rows              1 h               ended transfers after 30 days, codes, sessions, password failures, verified addresses, invitations
+//	purge-rows              1 h               ended transfers after 30 days, codes, sessions, password failures, verified addresses, invitations;
+//	                                          admin sessions, admin activations, admin login failures, audit events after 12 months
 //	orphans                 24 h              files of the tenant directories that the database proves orphaned
 //	backup                  daily, UTC time   copy of a SQLite database (TT_BACKUP_TIME, TT_BACKUP_KEEP)
 //
@@ -83,6 +84,17 @@
 // codes, the deposit sessions, the password failure counters, the verified
 // addresses unused for 12 months and the inactive invitations, last
 // because a transfer references its invitation without cascade.
+//
+// Then, in the system scope, it purges the rows of no single tenant, in
+// this order: the administrator sessions past their absolute expiry or
+// idle for Options.AdminSessionIdleTimeout (TT_ADMIN_SESSION_IDLE_TIMEOUT,
+// 30 minutes by default); the administrator activation links used or
+// expired; the administrator login failure counters whose latest failure
+// is AdminLoginFailureWindow (15 minutes, the longest window of the rules)
+// old and whose lock is over; the audit events older than
+// AuditRetentionMonths (12 calendar months). A failed listing of the
+// tenants skips the tenant phase only. Every purge runs in batches of
+// store.PurgeBatchSize, and the run logs one count per kind of row.
 //
 // # Orphan files
 //

@@ -52,10 +52,10 @@ var (
 	qWrappedKeyDelete = tenantQuery(
 		`DELETE FROM wrapped_keys WHERE tenant_id = ? AND id = ?`)
 	qWrappedKeyIDsInUse = systemQuery(
-		`SELECT DISTINCT key_id FROM wrapped_keys ORDER BY key_id`,
+		`SELECT key_id FROM wrapped_keys UNION SELECT key_id FROM system_secrets ORDER BY key_id`,
 		reasonKeyCheck)
 	qWrappedKeyCountByKey = systemQuery(
-		`SELECT count(*) FROM wrapped_keys WHERE key_id = ?`,
+		`SELECT (SELECT count(*) FROM wrapped_keys WHERE key_id = ?) + (SELECT count(*) FROM system_secrets WHERE key_id = ?)`,
 		reasonKeyRotation)
 	qWrappedKeyBatch = systemQuery(
 		`SELECT tenant_id, `+wrappedKeyColumns+` FROM wrapped_keys WHERE key_id = ? ORDER BY id LIMIT ?`,
@@ -228,8 +228,8 @@ func deleteWrappedKey(ctx context.Context, tx *ScopedTx, wkID string) error {
 }
 
 // KeyIDsInUse returns the distinct master key identifiers that wrapped keys
-// of any tenant reference, sorted. The start-up check refuses to run when
-// one of them is missing from the keyring.
+// of any tenant or system secrets reference, sorted. The start-up check
+// refuses to run when one of them is missing from the keyring.
 func (r *WrappedKeys) KeyIDsInUse(ctx context.Context) ([]string, error) {
 	var ids []string
 	err := r.db.systemScope(reasonKeyCheck).ReadTx(ctx, func(tx *SystemTx) error {
@@ -243,15 +243,17 @@ func (r *WrappedKeys) KeyIDsInUse(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
-// CountByKey returns the number of wrapped keys, across every tenant,
-// wrapped under the master key keyID.
+// CountByKey returns the number of keys wrapped under the master key
+// keyID: wrapped keys across every tenant plus system secrets. The master
+// key rotation counts both, and [KeyRotations.Complete] refuses to
+// complete while either remains under the old key.
 func (r *WrappedKeys) CountByKey(ctx context.Context, keyID string) (int64, error) {
 	if !validMasterKeyID(keyID) {
 		return 0, invalid("malformed master key id")
 	}
 	var n int64
 	err := r.db.systemScope(reasonKeyRotation).ReadTx(ctx, func(tx *SystemTx) error {
-		return tx.QueryRow(ctx, qWrappedKeyCountByKey, keyID).Scan(&n)
+		return tx.QueryRow(ctx, qWrappedKeyCountByKey, keyID, keyID).Scan(&n)
 	})
 	if err != nil {
 		return 0, wrap("count wrapped keys", err)
@@ -260,7 +262,7 @@ func (r *WrappedKeys) CountByKey(ctx context.Context, keyID string) (int64, erro
 }
 
 // keyIDsInUse returns the distinct master key identifiers referenced by
-// wrapped keys, sorted, inside tx.
+// wrapped keys and system secrets, sorted, inside tx.
 func keyIDsInUse(ctx context.Context, tx *SystemTx) ([]string, error) {
 	rows, err := tx.Query(ctx, qWrappedKeyIDsInUse)
 	if err != nil {
