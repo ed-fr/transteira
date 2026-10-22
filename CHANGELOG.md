@@ -148,6 +148,21 @@ and the project follows [Semantic Versioning](https://semver.org/).
   not a tenant FQDN before starting this version.
 - Audit log foundation (`audit_events`, `internal/audit`), purged after 12 months; migration
   `0008_admin`; `docs/operations/admin.md`.
+- Tenant configuration (step 11): tenant creation, update (per-transfer ceiling set by the super
+  admin, delegated admins limited to language and limit) and resumable deletion with full
+  crypto-erase; branding (colors with WCAG contrast check, logo and background re-encoded,
+  default background) and public tenant pages; IP ranges and domains; SMTP settings with test,
+  DNS check and SSRF guard on every connection (`TT_SMTP_DENY_NETWORKS`); per-tenant mail
+  templates (`{{variable}}` syntax only, HTML allowlist, required variables) used by real mails;
+  legal notice and privacy policy in limited Markdown; migration `0009_tenant_config`;
+  `docs/operations/tenants.md`. Deletion is audited at start (`tenant.deletion_started`) and at
+  completion (`tenant.deleted`, system actor `lifecycle`); transfer creation is refused once a
+  tenant is being deleted. Image processing is bounded in memory: 320 MiB budget for decoding,
+  scaling and re-encoding, worst case per format, color model and layout (tRNS, interlacing,
+  MCU rounding, WebP Huffman trees), checked against allocations measured on generated
+  worst-case images; one decode and at most 4 buffered upload bodies at a time; backgrounds
+  scaled with an approximate bilinear filter, which needs no temporary buffer. `internal/netpolicy` now holds the SMTP dial guard and the
+  shared CIDR parser.
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
   now starts when it becomes available (`expiresAt` is set then); a file that times out, drops

@@ -29,8 +29,14 @@ const (
 	// KindTemp is a leftover temporary file of an atomic write of a
 	// checkpoint or state (<name>.ckpt.<16 hex>.tmp or
 	// <name>.dlstate.<16 hex>.tmp), normally removed by the write itself
-	// and left behind only by a crash.
+	// and left behind only by a crash. A leftover of an asset write
+	// (<asset>.asset.<16 hex>.tmp) is a KindTemp too.
 	KindTemp
+	// KindAsset is a branding asset of the tenant (logo.asset or
+	// background.asset). It is referenced by the tenant row, not by a
+	// transfer: the orphan reconciliation must keep it; it is removed with
+	// [Store.RemoveAsset] or with the tenant directory.
+	KindAsset
 )
 
 // String returns the lowercase name of the kind, for logs.
@@ -44,6 +50,8 @@ func (k Kind) String() string {
 		return "state"
 	case KindTemp:
 		return "temp"
+	case KindAsset:
+		return "asset"
 	default:
 		return "unknown"
 	}
@@ -57,8 +65,9 @@ const tmpSuffixLen = 16
 // [Store.List].
 type Entry struct {
 	// Name is the storage name, without extension, of a known entry: it can
-	// be passed back to [Store.Remove], [Store.RemoveCheckpoint] or
-	// [Store.RemoveState]. For a KindUnknown entry it is the raw directory
+	// be passed back to [Store.Remove], [Store.RemoveCheckpoint],
+	// [Store.RemoveState] or, for a KindAsset entry, [Store.RemoveAsset].
+	// For a KindUnknown entry it is the raw directory
 	// entry name, for logging only.
 	Name string
 	// File is the raw directory entry name (with extensions). For a
@@ -181,6 +190,9 @@ func (s *Store) readDir(dir string) ([]fs.DirEntry, error) {
 // file, assumed to be a regular file. It returns KindUnknown for any name
 // the store does not produce.
 func classify(file string) (string, Kind) {
+	if name, kind, ok := classifyAsset(file); ok {
+		return name, kind
+	}
 	if len(file) < NameLen || !ValidName(file[:NameLen]) {
 		return file, KindUnknown
 	}
@@ -204,6 +216,28 @@ func classify(file string) (string, Kind) {
 		}
 	}
 	return file, KindUnknown
+}
+
+// classifyAsset classifies the asset entries: an asset or a temporary
+// file of an asset write. It reports false for any other name.
+func classifyAsset(file string) (string, Kind, bool) {
+	name, rest, ok := strings.Cut(file, ".")
+	if !ok || !validAsset(name) {
+		return "", KindUnknown, false
+	}
+	rest = "." + rest
+	if rest == assetExt {
+		return name, KindAsset, true
+	}
+	suffix, ok := strings.CutPrefix(rest, assetExt+".")
+	if !ok {
+		return "", KindUnknown, false
+	}
+	hexPart, ok := strings.CutSuffix(suffix, tmpExt)
+	if ok && validHex(hexPart, tmpSuffixLen) {
+		return name, KindTemp, true
+	}
+	return "", KindUnknown, false
 }
 
 // validHex reports whether s is exactly n lowercase hexadecimal characters.

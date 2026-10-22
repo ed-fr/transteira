@@ -10,13 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ed-fr/transteira/internal/netpolicy"
 )
 
 // maxHostnameLength is the maximum length of a DNS name in text form.
 const maxHostnameLength = 253
-
-// ipv4MappedBits is the length of the ::ffff:0:0/96 IPv4-mapped IPv6 prefix.
-const ipv4MappedBits = 96
 
 // maxLabelLength is the maximum length of a single DNS label.
 const maxLabelLength = 63
@@ -34,13 +33,9 @@ func splitList(raw string) []string {
 }
 
 // parsePrefixes parses a comma-separated list of CIDR prefixes or bare IP
-// addresses. A bare address becomes a single-host prefix (/32 or /128).
-// Prefixes with host bits set (e.g. 10.0.0.1/8) are rejected because they
-// usually reveal a typo whose silent correction would widen the trust.
-// IPv6 zones are rejected. IPv4-mapped IPv6 addresses and prefixes (e.g.
-// ::ffff:10.0.0.0/104) are converted to their IPv4 equivalent (10.0.0.0/8),
-// since client addresses are unmapped before matching. A mapped prefix shorter
-// than /96 has no IPv4 equivalent; it is rejected by the host bits check.
+// addresses with the rules of [netpolicy.ParsePrefix]: a bare address is a
+// single host, host bits and IPv6 zones are rejected, and IPv4-mapped
+// addresses and prefixes become IPv4.
 func parsePrefixes(raw string) ([]netip.Prefix, error) {
 	var prefixes []netip.Prefix
 	for _, item := range splitList(raw) {
@@ -53,30 +48,17 @@ func parsePrefixes(raw string) ([]netip.Prefix, error) {
 	return prefixes, nil
 }
 
-// parsePrefix parses a single CIDR prefix or bare IP address.
+// parsePrefix parses a single CIDR prefix or bare IP address. The error
+// quotes the item (installation configuration, never a secret) and, for
+// host bits, suggests the masked prefix.
 func parsePrefix(item string) (netip.Prefix, error) {
-	if !strings.Contains(item, "/") {
-		addr, err := netip.ParseAddr(item)
-		if err != nil {
-			return netip.Prefix{}, fmt.Errorf("%q is not a valid IP address or CIDR prefix", item)
-		}
-		if addr.Zone() != "" {
-			return netip.Prefix{}, fmt.Errorf("%q: IPv6 zones are not allowed", item)
-		}
-		addr = addr.Unmap()
-		return netip.PrefixFrom(addr, addr.BitLen()), nil
-	}
-	p, err := netip.ParsePrefix(item)
-	if err != nil {
-		return netip.Prefix{}, fmt.Errorf("%q is not a valid IP address or CIDR prefix", item)
-	}
-	if p != p.Masked() {
-		return netip.Prefix{}, fmt.Errorf("%q has host bits set (did you mean %s?)", item, p.Masked())
-	}
-	// A masked prefix shorter than /96 cannot keep the ::ffff: marker, so a
-	// mapped prefix reaching this point always has at least 96 bits.
-	if p.Addr().Is4In6() {
-		return netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-ipv4MappedBits), nil
+	p, err := netpolicy.ParsePrefix(item)
+	switch {
+	case errors.Is(err, netpolicy.ErrPrefixHostBits):
+		// netpolicy only reports host bits for a well-formed prefix.
+		return netip.Prefix{}, fmt.Errorf("%q has host bits set (did you mean %s?)", item, netip.MustParsePrefix(item).Masked())
+	case err != nil:
+		return netip.Prefix{}, fmt.Errorf("%q: %w", item, err)
 	}
 	return p, nil
 }

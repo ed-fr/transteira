@@ -1,15 +1,8 @@
 Hello,
 
 The antivirus could not analyze the following files of your transfer. They have been sent anyway, and the recipients are told that they were not scanned.
-{{range .Files}}
-- {{.Name}} ({{size .Size}})
-  SHA-256: {{.SHA256}}
-{{- if eq .NotScanned "encrypted"}}
-  Reason: encrypted archive, whose content the antivirus cannot read.
-{{- else}}
-  Reason: the file is too large or too complex to be fully analyzed.
-{{- end}}
-{{- end}}
+
+{{files}}
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+This message was sent automatically by {{tenant_name}}. Please do not reply to it.

@@ -396,3 +396,19 @@ func TestWithContextError(t *testing.T) {
 		t.Errorf("already wrapped: %v", got)
 	}
 }
+
+func TestSendCustomDial(t *testing.T) {
+	var gotNetwork, gotAddr string
+	dialErr := errors.New("refused by the guard")
+	s := NewSMTPSender(SMTPOptions{Timeout: 2 * time.Second, Dial: func(_ context.Context, network, addr string) (net.Conn, error) {
+		gotNetwork, gotAddr = network, addr
+		return nil, dialErr
+	}})
+	err := s.Send(context.Background(), testSettings(2525, SecurityNone), testMessage())
+	if !errors.Is(err, ErrSMTP) || !errors.Is(err, dialErr) {
+		t.Fatalf("err = %v", err)
+	}
+	if gotNetwork != "tcp" || gotAddr != "127.0.0.1:2525" {
+		t.Fatalf("dial(%q, %q)", gotNetwork, gotAddr)
+	}
+}

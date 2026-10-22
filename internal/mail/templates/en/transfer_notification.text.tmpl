@@ -1,39 +1,25 @@
 Hello,
 
-{{.SenderEmail}} sent you files through the {{.TenantName}} transfer service.
-{{- if .Message}}
+{{sender_email}} sent you files through the {{tenant_name}} transfer service.
 
-Their message:
-
-{{quote .Message}}
-{{- end}}
+{{message}}
 
 To download the files, open this link:
 
-{{.Link}}
+{{download_link}}
 
-The files are available until {{datetime .ExpiresAt}}.
-{{- if .PasswordRequired}}
+The files are available until {{expiry_datetime}}.
 
-This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.
-{{- end}}
+{{password_notice}}
 
 Files:
-{{- range .Files}}
-- {{.Name}} ({{size .Size}})
-  SHA-256: {{.SHA256}}
-{{- if eq .NotScanned "too_large"}}
-  Not scanned by the antivirus: the file is too large or too complex to be fully analyzed.
-{{- else if eq .NotScanned "encrypted"}}
-  Could not be analyzed by the antivirus: encrypted archive.
-{{- end}}
-{{- end}}
+{{files}}
 
 The SHA-256 fingerprint of each file lets you check that the downloaded file is intact.
 
 Do not forward this message: anyone who has the link can download the files.
 
-{{t "mail.footer.ignore"}}
+If you were not expecting this message, you can safely ignore it.
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+This message was sent automatically by {{tenant_name}}. Please do not reply to it.

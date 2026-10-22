@@ -490,7 +490,8 @@ func TestCryptoErase(t *testing.T) {
 			t.Errorf("wrapped keys left after the erasure = %d, %v", n, err)
 		}
 
-		// Deleting a tenant cascades to its wrapped keys, and only to them.
+		// Deleting a tenant requires its wrapped keys destroyed first
+		// (T-110), and only its own keys go.
 		var keysA, keysB []string
 		for range 3 {
 			wa, err := ks.vault.Seal(ctx, a.ID, crypto.PurposeDEK, bytes.Repeat([]byte{0xA}, crypto.DEKSize))
@@ -508,6 +509,18 @@ func TestCryptoErase(t *testing.T) {
 			t.Fatal(err)
 		}
 		keysA = append(keysA, secretA)
+		if err := ks.db.Tenants().Delete(ctx, a.ID); !errors.Is(err, store.ErrKeysRemain) {
+			t.Fatalf("Tenants.Delete(A) with keys = %v, want store.ErrKeysRemain", err)
+		}
+		ids, err := ks.db.WrappedKeys().ListIDs(ctx, a.ID, "", 0)
+		if err != nil || len(ids) != len(keysA) {
+			t.Fatalf("ListIDs(A) = %v, %v; want %d keys", ids, err, len(keysA))
+		}
+		for _, w := range ids {
+			if err := ks.vault.Destroy(ctx, a.ID, w); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if err := ks.db.Tenants().Delete(ctx, a.ID); err != nil {
 			t.Fatalf("Tenants.Delete(A): %v", err)
 		}

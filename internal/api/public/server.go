@@ -36,6 +36,12 @@ type Server struct {
 	uploads UploadService
 	// downloads serves the recipients; nil until WithDownloads.
 	downloads DownloadService
+	// tenants serves the public tenant configuration; nil until
+	// WithTenantService.
+	tenants TenantService
+	// maintenance reports the maintenance mode; nil (off) until
+	// WithMaintenance.
+	maintenance func() bool
 	// now is the clock deriving the Max-Age of the session cookie from the
 	// session expiry (replaceable in tests).
 	now func() time.Time

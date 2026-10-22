@@ -1,29 +1,12 @@
 Hello,
-{{- if .Infected}}
 
-The antivirus found a threat in the following files of your transfer. They have been deleted.
-{{range .Infected}}
-- {{.Name}}
-  Detected threat: {{.Signature}}
-{{- end}}
-{{- end}}
-{{- if .Withheld}}
+{{infected_files}}
 
-The following files could not be analyzed by the antivirus and are withheld for safety: they cannot be downloaded.
-{{range .Withheld}}
-- {{.Name}} ({{size .Size}})
-{{- end}}
-{{- end}}
+{{withheld_files}}
 
-{{if .Rejected}}No file of the transfer could be delivered: the transfer was not sent and the recipients have not been notified.{{else}}The other files of the transfer have been sent to the recipients.{{end}}
-{{- if .Infected}}
+{{outcome}}
 
-Check the device the files come from with an up-to-date antivirus before sending them again.
-{{- end}}
-{{- if .Withheld}}
-
-To share a withheld file, send it again in a new transfer.
-{{- end}}
+{{advice}}
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+This message was sent automatically by {{tenant_name}}. Please do not reply to it.

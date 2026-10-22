@@ -27,6 +27,14 @@ type FieldError struct {
 	Code string `json:"code"`
 	// Allowed optionally lists the accepted values.
 	Allowed []any `json:"allowed,omitempty"`
+	// Line and Column optionally locate the problem inside the field
+	// (1-based, the column in characters), for a mail template; 0 omits
+	// them.
+	Line   int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
+	// Message optionally explains the problem, in English (mail
+	// templates).
+	Message string `json:"message,omitempty"`
 }
 
 // Problem is an RFC 9457 Problem Details object with the TransTeira

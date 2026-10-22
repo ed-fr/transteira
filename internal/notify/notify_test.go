@@ -56,7 +56,7 @@ func (s *fakeSMTP) Get(_ context.Context, tid tenant.ID) (store.SMTPConfig, erro
 // failRenderer fails every render.
 type failRenderer struct{}
 
-func (failRenderer) Render(string, string, any) (mail.Message, error) {
+func (failRenderer) RenderFor(context.Context, mail.OverrideLookup, string, string, string, any) (mail.Message, error) {
 	return mail.Message{}, errors.New("render boom")
 }
 

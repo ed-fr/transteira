@@ -1,18 +1,11 @@
 Hello,
 
-Your transfer was downloaded in full for the first time on {{datetime .DownloadedAt}}.
+Your transfer was downloaded in full for the first time on {{download_datetime}}.
 
 Files:
-{{- range .Files}}
-- {{.Name}} ({{size .Size}})
-{{- end}}
-{{- if not .DeleteAt.IsZero}}
+{{files}}
 
-As you requested, the transfer is deleted after its first download: it will be permanently erased on {{datetime .DeleteAt}}.
-{{- else}}
-
-This notice is sent only once: later downloads are not notified.
-{{- end}}
+{{deletion_notice}}
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+This message was sent automatically by {{tenant_name}}. Please do not reply to it.

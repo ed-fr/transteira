@@ -14,6 +14,7 @@ import (
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/upload"
 )
 
@@ -217,6 +218,24 @@ func TestCreateQuota(t *testing.T) {
 		// Tenant B is not affected by the quota of A.
 		if ev.usedBytes(t, ev.b) != 0 {
 			t.Error("B uses storage")
+		}
+	})
+}
+
+// TestCreateTenantDeleting checks that a request that resolved the tenant
+// before its deletion started creates nothing (403 deposit-not-allowed).
+func TestCreateTenantDeleting(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		if err := ev.db.Tenants().SetStatus(ctx, ev.a.ID, tenant.StatusDeleting); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ev.svc.Create(ctx, ev.a, internalSender(), request(), ""); !errors.Is(err, ErrForbidden) {
+			t.Errorf("err = %v, want ErrForbidden", err)
+		}
+		if got := ev.usedBytes(t, ev.a); got != 0 {
+			t.Errorf("used = %d, want 0", got)
 		}
 	})
 }

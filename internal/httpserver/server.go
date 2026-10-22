@@ -47,6 +47,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/ratelimit"
@@ -83,6 +84,13 @@ const (
 	// middleware.ImageBodyLimit bytes), which may take longer on a slow
 	// link.
 	ImageDeadline = 2 * time.Minute
+	// AdminLongDeadline bounds the admin operations that wait on a slow
+	// party: the SMTP test (up to TT_SMTP_TIMEOUT, at most 5 minutes) and
+	// the deletion of a tenant (erasure of all its transfers). The erasure
+	// runs detached from the request context: a deletion whose response is
+	// cut short by this deadline or by the client goes on server side, and
+	// one interrupted otherwise resumes when repeated or at the hourly run.
+	AdminLongDeadline = 6 * time.Minute
 )
 
 // Route prefixes.
@@ -130,6 +138,10 @@ type routePolicy struct {
 	// idleWrite writes the response with an idle write timeout
 	// (idleWriteMiddleware) instead of a deadline.
 	idleWrite bool
+	// assetBody limits the body to the size limit of the branding image
+	// named by the {asset} path value (5 MiB for a logo, 10 MiB for a
+	// background), bodyLimit for an unknown name.
+	assetBody bool
 }
 
 // defaultPolicy applies to every operation absent from routePolicies.
@@ -183,7 +195,13 @@ var routePolicies = map[string]routePolicy{
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
 	},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
-		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline,
+		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline, assetBody: true,
+	},
+	http.MethodPost + " " + APIBaseURL + "/admin/tenants/{tenantId}/smtp/test": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline,
+	},
+	http.MethodDelete + " " + APIBaseURL + "/admin/tenants/{tenantId}": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline,
 	},
 	http.MethodGet + " " + APIBaseURL + "/tenant/assets/{asset}": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline,
@@ -196,6 +214,17 @@ var routePolicies = map[string]routePolicy{
 // policyOf returns the policy of the operation matched for r.
 func policyOf(r *http.Request) routePolicy {
 	return policyOfPattern(r.Pattern)
+}
+
+// bodyLimitOf returns the body limit of the operation matched for r.
+func bodyLimitOf(r *http.Request) int64 {
+	p := policyOf(r)
+	if p.assetBody {
+		if kind, err := branding.ParseKind(r.PathValue("asset")); err == nil {
+			return kind.MaxBytes()
+		}
+	}
+	return p.bodyLimit
 }
 
 // policyOfPattern returns the policy of the route pattern.
@@ -341,7 +370,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		// earlier, around the router (idleBodyHandler).
 		Middlewares: []gen.MiddlewareFunc{
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
-			middleware.BodyLimitFunc(func(r *http.Request) int64 { return policyOf(r).bodyLimit }),
+			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf }),
 			middleware.SameOrigin(func(r *http.Request) bool { return policyOf(r).sameOrigin }),
 			middleware.DepositSession(sessions, func(r *http.Request) bool {

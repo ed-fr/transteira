@@ -437,6 +437,10 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		return Details{}, &RateLimitError{RetryAfter: OpenTransfersRetryAfter}
 	case errors.Is(err, errQuota):
 		return Details{}, ErrQuotaExceeded
+	case errors.Is(err, store.ErrNotFound):
+		// The tenant's deletion started after its resolution (or the
+		// invitation was deleted meanwhile): nothing was created.
+		return Details{}, ErrForbidden
 	case err != nil:
 		return Details{}, fmt.Errorf("transfer: create transfer: %w", err)
 	}

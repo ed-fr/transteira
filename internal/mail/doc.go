@@ -13,7 +13,13 @@
 //   - [Sender] and its SMTP implementation [SMTPSender], with bounded
 //     timeouts and context cancellation;
 //   - [Templates], the embedded French and English templates, rendered by
-//     language (see package i18n for the negotiation);
+//     language (see package i18n for the negotiation), and the variable
+//     engine of the per-tenant customizations: {{name}} placeholders
+//     without any logic, typed variables (text, URL, pre-rendered block),
+//     required variables, and HTML bodies filtered by the allowlist of
+//     package sanitize ([ValidateTemplate], [NormalizeTemplate],
+//     [Templates.RenderOverride], [Templates.RenderFor], [Preview],
+//     [Variables]);
 //   - [Queue], a bounded in-memory queue with background workers and one
 //     retry, so that HTTP handlers never wait for an SMTP server (T-89).
 //

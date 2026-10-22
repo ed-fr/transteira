@@ -1,18 +1,11 @@
 Bonjour,
 
-Votre transfert a été téléchargé en entier pour la première fois le {{datetime .DownloadedAt}}.
+Votre transfert a été téléchargé en entier pour la première fois le {{download_datetime}}.
 
 Fichiers :
-{{- range .Files}}
-- {{.Name}} ({{size .Size}})
-{{- end}}
-{{- if not .DeleteAt.IsZero}}
+{{files}}
 
-Comme vous l'avez demandé, le transfert est supprimé après son premier téléchargement : il sera définitivement effacé le {{datetime .DeleteAt}}.
-{{- else}}
-
-Cet avis n'est envoyé qu'une fois : les téléchargements suivants ne sont pas signalés.
-{{- end}}
+{{deletion_notice}}
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+Ce message a été envoyé automatiquement par {{tenant_name}}. Merci de ne pas y répondre.

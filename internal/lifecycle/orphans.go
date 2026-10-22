@@ -119,6 +119,10 @@ func (s *Sweeper) removeOrphans(ctx context.Context, tid tenant.ID, now time.Tim
 			unknown++
 			continue
 		}
+		if e.Kind == storage.KindAsset {
+			// Branding images belong to the tenant, not to a transfer.
+			continue
+		}
 		if e.ModTime.After(cutoff) {
 			continue
 		}

@@ -1,216 +1,45 @@
 package mail
 
 import (
-	"bytes"
+	"context"
 	"embed"
 	"fmt"
-	htmltemplate "html/template"
 	"io/fs"
 	"path"
 	"sort"
 	"strings"
-	texttemplate "text/template"
-	"time"
 
 	"github.com/ed-fr/transteira/internal/i18n"
+	"github.com/ed-fr/transteira/internal/mail/sanitize"
+	"github.com/ed-fr/transteira/internal/textsafe"
 )
 
-// Names of the built-in templates.
-const (
-	// TemplateVerificationCode is the e-mail verification code mail
-	// (CLAUDE.md section 7); data: [VerificationCodeData].
-	TemplateVerificationCode = "verification_code"
-	// TemplateInvitation is the external invitation mail (CLAUDE.md
-	// section 9); data: [InvitationData].
-	TemplateInvitation = "invitation"
-	// TemplateTransferNotification is the mail sent to each recipient of an
-	// available transfer (CLAUDE.md section 12.2); data:
-	// [TransferNotificationData].
-	TemplateTransferNotification = "transfer_notification"
-	// TemplateTransferConfirmation is the confirmation sent to the sender of
-	// an available transfer; data: [TransferConfirmationData].
-	TemplateTransferConfirmation = "transfer_confirmation"
-	// TemplateFileProblems warns the sender about the files that were not
-	// delivered: infected files, deleted (CLAUDE.md section 11), and files
-	// that could not be analyzed, withheld under fail-closed; data:
-	// [FileProblemsData].
-	TemplateFileProblems = "file_problems"
-	// TemplateFileNotScanned warns the sender that the antivirus could not
-	// analyze files (too large or too complex, or encrypted archives),
-	// delivered anyway;
-	// data: [FileNotScannedData].
-	TemplateFileNotScanned = "file_not_scanned"
-	// TemplateFirstDownload tells the sender that the transfer has been
-	// downloaded in full for the first time (CLAUDE.md section 12.2), sent
-	// once per transfer; data: [FirstDownloadData].
-	TemplateFirstDownload = "first_download"
-)
-
-// QRContentID is the Content-ID of the QR code of the download link, the
-// inline part referenced by the transfer_notification template as
-// <img src="cid:qr@transteira"> (threat T-87: no remote image). It is written
-// literally in the templates, since html/template neutralizes "cid:" URLs
-// built from data.
-const QRContentID = "qr@transteira"
-
-// VerificationCodeData is the data of [TemplateVerificationCode].
-type VerificationCodeData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// Code is the one-time code (6 digits). It is never logged.
-	Code string
-	// ValidityMinutes is the lifetime of the code (15).
-	ValidityMinutes int
-}
-
-// InvitationData is the data of [TemplateInvitation].
-type InvitationData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// InviterEmail is the verified address of the internal user who invites.
-	InviterEmail string
-	// Message is the optional free text of the inviter, as plain text. It is
-	// HTML-escaped and never turned into links by the templates; the caller
-	// limits its length (threat T-18).
-	Message string
-	// Link is the absolute invitation URL, built from the registered FQDN of
-	// the tenant, never from the request Host (threat T-03).
-	Link string
-	// ExpiresAt is when the unused invitation expires.
-	ExpiresAt time.Time
-}
-
-// NotScannedReason is why the antivirus could not analyze a delivered
-// file. The templates compare it with the constant values below.
-type NotScannedReason string
-
-// Reasons for a file not to be scanned.
-const (
-	// NotScannedTooLarge is a file above the antivirus limits: too large,
-	// or too complex (number of files, recursion depth) to be fully
-	// analyzed.
-	NotScannedTooLarge NotScannedReason = "too_large"
-	// NotScannedEncrypted is an encrypted archive, whose content the
-	// antivirus cannot read.
-	NotScannedEncrypted NotScannedReason = "encrypted"
-)
-
-// FileInfo describes one file of a transfer in the transfer mails.
-type FileInfo struct {
-	// Name is the original file name, as plain text: the templates escape it
-	// and the caller removes control and hidden characters.
-	Name string
-	// Size is the size in bytes, formatted by the templates ("size").
-	Size int64
-	// SHA256 is the hexadecimal SHA-256 digest of the clear content.
-	SHA256 string
-	// NotScanned is why the antivirus could not analyze the delivered file,
-	// "" when it was scanned.
-	NotScanned NotScannedReason
-}
-
-// TransferNotificationData is the data of [TemplateTransferNotification].
-type TransferNotificationData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// SenderEmail is the verified address of the sender.
-	SenderEmail string
-	// Message is the optional free text of the sender, as plain text. It is
-	// HTML-escaped and never turned into links by the templates (T-81).
-	Message string
-	// Link is the absolute download URL, built from the registered FQDN of
-	// the tenant. It is the only link of the mail.
-	Link string
-	// Files lists the files available for download.
-	Files []FileInfo
-	// ExpiresAt is when the transfer expires.
-	ExpiresAt time.Time
-	// PasswordRequired tells the recipient that a password protects the
-	// transfer and will come through another channel (T-88).
-	PasswordRequired bool
-	// QR shows the QR code of Link, an inline part of Content-ID
-	// [QRContentID] that the caller attaches.
-	QR bool
-}
-
-// TransferConfirmationData is the data of [TemplateTransferConfirmation].
-type TransferConfirmationData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// Link is the absolute download URL.
-	Link string
-	// Recipients lists the addresses the transfer was sent to.
-	Recipients []string
-	// Files lists the files available for download.
-	Files []FileInfo
-	// ExpiresAt is when the transfer expires.
-	ExpiresAt time.Time
-	// PasswordRequired reminds the sender to give the password to the
-	// recipients through another channel.
-	PasswordRequired bool
-	// Withheld lists the files that could not be analyzed and are withheld
-	// (never downloadable); SHA256 is not shown.
-	Withheld []FileInfo
-}
-
-// InfectedFile is a file deleted because the antivirus found it infected.
-type InfectedFile struct {
-	// Name is the original file name, as plain text.
-	Name string
-	// Signature is the name of the detected threat, as reported by the
-	// antivirus (plain text, bounded by the caller).
-	Signature string
-}
-
-// FileProblemsData is the data of [TemplateFileProblems]. At least one of
-// Infected and Withheld is expected; the subject names the infection when
-// there is one.
-type FileProblemsData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// Infected lists the infected files, deleted.
-	Infected []InfectedFile
-	// Withheld lists the files that could not be analyzed, withheld for
-	// safety (name and size only).
-	Withheld []FileInfo
-	// Rejected is set when no file could be delivered: the transfer was not
-	// sent and no recipient was notified. Otherwise the remaining files were
-	// sent.
-	Rejected bool
-}
-
-// FileNotScannedData is the data of [TemplateFileNotScanned]: every file
-// listed has a NotScanned reason.
-type FileNotScannedData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// Files lists the files the antivirus could not analyze.
-	Files []FileInfo
-}
-
-// FirstDownloadData is the data of [TemplateFirstDownload]. It names no
-// recipient: in V1 a transfer has a single download link, so the download
-// cannot be attributed to one recipient.
-type FirstDownloadData struct {
-	// TenantName is the display name of the entity.
-	TenantName string
-	// Files lists the files of the transfer (name and size; SHA256 and
-	// NotScanned are not shown).
-	Files []FileInfo
-	// DownloadedAt is when the transfer was first downloaded in full,
-	// formatted by the templates ("datetime").
-	DownloadedAt time.Time
-	// DeleteAt is when the transfer is erased, formatted like DownloadedAt,
-	// when the sender asked for deletion after the first download; zero
-	// when the transfer stays until its expiry.
-	DeleteAt time.Time
-}
+// Every mail is rendered through the variable engine (approach A of step
+// 11): the default templates are written in the same {{name}} syntax as the
+// tenant customizations, they are the single source of truth, and a
+// customization replaces them as a whole. A template has three parts:
+//
+//   - the subject, a single line: values are inserted raw, then control,
+//     line-separator and format characters are removed or turned into
+//     spaces and whitespace is collapsed, so that no header can be injected;
+//   - the HTML body, the content of the mail page: it is sanitized by the
+//     allowlist of package sanitize, then values are HTML-escaped in text,
+//     escaped for attributes in title and alt, and URL values are checked
+//     (http, https or mailto, else "#") in href. Blocks are trusted HTML
+//     produced by this package. The page around the content (doctype, head
+//     with the subject as title, body and its layout styles) is fixed;
+//   - the text body: values are inserted raw, with CR and CRLF turned into
+//     LF.
+//
+// A block that renders empty also removes the line breaks that follow it,
+// as many as precede it (at most two), so that a block written alone on its
+// line, or as a paragraph of its own in the text body, leaves no blank line.
 
 //go:embed templates
 var defaultTemplateFS embed.FS
 
-// Template file layout: <lang>/<name>.<part>.tmpl, part being subject, text
-// or html. subject and text are mandatory, html is optional.
+// Template file layout: <lang>/<name>.<part>.tmpl, part being subject, html
+// or text; the three parts are mandatory.
 const (
 	partSubject = "subject"
 	partText    = "text"
@@ -218,26 +47,40 @@ const (
 	tmplSuffix  = ".tmpl"
 )
 
-// templateSet is one template in one language.
-type templateSet struct {
-	subject *texttemplate.Template
-	text    *texttemplate.Template
-	html    *htmltemplate.Template // nil when the template has no HTML body
+// Size limits of a template, in runes (see the EmailTemplateUpdate schema).
+const (
+	MaxSubjectLen = 255
+	MaxBodyLen    = 100000
+)
+
+// TemplateSource is the source of a template, in the {{name}} syntax.
+type TemplateSource struct {
+	// Subject is the subject line.
+	Subject string
+	// HTML is the content of the HTML body.
+	HTML string
+	// Text is the plain-text body.
+	Text string
 }
 
-// Templates renders mail templates in the supported languages. Templates
-// are parsed once, at construction. A Templates is read-only afterwards and
-// safe for concurrent use.
-//
-// The template engine is restricted (threat T-82): besides the builtins of
-// text/template and html/template, templates only get "t" (catalog lookup
-// in the template language), "date" (locale date), "datetime" (locale date
-// and time, UTC; see [FormatDateTime]), "size" (locale binary size; see
-// [FormatSize]) and "quote" (prefixes every line with "> "). Later steps add
-// per-tenant templates on top of the defaults, with the same restricted
-// function set.
+// compiled is a validated template.
+type compiled struct {
+	subject []tpiece
+	text    []tpiece
+	html    []sanitize.Segment
+}
+
+// defaultSet is a default template in one language.
+type defaultSet struct {
+	src TemplateSource
+	c   *compiled
+}
+
+// Templates renders mail templates in the supported languages. The default
+// templates are parsed and validated once, at construction. A Templates is
+// read-only afterwards and safe for concurrent use.
 type Templates struct {
-	sets map[string]map[string]*templateSet // name -> lang -> set
+	sets map[string]map[string]*defaultSet // name -> lang -> set
 }
 
 // defaultTemplates is the set embedded in the binary.
@@ -247,7 +90,11 @@ var defaultTemplates = mustDefaultTemplates()
 // template is a build defect, caught by the tests.
 func mustDefaultTemplates() *Templates {
 	sub, _ := fs.Sub(defaultTemplateFS, "templates") // constant, valid path
-	t, err := NewTemplates(sub, i18n.DefaultCatalog())
+	return mustTemplates(NewTemplates(sub))
+}
+
+// mustTemplates panics on err.
+func mustTemplates(t *Templates, err error) *Templates {
 	if err != nil {
 		panic(err)
 	}
@@ -264,33 +111,29 @@ func Render(name, lang string, data any) (Message, error) {
 	return defaultTemplates.Render(name, lang, data)
 }
 
-// funcs returns the restricted function set of templates written in lang.
-func funcs(lang string, catalog *i18n.Catalog) map[string]any {
-	return map[string]any{
-		"t":        func(key string, pairs ...string) string { return catalog.T(lang, key, pairs...) },
-		"date":     func(t time.Time) string { return i18n.FormatDate(lang, t) },
-		"datetime": func(t time.Time) string { return FormatDateTime(lang, t) },
-		"size":     func(n int64) string { return FormatSize(lang, n) },
-		"quote":    quoteLines,
-	}
+// RenderOverride renders a template with an optional customization; see
+// [Templates.RenderOverride].
+func RenderOverride(name, lang string, data any, override *TemplateSource) (Message, error) {
+	return defaultTemplates.RenderOverride(name, lang, data, override)
 }
 
-// quoteLines prefixes every line of s with "> ", as mail clients quote a
-// message, so that free text stands apart from the text of the service.
-func quoteLines(s string) string {
-	lines := strings.Split(strings.ReplaceAll(strings.TrimRight(s, "\r\n"), "\r\n", "\n"), "\n")
-	for i, l := range lines {
-		lines[i] = strings.TrimRight("> "+l, " ")
-	}
-	return strings.Join(lines, "\n")
+// Preview renders a template with sample data; see [Templates.Preview].
+func Preview(key, lang string, override *TemplateSource) (Message, error) {
+	return defaultTemplates.Preview(key, lang, override)
 }
 
-// NewTemplates parses every <lang>/<name>.<part>.tmpl file of fsys. Unknown
-// languages, unknown parts and files outside that layout are errors, as is a
-// template without subject or text part. Strings looked up with "t" come from
-// catalog.
-func NewTemplates(fsys fs.FS, catalog *i18n.Catalog) (*Templates, error) {
-	t := &Templates{sets: map[string]map[string]*templateSet{}}
+// DefaultSource returns the source of a built-in template; see
+// [Templates.Source].
+func DefaultSource(key, lang string) (TemplateSource, error) {
+	return defaultTemplates.Source(key, lang)
+}
+
+// NewTemplates reads every <lang>/<name>.<part>.tmpl file of fsys, name
+// being a template key ([TemplateNames]). Unknown languages, keys or parts,
+// files outside that layout, a template lacking a part and a template that
+// fails [ValidateTemplate] are errors.
+func NewTemplates(fsys fs.FS) (*Templates, error) {
+	raw := map[string]map[string]*TemplateSource{}
 	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -298,79 +141,62 @@ func NewTemplates(fsys fs.FS, catalog *i18n.Catalog) (*Templates, error) {
 		if d.IsDir() {
 			return nil
 		}
-		return t.parseFile(fsys, p, catalog)
+		return readPart(fsys, p, raw)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mail: templates: %w", err)
 	}
-	for name, langs := range t.sets {
-		for lang, set := range langs {
-			if set.subject == nil || set.text == nil {
-				return nil, fmt.Errorf("mail: templates: %s/%s lacks a subject or text part", lang, name)
+	t := &Templates{sets: map[string]map[string]*defaultSet{}}
+	for name, langs := range raw {
+		t.sets[name] = map[string]*defaultSet{}
+		for lang, src := range langs {
+			if src.Subject == "" || src.HTML == "" || src.Text == "" {
+				return nil, fmt.Errorf("mail: templates: %s/%s lacks a part", lang, name)
 			}
+			c, err := compileTemplate(name, *src)
+			if err != nil {
+				return nil, fmt.Errorf("mail: templates: %s/%s: %w", lang, name, err)
+			}
+			t.sets[name][lang] = &defaultSet{src: *src, c: c}
 		}
 	}
 	return t, nil
 }
 
-// parseFile parses one template file into its set.
-func (t *Templates) parseFile(fsys fs.FS, p string, catalog *i18n.Catalog) error {
+// readPart reads one template file into raw.
+func readPart(fsys fs.FS, p string, raw map[string]map[string]*TemplateSource) error {
 	lang, file := path.Split(p)
 	lang = strings.TrimSuffix(lang, "/")
 	if !i18n.IsSupported(lang) || !strings.HasSuffix(file, tmplSuffix) {
 		return fmt.Errorf("unexpected file %q", p)
 	}
 	name, part, ok := strings.Cut(strings.TrimSuffix(file, tmplSuffix), ".")
-	if !ok || !isTemplateName(name) {
+	if _, known := keyDefs[name]; !ok || !known {
 		return fmt.Errorf("unexpected file %q", p)
 	}
-	raw, err := fs.ReadFile(fsys, p)
+	b, err := fs.ReadFile(fsys, p)
 	if err != nil {
 		return err
 	}
-	if t.sets[name] == nil {
-		t.sets[name] = map[string]*templateSet{}
+	if raw[name] == nil {
+		raw[name] = map[string]*TemplateSource{}
 	}
-	set := t.sets[name][lang]
-	if set == nil {
-		set = &templateSet{}
-		t.sets[name][lang] = set
+	src := raw[name][lang]
+	if src == nil {
+		src = &TemplateSource{}
+		raw[name][lang] = src
 	}
-	fm := funcs(lang, catalog)
 	switch part {
-	case partSubject, partText:
-		tt, err := texttemplate.New(p).Option("missingkey=error").Funcs(fm).Parse(string(raw))
-		if err != nil {
-			return err
-		}
-		if part == partSubject {
-			set.subject = tt
-		} else {
-			set.text = tt
-		}
+	case partSubject:
+		src.Subject = strings.TrimRight(string(b), "\r\n")
 	case partHTML:
-		ht, err := htmltemplate.New(p).Option("missingkey=error").Funcs(fm).Parse(string(raw))
-		if err != nil {
-			return err
-		}
-		set.html = ht
+		src.HTML = string(b)
+	case partText:
+		src.Text = string(b)
 	default:
 		return fmt.Errorf("unexpected file %q", p)
 	}
 	return nil
-}
-
-// isTemplateName accepts [a-z_]+.
-func isTemplateName(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := range len(s) {
-		if (s[i] < 'a' || s[i] > 'z') && s[i] != '_' {
-			return false
-		}
-	}
-	return true
 }
 
 // Names returns the sorted template names.
@@ -383,41 +209,239 @@ func (t *Templates) Names() []string {
 	return names
 }
 
-// Render renders template name in lang with data, falling back to
-// [i18n.Default] when the template does not exist in lang. The returned
-// [Message] has Subject (whitespace collapsed to one line), Text, HTML and
-// Language (the language actually used) set; the caller sets To and any
-// inline part. Errors wrap [ErrUnknownTemplate] or report a template
-// execution failure (for example a missing field).
-func (t *Templates) Render(name, lang string, data any) (Message, error) {
+// set returns the default template of key in lang, falling back to
+// [i18n.Default], and the language used.
+func (t *Templates) set(key, lang string) (string, *defaultSet, string, error) {
+	name := keyName(key)
 	langs, ok := t.sets[name]
 	if !ok {
-		return Message{}, fmt.Errorf("%w: %q", ErrUnknownTemplate, name)
+		return "", nil, "", fmt.Errorf("%w: %q", ErrUnknownTemplate, key)
 	}
 	set, ok := langs[lang]
 	if !ok {
 		lang = i18n.Default
 		if set, ok = langs[lang]; !ok {
-			return Message{}, fmt.Errorf("%w: %q has no %q version", ErrUnknownTemplate, name, lang)
+			return "", nil, "", fmt.Errorf("%w: %q has no %q version", ErrUnknownTemplate, key, lang)
 		}
 	}
-	var subject, text, html bytes.Buffer
-	if err := set.subject.Execute(&subject, data); err != nil {
-		return Message{}, fmt.Errorf("mail: render %s: %w", name, err)
+	return name, set, lang, nil
+}
+
+// Source returns the source of the default template of key in lang (or in
+// [i18n.Default] when lang has none): the template an administrator starts
+// from, and the one used again after a reset. Errors wrap
+// [ErrUnknownTemplate].
+func (t *Templates) Source(key, lang string) (TemplateSource, error) {
+	_, set, _, err := t.set(key, lang)
+	if err != nil {
+		return TemplateSource{}, err
 	}
-	if err := set.text.Execute(&text, data); err != nil {
-		return Message{}, fmt.Errorf("mail: render %s: %w", name, err)
+	return set.src, nil
+}
+
+// Render renders the default template name in lang with data, falling back
+// to [i18n.Default] when the template does not exist in lang. data must be
+// the data type of the template (for example [VerificationCodeData]). The
+// returned [Message] has Subject, Text, HTML and Language (the language
+// actually used) set; the caller sets To and any inline part. Errors wrap
+// [ErrUnknownTemplate] or report a wrong data type.
+func (t *Templates) Render(name, lang string, data any) (Message, error) {
+	return t.RenderOverride(name, lang, data, nil)
+}
+
+// RenderOverride renders like [Templates.Render], with the customization
+// override of the tenant instead of the default template when it is not
+// nil. override must be the customization of the language actually used
+// (lang when the default template exists in lang). An invalid override is
+// an error wrapping [ErrInvalidTemplate].
+func (t *Templates) RenderOverride(name, lang string, data any, override *TemplateSource) (Message, error) {
+	name, set, lang, err := t.set(name, lang)
+	if err != nil {
+		return Message{}, err
 	}
-	if set.html != nil {
-		if err := set.html.Execute(&html, data); err != nil {
-			return Message{}, fmt.Errorf("mail: render %s: %w", name, err)
+	c := set.c
+	if override != nil {
+		if c, err = compileTemplate(name, *override); err != nil {
+			return Message{}, err
 		}
 	}
+	def := keyDefs[name]
+	vals, ok := def.values(labelsFor(lang), lang, data)
+	if !ok {
+		return Message{}, fmt.Errorf("mail: render %s: unexpected data type %T", name, data)
+	}
+	return c.render(lang, vals), nil
+}
+
+// OverrideLookup returns the customization of template name in lang for a
+// tenant, or nil when the tenant uses the default template.
+type OverrideLookup func(ctx context.Context, tenantID, name, lang string) (*TemplateSource, error)
+
+// RenderFor renders template name for a tenant: the customization returned
+// by lookup for the language actually used when there is one, the default
+// template otherwise. A lookup error is returned. A stored customization
+// that no longer validates (validation rules made stricter after it was
+// saved) is ignored and the default template is used, so that the mails of
+// the tenant keep working.
+func (t *Templates) RenderFor(ctx context.Context, lookup OverrideLookup, tenantID, name, lang string, data any) (Message, error) {
+	name, _, effective, err := t.set(name, lang)
+	if err != nil {
+		return Message{}, err
+	}
+	override, err := lookup(ctx, tenantID, name, effective)
+	if err != nil {
+		return Message{}, fmt.Errorf("mail: render %s: template lookup: %w", name, err)
+	}
+	if override != nil {
+		if m, err := t.RenderOverride(name, effective, data, override); err == nil {
+			return m, nil
+		}
+	}
+	return t.Render(name, effective, data)
+}
+
+// Preview renders template key in lang with the sample data of the key
+// (see [Variables]): override when not nil, else the default template.
+// Errors wrap [ErrUnknownTemplate] or [ErrInvalidTemplate].
+func (t *Templates) Preview(key, lang string, override *TemplateSource) (Message, error) {
+	name, _, err := lookupKey(key)
+	if err != nil {
+		return Message{}, err
+	}
+	return t.RenderOverride(name, lang, keyDefs[name].sample, override)
+}
+
+// --- Rendering ---------------------------------------------------------------
+
+// HTML page around the content of the HTML body.
+const (
+	htmlPageStart = "<!DOCTYPE html>\n<html lang=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n" +
+		"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>%s</title>\n</head>\n" +
+		"<body style=\"margin:0;padding:24px;background-color:#ffffff;color:#1a1a1a;" +
+		"font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;\">\n" +
+		"<div role=\"main\" style=\"max-width:560px;margin:0 auto;\">\n"
+	htmlPageEnd = "\n</div>\n</body>\n</html>\n"
+)
+
+// render renders a compiled template with vals.
+func (c *compiled) render(lang string, vals map[string]value) Message {
+	var subject strings.Builder
+	for _, p := range c.subject {
+		if p.name == "" {
+			subject.WriteString(p.text)
+		} else {
+			subject.WriteString(vals[p.name].text)
+		}
+	}
+	s := subjectLine(subject.String())
+
+	var text writer
+	for _, p := range c.text {
+		if p.name == "" {
+			text.literal(p.text)
+		} else {
+			text.value(normalizeNewlines(vals[p.name].text))
+		}
+	}
+
+	var body writer
+	for _, seg := range c.html {
+		if seg.Placeholder == "" {
+			body.literal(seg.Literal)
+			continue
+		}
+		v := vals[seg.Placeholder]
+		switch {
+		case seg.Context == sanitize.URL:
+			body.value(esc(linkURL(v.text)))
+		case v.kind == VarBlock:
+			body.value(string(v.html))
+		default:
+			body.value(esc(v.text))
+		}
+	}
+	page := fmt.Sprintf(htmlPageStart, lang, esc(s)) + strings.Trim(body.b.String(), " \t\r\n") + htmlPageEnd
 	return Message{
-		// strings.Fields also drops any CR or LF a value may have carried.
-		Subject:  strings.Join(strings.Fields(subject.String()), " "),
-		Text:     text.String(),
-		HTML:     html.String(),
+		Subject:  s,
+		Text:     strings.TrimRight(text.b.String(), " \t\r\n") + "\n",
+		HTML:     page,
 		Language: lang,
-	}, nil
+	}
+}
+
+// writer assembles a body, removing the line breaks after an empty value.
+type writer struct {
+	b    strings.Builder
+	skip int // line breaks to remove at the start of the next literal
+}
+
+// literal writes template text.
+func (w *writer) literal(s string) {
+	if w.skip > 0 {
+		n := 0
+		for n < w.skip && n < len(s) && s[n] == '\n' {
+			n++
+		}
+		s = s[n:]
+		w.skip = 0
+	}
+	w.b.WriteString(s)
+}
+
+// value writes a value; an empty one schedules the removal of as many line
+// breaks as precede it (at most two).
+func (w *writer) value(s string) {
+	if s != "" {
+		w.skip = 0
+		w.b.WriteString(s)
+		return
+	}
+	cur := w.b.String()
+	n := 0
+	for n < 2 && n < len(cur) && cur[len(cur)-1-n] == '\n' {
+		n++
+	}
+	w.skip = n
+}
+
+// normalizeNewlines turns CRLF and CR into LF.
+func normalizeNewlines(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+}
+
+// subjectLine makes a header-safe subject: control and line-separator
+// characters become spaces, format and invisible characters (bidirectional
+// controls...) are removed, whitespace is collapsed and the line is cut to
+// the limit of [Build].
+func subjectLine(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case textsafe.IsControl(r) || textsafe.IsLineSeparator(r):
+			return ' '
+		case textsafe.IsFormat(r) || textsafe.IsInvisible(r):
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	if r := []rune(s); len(r) > maxSubjectLen {
+		s = strings.TrimRight(string(r[:maxSubjectLen-1]), " ") + "…"
+	}
+	return s
+}
+
+// linkURL returns u when it is an http, https or mailto URL without
+// whitespace or control character, else "#". URL values are built by the
+// server; the check is a last line of defense (threat T-87).
+func linkURL(u string) string {
+	lower := strings.ToLower(u)
+	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "mailto:") {
+		return "#"
+	}
+	for _, r := range u {
+		if r <= ' ' || r == 0x7f {
+			return "#"
+		}
+	}
+	return u
 }

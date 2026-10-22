@@ -493,9 +493,12 @@ func TestFaults(t *testing.T) {
 		ev.svc.secrets = failSecrets{}
 		wantErr(t, "Start with failing vault", startInt(), errFault)
 		ev.svc.secrets = ev.vault
-		ev.svc.render = func(string, string, any) (mail.Message, error) { return mail.Message{}, errFault }
+		realRender := ev.svc.render
+		ev.svc.render = func(context.Context, mail.OverrideLookup, string, string, string, any) (mail.Message, error) {
+			return mail.Message{}, errFault
+		}
 		wantErr(t, "Start with failing render", startInt(), errFault)
-		ev.svc.render = mail.Render
+		ev.svc.render = realRender
 		for _, tc := range []struct {
 			err, want error
 		}{

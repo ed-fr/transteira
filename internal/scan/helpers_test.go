@@ -494,7 +494,7 @@ func newEnv(t *testing.T, e storetest.Engine, opts Options) *env {
 		opts.RetryMin, opts.RetryMax = retryMin, retryMax
 	}
 	opts.Logger = slog.New(ev.logs)
-	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{})
+	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Overrides: notify.StoreOverrides(db.TenantEmailTemplates())})
 	ev.w = New(Deps{
 		DB: db, Vault: faultVault{inner: vault, f: ev.f}, Files: faultFiles{inner: files, f: ev.f},
 		Scanner: ev.scanner, Remover: faultRemover{inner: ev.uploads, f: ev.f},

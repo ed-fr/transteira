@@ -41,6 +41,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -139,6 +140,39 @@ var isolationCases = map[string]isolationCase{
 	"deleteAdmin":           adminHostOnly,
 	"resetAdminCredentials": adminHostOnly,
 	"activateAdmin":         adminHostOnly,
+	// Tenant configuration (tenantconfig_test.go): served on the admin host
+	// only, like every administration operation; the delegated admin of
+	// tenant A, sending each operation for tenant B's ID, gets exactly the
+	// answer of an unknown tenant ID (404, or 403 for a super admin
+	// operation) and never data of B.
+	"listTenants":           adminTenantOp,
+	"createTenant":          adminTenantOp,
+	"getTenant":             adminTenantOp,
+	"updateTenant":          adminTenantOp,
+	"deleteTenant":          adminTenantOp,
+	"getBranding":           adminTenantOp,
+	"updateBranding":        adminTenantOp,
+	"uploadBrandingAsset":   adminTenantOp,
+	"deleteBrandingAsset":   adminTenantOp,
+	"getNetworkRules":       adminTenantOp,
+	"updateNetworkRules":    adminTenantOp,
+	"getSmtpSettings":       adminTenantOp,
+	"updateSmtpSettings":    adminTenantOp,
+	"testSmtp":              adminTenantOp,
+	"checkMailDns":          adminTenantOp,
+	"listEmailTemplates":    adminTenantOp,
+	"getEmailTemplate":      adminTenantOp,
+	"updateEmailTemplate":   adminTenantOp,
+	"resetEmailTemplate":    adminTenantOp,
+	"previewEmailTemplate":  adminTenantOp,
+	"getLegalDocumentAdmin": adminTenantOp,
+	"updateLegalDocument":   adminTenantOp,
+	// Public configuration of the tenant (tenantconfig_test.go): under each
+	// tenant host, the name, branding, logo and legal documents of that
+	// tenant only.
+	"getPublicTenant":        publicTenantConfig,
+	"getTenantAsset":         tenantAssets,
+	"getTenantLegalDocument": tenantLegal,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -164,7 +198,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
-			case "listTenants", "getTenant": // stubs answering not-implemented
+			case "listTenantTransfers", "getTenantStats": // stubs answering not-implemented
 				if !isStub(t, op) {
 					t.Errorf("isStub(%s) = false, want true", op.id)
 				}
@@ -428,6 +462,12 @@ type harness struct {
 	engine storetest.Engine
 	// admins are the administrator accounts of the admin cases.
 	admins adminFixtures
+	// config is the configuration seeded for the tenant cases.
+	config configFixtures
+	// sessMu guards sess, the session of the delegated admin of tenant A
+	// shared by the tenant configuration cases (opened on first use).
+	sessMu sync.Mutex
+	sess   *adminSession
 }
 
 // masterKeyLabel names the master key of the server
@@ -478,9 +518,10 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 	h.fixtures = seedDeposit(t, db, h.tenantA.ID)
 	h.transfers = seedTransfers(t, db, h.tenantA.ID, h.tenantB.ID)
 	h.admins = seedAdmins(t, db, h.tenantA.ID)
+	root := t.TempDir()
+	h.config = seedTenantConfig(t, db, h, filepath.Join(root, "data"))
 	_ = db.Close()
 
-	root := t.TempDir()
 	env := map[string]string{
 		config.EnvDBDriver:       e.Driver,
 		config.EnvDBDSN:          e.DSN,

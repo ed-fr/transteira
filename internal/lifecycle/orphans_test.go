@@ -269,3 +269,44 @@ func TestOrphansFailures(t *testing.T) {
 		}
 	})
 }
+
+// TestOrphansKeepAssets checks that old branding assets, referenced by the
+// tenant row and not by a transfer, are neither removed nor counted, as
+// unknown entries or failures.
+func TestOrphansKeepAssets(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		old := ev.clock.Now().Add(-OrphanGrace - 24*time.Hour)
+		files := []string{storage.AssetLogo + ".asset", storage.AssetBackground + ".asset"}
+		for _, f := range files {
+			ev.write(ev.a, f, old)
+		}
+
+		// The rule itself, on the listed entries.
+		var c orphanCounts
+		entries := []storage.Entry{
+			{Name: storage.AssetLogo, File: files[0], Kind: storage.KindAsset, ModTime: old},
+			{Name: storage.AssetBackground, File: files[1], Kind: storage.KindAsset, ModTime: old},
+		}
+		if err := ev.s.removeOrphans(context.Background(), ev.a.ID, ev.clock.Now(), entries, nil, nil, &c); err != nil {
+			t.Fatalf("removeOrphans: %v", err)
+		}
+		if c != (orphanCounts{}) {
+			t.Fatalf("counts %+v", c)
+		}
+
+		// The whole task, on the real directory.
+		ev.runTask(TaskOrphans)
+		for _, f := range files {
+			if !ev.exists(ev.a, f) {
+				t.Errorf("%s removed", f)
+			}
+		}
+		if n := ev.logs.count("lifecycle: unknown entries left"); n != 0 {
+			t.Fatalf("assets counted as unknown:\n%s", ev.logs.all())
+		}
+		if n := ev.logs.count("lifecycle: orphan files removed"); n != 0 {
+			t.Fatalf("assets counted as removed:\n%s", ev.logs.all())
+		}
+	})
+}

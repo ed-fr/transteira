@@ -1,28 +1,8 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Votre transfert a été téléchargé</title>
-</head>
-<body style="margin:0;padding:24px;background-color:#ffffff;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.5;">
-<div role="main" style="max-width:560px;margin:0 auto;">
-<h1 style="font-size:20px;margin:0 0 16px;">{{.TenantName}}</h1>
+<h1 style="font-size:20px;margin:0 0 16px;">{{tenant_name}}</h1>
 <p>Bonjour,</p>
-<p>Votre transfert a été téléchargé en entier pour la première fois le {{datetime .DownloadedAt}}.</p>
+<p>Votre transfert a été téléchargé en entier pour la première fois le {{download_datetime}}.</p>
 <h2 style="font-size:18px;margin:24px 0 8px;">Fichiers</h2>
-<ul style="padding-left:20px;margin:0 0 16px;">
-{{- range .Files}}
-<li style="margin:0 0 12px;"><strong style="word-break:break-all;">{{.Name}}</strong> ({{size .Size}})</li>
-{{- end}}
-</ul>
-{{- if not .DeleteAt.IsZero}}
-<p><strong>Comme vous l'avez demandé, le transfert est supprimé après son premier téléchargement : il sera définitivement effacé le {{datetime .DeleteAt}}.</strong></p>
-{{- else}}
-<p>Cet avis n'est envoyé qu'une fois : les téléchargements suivants ne sont pas signalés.</p>
-{{- end}}
+{{files}}
+{{deletion_notice}}
 <hr style="border:0;border-top:1px solid #767676;margin:24px 0 16px;">
-<p style="font-size:14px;color:#4a4a4a;">{{t "mail.footer.automated" "tenant" .TenantName}}</p>
-</div>
-</body>
-</html>
+<p style="font-size:14px;color:#4a4a4a;">Ce message a été envoyé automatiquement par {{tenant_name}}. Merci de ne pas y répondre.</p>

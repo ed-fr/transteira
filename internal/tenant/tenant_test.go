@@ -11,14 +11,18 @@ import (
 func validTenant() Tenant {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	return Tenant{
-		ID:                validID,
-		Name:              "Entity A",
-		FQDN:              "transfer.entity-a.example.com",
-		DefaultLanguage:   "fr",
-		MaxTransferBytes:  MaxTransferLimit,
-		StorageQuotaBytes: 1 << 40,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:                 validID,
+		Name:               "Entity A",
+		FQDN:               "transfer.entity-a.example.com",
+		DefaultLanguage:    "fr",
+		MaxTransferBytes:   MaxTransferLimit,
+		MaxTransferCeiling: MaxTransferLimit,
+		StorageQuotaBytes:  1 << 40,
+		Status:             StatusActive,
+		PrimaryColor:       DefaultPrimaryColor,
+		AccentColor:        DefaultAccentColor,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 }
 
@@ -46,6 +50,17 @@ func TestTenantValidate(t *testing.T) {
 		{"zero transfer", func(x *Tenant) { x.MaxTransferBytes = 0 }, false},
 		{"negative transfer", func(x *Tenant) { x.MaxTransferBytes = -1 }, false},
 		{"transfer over limit", func(x *Tenant) { x.MaxTransferBytes = MaxTransferLimit + 1 }, false},
+		{"transfer under ceiling", func(x *Tenant) { x.MaxTransferBytes, x.MaxTransferCeiling = 10, 11 }, true},
+		{"transfer over ceiling", func(x *Tenant) { x.MaxTransferBytes, x.MaxTransferCeiling = 12, 11 }, false},
+		{"zero ceiling", func(x *Tenant) { x.MaxTransferCeiling = 0 }, false},
+		{"ceiling over limit", func(x *Tenant) { x.MaxTransferCeiling = MaxTransferLimit + 1 }, false},
+		{"deleting", func(x *Tenant) { x.Status = StatusDeleting }, true},
+		{"empty status", func(x *Tenant) { x.Status = "" }, false},
+		{"unknown status", func(x *Tenant) { x.Status = "archived" }, false},
+		{"lower-case colors", func(x *Tenant) { x.PrimaryColor, x.AccentColor = "#abcdef", "#000000" }, true},
+		{"empty primary", func(x *Tenant) { x.PrimaryColor = "" }, false},
+		{"short accent", func(x *Tenant) { x.AccentColor = "#FFF" }, false},
+		{"assets", func(x *Tenant) { x.HasLogo, x.HasBackground = true, true }, true},
 		{"zero quota", func(x *Tenant) { x.StorageQuotaBytes = 0 }, false},
 		{"negative quota", func(x *Tenant) { x.StorageQuotaBytes = -5 }, false},
 	}
@@ -106,5 +121,48 @@ func TestLanguages(t *testing.T) {
 	}
 	if IsLanguage("EN") || IsLanguage("de") {
 		t.Fatal("IsLanguage accepted an unsupported code")
+	}
+}
+
+func TestValidColor(t *testing.T) {
+	t.Parallel()
+	for _, c := range []string{"#000000", "#FFFFFF", "#1f4e79", DefaultPrimaryColor, DefaultAccentColor} {
+		if !ValidColor(c) {
+			t.Errorf("ValidColor(%q) = false", c)
+		}
+	}
+	for _, c := range []string{"", "#", "#FFF", "000000", "#0000000", "#GGGGGG", "##00000", "red", "#00000\n"} {
+		if ValidColor(c) {
+			t.Errorf("ValidColor(%q) = true", c)
+		}
+	}
+}
+
+func TestStatusValid(t *testing.T) {
+	t.Parallel()
+	if !StatusActive.Valid() || !StatusDeleting.Valid() || Status("").Valid() || Status("Active").Valid() {
+		t.Fatal("Status.Valid is wrong")
+	}
+}
+
+func TestWithDefaults(t *testing.T) {
+	t.Parallel()
+	bare := Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "en", MaxTransferBytes: 5, StorageQuotaBytes: 9}
+	d := bare.WithDefaults()
+	if d == &bare || d.MaxTransferCeiling != 5 || d.Status != StatusActive ||
+		d.PrimaryColor != DefaultPrimaryColor || d.AccentColor != DefaultAccentColor {
+		t.Fatalf("WithDefaults() = %+v", d)
+	}
+	if err := d.Validate(); err != nil {
+		t.Fatalf("defaults do not validate: %v", err)
+	}
+	if bare.Status != "" || bare.MaxTransferCeiling != 0 {
+		t.Fatal("WithDefaults modified its receiver")
+	}
+	set := validTenant()
+	set.MaxTransferBytes, set.MaxTransferCeiling = 1, 2
+	set.Status, set.PrimaryColor, set.AccentColor = StatusDeleting, "#010203", "#040506"
+	if got := set.WithDefaults(); *got != set {
+		t.Fatalf("WithDefaults changed set fields: %+v", got)
 	}
 }

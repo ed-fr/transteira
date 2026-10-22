@@ -654,6 +654,8 @@ func TestTransfersTenantDeletion(t *testing.T) {
 		ext.SenderEmail, ext.SenderKind, ext.InvitationID = "bob@partner.example.org", store.DepositorExternal, inv.ID
 		da := mustTransfer(t, db, a.ID, ext)
 		db2 := mustTransfer(t, db, b.ID, newTransfer())
+		wantErr(t, "Tenants.Delete with file keys", db.Tenants().Delete(ctx, a.ID), store.ErrKeysRemain)
+		eraseTenantKeys(t, db, a.ID)
 		if err := db.Tenants().Delete(ctx, a.ID); err != nil {
 			t.Fatalf("Tenants.Delete: %v", err)
 		}
@@ -664,6 +666,34 @@ func TestTransfersTenantDeletion(t *testing.T) {
 		if got, err := db.Transfers().Get(ctx, b.ID, db2.ID); err != nil || !reflect.DeepEqual(got, db2) {
 			t.Errorf("B's transfer = %+v, %v", got, err)
 		}
+	})
+}
+
+// TestTransfersCreateTenantNotActive checks that no transfer is created in
+// a tenant whose deletion started, even by a request that resolved it
+// before, and that the other tenants are unaffected.
+func TestTransfersCreateTenantNotActive(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		a := newTenant(t, db, "transfer.entity-a.example.com")
+		b := newTenant(t, db, "transfer.entity-b.example.com")
+		fa := newFile(t, db, a.ID, "report.pdf", 10)
+		if err := db.Tenants().SetStatus(ctx, a.ID, tenant.StatusDeleting); err != nil {
+			t.Fatal(err)
+		}
+		tr := newTransfer()
+		err := inTx(t, db, a.ID, func(tx *store.ScopedTx) error {
+			return db.Transfers().CreateTx(ctx, tx, tr, []string{"bob@partner.example.org"}, []store.TransferFile{fa})
+		})
+		wantErr(t, "CreateTx in a deleting tenant", err, store.ErrNotFound)
+		_, err = db.Transfers().Get(ctx, a.ID, tr.ID)
+		wantErr(t, "transfer of a deleting tenant", err, store.ErrNotFound)
+		_, err = db.TransferFiles().GetByUploadID(ctx, a.ID, fa.UploadID)
+		wantErr(t, "file of a deleting tenant", err, store.ErrNotFound)
+		mustTransfer(t, db, b.ID, newTransfer())
 	})
 }
 

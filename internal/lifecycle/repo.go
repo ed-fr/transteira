@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -36,6 +37,14 @@ type repo interface {
 
 	storageRefs(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, error)
 	availableIDs(ctx context.Context, tid tenant.ID) ([]string, error)
+
+	deletingTenants(ctx context.Context) ([]tenant.ID, error)
+	getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
+	transferIDs(ctx context.Context, tid tenant.ID, statuses ...store.TransferStatus) ([]string, error)
+	keyIDs(ctx context.Context, tid tenant.ID, after string, limit int) ([]string, error)
+	destroyKeys(ctx context.Context, tid tenant.ID, wkIDs []string) error
+	deleteTenant(ctx context.Context, tid tenant.ID) error
+	audit(ctx context.Context, ev audit.Event) error
 
 	backupSupported() bool
 	backup(ctx context.Context, path string) error
@@ -72,8 +81,8 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 // in one transaction: it checks inside it that the transfer is still due
 // (stillDue, which applies finalDue; errNotDue otherwise), destroys its
 // sealed download token if any, then marks it deleted (kindDelete) or
-// expired. The store refuses while a file key remains
-// (store.ErrKeysRemain).
+// expired, or deletes its row (kindTenant). The store refuses while a file
+// key remains (store.ErrKeysRemain).
 func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID string, now time.Time, stillDue func(store.Transfer) bool) error {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -92,8 +101,11 @@ func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID stri
 				return err
 			}
 		}
-		if k == kindDelete {
+		switch k {
+		case kindDelete:
 			return r.db.Transfers().MarkDeletedTx(ctx, tx, trfID)
+		case kindTenant:
+			return r.db.Transfers().DeleteTx(ctx, tx, trfID)
 		}
 		return r.db.Transfers().MarkExpiredTx(ctx, tx, trfID, now)
 	})
@@ -137,6 +149,48 @@ func (r storeRepo) storageRefs(ctx context.Context, tid tenant.ID) (map[string]s
 
 func (r storeRepo) availableIDs(ctx context.Context, tid tenant.ID) ([]string, error) {
 	return r.db.Transfers().IDsByStatus(ctx, tid, store.TransferAvailable)
+}
+
+func (r storeRepo) deletingTenants(ctx context.Context) ([]tenant.ID, error) {
+	return r.db.Tenants().ListDeleting(ctx)
+}
+
+func (r storeRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	return r.db.Tenants().Get(ctx, tid)
+}
+
+func (r storeRepo) transferIDs(ctx context.Context, tid tenant.ID, statuses ...store.TransferStatus) ([]string, error) {
+	return r.db.Transfers().IDsByStatus(ctx, tid, statuses...)
+}
+
+func (r storeRepo) keyIDs(ctx context.Context, tid tenant.ID, after string, limit int) ([]string, error) {
+	return r.db.WrappedKeys().ListIDs(ctx, tid, after, limit)
+}
+
+// destroyKeys destroys the wrapped keys wkIDs of tid in one transaction; a
+// key already gone is skipped.
+func (r storeRepo) destroyKeys(ctx context.Context, tid tenant.ID, wkIDs []string) error {
+	s, err := r.db.Scoped(tid)
+	if err != nil {
+		return err
+	}
+	return s.Tx(ctx, func(tx *store.ScopedTx) error {
+		for _, wkID := range wkIDs {
+			if err := r.vault.DestroyTx(ctx, tx, wkID); err != nil && !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r storeRepo) deleteTenant(ctx context.Context, tid tenant.ID) error {
+	return r.db.Tenants().Delete(ctx, tid)
+}
+
+// audit records ev in the audit log, in its own transaction.
+func (r storeRepo) audit(ctx context.Context, ev audit.Event) error {
+	return audit.New(r.db).Record(ctx, ev)
 }
 
 // backupSupported reports whether TransTeira copies the database itself

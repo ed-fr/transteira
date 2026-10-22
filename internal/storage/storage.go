@@ -333,6 +333,11 @@ func (s *Store) writeAtomic(op string, tid tenant.ID, name, ext string, data []b
 	if err := check(tid, name); err != nil {
 		return err
 	}
+	return s.writeAtomicChecked(op, tid, name, ext, data, maxSize)
+}
+
+// writeAtomicChecked is writeAtomic once tid and name are validated.
+func (s *Store) writeAtomicChecked(op string, tid tenant.ID, name, ext string, data []byte, maxSize int) error {
 	if len(data) > maxSize {
 		return fmt.Errorf("storage: %s %s: %w: too large", op, name, ErrInvalid)
 	}
@@ -406,6 +411,11 @@ func (s *Store) readBounded(op string, tid tenant.ID, name, ext string, maxSize 
 	if err := check(tid, name); err != nil {
 		return nil, time.Time{}, err
 	}
+	return s.readBoundedChecked(op, tid, name, ext, maxSize)
+}
+
+// readBoundedChecked is readBounded once tid and name are validated.
+func (s *Store) readBoundedChecked(op string, tid tenant.ID, name, ext string, maxSize int) ([]byte, time.Time, error) {
 	f, info, err := s.openRegular(op, rel(tid, name, ext), name, os.O_RDONLY)
 	if err != nil {
 		return nil, time.Time{}, err

@@ -16,6 +16,9 @@ import (
 const (
 	fieldInvalidFormat = "invalid-format"
 	fieldRequired      = "required"
+	// fieldNotNullable is a null member of a merge patch on a field that
+	// cannot be removed.
+	fieldNotNullable = "not-nullable"
 )
 
 // errNoService reports a server built without WithService: a wiring error,
@@ -121,4 +124,20 @@ func deref[T any](p *T) T {
 		return zero
 	}
 	return *p
+}
+
+// optional returns a pointer to v, or nil when v is empty.
+func optional(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// optionalTime returns a pointer to t, or nil when t is zero.
+func optionalTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }

@@ -137,7 +137,11 @@ func TestWrappedKeysCRUD(t *testing.T) {
 			t.Errorf("Get(deleted) = %v", err)
 		}
 
-		// Deleting a tenant erases its keys.
+		// Deleting a tenant requires its keys erased first (T-110).
+		if err := db.Tenants().Delete(ctx, b.ID); !errors.Is(err, store.ErrKeysRemain) {
+			t.Fatalf("Delete(tenant with keys) = %v, want ErrKeysRemain", err)
+		}
+		eraseTenantKeys(t, db, b.ID)
 		if err := db.Tenants().Delete(ctx, b.ID); err != nil {
 			t.Fatal(err)
 		}

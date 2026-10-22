@@ -74,6 +74,7 @@ const (
 	AuditActionSetupCompleted             AuditAction = "setup.completed"
 	AuditActionTenantCreated              AuditAction = "tenant.created"
 	AuditActionTenantDeleted              AuditAction = "tenant.deleted"
+	AuditActionTenantDeletionStarted      AuditAction = "tenant.deletion_started"
 	AuditActionTenantUpdated              AuditAction = "tenant.updated"
 	AuditActionTransferCreated            AuditAction = "transfer.created"
 	AuditActionTransferDeleted            AuditAction = "transfer.deleted"
@@ -155,6 +156,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionTenantCreated:
 		return true
 	case AuditActionTenantDeleted:
+		return true
+	case AuditActionTenantDeletionStarted:
 		return true
 	case AuditActionTenantUpdated:
 		return true
@@ -763,6 +766,66 @@ func (e SmtpSecurity) Valid() bool {
 	case SmtpSecurityStarttls:
 		return true
 	case SmtpSecurityTls:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SmtpTestResultStage.
+const (
+	SmtpTestResultStageAuth     SmtpTestResultStage = "auth"
+	SmtpTestResultStageConnect  SmtpTestResultStage = "connect"
+	SmtpTestResultStageData     SmtpTestResultStage = "data"
+	SmtpTestResultStageDone     SmtpTestResultStage = "done"
+	SmtpTestResultStageEnvelope SmtpTestResultStage = "envelope"
+	SmtpTestResultStageGreeting SmtpTestResultStage = "greeting"
+	SmtpTestResultStageSettings SmtpTestResultStage = "settings"
+	SmtpTestResultStageStarttls SmtpTestResultStage = "starttls"
+	SmtpTestResultStageTls      SmtpTestResultStage = "tls"
+	SmtpTestResultStageUnknown  SmtpTestResultStage = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the SmtpTestResultStage enum.
+func (e SmtpTestResultStage) Valid() bool {
+	switch e {
+	case SmtpTestResultStageAuth:
+		return true
+	case SmtpTestResultStageConnect:
+		return true
+	case SmtpTestResultStageData:
+		return true
+	case SmtpTestResultStageDone:
+		return true
+	case SmtpTestResultStageEnvelope:
+		return true
+	case SmtpTestResultStageGreeting:
+		return true
+	case SmtpTestResultStageSettings:
+		return true
+	case SmtpTestResultStageStarttls:
+		return true
+	case SmtpTestResultStageTls:
+		return true
+	case SmtpTestResultStageUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TenantStatus.
+const (
+	Active   TenantStatus = "active"
+	Deleting TenantStatus = "deleting"
+)
+
+// Valid indicates whether the value is a known member of the TenantStatus enum.
+func (e TenantStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Deleting:
 		return true
 	default:
 		return false
@@ -1626,6 +1689,9 @@ type Language string
 type LegalDocument struct {
 	Document LegalDocumentDocument `json:"document"`
 
+	// Html Sanitized HTML rendering of `markdown` (public reads only).
+	Html *string `json:"html,omitempty"`
+
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language  Language   `json:"language"`
 	Markdown  string     `json:"markdown"`
@@ -1729,7 +1795,16 @@ type Problem struct {
 	Errors *[]struct {
 		Allowed *[]interface{} `json:"allowed,omitempty"`
 		Code    string         `json:"code"`
-		Field   string         `json:"field"`
+
+		// Column Column of the problem in the line, in characters (1-based; mail templates).
+		Column *int   `json:"column,omitempty"`
+		Field  string `json:"field"`
+
+		// Line Line of the problem in the field (1-based; mail templates).
+		Line *int `json:"line,omitempty"`
+
+		// Message English explanation of the problem (mail templates).
+		Message *string `json:"message,omitempty"`
 	} `json:"errors,omitempty"`
 	Files *[]string `json:"files,omitempty"`
 
@@ -1774,10 +1849,20 @@ type PublicInvitation struct {
 type PublicTenant struct {
 	AvailableLanguages []Language `json:"availableLanguages"`
 	Branding           struct {
-		AccentColor   HexColor `json:"accentColor"`
-		BackgroundUrl string   `json:"backgroundUrl"`
-		LogoUrl       string   `json:"logoUrl"`
-		PrimaryColor  HexColor `json:"primaryColor"`
+		AccentColor HexColor `json:"accentColor"`
+
+		// BackgroundUrl URL of the background image (the default one when the tenant has none).
+		BackgroundUrl string `json:"backgroundUrl"`
+
+		// HasBackground The tenant configured a background image (otherwise the default one is served).
+		HasBackground bool `json:"hasBackground"`
+
+		// HasLogo The tenant configured a logo.
+		HasLogo bool `json:"hasLogo"`
+
+		// LogoUrl URL of the logo; absent when the tenant has none.
+		LogoUrl      *string  `json:"logoUrl,omitempty"`
+		PrimaryColor HexColor `json:"primaryColor"`
 	} `json:"branding"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -1954,10 +2039,16 @@ type SmtpTest struct {
 type SmtpTestResult struct {
 	DurationMs int `json:"durationMs"`
 
-	// Error SMTP error message (never contains credentials).
-	Error   *string `json:"error,omitempty"`
-	Success bool    `json:"success"`
+	// Error SMTP error message, sanitized: never contains credentials nor control characters, truncated to 300 characters.
+	Error *string `json:"error,omitempty"`
+
+	// Stage How far the SMTP dialogue went: `done` on success, otherwise the step that failed.
+	Stage   SmtpTestResultStage `json:"stage"`
+	Success bool                `json:"success"`
 }
+
+// SmtpTestResultStage How far the SMTP dialogue went: `done` on success, otherwise the step that failed.
+type SmtpTestResultStage string
 
 // SystemSettings defines model for SystemSettings.
 type SystemSettings struct {
@@ -1970,24 +2061,38 @@ type Tenant struct {
 	CreatedAt time.Time `json:"createdAt"`
 
 	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
-	DefaultLanguage   Language  `json:"defaultLanguage"`
-	Fqdn              Fqdn      `json:"fqdn"`
-	Id                string    `json:"id"`
-	MaxTransferBytes  int64     `json:"maxTransferBytes"`
-	Name              string    `json:"name"`
-	StorageQuotaBytes ByteSize  `json:"storageQuotaBytes"`
-	StorageUsedBytes  ByteSize  `json:"storageUsedBytes"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	DefaultLanguage Language `json:"defaultLanguage"`
+	Fqdn            Fqdn     `json:"fqdn"`
+	Id              string   `json:"id"`
+
+	// MaxTransferBytes Per-transfer size limit.
+	MaxTransferBytes int64 `json:"maxTransferBytes"`
+
+	// MaxTransferCeiling Ceiling of `maxTransferBytes`, set by the super admin: a delegated admin may set `maxTransferBytes` at most to it.
+	MaxTransferCeiling int64  `json:"maxTransferCeiling"`
+	Name               string `json:"name"`
+
+	// Status `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
+	Status            TenantStatus `json:"status"`
+	StorageQuotaBytes ByteSize     `json:"storageQuotaBytes"`
+	StorageUsedBytes  ByteSize     `json:"storageUsedBytes"`
+	UpdatedAt         time.Time    `json:"updatedAt"`
 }
+
+// TenantStatus `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
+type TenantStatus string
 
 // TenantCreate defines model for TenantCreate.
 type TenantCreate struct {
 	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
-	DefaultLanguage   Language `json:"defaultLanguage"`
-	Fqdn              Fqdn     `json:"fqdn"`
-	MaxTransferBytes  *int64   `json:"maxTransferBytes,omitempty"`
-	Name              string   `json:"name"`
-	StorageQuotaBytes int64    `json:"storageQuotaBytes"`
+	DefaultLanguage  Language `json:"defaultLanguage"`
+	Fqdn             Fqdn     `json:"fqdn"`
+	MaxTransferBytes *int64   `json:"maxTransferBytes,omitempty"`
+
+	// MaxTransferCeiling Ceiling of `maxTransferBytes` for the delegated admins; defaults to `maxTransferBytes`, which must not exceed it.
+	MaxTransferCeiling *int64 `json:"maxTransferCeiling,omitempty"`
+	Name               string `json:"name"`
+	StorageQuotaBytes  int64  `json:"storageQuotaBytes"`
 }
 
 // TenantList defines model for TenantList.
@@ -2026,15 +2131,8 @@ type TenantStats struct {
 // TenantStatsPeriod defines model for TenantStats.Period.
 type TenantStatsPeriod string
 
-// TenantUpdate defines model for TenantUpdate.
-type TenantUpdate struct {
-	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
-	DefaultLanguage   *Language `json:"defaultLanguage,omitempty"`
-	Fqdn              *Fqdn     `json:"fqdn,omitempty"`
-	MaxTransferBytes  *int64    `json:"maxTransferBytes,omitempty"`
-	Name              *string   `json:"name,omitempty"`
-	StorageQuotaBytes *int64    `json:"storageQuotaBytes,omitempty"`
-}
+// TenantUpdate JSON Merge Patch of the tenant general settings; `null` is refused on every field.
+type TenantUpdate = json.RawMessage
 
 // TotpCode Exactly one of `code` or `recoveryCode`.
 type TotpCode struct {
@@ -2359,7 +2457,7 @@ type ListTenantInvitationsParams struct {
 
 // CheckMailDnsParams defines parameters for CheckMailDns.
 type CheckMailDnsParams struct {
-	// DkimSelector DKIM selectors to probe (they cannot be discovered from DNS).
+	// DkimSelector DKIM selectors to probe (they cannot be discovered from DNS): DNS labels of letters, digits and inner hyphens, separated by dots.
 	DkimSelector *[]string `form:"dkimSelector,omitempty" json:"dkimSelector,omitempty"`
 }
 
@@ -2418,6 +2516,12 @@ type CreateInvitationParams struct {
 type GetPublicTenantParams struct {
 	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
 	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+}
+
+// GetTenantAssetParams defines parameters for GetTenantAsset.
+type GetTenantAssetParams struct {
+	// IfNoneMatch Entity tag of the copy held by the client; `304` when it is still current.
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
 }
 
 // GetTenantAssetParamsAsset defines parameters for GetTenantAsset.
@@ -2923,7 +3027,7 @@ type ServerInterface interface {
 	GetPublicTenant(w http.ResponseWriter, r *http.Request, params GetPublicTenantParams)
 	// GetTenantAsset Tenant logo or background image
 	// (GET /tenant/assets/{asset})
-	GetTenantAsset(w http.ResponseWriter, r *http.Request, asset GetTenantAssetParamsAsset)
+	GetTenantAsset(w http.ResponseWriter, r *http.Request, asset GetTenantAssetParamsAsset, params GetTenantAssetParams)
 	// GetTenantLegalDocument Legal notice or privacy policy of the tenant
 	// (GET /tenant/legal/{document})
 	GetTenantLegalDocument(w http.ResponseWriter, r *http.Request, document GetTenantLegalDocumentParamsDocument, params GetTenantLegalDocumentParams)
@@ -5351,8 +5455,32 @@ func (siw *ServerInterfaceWrapper) GetTenantAsset(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTenantAssetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetTenantAsset(w, r, asset)
+		siw.Handler.GetTenantAsset(w, r, asset, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8382,6 +8510,22 @@ func (response ListTenants200JSONResponse) VisitListTenantsResponse(w http.Respo
 	return err
 }
 
+type ListTenants400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenants400ApplicationProblemPlusJSONResponse) VisitListTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenants401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -8525,11 +8669,11 @@ type DeleteTenantResponseObject interface {
 	VisitDeleteTenantResponse(w http.ResponseWriter) error
 }
 
-type DeleteTenant202Response struct {
+type DeleteTenant204Response struct {
 }
 
-func (response DeleteTenant202Response) VisitDeleteTenantResponse(w http.ResponseWriter) error {
-	w.WriteHeader(202)
+func (response DeleteTenant204Response) VisitDeleteTenantResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
 	return nil
 }
 
@@ -9563,6 +9707,22 @@ func (response UpdateBranding401ApplicationProblemPlusJSONResponse) VisitUpdateB
 	return err
 }
 
+type UpdateBranding403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateBranding403ApplicationProblemPlusJSONResponse) VisitUpdateBrandingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateBranding404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -9624,6 +9784,22 @@ func (response DeleteBrandingAsset401ApplicationProblemPlusJSONResponse) VisitDe
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteBrandingAsset403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteBrandingAsset403ApplicationProblemPlusJSONResponse) VisitDeleteBrandingAssetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9707,6 +9883,22 @@ func (response UploadBrandingAsset401ApplicationProblemPlusJSONResponse) VisitUp
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadBrandingAsset403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UploadBrandingAsset403ApplicationProblemPlusJSONResponse) VisitUploadBrandingAssetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10053,6 +10245,22 @@ func (response ResetEmailTemplate401ApplicationProblemPlusJSONResponse) VisitRes
 	return err
 }
 
+type ResetEmailTemplate403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ResetEmailTemplate403ApplicationProblemPlusJSONResponse) VisitResetEmailTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ResetEmailTemplate404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -10214,6 +10422,22 @@ func (response UpdateEmailTemplate401ApplicationProblemPlusJSONResponse) VisitUp
 	return err
 }
 
+type UpdateEmailTemplate403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateEmailTemplate403ApplicationProblemPlusJSONResponse) VisitUpdateEmailTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateEmailTemplate404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -10299,6 +10523,22 @@ func (response PreviewEmailTemplate401ApplicationProblemPlusJSONResponse) VisitP
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewEmailTemplate403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response PreviewEmailTemplate403ApplicationProblemPlusJSONResponse) VisitPreviewEmailTemplateResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10600,6 +10840,22 @@ func (response UpdateLegalDocument401ApplicationProblemPlusJSONResponse) VisitUp
 	return err
 }
 
+type UpdateLegalDocument403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateLegalDocument403ApplicationProblemPlusJSONResponse) VisitUpdateLegalDocumentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateLegalDocument404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -10753,6 +11009,22 @@ func (response UpdateNetworkRules401ApplicationProblemPlusJSONResponse) VisitUpd
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNetworkRules403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateNetworkRules403ApplicationProblemPlusJSONResponse) VisitUpdateNetworkRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10914,6 +11186,22 @@ func (response UpdateSmtpSettings401ApplicationProblemPlusJSONResponse) VisitUpd
 	return err
 }
 
+type UpdateSmtpSettings403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSmtpSettings403ApplicationProblemPlusJSONResponse) VisitUpdateSmtpSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateSmtpSettings404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -10965,6 +11253,22 @@ func (response CheckMailDns200JSONResponse) VisitCheckMailDnsResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckMailDns400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CheckMailDns400ApplicationProblemPlusJSONResponse) VisitCheckMailDnsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11040,6 +11344,22 @@ func (response TestSmtp200JSONResponse) VisitTestSmtpResponse(w http.ResponseWri
 	return err
 }
 
+type TestSmtp400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response TestSmtp400ApplicationProblemPlusJSONResponse) VisitTestSmtpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type TestSmtp401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -11052,6 +11372,22 @@ func (response TestSmtp401ApplicationProblemPlusJSONResponse) VisitTestSmtpRespo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSmtp403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response TestSmtp403ApplicationProblemPlusJSONResponse) VisitTestSmtpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -12866,7 +13202,8 @@ func (response GetPublicTenant500ApplicationProblemPlusJSONResponse) VisitGetPub
 }
 
 type GetTenantAssetRequestObject struct {
-	Asset GetTenantAssetParamsAsset `json:"asset"`
+	Asset  GetTenantAssetParamsAsset `json:"asset"`
+	Params GetTenantAssetParams
 }
 
 type GetTenantAssetResponseObject interface {
@@ -12874,7 +13211,9 @@ type GetTenantAssetResponseObject interface {
 }
 
 type GetTenantAsset200ResponseHeaders struct {
-	ETag *string
+	CacheControl        *string
+	ETag                *string
+	XContentTypeOptions *string
 }
 
 type GetTenantAsset200ImagejpegResponse struct {
@@ -12889,8 +13228,14 @@ func (response GetTenantAsset200ImagejpegResponse) VisitGetTenantAssetResponse(w
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
 	if response.Headers.ETag != nil {
 		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
 	}
 	w.WriteHeader(200)
 
@@ -12913,8 +13258,14 @@ func (response GetTenantAsset200ImagepngResponse) VisitGetTenantAssetResponse(w 
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
 	if response.Headers.ETag != nil {
 		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
 	}
 	w.WriteHeader(200)
 
@@ -12925,34 +13276,22 @@ func (response GetTenantAsset200ImagepngResponse) VisitGetTenantAssetResponse(w 
 	return err
 }
 
-type GetTenantAsset200ImagewebpResponse struct {
-	Body          io.Reader
-	Headers       GetTenantAsset200ResponseHeaders
-	ContentLength int64
-}
-
-func (response GetTenantAsset200ImagewebpResponse) VisitGetTenantAssetResponse(w http.ResponseWriter) error {
-
-	w.Header().Set("Content-Type", "image/webp")
-	if response.ContentLength != 0 {
-		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
-	}
-	if response.Headers.ETag != nil {
-		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
-	}
-	w.WriteHeader(200)
-
-	if closer, ok := response.Body.(io.ReadCloser); ok {
-		defer closer.Close()
-	}
-	_, err := io.Copy(w, response.Body)
-	return err
+type GetTenantAsset304ResponseHeaders struct {
+	CacheControl *string
+	ETag         *string
 }
 
 type GetTenantAsset304Response struct {
+	Headers GetTenantAsset304ResponseHeaders
 }
 
 func (response GetTenantAsset304Response) VisitGetTenantAssetResponse(w http.ResponseWriter) error {
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
 	w.WriteHeader(304)
 	return nil
 }
@@ -16706,10 +17045,11 @@ func (sh *strictHandler) GetPublicTenant(w http.ResponseWriter, r *http.Request,
 }
 
 // GetTenantAsset operation middleware
-func (sh *strictHandler) GetTenantAsset(w http.ResponseWriter, r *http.Request, asset GetTenantAssetParamsAsset) {
+func (sh *strictHandler) GetTenantAsset(w http.ResponseWriter, r *http.Request, asset GetTenantAssetParamsAsset, params GetTenantAssetParams) {
 	var request GetTenantAssetRequestObject
 
 	request.Asset = asset
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.GetTenantAsset(ctx, request.(GetTenantAssetRequestObject))

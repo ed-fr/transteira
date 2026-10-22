@@ -26,12 +26,15 @@ const (
 	// kindAbandoned erases the uploading transfers whose uploads expired;
 	// they end expired.
 	kindAbandoned
+	// kindTenant erases every transfer of a tenant being deleted, whatever
+	// its status, and deletes its row ([Sweeper.EraseTenant]).
+	kindTenant
 	kindCount
 )
 
 // task returns the task of k.
 func (k kind) task() Task {
-	return [kindCount]Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads}[k]
+	return [kindCount]Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions}[k]
 }
 
 // stats counts what one run of an erasure task did.
@@ -183,13 +186,15 @@ func (s *Sweeper) erase(ctx context.Context, k kind, tt store.TenantTransfer, no
 	}
 	// Every file is passed, keyed or not: the keys still present are
 	// destroyed, and the removal of a file left on disk by an earlier
-	// failure (an open file on Windows) is retried.
-	if len(d.Files) > 0 {
+	// failure (an open file on Windows) is retried. The erasure of a tenant
+	// skips the transfers without any key left (already erased): their
+	// leftovers go with the tenant directory.
+	if len(d.Files) > 0 && (k != kindTenant || anyKeyed(d.Files)) {
 		if err := s.remover.RemoveFiles(ctx, tt.TenantID, d.Files); err != nil {
 			return s.fail(ctx, k, tt, "remove files", err)
 		}
 	}
-	if d.Status == store.TransferRejected {
+	if k == kindExpire && d.Status == store.TransferRejected {
 		return erased
 	}
 	if err := s.files.RemoveState(tt.TenantID, storage.StateName(tt.TransferID)); err != nil {
@@ -205,7 +210,7 @@ func (s *Sweeper) erase(ctx context.Context, k kind, tt store.TenantTransfer, no
 	if err != nil {
 		return s.fail(ctx, k, tt, "final transaction", err)
 	}
-	if started == store.TransferScanning {
+	if k == kindExpire && started == store.TransferScanning {
 		s.logger.WarnContext(ctx, "lifecycle: transfer expired while still scanning (stuck analysis)",
 			slog.String("tenant", string(tt.TenantID)), slog.String("transfer", tt.TransferID),
 			slog.Duration("finalized_age", now.Sub(d.FinalizedAt)))
@@ -240,13 +245,16 @@ func (s *Sweeper) check(ctx context.Context, k kind, tt store.TenantTransfer, no
 //   - kindExpire: past its expiry (see dueExpiry), or rejected with a file
 //     that still has its data key;
 //   - kindAbandoned: uploading, with uploads that expired at or before now
-//     according to the upload engine.
+//     according to the upload engine;
+//   - kindTenant: always.
 func (s *Sweeper) due(ctx context.Context, k kind, tid tenant.ID, d store.TransferDetails, now time.Time) (bool, error) {
 	switch k {
 	case kindDelete:
 		return dueDeletion(d.Transfer, now), nil
 	case kindExpire:
 		return dueExpiry(d.Transfer, now, s.scanningMaxAge) || rejectedKeyed(d), nil
+	case kindTenant:
+		return true, nil
 	}
 	if d.Status != store.TransferUploading {
 		return false, nil
@@ -270,6 +278,8 @@ func finalDue(k kind, t store.Transfer, now time.Time, started store.TransferSta
 		return dueDeletion(t, now)
 	case kindExpire:
 		return dueExpiry(t, now, scanningMaxAge) || (started == store.TransferScanning && t.Status == store.TransferAvailable)
+	case kindTenant:
+		return true
 	default:
 		return t.Status == store.TransferUploading
 	}
@@ -300,10 +310,12 @@ func dueExpiry(t store.Transfer, now time.Time, scanningMaxAge time.Duration) bo
 // rejectedKeyed reports whether d is rejected with a file that still has
 // its data key.
 func rejectedKeyed(d store.TransferDetails) bool {
-	if d.Status != store.TransferRejected {
-		return false
-	}
-	for _, f := range d.Files {
+	return d.Status == store.TransferRejected && anyKeyed(d.Files)
+}
+
+// anyKeyed reports whether a file of files still has its data key.
+func anyKeyed(files []store.TransferFile) bool {
+	for _, f := range files {
 		if f.DEKKeyID != "" {
 			return true
 		}

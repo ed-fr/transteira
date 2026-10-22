@@ -7,6 +7,13 @@
 //	<dataDir>/<tenantID>/<name>.ttef     encrypted file (TransTeira encrypted format)
 //	<dataDir>/<tenantID>/<name>.ckpt     sealed resume checkpoint of an upload
 //	<dataDir>/<tenantID>/<name>.dlstate  download state of a transfer
+//	<dataDir>/<tenantID>/logo.asset      re-encoded branding logo
+//	<dataDir>/<tenantID>/background.asset re-encoded branding background
+//
+// Branding assets ([Store.WriteAsset]) have fixed names, logo and
+// background, and are written atomically like checkpoints. They are
+// referenced by the tenant row, not by a transfer: [Store.List] reports
+// them as [KindAsset] so that the orphan reconciliation keeps them.
 //
 // A state file holds small bookkeeping of the download layer (the byte
 // ranges served per file of a transfer, at most [MaxStateSize] bytes). It

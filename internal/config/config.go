@@ -214,6 +214,9 @@ type Config struct {
 	SMTPTimeout time.Duration
 	// MailQueueSize is the capacity of the in-memory mail queue.
 	MailQueueSize int
+	// SMTPDenyNetworks lists the networks a tenant SMTP server may never
+	// resolve to (SSRF protection), checked at connection time.
+	SMTPDenyNetworks []netip.Prefix
 
 	// BackupTime is the UTC time of day of the nightly SQLite copy, as an
 	// offset since midnight in [0, 24h).
@@ -627,7 +630,8 @@ func (l *loader) loadDurations(c *Config) {
 	c.MaxOpenTransfers = n
 }
 
-// loadMail reads the SMTP timeout and the mail queue capacity.
+// loadMail reads the SMTP timeout, the mail queue capacity and the networks
+// tenant SMTP servers may never resolve to.
 func (l *loader) loadMail(c *Config) {
 	c.SMTPTimeout = l.duration(EnvSMTPTimeout, DefaultSMTPTimeout, minSMTPTimeout, maxSMTPTimeout)
 	n, err := parseInt(l.getOr(EnvMailQueueSize, DefaultMailQueueSize), minMailQueueSize, maxMailQueueSize)
@@ -635,6 +639,11 @@ func (l *loader) loadMail(c *Config) {
 		l.fail(EnvMailQueueSize, "%v", err)
 	}
 	c.MailQueueSize = n
+	deny, err := parsePrefixes(l.getOr(EnvSMTPDenyNetworks, DefaultSMTPDenyNetworks))
+	if err != nil {
+		l.fail(EnvSMTPDenyNetworks, "%v", err)
+	}
+	c.SMTPDenyNetworks = deny
 }
 
 // loadAntivirus reads the scan size limit, the scan timeout and the number

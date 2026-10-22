@@ -3,6 +3,7 @@ package mail
 import (
 	"errors"
 	"flag"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -208,65 +209,111 @@ func TestTemplatesRenderErrors(t *testing.T) {
 	if err != nil || m.Language != "en" {
 		t.Errorf("fallback: %v %q", err, m.Language)
 	}
-	// Wrong data type: execution error.
+	// Wrong data type.
 	if _, err := Render(TemplateVerificationCode, "fr", struct{}{}); err == nil {
 		t.Error("wrong data: want error")
 	}
-	cat := i18n.DefaultCatalog()
+	// A template that only exists in French has no fallback in English.
 	tpl, err := NewTemplates(fstest.MapFS{
-		"fr/only_fr.subject.tmpl":  {Data: []byte("s")},
-		"fr/only_fr.text.tmpl":     {Data: []byte("t")},
-		"en/bad_text.subject.tmpl": {Data: []byte("s")},
-		"en/bad_text.text.tmpl":    {Data: []byte("{{.Missing}}")},
-		"en/bad_html.subject.tmpl": {Data: []byte("s")},
-		"en/bad_html.text.tmpl":    {Data: []byte("t")},
-		"en/bad_html.html.tmpl":    {Data: []byte("{{.Missing}}")},
-		"en/no_html.subject.tmpl":  {Data: []byte("{{t \"mail.footer.ignore\"}}")},
-		"en/no_html.text.tmpl":     {Data: []byte("{{quote \"a\\r\\n\\r\\nb \\n\\n\"}}|{{date .}}")},
-	}, cat)
+		"fr/verification_code.subject.tmpl": {Data: []byte("s {{code}}")},
+		"fr/verification_code.html.tmpl":    {Data: []byte("<p>{{code}}</p>")},
+		"fr/verification_code.text.tmpl":    {Data: []byte("{{code}}")},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tpl.Render("only_fr", "en", nil); !errors.Is(err, ErrUnknownTemplate) {
-		t.Errorf("only_fr: %v", err)
+	if _, err := tpl.Render(TemplateVerificationCode, "en", VerificationCodeData{}); !errors.Is(err, ErrUnknownTemplate) {
+		t.Errorf("only fr: %v", err)
 	}
-	if m, err := tpl.Render("only_fr", "fr", nil); err != nil || m.Subject != "s" || m.HTML != "" {
-		t.Errorf("only_fr fr: %+v %v", m, err)
+	if _, err := tpl.Source(TemplateVerificationCode, "en"); !errors.Is(err, ErrUnknownTemplate) {
+		t.Errorf("only fr source: %v", err)
 	}
-	data := map[string]any{}
-	if _, err := tpl.Render("bad_text", "en", data); err == nil {
-		t.Error("bad_text: want error")
+	m, err = tpl.Render(TemplateVerificationCode, "fr", VerificationCodeData{Code: "1"})
+	if err != nil || m.Subject != "s 1" || m.Text != "1\n" || !strings.Contains(m.HTML, "<p>1</p>") {
+		t.Errorf("only fr fr: %+v %v", m, err)
 	}
-	if _, err := tpl.Render("bad_html", "en", data); err == nil {
-		t.Error("bad_html: want error")
+	if got := strings.Join(tpl.Names(), ","); got != TemplateVerificationCode {
+		t.Errorf("names %s", got)
 	}
-	m, err = tpl.Render("no_html", "en", time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC))
-	if err != nil || m.Text != "> a\n>\n> b|January 2, 2026" || m.Subject != i18n.T("en", "mail.footer.ignore") {
-		t.Errorf("funcs: %q %q %v", m.Subject, m.Text, err)
+}
+
+// failFS fails to open one file.
+type failFS struct{ fstest.MapFS }
+
+func (f failFS) Open(name string) (fs.File, error) {
+	if name == "en/verification_code.text.tmpl" {
+		return nil, fs.ErrPermission
+	}
+	return f.MapFS.Open(name)
+}
+
+func (f failFS) ReadFile(name string) ([]byte, error) {
+	if name == "en/verification_code.text.tmpl" {
+		return nil, fs.ErrPermission
+	}
+	return f.MapFS.ReadFile(name)
+}
+
+// failDirFS fails to list the en directory.
+type failDirFS struct{ fstest.MapFS }
+
+func (f failDirFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if name == "en" {
+		return nil, fs.ErrPermission
+	}
+	return f.MapFS.ReadDir(name)
+}
+
+func TestMustTemplates(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("no panic")
+		}
+	}()
+	mustTemplates(nil, errors.New("broken"))
+}
+
+func TestRenderWrongData(t *testing.T) {
+	for _, name := range TemplateNames() {
+		if _, err := Render(name, "en", struct{}{}); err == nil || !strings.Contains(err.Error(), "unexpected data type") {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 
 func TestNewTemplatesErrors(t *testing.T) {
-	cat := i18n.DefaultCatalog()
-	cases := map[string]fstest.MapFS{
-		"unknown language": {"de/x.subject.tmpl": {Data: []byte("s")}},
-		"root file":        {"x.subject.tmpl": {Data: []byte("s")}},
-		"bad suffix":       {"en/x.subject.txt": {Data: []byte("s")}},
-		"no part":          {"en/x.tmpl": {Data: []byte("s")}},
-		"bad name":         {"en/X-1.subject.tmpl": {Data: []byte("s")}},
-		"empty name":       {"en/.subject.tmpl": {Data: []byte("s")}},
-		"unknown part":     {"en/x.footer.tmpl": {Data: []byte("s")}},
-		"text parse":       {"en/x.subject.tmpl": {Data: []byte("{{")}},
-		"html parse":       {"en/x.html.tmpl": {Data: []byte("{{end}}")}},
-		"unknown func":     {"en/x.subject.tmpl": {Data: []byte(`{{exec "rm"}}`)}},
-		"missing text": {
-			"en/x.subject.tmpl": {Data: []byte("s")},
-			"en/x.html.tmpl":    {Data: []byte("h")},
-		},
-		"nested dir": {"en/sub/x.subject.tmpl": {Data: []byte("s")}},
+	ok := fstest.MapFS{
+		"en/verification_code.subject.tmpl": {Data: []byte("s")},
+		"en/verification_code.html.tmpl":    {Data: []byte("<p>{{code}}</p>")},
+		"en/verification_code.text.tmpl":    {Data: []byte("{{code}}")},
+	}
+	with := func(path, data string) fstest.MapFS {
+		m := fstest.MapFS{}
+		for k, v := range ok {
+			m[k] = v
+		}
+		if data == "" {
+			delete(m, path)
+		} else {
+			m[path] = &fstest.MapFile{Data: []byte(data)}
+		}
+		return m
+	}
+	cases := map[string]fs.FS{
+		"unknown language": with("de/verification_code.subject.tmpl", "s"),
+		"root file":        with("verification_code.subject.tmpl", "s"),
+		"bad suffix":       with("en/verification_code.subject.txt", "s"),
+		"no part":          with("en/verification_code.tmpl", "s"),
+		"unknown key":      with("en/nope.subject.tmpl", "s"),
+		"unknown part":     with("en/verification_code.footer.tmpl", "s"),
+		"missing part":     with("en/verification_code.html.tmpl", ""),
+		"syntax":           with("en/verification_code.text.tmpl", "{{.Code}}"),
+		"nested dir":       with("en/sub/verification_code.subject.tmpl", "s"),
+		"read error":       failFS{ok},
+		"walk error":       failDirFS{ok},
 	}
 	for name, fsys := range cases {
-		if _, err := NewTemplates(fsys, cat); err == nil {
+		if _, err := NewTemplates(fsys); err == nil {
 			t.Errorf("%s: want error", name)
 		}
 	}

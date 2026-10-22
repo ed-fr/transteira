@@ -1,20 +1,16 @@
 Hello,
 
-{{.InviterEmail}} invites you to send files through the {{.TenantName}} transfer service.
-{{- if .Message}}
+{{inviter_email}} invites you to send files through the {{tenant_name}} transfer service.
 
-Their message:
-
-{{quote .Message}}
-{{- end}}
+{{message}}
 
 To send your files, open this link:
 
-{{.Link}}
+{{invitation_link}}
 
-You will first confirm your e-mail address with a code sent to you. This invitation expires on {{date .ExpiresAt}} if it is not used.
+You will first confirm your e-mail address with a code sent to you. This invitation expires on {{expiry_date}} if it is not used.
 
-{{t "mail.footer.ignore"}}
+If you were not expecting this message, you can safely ignore it.
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+This message was sent automatically by {{tenant_name}}. Please do not reply to it.

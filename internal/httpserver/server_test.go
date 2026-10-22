@@ -21,9 +21,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/securitylog"
@@ -265,7 +267,7 @@ func TestOutsideTenantRoutes(t *testing.T) {
 
 func TestNotFound(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{})
+	e := newEnv(t, envConfig{api: public.NewServer(public.WithTenantService(noLogoTenants{}))})
 	tests := []struct {
 		name, method, target, host string
 	}{
@@ -279,7 +281,7 @@ func TestNotFound(t *testing.T) {
 		{"trailing slash on health", http.MethodGet, "/healthz/", hostA},
 		{"unknown outside api", http.MethodGet, "/nope", hostA},
 		{"unknown api path", http.MethodGet, "/api/v1/nope", hostA},
-		{"stub operation", http.MethodGet, "/api/v1/tenant", hostA},
+		{"operation answering not-found", http.MethodGet, "/api/v1/tenant/assets/logo", hostA},
 		{"admin operation on a tenant host", http.MethodGet, "/api/v1/admin/tenants/ten_x", hostA},
 		{"unknown api path under known prefix", http.MethodPost, "/api/v1/version/x", hostA},
 		{"admin operation with JSON body on a tenant host", http.MethodPost, "/api/v1/admin/tenants", hostA},
@@ -523,7 +525,7 @@ func TestTrustedProxy(t *testing.T) {
 
 func TestMaintenance(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{})
+	e := newEnv(t, envConfig{api: public.NewServer(public.WithTenantService(noLogoTenants{}))})
 	e.maintenance.Store(true)
 	rec := e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader(`{}`), "Content-Type", "application/json")
 	p := decodeProblem(t, rec, http.StatusServiceUnavailable, problem.CodeMaintenance)
@@ -537,8 +539,8 @@ func TestMaintenance(t *testing.T) {
 	if rec := e.do(t, http.MethodGet, "/api/v1/version", hostA, nil); rec.Code != http.StatusOK {
 		t.Errorf("version in maintenance: %d", rec.Code)
 	}
-	if rec := e.do(t, http.MethodGet, "/api/v1/tenant", hostA, nil); rec.Code != http.StatusNotFound {
-		t.Errorf("stub in maintenance: %d", rec.Code)
+	if rec := e.do(t, http.MethodGet, "/api/v1/tenant/assets/logo", hostA, nil); rec.Code != http.StatusNotFound {
+		t.Errorf("tenant asset in maintenance: %d", rec.Code)
 	}
 	e.maintenance.Store(false)
 	// The operation is reached again: its deposit session is checked.
@@ -634,7 +636,7 @@ func TestMaintenanceBeforeBody(t *testing.T) {
 
 func TestRequireJSON(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}})
+	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}, adminAPI: stubTenantAdmin{admin.NewServer()}})
 	rec := e.do(t, http.MethodPost, "/api/v1/deposit-sessions", hostA, strings.NewReader("{}"), "Content-Type", "text/plain")
 	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
 
@@ -653,14 +655,32 @@ func TestRequireJSON(t *testing.T) {
 
 func TestBrandingBodyLimit(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}})
-	const target = "/api/v1/admin/tenants/ten_x/branding/logo"
+	e := newEnv(t, envConfig{adminSessions: fakeAdminSessions{}, adminAPI: stubTenantAdmin{admin.NewServer()}})
+	const (
+		logo       = "/api/v1/admin/tenants/ten_x/branding/logo"
+		background = "/api/v1/admin/tenants/ten_x/branding/background"
+		unknown    = "/api/v1/admin/tenants/ten_x/branding/favicon"
+	)
 	hdr := append(adminAuth(), "Content-Type", "image/png")
-	// Above the JSON limit but within the image limit: reaches the stub.
-	rec := e.do(t, http.MethodPut, target, hostAdmin, strings.NewReader(strings.Repeat("x", int(middleware.DefaultJSONBodyLimit)+1)), hdr...)
+	body := func(n int64) io.Reader { return strings.NewReader(strings.Repeat("x", int(n))) }
+	// Above the JSON limit but within the logo limit: reaches the handler.
+	rec := e.do(t, http.MethodPut, logo, hostAdmin, body(middleware.DefaultJSONBodyLimit+1), hdr...)
 	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
-	// Above the image limit: refused upfront.
-	rec = e.do(t, http.MethodPut, target, hostAdmin, strings.NewReader(strings.Repeat("x", int(middleware.ImageBodyLimit)+1)), hdr...)
+	// Above the logo limit but within the background limit.
+	rec = e.do(t, http.MethodPut, logo, hostAdmin, body(branding.MaxLogoBytes+1), hdr...)
+	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
+	rec = e.do(t, http.MethodPut, background, hostAdmin, body(branding.MaxLogoBytes+1), hdr...)
+	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	// Above the background limit: refused upfront.
+	rec = e.do(t, http.MethodPut, background, hostAdmin, body(branding.MaxBackgroundBytes+1), hdr...)
+	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
+	// A chunked body above the limit is cut while read: 413 too.
+	rec = e.do(t, http.MethodPut, logo, hostAdmin, io.MultiReader(body(branding.MaxLogoBytes), body(1)), hdr...)
+	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
+	// An unknown asset keeps the largest image limit (the handler answers 404).
+	rec = e.do(t, http.MethodPut, unknown, hostAdmin, body(branding.MaxLogoBytes+1), hdr...)
+	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	rec = e.do(t, http.MethodPut, unknown, hostAdmin, body(middleware.ImageBodyLimit+1), hdr...)
 	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
 }
 
@@ -705,8 +725,10 @@ func TestRoutePolicies(t *testing.T) {
 		"OPTIONS /api/v1/uploads":                               defaultPolicy,
 		"GET /api/v1/downloads/{linkToken}/files/{fileId}":      {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
 		"GET /api/v1/downloads/{linkToken}/archive":             {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
-		"PUT /api/v1/admin/tenants/{tenantId}/branding/{asset}": {bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline},
+		"PUT /api/v1/admin/tenants/{tenantId}/branding/{asset}": {bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline, assetBody: true},
 		"GET /api/v1/tenant/assets/{asset}":                     {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline},
+		"POST /api/v1/admin/tenants/{tenantId}/smtp/test":       {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline},
+		"DELETE /api/v1/admin/tenants/{tenantId}":               {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding":         defaultPolicy,
 		"GET /api/v1/downloads/{linkToken}":                     defaultPolicy,
 		"POST /api/v1/transfers":                                sessionPolicy(true),
@@ -751,6 +773,8 @@ func TestDeadlineMiddleware(t *testing.T) {
 		{"POST /api/v1/transfers", RequestDeadline},
 		{"HEAD /api/v1/uploads/{uploadId}", RequestDeadline},
 		{"PUT /api/v1/admin/tenants/{tenantId}/branding/{asset}", ImageDeadline},
+		{"POST /api/v1/admin/tenants/{tenantId}/smtp/test", AdminLongDeadline},
+		{"DELETE /api/v1/admin/tenants/{tenantId}", AdminLongDeadline},
 		{"PATCH /api/v1/uploads/{uploadId}", 0},
 		{"GET /api/v1/downloads/{linkToken}/files/{fileId}", 0},
 		{"GET /api/v1/downloads/{linkToken}/archive", 0},

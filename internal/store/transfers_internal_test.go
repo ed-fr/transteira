@@ -155,6 +155,7 @@ func TestTransferDriverFaults(t *testing.T) {
 	}{
 		{"release key", faultExec, "SET idempotency_key = NULL", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "k") }},
 		{"insert transfer", faultExec, "INSERT INTO transfers", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
+		{"tenant active", faultQuery, "JOIN tenants n", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"insert recipient", faultExec, "INSERT INTO transfer_recipients", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"check key", faultQuery, "FROM wrapped_keys WHERE tenant_id", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"insert file", faultExec, "INSERT INTO transfer_files", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
@@ -228,5 +229,12 @@ func TestUsedBytesLockFailure(t *testing.T) {
 	err := f.tx(ctx, func(tx *ScopedTx) error { _, err := f.db.Transfers().UsedBytesTx(ctx, tx); return err })
 	if err == nil || !strings.Contains(err.Error(), "lock tenant") {
 		t.Errorf("UsedBytesTx with a failing lock = %v", err)
+	}
+	trf := Transfer{ID: id.New(id.Transfer), SenderEmail: fixtureEmail, SenderKind: DepositorInternal, ExpiryDays: 1}
+	if err := f.create(ctx, trf, f.newFile(ctx, t)); err == nil || !strings.Contains(err.Error(), "lock tenant") {
+		t.Errorf("CreateTx with a failing lock = %v", err)
+	}
+	if err := f.db.Tenants().SetStatus(ctx, f.tid, tenant.StatusDeleting); err == nil || !strings.Contains(err.Error(), "lock tenant") {
+		t.Errorf("SetStatus with a failing lock = %v", err)
 	}
 }

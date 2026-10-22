@@ -16,13 +16,13 @@ func TestNewDefaults(t *testing.T) {
 	if s.now == nil || s.logger == nil || s.endedRetention != EndedRetention || s.orphanGrace != OrphanGrace ||
 		s.scanningMaxAge != store.ScanningMaxAge ||
 		s.uploadTTL != 0 || s.backupKeep != DefaultBackupKeep || s.purgeBatch != store.PurgeBatchSize ||
-		s.pageSizes != [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit} {
+		s.keyBatch != store.MaxPageSize || s.pageSizes != [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit} {
 		t.Fatalf("defaults not applied: %+v", s)
 	}
 	want := map[Task]time.Duration{
 		TaskDeleteAfterDownload: DefaultInterval, TaskExpire: DefaultInterval,
-		TaskAbandonedUploads: DefaultAbandonedInterval, TaskPurgeRows: DefaultPurgeInterval,
-		TaskOrphans: DefaultOrphansInterval, TaskBackup: 0,
+		TaskAbandonedUploads: DefaultAbandonedInterval, TaskTenantDeletions: DefaultTenantDeletionsInterval,
+		TaskPurgeRows: DefaultPurgeInterval, TaskOrphans: DefaultOrphansInterval, TaskBackup: 0,
 	}
 	for i, tk := range s.tasks {
 		if tk.name != allTasks[i] || tk.interval != want[tk.name] || tk.atStart != (tk.name != TaskBackup) {
@@ -35,10 +35,10 @@ func TestNewDefaults(t *testing.T) {
 	s = New(Deps{}, Options{
 		Interval: time.Second, AbandonedInterval: 2 * time.Second, PurgeInterval: 3 * time.Second,
 		OrphansInterval: 4 * time.Second, EndedRetention: time.Hour, OrphanGrace: time.Minute, BackupKeep: 2,
-		ScanningMaxAge: 5 * time.Hour,
+		ScanningMaxAge: 5 * time.Hour, TenantDeletionsInterval: 5 * time.Second,
 	})
-	if s.tasks[1].interval != time.Second || s.tasks[2].interval != 2*time.Second || s.tasks[3].interval != 3*time.Second ||
-		s.tasks[4].interval != 4*time.Second || s.endedRetention != time.Hour || s.orphanGrace != time.Minute || s.backupKeep != 2 ||
+	if s.tasks[1].interval != time.Second || s.tasks[2].interval != 2*time.Second || s.tasks[3].interval != 5*time.Second ||
+		s.tasks[4].interval != 3*time.Second || s.tasks[5].interval != 4*time.Second || s.endedRetention != time.Hour || s.orphanGrace != time.Minute || s.backupKeep != 2 ||
 		s.scanningMaxAge != 5*time.Hour {
 		t.Fatalf("options not applied: %+v", s)
 	}
@@ -78,7 +78,7 @@ func TestRunTask(t *testing.T) {
 	if err := ev.s.RunTask(context.Background(), TaskBackup); !errors.Is(err, ErrBackupDisabled) {
 		t.Fatalf("RunTask(backup) without a directory = %v", err)
 	}
-	for _, tk := range allTasks[:5] {
+	for _, tk := range allTasks[:6] {
 		ev.runTask(tk)
 		if !ev.s.LastRun(tk).Equal(ev.clock.Now()) {
 			t.Errorf("LastRun(%s) = %v", tk, ev.s.LastRun(tk))
@@ -144,15 +144,15 @@ func TestStartClose(t *testing.T) {
 			t.Fatalf("second Start = %v, want ErrStarted", err)
 		}
 		// Every task but the backup runs at once, in order.
-		for _, tk := range allTasks[:5] {
+		for _, tk := range allTasks[:6] {
 			if r := next(t, ev, results); r.task != tk || r.err != nil {
 				t.Fatalf("first runs: got %s (%v), want %s", r.task, r.err, tk)
 			}
 		}
 		sqlite := e.Driver == "sqlite"
-		nTimers := 5
+		nTimers := 6
 		if sqlite {
-			nTimers = 6
+			nTimers = 7
 		}
 		created := waitTimers(t, ft, nTimers)
 		if created[TaskBackup] != boolInt(sqlite) {
@@ -199,7 +199,7 @@ func TestStartClose(t *testing.T) {
 		if err := ev.s.Close(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-		for _, tk := range allTasks[:5] {
+		for _, tk := range allTasks[:6] {
 			if ft.stops(tk) == 0 {
 				t.Errorf("timer of %s not stopped", tk)
 			}
@@ -223,10 +223,10 @@ func boolInt(b bool) int {
 func TestStartWithoutBackupDir(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
 	ft, results := startEnv(t, ev, context.Background())
-	for range 5 {
+	for range 6 {
 		next(t, ev, results)
 	}
-	if got := waitTimers(t, ft, 5); got[TaskBackup] != 0 {
+	if got := waitTimers(t, ft, 6); got[TaskBackup] != 0 {
 		t.Fatalf("backup scheduled without a directory: %v", got)
 	}
 }
@@ -261,15 +261,15 @@ func TestStartStopsWithContext(t *testing.T) {
 	ev := newEnv(t, storetest.SQLite(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	ft, results := startEnv(t, ev, ctx)
-	for range 5 {
+	for range 6 {
 		next(t, ev, results)
 	}
-	waitTimers(t, ft, 5)
+	waitTimers(t, ft, 6)
 	cancel()
 	if err := ev.s.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for _, tk := range allTasks[:5] {
+	for _, tk := range allTasks[:6] {
 		if ft.stops(tk) != 1 {
 			t.Errorf("timer of %s stopped %d times", tk, ft.stops(tk))
 		}

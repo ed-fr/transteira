@@ -238,6 +238,8 @@ paths:
                 branding:
                   primaryColor: '#0B5FFF'
                   accentColor: '#00875A'
+                  hasLogo: true
+                  hasBackground: false
                   logoUrl: /api/v1/tenant/assets/logo
                   backgroundUrl: /api/v1/tenant/assets/background
                 limits:
@@ -253,7 +255,12 @@ paths:
       tags: [Meta]
       operationId: getTenantAsset
       summary: Tenant logo or background image
-      description: Returns the configured image, or the default one when the tenant has none.
+      description: |
+        Returns the configured image, re-encoded by the server when it was uploaded (PNG for the
+        logo, JPEG for the background), never the uploaded bytes. Without a configured image, the
+        background is the built-in default one and the logo answers `404`. The response carries a
+        strong `ETag` (quoted SHA-256 of the image) and a short public cache lifetime (5 minutes):
+        a client revalidates with `If-None-Match` and gets `304` while the image is unchanged.
       security: []
       parameters:
         - name: asset
@@ -262,17 +269,27 @@ paths:
           required: true
           schema: { type: string, enum: [logo, background] }
           example: logo
+        - name: If-None-Match
+          in: header
+          description: Entity tag of the copy held by the client; `304` when it is still current.
+          required: false
+          schema: { type: string, maxLength: 256 }
+          example: '"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"'
       responses:
         '200':
-          description: "Image content. Served with `X-Content-Type-Options: nosniff` and a long cache lifetime with ETag."
+          description: "Image content, with its exact media type (`image/png` for the logo, `image/jpeg` for the background), `X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=300`."
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/AssetCacheControl' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
           content:
-            image/png: { schema: { type: string, format: binary } }
-            image/jpeg: { schema: { type: string, format: binary } }
-            image/webp: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary }, example: "<binary data>" }
+            image/jpeg: { schema: { type: string, format: binary }, example: "<binary data>" }
         '304':
-          description: Not modified.
+          description: Not modified (the `If-None-Match` entity tag is current).
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/AssetCacheControl' }
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -282,14 +299,19 @@ paths:
       tags: [Meta]
       operationId: getTenantLegalDocument
       summary: Legal notice or privacy policy of the tenant
-      description: "Returns the legal notice or the privacy policy of the current tenant in the negotiated language, falling back to the tenant default language."
+      description: |
+        Returns the legal notice or the privacy policy of the current tenant in the negotiated
+        language, falling back to the tenant default language; `404` when the tenant wrote it in
+        neither. The answer holds the Markdown source and `html`, its rendering by the server:
+        limited Markdown, raw HTML never passed through, sanitized by an allowlist. A client
+        displays `html` as is rather than rendering the Markdown itself.
       security: []
       parameters:
         - $ref: '#/components/parameters/LegalDocumentPath'
         - $ref: '#/components/parameters/AcceptLanguage'
       responses:
         '200':
-          description: Document in the negotiated language (Markdown source; rendered by the client).
+          description: Document in the negotiated language, with its sanitized HTML rendering.
           headers:
             Content-Language: { $ref: '#/components/headers/ContentLanguage' }
           content:
@@ -299,6 +321,7 @@ paths:
                 document: privacy-policy
                 language: en
                 markdown: "# Privacy policy\n\nEntity A processes the email addresses..."
+                html: "<h1>Privacy policy</h1>\n<p>Entity A processes the email addresses...</p>\n"
                 updatedAt: '2026-10-01T09:00:00Z'
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
@@ -1661,7 +1684,10 @@ paths:
       tags: [Admin tenants]
       operationId: listTenants
       summary: List tenants visible to the admin
-      description: Super admin sees all tenants; a delegated admin sees only assigned tenants.
+      description: |
+        The super admin sees every tenant, page by page, including those being deleted
+        (`status: deleting`); a delegated admin sees the active tenants it is assigned to, in one
+        page. A malformed `cursor` is refused with `400 validation-failed`.
       security:
         - adminSession: []
       parameters:
@@ -1680,17 +1706,29 @@ paths:
                     fqdn: transfer.entity-a.example.com
                     defaultLanguage: fr
                     maxTransferBytes: 21474836480
+                    maxTransferCeiling: 21474836480
+                    status: active
                     storageQuotaBytes: 1099511627776
                     storageUsedBytes: 274877906944
                     createdAt: '2026-09-01T08:00:00Z'
                     updatedAt: '2026-10-01T08:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
       tags: [Admin tenants]
       operationId: createTenant
       summary: Create a tenant (super admin)
-      description: "Creates a tenant with its FQDN, default language and storage quota. Default branding, email templates and legal texts are provisioned. The FQDN can never be an admin host (`TT_ADMIN_HOSTS`). Reserved to the super admin."
+      description: |
+        Creates a tenant with its FQDN, default language, storage quota and per-transfer limit
+        (reserved to the super admin). The tenant starts with the default branding; until
+        customised, its email templates are the built-in ones and it has no legal texts. The FQDN
+        must be unique and can never be an admin host (`TT_ADMIN_HOSTS`): such an FQDN is refused
+        with `400 validation-failed` on `/fqdn`, an FQDN already used with `409 already-exists`.
+        The limit and its ceiling are set in one step: `maxTransferCeiling` defaults to
+        `maxTransferBytes`, and `maxTransferBytes` to `maxTransferCeiling` when it is given, else
+        20 GiB. A `maxTransferBytes` above `maxTransferCeiling` is refused with
+        `400 validation-failed` on `/maxTransferBytes`.
       security:
         - adminSession: []
           csrfToken: []
@@ -1705,9 +1743,10 @@ paths:
               defaultLanguage: en
               storageQuotaBytes: 549755813888
               maxTransferBytes: 10737418240
+              maxTransferCeiling: 10737418240
       responses:
         '201':
-          description: Tenant created (with default branding, templates and legal texts).
+          description: Tenant created (default branding; built-in templates; no legal texts).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Tenant' }
@@ -1717,6 +1756,8 @@ paths:
                 fqdn: transfer.entity-b.example.com
                 defaultLanguage: en
                 maxTransferBytes: 10737418240
+                maxTransferCeiling: 10737418240
+                status: active
                 storageQuotaBytes: 549755813888
                 storageUsedBytes: 0
                 createdAt: '2026-10-19T16:00:00Z'
@@ -1734,7 +1775,10 @@ paths:
       tags: [Admin tenants]
       operationId: getTenant
       summary: Tenant general settings
-      description: "Returns the general settings of a tenant within the admin scope, including quota usage."
+      description: |
+        Returns the general settings of a tenant within the admin scope, including quota usage.
+        A tenant outside the scope of a delegated admin answers `404`, exactly like an unknown
+        one. Only the super admin reaches a tenant being deleted (`status: deleting`).
       security:
         - adminSession: []
       responses:
@@ -1749,6 +1793,8 @@ paths:
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: fr
                 maxTransferBytes: 21474836480
+                maxTransferCeiling: 21474836480
+                status: active
                 storageQuotaBytes: 1099511627776
                 storageUsedBytes: 274877906944
                 createdAt: '2026-09-01T08:00:00Z'
@@ -1761,10 +1807,20 @@ paths:
       operationId: updateTenant
       summary: Update tenant general settings
       description: |
-        `fqdn` and `storageQuotaBytes` can only be changed by the super admin; the FQDN can never
-        be an admin host (`TT_ADMIN_HOSTS`). A delegated admin
-        may only lower `maxTransferBytes`, never above 20 GiB nor above the value set by the super admin.
-        JSON Merge Patch semantics (RFC 7396).
+        JSON Merge Patch semantics (RFC 7396): an absent field is left unchanged. No field of
+        this resource can be removed: `null` on any of them is refused with
+        `400 validation-failed` naming the field (for example `/name`), and changes nothing.
+
+        The super admin may change every field. The FQDN must stay unique (`409 already-exists`)
+        and can never be an admin host (`TT_ADMIN_HOSTS`, `400 validation-failed` on `/fqdn`).
+        Raising `maxTransferBytes` above the ceiling without a new `maxTransferCeiling` raises the
+        ceiling with it; lowering `maxTransferCeiling` below `maxTransferBytes` lowers the limit
+        too; giving both with `maxTransferBytes` above `maxTransferCeiling` is `400`.
+
+        A delegated admin may only change `defaultLanguage` and set `maxTransferBytes` at most to
+        `maxTransferCeiling` (the ceiling set by the super admin). Changing `name`, `fqdn`,
+        `storageQuotaBytes` or `maxTransferCeiling`, or setting `maxTransferBytes` above the
+        ceiling, is refused with `403 forbidden` and changes nothing.
       security:
         - adminSession: []
           csrfToken: []
@@ -1786,6 +1842,8 @@ paths:
                 fqdn: transfer.entity-a.example.com
                 defaultLanguage: en
                 maxTransferBytes: 5368709120
+                maxTransferCeiling: 21474836480
+                status: active
                 storageQuotaBytes: 1099511627776
                 storageUsedBytes: 274877906944
                 createdAt: '2026-09-01T08:00:00Z'
@@ -1801,9 +1859,19 @@ paths:
       operationId: deleteTenant
       summary: Delete a tenant and all its data (super admin)
       description: |
-        Irreversible. Deletes every transfer (with crypto-erase), verified address, invitation,
-        token, template and configuration of the tenant. Audit and security log entries are kept
-        until their 12-month retention expires. The tenant name must be repeated as confirmation.
+        Irreversible (reserved to the super admin). The tenant name must be repeated as
+        confirmation (`400 validation-failed` on `confirm` otherwise). The tenant first moves to
+        the `deleting` status: its FQDN stops being served and no further change is accepted. Then
+        every transfer is crypto-erased (file keys destroyed, then the files), the remaining keys
+        (SMTP password, tokens) are destroyed, the tenant row is deleted with every verified
+        address, invitation, token, template and setting, and the tenant directory (files,
+        branding images) is removed. Audit and security log entries are kept until their 12-month
+        retention expires.
+
+        The request answers `204` once everything is erased. The deletion is resumable: when it
+        fails midway (`500 internal-error`), the tenant stays `deleting` (visible to the super
+        admin only) and the periodic cleanup task completes it; repeating the request resumes it
+        at once, from where it stopped.
       security:
         - adminSession: []
           csrfToken: []
@@ -1815,7 +1883,7 @@ paths:
           schema: { type: string }
           example: Entity B
       responses:
-        '202': { description: Deletion scheduled. }
+        '204': { description: Tenant and all its data deleted. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1882,6 +1950,7 @@ paths:
                   - { pair: accent-on-light, ratio: 4.6, level: AA }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -1899,9 +1968,11 @@ paths:
       operationId: uploadBrandingAsset
       summary: Upload logo or background image
       description: |
-        PNG, JPEG or WebP only (detected from content, not from the declared type), 5 MiB max for
-        a logo and 10 MiB for a background. Images are decoded and re-encoded server side to strip
-        metadata and active content. SVG is refused.
+        PNG, JPEG or WebP only, detected from the content (`415` otherwise, SVG included); the
+        declared `Content-Type` must be an `image/*` type but is never trusted. 5 MiB max for a
+        logo and 10 MiB for a background, and bounded dimensions checked before decoding (`413`
+        above). Images are decoded and re-encoded server side (PNG for the logo, JPEG for the
+        background) to strip metadata and active content; a corrupt image is `400`.
       security:
         - adminSession: []
           csrfToken: []
@@ -1915,6 +1986,7 @@ paths:
         '204': { description: Image stored. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedMediaType' }
@@ -1930,6 +2002,7 @@ paths:
       responses:
         '204': { description: Image removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -1982,6 +2055,7 @@ paths:
                 internalDomains: [entity-a.example.com]
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2056,6 +2130,7 @@ paths:
                 fromName: null
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2066,7 +2141,12 @@ paths:
       tags: [Admin tenants]
       operationId: testSmtp
       summary: Send a test email
-      description: "Sends a test email through the tenant SMTP settings and reports the result of the SMTP dialogue. Rate limited."
+      description: |
+        Sends a fixed test email through the tenant SMTP settings and reports the result of the
+        SMTP dialogue: `stage` tells how far it went, `error` is the server answer, sanitized
+        (credentials redacted, control characters removed, truncated). A server whose address is
+        in a denied network (`TT_SMTP_DENY_NETWORKS`), resolved at connection time, is never
+        contacted (`stage: connect`). Limited per administrator and tenant (`429`); audited.
       security:
         - adminSession: []
           csrfToken: []
@@ -2083,9 +2163,11 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SmtpTestResult' }
               examples:
-                ok: { value: { success: true, durationMs: 412 } }
-                ko: { value: { success: false, durationMs: 5003, error: 'dial tcp: i/o timeout' } }
+                ok: { value: { success: true, durationMs: 412, stage: done } }
+                ko: { value: { success: false, durationMs: 5003, stage: connect, error: 'mail: smtp: connect: dial tcp 192.0.2.25:25: i/o timeout' } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2097,15 +2179,24 @@ paths:
       tags: [Admin tenants]
       operationId: checkMailDns
       summary: Indicative SPF, DKIM and DMARC check of the sender domain
-      description: Informational only; DKIM selectors to probe can be given since they cannot be discovered.
+      description: |
+        Informational only; DKIM selectors to probe can be given since they cannot be discovered.
+        More than 5 selectors, or a selector that is not made of DNS labels, is refused with
+        `400 validation-failed` on `dkimSelector`.
       security:
         - adminSession: []
       parameters:
         - name: dkimSelector
           in: query
-          description: "DKIM selectors to probe (they cannot be discovered from DNS)."
+          description: "DKIM selectors to probe (they cannot be discovered from DNS): DNS labels of letters, digits and inner hyphens, separated by dots."
           required: false
-          schema: { type: array, items: { type: string, maxLength: 63 }, maxItems: 5 }
+          schema:
+            type: array
+            maxItems: 5
+            items:
+              type: string
+              maxLength: 63
+              pattern: '^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$'
           example: [selector1, selector2]
       responses:
         '200':
@@ -2118,6 +2209,7 @@ paths:
                 spf: { status: ok, record: 'v=spf1 include:spf.protection.example.net -all' }
                 dkim: { status: ok, selectors: [{ selector: selector1, found: true }] }
                 dmarc: { status: warning, record: 'v=DMARC1; p=none', message: Policy is p=none. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2169,10 +2261,10 @@ paths:
                 key: transfer-notification
                 language: en
                 customised: false
-                subject: '{{.SenderEmail}} sent you files'
-                bodyHtml: '<p>{{.SenderEmail}} sent you {{.FileCount}} file(s).</p><p><a href="{{.DownloadURL}}">Download</a></p>'
-                bodyText: "{{.SenderEmail}} sent you {{.FileCount}} file(s).\n{{.DownloadURL}}"
-                variables: [SenderEmail, Message, FileCount, Files, DownloadURL, ExpiresAt, PasswordProtected, TenantName]
+                subject: '{{sender_email}} sent you files via {{tenant_name}}'
+                bodyHtml: '<p><strong>{{sender_email}}</strong> sent you {{file_count}} file(s).</p>{{message}}<p><a href="{{download_link}}">Download the files</a></p><p>Available until {{expiry_datetime}}.</p>{{password_notice}}{{qr_code}}{{files}}'
+                bodyText: "{{sender_email}} sent you {{file_count}} file(s).\n\n{{message}}\n\n{{download_link}}\n\nAvailable until {{expiry_datetime}}.\n\n{{password_notice}}\n\nFiles:\n{{files}}"
+                variables: [tenant_name, sender_email, message, download_link, expiry_datetime, password_notice, qr_code, files, file_count]
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2181,9 +2273,21 @@ paths:
       operationId: updateEmailTemplate
       summary: Customise a template
       description: |
-        Templates use a restricted, auto-escaping template language: only the documented
-        variables are available, no function call can reach the file system or the network.
-        Invalid templates are refused with `400`.
+        Templates contain plain text (subject and text part) or HTML (HTML part) with `{{snake_case}}`
+        variables only: no logic, no condition, loop, function or any other template syntax.
+        Only the variables listed by `getEmailTemplate` for this template are accepted, and the
+        required ones (such as the download link or the verification code) must be present.
+        Values are HTML-escaped in the HTML part; list variables such as `{{files}}` are pre-rendered
+        blocks. The HTML is sanitized by an allowlist: formatting tags and `https:` or `mailto:`
+        links only; scripts, `<style>` elements, forms, frames, event handlers and remote images
+        are removed (only `cid:` images, for the QR code), and inline `style` attributes are
+        filtered to an allowlist of properties (colors, fonts, spacing, borders, sizes; not
+        `display`). In the HTML part, a required variable counts only where the recipient sees
+        it: in the text, or as the `href` of a link for a URL variable (not in `title` or `alt`).
+        The saved (sanitized) template is returned.
+
+        An invalid template is refused with `400 validation-failed`: each entry of `errors` names
+        the part (`/subject`, `/bodyHtml` or `/bodyText`) with its `line`, `column` and `message`.
       security:
         - adminSession: []
           csrfToken: []
@@ -2193,9 +2297,9 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EmailTemplateUpdate' }
             example:
-              subject: 'Files from {{.SenderEmail}}'
-              bodyHtml: '<p>Hello,</p><p>{{.SenderEmail}} sent you files.</p><p><a href="{{.DownloadURL}}">Download</a></p>'
-              bodyText: "Hello,\n{{.SenderEmail}} sent you files.\n{{.DownloadURL}}"
+              subject: 'Files from {{sender_email}}'
+              bodyHtml: '<p>Hello,</p><p>{{sender_email}} sent you files.</p><p><a href="{{download_link}}">Download</a></p>{{password_notice}}{{files}}'
+              bodyText: "Hello,\n{{sender_email}} sent you files.\n{{download_link}}\n\n{{password_notice}}\n\n{{files}}"
       responses:
         '200':
           description: Saved template.
@@ -2206,13 +2310,14 @@ paths:
                 key: transfer-notification
                 language: en
                 customised: true
-                subject: 'Files from {{.SenderEmail}}'
-                bodyHtml: '<p>Hello,</p><p>{{.SenderEmail}} sent you files.</p><p><a href="{{.DownloadURL}}">Download</a></p>'
-                bodyText: "Hello,\n{{.SenderEmail}} sent you files.\n{{.DownloadURL}}"
-                variables: [SenderEmail, Message, FileCount, Files, DownloadURL, ExpiresAt, PasswordProtected, TenantName]
+                subject: 'Files from {{sender_email}}'
+                bodyHtml: '<p>Hello,</p><p>{{sender_email}} sent you files.</p><p><a href="{{download_link}}">Download</a></p>{{password_notice}}{{files}}'
+                bodyText: "Hello,\n{{sender_email}} sent you files.\n{{download_link}}\n\n{{password_notice}}\n\n{{files}}"
+                variables: [tenant_name, sender_email, message, download_link, expiry_datetime, password_notice, qr_code, files, file_count]
                 updatedAt: '2026-10-19T16:10:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
@@ -2226,6 +2331,7 @@ paths:
       responses:
         '204': { description: Customisation removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2248,9 +2354,9 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/EmailTemplateUpdate' }
             example:
-              subject: 'Files from {{.SenderEmail}}'
-              bodyHtml: '<p>{{.SenderEmail}} sent you files.</p>'
-              bodyText: '{{.SenderEmail}} sent you files.'
+              subject: 'Files from {{sender_email}}'
+              bodyHtml: '<p>{{sender_email}} sent you files.</p><p><a href="{{download_link}}">Download</a></p>{{password_notice}}{{files}}'
+              bodyText: "{{sender_email}} sent you files.\n{{download_link}}\n\n{{password_notice}}\n\n{{files}}"
       responses:
         '200':
           description: Rendered email.
@@ -2259,10 +2365,11 @@ paths:
               schema: { $ref: '#/components/schemas/EmailPreview' }
               example:
                 subject: Files from alice@entity-a.example.com
-                bodyHtml: '<p>alice@entity-a.example.com sent you files.</p>'
-                bodyText: alice@entity-a.example.com sent you files.
+                bodyHtml: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Files from alice@entity-a.example.com</title>\n</head>\n<body>\n<div role=\"main\">\n<p>alice@entity-a.example.com sent you files.</p><p><a href=\"https://transfer.entity-a.example.com/d/dl_sample\">Download</a></p><p><strong>This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.</strong></p><ul>\n<li><strong>report.pdf</strong> (1.5 MB)<br>\n<span>SHA-256: <code>abababababababababababababababababababababababababababababababab</code></span></li>\n</ul>\n</div>\n</body>\n</html>\n"
+                bodyText: "alice@entity-a.example.com sent you files.\nhttps://transfer.entity-a.example.com/d/dl_sample\n\nThis transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.\n\n- report.pdf (1.5 MB)\n  SHA-256: abababababababababababababababababababababababababababababababab\n"
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2296,7 +2403,7 @@ paths:
       tags: [Admin tenants]
       operationId: updateLegalDocument
       summary: Replace a legal text (Markdown, rendered without raw HTML)
-      description: "Replaces a legal text of the tenant. Markdown is rendered without raw HTML."
+      description: "Replaces a legal text of the tenant (limited Markdown, rendered without raw HTML and sanitized when served). An empty or blank text removes it."
       security:
         - adminSession: []
           csrfToken: []
@@ -2319,6 +2426,7 @@ paths:
                 updatedAt: '2026-10-19T16:12:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -3595,6 +3703,10 @@ components:
     NoStore:
       schema: { type: string, enum: [no-store] }
       example: no-store
+    AssetCacheControl:
+      description: Short public cache lifetime of a branding image, revalidated with its ETag.
+      schema: { type: string }
+      example: public, max-age=300
     FileETag:
       description: Strong entity tag, the quoted SHA-256 of the file (for `If-Range` and `If-None-Match`).
       schema: { type: string }
@@ -3973,6 +4085,9 @@ components:
               field: { type: string }
               code: { type: string }
               allowed: { type: array, items: {} }
+              line: { type: integer, minimum: 1, description: "Line of the problem in the field (1-based; mail templates)." }
+              column: { type: integer, minimum: 1, description: "Column of the problem in the line, in characters (1-based; mail templates)." }
+              message: { type: string, description: "English explanation of the problem (mail templates)." }
         attemptsRemaining: { type: integer, minimum: 0 }
         retryAfterSeconds: { type: integer, minimum: 0 }
         maxTransferBytes: { type: integer, format: int64 }
@@ -4072,12 +4187,14 @@ components:
         availableLanguages: { type: array, items: { $ref: '#/components/schemas/Language' } }
         branding:
           type: object
-          required: [primaryColor, accentColor, logoUrl, backgroundUrl]
+          required: [primaryColor, accentColor, hasLogo, hasBackground, backgroundUrl]
           properties:
             primaryColor: { $ref: '#/components/schemas/HexColor' }
             accentColor: { $ref: '#/components/schemas/HexColor' }
-            logoUrl: { type: string }
-            backgroundUrl: { type: string }
+            hasLogo: { type: boolean, description: The tenant configured a logo. }
+            hasBackground: { type: boolean, description: "The tenant configured a background image (otherwise the default one is served)." }
+            logoUrl: { type: string, description: URL of the logo; absent when the tenant has none. }
+            backgroundUrl: { type: string, description: URL of the background image (the default one when the tenant has none). }
         limits:
           type: object
           required: [maxTransferBytes, expiryDays]
@@ -4094,6 +4211,7 @@ components:
         document: { type: string, enum: [legal-notice, privacy-policy] }
         language: { $ref: '#/components/schemas/Language' }
         markdown: { type: string, maxLength: 100000 }
+        html: { type: string, description: "Sanitized HTML rendering of `markdown` (public reads only)." }
         updatedAt: { type: string, format: date-time }
     LegalDocumentUpdate:
       type: object
@@ -4534,13 +4652,23 @@ components:
       pattern: '^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,63}|xn--[a-z0-9-]{1,59})$'
     Tenant:
       type: object
-      required: [id, name, fqdn, defaultLanguage, maxTransferBytes, storageQuotaBytes, storageUsedBytes, createdAt, updatedAt]
+      required: [id, name, fqdn, defaultLanguage, maxTransferBytes, maxTransferCeiling, status, storageQuotaBytes, storageUsedBytes, createdAt, updatedAt]
       properties:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 100 }
         fqdn: { $ref: '#/components/schemas/Fqdn' }
         defaultLanguage: { $ref: '#/components/schemas/Language' }
-        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480, description: Per-transfer size limit. }
+        maxTransferCeiling:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 21474836480
+          description: "Ceiling of `maxTransferBytes`, set by the super admin: a delegated admin may set `maxTransferBytes` at most to it."
+        status:
+          type: string
+          enum: [active, deleting]
+          description: "`deleting` while a deletion is in progress or left unfinished (seen by the super admin only)."
         storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
         storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
         createdAt: { type: string, format: date-time }
@@ -4560,15 +4688,31 @@ components:
         defaultLanguage: { $ref: '#/components/schemas/Language' }
         storageQuotaBytes: { type: integer, format: int64, minimum: 1 }
         maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480, default: 21474836480 }
+        maxTransferCeiling:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 21474836480
+          description: "Ceiling of `maxTransferBytes` for the delegated admins; defaults to `maxTransferBytes`, which must not exceed it."
       additionalProperties: false
     TenantUpdate:
       type: object
+      description: |
+        JSON Merge Patch of the tenant general settings; `null` is refused on every field.
+      # Decoded by the handler itself, which must tell a null field (refused) from an absent one.
+      x-go-type: json.RawMessage
       properties:
         name: { type: string, minLength: 1, maxLength: 100 }
         fqdn: { $ref: '#/components/schemas/Fqdn' }
         defaultLanguage: { $ref: '#/components/schemas/Language' }
-        storageQuotaBytes: { type: integer, format: int64, minimum: 1 }
-        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+        storageQuotaBytes: { type: integer, format: int64, minimum: 1, description: Super admin only. }
+        maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480, description: "A delegated admin may set it at most to `maxTransferCeiling`." }
+        maxTransferCeiling:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 21474836480
+          description: "Ceiling of `maxTransferBytes` (super admin only); lowering it below `maxTransferBytes` lowers the limit too."
       additionalProperties: false
     ContrastResult:
       type: object
@@ -4648,11 +4792,16 @@ components:
       additionalProperties: false
     SmtpTestResult:
       type: object
-      required: [success, durationMs]
+      required: [success, durationMs, stage]
       properties:
         success: { type: boolean }
         durationMs: { type: integer }
-        error: { type: string, description: SMTP error message (never contains credentials). }
+        stage:
+          type: string
+          x-extensible-enum: true
+          enum: [settings, connect, tls, greeting, starttls, auth, envelope, data, done, unknown]
+          description: "How far the SMTP dialogue went: `done` on success, otherwise the step that failed."
+        error: { type: string, description: "SMTP error message, sanitized: never contains credentials nor control characters, truncated to 300 characters." }
     DnsRecordCheck:
       type: object
       required: [status]
@@ -4910,6 +5059,7 @@ components:
         - admin.password_reset_local
         - tenant.created
         - tenant.updated
+        - tenant.deletion_started
         - tenant.deleted
         - config.updated
         - blocklist.updated

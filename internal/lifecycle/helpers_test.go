@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
@@ -108,8 +109,9 @@ func (f *faults) called(name string) int {
 // faultRepo wraps a repo with a fault per method: "due" (the deletion
 // listing), "dueExpirations", "rejectedKeyed", "abandoned", "transfer", "finish", "scrub",
 // "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "purgeSystem:<name>", "storageRefs",
-// "availableIDs", "backup", and "backupUnsupported" (any fault makes
-// backupSupported false). refsHook, when set, edits the storage refs
+// "availableIDs", "deletingTenants", "getTenant", "transferIDs", "keyIDs",
+// "destroyKeys", "deleteTenant", "audit", "backup", and "backupUnsupported" (any
+// fault makes backupSupported false). refsHook, when set, edits the storage refs
 // returned.
 type faultRepo struct {
 	inner    repo
@@ -219,6 +221,55 @@ func (r *faultRepo) availableIDs(ctx context.Context, tid tenant.ID) ([]string, 
 	return r.inner.availableIDs(ctx, tid)
 }
 
+func (r *faultRepo) deletingTenants(ctx context.Context) ([]tenant.ID, error) {
+	if err := r.f.hit("deletingTenants"); err != nil {
+		return nil, err
+	}
+	return r.inner.deletingTenants(ctx)
+}
+
+func (r *faultRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	if err := r.f.hit("getTenant"); err != nil {
+		return nil, err
+	}
+	return r.inner.getTenant(ctx, tid)
+}
+
+func (r *faultRepo) transferIDs(ctx context.Context, tid tenant.ID, statuses ...store.TransferStatus) ([]string, error) {
+	if err := r.f.hit("transferIDs"); err != nil {
+		return nil, err
+	}
+	return r.inner.transferIDs(ctx, tid, statuses...)
+}
+
+func (r *faultRepo) keyIDs(ctx context.Context, tid tenant.ID, after string, limit int) ([]string, error) {
+	if err := r.f.hit("keyIDs"); err != nil {
+		return nil, err
+	}
+	return r.inner.keyIDs(ctx, tid, after, limit)
+}
+
+func (r *faultRepo) destroyKeys(ctx context.Context, tid tenant.ID, wkIDs []string) error {
+	if err := r.f.hit("destroyKeys"); err != nil {
+		return err
+	}
+	return r.inner.destroyKeys(ctx, tid, wkIDs)
+}
+
+func (r *faultRepo) deleteTenant(ctx context.Context, tid tenant.ID) error {
+	if err := r.f.hit("deleteTenant"); err != nil {
+		return err
+	}
+	return r.inner.deleteTenant(ctx, tid)
+}
+
+func (r *faultRepo) audit(ctx context.Context, ev audit.Event) error {
+	if err := r.f.hit("audit"); err != nil {
+		return err
+	}
+	return r.inner.audit(ctx, ev)
+}
+
 func (r *faultRepo) backupSupported() bool {
 	return r.f.hit("backupUnsupported") == nil && r.inner.backupSupported()
 }
@@ -281,7 +332,7 @@ func (r faultRemover) TransferActivity(ctx context.Context, tid tenant.ID, files
 }
 
 // faultFiles wraps the storage with the faults "tenantDirs", "list",
-// "removeData", "removeCheckpoint", "state" and "removeTemp".
+// "removeData", "removeCheckpoint", "state", "removeTemp" and "removeDir".
 type faultFiles struct {
 	inner *storage.Store
 	f     *faults
@@ -327,6 +378,13 @@ func (s faultFiles) RemoveTemp(tid tenant.ID, file string) error {
 		return err
 	}
 	return s.inner.RemoveTemp(tid, file)
+}
+
+func (s faultFiles) RemoveTenantDir(tid tenant.ID) error {
+	if err := s.f.hit("removeDir"); err != nil {
+		return err
+	}
+	return s.inner.RemoveTenantDir(tid)
 }
 
 // clock is a settable fake clock.
@@ -440,7 +498,7 @@ func (ft *fakeTimers) stops(t Task) int {
 }
 
 // allTasks are the tasks in their order.
-var allTasks = []Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskPurgeRows, TaskOrphans, TaskBackup}
+var allTasks = []Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions, TaskPurgeRows, TaskOrphans, TaskBackup}
 
 // runResult is the outcome of a scheduled run.
 type runResult struct {

@@ -437,7 +437,9 @@ func newEnv(t *testing.T, e storetest.Engine, tune func(*Options)) *env {
 	ev.a = ev.newTenant(hostA, true)
 	ev.b = ev.newTenant(hostB, true)
 	ev.c = ev.newTenant(hostC, false)
-	ev.notifier = &faultNotifier{inner: notify.New(vault, db.SMTPSettings(), nil, notify.Options{Now: ev.clock.now}), f: ev.f}
+	ev.notifier = &faultNotifier{inner: notify.New(vault, db.SMTPSettings(), nil, notify.Options{
+		Now: ev.clock.now, Overrides: notify.StoreOverrides(db.TenantEmailTemplates()),
+	}), f: ev.f}
 	opts := Options{
 		Grace: grace, RetryMin: 2 * time.Millisecond, RetryMax: 8 * time.Millisecond,
 		Now: ev.clock.now, Logger: slog.New(ev.logs),

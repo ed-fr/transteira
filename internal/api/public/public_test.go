@@ -9,7 +9,6 @@ import (
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
-	"github.com/ed-fr/transteira/internal/api/stubs"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/version"
 )
@@ -72,14 +71,6 @@ func TestGetVersionWithoutTenant(t *testing.T) {
 	var p *problem.Problem
 	if !errors.As(err, &p) || p.Code != problem.CodeUnknownTenant {
 		t.Fatalf("err = %v, want unknown-tenant", err)
-	}
-}
-
-func TestStubsStillAnswerNotImplemented(t *testing.T) {
-	t.Parallel()
-	_, err := NewServer().GetPublicTenant(tenantCtx(), gen.GetPublicTenantRequestObject{})
-	if !errors.Is(err, stubs.ErrNotImplemented) {
-		t.Errorf("err = %v, want ErrNotImplemented", err)
 	}
 }
 

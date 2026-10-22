@@ -178,10 +178,7 @@ func build(s Settings, m Message, now time.Time) ([]byte, error) {
 		return nil, err
 	}
 	from, _ := ParseAddress(s.FromAddress) // validated above
-	msgID, err := newMessageID(domainOf(from))
-	if err != nil {
-		return nil, err
-	}
+	msgID := newMessageID(domainOf(from))
 
 	var buf bytes.Buffer
 	writeHeader(&buf, "From", formatMailbox(s.FromName, from))
@@ -293,13 +290,12 @@ func writeBase64(w io.Writer, data []byte) {
 	_, _ = io.WriteString(w, enc+"\r\n")
 }
 
-// newMessageID returns <32 random hex digits@domain>.
-func newMessageID(domain string) (string, error) {
+// newMessageID returns <32 random hex digits@domain>. crypto/rand.Read
+// never fails (it aborts the program instead).
+func newMessageID(domain string) string {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("mail: message ID: %w", err)
-	}
-	return "<" + hex.EncodeToString(b[:]) + "@" + domain + ">", nil
+	_, _ = rand.Read(b[:])
+	return "<" + hex.EncodeToString(b[:]) + "@" + domain + ">"
 }
 
 // formatMailbox formats "Display Name <addr>", or the bare address when

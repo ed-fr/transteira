@@ -185,7 +185,7 @@ func newAdminHandler(deps Deps, eh errorHandlers, events middleware.SecurityEven
 		// The last middleware is the outermost one.
 		Middlewares: []gen.MiddlewareFunc{
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
-			middleware.BodyLimitFunc(func(r *http.Request) int64 { return policyOf(r).bodyLimit }),
+			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.AdminCSRF(sessions, adminSessionRequired),
 			middleware.SameOrigin(adminOpenRoute),
 			middleware.AdminSession(sessions, adminSessionRequired, logger),

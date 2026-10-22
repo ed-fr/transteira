@@ -370,6 +370,18 @@ var tenantAllowlist = map[string]int{
 	`INSERT INTO wrapped_keys (tenant_id, id, purpose, key_id, blob, created_at) VALUES (?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + wrappedKeyColumns + ` FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                     0,
 	`DELETE FROM wrapped_keys WHERE tenant_id = ? AND id = ?`:                                               0,
+	`SELECT id FROM wrapped_keys WHERE tenant_id = ? AND id > ? ORDER BY id LIMIT ?`:                        0,
+	// Tenant mail templates and legal documents.
+	`SELECT subject, body_html, body_text, updated_at, updated_by FROM tenant_email_templates WHERE tenant_id = ? AND template_key = ? AND language = ?`:                    0,
+	`SELECT template_key, language, updated_at FROM tenant_email_templates WHERE tenant_id = ? ORDER BY template_key, language`:                                             0,
+	`UPDATE tenant_email_templates SET subject = ?, body_html = ?, body_text = ?, updated_at = ?, updated_by = ? WHERE tenant_id = ? AND template_key = ? AND language = ?`: 5,
+	`INSERT INTO tenant_email_templates (tenant_id, template_key, language, subject, body_html, body_text, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`:         0,
+	`DELETE FROM tenant_email_templates WHERE tenant_id = ? AND template_key = ? AND language = ?`:                                                                          0,
+	`SELECT content, updated_at, updated_by FROM tenant_legal_documents WHERE tenant_id = ? AND document = ? AND language = ?`:                                              0,
+	`UPDATE tenant_legal_documents SET content = ?, updated_at = ?, updated_by = ? WHERE tenant_id = ? AND document = ? AND language = ?`:                                   3,
+	`INSERT INTO tenant_legal_documents (tenant_id, document, language, content, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?)`:                                         0,
+	`DELETE FROM tenant_legal_documents WHERE tenant_id = ? AND document = ? AND language = ?`:                                                                              0,
+	`SELECT document, language FROM tenant_legal_documents WHERE tenant_id = ? ORDER BY document, language`:                                                                 0,
 	// SMTP settings.
 	`SELECT ` + smtpColumns + ` FROM tenant_smtp_settings WHERE tenant_id = ?`: 0,
 	`UPDATE tenant_smtp_settings SET host = ?, port = ?, security = ?, username = ?, password_key_id = ?, ` +
@@ -520,6 +532,8 @@ var tenantAllowlist = map[string]int{
 // reviewedAllowlist pins every reviewed (multi-table) tenant query with its
 // review reason. Each entry needs a security review.
 var reviewedAllowlist = map[string]string{
+	`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id WHERE t.tenant_id = ? AND t.id = ? ` +
+		`AND n.status = 'active'`: reasonTransferTenantActive,
 	// Declared by the tests (above).
 	`SELECT r.value FROM tenant_network_rules r JOIN tenants t ON t.id = r.tenant_id WHERE r.tenant_id = ?`: "test only: exercises reviewedTenantQuery",
 }
@@ -571,12 +585,15 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`:                                                                                  reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                                reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
-	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ?`:                                                                                                     reasonTenantResolve,
+	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
-	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, storage_quota_bytes = ?, updated_at = ? WHERE id = ?`:                    reasonTenantAdmin,
-	`DELETE FROM tenants WHERE id = ?`: reasonTenantAdmin,
+	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`DELETE FROM tenants WHERE id = ?`:                             reasonTenantAdmin,
+	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
+	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,
+	`SELECT count(*) FROM wrapped_keys WHERE tenant_id = ?`:        reasonTenantErase,
 	// Master keys (startup check and rotation).
 	`SELECT key_id FROM wrapped_keys UNION SELECT key_id FROM system_secrets ORDER BY key_id`:                                                     reasonKeyCheck,
 	`SELECT (SELECT count(*) FROM wrapped_keys WHERE key_id = ?) + (SELECT count(*) FROM system_secrets WHERE key_id = ?)`:                        reasonKeyRotation,

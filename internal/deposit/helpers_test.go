@@ -17,6 +17,7 @@ import (
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
+	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -163,7 +164,9 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 		t.Fatal(err)
 	}
 	ev := &env{db: db, clock: clock, queue: &fakeQueue{}, seclog: &syncBuffer{}, vault: masterkey.NewVault(db, kr, nil)}
-	ev.svc = New(db, kr, ev.vault, ev.queue, securitylog.New(ev.seclog), Options{Now: clock.Now, SessionTTL: 4 * time.Hour})
+	ev.svc = New(db, kr, ev.vault, ev.queue, securitylog.New(ev.seclog), Options{
+		Now: clock.Now, SessionTTL: 4 * time.Hour, Overrides: notify.StoreOverrides(db.TenantEmailTemplates()),
+	})
 	ev.a = ev.newTenant(t, hostA, "en")
 	ev.b = ev.newTenant(t, hostB, "fr")
 	ev.c = ev.newTenant(t, hostC, "en")

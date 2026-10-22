@@ -28,6 +28,9 @@ const (
 	// TaskAbandonedUploads erases the transfers whose uploads expired before
 	// their finalization, which releases their quota reservation.
 	TaskAbandonedUploads Task = "abandoned-uploads"
+	// TaskTenantDeletions completes the deletions of the tenants left in
+	// tenant.StatusDeleting (an interrupted [Sweeper.EraseTenant]).
+	TaskTenantDeletions Task = "tenant-deletions"
 	// TaskPurgeRows deletes the rows that are no longer needed.
 	TaskPurgeRows Task = "purge-rows"
 	// TaskOrphans removes the files of the tenant directories that the
@@ -45,6 +48,9 @@ const (
 	// DefaultAbandonedInterval is the default delay between two runs of
 	// TaskAbandonedUploads.
 	DefaultAbandonedInterval = 15 * time.Minute
+	// DefaultTenantDeletionsInterval is the default delay between two runs
+	// of TaskTenantDeletions.
+	DefaultTenantDeletionsInterval = time.Hour
 	// DefaultPurgeInterval is the default delay between two runs of
 	// TaskPurgeRows.
 	DefaultPurgeInterval = time.Hour
@@ -86,6 +92,10 @@ var (
 	// ErrBackupDisabled is returned by [Sweeper.RunTask] for TaskBackup
 	// when Options.BackupDir is empty.
 	ErrBackupDisabled = errors.New("lifecycle: database backup disabled")
+	// ErrTenantNotDeleting is returned by [Sweeper.EraseTenant] for a tenant
+	// that exists and is not in tenant.StatusDeleting: a tenant is only
+	// erased once its deletion has been started.
+	ErrTenantNotDeleting = errors.New("lifecycle: tenant deletion not started")
 )
 
 // Vault destroys wrapped keys inside a transaction. *masterkey.Vault
@@ -117,6 +127,7 @@ type Files interface {
 	RemoveCheckpoint(tid tenant.ID, name string) error
 	RemoveState(tid tenant.ID, name string) error
 	RemoveTemp(tid tenant.ID, file string) error
+	RemoveTenantDir(tid tenant.ID) error
 }
 
 // Deps are the components the sweeper relies on. Every field is required.
@@ -139,6 +150,9 @@ type Options struct {
 	// AbandonedInterval is the delay between two runs of
 	// TaskAbandonedUploads (DefaultAbandonedInterval).
 	AbandonedInterval time.Duration
+	// TenantDeletionsInterval is the delay between two runs of
+	// TaskTenantDeletions (DefaultTenantDeletionsInterval).
+	TenantDeletionsInterval time.Duration
 	// PurgeInterval is the delay between two runs of TaskPurgeRows
 	// (DefaultPurgeInterval).
 	PurgeInterval time.Duration
@@ -222,6 +236,9 @@ type Sweeper struct {
 	pageSizes [kindCount]int
 	// purgeBatch is the page size of the listing of the ended transfers.
 	purgeBatch int
+	// keyBatch is the page size of the listing of a tenant's wrapped keys,
+	// destroyed one transaction per page.
+	keyBatch int
 
 	tasks []*task
 	// newTimer returns a channel receiving once after d, for the next run
@@ -275,6 +292,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		backupKeep:           orDefault(opts.BackupKeep, DefaultBackupKeep),
 		pageSizes:            [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit},
 		purgeBatch:           store.PurgeBatchSize,
+		keyBatch:             store.MaxPageSize,
 		newTimer:             realTimer,
 		last:                 make(map[Task]time.Time),
 	}
@@ -284,6 +302,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		{TaskDeleteAfterDownload, interval, true, s.erasureTask(kindDelete)},
 		{TaskExpire, interval, true, s.erasureTask(kindExpire)},
 		{TaskAbandonedUploads, orDefault(opts.AbandonedInterval, DefaultAbandonedInterval), true, s.erasureTask(kindAbandoned)},
+		{TaskTenantDeletions, orDefault(opts.TenantDeletionsInterval, DefaultTenantDeletionsInterval), true, s.tenantDeletions},
 		{TaskPurgeRows, orDefault(opts.PurgeInterval, DefaultPurgeInterval), true, s.purgeRows},
 		{TaskOrphans, orDefault(opts.OrphansInterval, DefaultOrphansInterval), true, s.orphans},
 		{TaskBackup, 0, false, s.backup},

@@ -86,7 +86,12 @@ transteira/
 │   │                                # infectés, lien de téléchargement, envoi des notifications
 │   ├── notify/                      # Construction des mails de transfert (QR code inline, empreintes, alertes expéditeur)
 │   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
-│   │                                # (templates/), file d'envoi asynchrone ; les mails de transfert sont construits par notify
+│   │                                # (templates/, variables {{nom}} sans logique), surcharge par entité, file d'envoi
+│   │   └── sanitize/                # Filtre HTML par liste blanche (modèles personnalisés, mentions légales)
+│   ├── markup/                      # Markdown limité vers HTML filtré (mentions légales)
+│   ├── branding/                    # Images d'habillage (détection, décodage borné, réencodage), contraste WCAG, fond par défaut
+│   ├── tenantadmin/                 # Configuration des entités : droits, habillage, réseau, SMTP (test, DNS, garde SSRF),
+│   │                                # modèles, mentions légales, suppression
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
 │   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois)
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)

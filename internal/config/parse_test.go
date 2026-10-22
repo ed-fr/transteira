@@ -49,6 +49,19 @@ func TestParsePrefixes(t *testing.T) {
 	}
 }
 
+func TestParsePrefixErrors(t *testing.T) {
+	t.Parallel()
+	for raw, want := range map[string]string{
+		"10.0.0.1/8":   `"10.0.0.1/8" has host bits set (did you mean 10.0.0.0/8?)`,
+		"fe80::1%eth0": `"fe80::1%eth0": IPv6 zones are not allowed`,
+		"example.com":  `"example.com": not a valid IP address or CIDR prefix`,
+	} {
+		if _, err := parsePrefixes(raw); err == nil || err.Error() != want {
+			t.Errorf("parsePrefixes(%q) error = %v, want %s", raw, err, want)
+		}
+	}
+}
+
 func TestParseBool(t *testing.T) {
 	t.Parallel()
 	for _, raw := range []string{"true", "TRUE", " True ", "1"} {

@@ -195,6 +195,19 @@ func (t *SystemTx) prepare(q SystemQuery, args []any) (string, error) {
 	return q.system.sql(t.dialect), nil
 }
 
+// lockTenant takes the lock of [ScopedTx.lock] for tenant tid, serializing
+// the current system transaction with the tenant's transactions that take
+// it, until it ends. It is a no-op on SQLite.
+func (t *SystemTx) lockTenant(ctx context.Context, tid tenant.ID) error {
+	if t.dialect.lockTenant == "" {
+		return nil
+	}
+	if _, err := t.tx.ExecContext(ctx, t.dialect.lockTenant, string(tid)); err != nil {
+		return wrap("lock tenant", err)
+	}
+	return nil
+}
+
 // Exec runs a statement that returns no rows.
 func (t *SystemTx) Exec(ctx context.Context, q SystemQuery, args ...any) (sql.Result, error) {
 	text, err := t.prepare(q, args)

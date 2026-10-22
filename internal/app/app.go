@@ -1,8 +1,8 @@
 // Package app wires the TransTeira server together and runs it: logging,
 // master keys, database, migrations, master key check, tenant resolution,
 // security log, health checks, mail queue, depositor identification,
-// transfers and tus uploads, administrator authentication, and the HTTP
-// server, with a graceful shutdown.
+// transfers and tus uploads, administrator authentication, tenant
+// configuration, and the HTTP server, with a graceful shutdown.
 package app
 
 import (
@@ -25,6 +25,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/deposit"
@@ -35,12 +36,14 @@ import (
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
+	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/tenantadmin"
 	"github.com/ed-fr/transteira/internal/transfer"
 	"github.com/ed-fr/transteira/internal/upload"
 	"github.com/ed-fr/transteira/internal/version"
@@ -167,8 +170,9 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // refusal of an admin host that is also a tenant FQDN, tenant resolver,
 // security log, mail queue and depositor identification service,
 // administrator authentication (with the setup token generated and logged
-// while no administrator exists, see newAdminService), health checks, HTTP
-// server. At shutdown the mail queue is drained
+// while no administrator exists, see newAdminService), tenant configuration
+// service (sharing the tenant resolver, which it invalidates, and the
+// guarded SMTP sender), health checks, HTTP server. At shutdown the mail queue is drained
 // (at most MailDrainTimeout) after the HTTP server has stopped and before
 // the database is closed.
 func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
@@ -249,11 +253,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// The queue owns the context of its deliveries, canceled by Close. Its
 	// close is deferred after db.Close, so it runs before it, and after
 	// serve has returned, so that no handler can enqueue a mail any more.
-	mailQueue := mail.NewQueue(newSMTPSender(cfg), cfg.MailQueueSize, logger, mailQueueOptions(cfg)) //nolint:contextcheck // see above
+	// One sender serves the queue and the SMTP test of the administration:
+	// every tenant SMTP connection dials through the guard refusing the
+	// denied networks (TT_SMTP_DENY_NETWORKS, threat model P21).
+	smtpSender := newSMTPSender(cfg)
+	mailQueue := mail.NewQueue(smtpSender, cfg.MailQueueSize, logger, mailQueueOptions(cfg)) //nolint:contextcheck // see above
 	defer closeMailQueue(ctx, mailQueue, logger)
 	vault := masterkey.NewVault(db, keys, logger)
+	// The mails of a tenant use its customized templates when it has some.
+	overrides := notify.StoreOverrides(db.TenantEmailTemplates())
 	deposits := deposit.New(db, keys, vault, mailQueue, secLog,
-		deposit.Options{SessionTTL: cfg.DepositSessionTTL, Logger: logger})
+		deposit.Options{SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides})
 	files, err := storage.New(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -264,7 +274,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address,
 		antivirus.WithMaxScanBytes(cfg.ClamAVMaxScanBytes), antivirus.WithScanTimeout(cfg.ClamAVTimeout))
 	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
-	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger})
+	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger, Overrides: overrides})
 	// One hasher bounds the argon2id computations of the transfer passwords,
 	// at creation (transfer) and at unlock (download), and of the admin
 	// passwords (login, setup, activation, change).
@@ -289,6 +299,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return err
 	}
+	// The resolver of the HTTP tenant middleware is invalidated by the
+	// tenant configuration after every change of a tenant row.
+	resolver := tenant.NewResolver(db.Tenants())
+	tenants, err := tenantadmin.New(db, tenantadmin.Options{
+		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
+		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
+		Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)
 	}
@@ -298,7 +319,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
-		Resolver:     tenant.NewResolver(db.Tenants()),
+		Resolver:     resolver,
 		SecurityLog:  secLog,
 		Health: &health.Service{
 			Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
@@ -308,10 +329,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		},
 		Maintenance: maintenance,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
-			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads})),
-		Sessions:            deposits,
-		AdminHosts:          cfg.AdminHosts,
-		AdminAPI:            admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants())),
+			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
+			public.WithTenantService(tenants), public.WithMaintenance(maintenance.Load)),
+		Sessions:   deposits,
+		AdminHosts: cfg.AdminHosts,
+		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
+			admin.WithTenantService(tenants)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
@@ -665,13 +688,67 @@ func closeBackground(ctx context.Context, logger *slog.Logger, closers ...closer
 	wg.Wait()
 }
 
-// newSMTPSender returns the SMTP sender of the mail queue. The EHLO name
-// stays the mail package default ("localhost"): the instance serves several
-// tenant FQDNs and knows no single public host name of its own, and the
-// relays TransTeira targets (internal relay, Microsoft 365, classic
-// authenticated SMTP) do not check it.
+// newSMTPSender returns the SMTP sender of the mail queue and of the SMTP
+// test. It dials through a netpolicy.DialGuard over
+// cfg.SMTPDenyNetworks: the address of a tenant SMTP server is resolved and
+// checked at each connection (threat model P21, DNS rebinding included).
+// The EHLO name stays the mail package default ("localhost"): the instance
+// serves several tenant FQDNs and knows no single public host name of its
+// own, and the relays TransTeira targets (internal relay, Microsoft 365,
+// classic authenticated SMTP) do not check it.
 func newSMTPSender(cfg *config.Config) *mail.SMTPSender {
-	return mail.NewSMTPSender(mail.SMTPOptions{Timeout: cfg.SMTPTimeout})
+	guard := netpolicy.NewDialGuard(cfg.SMTPDenyNetworks, nil)
+	return mail.NewSMTPSender(mail.SMTPOptions{Timeout: cfg.SMTPTimeout, Dial: guard.DialContext})
+}
+
+// assetStore keeps the branding images of the tenants in the data
+// directory (tenantadmin.AssetStore), under the fixed asset names of
+// package storage.
+type assetStore struct {
+	files *storage.Store
+}
+
+// errUnknownAsset reports a branding kind without asset name.
+var errUnknownAsset = errors.New("app: unknown branding image kind")
+
+// assetName maps a branding kind to its storage asset name.
+func assetName(kind branding.Kind) (string, error) {
+	switch kind {
+	case branding.KindLogo:
+		return storage.AssetLogo, nil
+	case branding.KindBackground:
+		return storage.AssetBackground, nil
+	default:
+		return "", errUnknownAsset
+	}
+}
+
+// Put implements tenantadmin.AssetStore.
+func (a assetStore) Put(tid tenant.ID, kind branding.Kind, data []byte) error {
+	name, err := assetName(kind)
+	if err != nil {
+		return err
+	}
+	return a.files.WriteAsset(tid, name, data)
+}
+
+// Get implements tenantadmin.AssetStore; a missing image matches
+// fs.ErrNotExist.
+func (a assetStore) Get(tid tenant.ID, kind branding.Kind) ([]byte, error) {
+	name, err := assetName(kind)
+	if err != nil {
+		return nil, err
+	}
+	return a.files.ReadAsset(tid, name)
+}
+
+// Delete implements tenantadmin.AssetStore.
+func (a assetStore) Delete(tid tenant.ID, kind branding.Kind) error {
+	name, err := assetName(kind)
+	if err != nil {
+		return err
+	}
+	return a.files.RemoveAsset(tid, name)
 }
 
 // mailQueueOptions returns the explicit tuning of the mail queue: the mail

@@ -51,6 +51,8 @@ var (
 		`SELECT ` + wrappedKeyColumns + ` FROM wrapped_keys WHERE tenant_id = ? AND id = ?`)
 	qWrappedKeyDelete = tenantQuery(
 		`DELETE FROM wrapped_keys WHERE tenant_id = ? AND id = ?`)
+	qWrappedKeyListIDs = tenantQuery(
+		`SELECT id FROM wrapped_keys WHERE tenant_id = ? AND id > ? ORDER BY id LIMIT ?`)
 	qWrappedKeyIDsInUse = systemQuery(
 		`SELECT key_id FROM wrapped_keys UNION SELECT key_id FROM system_secrets ORDER BY key_id`,
 		reasonKeyCheck)
@@ -225,6 +227,39 @@ func deleteWrappedKey(ctx context.Context, tx *ScopedTx, wkID string) error {
 		return err
 	}
 	return expectOne(res)
+}
+
+// ListIDs returns the IDs (never the keys) of up to limit wrapped keys of
+// tenant tid that sort after after ("" for the first page), in ID order
+// (DefaultPageSize when limit <= 0, at most MaxPageSize). The deletion of a
+// tenant walks them to destroy every key left (SMTP password, sealed
+// tokens, keys of files without transfer) before [Tenants.Delete]. A
+// malformed after yields ErrInvalid.
+func (r *WrappedKeys) ListIDs(ctx context.Context, tid tenant.ID, after string, limit int) ([]string, error) {
+	if after != "" && !id.Valid(id.WrappedKey, after) {
+		return nil, invalid("malformed cursor")
+	}
+	s, err := r.db.Scoped(tid)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
+		rows, err := tx.Query(ctx, qWrappedKeyListIDs, after, pageLimit(limit))
+		if err != nil {
+			return err
+		}
+		ids, err = collect(rows, func(r *sql.Rows) (string, error) {
+			var s string
+			err := r.Scan(&s)
+			return s, err
+		})
+		return err
+	})
+	if err != nil {
+		return nil, wrap("list wrapped key ids", err)
+	}
+	return ids, nil
 }
 
 // KeyIDsInUse returns the distinct master key identifiers that wrapped keys

@@ -30,7 +30,7 @@ Some codes carry extension members:
 
 | Member | Used by | Meaning |
 |---|---|---|
-| `errors` | `validation-failed` | List of `{field, code, allowed?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`). |
+| `errors` | `validation-failed` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
 | `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid` | Number of attempts left before lockout or invalidation. |
 | `retryAfterSeconds` | `rate-limited`, `transfer-locked`, `maintenance` | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
 | `maxTransferBytes` | `transfer-too-large` | Per-transfer size limit of the entity, in bytes. |
@@ -50,7 +50,14 @@ use to ban the client IP.
 - **HTTP status:** 400 Bad Request
 - **Meaning:** the request is malformed (invalid JSON, wrong type) or a field is invalid.
   The `errors` member lists each invalid field with a reason code and, when relevant, the
-  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`).
+  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). In the tenant
+  configuration: an entity FQDN that is malformed or equal to an admin host (`/fqdn`), a
+  confirmation that is not the exact entity name when deleting it (`confirm`), a corrupt
+  branding image (`/image`), and a mail template that uses an unknown variable, any template
+  syntax other than `{{snake_case}}` variables, or lacks a required variable (one
+  `invalid-template` entry per problem, with its position). In a JSON Merge Patch, `null` on
+  a field that cannot be removed is refused with one `not-nullable` entry per field (for
+  example `/name` when updating an entity).
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -83,9 +90,11 @@ use to ban the client IP.
 - **HTTP status:** 403 Forbidden
 - **Meaning:** the caller is authenticated but its role does not allow the operation (for
   example a delegated admin calling a super admin endpoint, or a super admin trying to disable
-  the TOTP that is mandatory for them).
+  the TOTP that is mandatory for them). A delegated admin changing the name, FQDN, storage quota
+  or transfer ceiling of its entity, or setting its transfer limit above the ceiling set by the
+  super admin, also gets `forbidden`, and nothing is changed.
 - **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`,
-  `DELETE /admin/me/totp`.
+  `PATCH /admin/tenants/{tenantId}`, `DELETE /admin/tenants/{tenantId}`, `DELETE /admin/me/totp`.
 - **What to do:** do not retry; ask a super admin if the access is legitimately needed.
 
 ### csrf-invalid
@@ -176,7 +185,9 @@ use to ban the client IP.
   host every `/admin/*` path answers `not-found`, and under the admin host every entity
   endpoint does. An unknown, used or expired activation link also answers `not-found`, and so
   does an entity a delegated admin is not assigned to, exactly like an entity that does not
-  exist.
+  exist, and an entity being deleted. The public branding images answer `not-found` for a logo
+  the entity has not configured (the background falls back to the default image), and a legal
+  document the entity has written in neither the negotiated nor its default language.
 - **Typical endpoints:** any endpoint with an identifier in its path, `/admin/*` on an entity
   host, `POST /admin/activation`.
 - **What to do:** check the identifier or link. Do not retry unchanged.
@@ -278,8 +289,10 @@ use to ban the client IP.
 ### payload-too-large
 
 - **HTTP status:** 413 Content Too Large
-- **Meaning:** the request body is larger than the endpoint accepts (for example an oversized
-  logo or background image).
+- **Meaning:** the request body is larger than the endpoint accepts (for example a logo above
+  5 MiB or a background image above 10 MiB), or an image whose dimensions exceed the limits of
+  its kind or whose decoding and re-encoding would need more than 320 MiB (both checked before
+  decoding; see `docs/operations/tenants.md` for the resulting limits per format).
 - **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/{asset}`.
 - **What to do:** send a smaller body.
 
@@ -294,7 +307,9 @@ use to ban the client IP.
 ### unsupported-media-type
 
 - **HTTP status:** 415 Unsupported Media Type
-- **Meaning:** the `Content-Type` of the request is not accepted by the endpoint.
+- **Meaning:** the `Content-Type` of the request is not accepted by the endpoint, or a branding
+  image is not a PNG, JPEG or WebP image (detected from its content, whatever its declared type;
+  SVG is refused). A branding upload must declare an `image/*` type.
 - **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/{asset}`, any JSON endpoint
   called without `application/json`.
 - **What to do:** send the body with a supported media type.
@@ -323,12 +338,13 @@ use to ban the client IP.
   15 minutes lock for 15 minutes; 5 wrong second factors of one admin, TOTP enrollment
   confirmations included, lock their second factor for 15 minutes), and a per-client limit of
   the sign-in steps (setup, password, second factor, TOTP enrollment confirmation, activation:
-  20 at once, then one every 3 seconds).
+  20 at once, then one every 3 seconds), and the SMTP tests of an entity (5 per administrator
+  and entity within 10 minutes).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
-  `PUT /admin/me/password`.
+  `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -397,7 +413,10 @@ use to ban the client IP.
 
 - **HTTP status:** 500 Internal Server Error
 - **Meaning:** an unexpected server-side error occurred. The response never contains internal
-  details.
+  details. When the deletion of an entity fails midway, the entity stays in the `deleting`
+  status (no longer served, visible to the super admin only): repeating
+  `DELETE /admin/tenants/{tenantId}` resumes it from where it stopped, and the periodic cleanup
+  task completes it otherwise.
 - **Typical endpoints:** any endpoint.
 - **What to do:** retry later. If the error persists, report it to the administrators with the
   `instance` identifier so they can find it in the logs.

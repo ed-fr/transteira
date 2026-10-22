@@ -43,6 +43,12 @@ type SMTPOptions struct {
 	// RootCAs overrides the system roots used to verify the server
 	// certificate (tests, private CA). Nil means the system roots.
 	RootCAs *x509.CertPool
+	// Dial opens the TCP connection to the server ("host:port"); nil means
+	// a plain net.Dialer. The application passes a dialer refusing the
+	// denied networks (netpolicy.DialGuard, threat model P21). The TLS
+	// server name stays the configured host, whatever address Dial
+	// connects to.
+	Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
 // SMTPSender is the SMTP implementation of [Sender], built on net/smtp.
@@ -72,6 +78,9 @@ func NewSMTPSender(opts SMTPOptions) *SMTPSender {
 		helloName: opts.HelloName,
 		rootCAs:   opts.RootCAs,
 		dial:      (&net.Dialer{}).DialContext,
+	}
+	if opts.Dial != nil {
+		s.dial = opts.Dial
 	}
 	if s.timeout <= 0 {
 		s.timeout = DefaultTimeout

@@ -4,38 +4,19 @@ Votre transfert est prêt : les destinataires ont reçu le lien de téléchargem
 
 Lien de téléchargement :
 
-{{.Link}}
+{{download_link}}
 
-Les fichiers sont disponibles jusqu'au {{datetime .ExpiresAt}}.
-{{- if .PasswordRequired}}
+Les fichiers sont disponibles jusqu'au {{expiry_datetime}}.
 
-Le transfert est protégé par un mot de passe. Communiquez-le aux destinataires par un autre canal (téléphone, SMS...), jamais dans le même e-mail que le lien.
-{{- end}}
+{{password_notice}}
 
 Destinataires :
-{{- range .Recipients}}
-- {{.}}
-{{- end}}
+{{recipients}}
 
 Fichiers :
-{{- range .Files}}
-- {{.Name}} ({{size .Size}})
-  SHA-256 : {{.SHA256}}
-{{- if eq .NotScanned "too_large"}}
-  Non analysé par l'antivirus : le fichier est trop volumineux ou trop complexe pour être entièrement analysé.
-{{- else if eq .NotScanned "encrypted"}}
-  N'a pas pu être analysé par l'antivirus : archive chiffrée.
-{{- end}}
-{{- end}}
-{{- if .Withheld}}
+{{files}}
 
-Fichiers retenus :
-{{- range .Withheld}}
-- {{.Name}} ({{size .Size}})
-{{- end}}
-
-Ces fichiers n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : les destinataires ne peuvent pas les télécharger.
-{{- end}}
+{{withheld_files}}
 
 -- 
-{{t "mail.footer.automated" "tenant" .TenantName}}
+Ce message a été envoyé automatiquement par {{tenant_name}}. Merci de ne pas y répondre.

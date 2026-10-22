@@ -109,9 +109,15 @@ type Options struct {
 	SessionTTL time.Duration
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
-	// Logger receives the failures to write the security log, which never
-	// fail a request (nil discards).
+	// Logger receives the failures to write the security log and to read
+	// a customized mail template, which never fail a request (nil
+	// discards).
 	Logger *slog.Logger
+	// Overrides returns the customized mail templates of the tenants,
+	// usually notify.StoreOverrides(db.TenantEmailTemplates()); nil uses
+	// the default templates for every tenant. A lookup failure falls back
+	// to the default template (see [Service.prepareMail]).
+	Overrides mail.OverrideLookup
 }
 
 // Service identifies depositors. It is safe for concurrent use.
@@ -124,8 +130,9 @@ type Service struct {
 	logger     *slog.Logger
 	sessionTTL time.Duration
 	clock      func() time.Time
+	overrides  mail.OverrideLookup
 	// Mail rendering and random sources, replaced by the tests.
-	render   func(name, lang string, data any) (mail.Message, error)
+	render   func(ctx context.Context, lookup mail.OverrideLookup, tenantID, name, lang string, data any) (mail.Message, error)
 	rand     io.Reader
 	newToken func(prefix string, entropyBytes int) (string, error)
 	newID    func(p id.Prefix) (string, error)
@@ -146,8 +153,8 @@ func New(db *store.DB, keys Keys, secrets Secrets, queue MailQueue, seclog Secur
 	}
 	s := &Service{
 		repo: storeRepo{db: db}, keys: keys, secrets: secrets, queue: queue, seclog: seclog,
-		logger: opts.Logger, sessionTTL: opts.SessionTTL, clock: opts.Now,
-		render: mail.Render, rand: rand.Reader, newToken: id.NewToken,
+		logger: opts.Logger, sessionTTL: opts.SessionTTL, clock: opts.Now, overrides: opts.Overrides,
+		render: mail.DefaultTemplates().RenderFor, rand: rand.Reader, newToken: id.NewToken,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s

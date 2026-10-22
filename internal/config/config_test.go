@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -86,6 +87,10 @@ func TestLoadDefaults(t *testing.T) {
 		{"BroadTrustedProxies", len(c.BroadTrustedProxies()), 0},
 		{"SMTPTimeout", c.SMTPTimeout, 30 * time.Second},
 		{"MailQueueSize", c.MailQueueSize, 1000},
+		{
+			"SMTPDenyNetworks", fmt.Sprint(c.SMTPDenyNetworks),
+			"[127.0.0.0/8 ::1/128 169.254.0.0/16 fe80::/10 fd00:ec2::254/128 100.100.100.200/32 0.0.0.0/8 ::/96]",
+		},
 		{"UploadIdleTimeout", c.UploadIdleTimeout, 60 * time.Second},
 		{"DownloadIdleTimeout", c.DownloadIdleTimeout, 60 * time.Second},
 		{"MaxRecipients", c.MaxRecipients, 50},
@@ -99,6 +104,34 @@ func TestLoadDefaults(t *testing.T) {
 	for _, tc := range checks {
 		if tc.got != tc.want {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+}
+
+func TestDefaultSMTPDenyNetworks(t *testing.T) {
+	c := mustLoad(t, nil)
+	denied := func(addr string) bool {
+		a := netip.MustParseAddr(addr)
+		return slices.ContainsFunc(c.SMTPDenyNetworks, func(p netip.Prefix) bool { return p.Contains(a) })
+	}
+	for _, addr := range []string{
+		"127.0.0.1", "::1", "169.254.169.254", "fd00:ec2::254", "fe80::1", "0.0.0.0", "::",
+		"100.100.100.200", // Alibaba Cloud metadata
+		"::7f00:1",        // IPv4-compatible 127.0.0.1
+		"::a9fe:a9fe",     // IPv4-compatible 169.254.169.254
+	} {
+		if !denied(addr) {
+			t.Errorf("%s is not denied by default", addr)
+		}
+	}
+	// Private ranges, carrier-grade NAT and overlay networks (Tailscale
+	// relays) stay reachable, as do public and IPv4-mapped addresses.
+	for _, addr := range []string{
+		"10.0.0.25", "172.20.0.5", "192.168.1.10", "100.64.0.1", "100.100.100.100", "100.127.255.254",
+		"203.0.113.10", "2001:db8::25", "fd7a:115c:a1e0::1",
+	} {
+		if denied(addr) {
+			t.Errorf("%s is denied by default", addr)
 		}
 	}
 }
@@ -375,6 +408,16 @@ func TestLoadValid(t *testing.T) {
 			},
 		},
 		{
+			name: "smtp deny networks replace the default",
+			vars: map[string]string{EnvSMTPDenyNetworks: " 172.20.0.0/16, 10.1.2.3 ,::ffff:192.0.2.0/120"},
+			check: func(t *testing.T, c *Config) {
+				t.Helper()
+				if got := fmt.Sprint(c.SMTPDenyNetworks); got != "[172.20.0.0/16 10.1.2.3/32 192.0.2.0/24]" {
+					t.Errorf("SMTPDenyNetworks = %s", got)
+				}
+			},
+		},
+		{
 			name: "mail bounds inclusive high",
 			vars: map[string]string{EnvSMTPTimeout: "5m", EnvMailQueueSize: "100000"},
 			check: func(t *testing.T, c *Config) {
@@ -539,6 +582,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"mail queue zero", map[string]string{EnvMailQueueSize: "0"}, []string{EnvMailQueueSize}},
 		{"mail queue too big", map[string]string{EnvMailQueueSize: "100001"}, []string{EnvMailQueueSize}},
 		{"mail queue malformed", map[string]string{EnvMailQueueSize: "lots"}, []string{EnvMailQueueSize}},
+		{"smtp deny malformed", map[string]string{EnvSMTPDenyNetworks: "127.0.0.0/8,nowhere"}, []string{EnvSMTPDenyNetworks}},
+		{"smtp deny host bits", map[string]string{EnvSMTPDenyNetworks: "169.254.1.1/16"}, []string{EnvSMTPDenyNetworks}},
 		{"scan bytes too small", map[string]string{EnvClamAVMaxScanBytes: "1048575"}, []string{EnvClamAVMaxScanBytes}},
 		{"scan bytes too big", map[string]string{EnvClamAVMaxScanBytes: "4294967296"}, []string{EnvClamAVMaxScanBytes}},
 		{"scan bytes malformed", map[string]string{EnvClamAVMaxScanBytes: "2G"}, []string{EnvClamAVMaxScanBytes}},

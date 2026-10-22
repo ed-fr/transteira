@@ -6,8 +6,14 @@
 // The rule is evaluated whenever an action relies on it: opening a deposit
 // session, confirming a verification code, creating an invitation and (step
 // 6) creating a transfer, so that a session opened at the office does not
-// keep its rights from outside. The package is pure: callers load the rules
+// keep its rights from outside. The rule is pure: callers load the rules
 // of the tenant (store.NetworkRules) and log the refusals.
+//
+// The package also holds the other network policies of the application:
+// [ParsePrefix], the parsing of an IP range shared by the installation
+// configuration and the tenant settings, and [DialGuard], which keeps every
+// connection to a tenant SMTP server (mail queue and SMTP test) out of the
+// denied networks (TT_SMTP_DENY_NETWORKS, threat model P21).
 package netpolicy
 
 import (
@@ -52,11 +58,7 @@ func Evaluate(rules Rules, ip netip.Addr, email string) Verdict {
 
 // IPInternal reports whether ip belongs to one of the internal ranges.
 func IPInternal(rules Rules, ip netip.Addr) bool {
-	if !ip.IsValid() {
-		return false
-	}
-	addr := ip.Unmap().WithZone("")
-	return slices.ContainsFunc(rules.CIDRs, func(p netip.Prefix) bool { return p.Contains(addr) })
+	return Contains(rules.CIDRs, ip)
 }
 
 // DomainInternal reports whether the domain of email is one of the internal

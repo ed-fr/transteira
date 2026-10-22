@@ -467,10 +467,7 @@ func TestMigration0008Upgrade(t *testing.T) {
 		if n, err := db.Migrate(ctx); err != nil || n != 7 {
 			t.Fatalf("Migrate to 0007 = %d, %v", n, err)
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
+		tn := &tenant.Tenant{ID: createLegacyTenant(ctx, t, db, "a.example.com", 1)} // schema before 0009
 		wk := WrappedKey{ID: id.New(id.WrappedKey), Purpose: KeyPurposeSecret, KeyID: testMK1, Blob: []byte("k")}
 		if err := db.WrappedKeys().Create(ctx, tn.ID, wk); err != nil {
 			t.Fatal(err)

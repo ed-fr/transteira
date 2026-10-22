@@ -305,12 +305,9 @@ func TestMigration0007Upgrade(t *testing.T) {
 		if n, err := db.Migrate(ctx); err != nil || n != 6 {
 			t.Fatalf("Migrate to 0006 = %d, %v", n, err)
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
-		if err != nil {
-			t.Fatal(err)
-		}
+		tn := &tenant.Tenant{ID: createLegacyTenant(ctx, t, db, "a.example.com", 1)} // schema before 0009
 		ids := map[TransferStatus]string{}
-		err = db.runTx(ctx, db.write, db.dialect.scopeSystem, nil, func(tx *sql.Tx) error {
+		err := db.runTx(ctx, db.write, db.dialect.scopeSystem, nil, func(tx *sql.Tx) error {
 			for _, st := range []TransferStatus{TransferRejected, TransferExpired, TransferDeleted, TransferUploading} {
 				ids[st] = id.New(id.Transfer)
 				fin := "1, 2"

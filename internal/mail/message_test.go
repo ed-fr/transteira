@@ -15,6 +15,18 @@ import (
 	"time"
 )
 
+func TestValidLocal(t *testing.T) {
+	// net/mail already refuses empty atoms; validLocal does not rely on it.
+	for _, local := range []string{"a..b", ".a", "a.", "."} {
+		if validLocal(local) {
+			t.Errorf("validLocal(%q) = true", local)
+		}
+	}
+	if !validLocal("a.b") {
+		t.Error(`validLocal("a.b") = false`)
+	}
+}
+
 func TestParseAddress(t *testing.T) {
 	ok := map[string]string{
 		"bob@example.com":                     "bob@example.com",

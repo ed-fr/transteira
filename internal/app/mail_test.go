@@ -4,17 +4,22 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/download"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/scan"
+	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
@@ -197,5 +202,54 @@ func TestLifecycleOptions(t *testing.T) {
 	WithLifecycleOptions(func(lo *lifecycle.Options) { lo.Interval = 50 * time.Millisecond })(&o)
 	if got := lifecycleOptions(cfg, &o, nil); got.Interval != 50*time.Millisecond || got.BackupKeep != 9 {
 		t.Errorf("edited lifecycle options = %+v", got)
+	}
+}
+
+func TestSMTPSenderDialsThroughTheGuard(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{SMTPTimeout: 2 * time.Second, SMTPDenyNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}}
+	err := newSMTPSender(cfg).Send(context.Background(), mail.Settings{
+		Host: "127.0.0.1", Port: 25, Security: mail.SecurityNone, FromAddress: "noreply@entity-a.example.com",
+	}, mail.Message{To: []string{"bob@example.com"}, Subject: "s", Text: "t", Language: "en"})
+	if !errors.Is(err, netpolicy.ErrAddressDenied) {
+		t.Fatalf("err = %v, want a denied address", err)
+	}
+}
+
+func TestAssetStore(t *testing.T) {
+	t.Parallel()
+	files, err := storage.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = files.Close() })
+	a := assetStore{files: files}
+	tid := tenant.ID(id.New(id.Tenant))
+	for _, kind := range []branding.Kind{branding.KindLogo, branding.KindBackground} {
+		if _, err := a.Get(tid, kind); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s missing: %v", kind, err)
+		}
+		if err := a.Put(tid, kind, []byte(kind.String())); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := a.Get(tid, kind); err != nil || string(got) != kind.String() {
+			t.Fatalf("%s: %q %v", kind, got, err)
+		}
+		if err := a.Delete(tid, kind); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.Get(tid, kind); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s after delete: %v", kind, err)
+		}
+	}
+	const unknown = branding.Kind(42)
+	if err := a.Put(tid, unknown, nil); !errors.Is(err, errUnknownAsset) {
+		t.Errorf("put unknown: %v", err)
+	}
+	if _, err := a.Get(tid, unknown); !errors.Is(err, errUnknownAsset) {
+		t.Errorf("get unknown: %v", err)
+	}
+	if err := a.Delete(tid, unknown); !errors.Is(err, errUnknownAsset) {
+		t.Errorf("delete unknown: %v", err)
 	}
 }

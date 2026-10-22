@@ -16,30 +16,45 @@ import (
 const (
 	reasonTenantAdmin   = "tenant administration by the super admin (tenants table is the tenant registry)"
 	reasonTenantResolve = "resolve the tenant serving an HTTP Host before any tenant is known"
+	reasonTenantResume  = "resume the interrupted tenant deletions (identifiers only)"
+	reasonTenantErase   = "tenant deletion: refuse while a wrapped key of the tenant remains (T-110)"
 )
 
 // tenantColumns is the column list read by the tenant queries.
-const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, storage_quota_bytes, created_at, updated_at`
+const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
+	`status, primary_color, accent_color, has_logo, has_background, created_at, updated_at`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
 var (
 	qTenantInsert = systemQuery(
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
 		reasonTenantAdmin)
 	qTenantByFQDN = systemQuery(
-		`SELECT `+tenantColumns+` FROM tenants WHERE fqdn = ?`,
+		`SELECT `+tenantColumns+` FROM tenants WHERE fqdn = ? AND status = 'active'`,
 		reasonTenantResolve)
 	qTenantList = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`,
 		reasonTenantAdmin)
+	// qTenantUpdate only updates an active tenant: a tenant being deleted
+	// is treated as gone.
 	qTenantUpdate = systemQuery(
 		`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?,
-			storage_quota_bytes = ?, updated_at = ? WHERE id = ?`,
+			max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?,
+			has_logo = ?, has_background = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
+	qTenantSetStatus = systemQuery(
+		`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`,
+		reasonTenantAdmin)
+	qTenantListDeleting = systemQuery(
+		`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`,
+		reasonTenantResume)
+	qTenantKeyCount = systemQuery(
+		`SELECT count(*) FROM wrapped_keys WHERE tenant_id = ?`,
+		reasonTenantErase)
 	qTenantDelete = systemQuery(
 		`DELETE FROM tenants WHERE id = ?`,
 		reasonTenantAdmin)
@@ -62,40 +77,50 @@ var _ tenant.Lookup = (*Tenants)(nil)
 func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	var (
 		t                tenant.Tenant
-		tid              string
+		tid, status      string
 		created, updated int64
 	)
-	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes,
-		&t.StorageQuotaBytes, &created, &updated); err != nil {
+	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
+		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground,
+		&created, &updated); err != nil {
 		return nil, err
 	}
 	t.ID = tenant.ID(tid)
+	t.Status = tenant.Status(status)
 	t.CreatedAt = fromMillis(created)
 	t.UpdatedAt = fromMillis(updated)
 	return &t, nil
 }
 
-// Create validates t, assigns it a new ID and timestamps, and stores it. It
-// returns the stored tenant, ErrInvalid for invalid fields (including a
-// preset ID) and ErrConflict when the FQDN is already used.
+// Create validates t, assigns it a new ID and timestamps, and stores it.
+// Unset settings take their defaults ([tenant.Tenant.WithDefaults]): the
+// ceiling is the transfer limit, the colors are the default ones and the
+// status is active. It returns the stored tenant, ErrInvalid for invalid
+// fields (including a preset ID, a status other than active, or a transfer
+// limit above the ceiling, the ceiling being at most
+// [tenant.MaxTransferLimit]) and ErrConflict when the FQDN is already used.
 func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	if !t.ID.IsZero() {
 		return nil, invalid("tenant id is assigned by the store")
 	}
-	if err := t.Validate(); err != nil {
+	c := t.WithDefaults()
+	if c.Status != tenant.StatusActive {
+		return nil, invalid("a new tenant is active")
+	}
+	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	newID, err := r.db.newID(id.Tenant)
 	if err != nil {
 		return nil, wrap("create tenant", err)
 	}
-	c := t.Clone()
 	c.ID = tenant.ID(newID)
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
 	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
-			c.MaxTransferBytes, c.StorageQuotaBytes, toMillis(now), toMillis(now))
+			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
+			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, toMillis(now), toMillis(now))
 		return err
 	})
 	if err != nil {
@@ -104,7 +129,7 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	return c, nil
 }
 
-// Get returns the tenant tid, or ErrNotFound.
+// Get returns the tenant tid, whatever its status, or ErrNotFound.
 func (r *Tenants) Get(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	if err := tid.Validate(); err != nil {
 		return nil, fmt.Errorf("store: get tenant: %w", ErrNotFound)
@@ -121,8 +146,9 @@ func (r *Tenants) Get(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error
 	return t, nil
 }
 
-// TenantByFQDN returns the tenant served by the normalized host name fqdn.
-// It implements [tenant.Lookup]: an unknown host yields an error wrapping
+// TenantByFQDN returns the active tenant served by the normalized host name
+// fqdn. It implements [tenant.Lookup]: an unknown host, or the host of a
+// tenant being deleted ([tenant.StatusDeleting]), yields an error wrapping
 // both tenant.ErrUnknownTenant and ErrNotFound.
 func (r *Tenants) TenantByFQDN(ctx context.Context, fqdn string) (*tenant.Tenant, error) {
 	var t *tenant.Tenant
@@ -149,7 +175,7 @@ type TenantListOptions struct {
 	Limit int
 }
 
-// List returns a page of tenants ordered by ID, which is approximately
+// List returns a page of tenants, whatever their status, ordered by ID, which is approximately
 // creation order (IDs created in the same millisecond sort randomly). A
 // malformed cursor yields ErrInvalid.
 func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenant.Tenant], error) {
@@ -172,11 +198,15 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 	return paginate(items, limit, func(t *tenant.Tenant) string { return string(t.ID) }), nil
 }
 
-// Update stores the modifiable fields of t (name, FQDN, language, limits)
-// and refreshes UpdatedAt. It returns the stored tenant, ErrInvalid for
-// invalid fields, ErrNotFound when the tenant does not exist and ErrConflict
-// when the new FQDN is already used. Callers must invalidate the
-// tenant.Resolver cache for the old and new FQDN.
+// Update stores the modifiable fields of t (name, FQDN, language, limits,
+// colors, asset flags) and refreshes UpdatedAt; the status only changes
+// with [Tenants.SetStatus], so t.Status must merely be valid. The transfer
+// limit must not exceed the ceiling, itself at most
+// [tenant.MaxTransferLimit]; who may change which field is the caller's
+// rule. It returns the stored tenant, ErrInvalid for invalid fields,
+// ErrNotFound when the tenant does not exist or is being deleted, and
+// ErrConflict when the new FQDN is already used. Callers must invalidate
+// the tenant.Resolver cache for the old and new FQDN.
 func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
 		return nil, invalid("tenant id is required")
@@ -188,7 +218,8 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	var out *tenant.Tenant
 	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
-			t.MaxTransferBytes, t.StorageQuotaBytes, now, string(t.ID))
+			t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
+			t.HasLogo, t.HasBackground, now, string(t.ID))
 		if err != nil {
 			return err
 		}
@@ -204,15 +235,78 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	return out, nil
 }
 
-// Delete removes the tenant tid and, by cascade, every row it owns,
-// including its wrapped keys (the crypto-erase of its files and secrets),
-// then scrubs the database files ([DB.ScrubDeleted]). It returns
-// ErrNotFound when the tenant does not exist. A scrub left incomplete by
-// active readers (ErrScrubBusy) is logged as a warning, not returned; any
-// other scrub failure is returned, the tenant being deleted. Erasing the
-// tenant's files on disk is the caller's job.
+// SetStatus moves the tenant tid to status and refreshes UpdatedAt.
+// [tenant.StatusDeleting] starts a deletion: the tenant stops resolving
+// from its FQDN at once (callers also invalidate the tenant.Resolver
+// cache), refuses [Tenants.Update], and [Tenants.ListDeleting] finds it
+// again if the deletion is interrupted. It takes the tenant lock, so that a
+// transfer creation in progress either commits first (and is erased with
+// the tenant) or sees the new status and fails. It returns ErrInvalid for an
+// unknown status and ErrNotFound when the tenant does not exist.
+func (r *Tenants) SetStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error {
+	if !status.Valid() {
+		return invalid("unknown tenant status")
+	}
+	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+		// Ordered with the transfer creations of the tenant, which check
+		// under this lock that it is still active (Transfers.CreateTx).
+		if err := tx.lockTenant(ctx, tid); err != nil {
+			return err
+		}
+		res, err := tx.Exec(ctx, qTenantSetStatus, string(status), toMillis(r.db.now()), string(tid))
+		if err != nil {
+			return err
+		}
+		return expectOne(res)
+	})
+	if err != nil {
+		return wrap("set tenant status", err)
+	}
+	return nil
+}
+
+// ListDeleting returns the IDs of the tenants in [tenant.StatusDeleting],
+// sorted, so that the deletions interrupted by a stop resume at start-up
+// or from the cleanup task. It returns identifiers only.
+func (r *Tenants) ListDeleting(ctx context.Context) ([]tenant.ID, error) {
+	var ids []tenant.ID
+	err := r.db.systemScope(reasonTenantResume).ReadTx(ctx, func(tx *SystemTx) error {
+		rows, err := tx.Query(ctx, qTenantListDeleting)
+		if err != nil {
+			return err
+		}
+		ids, err = collect(rows, func(r *sql.Rows) (tenant.ID, error) {
+			var s string
+			err := r.Scan(&s)
+			return tenant.ID(s), err
+		})
+		return err
+	})
+	if err != nil {
+		return nil, wrap("list deleting tenants", err)
+	}
+	return ids, nil
+}
+
+// Delete removes the tenant tid and, by cascade, every row it owns, then
+// scrubs the database files ([DB.ScrubDeleted]). The cryptographic erasure
+// comes first (spec 16.1, T-110): every wrapped key of the tenant (file
+// keys, SMTP password, sealed tokens) must have been destroyed beforehand
+// ([WrappedKeys.ListIDs], [WrappedKeys.Delete]); otherwise it returns
+// [ErrKeysRemain] and deletes nothing. It returns ErrNotFound when the
+// tenant does not exist. A scrub left incomplete by active readers
+// (ErrScrubBusy) is logged as a warning, not returned; any other scrub
+// failure is returned, the tenant being deleted. Erasing the tenant's
+// files on disk is the caller's job.
 func (r *Tenants) Delete(ctx context.Context, tid tenant.ID) error {
 	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+		var keys int64
+		if err := tx.QueryRow(ctx, qTenantKeyCount, string(tid)).Scan(&keys); err != nil {
+			return err
+		}
+		if keys > 0 {
+			return ErrKeysRemain
+		}
 		res, err := tx.Exec(ctx, qTenantDelete, string(tid))
 		if err != nil {
 			return err

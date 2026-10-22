@@ -103,6 +103,12 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
 	`ended_at`
 
+// reasonTransferTenantActive is the review of qTransferTenantActive: the
+// tenant slot filters transfers, and the join reads the tenants row of the
+// same tenant only (n.id = t.tenant_id); on PostgreSQL the tenants policy
+// also restricts a tenant scope to its own row.
+const reasonTransferTenantActive = "transfer creation: refuse a tenant whose deletion started (same tenant row only)"
+
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
 	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
@@ -163,6 +169,14 @@ var (
 	// was destroyed first (T-110).
 	qTransferDelete = tenantQuery(
 		`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`)
+	// qTransferTenantActive counts the transfer just inserted when its
+	// tenant is still active: a creation that resolved the tenant before
+	// its deletion started finds 0 and is rolled back, so that no row (and
+	// no file) appears in a tenant being erased.
+	qTransferTenantActive = reviewedTenantQuery(
+		`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id
+		WHERE t.tenant_id = ? AND t.id = ? AND n.status = 'active'`,
+		reasonTransferTenantActive)
 
 	qRecipientInsert = tenantQuery(
 		`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`)
@@ -546,8 +560,9 @@ func checkKey(ctx context.Context, tx *ScopedTx, keyID, purpose, msg string) err
 // It returns ErrInvalid for a malformed field (1 to MaxTransferRecipients
 // distinct recipients and 1 to MaxTransferFiles files are required; a file
 // may be created completed, such as an empty file), ErrNotFound when the
-// tenant, the invitation or a data key does not exist (or belongs to
-// another tenant), and ErrConflict when an identifier, an upload
+// tenant is not active (its deletion started: checked under the tenant
+// lock, in the same transaction as the inserts), or when the invitation or
+// a data key does not exist (or belongs to another tenant), and ErrConflict when an identifier, an upload
 // identifier, a storage name or a data key is already used, or when the
 // sender used the idempotency key for another transfer within
 // IdempotencyRetention of t.CreatedAt (a key older than that is released
@@ -584,6 +599,12 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 	if err != nil {
 		return err
 	}
+	// The tenant lock orders the creation with the start of a deletion
+	// (Tenants.SetStatus takes it too), so that the status read below is
+	// final until the commit.
+	if err := tx.lock(ctx); err != nil {
+		return err
+	}
 	created := r.db.orNow(t.CreatedAt)
 	if t.IdempotencyKey != "" {
 		_, err := tx.Exec(ctx, qTransferReleaseKey, t.SenderEmail, t.IdempotencyKey,
@@ -598,6 +619,13 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		toMillis(created))
 	if err != nil {
 		return err
+	}
+	var active int
+	if err := tx.QueryRow(ctx, qTransferTenantActive, t.ID).Scan(&active); err != nil {
+		return err
+	}
+	if active == 0 {
+		return ErrNotFound
 	}
 	for i, email := range rcpts {
 		if _, err := tx.Exec(ctx, qRecipientInsert, t.ID, i, email); err != nil {

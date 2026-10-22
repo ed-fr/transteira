@@ -7,6 +7,7 @@
 //	delete-after-download   1 min             transfers deleted after their first download, once the grace period is over
 //	expire                  1 min             available transfers past their expiry, transfers scanning for 30 days; files of rejected transfers
 //	abandoned-uploads       15 min            uploading transfers whose uploads expired (upload TTL or maximum age)
+//	tenant-deletions        1 h               tenants left in the deleting status: completes their erasure (EraseTenant)
 //	purge-rows              1 h               ended transfers after 30 days, codes, sessions, password failures, verified addresses, invitations;
 //	                                          admin sessions, admin activations, admin login failures, audit events after 12 months
 //	orphans                 24 h              files of the tenant directories that the database proves orphaned
@@ -73,6 +74,45 @@
 // that could not be analyzed) only gets step 2 and stays rejected. A
 // transfer that the antivirus made available between steps 2 and 4 (it was
 // still scanning at its expiry) is expired anyway: its keys are gone.
+//
+// # Tenant deletion
+//
+// [Sweeper.EraseTenant] erases a tenant whose deletion was started
+// (tenant.StatusDeleting, which stops it from resolving at once; any other
+// existing tenant is refused with ErrTenantNotDeleting). Under the run
+// mutex, it:
+//
+//  1. erases every transfer of the tenant, whatever its status, through the
+//     erasure path above (kind "tenant": always due, the file keys
+//     destroyed before the files, checkpoints and state, the sealed token
+//     destroyed in the final transaction, which deletes the transfer row
+//     instead of marking it); the live transfers are listed at once
+//     ([store.Transfers.IDsByStatus]), the ended ones page after page
+//     ([store.Transfers.ListEnded]), and those already without any key skip
+//     the file step, their leftovers going with the directory;
+//  2. destroys every wrapped key left to the tenant (SMTP password, any
+//     other), walked with [store.WrappedKeys.ListIDs], one transaction per
+//     page;
+//  3. removes the tenant directory from the data volume with everything in
+//     it, branding assets included ([Files.RemoveTenantDir]);
+//  4. deletes the tenant row ([store.Tenants.Delete], refused while a key
+//     remains), whose cascades take every row left; the audit events stay
+//     until their 12-month purge;
+//  5. removes the directory again, in case a request that resolved the
+//     tenant before its deletion started recreated it (no transfer can be
+//     created any more: [store.Transfers.CreateTx] requires an active
+//     tenant; a failure is only logged), then records tenant.deleted
+//     (actor SystemActor, details name and FQDN) when this run deleted the
+//     row, so exactly once per tenant, whether the super admin's request
+//     or tenant-deletions completes it; an audit failure is logged;
+//  6. scrubs the database, also after a failure.
+//
+// Every step is idempotent: a failure returns an error and leaves the
+// tenant in the deleting status, and the next call resumes; a tenant already
+// gone yields nil. tenant-deletions lists the deleting tenants
+// ([store.Tenants.ListDeleting]) at start and every hour and erases each, so
+// that a deletion interrupted by a crash completes; a tenant that fails is
+// logged and makes the run fail (LastRun unmoved).
 //
 // # Row purges
 //

@@ -135,6 +135,10 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 		config.EnvLogLevel:      "debug",
 		config.EnvClamAVAddr:    o.clamd,
 		config.EnvAdminHosts:    adminHost,
+		// Mailpit listens on the loopback, which the default
+		// TT_SMTP_DENY_NETWORKS refuses (P21): keep the link-local and
+		// metadata addresses denied only.
+		config.EnvSMTPDenyNetworks: "169.254.0.0/16,fe80::/10,fd00:ec2::254/128",
 	}
 	if e.MigrateDSN != "" {
 		env[config.EnvDBMigrateDSN] = e.MigrateDSN

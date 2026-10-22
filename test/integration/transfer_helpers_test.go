@@ -528,6 +528,7 @@ func (d *depositEnv) setLimits(t *testing.T, maxTransfer, quota int64) {
 		t.Fatal(err)
 	}
 	tn.MaxTransferBytes, tn.StorageQuotaBytes = maxTransfer, quota
+	tn.MaxTransferCeiling = max(tn.MaxTransferCeiling, maxTransfer)
 	if _, err := d.db.Tenants().Update(ctx, tn); err != nil {
 		t.Fatalf("update tenant limits: %v", err)
 	}

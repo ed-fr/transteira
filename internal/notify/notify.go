@@ -148,9 +148,72 @@ type SMTPSource interface {
 	Get(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error)
 }
 
-// Renderer renders a mail template. *mail.Templates implements it.
+// Renderer renders a mail template of a tenant, with its customization
+// when lookup returns one. *mail.Templates implements it.
 type Renderer interface {
-	Render(name, lang string, data any) (mail.Message, error)
+	RenderFor(ctx context.Context, lookup mail.OverrideLookup, tenantID, name, lang string, data any) (mail.Message, error)
+}
+
+// TemplateStore reads the customized mail templates of a tenant; it returns
+// an error wrapping store.ErrNotFound when the tenant uses the default
+// template. *store.TenantEmailTemplates implements it.
+type TemplateStore interface {
+	Get(ctx context.Context, tid tenant.ID, key, lang string) (store.EmailTemplate, error)
+}
+
+// StoreOverrides adapts the customized templates of src to a
+// [mail.OverrideLookup]: a template that is not customized (store.ErrNotFound)
+// gives no override, any other failure is returned. The template name is
+// accepted in the internal form (verification_code) and read under its API
+// key (verification-code).
+func StoreOverrides(src TemplateStore) mail.OverrideLookup {
+	return func(ctx context.Context, tenantID, name, lang string) (*mail.TemplateSource, error) {
+		tid, err := tenant.ParseID(tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("notify: template lookup: %w", err)
+		}
+		t, err := src.Get(ctx, tid, strings.ReplaceAll(name, "_", "-"), lang)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			return nil, nil // no customization: the default template applies
+		case err != nil:
+			return nil, fmt.Errorf("notify: template lookup: %w", err)
+		}
+		return &mail.TemplateSource{Subject: t.Subject, HTML: t.BodyHTML, Text: t.BodyText}, nil
+	}
+}
+
+// NoOverrides is a [mail.OverrideLookup] for which every tenant uses the
+// default templates.
+func NoOverrides(context.Context, string, string, string) (*mail.TemplateSource, error) {
+	return nil, nil // no customization: the default template applies
+}
+
+// TolerantOverrides wraps lookup so that a lookup failure never stops a
+// mail: the failure is logged at WARN level, with the tenant ID and the
+// template name (never an address), and no override is returned, so the
+// default template is used. A customized template only changes the
+// wording; the default carries the same mandatory content (link, code,
+// files), and losing the mail (a scan notification is not retried, a
+// verification code would fail the request) is worse than sending it with
+// the default wording. A nil lookup is [NoOverrides].
+func TolerantOverrides(lookup mail.OverrideLookup, logger *slog.Logger) mail.OverrideLookup {
+	if lookup == nil {
+		return NoOverrides
+	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	return func(ctx context.Context, tenantID, name, lang string) (*mail.TemplateSource, error) {
+		src, err := lookup(ctx, tenantID, name, lang)
+		if err != nil {
+			logger.WarnContext(ctx, "customized mail template unreadable, the default template is used",
+				slog.String("tenant", tenantID), slog.String("template", name), slog.String("language", lang),
+				slog.Any("error", err))
+			return nil, nil // the default template applies
+		}
+		return src, nil
+	}
 }
 
 // Options tunes a [Notifier].
@@ -158,8 +221,13 @@ type Options struct {
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives one debug line per batch of mails built, without any
-	// address (nil discards).
+	// address, and the template lookup failures (nil discards).
 	Logger *slog.Logger
+	// Overrides returns the customized templates of the tenants, usually
+	// StoreOverrides(db.TenantEmailTemplates()); nil uses the default
+	// templates for every tenant. Its failures are tolerated (see
+	// [TolerantOverrides]).
+	Overrides mail.OverrideLookup
 }
 
 // Notifier builds the transfer notification mails (CLAUDE.md section 12.2)
@@ -174,6 +242,7 @@ type Notifier struct {
 	vault     Vault
 	smtp      SMTPSource
 	templates Renderer
+	overrides mail.OverrideLookup
 	now       func() time.Time
 	logger    *slog.Logger
 }
@@ -191,7 +260,10 @@ func New(vault Vault, smtp SMTPSource, templates Renderer, opts Options) *Notifi
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
-	return &Notifier{vault: vault, smtp: smtp, templates: templates, now: opts.Now, logger: opts.Logger}
+	return &Notifier{
+		vault: vault, smtp: smtp, templates: templates, overrides: TolerantOverrides(opts.Overrides, opts.Logger),
+		now: opts.Now, logger: opts.Logger,
+	}
 }
 
 // RecipientJobs builds the transfer_notification mail of every recipient:
@@ -218,9 +290,9 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 		TenantName: t.Name, SenderEmail: v.sender, Message: v.message, Link: link,
 		Files: v.files, ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, QR: true,
 	}
-	msg, err := n.templates.Render(mail.TemplateTransferNotification, n.language(t, tr), data)
+	msg, err := n.render(ctx, t, tr, mail.TemplateTransferNotification, data)
 	if err != nil {
-		return nil, fmt.Errorf("notify: render %s: %w", mail.TemplateTransferNotification, err)
+		return nil, err
 	}
 	settings, err := n.settings(ctx, t)
 	if err != nil {
@@ -378,9 +450,9 @@ func (n *Notifier) prepareDownload(tr TransferView, link string) (downloadView, 
 
 // senderJob renders a mail to the sender and wraps it in a job.
 func (n *Notifier) senderJob(ctx context.Context, t *tenant.Tenant, tr TransferView, sender, name string, data any) (mail.Job, error) {
-	msg, err := n.templates.Render(name, n.language(t, tr), data)
+	msg, err := n.render(ctx, t, tr, name, data)
 	if err != nil {
-		return mail.Job{}, fmt.Errorf("notify: render %s: %w", name, err)
+		return mail.Job{}, err
 	}
 	settings, err := n.settings(ctx, t)
 	if err != nil {
@@ -389,6 +461,16 @@ func (n *Notifier) senderJob(ctx context.Context, t *tenant.Tenant, tr TransferV
 	msg.To = []string{sender}
 	n.logBuilt(ctx, t, tr, name, 1)
 	return n.job(t, name, settings, msg), nil
+}
+
+// render renders template name of tenant t in the language of tr, with the
+// customization of the tenant when there is one.
+func (n *Notifier) render(ctx context.Context, t *tenant.Tenant, tr TransferView, name string, data any) (mail.Message, error) {
+	msg, err := n.templates.RenderFor(ctx, n.overrides, t.ID.String(), name, n.language(t, tr), data)
+	if err != nil {
+		return mail.Message{}, fmt.Errorf("notify: render %s: %w", name, err)
+	}
+	return msg, nil
 }
 
 // job assembles a mail job of tenant t.

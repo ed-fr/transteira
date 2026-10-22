@@ -43,6 +43,7 @@ const (
 	EnvScanWorkers              = "TT_SCAN_WORKERS"
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
+	EnvSMTPDenyNetworks         = "TT_SMTP_DENY_NETWORKS"
 	EnvBackupTime               = "TT_BACKUP_TIME"
 	EnvBackupKeep               = "TT_BACKUP_KEEP"
 )
@@ -75,6 +76,17 @@ const (
 	DefaultBackupTime               = "02:30"
 	DefaultBackupKeep               = "7"
 )
+
+// DefaultSMTPDenyNetworks lists the networks a tenant SMTP server may never
+// resolve to: loopback, link-local (including the cloud metadata addresses
+// 169.254.169.254 and fd00:ec2::254), the Alibaba Cloud metadata address
+// 100.100.100.200 (only that address: the rest of the shared address space
+// 100.64.0.0/10 is used by carrier-grade NAT and overlay networks), "this
+// network", and the IPv4-compatible IPv6 addresses ::/96, which include the
+// unspecified address. Private ranges stay allowed for internal relays
+// (§12.1).
+const DefaultSMTPDenyNetworks = "127.0.0.0/8,::1/128,169.254.0.0/16,fe80::/10," +
+	"fd00:ec2::254/128,100.100.100.200/32,0.0.0.0/8,::/96"
 
 // envPrefix is the prefix shared by every TransTeira variable.
 const envPrefix = "TT_"
@@ -243,6 +255,21 @@ func Variables() []Var {
 			Description: "Capacity of the in-memory queue of mails waiting to be sent (between 1 " +
 				"and 100000). When it is full, requests that send a mail (verification codes, " +
 				"invitations) are answered 429 Too Many Requests.",
+		},
+		{
+			Name: EnvSMTPDenyNetworks, Group: "Mail", Default: DefaultSMTPDenyNetworks,
+			Description: "Comma-separated list of IP addresses or CIDR prefixes that a tenant SMTP " +
+				"server may never resolve to, checked on the address resolved at connection " +
+				"time (protection against server-side request forgery and DNS rebinding). The " +
+				"default denies loopback, link-local (including the cloud metadata addresses " +
+				"169.254.169.254 and fd00:ec2::254, and 100.100.100.200 on Alibaba Cloud), " +
+				"0.0.0.0/8 and the IPv4-compatible IPv6 addresses ::/96 (including the " +
+				"unspecified address ::). " +
+				"Private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) are NOT denied by " +
+				"default, so that an SMTP relay on the internal Docker network keeps working; " +
+				"consider adding the networks of the database and ClamAV containers. A value " +
+				"replaces the default entirely: to extend it, repeat the default list and append " +
+				"your networks, e.g. " + DefaultSMTPDenyNetworks + ",172.20.0.0/16.",
 		},
 		{
 			Name: EnvLogLevel, Group: "Logging", Default: DefaultLogLevel,

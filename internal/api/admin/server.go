@@ -1,7 +1,9 @@
 // Package admin implements the administration operations of the TransTeira
 // API (gen.StrictServerInterface) served on the admin host: first-run
 // setup, login with TOTP, own account and administrator accounts
-// (CLAUDE.md sections 6.5 and 6.6).
+// (CLAUDE.md sections 6.5 and 6.6), and the configuration of the tenants
+// (sections 5, 12, 13 and 14: general settings, branding, network rules,
+// SMTP, mail templates and legal documents) over internal/tenantadmin.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -81,6 +83,8 @@ type Server struct {
 	// tenants names the tenants of an administrator; nil until
 	// WithTenants.
 	tenants Tenants
+	// tenantSvc configures the tenants; nil until WithTenantService.
+	tenantSvc TenantService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the
