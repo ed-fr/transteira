@@ -24,5 +24,6 @@
 //     retry, so that HTTP handlers never wait for an SMTP server (T-89).
 //
 // Message bodies, subjects, verification codes and SMTP passwords are never
-// logged; recipients only appear in logs as [AddressHash] pseudonyms.
+// logged; recipients only appear in logs as [AddressHash] pseudonyms, keyed
+// per process so that they correlate within one process run only.
 package mail

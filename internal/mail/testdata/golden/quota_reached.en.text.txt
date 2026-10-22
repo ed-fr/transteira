@@ -1,0 +1,14 @@
+Hello,
+
+The entity Entity A & Co has reached its storage quota: 100% is used (100 GB out of 100 GB).
+
+New deposits are refused until space is freed, when transfers expire or are deleted.
+
+You can delete transfers that are no longer needed, or ask the super administrator for a larger quota.
+
+Administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

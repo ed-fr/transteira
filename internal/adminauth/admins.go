@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -131,9 +133,9 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	if err != nil {
 		return Account{}, Activation{}, invalid(FieldUsername)
 	}
-	email, err := store.NormalizeEmail(req.Email)
+	email, err := parseEmail(req.Email)
 	if err != nil {
-		return Account{}, Activation{}, invalid(FieldEmail)
+		return Account{}, Activation{}, err
 	}
 	if req.Role != store.RoleDelegatedAdmin {
 		return Account{}, Activation{}, invalid(FieldRole)
@@ -203,9 +205,11 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 		return Account{}, err
 	}
 	if u.Email != nil {
-		if _, err := store.NormalizeEmail(*u.Email); err != nil {
-			return Account{}, invalid(FieldEmail)
+		email, err := parseEmail(*u.Email)
+		if err != nil {
+			return Account{}, err
 		}
+		u.Email = &email
 	}
 	if u.Role != nil && *u.Role != store.RoleSuperAdmin && *u.Role != store.RoleDelegatedAdmin {
 		return Account{}, invalid(FieldRole)
@@ -569,4 +573,24 @@ func (s *Service) ListAccounts(ctx context.Context) ([]Account, error) {
 		}
 		cursor = page.NextCursor
 	}
+}
+
+// parseEmail validates the mail address of an administrator with the
+// restricted syntax of mail.ParseAddress (a bare dot-atom address: no
+// display name, angle brackets, list, quoted local part or comment), then
+// normalizes it like the store. Both checks run because each one refuses
+// what the other accepts, as for the deposit and transfer addresses: the
+// address is written in mail headers and SMTP commands, and echoed as the
+// OpenAPI Email of the Admin responses. It returns an *InvalidError on
+// FieldEmail otherwise.
+func parseEmail(raw string) (string, error) {
+	mailbox, err := mail.ParseAddress(strings.TrimSpace(raw))
+	if err != nil {
+		return "", invalid(FieldEmail)
+	}
+	email, err := store.NormalizeEmail(mailbox)
+	if err != nil {
+		return "", invalid(FieldEmail)
+	}
+	return email, nil
 }

@@ -65,10 +65,14 @@ transteira/
 │   ├── lifecycle/                   # Tâche périodique unique (§20, §23) : suppression après premier téléchargement,
 │   │                                # expirations, uploads abandonnés, purge des lignes (transferts terminés depuis
 │   │                                # 30 jours, codes, sessions, compteurs, adresses et invitations à 12 mois),
-│   │                                # réconciliation des orphelins sur disque, copie nocturne SQLite (VACUUM INTO)
+│   │                                # réconciliation des orphelins sur disque, copie nocturne SQLite (VACUUM INTO) ;
+│   │                                # EraseTransfer (suppression admin ou RGPD, antivirus bloqué avant la destruction des clés)
 │   ├── (blocklist → store)          # Liste de blocage (adresse, domaine, SHA-256) : pas de package dédié,
-│   │                                # dépôt store/blocklist.go, appliquée par deposit (et transfer pour les empreintes)
-│   ├── quota/                       # Limite par envoi, quota par entité, réservations, seuils 80 % / 100 %
+│   │                                # dépôt store/blocklist.go, gérée par tenantops, appliquée par deposit
+│   │                                # (et transfer pour les empreintes)
+│   ├── (réservations → transfer)    # Limite par envoi et réservation du quota sous verrou d'entité : transfer
+│   ├── quota/                       # Alertes de quota 80 % / 100 % (niveau en base, hystérésis 75 % / 95 %, une alerte
+│   │                                # par franchissement), destinataires, balayage toutes les 15 min
 │   ├── adminauth/                   # Comptes admin, argon2id, TOTP, codes de secours, sessions, premier lancement
 │   │                                # (couche d'authentification prévue pour accueillir un fournisseur OIDC en V2)
 │   ├── (authz → adminauth)          # Rôles et périmètres dans adminauth/authz.go (super_admin, delegated_admin ; auditor en V2)
@@ -83,7 +87,8 @@ transteira/
 │   │                                # points de reprise écrits de façon atomique
 │   ├── antivirus/                   # Client clamd (PING, INSTREAM), verdicts, limite de taille ; antivirustest : faux clamd
 │   ├── scan/                        # Worker d'analyse : file, balayage au démarrage, fail-closed, effacement des fichiers
-│   │                                # infectés, lien de téléchargement, envoi des notifications
+│   │                                # infectés, lien de téléchargement, envoi des notifications, Hold (transfert
+│   │                                # retiré de l'analyse pendant sa suppression)
 │   ├── notify/                      # Construction des mails de transfert (QR code inline, empreintes, alertes expéditeur)
 │   ├── mail/                        # SMTP par entité (sans chiffrement, STARTTLS, TLS), MIME, modèles FR/EN intégrés
 │   │                                # (templates/, variables {{nom}} sans logique), surcharge par entité, file d'envoi
@@ -92,13 +97,21 @@ transteira/
 │   ├── branding/                    # Images d'habillage (détection, décodage borné, réencodage), contraste WCAG, fond par défaut
 │   ├── tenantadmin/                 # Configuration des entités : droits, habillage, réseau, SMTP (test, DNS, garde SSRF),
 │   │                                # modèles, mentions légales, suppression
+│   ├── tenantops/                   # Opérations des entités : transferts (liste, détail, suppression, renvoi de la
+│   │                                # notification), invitations (liste, révocation), liste de blocage, journal
+│   │                                # d'audit de l'entité et journal global (super admin)
 │   ├── events/                      # Bus d'événements interne (mail, journal de sécurité ; webhooks et syslog en V1.1)
-│   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois)
+│   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois),
+│   │                                # garde-fou « aucune adresse dans les détails », caviardage des textes libres
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
 │   ├── maintenance/                 # État du mode maintenance (variable d'environnement + administration)
 │   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
-│   ├── gdpr/                        # Recherche et effacement des données d'une adresse
-│   ├── stats/                       # Statistiques par entité et globales, espace disque
+│   ├── datasubject/                 # Droits des personnes (RGPD) : recherche et effacement des données d'une adresse
+│   │                                # dans une entité, pseudonymisation de l'audit (anciennement prévu sous le nom gdpr/)
+│   ├── stats/                       # Statistiques par entité et globales (agrégats quotidiens, espace disque)
+│   ├── usage/                       # Compteurs d'activité par entité et par jour UTC, cumulés en mémoire et écrits
+│   │                                # toutes les 30 s (table tenant_daily_stats, sans donnée personnelle)
+│   ├── diskusage/                   # Taille et espace libre du système de fichiers des données (statfs / Windows)
 │   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/)
 │   ├── ratelimit/                   # Paniers par clé et fenêtres de verrouillage (bornés, horloge injectable)
 │   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage)

@@ -2,6 +2,8 @@ package mail
 
 import (
 	"fmt"
+	"math"
+	"math/bits"
 	"sort"
 	"strconv"
 	"strings"
@@ -201,6 +203,39 @@ var keyDefs = map[string]keyDef{
 			DeleteAt: sampleTime.Add(15 * time.Minute),
 		},
 	},
+	TemplateQuotaWarning: quotaKeyDef(QuotaWarningPercent, 82),
+	TemplateQuotaReached: quotaKeyDef(QuotaReachedPercent, 100),
+}
+
+// Thresholds of the quota alerts, in percent of the quota (CLAUDE.md
+// section 8.5), shown by the quota alert mails. Package quota raises the
+// alert levels at these same thresholds.
+const (
+	// QuotaWarningPercent is the threshold of [TemplateQuotaWarning].
+	QuotaWarningPercent = 80
+	// QuotaReachedPercent is the threshold of [TemplateQuotaReached].
+	QuotaReachedPercent = 100
+)
+
+// quotaKeyDef declares a quota alert key of the given threshold; the sample
+// uses usedPercent of a 500 GB quota.
+func quotaKeyDef(threshold, usedPercent int64) keyDef {
+	const sampleQuota = 500 << 30
+	return keyDef{
+		vars: []varSpec{
+			tenantVar,
+			{"usage_percent", VarText, true, "Share of the storage quota used, with the percent sign, rounded down."},
+			{"threshold_percent", VarText, false, "Threshold that triggered the alert, with the percent sign."},
+			{"used_size", VarText, false, "Storage used by the entity."},
+			{"quota_size", VarText, false, "Storage quota of the entity."},
+			{"admin_link", VarURL, false, "Link to the administration console."},
+		},
+		values: quotaValues(threshold),
+		sample: QuotaAlertData{
+			TenantName: sampleTenant, UsedBytes: sampleQuota / 100 * usedPercent, QuotaBytes: sampleQuota,
+			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	}
 }
 
 // Sample data of the previews.
@@ -388,6 +423,50 @@ func firstDownloadValues(l *labels, lang string, data any) (map[string]value, bo
 		"files":             simpleFilesBlock(lang, d.Files),
 		"deletion_notice":   deletion,
 	}, true
+}
+
+func quotaValues(threshold int64) func(*labels, string, any) (map[string]value, bool) {
+	return func(_ *labels, lang string, data any) (map[string]value, bool) {
+		d, ok := data.(QuotaAlertData)
+		if !ok {
+			return nil, false
+		}
+		return map[string]value{
+			"tenant_name":       textValue(d.TenantName),
+			"usage_percent":     textValue(formatPercent(lang, UsagePercent(d.UsedBytes, d.QuotaBytes))),
+			"threshold_percent": textValue(formatPercent(lang, threshold)),
+			"used_size":         textValue(FormatSize(lang, d.UsedBytes)),
+			"quota_size":        textValue(FormatSize(lang, d.QuotaBytes)),
+			"admin_link":        urlValue(d.AdminLink),
+		}, true
+	}
+}
+
+// UsagePercent is the share of quota that used represents, in percent,
+// rounded down, computed exactly (128-bit product, no float rounding); a
+// quota of 0 or less counts as fully used (100), a negative use as none.
+// A share beyond the int64 range, which no real size reaches, is capped
+// at math.MaxInt64. The quota alert mails and the audit events of package
+// quota share it.
+func UsagePercent(used, quota int64) int64 {
+	if quota <= 0 {
+		return 100
+	}
+	hi, lo := bits.Mul64(uint64(max(used, 0)), 100)
+	if hi >= uint64(quota) {
+		return math.MaxInt64
+	}
+	q, _ := bits.Div64(hi, lo, uint64(quota))
+	return int64(min(q, math.MaxInt64))
+}
+
+// formatPercent writes a percentage the way lang does: "82%" in English,
+// "82 %" with a non-breaking space in French.
+func formatPercent(lang string, p int64) string {
+	if lang == i18n.French {
+		return strconv.FormatInt(p, 10) + nbsp + "%"
+	}
+	return strconv.FormatInt(p, 10) + "%"
 }
 
 // --- Blocks ------------------------------------------------------------------

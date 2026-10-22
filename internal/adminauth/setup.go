@@ -68,9 +68,9 @@ func (s *Service) CreateSuperAdmin(ctx context.Context, req SetupRequest, client
 	if err != nil {
 		return SetupResult{}, invalid(FieldUsername)
 	}
-	email, err := store.NormalizeEmail(req.Email)
+	email, err := parseEmail(req.Email)
 	if err != nil {
-		return SetupResult{}, invalid(FieldEmail)
+		return SetupResult{}, err
 	}
 	if err := checkNewPassword(req.Password, FieldPassword); err != nil {
 		return SetupResult{}, err

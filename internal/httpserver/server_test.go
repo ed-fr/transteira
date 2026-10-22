@@ -1013,3 +1013,20 @@ func TestNoRedirectUnderAPI(t *testing.T) {
 		decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 	}
 }
+
+func TestResponseErrorClientGone(t *testing.T) {
+	t.Parallel()
+	var logs lockedBuffer
+	h := errorHandlers{logger: slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/", nil)
+	rec := httptest.NewRecorder()
+	h.responseError(rec, req, fmt.Errorf("tenantops: delete transfer: %w", context.Canceled))
+	if got := logs.String(); !strings.Contains(got, `"level":"DEBUG"`) || strings.Contains(got, `"level":"ERROR"`) {
+		t.Errorf("server error of a departed client not logged at debug level: %s", got)
+	}
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status %d", rec.Code)
+	}
+}

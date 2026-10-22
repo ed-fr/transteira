@@ -63,6 +63,12 @@ func mailKinds(n *Notifier, tn *tenant.Tenant) map[string]func() ([]mail.Job, er
 		mail.TemplateFirstDownload: func() ([]mail.Job, error) {
 			return one(n.FirstDownload(ctx, tn, tr, testNow, time.Time{}))
 		},
+		mail.TemplateQuotaWarning: func() ([]mail.Job, error) {
+			return n.QuotaAlert(ctx, tn, testQuotaData(), QuotaWarning, []Contact{{Email: "admin@entity-a.example.com"}})
+		},
+		mail.TemplateQuotaReached: func() ([]mail.Job, error) {
+			return n.QuotaAlert(ctx, tn, testQuotaData(), QuotaReached, []Contact{{Email: "admin@entity-a.example.com"}})
+		},
 	}
 }
 

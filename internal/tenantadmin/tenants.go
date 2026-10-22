@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/textsafe"
@@ -189,7 +190,7 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 		return TenantView{}, fmt.Errorf("tenantadmin: create tenant: %w", err)
 	}
 	s.invalidate(t.ID, t.FQDN)
-	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{"name": t.Name, "fqdn": t.FQDN})
+	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN})
 	return s.view(ctx, t)
 }
 
@@ -361,7 +362,7 @@ func (s *Service) DeleteTenant(ctx context.Context, p adminauth.Principal, tid t
 	// the client went away (it would only resume at the next hourly run).
 	ectx := context.WithoutCancel(ctx)
 	s.record(ectx, p, ip, tid, ActionTenantDeletionStarted, map[string]any{
-		"name": t.Name, "fqdn": t.FQDN, "resumed": resumed,
+		"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN, "resumed": resumed,
 	})
 	if err := s.eraser.EraseTenant(ectx, tid); err != nil {
 		return fmt.Errorf("tenantadmin: erase tenant: %w", err)

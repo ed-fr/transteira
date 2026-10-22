@@ -282,6 +282,10 @@ func TestServiceErrors(t *testing.T) {
 			}
 		}
 	}
+	p := expectProblem(t, serviceError(&adminauth.InvalidError{Field: adminauth.FieldEmail}), problem.CodeValidationFailed)
+	if !reflect.DeepEqual(p.Errors, []problem.FieldError{{Field: "/email", Code: fieldInvalidEmail}}) {
+		t.Errorf("email field errors %+v", p.Errors)
+	}
 	if got := serviceError(boom); got != boom { //nolint:errorlint // identity is the point
 		t.Errorf("serviceError(other) = %v, want it unchanged", got)
 	}

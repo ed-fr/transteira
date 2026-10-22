@@ -1,0 +1,14 @@
+Hello,
+
+The entity Entity A & Co has used 85% of its storage quota, above the alert threshold of 80%.
+
+Storage used: 85 GB out of 100 GB.
+
+When the quota is fully used, new deposits are refused until space is freed by expired or deleted transfers. You can delete transfers that are no longer needed, or ask the super administrator for a larger quota.
+
+Administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

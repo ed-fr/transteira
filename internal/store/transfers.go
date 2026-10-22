@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"net/netip"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -101,7 +102,7 @@ const IdempotencyRetention = 24 * time.Hour
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
 	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
-	`ended_at`
+	`ended_at, sender_ip, download_count`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -120,8 +121,8 @@ var (
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		created_at, sender_ip)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qTransferReleaseKey clears an idempotency key of the sender older
 	// than the retention, so that the key can be reused.
 	qTransferReleaseKey = tenantQuery(
@@ -286,6 +287,14 @@ type Transfer struct {
 	// (rejected, expired or deleted), zero before. The cleanup task deletes
 	// its rows EndedAt + 30 days ([Transfers.ListEnded]).
 	EndedAt time.Time
+	// SenderIP is the client IP of the sender when the transfer was
+	// created (an IPv4-mapped address is stored as IPv4), set at creation;
+	// the zero Addr when unknown (transfers created before the column
+	// existed, or created without one).
+	SenderIP netip.Addr
+	// DownloadCount counts the download starts of a file or of the archive
+	// ([Transfers.IncrementDownloadsTx]); 0 for a new transfer.
+	DownloadCount int64
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -470,8 +479,13 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("a new transfer cannot be downloaded")
 	case !t.EndedAt.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be ended")
+	case t.DownloadCount != 0:
+		return Transfer{}, invalid("a new transfer cannot be downloaded")
 	}
 	t.Status, t.TotalBytes = TransferUploading, total
+	if t.SenderIP.IsValid() {
+		t.SenderIP = t.SenderIP.Unmap().WithZone("")
+	}
 	return t, nil
 }
 
@@ -613,10 +627,14 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 			return err
 		}
 	}
+	var senderIP any
+	if t.SenderIP.IsValid() {
+		senderIP = t.SenderIP.String()
+	}
 	_, err = tx.Exec(ctx, qTransferInsert, t.ID, string(t.Status), t.SenderEmail, string(t.SenderKind),
 		nullText(t.InvitationID), t.Message, t.Language, t.ExpiryDays, nullText(t.PasswordHash),
 		t.DeleteAfterFirstDownload, t.TotalBytes, nullText(t.IdempotencyKey), nullText(t.RequestFingerprint),
-		toMillis(created))
+		toMillis(created), senderIP)
 	if err != nil {
 		return err
 	}
@@ -655,14 +673,14 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	var (
 		t                                Transfer
 		status, kind                     string
-		inv, pwd, key, fp, tokenKey      sql.NullString
+		inv, pwd, key, fp, tokenKey, ip  sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
 		downloaded, deleteAfter, ended   sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
-		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended)
+		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -671,6 +689,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.CreatedAt, t.FinalizedAt, t.ExpiresAt = fromMillis(created), nullMillis(finalized), nullMillis(expiration)
 	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
 	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
+	t.SenderIP = parseIP(ip.String)
 	return t, nil
 }
 

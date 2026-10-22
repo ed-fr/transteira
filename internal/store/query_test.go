@@ -364,6 +364,7 @@ var tenantAllowlist = map[string]int{
 	`INSERT INTO blocklist_entries (tenant_id, id, kind, value, comment, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND id > ? ORDER BY id LIMIT ?`:                    0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND kind = ? AND id > ? ORDER BY id LIMIT ?`:       0,
+	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND id = ?`:                                        0,
 	`DELETE FROM blocklist_entries WHERE tenant_id = ? AND id = ?`:                                                             0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND ( (kind = 'email' AND value = ?) ` +
 		`OR (kind = 'sha256' AND value = ?) OR (kind = 'domain' AND (value = ? OR ? LIKE ('%.' || value))) ) ORDER BY id`: 0,
@@ -431,7 +432,7 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`created_at, sender_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at < ?`: 0,
 	`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND id = ?`: 0,
@@ -523,6 +524,43 @@ var tenantAllowlist = map[string]int{
 	`SELECT id, at, actor_kind, actor, ip, action, object_kind, object_id, details FROM audit_events WHERE tenant_id = ? ` +
 		`AND at >= ? AND at <= ? AND (? = '' OR action = ?) AND (? = '' OR actor = ?) AND (at, id) < (?, ?) ` +
 		`ORDER BY at DESC, id DESC LIMIT ?`: 0,
+	// Operations of a tenant (0010): administrator view, GDPR erasure,
+	// usage counters and quota alerts.
+	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND transfer_id = ?`:                        0,
+	`UPDATE transfers SET download_count = download_count + 1 WHERE tenant_id = ? AND id = ?`:            0,
+	`SELECT id FROM transfers WHERE tenant_id = ? AND sender_email = ? ORDER BY id`:                      0,
+	`SELECT id FROM transfers WHERE tenant_id = ? AND invitation_id = ? ORDER BY id`:                     0,
+	`SELECT transfer_id FROM transfer_recipients WHERE tenant_id = ? AND email = ? ORDER BY transfer_id`: 0,
+	`DELETE FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? AND email = ?`:              0,
+	`SELECT count(*) FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ?`:                   0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ?` + invitationListTail:         0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND revoked_at IS NULL AND expires_at > ? ` +
+		`AND last_used_at IS NULL` + invitationListTail: 0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND revoked_at IS NULL AND expires_at > ? ` +
+		`AND last_used_at IS NOT NULL` + invitationListTail: 0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND revoked_at IS NULL AND expires_at <= ?` +
+		invitationListTail: 0,
+	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND revoked_at IS NOT NULL` +
+		invitationListTail: 0,
+	`SELECT count(*) FROM invitations WHERE tenant_id = ? AND email = ?`:                                                 0,
+	`SELECT id FROM invitations WHERE tenant_id = ? AND email = ? ORDER BY id`:                                           0,
+	`SELECT count(*) FROM invitations WHERE tenant_id = ? AND invited_by = ?`:                                            0,
+	`DELETE FROM invitations WHERE tenant_id = ? AND email = ?`:                                                          0,
+	`UPDATE invitations SET invited_by = ?, revoked_at = COALESCE(revoked_at, ?) WHERE tenant_id = ? AND invited_by = ?`: 2,
+	`DELETE FROM verified_addresses WHERE tenant_id = ? AND email = ?`:                                                   0,
+	`DELETE FROM verification_challenges WHERE tenant_id = ? AND email = ?`:                                              0,
+	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND email = ?`:                                                     0,
+	`SELECT count(*) FROM audit_events WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`:   0,
+	`UPDATE tenant_daily_stats SET transfers = transfers + ?, bytes_uploaded = bytes_uploaded + ?, ` +
+		`downloads = downloads + ?, bytes_downloaded = bytes_downloaded + ?, virus_detections = virus_detections + ? ` +
+		`WHERE tenant_id = ? AND day = ?`: 5,
+	`INSERT INTO tenant_daily_stats (tenant_id, day, transfers, bytes_uploaded, downloads, bytes_downloaded, ` +
+		`virus_detections) VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT day, transfers, bytes_uploaded, downloads, bytes_downloaded, virus_detections FROM tenant_daily_stats ` +
+		`WHERE tenant_id = ? AND day >= ? ORDER BY day`: 0,
+	`SELECT level, changed_at FROM tenant_quota_alerts WHERE tenant_id = ?`:                      0,
+	`UPDATE tenant_quota_alerts SET level = ?, changed_at = ? WHERE tenant_id = ? AND level = ?`: 2,
+	`INSERT INTO tenant_quota_alerts (tenant_id, level, changed_at) VALUES (?, ?, ?)`:            0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -534,6 +572,10 @@ var tenantAllowlist = map[string]int{
 var reviewedAllowlist = map[string]string{
 	`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id WHERE t.tenant_id = ? AND t.id = ? ` +
 		`AND n.status = 'active'`: reasonTransferTenantActive,
+	`SELECT ` + transferColumns + ` FROM transfers t WHERE t.tenant_id = ? AND (? = '' OR t.status = ?) ` +
+		`AND (? = '' OR t.sender_email = ? OR EXISTS (SELECT 1 FROM transfer_recipients r ` +
+		`WHERE r.tenant_id = t.tenant_id AND r.transfer_id = t.id AND r.email = ?)) ` +
+		`AND t.created_at > ? AND (t.created_at, t.id) < (?, ?) ORDER BY t.created_at DESC, t.id DESC LIMIT ?`: reasonTransferAdminList,
 	// Declared by the tests (above).
 	`SELECT r.value FROM tenant_network_rules r JOIN tenants t ON t.id = r.tenant_id WHERE r.tenant_id = ?`: "test only: exercises reviewedTenantQuery",
 }
@@ -677,6 +719,19 @@ var systemAllowlist = map[string]string{
 	`SELECT tenant_id, id, at, actor_kind, actor, ip, action, object_kind, object_id, details FROM audit_events WHERE at >= ? AND at <= ? AND (? = '' OR action = ?) AND (? = '' OR actor = ?) AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?`:                reasonAudit,
 	`SELECT id, purpose, key_id, blob, created_at FROM system_secrets WHERE key_id = ? ORDER BY id LIMIT ?`:                                                                                                                                                            reasonKeyRotation,
 	`UPDATE system_secrets SET blob = ?, key_id = ? WHERE id = ? AND key_id = ?`:                                                                                                                                                                                       reasonKeyRotation,
+	// Operations of a tenant (0010).
+	`SELECT tenant_id, CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
+		`WHERE status IN ('uploading', 'scanning', 'available') GROUP BY tenant_id ORDER BY tenant_id`: reasonUsedBytesAll,
+	`UPDATE audit_events SET actor = ? WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`: reasonAuditPseudonymise,
+	`SELECT tenant_id, CAST(sum(transfers) AS BIGINT), CAST(sum(bytes_uploaded) AS BIGINT), ` +
+		`CAST(sum(downloads) AS BIGINT), CAST(sum(bytes_downloaded) AS BIGINT), CAST(sum(virus_detections) AS BIGINT) ` +
+		`FROM tenant_daily_stats WHERE day >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonUsageAll,
+	`DELETE FROM tenant_daily_stats WHERE day < ?`: reasonUsagePurge,
+	`SELECT a.id, a.email, a.language FROM admins a JOIN admin_tenants t ON t.admin_id = a.id ` +
+		`WHERE t.tenant_id = ? AND a.role = 'delegated_admin' AND a.disabled = false AND a.password_hash IS NOT NULL ` +
+		`ORDER BY a.id`: reasonAdminContacts,
+	`SELECT id, email, language FROM admins WHERE role = 'super_admin' AND disabled = false AND password_hash IS NOT NULL ` +
+		`ORDER BY id`: reasonAdminContacts,
 	`DELETE FROM system_secrets WHERE id = ?`:                                                   reasonSystemSecrets,
 	`INSERT INTO system_secrets (id, purpose, key_id, blob, created_at) VALUES (?, ?, ?, ?, ?)`: reasonSystemSecrets,
 	`SELECT id, purpose, key_id, blob, created_at FROM system_secrets WHERE id = ?`:             reasonSystemSecrets,

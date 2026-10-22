@@ -36,6 +36,7 @@ type Archive struct {
 	files   []store.TransferFile
 	entries []zipstream.Entry
 	size    int64
+	ip      netip.Addr
 	release func()
 }
 
@@ -70,7 +71,7 @@ func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken
 	if err != nil {
 		return nil, err
 	}
-	return &Archive{svc: s, t: t, d: a.d, files: a.files, entries: entries, size: size, release: release}, nil
+	return &Archive{svc: s, t: t, d: a.d, files: a.files, entries: entries, size: size, ip: clientIP, release: release}, nil
 }
 
 // Close releases the stream slot of the archive, if Write did not already.
@@ -82,7 +83,11 @@ func (a *Archive) Close() { a.release() }
 func (a *Archive) Size() int64 { return a.size }
 
 // Write streams the archive to w, decrypting one file at a time, one chunk
-// at a time. When the whole archive was written without error, the
+// at a time. Calling Write is a download start: it first records the
+// transfer.downloaded audit event and counts one download (the HTTP layer
+// never calls it for HEAD); a failure of that recording is logged and the
+// archive is still written. When it returns, the plaintext bytes of the
+// files written are counted in the tenant usage. When the whole archive was written without error, the
 // transfer counts as downloaded (the first download mail and the deletion
 // after the first download follow, see the package documentation); a
 // partial write never counts; a transfer already downloaded is not
@@ -92,12 +97,19 @@ func (a *Archive) Size() int64 { return a.size }
 // slot when it returns.
 func (a *Archive) Write(ctx context.Context, w io.Writer) error {
 	defer a.release()
+	a.svc.downloadStarted(ctx, a.t, a.d.ID, archiveObject, a.ip)
+	var served int64
+	defer func() { a.svc.bytesServed(a.t.ID, served) }()
 	err := archiveFormat.Write(w, a.entries, func(i int) (io.Reader, error) {
-		return a.svc.openEntry(ctx, a.t.ID, a.files[i])
+		return a.svc.openEntry(ctx, a.t.ID, a.files[i], &served)
 	})
 	if err != nil {
 		a.svc.log(ctx, slog.LevelInfo, "archive not sent to its end", a.t.ID, a.d.ID, slog.Any("error", err))
 		return fmt.Errorf("download: write archive: %w", err)
+	}
+	served = 0
+	for _, f := range a.files {
+		served += f.Size
 	}
 	if !a.d.FirstDownloadedAt.IsZero() {
 		return nil
@@ -109,17 +121,31 @@ func (a *Archive) Write(ctx context.Context, w io.Writer) error {
 }
 
 // entryReader is the decrypted content of an archive entry; Close releases
-// the stored file (zipstream closes it once the entry is copied).
+// the stored file (zipstream closes it once the entry is copied). It adds
+// to served the bytes read, each read once followed by another, which
+// zipstream only does after writing what it read: a failed archive never
+// counts bytes the client did not get.
 type entryReader struct {
-	*crypto.Reader
-	osf *os.File
+	cr      *crypto.Reader
+	osf     *os.File
+	served  *int64
+	pending int64
+}
+
+// Read implements io.Reader.
+func (r *entryReader) Read(p []byte) (int, error) {
+	*r.served += r.pending
+	n, err := r.cr.Read(p)
+	r.pending = int64(n)
+	return n, err
 }
 
 // Close implements io.Closer.
-func (r entryReader) Close() error { return r.osf.Close() }
+func (r *entryReader) Close() error { return r.osf.Close() }
 
-// openEntry opens the stored file of f for sequential decryption.
-func (s *Service) openEntry(ctx context.Context, tid tenant.ID, f store.TransferFile) (io.Reader, error) {
+// openEntry opens the stored file of f for sequential decryption, counting
+// the bytes read in served.
+func (s *Service) openEntry(ctx context.Context, tid tenant.ID, f store.TransferFile, served *int64) (io.Reader, error) {
 	dek, err := s.vault.Open(ctx, tid, crypto.PurposeDEK, f.DEKKeyID)
 	if err != nil {
 		return nil, fmt.Errorf("open data key: %w", err)
@@ -134,5 +160,5 @@ func (s *Service) openEntry(ctx context.Context, tid tenant.ID, f store.Transfer
 		_ = osf.Close()
 		return nil, fmt.Errorf("read stored file: %w", err)
 	}
-	return entryReader{Reader: cr, osf: osf}, nil
+	return &entryReader{cr: cr, osf: osf, served: served}, nil
 }

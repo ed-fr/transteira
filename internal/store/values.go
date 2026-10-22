@@ -168,3 +168,20 @@ func upsert(ctx context.Context, tx *ScopedTx, update TenantQuery, updateArgs []
 	_, err = tx.Exec(ctx, insert, insertArgs...)
 	return err
 }
+
+// PseudonymPrefix starts the pseudonym that replaces the address of an
+// erased data subject (GDPR erasure): "erased-" followed by
+// PseudonymHexLen lowercase hexadecimal characters.
+const PseudonymPrefix = "erased-"
+
+// PseudonymHexLen is the number of hexadecimal characters of a pseudonym
+// after PseudonymPrefix.
+const PseudonymHexLen = 16
+
+// IsPseudonym reports whether s is a well-formed pseudonym of an erased
+// data subject: PseudonymPrefix followed by PseudonymHexLen lowercase
+// hexadecimal characters.
+func IsPseudonym(s string) bool {
+	rest, ok := strings.CutPrefix(s, PseudonymPrefix)
+	return ok && isLowerHex(rest, PseudonymHexLen)
+}

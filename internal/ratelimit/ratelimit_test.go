@@ -574,3 +574,29 @@ func BenchmarkWindowAllow(b *testing.B) {
 		w.Allow(keys[i%len(keys)])
 	}
 }
+
+func TestWindowRefund(t *testing.T) {
+	clk := newFakeClock()
+	w := NewWindow(2, time.Minute, WithClock(clk.Now))
+	w.Refund("unknown") // nothing counted: no effect, no panic
+	for range 2 {
+		if ok, _ := w.Allow("k"); !ok {
+			t.Fatal("refused below the limit")
+		}
+	}
+	if ok, _ := w.Allow("k"); ok {
+		t.Fatal("allowed above the limit")
+	}
+	w.Refund("k")
+	if ok, _ := w.Allow("k"); !ok {
+		t.Fatal("refunded slot not available")
+	}
+	// Events that left the window are not refunded twice.
+	clk.Advance(time.Minute)
+	w.Refund("k")
+	for range 2 {
+		if ok, _ := w.Allow("k"); !ok {
+			t.Fatal("refused after the window")
+		}
+	}
+}

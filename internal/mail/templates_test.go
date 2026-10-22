@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,12 @@ func goldenData() map[string]any {
 			DownloadedAt: time.Date(2027, time.October, 14, 16, 5, 0, 0, time.UTC),
 			DeleteAt:     time.Date(2027, time.October, 14, 16, 20, 0, 0, time.UTC),
 		},
+		TemplateQuotaWarning: QuotaAlertData{
+			TenantName: "Entity A & Co", UsedBytes: 85 << 30, QuotaBytes: 100 << 30, AdminLink: goldenAdminLink,
+		},
+		TemplateQuotaReached: QuotaAlertData{
+			TenantName: "Entity A & Co", UsedBytes: 100<<30 + 1, QuotaBytes: 100 << 30, AdminLink: goldenAdminLink,
+		},
 	}
 }
 
@@ -76,6 +83,8 @@ const (
 	hostileMessage = "Hello <b>Bob</b>,\nplease see https://phishing.example.com/login\n" +
 		`<a href="https://evil.example">click</a>` + "\n"
 	goldenLink = "https://transfer.entity-a.example.com/d/dl_abc123"
+	// goldenAdminLink is the console link of the quota alerts.
+	goldenAdminLink = "https://admin.transfer.example.com/admin"
 )
 
 var goldenExpiry = time.Date(2027, time.October, 20, 8, 30, 0, 0, time.UTC)
@@ -93,7 +102,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,first_download,invitation,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -161,6 +170,43 @@ func TestTemplatesEscaping(t *testing.T) {
 	m, err = Render(TemplateInvitation, "fr", data)
 	if err != nil || strings.Contains(m.Text, "Son message") || strings.Contains(m.HTML, "blockquote") {
 		t.Errorf("empty message: %v\n%s", err, m.Text)
+	}
+}
+
+func TestQuotaPercent(t *testing.T) {
+	for _, c := range []struct{ used, quota, want int64 }{
+		{0, 100, 0},
+		{79, 100, 79},
+		{799, 1000, 79},
+		{80, 100, 80},
+		{150, 100, 150},
+		{-5, 100, 0},
+		{5, 0, 100},
+		{5, -1, 100},
+		{1 << 62, 1 << 62, 100},
+		{math.MaxInt64, math.MaxInt64, 100},
+		{math.MaxInt64 - 1, math.MaxInt64, 99}, // exact: a float would round up to 100
+		{math.MaxInt64, 50, math.MaxInt64},     // quotient beyond int64: capped
+		{math.MaxInt64, 1, math.MaxInt64},      // 128-bit quotient overflow: capped
+	} {
+		if got := UsagePercent(c.used, c.quota); got != c.want {
+			t.Errorf("UsagePercent(%d, %d) = %d, want %d", c.used, c.quota, got, c.want)
+		}
+	}
+	if formatPercent("fr", 80) != "80 %" || formatPercent("en", 80) != "80%" {
+		t.Error("formatPercent")
+	}
+	// The threshold follows the template; the console link is the only link.
+	data := goldenData()[TemplateQuotaWarning].(QuotaAlertData)
+	for name, want := range map[string]string{TemplateQuotaWarning: "80%", TemplateQuotaReached: "100%"} {
+		vals, ok := keyDefs[name].values(labelsFor("en"), "en", data)
+		if !ok || vals["threshold_percent"].text != want || vals["usage_percent"].text != "85%" {
+			t.Errorf("%s: %+v", name, vals)
+		}
+		m, err := Render(name, "fr", data)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Subject, "Entity A & Co") {
+			t.Errorf("%s: %v %s", name, err, m.Subject)
+		}
 	}
 }
 

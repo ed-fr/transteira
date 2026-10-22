@@ -169,7 +169,7 @@ func TestPurgeRowsFailures(t *testing.T) {
 	})
 	for _, fault := range []string{
 		"listEnded", "deleteEnded", "purge:challenges", "purge:invitations",
-		"purgeSystem:admin_sessions", "purgeSystem:audit_events",
+		"purgeSystem:admin_sessions", "purgeSystem:audit_events", "purgeSystem:usage_counters",
 	} {
 		runEach(t, fault, func(t *testing.T, e storetest.Engine) {
 			ev := newEnv(t, e)
@@ -339,6 +339,36 @@ func TestPurgeRowsSystemOptions(t *testing.T) {
 		// than 11 months.
 		if ev.logs.count("admin_sessions=0 admin_activations=1 admin_login_failures=1 audit_events=2") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+	})
+}
+
+func TestPurgeRowsUsageCounters(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		cutoff := store.DayOf(ev.clock.Now()).AddDate(0, -UsageRetentionMonths, 0)
+		add := func(tn *tenant.Tenant, day time.Time) {
+			t.Helper()
+			if err := ev.db.TenantUsage().Add(ctx, tn.ID, day, store.UsageCounts{Transfers: 1}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		add(ev.a, cutoff.AddDate(0, 0, -1))
+		add(ev.a, cutoff)
+		add(ev.b, cutoff.AddDate(0, 0, -1))
+		ev.runTask(TaskPurgeRows)
+		if ev.logs.count("usage_counters=2") != 1 {
+			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		for tn, want := range map[*tenant.Tenant]int{ev.a: 1, ev.b: 0} {
+			got, err := ev.db.TenantUsage().Range(ctx, tn.ID, time.Time{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != want || (want == 1 && !got[0].Day.Equal(cutoff)) {
+				t.Fatalf("%s keeps %v, want %d day(s) from %v", tn.FQDN, got, want, cutoff)
+			}
 		}
 	})
 }

@@ -149,7 +149,7 @@ func (s *Sweeper) recordTenantDeleted(ctx context.Context, t *tenant.Tenant) {
 	ev := audit.Event{
 		TenantID: t.ID, ActorKind: store.ActorSystem, Actor: SystemActor, Action: ActionTenantDeleted,
 		ObjectKind: objectTenant, ObjectID: string(t.ID),
-		Details: map[string]any{"name": t.Name, "fqdn": t.FQDN},
+		Details: map[string]any{"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN},
 	}
 	if err := s.repo.audit(ctx, ev); err != nil {
 		s.logger.ErrorContext(ctx, "lifecycle: audit write failed", slog.String("action", string(ActionTenantDeleted)),

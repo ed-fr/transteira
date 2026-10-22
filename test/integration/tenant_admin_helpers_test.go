@@ -236,6 +236,7 @@ func tenantRows(t *testing.T, e storetest.Engine, tid string) map[string]int {
 		"tenant_network_rules", "blocklist_entries", "wrapped_keys", "tenant_smtp_settings", "invitations",
 		"verification_challenges", "verified_addresses", "deposit_sessions", "transfers", "transfer_recipients",
 		"transfer_files", "password_failures", "admin_tenants", "tenant_email_templates", "tenant_legal_documents",
+		"tenant_daily_stats", "tenant_quota_alerts",
 	} {
 		out[table] = countSystem(t, e, `SELECT COUNT(*) FROM `+table+` WHERE tenant_id = '`+tid+`'`)
 	}

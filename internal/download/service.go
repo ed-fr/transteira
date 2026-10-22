@@ -68,7 +68,8 @@ type SecurityLog interface {
 	Log(ev securitylog.Event) error
 }
 
-// Deps are the components the service relies on. Every field is required.
+// Deps are the components the service relies on. Every field is required,
+// except Usage.
 type Deps struct {
 	// DB stores the transfers and the password failure counters.
 	DB *store.DB
@@ -86,6 +87,9 @@ type Deps struct {
 	Mail MailQueue
 	// SecurityLog receives the wrong password and rate_limited events.
 	SecurityLog SecurityLog
+	// Usage receives the download starts and the bytes served, for the
+	// tenant statistics; nil counts nothing.
+	Usage Usage
 }
 
 // Options tunes a [Service].
@@ -107,6 +111,22 @@ type Options struct {
 	// CommitTimeout bounds the recording done once a response is over
 	// (DefaultCommitTimeout when <= 0).
 	CommitTimeout time.Duration
+	// StartWindow is how long a download start of a file or of the archive
+	// by a client (IPv4 address or IPv6 /64) keeps the next starts of the
+	// same object by the same client from being recorded again: audit
+	// event, download count and usage count (DefaultStartWindow when <=
+	// 0). The bytes served are always counted.
+	StartWindow time.Duration
+	// MaxStarts bounds the download starts remembered for that
+	// deduplication; when full, the oldest is forgotten
+	// (DefaultMaxStarts when <= 0).
+	MaxStarts int
+	// MaxStartsPerTransfer bounds the download starts recorded for one
+	// transfer within StartWindow, whatever the clients, so that a client
+	// cycling many keys cannot defeat the deduplication by eviction; beyond
+	// it, starts are not recorded until that window is over
+	// (DefaultMaxStartsPerTransfer when <= 0).
+	MaxStartsPerTransfer int
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the operational logs, which hold identifiers only:
@@ -142,10 +162,13 @@ type Service struct {
 	notifier  Notifier
 	mails     *mail.Retrier
 	seclog    SecurityLog
+	usage     Usage
 	opts      Options
 	logger    *slog.Logger
 	clock     func() time.Time
 	streams   streams
+	// starts deduplicates the download starts.
+	starts *startDedup
 	// events throttles the download_streams security events.
 	events *ratelimit.Limiter
 	// flushBytes is the newly served bytes that make a range state worth
@@ -168,20 +191,33 @@ func New(deps Deps, opts Options) *Service {
 	if opts.CommitTimeout <= 0 {
 		opts.CommitTimeout = DefaultCommitTimeout
 	}
+	if opts.StartWindow <= 0 {
+		opts.StartWindow = DefaultStartWindow
+	}
+	if opts.MaxStarts <= 0 {
+		opts.MaxStarts = DefaultMaxStarts
+	}
+	if opts.MaxStartsPerTransfer <= 0 {
+		opts.MaxStartsPerTransfer = DefaultMaxStartsPerTransfer
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
+	var usage Usage = noUsage{}
+	if deps.Usage != nil {
+		usage = deps.Usage
+	}
 	return &Service{
-		repo: storeRepo{db: deps.DB}, vault: deps.Vault, files: deps.Files, keys: deps.Keys,
-		passwords: deps.Passwords, notifier: deps.Notifier, seclog: deps.SecurityLog,
+		repo: storeRepo{db: deps.DB, audit: auditWriter(deps.DB)}, vault: deps.Vault, files: deps.Files, keys: deps.Keys,
+		passwords: deps.Passwords, notifier: deps.Notifier, seclog: deps.SecurityLog, usage: usage,
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
 		}),
 		opts: opts, logger: opts.Logger, clock: opts.Now, streams: streams{counts: map[streamKey]int{}},
-		events:     newEventThrottle(opts.Now),
+		events: newEventThrottle(opts.Now), starts: newStartDedup(opts.StartWindow, opts.MaxStarts, opts.MaxStartsPerTransfer),
 		flushBytes: flushBytes, locks: map[key]*lockEntry{}, pending: map[key]*pendingState{},
 	}
 }

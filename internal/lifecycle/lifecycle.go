@@ -78,6 +78,10 @@ const (
 	// AuditRetentionMonths is how long, in calendar months, the audit
 	// events are kept (CLAUDE.md sections 20 and 21.1).
 	AuditRetentionMonths = 12
+	// UsageRetentionMonths is how long, in calendar months, the daily usage
+	// counters of the statistics are kept: the 12-month series plus the
+	// current month.
+	UsageRetentionMonths = 13
 )
 
 // Errors of the [Sweeper].
@@ -130,7 +134,33 @@ type Files interface {
 	RemoveTenantDir(tid tenant.ID) error
 }
 
-// Deps are the components the sweeper relies on. Every field is required.
+// HoldIntent tells the antivirus worker why a transfer is held, which
+// decides the fate of the mails of a conclusion that committed meanwhile.
+type HoldIntent int
+
+const (
+	// HoldForErase holds a transfer about to be erased
+	// ([Sweeper.EraseTransfer]): the mails of a conclusion committed
+	// meanwhile are dropped, nobody is told about the transfer.
+	HoldForErase HoldIntent = iota
+	// HoldForEdit holds a transfer being edited (a recipient removed by a
+	// GDPR erasure): the mails of a conclusion committed meanwhile are
+	// deferred, and sent from the current state of the transfer once the
+	// last hold is released, unless it is being erased by then.
+	HoldForEdit
+)
+
+// Holder keeps a transfer away from the antivirus while it is erased
+// ([Sweeper.EraseTransfer], HoldForErase) or edited (HoldForEdit): Hold
+// cancels and waits for an analysis in progress, drops a queued one, and
+// release lets the worker queue the transfer again if it is still
+// scanning. *scan.Worker implements it.
+type Holder interface {
+	Hold(ctx context.Context, tid tenant.ID, trfID string, intent HoldIntent) (release func(), err error)
+}
+
+// Deps are the components the sweeper relies on. Every field is required,
+// except Holder.
 type Deps struct {
 	// DB stores the transfers and the other rows.
 	DB *store.DB
@@ -140,6 +170,9 @@ type Deps struct {
 	Remover Remover
 	// Files is the file storage of the tenants.
 	Files Files
+	// Holder is the antivirus worker, held by [Sweeper.EraseTransfer]; nil
+	// when there is none (tests, tools): nothing is held.
+	Holder Holder
 }
 
 // Options tunes a [Sweeper]. Zero values select the defaults.
@@ -212,6 +245,7 @@ type Sweeper struct {
 	repo    repo
 	remover Remover
 	files   Files
+	holder  Holder
 	fs      backupFS
 	now     func() time.Time
 	logger  *slog.Logger
@@ -277,9 +311,13 @@ func New(deps Deps, opts Options) *Sweeper {
 	if opts.Logger == nil {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
+	holder := deps.Holder
+	if holder == nil {
+		holder = noHolder{}
+	}
 	s := &Sweeper{
 		repo:    storeRepo{db: deps.DB, vault: deps.Vault},
-		remover: deps.Remover, files: deps.Files, fs: osFS(),
+		remover: deps.Remover, files: deps.Files, holder: holder, fs: osFS(),
 		now: opts.Now, logger: opts.Logger,
 		endedRetention:       orDefault(opts.EndedRetention, EndedRetention),
 		orphanGrace:          orDefault(opts.OrphanGrace, OrphanGrace),

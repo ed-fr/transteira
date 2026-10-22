@@ -76,6 +76,37 @@
 // an open circuit is retried for Options.MailRetryFor. A mail that cannot be
 // sent never changes the status of the transfer. Logs never hold an address
 // or a token.
+//
+// # Holds
+//
+// [Worker.Hold] keeps a transfer away from the worker while an
+// administrator or a GDPR erasure deletes it (lifecycle EraseTransfer,
+// intent lifecycle.HoldForErase) or a GDPR erasure removes one of its
+// recipients (lifecycle.HoldForEdit): an analysis in progress is canceled,
+// without counting an attempt and without concluding or sending any mail,
+// and Hold returns once it has stopped; a queued transfer, or one waiting
+// for a retry, is dropped; [Worker.Enqueue] and the sweeps ignore it. Holds
+// are counted per transfer. When the last one is released, the transfer is
+// queued again if it is still scanning in the database.
+//
+// A conclusion that was already committing when the hold arrived may still
+// make the transfer available or reject it. Whether a hold is present is
+// checked again under the worker lock right before its mails are queued.
+// Under an erasure hold, the mails are dropped: the holder erases the
+// transfer. Under edit holds only, they are deferred: the last release
+// rebuilds them from the current state of the transfer (its remaining
+// recipients, its download link unsealed from the database) and queues
+// them when it is still available, or still rejected. An erasure hold
+// taken meanwhile cancels the deferred mails.
+//
+// # Audit and usage
+//
+// Once its status is committed, an infected file records file.infected
+// (details: transfer ID and signature name) and counts one virus detection
+// for the statistics (Deps.Usage); a file accepted without analysis records
+// file.not_scanned (details: transfer ID and reason, too_large or
+// encrypted). The actor is the system ([SystemActor]). The audit is best
+// effort: a failure is logged, never returned, and never changes a status.
 package scan
 
 import (
@@ -84,12 +115,15 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/antivirus"
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/store"
@@ -120,8 +154,9 @@ type Scanner interface {
 	Ping(ctx context.Context) error
 }
 
-// Vault opens the data keys of the files and seals the download tokens.
-// *masterkey.Vault implements it.
+// Vault opens the data keys of the files, seals the download tokens and
+// unseals them for the mails deferred by a hold. *masterkey.Vault
+// implements it.
 type Vault interface {
 	Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID string) ([]byte, error)
 	SealTx(ctx context.Context, tx *store.ScopedTx, p crypto.Purpose, plaintext []byte) (string, error)
@@ -152,7 +187,24 @@ type MailQueue interface {
 	Enqueue(job mail.Job) error
 }
 
-// Deps are the components the worker relies on. Every field is required.
+// AuditWriter records audit events in the scope of a tenant.
+// *audit.Writer implements it.
+type AuditWriter interface {
+	RecordScoped(ctx context.Context, tid tenant.ID, ev audit.Event) error
+}
+
+// UsageCounter counts the virus detections of the statistics, in memory,
+// without blocking.
+type UsageCounter interface {
+	VirusDetected(tid tenant.ID, at time.Time)
+}
+
+// SystemActor is the actor (store.ActorSystem) of the audit events the
+// worker records.
+const SystemActor = "antivirus"
+
+// Deps are the components the worker relies on. Every field is required,
+// except Audit and Usage.
 type Deps struct {
 	// DB stores the transfers.
 	DB *store.DB
@@ -168,6 +220,11 @@ type Deps struct {
 	Notifier Notifier
 	// Mail is the mail queue.
 	Mail MailQueue
+	// Audit records file.infected and file.not_scanned; nil records
+	// nothing.
+	Audit AuditWriter
+	// Usage counts the virus detections; nil counts nothing.
+	Usage UsageCounter
 }
 
 // Options tunes a [Worker]. Zero values select the defaults.
@@ -203,6 +260,27 @@ type task struct {
 	k key
 }
 
+// holdState tracks the holds of a held transfer ([Worker.Hold]).
+type holdState struct {
+	// count is the number of holds in progress.
+	count int
+	// erase is the number of them taken for an erasure.
+	erase int
+	// pending is set when the mails of a conclusion were deferred under
+	// edit holds: the last release sends them.
+	pending bool
+}
+
+// run is a transfer being processed.
+type run struct {
+	// cancel cancels its processing, for a hold.
+	cancel context.CancelFunc
+	// done is closed once the processing has returned and its task ended.
+	done chan struct{}
+	// held is set when a hold canceled it.
+	held bool
+}
+
 // Worker is the antivirus worker. Create it with [New], start it with
 // [Worker.Start] and stop it with [Worker.Close]. It is safe for concurrent
 // use; one Worker must serve the whole instance, since it holds the
@@ -214,6 +292,8 @@ type Worker struct {
 	scanner  Scanner
 	remover  Remover
 	notifier Notifier
+	audit    AuditWriter
+	usage    UsageCounter
 	mails    *mail.Retrier
 	opts     Options
 	logger   *slog.Logger
@@ -230,6 +310,10 @@ type Worker struct {
 	// retry: the in-process lock of each transfer.
 	known   map[key]bool
 	retries map[key]int
+	// runs holds the transfers being processed.
+	runs map[key]*run
+	// holds tracks the holds of each held transfer ([Worker.Hold]).
+	holds   map[key]*holdState
 	timers  map[*time.Timer]task
 	running int
 	// released counts the transfers released, for the sweep.
@@ -274,12 +358,14 @@ func New(deps Deps, opts Options) *Worker {
 	w := &Worker{
 		repo: storeRepo{db: deps.DB, vault: deps.Vault}, vault: deps.Vault, files: deps.Files,
 		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier,
+		audit: deps.Audit, usage: deps.Usage,
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
 		}),
 		opts: opts, logger: opts.Logger, now: opts.Now, newToken: id.NewDownloadToken,
 		sweepLimit: store.ScanSweepLimit,
 		known:      map[key]bool{}, retries: map[key]int{}, timers: map[*time.Timer]task{},
+		runs: map[key]*run{}, holds: map[key]*holdState{},
 		refusals: map[string]int{},
 	}
 	w.changed = sync.NewCond(&w.mu)
@@ -288,19 +374,19 @@ func New(deps Deps, opts Options) *Worker {
 
 // Enqueue asks for the analysis of the transfer transferID of tenant tid.
 // It never blocks. A transfer already queued, being processed or waiting
-// for a retry is ignored, and so is any transfer once the worker is closed
-// (the start-up sweep resumes it). Its signature matches transfer
-// Options.OnFinalized.
+// for a retry is ignored, and so is a held transfer ([Worker.Hold]) and any
+// transfer once the worker is closed (the start-up sweep resumes it). Its
+// signature matches transfer Options.OnFinalized.
 func (w *Worker) Enqueue(tid tenant.ID, transferID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.enqueueLocked(key{tid: tid, id: transferID})
 }
 
-// enqueueLocked queues k unless it is known or the worker is closed, and
-// reports whether it was queued. w.mu must be held.
+// enqueueLocked queues k unless it is known, held or the worker is closed,
+// and reports whether it was queued. w.mu must be held.
 func (w *Worker) enqueueLocked(k key) bool {
-	if w.closed || w.known[k] {
+	if w.closed || w.known[k] || w.holds[k] != nil {
 		return false
 	}
 	w.known[k] = true
@@ -388,45 +474,199 @@ func (w *Worker) shutdown() {
 // loop runs tasks until the worker is closed.
 func (w *Worker) loop(ctx context.Context) {
 	for {
-		t, ok := w.next()
+		t, tctx, ok := w.next(ctx)
 		if !ok {
 			return
 		}
-		w.finishTask(t, w.process(ctx, t.k))
+		w.finishTask(t, w.process(tctx, t.k))
 	}
 }
 
-// next waits for a task; it returns false once the worker is closed.
-func (w *Worker) next() (task, bool) {
+// next waits for a task and registers it as running, with a context
+// derived from ctx that a hold cancels; it returns false once the worker is
+// closed.
+func (w *Worker) next(ctx context.Context) (task, context.Context, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for len(w.fifo) == 0 && !w.closed {
 		w.changed.Wait()
 	}
 	if w.closed {
-		return task{}, false
+		return task{}, nil, false
 	}
 	t := w.fifo[0]
 	w.fifo[0] = task{}
 	w.fifo = w.fifo[1:]
 	w.running++
-	return t, true
+	tctx, cancel := context.WithCancel(ctx)
+	w.runs[t.k] = &run{cancel: cancel, done: make(chan struct{})}
+	return t, tctx, true
 }
 
 // finishTask ends a task: a transfer is retried after retry when it is
-// positive, released otherwise.
+// positive and the transfer is not held, released otherwise; a hold waiting
+// for it is woken.
 func (w *Worker) finishTask(t task, retry time.Duration) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.running--
 	defer w.changed.Broadcast()
-	if retry > 0 && !w.closed {
+	r := w.runs[t.k]
+	delete(w.runs, t.k)
+	r.cancel()
+	close(r.done)
+	if r.held && !w.closed && w.holds[t.k] == nil {
+		// The holds that canceled it gave up before it stopped: it is
+		// processed again.
+		w.forgetLocked(t.k)
+		w.enqueueLocked(t.k)
+		return
+	}
+	if retry > 0 && !w.closed && w.holds[t.k] == nil {
 		w.scheduleLocked(task{k: t.k}, retry)
 		return
 	}
-	delete(w.known, t.k)
-	delete(w.retries, t.k)
+	w.forgetLocked(t.k)
+}
+
+// forgetLocked releases the in-process lock of k. w.mu must be held.
+func (w *Worker) forgetLocked(k key) {
+	delete(w.known, k)
+	delete(w.retries, k)
 	w.released++
+}
+
+// Hold keeps the transfer trfID of tenant tid away from the worker until
+// the returned release function is called (see the package documentation):
+// an analysis in progress is canceled and Hold waits for it to stop,
+// without counting an attempt, concluding or sending any mail; a queued
+// transfer, or one waiting for a retry, is dropped; Enqueue and the sweeps
+// ignore it meanwhile. intent decides the mails of a conclusion that
+// committed meanwhile: dropped under lifecycle.HoldForErase, deferred to
+// the last release under lifecycle.HoldForEdit only. Holds are counted:
+// the transfer stays held until every release was called. The last release
+// queues the transfer again when it is still scanning in the database (a
+// failure to read it queues it anyway: the processing checks the status),
+// and sends the deferred mails. release may be called more than once,
+// never waits for the worker, and does nothing more once the worker is
+// closed. When ctx is done before the analysis has stopped, Hold releases
+// its hold and returns ctx.Err(). Hold works on a stopped or closed
+// worker. Its signature matches lifecycle.Holder.
+func (w *Worker) Hold(ctx context.Context, tid tenant.ID, trfID string, intent lifecycle.HoldIntent) (release func(), err error) {
+	k := key{tid: tid, id: trfID}
+	erase := intent == lifecycle.HoldForErase
+	w.mu.Lock()
+	h := w.holds[k]
+	if h == nil {
+		h = &holdState{}
+		w.holds[k] = h
+	}
+	h.count++
+	if erase {
+		// The erasure decides: mails deferred by an edit are canceled.
+		h.erase++
+		h.pending = false
+	}
+	r := w.runs[k]
+	if r != nil {
+		r.held = true
+		r.cancel()
+	} else {
+		w.dropLocked(k)
+	}
+	w.mu.Unlock()
+	rctx := context.WithoutCancel(ctx)
+	release = sync.OnceFunc(func() { w.release(rctx, k, erase) })
+	if r != nil {
+		select {
+		case <-r.done:
+		case <-ctx.Done():
+			release()
+			return nil, ctx.Err()
+		}
+	}
+	return release, nil
+}
+
+// dropLocked removes k, which is not running, from the queue and from the
+// retry timers. w.mu must be held.
+func (w *Worker) dropLocked(k key) {
+	if !w.known[k] {
+		return
+	}
+	w.fifo = slices.DeleteFunc(w.fifo, func(t task) bool { return t.k == k })
+	for timer, t := range w.timers {
+		if t.k == k {
+			timer.Stop()
+			delete(w.timers, timer)
+		}
+	}
+	w.forgetLocked(k)
+	w.changed.Broadcast()
+}
+
+// release ends one hold of k (an erasure hold when erase is set); the last
+// one queues k again when it is still scanning, and sends its deferred
+// mails when it is still available or rejected.
+func (w *Worker) release(ctx context.Context, k key, erase bool) {
+	w.mu.Lock()
+	h := w.holds[k]
+	h.count--
+	if erase {
+		h.erase--
+	}
+	last := h.count == 0
+	pending := last && h.pending
+	if last {
+		delete(w.holds, k)
+	}
+	closed := w.closed
+	w.mu.Unlock()
+	if !last {
+		return
+	}
+	if closed {
+		if pending {
+			w.log(ctx, slog.LevelWarn, "worker closed: deferred notification mails not sent", k)
+		}
+		return
+	}
+	d, err := w.repo.transfer(ctx, k.tid, k.id)
+	switch {
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrInvalid):
+		return
+	case err != nil:
+		if pending {
+			w.log(ctx, slog.LevelError, "held transfer not read on release: deferred notification mails not sent", k,
+				slog.Any("error", err))
+		}
+		w.log(ctx, slog.LevelWarn, "held transfer not read on release, queued anyway", k, slog.Any("error", err))
+	case d.Status == store.TransferScanning:
+	case pending:
+		w.sendDeferred(ctx, k, d)
+		return
+	default:
+		return
+	}
+	w.Enqueue(k.tid, k.id)
+}
+
+// holdMailsLocked reports whether the mails of the transfer k must not be
+// queued now because k is held: under an erasure hold they are dropped,
+// under edit holds only they are marked pending for the last release.
+// w.mu must be held.
+func (w *Worker) holdMailsLocked(ctx context.Context, k key) bool {
+	h := w.holds[k]
+	switch {
+	case h == nil:
+		return false
+	case h.erase > 0:
+		w.log(ctx, slog.LevelInfo, "transfer held for erasure: no mail sent", k)
+	default:
+		h.pending = true
+		w.log(ctx, slog.LevelInfo, "transfer held for an edit: mails deferred to the release", k)
+	}
+	return true
 }
 
 // scheduleLocked arms the retry timer of t. w.mu must be held and the

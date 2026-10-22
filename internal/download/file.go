@@ -49,8 +49,20 @@ type File struct {
 // sniff its type, then seeks back, when no Content-Type is set). An empty
 // file is credited only through Delivered. A Content holds a concurrent
 // stream slot until it is closed. It is not safe for concurrent use.
+//
+// The first read from offset 0 is a download start: it records the
+// transfer.downloaded audit event and counts one download, before the
+// bytes are read (an empty file, never read, starts with Delivered). A
+// HEAD request (never read, never delivered) and a resumed range (read
+// from a later offset) are no start. The HTTP layer must set Content-Type,
+// so that http.ServeContent does not read the content to sniff it.
 type Content struct {
-	svc   *Service
+	svc *Service
+	// ctx is the request context, for the recording of the download start:
+	// it is kept because http.ServeContent drives Read and Seek, whose
+	// signatures take no context (the recording detaches it anyway).
+	ctx   context.Context
+	ip    netip.Addr
 	t     *tenant.Tenant
 	d     store.TransferDetails
 	files []store.TransferFile
@@ -66,7 +78,11 @@ type Content struct {
 	pending   span
 	delivered bool
 	closed    bool
-	release   func()
+	// started is set once the download start is recorded.
+	started bool
+	// served counts the credited bytes.
+	served  int64
+	release func()
 }
 
 // OpenFile opens the deliverable file fileID of the transfer of the
@@ -84,8 +100,10 @@ type Content struct {
 // sniff) and serves File.Content with http.ServeContent. It calls
 // [Content.Delivered] only for a GET answered 200 or 206 whose body was
 // written without error (never for HEAD, 416 or a failed write), then
-// closes the content in every case with the request context. Closing
-// releases the stream slot and records the served ranges; when every byte
+// closes the content in every case with the request context. The first
+// read from offset 0 records the download start (see [Content]). Closing
+// releases the stream slot, counts the bytes served in the tenant usage and
+// records the served ranges; when every byte
 // of every deliverable file has been served at least once, across
 // requests, the transfer counts as downloaded (see the package
 // documentation).
@@ -113,7 +131,7 @@ func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken strin
 		return nil, err
 	}
 	c := &Content{
-		svc: s, t: t, d: a.d, files: a.files, file: f, osf: osf, release: release,
+		svc: s, ctx: ctx, ip: clientIP, t: t, d: a.d, files: a.files, file: f, osf: osf, release: release,
 		sr: io.NewSectionReader(ra, 0, ra.Size()), track: a.d.FirstDownloadedAt.IsZero(),
 	}
 	return &File{ID: f.ID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, Content: c}, nil
@@ -146,6 +164,7 @@ func (c *Content) credit() {
 	if c.pending.end == 0 {
 		return
 	}
+	c.served += c.pending.end - c.pending.start
 	if l := len(c.spans); l > 0 && c.spans[l-1].end == c.pending.start {
 		c.spans[l-1].end = c.pending.end
 	} else if l < maxContentSpans {
@@ -158,6 +177,9 @@ func (c *Content) credit() {
 // offset.
 func (c *Content) Read(p []byte) (int, error) {
 	c.credit()
+	if c.pos == 0 {
+		c.start()
+	}
 	n, err := c.sr.Read(p)
 	if n > 0 {
 		c.pending = span{start: c.pos, end: c.pos + int64(n)}
@@ -183,6 +205,18 @@ func (c *Content) Seek(offset int64, whence int) (int64, error) {
 func (c *Content) Delivered() {
 	c.credit()
 	c.delivered = true
+	if c.file.Size == 0 {
+		c.start()
+	}
+}
+
+// start records the download start, once.
+func (c *Content) start() {
+	if c.started {
+		return
+	}
+	c.started = true
+	c.svc.downloadStarted(c.ctx, c.t, c.d.ID, c.file.ID, c.ip)
 }
 
 // Close releases the stored file and the stream slot, and records the
@@ -197,6 +231,7 @@ func (c *Content) Close(ctx context.Context) error {
 	}
 	c.closed = true
 	defer c.release()
+	c.svc.bytesServed(c.t.ID, c.served)
 	err := c.osf.Close()
 	if c.track && (len(c.spans) > 0 || (c.file.Size == 0 && c.delivered)) {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.svc.opts.CommitTimeout)

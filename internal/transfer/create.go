@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/filename"
 	"github.com/ed-fr/transteira/internal/id"
@@ -342,6 +343,11 @@ func fingerprint(p plan, req CreateRequest) string {
 //     quota fits; ErrQuotaExceeded otherwise, T-124); a data key per file
 //     (decision P6); the rows.
 //
+// After the commit, Options.OnQuota is called (refused false) and the
+// transfer.created audit event is recorded (best effort); a quota refusal
+// calls Options.OnQuota with refused true. A replayed request does neither.
+// The client IP is stored as the sender IP of the transfer.
+//
 // A zero-length file is completed after the commit: the upload engine
 // writes its encrypted form and the store records its completion. If that
 // fails, the failure is logged and the file stays incomplete (it is
@@ -392,7 +398,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID,
 		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
 		DeleteAfterFirstDownload: req.DeleteAfterFirstDownload, IdempotencyKey: idempotencyKey,
-		RequestFingerprint: fp, CreatedAt: now,
+		RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
 	}
 	deks := make([][]byte, len(p.files))
 	defer func() {
@@ -436,6 +442,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 			securitylog.Field{Key: securitylog.KeyScope, Value: scopeOpenTransfers})
 		return Details{}, &RateLimitError{RetryAfter: OpenTransfersRetryAfter}
 	case errors.Is(err, errQuota):
+		s.onQuota(t.ID, true)
 		return Details{}, ErrQuotaExceeded
 	case errors.Is(err, store.ErrNotFound):
 		// The tenant's deletion started after its resolution (or the
@@ -444,6 +451,9 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	case err != nil:
 		return Details{}, fmt.Errorf("transfer: create transfer: %w", err)
 	}
+	s.onQuota(t.ID, false)
+	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID,
+		map[string]any{"fileCount": len(p.files), "totalBytes": p.total, "origin": origin(sender)})
 	s.completeEmpty(ctx, t, p.files, deks, now)
 	d, err := s.repo.transfer(ctx, t.ID, trfID)
 	if err != nil {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/store"
@@ -76,8 +78,15 @@ func count(v notify.TransferView, r notify.ScanResult) int {
 
 // notify builds the mails and enqueues them. A mail that cannot be built is
 // logged and skipped; a tenant without SMTP settings stops everything, with
-// one error line, since no mail can be sent for it.
+// one error line, since no mail can be sent for it. A held transfer gets no
+// mail now (see [Worker.holdMailsLocked]): the hold is checked before the
+// build, and again under the worker lock right before the mails are
+// queued, so that a hold taken during the build is seen (the queue never
+// blocks).
 func (w *Worker) notify(ctx context.Context, k key, builders []builder) {
+	if w.holdMails(ctx, k) {
+		return
+	}
 	var jobs []mail.Job
 	for _, b := range builders {
 		js, err := b.build()
@@ -92,5 +101,47 @@ func (w *Worker) notify(ctx context.Context, k key, builders []builder) {
 		}
 		jobs = append(jobs, js...)
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.holdMailsLocked(ctx, k) {
+		return
+	}
 	w.mails.Send(ctx, jobs, slog.String("tenant", k.tid.String()), slog.String("transfer", k.id))
+}
+
+// holdMails is [Worker.holdMailsLocked] taking the worker lock.
+func (w *Worker) holdMails(ctx context.Context, k key) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.holdMailsLocked(ctx, k)
+}
+
+// sendDeferred sends the mails deferred while the transfer d was held for
+// an edit, rebuilt from its current state: to its remaining recipients,
+// with the download link unsealed from the database, when it is
+// available; the file problems mail when it is rejected. Any failure is
+// logged.
+func (w *Worker) sendDeferred(ctx context.Context, k key, d store.TransferDetails) {
+	t, err := w.repo.tenant(ctx, k.tid)
+	if err != nil {
+		w.log(ctx, slog.LevelError, "deferred notification mails not sent: tenant not read", k, slog.Any("error", err))
+		return
+	}
+	switch d.Status {
+	case store.TransferRejected:
+		w.notifyRejected(ctx, k, t, d)
+	case store.TransferAvailable:
+		token, err := w.vault.Open(ctx, k.tid, crypto.PurposeSecret, d.DownloadTokenKeyID)
+		if err != nil {
+			w.log(ctx, slog.LevelError, "deferred notification mails not sent: download token not opened", k,
+				slog.Any("error", err))
+			return
+		}
+		link := id.DownloadURL(t.FQDN, string(token))
+		clear(token)
+		w.notifyAvailable(ctx, k, t, d, link)
+	default:
+		w.log(ctx, slog.LevelInfo, "deferred notification mails dropped: the transfer is no longer available", k,
+			slog.String("status", string(d.Status)))
+	}
 }

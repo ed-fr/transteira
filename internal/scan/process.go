@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/antivirus"
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/storage"
@@ -69,7 +70,7 @@ func (w *Worker) process(ctx context.Context, k key) time.Duration {
 		}
 	}
 	// The conclusion is short and idempotent: it is not interrupted by a
-	// shutdown.
+	// shutdown. A hold stops it before its commit and before its mails.
 	return w.conclude(context.WithoutCancel(ctx), k)
 }
 
@@ -217,7 +218,58 @@ func (w *Worker) record(ctx context.Context, k key, f store.TransferFile, status
 	}
 	w.forgetRefusals(f.ID)
 	w.log(ctx, slog.LevelInfo, "file analyzed", k, slog.String("file", f.ID), slog.String("status", string(status)))
+	w.recorded(ctx, k, f, status, signature)
 	return fileDone, 0
+}
+
+// notScannedReasons are the reasons of file.not_scanned, by status.
+var notScannedReasons = map[store.ScanStatus]string{
+	store.ScanNotScannedTooLarge:  "too_large",
+	store.ScanNotScannedEncrypted: "encrypted",
+}
+
+// recorded follows the final status of the file f once committed: an
+// infected file counts a virus detection and records file.infected, a file
+// accepted without analysis records file.not_scanned.
+func (w *Worker) recorded(ctx context.Context, k key, f store.TransferFile, status store.ScanStatus, signature string) {
+	ev := audit.Event{
+		ActorKind: store.ActorSystem, Actor: SystemActor, ObjectKind: audit.ObjectFile, ObjectID: f.ID,
+		Details: map[string]any{"transferId": k.id},
+	}
+	switch reason, ok := notScannedReasons[status]; {
+	case status == store.ScanInfected:
+		if w.usage != nil {
+			w.usage.VirusDetected(k.tid, w.now())
+		}
+		ev.Action = audit.ActionFileInfected
+		if signature != "" {
+			ev.Details["signature"] = signature
+		}
+	case ok:
+		ev.Action = audit.ActionFileNotScanned
+		ev.Details["reason"] = reason
+	default:
+		return
+	}
+	w.recordAudit(ctx, k, ev)
+}
+
+// recordAudit records ev for the transfer k, best effort: a failure is
+// logged. A signature name the audit refuses as personal data (an at sign)
+// is dropped rather than losing the event.
+func (w *Worker) recordAudit(ctx context.Context, k key, ev audit.Event) {
+	if w.audit == nil {
+		return
+	}
+	err := w.audit.RecordScoped(ctx, k.tid, ev)
+	if errors.Is(err, audit.ErrPersonalDetail) {
+		delete(ev.Details, "signature")
+		err = w.audit.RecordScoped(ctx, k.tid, ev)
+	}
+	if err != nil {
+		w.log(ctx, slog.LevelError, "audit write failed", k, slog.String("action", string(ev.Action)),
+			slog.String("file", ev.ObjectID), slog.Any("error", err))
+	}
 }
 
 // maxRefusals is the number of passes on which the store may refuse the
@@ -347,6 +399,12 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 		}
 		w.log(ctx, slog.LevelInfo, "infected files erased", k, slog.Int("count", len(erase)))
 	}
+	if w.held(k) {
+		// Being erased or edited: neither available nor rejected; the
+		// last release queues it again when it is still scanning.
+		w.log(ctx, slog.LevelInfo, "transfer held: analysis stopped before its conclusion", k)
+		return 0
+	}
 	if deliverable == 0 {
 		if err := w.repo.reject(ctx, k.tid, k.id); err != nil {
 			return w.failed(ctx, k, "reject transfer", err)
@@ -370,6 +428,13 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 	d.ExpiresAt = now.Add(time.Duration(d.ExpiryDays) * 24 * time.Hour)
 	w.notifyAvailable(ctx, k, t, d, id.DownloadURL(t.FQDN, token))
 	return 0
+}
+
+// held reports whether k is held.
+func (w *Worker) held(k key) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.holds[k] != nil
 }
 
 // log writes a line about the transfer k.

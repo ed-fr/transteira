@@ -8,8 +8,6 @@ import (
 	"math"
 	"net/netip"
 	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/id"
@@ -18,6 +16,10 @@ import (
 
 // reasonAudit is the reason of the audit system queries.
 const reasonAudit = "audit log: global events, and instance-wide listing and purge"
+
+// reasonAuditPseudonymise is the reason of the GDPR pseudonymisation of
+// the audit log.
+const reasonAuditPseudonymise = "GDPR erasure: replace one data subject's address in the actor column of one tenant's events"
 
 // AuditActorKind is the kind of actor of an audit event (OpenAPI
 // AuditEvent.actor.kind, an extensible enumeration).
@@ -115,6 +117,16 @@ var (
 		`SELECT ` + auditColumns + ` FROM audit_events
 		WHERE tenant_id = ? AND at >= ? AND at <= ? AND (? = '' OR action = ?) AND (? = '' OR actor = ?)
 		AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?`)
+	// qAuditCountActor counts the events of a data subject (GDPR search):
+	// the actor column only holds an address for these kinds.
+	qAuditCountActor = tenantQuery(
+		`SELECT count(*) FROM audit_events WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`)
+	// qAuditPseudonymise is the only update of the audit log: the system
+	// scope alone may run it, the tenant scope staying append-only.
+	qAuditPseudonymise = systemQuery(
+		`UPDATE audit_events SET actor = ?
+		WHERE tenant_id = ? AND actor = ? AND actor_kind IN ('depositor', 'recipient')`,
+		reasonAuditPseudonymise)
 	qAuditPurge = systemQuery(
 		`DELETE FROM audit_events WHERE id IN (SELECT id FROM audit_events WHERE at < ? ORDER BY at, id LIMIT ?)`,
 		reasonAudit)
@@ -244,12 +256,84 @@ func (r *AuditEvents) appendScoped(ctx context.Context, tx *ScopedTx, ev AuditEv
 	return ev, nil
 }
 
+// AppendScoped records ev for tenant tid in its own tenant-scoped
+// transaction and returns the stored event (see
+// [AuditEvents.AppendScopedTx]): the events a tenant operation records
+// after its own transaction committed. It returns ErrInvalid for a
+// malformed tenant or field, or an event of another tenant.
+func (r *AuditEvents) AppendScoped(ctx context.Context, tid tenant.ID, ev AuditEvent) (AuditEvent, error) {
+	var out AuditEvent
+	err := writeScoped(ctx, r.db, tid, "append audit event", func(tx *ScopedTx) error {
+		var err error
+		out, err = r.appendScoped(ctx, tx, ev)
+		return err
+	})
+	if err != nil {
+		return AuditEvent{}, err
+	}
+	return out, nil
+}
+
+// CountActor returns the number of audit events of tenant tid whose actor
+// is the address email (normalized), as a depositor or a recipient (GDPR
+// search). It returns ErrInvalid for a malformed tenant or address.
+func (r *AuditEvents) CountActor(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	if _, err := r.db.Scoped(tid); err != nil {
+		return 0, err
+	}
+	email, err := NormalizeEmail(email)
+	if err != nil {
+		return 0, err
+	}
+	return readScoped(ctx, r.db, tid, "count audit events by actor", func(tx *ScopedTx) (int, error) {
+		var n int
+		err := tx.QueryRow(ctx, qAuditCountActor, email).Scan(&n)
+		return n, err
+	})
+}
+
+// PseudonymiseActor replaces the address email (normalized) by pseudonym
+// in the actor column of the events of tenant tid where it acted as a
+// depositor or a recipient, and returns how many events it changed (GDPR
+// erasure). Nothing else changes: the other columns, the other tenants'
+// events and the events of other actor kinds stay as they are. It is the
+// only update of the audit log, a system query (reason "GDPR erasure:
+// replace one data subject's address in the actor column of one tenant's
+// events"): the tenant scope stays append-only. It returns ErrInvalid for
+// a malformed tenant or address, or a pseudonym [IsPseudonym] rejects.
+func (r *AuditEvents) PseudonymiseActor(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error) {
+	if err := tid.Validate(); err != nil {
+		return 0, invalid("malformed tenant id")
+	}
+	email, err := NormalizeEmail(email)
+	if err != nil {
+		return 0, err
+	}
+	if !IsPseudonym(pseudonym) {
+		return 0, invalid("malformed pseudonym")
+	}
+	var n int64
+	err = r.db.systemScope(reasonAuditPseudonymise).Tx(ctx, func(tx *SystemTx) error {
+		res, err := tx.Exec(ctx, qAuditPseudonymise, pseudonym, string(tid), email)
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, wrap("pseudonymise audit actor", err)
+	}
+	return n, nil
+}
+
 // AuditFilter selects a page of audit events, newest first.
 type AuditFilter struct {
 	// TenantID restricts the listing to one tenant, through the tenant
-	// scope (row-level security on PostgreSQL). "" lists every event,
-	// global and of every tenant, for the super admin only: the caller must
-	// set it for any other administrator.
+	// scope (row-level security on PostgreSQL): the global events (without
+	// tenant) are then excluded. "" lists every event, global and of every
+	// tenant, in the system scope, for the super admin only: the caller
+	// must set it for any other administrator.
 	TenantID tenant.ID
 	// Action keeps the events of this action only ("" for all).
 	Action string
@@ -268,20 +352,12 @@ type AuditFilter struct {
 
 // auditCursor returns the cursor of the page after ev.
 func auditCursor(ev AuditEvent) string {
-	return strconv.FormatInt(toMillis(ev.At), 10) + ":" + ev.ID
+	return timeCursor(ev.At, ev.ID)
 }
 
 // parseAuditCursor reads a cursor; "" starts from the newest event.
 func parseAuditCursor(c string) (int64, string, error) {
-	if c == "" {
-		return math.MaxInt64, "", nil
-	}
-	ms, evID, ok := strings.Cut(c, ":")
-	at, err := strconv.ParseInt(ms, 10, 64)
-	if !ok || err != nil || !id.Valid(id.Audit, evID) || strconv.FormatInt(at, 10) != ms {
-		return 0, "", invalid("malformed cursor")
-	}
-	return at, evID, nil
+	return parseTimeCursor(c, id.Audit)
 }
 
 // scanAudit reads one row of auditColumns, after the scanned prefix.

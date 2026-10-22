@@ -160,6 +160,13 @@ var validBodies = map[string]string{
 	"testSmtp":            `{"to":"admin@entity-b.example.com"}`,
 	"updateLegalDocument": `{"markdown":"# Notice"}`,
 	"updateNetworkRules":  `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["entity-b.example.com"]}`,
+	// The tenant operations check the rights first; with valid bodies, a
+	// broken check would show (409 for B's existing entry, B's sender
+	// counted or erased).
+	"createBlocklistEntry": `{"kind":"domain","value":"` + blockedB + `"}`,
+	"deleteTenantTransfer": `{"reason":"isolation check"}`,
+	"searchDataSubject":    `{"email":"` + insiderB + `"}`,
+	"eraseDataSubject":     `{"email":"` + insiderB + `"}`,
 }
 
 // sendAs performs op on the admin host with the session sess, tenantID in

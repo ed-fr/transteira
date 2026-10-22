@@ -772,3 +772,24 @@ func TestFaultsAdmins(t *testing.T) {
 		restore()
 	}
 }
+
+// TestParseEmail checks the strict syntax of the administrator addresses:
+// only a bare dot-atom address the store can keep is accepted, normalized.
+func TestParseEmail(t *testing.T) {
+	got, err := parseEmail("  Alice.Admin@Entity-A.Example.COM ")
+	if err != nil || got != "alice.admin@entity-a.example.com" {
+		t.Errorf("parseEmail(valid) = %q, %v", got, err)
+	}
+	for _, bad := range []string{
+		"", "nope", "Alice <alice@entity-a.example.com>", "<alice@entity-a.example.com>",
+		"alice@entity-a.example.com, bob@entity-a.example.com", "\"a b\"@entity-a.example.com",
+		"alice(comment)@entity-a.example.com", "alice@entity-a.example.com\r\nBcc: x@example.com",
+		"user@example.123", "user@xn--a.example.com",
+	} {
+		_, err := parseEmail(bad)
+		var ie *InvalidError
+		if !errors.As(err, &ie) || ie.Field != FieldEmail {
+			t.Errorf("parseEmail(%q) = %v, want an invalid /email", bad, err)
+		}
+	}
+}

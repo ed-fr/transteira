@@ -9,7 +9,8 @@
 //	abandoned-uploads       15 min            uploading transfers whose uploads expired (upload TTL or maximum age)
 //	tenant-deletions        1 h               tenants left in the deleting status: completes their erasure (EraseTenant)
 //	purge-rows              1 h               ended transfers after 30 days, codes, sessions, password failures, verified addresses, invitations;
-//	                                          admin sessions, admin activations, admin login failures, audit events after 12 months
+//	                                          admin sessions, admin activations, admin login failures, audit events after 12 months,
+//	                                          usage counters after 13 months
 //	orphans                 24 h              files of the tenant directories that the database proves orphaned
 //	backup                  daily, UTC time   copy of a SQLite database (TT_BACKUP_TIME, TT_BACKUP_KEEP)
 //
@@ -75,6 +76,18 @@
 // transfer that the antivirus made available between steps 2 and 4 (it was
 // still scanning at its expiry) is expired anyway: its keys are gone.
 //
+// # Erasure on request
+//
+// [Sweeper.EraseTransfer] erases one transfer now, whatever its status,
+// through the same steps: for an administrator's deletion (MarkDeleted,
+// which ends it deleted from any status and leaves an expired or deleted
+// transfer as it is) or a GDPR erasure (DeleteRow, which deletes its row).
+// It first holds the antivirus worker (Deps.Holder), so that a transfer
+// still scanning is never made available and its recipients are never
+// mailed once the erasure has started, and reports an upload request
+// holding a file as ErrBusy, with nothing changed, for its caller to retry.
+// It does not wait for the periodic task in progress.
+//
 // # Tenant deletion
 //
 // [Sweeper.EraseTenant] erases a tenant whose deletion was started
@@ -132,7 +145,9 @@
 // expired; the administrator login failure counters whose latest failure
 // is AdminLoginFailureWindow (15 minutes, the longest window of the rules)
 // old and whose lock is over; the audit events older than
-// AuditRetentionMonths (12 calendar months). A failed listing of the
+// AuditRetentionMonths (12 calendar months); the daily usage counters of
+// the statistics older than UsageRetentionMonths (13 calendar months,
+// counted from 00:00 UTC of the current day). A failed listing of the
 // tenants skips the tenant phase only. Every purge runs in batches of
 // store.PurgeBatchSize, and the run logs one count per kind of row.
 //

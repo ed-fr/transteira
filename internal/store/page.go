@@ -2,6 +2,12 @@ package store
 
 import (
 	"database/sql"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ed-fr/transteira/internal/id"
 )
 
 // Page sizes for list operations.
@@ -59,4 +65,24 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 		return nil, err
 	}
 	return out, nil
+}
+
+// timeCursor returns the keyset cursor "<unix ms>:<id>" of a list ordered
+// by (time, id), newest first.
+func timeCursor(at time.Time, rowID string) string {
+	return strconv.FormatInt(toMillis(at), 10) + ":" + rowID
+}
+
+// parseTimeCursor reads a cursor of timeCursor whose identifier has prefix
+// p. "" starts from the newest row: it returns the largest time and "".
+func parseTimeCursor(c string, p id.Prefix) (int64, string, error) {
+	if c == "" {
+		return math.MaxInt64, "", nil
+	}
+	ms, rowID, ok := strings.Cut(c, ":")
+	at, err := strconv.ParseInt(ms, 10, 64)
+	if !ok || err != nil || !id.Valid(p, rowID) || strconv.FormatInt(at, 10) != ms {
+		return 0, "", invalid("malformed cursor")
+	}
+	return at, rowID, nil
 }

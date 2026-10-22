@@ -60,6 +60,7 @@ const (
 	AuditActionBlocklistUpdated           AuditAction = "blocklist.updated"
 	AuditActionConfigUpdated              AuditAction = "config.updated"
 	AuditActionDataSubjectErased          AuditAction = "data_subject.erased"
+	AuditActionDataSubjectSearched        AuditAction = "data_subject.searched"
 	AuditActionFileInfected               AuditAction = "file.infected"
 	AuditActionFileNotScanned             AuditAction = "file.not_scanned"
 	AuditActionInvitationCreated          AuditAction = "invitation.created"
@@ -72,9 +73,18 @@ const (
 	AuditActionQuotaReached               AuditAction = "quota.reached"
 	AuditActionQuotaWarning               AuditAction = "quota.warning"
 	AuditActionSetupCompleted             AuditAction = "setup.completed"
+	AuditActionTenantAssetDeleted         AuditAction = "tenant.asset_deleted"
+	AuditActionTenantAssetUploaded        AuditAction = "tenant.asset_uploaded"
+	AuditActionTenantBrandingUpdated      AuditAction = "tenant.branding_updated"
 	AuditActionTenantCreated              AuditAction = "tenant.created"
 	AuditActionTenantDeleted              AuditAction = "tenant.deleted"
 	AuditActionTenantDeletionStarted      AuditAction = "tenant.deletion_started"
+	AuditActionTenantLegalUpdated         AuditAction = "tenant.legal_updated"
+	AuditActionTenantNetworkUpdated       AuditAction = "tenant.network_updated"
+	AuditActionTenantSmtpTested           AuditAction = "tenant.smtp_tested"
+	AuditActionTenantSmtpUpdated          AuditAction = "tenant.smtp_updated"
+	AuditActionTenantTemplateReset        AuditAction = "tenant.template_reset"
+	AuditActionTenantTemplateUpdated      AuditAction = "tenant.template_updated"
 	AuditActionTenantUpdated              AuditAction = "tenant.updated"
 	AuditActionTransferCreated            AuditAction = "transfer.created"
 	AuditActionTransferDeleted            AuditAction = "transfer.deleted"
@@ -129,6 +139,8 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionDataSubjectErased:
 		return true
+	case AuditActionDataSubjectSearched:
+		return true
 	case AuditActionFileInfected:
 		return true
 	case AuditActionFileNotScanned:
@@ -153,11 +165,29 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionSetupCompleted:
 		return true
+	case AuditActionTenantAssetDeleted:
+		return true
+	case AuditActionTenantAssetUploaded:
+		return true
+	case AuditActionTenantBrandingUpdated:
+		return true
 	case AuditActionTenantCreated:
 		return true
 	case AuditActionTenantDeleted:
 		return true
 	case AuditActionTenantDeletionStarted:
+		return true
+	case AuditActionTenantLegalUpdated:
+		return true
+	case AuditActionTenantNetworkUpdated:
+		return true
+	case AuditActionTenantSmtpTested:
+		return true
+	case AuditActionTenantSmtpUpdated:
+		return true
+	case AuditActionTenantTemplateReset:
+		return true
+	case AuditActionTenantTemplateUpdated:
 		return true
 	case AuditActionTenantUpdated:
 		return true
@@ -1086,9 +1116,11 @@ type ActivationRequest struct {
 // Admin defines model for Admin.
 type Admin struct {
 	// Activated True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used.
-	Activated   bool       `json:"activated"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	Disabled    bool       `json:"disabled"`
+	Activated bool      `json:"activated"`
+	CreatedAt time.Time `json:"createdAt"`
+	Disabled  bool      `json:"disabled"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email       Email      `json:"email"`
 	Id          string     `json:"id"`
 	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
@@ -1107,6 +1139,7 @@ type Admin struct {
 
 // AdminCreate defines model for AdminCreate.
 type AdminCreate struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email       Email `json:"email"`
 	RequireTotp *bool `json:"requireTotp,omitempty"`
 
@@ -1127,8 +1160,10 @@ type AdminList struct {
 // AdminMe defines model for AdminMe.
 type AdminMe struct {
 	CsrfToken string `json:"csrfToken"`
-	Email     Email  `json:"email"`
-	Id        string `json:"id"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email Email  `json:"email"`
+	Id    string `json:"id"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language *Language `json:"language,omitempty"`
@@ -1145,7 +1180,7 @@ type AdminPassword = string
 
 // AdminReason defines model for AdminReason.
 type AdminReason struct {
-	// Reason Recorded in the audit log.
+	// Reason Free text recorded in the audit log after its e-mail addresses are replaced by `[address]`, then cut to 500 characters (the replacement may lengthen it).
 	Reason *string `json:"reason,omitempty"`
 }
 
@@ -1154,21 +1189,25 @@ type AdminRole string
 
 // AdminTransfer defines model for AdminTransfer.
 type AdminTransfer struct {
-	ApiTokenId               *string    `json:"apiTokenId,omitempty"`
-	CreatedAt                time.Time  `json:"createdAt"`
-	DeleteAfterFirstDownload bool       `json:"deleteAfterFirstDownload"`
-	DownloadCount            int        `json:"downloadCount"`
-	ExpiresAt                *time.Time `json:"expiresAt,omitempty"`
-	FileCount                int        `json:"fileCount"`
-	FirstDownloadedAt        *time.Time `json:"firstDownloadedAt,omitempty"`
-	Id                       string     `json:"id"`
-	InvitationId             *string    `json:"invitationId,omitempty"`
+	ApiTokenId               *string   `json:"apiTokenId,omitempty"`
+	CreatedAt                time.Time `json:"createdAt"`
+	DeleteAfterFirstDownload bool      `json:"deleteAfterFirstDownload"`
+
+	// DownloadCount Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded).
+	DownloadCount     int        `json:"downloadCount"`
+	ExpiresAt         *time.Time `json:"expiresAt,omitempty"`
+	FileCount         int        `json:"fileCount"`
+	FirstDownloadedAt *time.Time `json:"firstDownloadedAt,omitempty"`
+	Id                string     `json:"id"`
+	InvitationId      *string    `json:"invitationId,omitempty"`
 
 	// Origin Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
 	Origin            TransferOrigin `json:"origin"`
 	PasswordProtected bool           `json:"passwordProtected"`
 	Recipients        []Email        `json:"recipients"`
-	SenderEmail       Email          `json:"senderEmail"`
+
+	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	SenderEmail Email `json:"senderEmail"`
 
 	// Status `uploading` → `scanning` → `available` → `expired` | `deleted`.
 	// `rejected`: every file was infected or blocklisted.
@@ -1178,13 +1217,15 @@ type AdminTransfer struct {
 
 // AdminTransferDetail defines model for AdminTransferDetail.
 type AdminTransferDetail struct {
-	ApiTokenId               *string    `json:"apiTokenId,omitempty"`
-	CreatedAt                time.Time  `json:"createdAt"`
-	DeleteAfterFirstDownload bool       `json:"deleteAfterFirstDownload"`
-	DownloadCount            int        `json:"downloadCount"`
-	ExpiresAt                *time.Time `json:"expiresAt,omitempty"`
-	FileCount                int        `json:"fileCount"`
-	Files                    []struct {
+	ApiTokenId               *string   `json:"apiTokenId,omitempty"`
+	CreatedAt                time.Time `json:"createdAt"`
+	DeleteAfterFirstDownload bool      `json:"deleteAfterFirstDownload"`
+
+	// DownloadCount Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded).
+	DownloadCount int        `json:"downloadCount"`
+	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
+	FileCount     int        `json:"fileCount"`
+	Files         []struct {
 		Id        string  `json:"id"`
 		MediaType *string `json:"mediaType,omitempty"`
 		Name      string  `json:"name"`
@@ -1211,8 +1252,12 @@ type AdminTransferDetail struct {
 	Origin            TransferOrigin `json:"origin"`
 	PasswordProtected bool           `json:"passwordProtected"`
 	Recipients        []Email        `json:"recipients"`
-	SenderEmail       Email          `json:"senderEmail"`
-	SenderIp          *string        `json:"senderIp,omitempty"`
+
+	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	SenderEmail Email `json:"senderEmail"`
+
+	// SenderIp Client IP address of the sender when the transfer was created. Absent or null when unknown: transfers created before this field existed.
+	SenderIp *string `json:"senderIp,omitempty"`
 
 	// Status `uploading` → `scanning` → `available` → `expired` | `deleted`.
 	// `rejected`: every file was infected or blocklisted.
@@ -1234,7 +1279,9 @@ type AdminTransferList struct {
 // can disable or demote their own account, and the last usable super admin (not disabled,
 // activated, TOTP enabled) can be neither disabled nor demoted (`409 state-conflict`).
 type AdminUpdate struct {
-	Disabled    *bool  `json:"disabled,omitempty"`
+	Disabled *bool `json:"disabled,omitempty"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email       *Email `json:"email,omitempty"`
 	RequireTotp *bool  `json:"requireTotp,omitempty"`
 
@@ -1252,12 +1299,14 @@ type AdminWithActivation struct {
 	ActivationExpiresAt time.Time `json:"activationExpiresAt"`
 
 	// ActivationUrl Activation link on the admin host: `https://<admin host>/admin/activate#<token>`. The token is in the fragment, so that it never reaches a server log; the page posts it to `activateAdmin`.
-	ActivationUrl string     `json:"activationUrl"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	Disabled      bool       `json:"disabled"`
-	Email         Email      `json:"email"`
-	Id            string     `json:"id"`
-	LastLoginAt   *time.Time `json:"lastLoginAt,omitempty"`
+	ActivationUrl string    `json:"activationUrl"`
+	CreatedAt     time.Time `json:"createdAt"`
+	Disabled      bool      `json:"disabled"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email       Email      `json:"email"`
+	Id          string     `json:"id"`
+	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
 
 	// RequireTotp Always true for super admins.
 	RequireTotp *bool `json:"requireTotp,omitempty"`
@@ -1324,11 +1373,26 @@ type ApiTokenUpdate struct {
 	Name         *string       `json:"name,omitempty"`
 }
 
-// AuditAction defines model for AuditAction.
+// AuditAction Audit action, `<object>.<verb>`. The list is extensible: new actions may be added within
+// the API version, so clients must accept unknown values, and filters accept any value of
+// this form (`^[a-z_]+\.[a-z_]+$`, at most 64 characters). Notable actions:
+// `transfer.downloaded` is recorded at the start of the download of a file or of the
+// archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
+// the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
+// address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
+// `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
 type AuditEvent struct {
+	// Action Audit action, `<object>.<verb>`. The list is extensible: new actions may be added within
+	// the API version, so clients must accept unknown values, and filters accept any value of
+	// this form (`^[a-z_]+\.[a-z_]+$`, at most 64 characters). Notable actions:
+	// `transfer.downloaded` is recorded at the start of the download of a file or of the
+	// archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
+	// the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
+	// address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
+	// `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id   string              `json:"id"`
@@ -1342,7 +1406,9 @@ type AuditEvent struct {
 		Kind string `json:"kind"`
 	} `json:"object"`
 	OccurredAt time.Time `json:"occurredAt"`
-	TenantId   *string   `json:"tenantId,omitempty"`
+
+	// TenantId Tenant of the event; absent for an event without tenant (setup, admin management, maintenance, key rotation).
+	TenantId *string `json:"tenantId,omitempty"`
 }
 
 // AuditEventActorKind defines model for AuditEvent.Actor.Kind.
@@ -1371,7 +1437,7 @@ type BlocklistEntryCreate struct {
 	Comment *string       `json:"comment,omitempty"`
 	Kind    BlocklistKind `json:"kind"`
 
-	// Value Normalised to lower case.
+	// Value Trimmed and normalised to lower case, then validated according to `kind`: an email address, a domain name (no `@`), or a SHA-256 fingerprint (64 hexadecimal characters).
 	Value string `json:"value"`
 }
 
@@ -1433,31 +1499,41 @@ type DataSubjectEraseReport struct {
 
 // DataSubjectRequest defines model for DataSubjectRequest.
 type DataSubjectRequest struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email Email `json:"email"`
 }
 
 // DataSubjectSummary defines model for DataSubjectSummary.
 type DataSubjectSummary struct {
-	AuditEvents          int   `json:"auditEvents"`
-	Email                Email `json:"email"`
-	Invitations          int   `json:"invitations"`
-	SecurityEvents       int   `json:"securityEvents"`
-	TransfersAsRecipient int   `json:"transfersAsRecipient"`
-	TransfersAsSender    int   `json:"transfersAsSender"`
-	VerifiedAddress      bool  `json:"verifiedAddress"`
+	// AuditEvents Audit events of the tenant whose actor is the address.
+	AuditEvents int `json:"auditEvents"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email       Email `json:"email"`
+	Invitations int   `json:"invitations"`
+
+	// SecurityEvents Always 0: the security log never records e-mail addresses.
+	SecurityEvents       int  `json:"securityEvents"`
+	TransfersAsRecipient int  `json:"transfersAsRecipient"`
+	TransfersAsSender    int  `json:"transfersAsSender"`
+	VerifiedAddress      bool `json:"verifiedAddress"`
 }
 
 // DepositSession defines model for DepositSession.
 type DepositSession struct {
-	CanInvite bool      `json:"canInvite"`
-	CsrfToken string    `json:"csrfToken"`
+	CanInvite bool   `json:"canInvite"`
+	CsrfToken string `json:"csrfToken"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email     Email     `json:"email"`
 	ExpiresAt time.Time `json:"expiresAt"`
 
 	// Invitation Present for external depositors.
 	Invitation *struct {
 		ExpiresAt time.Time `json:"expiresAt"`
-		InvitedBy Email     `json:"invitedBy"`
+
+		// InvitedBy A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+		InvitedBy Email `json:"invitedBy"`
 	} `json:"invitation,omitempty"`
 
 	// Kind `internal`: internal IP and domain. `external`: invited external.
@@ -1472,6 +1548,7 @@ type DepositSession struct {
 
 // DepositSessionStart defines model for DepositSessionStart.
 type DepositSessionStart struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email           Email   `json:"email"`
 	InvitationToken *string `json:"invitationToken,omitempty"`
 }
@@ -1491,8 +1568,8 @@ type DnsRecordCheck struct {
 // DnsRecordCheckStatus defines model for DnsRecordCheck.Status.
 type DnsRecordCheckStatus string
 
-// Email defines model for Email.
-type Email = openapi_types.Email
+// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+type Email = string
 
 // EmailPreview defines model for EmailPreview.
 type EmailPreview struct {
@@ -1586,13 +1663,17 @@ type Fqdn = string
 
 // GlobalStats defines model for GlobalStats.
 type GlobalStats struct {
+	// Disk Usage of the filesystem that holds the data directory (encrypted files).
 	Disk struct {
+		// AlertThreshold Ratio above which the super admin is alerted. Fixed at 0.85 until the runtime system settings are available (`diskAlertThreshold`).
 		AlertThreshold float32  `json:"alertThreshold"`
 		TotalBytes     ByteSize `json:"totalBytes"`
 		UsedBytes      ByteSize `json:"usedBytes"`
 		UsedRatio      float32  `json:"usedRatio"`
 	} `json:"disk"`
-	Period  GlobalStatsPeriod `json:"period"`
+	Period GlobalStatsPeriod `json:"period"`
+
+	// Tenants One row per active tenant (tenants being deleted are excluded); counters defined as in `TenantStats`.
 	Tenants []struct {
 		BytesUploaded     ByteSize `json:"bytesUploaded"`
 		Name              string   `json:"name"`
@@ -1627,17 +1708,22 @@ type HexColor = string
 
 // Invitation defines model for Invitation.
 type Invitation struct {
-	CreatedAt  time.Time        `json:"createdAt"`
-	Email      Email            `json:"email"`
-	ExpiresAt  time.Time        `json:"expiresAt"`
-	Id         string           `json:"id"`
-	InvitedBy  Email            `json:"invitedBy"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email     Email     `json:"email"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	Id        string    `json:"id"`
+
+	// InvitedBy Email address of the internal user who issued the invitation, or the pseudonym `erased-<16 hex>` when that user's data was erased (GDPR); such an invitation is always revoked.
+	InvitedBy  string           `json:"invitedBy"`
 	LastUsedAt *time.Time       `json:"lastUsedAt,omitempty"`
 	Status     InvitationStatus `json:"status"`
 }
 
 // InvitationCreate defines model for InvitationCreate.
 type InvitationCreate struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email Email `json:"email"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -1839,10 +1925,13 @@ type PublicFile struct {
 
 // PublicInvitation defines model for PublicInvitation.
 type PublicInvitation struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email     Email     `json:"email"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	InvitedBy Email     `json:"invitedBy"`
-	Message   *string   `json:"message,omitempty"`
+
+	// InvitedBy A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	InvitedBy Email   `json:"invitedBy"`
+	Message   *string `json:"message,omitempty"`
 }
 
 // PublicTenant defines model for PublicTenant.
@@ -1897,7 +1986,9 @@ type PublicTransfer struct {
 	// Message Plain text, to be rendered as text (never HTML).
 	Message           *string `json:"message,omitempty"`
 	PasswordProtected bool    `json:"passwordProtected"`
-	SenderEmail       Email   `json:"senderEmail"`
+
+	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	SenderEmail Email `json:"senderEmail"`
 
 	// TotalBytes Total size of the listed files; absent while `locked`.
 	TotalBytes *ByteSize `json:"totalBytes,omitempty"`
@@ -1969,7 +2060,9 @@ type SenderTransfer struct {
 	Message           *string      `json:"message,omitempty"`
 	PasswordProtected bool         `json:"passwordProtected"`
 	Recipients        []Email      `json:"recipients"`
-	SenderEmail       Email        `json:"senderEmail"`
+
+	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	SenderEmail Email `json:"senderEmail"`
 
 	// Status `uploading` → `scanning` → `available` → `expired` | `deleted`.
 	// `rejected`: every file was infected or blocklisted.
@@ -1980,6 +2073,7 @@ type SenderTransfer struct {
 
 // SetupRequest defines model for SetupRequest.
 type SetupRequest struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email Email `json:"email"`
 
 	// Password At least 12 characters; checked against a list of common passwords.
@@ -2001,6 +2095,7 @@ type SmtpSecurity string
 
 // SmtpSettings defines model for SmtpSettings.
 type SmtpSettings struct {
+	// FromAddress A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	FromAddress Email   `json:"fromAddress"`
 	FromName    *string `json:"fromName,omitempty"`
 	Host        string  `json:"host"`
@@ -2014,6 +2109,7 @@ type SmtpSettings struct {
 
 // SmtpSettingsUpdate defines model for SmtpSettingsUpdate.
 type SmtpSettingsUpdate struct {
+	// FromAddress A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	FromAddress Email   `json:"fromAddress"`
 	FromName    *string `json:"fromName,omitempty"`
 	Host        string  `json:"host"`
@@ -2032,6 +2128,7 @@ type SmtpSettingsUpdate struct {
 
 // SmtpTest defines model for SmtpTest.
 type SmtpTest struct {
+	// To A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	To Email `json:"to"`
 }
 
@@ -2052,6 +2149,7 @@ type SmtpTestResultStage string
 
 // SystemSettings defines model for SystemSettings.
 type SystemSettings struct {
+	// AlertEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	AlertEmail         *Email   `json:"alertEmail,omitempty"`
 	DiskAlertThreshold *float32 `json:"diskAlertThreshold,omitempty"`
 }
@@ -2112,20 +2210,41 @@ type TenantRef struct {
 
 // TenantStats defines model for TenantStats.
 type TenantStats struct {
-	BytesDownloaded ByteSize          `json:"bytesDownloaded"`
-	BytesUploaded   ByteSize          `json:"bytesUploaded"`
-	DownloadCount   int               `json:"downloadCount"`
-	Period          TenantStatsPeriod `json:"period"`
-	Series          []struct {
+	// BytesDownloaded Plaintext bytes actually served to recipients during the period.
+	BytesDownloaded ByteSize `json:"bytesDownloaded"`
+
+	// BytesUploaded Total size of the transfers counted in `transferCount`.
+	BytesUploaded ByteSize `json:"bytesUploaded"`
+
+	// DownloadCount Download starts of a file or of the archive during the period; HEAD requests and resumed ranges are not counted.
+	DownloadCount int               `json:"downloadCount"`
+	Period        TenantStatsPeriod `json:"period"`
+
+	// Series Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
+	// zero-filled point for every period without activity: one point per UTC day for `7d`
+	// (7 points) and `30d` (30 points), today included; one point per calendar month (UTC)
+	// for `12m` (12 points, current month included), whose `date` is the first day of the
+	// month.
+	Series []struct {
 		BytesUploaded ByteSize           `json:"bytesUploaded"`
 		Date          openapi_types.Date `json:"date"`
 		Transfers     int                `json:"transfers"`
 	} `json:"series"`
+
+	// StorageQuotaBytes Storage quota of the tenant.
 	StorageQuotaBytes ByteSize `json:"storageQuotaBytes"`
-	StorageUsedBytes  ByteSize `json:"storageUsedBytes"`
-	StorageUsedRatio  float32  `json:"storageUsedRatio"`
-	TransferCount     int      `json:"transferCount"`
-	VirusDetections   int      `json:"virusDetections"`
+
+	// StorageUsedBytes Storage currently used by the tenant (current value, not limited to the period).
+	StorageUsedBytes ByteSize `json:"storageUsedBytes"`
+
+	// StorageUsedRatio `storageUsedBytes` / `storageQuotaBytes` (may exceed 1).
+	StorageUsedRatio float32 `json:"storageUsedRatio"`
+
+	// TransferCount Transfers finalized during the period (counted when they are finalized, whatever happened to them afterwards).
+	TransferCount int `json:"transferCount"`
+
+	// VirusDetections Files found infected by the antivirus during the period.
+	VirusDetections int `json:"virusDetections"`
 }
 
 // TenantStatsPeriod defines model for TenantStats.Period.
@@ -2210,10 +2329,12 @@ type Username = string
 
 // VerificationChallenge defines model for VerificationChallenge.
 type VerificationChallenge struct {
-	AttemptsRemaining int       `json:"attemptsRemaining"`
-	ChallengeId       string    `json:"challengeId"`
-	Email             Email     `json:"email"`
-	ExpiresAt         time.Time `json:"expiresAt"`
+	AttemptsRemaining int    `json:"attemptsRemaining"`
+	ChallengeId       string `json:"challengeId"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email     Email     `json:"email"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // VerificationCode defines model for VerificationCode.
@@ -2373,10 +2494,10 @@ type ListAdminsParams struct {
 
 // ListGlobalAuditEventsParams defines parameters for ListGlobalAuditEvents.
 type ListGlobalAuditEventsParams struct {
-	// TenantId Filter by tenant.
+	// TenantId Filter by tenant; events without tenant are then excluded.
 	TenantId *string `form:"tenantId,omitempty" json:"tenantId,omitempty"`
 
-	// Action Filter by audit action.
+	// Action Filter by audit action. The list of actions is extensible: any value of the `AuditAction` form is accepted, and an unknown action simply matches no event.
 	Action *AuditAction `form:"action,omitempty" json:"action,omitempty"`
 
 	// Limit Maximum number of items per page.
@@ -2412,7 +2533,7 @@ type DeleteTenantParams struct {
 
 // ListTenantAuditEventsParams defines parameters for ListTenantAuditEvents.
 type ListTenantAuditEventsParams struct {
-	// Action Filter by audit action.
+	// Action Filter by audit action. The list of actions is extensible: any value of the `AuditAction` form is accepted, and an unknown action simply matches no event.
 	Action *AuditAction `form:"action,omitempty" json:"action,omitempty"`
 
 	// Actor Filter by actor (email address or admin username).
@@ -2476,7 +2597,7 @@ type ListTenantTransfersParams struct {
 	Status *TransferStatus `form:"status,omitempty" json:"status,omitempty"`
 
 	// Email Filter on sender or recipient address (exact match).
-	Email *openapi_types.Email `form:"email,omitempty" json:"email,omitempty"`
+	Email *Email `form:"email,omitempty" json:"email,omitempty"`
 
 	// CreatedAfter Only items created after this instant.
 	CreatedAfter *time.Time `form:"createdAfter,omitempty" json:"createdAfter,omitempty"`
@@ -7890,6 +8011,22 @@ func (response ListGlobalAuditEvents200JSONResponse) VisitListGlobalAuditEventsR
 	return err
 }
 
+type ListGlobalAuditEvents400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListGlobalAuditEvents400ApplicationProblemPlusJSONResponse) VisitListGlobalAuditEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListGlobalAuditEvents401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -8436,6 +8573,22 @@ func (response GetGlobalStats200JSONResponse) VisitGetGlobalStatsResponse(w http
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetGlobalStats400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response GetGlobalStats400ApplicationProblemPlusJSONResponse) VisitGetGlobalStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9295,6 +9448,22 @@ func (response ListTenantAuditEvents200JSONResponse) VisitListTenantAuditEventsR
 	return err
 }
 
+type ListTenantAuditEvents400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantAuditEvents400ApplicationProblemPlusJSONResponse) VisitListTenantAuditEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantAuditEvents401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -9362,6 +9531,22 @@ func (response ListBlocklist200JSONResponse) VisitListBlocklistResponse(w http.R
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBlocklist400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListBlocklist400ApplicationProblemPlusJSONResponse) VisitListBlocklistResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9469,6 +9654,22 @@ func (response CreateBlocklistEntry401ApplicationProblemPlusJSONResponse) VisitC
 	return err
 }
 
+type CreateBlocklistEntry403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response CreateBlocklistEntry403ApplicationProblemPlusJSONResponse) VisitCreateBlocklistEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateBlocklistEntry404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -9546,6 +9747,22 @@ func (response DeleteBlocklistEntry401ApplicationProblemPlusJSONResponse) VisitD
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteBlocklistEntry403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteBlocklistEntry403ApplicationProblemPlusJSONResponse) VisitDeleteBlocklistEntryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10022,6 +10239,22 @@ func (response EraseDataSubject401ApplicationProblemPlusJSONResponse) VisitErase
 	return err
 }
 
+type EraseDataSubject403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response EraseDataSubject403ApplicationProblemPlusJSONResponse) VisitEraseDataSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EraseDataSubject404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -10034,6 +10267,30 @@ func (response EraseDataSubject404ApplicationProblemPlusJSONResponse) VisitErase
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EraseDataSubject409ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type EraseDataSubject409ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers EraseDataSubject409ResponseHeaders
+}
+
+func (response EraseDataSubject409ApplicationProblemPlusJSONResponse) VisitEraseDataSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10105,6 +10362,22 @@ func (response SearchDataSubject401ApplicationProblemPlusJSONResponse) VisitSear
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchDataSubject403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response SearchDataSubject403ApplicationProblemPlusJSONResponse) VisitSearchDataSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10598,6 +10871,22 @@ func (response ListTenantInvitations200JSONResponse) VisitListTenantInvitationsR
 	return err
 }
 
+type ListTenantInvitations400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantInvitations400ApplicationProblemPlusJSONResponse) VisitListTenantInvitationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantInvitations401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -10675,6 +10964,22 @@ func (response RevokeInvitation401ApplicationProblemPlusJSONResponse) VisitRevok
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeInvitation403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeInvitation403ApplicationProblemPlusJSONResponse) VisitRevokeInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11466,6 +11771,22 @@ func (response GetTenantStats200JSONResponse) VisitGetTenantStatsResponse(w http
 	return err
 }
 
+type GetTenantStats400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantStats400ApplicationProblemPlusJSONResponse) VisitGetTenantStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetTenantStats401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -11537,6 +11858,22 @@ func (response ListTenantTransfers200JSONResponse) VisitListTenantTransfersRespo
 	return err
 }
 
+type ListTenantTransfers400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantTransfers400ApplicationProblemPlusJSONResponse) VisitListTenantTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantTransfers401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -11603,6 +11940,22 @@ func (response DeleteTenantTransfer204Response) VisitDeleteTenantTransferRespons
 	return nil
 }
 
+type DeleteTenantTransfer400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantTransfer400ApplicationProblemPlusJSONResponse) VisitDeleteTenantTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteTenantTransfer401ApplicationProblemPlusJSONResponse struct {
 	UnauthenticatedApplicationProblemPlusJSONResponse
 }
@@ -11619,6 +11972,22 @@ func (response DeleteTenantTransfer401ApplicationProblemPlusJSONResponse) VisitD
 	return err
 }
 
+type DeleteTenantTransfer403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantTransfer403ApplicationProblemPlusJSONResponse) VisitDeleteTenantTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteTenantTransfer404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -11631,6 +12000,30 @@ func (response DeleteTenantTransfer404ApplicationProblemPlusJSONResponse) VisitD
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantTransfer409ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type DeleteTenantTransfer409ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers DeleteTenantTransfer409ResponseHeaders
+}
+
+func (response DeleteTenantTransfer409ApplicationProblemPlusJSONResponse) VisitDeleteTenantTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -11772,6 +12165,22 @@ func (response ResendTransferNotification401ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
+type ResendTransferNotification403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ResendTransferNotification403ApplicationProblemPlusJSONResponse) VisitResendTransferNotificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ResendTransferNotification404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -11804,6 +12213,25 @@ func (response ResendTransferNotification409ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
+type ResendTransferNotification429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ResendTransferNotification429ApplicationProblemPlusJSONResponse) VisitResendTransferNotificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ResendTransferNotification500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -11816,6 +12244,20 @@ func (response ResendTransferNotification500ApplicationProblemPlusJSONResponse) 
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResendTransferNotification503ApplicationProblemPlusJSONResponse Problem
+
+func (response ResendTransferNotification503ApplicationProblemPlusJSONResponse) VisitResendTransferNotificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }

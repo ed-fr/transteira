@@ -20,7 +20,10 @@ import (
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/storage"
+	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/usage"
 )
 
 // blockingSender blocks every delivery until its context ends.
@@ -35,11 +38,13 @@ func (b blockingSender) Send(ctx context.Context, _ mail.Settings, _ mail.Messag
 func TestShutdownBudget(t *testing.T) {
 	t.Parallel()
 	const dockerGrace = 10 * time.Second
-	if total := ShutdownTimeout + HandlerDrainTimeout + BackgroundCloseTimeout + MailDrainTimeout; total >= dockerGrace {
-		t.Errorf("worst-case shutdown %v, want strictly below Docker's %v grace period", total, dockerGrace)
+	total := ShutdownTimeout + HandlerDrainTimeout + BackgroundCloseTimeout + FinalCloseTimeout + MailDrainTimeout
+	if total != 9*time.Second || total >= dockerGrace {
+		t.Errorf("worst-case shutdown %v, want 9s, strictly below Docker's %v grace period", total, dockerGrace)
 	}
-	if ShutdownTimeout != 6*time.Second || BackgroundCloseTimeout != time.Second {
-		t.Errorf("ShutdownTimeout = %v, BackgroundCloseTimeout = %v, want 6s and 1s", ShutdownTimeout, BackgroundCloseTimeout)
+	if ShutdownTimeout != 5*time.Second || BackgroundCloseTimeout != time.Second || FinalCloseTimeout != time.Second {
+		t.Errorf("ShutdownTimeout = %v, BackgroundCloseTimeout = %v, FinalCloseTimeout = %v, want 5s, 1s and 1s",
+			ShutdownTimeout, BackgroundCloseTimeout, FinalCloseTimeout)
 	}
 }
 
@@ -119,19 +124,92 @@ type quickCloser struct{ closed bool }
 
 func (c *quickCloser) Close(context.Context) error { c.closed = true; return nil }
 
-func TestCloseBackground(t *testing.T) {
+// budgetCloser records whether its context still had time left when it
+// was called.
+type budgetCloser struct {
+	err  error
+	left time.Duration
+}
+
+func (c *budgetCloser) Close(ctx context.Context) error {
+	c.err = ctx.Err()
+	if d, ok := ctx.Deadline(); ok {
+		c.left = time.Until(d)
+	}
+	return nil
+}
+
+func TestCloseStages(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
-	slow, quick := &slowCloser{}, &quickCloser{}
+	slow, quick, later := &slowCloser{}, &quickCloser{}, &budgetCloser{}
+	const first, second = 50 * time.Millisecond, time.Second
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // the signal context is already done at shutdown
 	start := time.Now()
-	closeBackground(t.Context(), slog.New(slog.NewTextHandler(&logs, nil)), slow, quick)
-	if d := time.Since(start); d < BackgroundCloseTimeout || d > 3*BackgroundCloseTimeout {
-		t.Errorf("closeBackground took %s, want about %s", d, BackgroundCloseTimeout)
+	closeStages(ctx, slog.New(slog.NewTextHandler(&logs, nil)),
+		closeStage{timeout: first, closers: []closer{slow, quick}},
+		closeStage{timeout: second, closers: []closer{later}})
+	if d := time.Since(start); d < first || d > 20*first {
+		t.Errorf("closeStages took %s, want about %s", d, first)
+	}
+	// The later stage runs once the first one is over, with its own budget:
+	// the first stage exhausting its deadline does not deprive it.
+	if later.err != nil || later.left < second/2 {
+		t.Errorf("later stage: err %v, %s left, want its own budget", later.err, later.left)
 	}
 	if !slow.closed || !quick.closed || !strings.Contains(logs.String(), "background worker still running") ||
 		!strings.Contains(logs.String(), "slowCloser") || strings.Contains(logs.String(), "quickCloser") {
 		t.Errorf("closed %v %v, logs %q", slow.closed, quick.closed, logs.String())
 	}
+}
+
+// TestCloseStagesUsageFlush checks the shutdown of the usage recorder: the
+// counters recorded after the signal are flushed by the second stage even
+// when the first stage exhausted its budget, before the database closes.
+func TestCloseStagesUsageFlush(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		db, err := store.Open(ctx, e.Config())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = db.Close() }()
+		if _, err := db.Migrate(ctx); err != nil {
+			t.Fatal(err)
+		}
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
+			Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "en",
+			MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := usage.New(db, usage.Options{Interval: time.Hour})
+		sig, stop := context.WithCancel(ctx)
+		if err := rec.Start(sig); err != nil {
+			t.Fatal(err)
+		}
+		stop() // SIGTERM
+		now := time.Now()
+		rec.BytesServed(tn.ID, 42, now) // a download finishing during the HTTP shutdown
+		rec.VirusDetected(tn.ID, now)   // the antivirus worker stopping
+		var logs bytes.Buffer
+		closeStages(sig, slog.New(slog.NewTextHandler(&logs, nil)),
+			closeStage{timeout: 20 * time.Millisecond, closers: []closer{&slowCloser{}}},
+			closeStage{timeout: 5 * time.Second, closers: []closer{rec}})
+		if strings.Contains(logs.String(), "Recorder") {
+			t.Errorf("usage recorder cut short: %s", logs.String())
+		}
+		days, err := db.TenantUsage().Range(ctx, tn.ID, store.DayOf(now))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(days) != 1 || days[0].BytesDownloaded != 42 || days[0].VirusDetections != 1 {
+			t.Errorf("usage = %+v, want the counters recorded after the signal", days)
+		}
+	})
 }
 
 // fakeBackend is a downloadBackend answering err, or a file and an archive.

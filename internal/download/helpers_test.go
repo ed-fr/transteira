@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -179,6 +180,13 @@ func (r faultRepo) markFirst(ctx context.Context, tid tenant.ID, trfID string, n
 		return false, err
 	}
 	return r.inner.markFirst(ctx, tid, trfID, now, deleteAfter)
+}
+
+func (r faultRepo) started(ctx context.Context, tid tenant.ID, trfID string, ev audit.Event) error {
+	if err := r.f.hit("started"); err != nil {
+		return err
+	}
+	return r.inner.started(ctx, tid, trfID, ev)
 }
 
 // faultVault wraps the vault with the fault "open".
@@ -401,6 +409,7 @@ type env struct {
 	f        *faults
 	clock    *clock
 	notifier *faultNotifier
+	usage    *fakeUsage
 	svc      *Service
 	a, b, c  *tenant.Tenant
 	// secrets are the tokens and file names that must never be logged.
@@ -431,7 +440,7 @@ func newEnv(t *testing.T, e storetest.Engine, tune func(*Options)) *env {
 	t.Cleanup(func() { _ = files.Close() })
 	ev := &env{
 		t: t, db: db, vault: vault, keyring: kr, files: files, queue: &fakeQueue{}, seclog: &fakeSeclog{},
-		logs: &logCapture{}, f: newFaults(),
+		logs: &logCapture{}, f: newFaults(), usage: &fakeUsage{},
 		clock: &clock{t: time.Now().UTC().Truncate(time.Millisecond)},
 	}
 	ev.a = ev.newTenant(hostA, true)
@@ -450,7 +459,7 @@ func newEnv(t *testing.T, e storetest.Engine, tune func(*Options)) *env {
 	ev.svc = New(Deps{
 		DB: db, Vault: faultVault{inner: vault, f: ev.f}, Files: faultFiles{inner: files, f: ev.f},
 		Keys: faultKeys{inner: kr, f: ev.f}, Passwords: faultVerifier{inner: crypto.NewPasswordHasher(2), f: ev.f},
-		Notifier: ev.notifier, Mail: ev.queue, SecurityLog: ev.seclog,
+		Notifier: ev.notifier, Mail: ev.queue, SecurityLog: ev.seclog, Usage: ev.usage,
 	}, opts)
 	ev.svc.repo = faultRepo{inner: ev.svc.repo, f: ev.f}
 	// Every new range is written at once, unless a test says otherwise.

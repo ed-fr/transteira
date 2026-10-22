@@ -1,0 +1,14 @@
+Bonjour,
+
+L'entité Entity A & Co utilise 85 % de son quota de stockage, au-delà du seuil d'alerte de 80 %.
+
+Espace utilisé : 85 Go sur 100 Go.
+
+Lorsque le quota sera entièrement utilisé, les nouveaux dépôts seront refusés jusqu'à ce que de l'espace soit libéré par l'expiration ou la suppression de transferts. Vous pouvez supprimer les transferts devenus inutiles, ou demander au super administrateur un quota plus élevé.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

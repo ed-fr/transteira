@@ -1,0 +1,1 @@
+Storage quota of Entity A & Co reached: new deposits are refused

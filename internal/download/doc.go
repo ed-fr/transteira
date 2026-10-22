@@ -106,6 +106,31 @@
 // ErrGone. The range state is removed once the first download is recorded;
 // whoever deletes a transfer removes its state file too.
 //
+// # Download starts and usage
+//
+// A download start is a GET of a file read from offset 0 (whole file, or a
+// range starting at 0; an empty file once delivered) or a written archive;
+// never a HEAD request nor a resumed range. Each start records, in one
+// tenant-scoped transaction, the transfer.downloaded audit event (actor
+// kind recipient, actor "link", object the transfer, details the file ID
+// or "archive") and one more store.Transfer.DownloadCount, before the first
+// byte, bounded by a short timeout. Serving never depends on that
+// recording: a failure is logged and the download goes on unrecorded. The
+// starts and the plaintext bytes actually served (counted like the served
+// ranges) also go to Deps.Usage, for the tenant statistics.
+//
+// A start is recorded (audit event, download count and usage start) at most
+// once per tenant, transfer, object and client (IPv4 address or IPv6 /64)
+// within Options.StartWindow, one hour by default, so that a client looping
+// on the first byte cannot flood the append-only audit log. The record is
+// kept in a bounded in-memory map (Options.MaxStarts entries, the oldest
+// dropped first) that a restart forgets. Since a client holding many keys
+// (the /64s of an IPv6 /48) could evict every entry, at most
+// Options.MaxStartsPerTransfer starts of one transfer (1000 by default) are
+// recorded per window opened at its first one, whatever the clients, in a
+// separate bounded map that such cycling cannot reset. Served bytes stay
+// exact.
+//
 // # Logs
 //
 // Logs hold tenant, transfer and file identifiers only: never a token, a

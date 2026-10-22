@@ -3,12 +3,15 @@
 A tenant (entity) is one organisation served by the shared instance, with
 its own host name, branding, rules, SMTP settings, mail templates and legal
 texts, and strictly isolated data. This page covers their configuration
-from the administration.
+from the administration and the storage quota alerts. The daily operation
+of a tenant (transfers, invitations, blocklist, audit log, GDPR,
+statistics) is described in [Administration](admin.md).
 
 - Implementation: `internal/tenantadmin`, `internal/branding`,
-  `internal/mail` (templates), `internal/lifecycle` (deletion).
+  `internal/mail` (templates), `internal/lifecycle` (deletion),
+  `internal/quota` (quota alerts).
 - Variable: `TT_SMTP_DENY_NETWORKS`, see `.env.example`.
-- Threat model: T-63, T-64, T-92 and the SMTP SSRF entry in
+- Threat model: T-63, T-64, T-92, T-124, T-149 and the SMTP SSRF entry in
   `docs/security/threat-model.md`.
 
 ## Who can change what
@@ -87,8 +90,9 @@ working: add your database and ClamAV networks to the variable.
 ## Mail templates
 
 Each mail (verification code, transfer notification, confirmation, first
-download, file problems, file not scanned, invitation) can be customised per
-tenant and language: subject, HTML body and text body.
+download, file problems, file not scanned, invitation, quota warning and
+quota reached) can be customised per tenant and language: subject, HTML
+body and text body.
 
 - Only variables are allowed: `{{download_link}}`, `{{sender_email}}`… The
   list, with the required ones, is returned with each template. There is no
@@ -104,6 +108,55 @@ tenant and language: subject, HTML body and text body.
 If a customised template cannot be read when a mail is sent, the default
 one is used and a warning is logged: mails are never lost because of a
 customisation.
+
+## Quota alerts
+
+The super admin sets the storage quota of each tenant. The storage used is
+the declared size of the tenant's transfers that are uploading, being
+scanned or available; space is reserved when a transfer is created, so a
+deposit that would exceed the quota is refused at once (`507
+quota-exceeded`) and nothing is written.
+
+TransTeira keeps an alert level per tenant and mails the admins when it
+rises:
+
+| Level | Reached when | Mail and audit action |
+|---|---|---|
+| 80 | the tenant uses at least 80 % of its quota | `quota-warning`, `quota.warning` |
+| 100 | the storage used reaches the quota, or a deposit was refused for quota while the tenant uses at least 95 % of it | `quota-reached`, `quota.reached`: new deposits are refused until space is freed (expiry or deletion) |
+
+- **One mail per crossing.** A mail is sent only when the level rises,
+  never again while it stays there. To avoid an alert at every small
+  change around a threshold, the levels go down with a margin
+  (hysteresis): level 80 re-arms only once usage drops below 75 %, and
+  level 100 goes back to 80 only below 95 %. A level that goes down is
+  recorded silently.
+- **Recipients**: the delegated admins attached to the tenant (enabled and
+  activated), each in their language; when the tenant has none, the super
+  admins. The mail goes through the tenant's own SMTP settings.
+- **Risk of the fallback to the super admins** (deliberate, threat model
+  T-149): the tenant's SMTP settings may have been set by a delegated
+  admin who has since been disabled or detached, possibly pointing at a
+  relay they control, which then receives the super admins' addresses and
+  the tenant's storage figures. The mail holds no secret and no link token
+  (only the administration console URL), and the SMTP egress guard
+  (`TT_SMTP_DENY_NETWORKS`) still applies. When a tenant is left without a
+  delegated admin, the super admin should review its SMTP settings before
+  relying on its alerts.
+- **Without SMTP settings**, no mail can be sent: the level is still
+  stored, an error is logged, and the rise is recorded in the audit log
+  anyway. The audit log is the durable trace of the alerts: check it (or
+  the statistics) if a tenant has no working SMTP.
+- **When**: right after each transfer creation and each deposit refused for
+  quota, and in a sweep of every active tenant at startup and every 15
+  minutes, which catches space freed by expirations and deletions and
+  quota changes by the super admin.
+
+The current usage and quota of a tenant also appear in its statistics
+(`storageUsedBytes`, `storageQuotaBytes`, `storageUsedRatio`): see
+[Statistics](admin.md#statistics) for the definition of every figure. The
+sum of the quotas may exceed the disk: the super admin watches the disk
+usage in the global statistics.
 
 ## Legal notice and privacy policy
 

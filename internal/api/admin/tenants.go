@@ -121,7 +121,8 @@ func invalidProblem(e *tenantadmin.InvalidError) *problem.Problem {
 		})
 	}
 	if len(fields) == 0 && e.Field != "" {
-		fields = append(fields, problem.FieldError{Field: e.Field, Code: fieldInvalidFormat})
+		address := e.Field == tenantadmin.FieldFromAddress || e.Field == tenantadmin.FieldTo
+		fields = append(fields, problem.FieldError{Field: e.Field, Code: formatCode(address)})
 	}
 	return problem.New(problem.CodeValidationFailed, problem.WithFieldErrors(fields...))
 }

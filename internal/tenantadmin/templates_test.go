@@ -31,10 +31,15 @@ func TestTemplates(t *testing.T) {
 		if len(list) != 2*len(templateKeys()) || list[0].Customized {
 			t.Fatalf("list: %+v", list)
 		}
+		listed := map[string]bool{}
 		for _, s := range list {
-			if s.Key == store.EmailTemplateQuotaWarning {
+			if s.Key == store.EmailTemplateDiskAlert {
 				t.Fatal("a key without built-in template is listed")
 			}
+			listed[s.Key] = true
+		}
+		if !listed[store.EmailTemplateQuotaWarning] || !listed[store.EmailTemplateQuotaReached] {
+			t.Fatalf("quota alert templates not listed: %v", listed)
 		}
 
 		tpl, err := ev.svc.GetTemplate(ctx, ev.adminA, ev.a.ID, keyCode, "fr")
@@ -125,7 +130,7 @@ func TestTemplates(t *testing.T) {
 		}
 
 		// Unknown keys and languages, and isolation.
-		for _, k := range [][2]string{{store.EmailTemplateQuotaWarning, "en"}, {"verification_code", "en"}, {keyCode, "de"}} {
+		for _, k := range [][2]string{{store.EmailTemplateDiskAlert, "en"}, {"verification_code", "en"}, {keyCode, "de"}} {
 			_, err = ev.svc.GetTemplate(ctx, ev.adminA, ev.a.ID, k[0], k[1])
 			wantErr(t, "get "+k[0]+"/"+k[1], err, ErrNotFound)
 			_, err = ev.svc.UpdateTemplate(ctx, ev.adminA, ev.a.ID, k[0], k[1], goodTemplate(), clientIP)

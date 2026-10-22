@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
@@ -176,7 +177,8 @@ func (s *Service) Get(ctx context.Context, t *tenant.Tenant, sender Sender, trfI
 // already destroyed: Finalize then refuses it (ErrConflict) and canceling
 // again finishes the job.
 func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) error {
-	if _, err := normalize(sender); err != nil {
+	email, err := normalize(sender)
+	if err != nil {
 		return err
 	}
 	d, unlock, err := s.lockUploading(ctx, t.ID, sender, trfID)
@@ -191,6 +193,7 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 	if err != nil {
 		return storeError("delete transfer", err)
 	}
+	s.record(ctx, t, sender, email, audit.ActionTransferDeleted, trfID, map[string]any{"by": deletedBySender})
 	return nil
 }
 
@@ -217,9 +220,11 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 //     transfer stays uploading and is never made available; the sender may
 //     cancel it, and the cleanup purges it after the upload TTL.
 //
-// After the commit, Options.OnFinalized is called (best effort).
+// After the commit, Options.OnFinalized and Options.Usage are called and
+// the transfer.finalized audit event is recorded (best effort).
 func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) (Details, error) {
-	if _, _, err := s.checkEligible(ctx, t, sender); err != nil {
+	email, _, err := s.checkEligible(ctx, t, sender)
+	if err != nil {
 		return Details{}, err
 	}
 	d, unlock, err := s.lockUploading(ctx, t.ID, sender, trfID)
@@ -231,7 +236,9 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 		return Details{}, ErrConflict
 	}
 	var incomplete, mismatch []string
+	var total int64
 	for _, f := range d.Files {
+		total += f.Size
 		switch {
 		case f.DEKKeyID == "":
 			return Details{}, ErrConflict
@@ -250,11 +257,17 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	if err := s.checkBlockedFiles(ctx, t, sender, d.Files); err != nil {
 		return Details{}, err
 	}
-	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error { return tx.finalize(ctx, trfID, s.now()) })
+	now := s.now()
+	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error { return tx.finalize(ctx, trfID, now) })
 	if err != nil {
 		return Details{}, storeError("finalize transfer", err)
 	}
 	s.onFinalized(t.ID, trfID)
+	if s.usage != nil {
+		s.usage.TransferFinalized(t.ID, total, now)
+	}
+	s.record(ctx, t, sender, email, audit.ActionTransferFinalized, trfID,
+		map[string]any{"fileCount": len(d.Files), "totalBytes": total})
 	if d, err = s.load(ctx, t.ID, sender, trfID); err != nil {
 		return Details{}, err
 	}

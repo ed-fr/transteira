@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/netpolicy"
@@ -94,6 +95,28 @@ type SecurityLog interface {
 	Log(ev securitylog.Event) error
 }
 
+// AuditRecorder records tenant audit events. *audit.Writer implements it.
+type AuditRecorder interface {
+	RecordScoped(ctx context.Context, tid tenant.ID, ev audit.Event) error
+}
+
+// UsageRecorder counts the finalized transfers in the usage statistics of
+// the tenants. TransferFinalized must not block.
+type UsageRecorder interface {
+	TransferFinalized(tid tenant.ID, totalBytes int64, at time.Time)
+}
+
+// Audit detail values.
+const (
+	// originInternal is a transfer of an internal sender.
+	originInternal = "internal"
+	// originInvitation is a transfer of an external sender holding an
+	// invitation.
+	originInvitation = "invitation"
+	// deletedBySender tells that the sender canceled the transfer.
+	deletedBySender = "sender"
+)
+
 // Options tunes a [Service].
 type Options struct {
 	// MaxRecipients bounds the recipients of a transfer
@@ -118,6 +141,20 @@ type Options struct {
 	// sweeps the scanning transfers at startup to recover such losses. nil
 	// does nothing.
 	OnFinalized func(tid tenant.ID, transferID string)
+	// OnQuota is called after the commit of every creation (refused false)
+	// and when a creation is refused because the storage quota of the
+	// tenant is exceeded (refused true), so that the quota alerts are
+	// evaluated. It is called on the request path: the caller must make it
+	// non-blocking (a buffered channel with a non-blocking send, for
+	// instance). nil does nothing.
+	OnQuota func(tid tenant.ID, refused bool)
+	// Audit records the tenant audit events (transfer created, finalized
+	// and canceled), best effort after the commit: a failure is logged,
+	// never returned. nil records nothing.
+	Audit AuditRecorder
+	// Usage counts every finalized transfer, after the commit. nil counts
+	// nothing.
+	Usage UsageRecorder
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the failures that do not fail a request (security
@@ -147,6 +184,9 @@ type Service struct {
 	maxOpen       int
 	uploadMaxAge  time.Duration
 	onFinalized   func(tid tenant.ID, transferID string)
+	onQuota       func(tid tenant.ID, refused bool)
+	audit         AuditRecorder
+	usage         UsageRecorder
 	clock         func() time.Time
 	newID         func(p id.Prefix) (string, error)
 	newUploadID   func() (string, error)
@@ -172,6 +212,9 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 	if opts.OnFinalized == nil {
 		opts.OnFinalized = func(tenant.ID, string) {}
 	}
+	if opts.OnQuota == nil {
+		opts.OnQuota = func(tenant.ID, bool) {}
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -182,7 +225,8 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 		repo: storeRepo{db: db, keys: keys}, uploads: uploads, seclog: seclog, hasher: opts.Hasher,
 		logger: opts.Logger, maxRecipients: opts.MaxRecipients, maxOpen: opts.MaxOpenTransfers,
 		uploadMaxAge: opts.UploadMaxAge,
-		onFinalized:  opts.OnFinalized, clock: opts.Now, newUploadID: id.NewUploadToken,
+		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage,
+		clock: opts.Now, newUploadID: id.NewUploadToken,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s
@@ -342,4 +386,31 @@ func (s *Service) lockUploading(ctx context.Context, tid tenant.ID, sender Sende
 		return store.TransferDetails{}, nil, err
 	}
 	return d, unlock, nil
+}
+
+// origin returns the audit origin of a transfer of sender.
+func origin(sender Sender) string {
+	if sender.Kind == store.DepositorExternal {
+		return originInvitation
+	}
+	return originInternal
+}
+
+// record appends a tenant audit event on the transfer trfID whose actor is
+// the sender address email, best effort: a failure is only reported on the
+// application log. The address goes in the actor column, never in details.
+func (s *Service) record(ctx context.Context, t *tenant.Tenant, sender Sender, email string,
+	action audit.Action, trfID string, details map[string]any,
+) {
+	if s.audit == nil {
+		return
+	}
+	ev := audit.Event{
+		ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP,
+		Action: action, ObjectKind: audit.ObjectTransfer, ObjectID: trfID, Details: details,
+	}
+	if err := s.audit.RecordScoped(context.WithoutCancel(ctx), t.ID, ev); err != nil {
+		s.logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(action)),
+			slog.String("tenant", t.FQDN), slog.String("error", err.Error()))
+	}
 }

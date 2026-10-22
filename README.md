@@ -26,7 +26,11 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Light to operate**: a single Go binary in a minimal Docker image, SQLite by default or
   PostgreSQL, configuration by environment variables, reverse proxy configurations for Caddy,
   Nginx, Traefik and Apache.
-- **GDPR minded**: automatic expiry and purges, data subject erasure, technical cookies only.
+- **Administration**: super admin and delegated admins per entity, transfer overview with early
+  deletion and notification resend, invitations and blocklist, audit log, statistics dashboard,
+  storage quota alerts.
+- **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
+  pseudonymised), technical cookies only.
 
 ## Documentation
 
@@ -36,6 +40,8 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - [Master key](docs/operations/master-key.md): generate the key and store a copy in a password
   vault **before the first start**; without it, encrypted files cannot be recovered.
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec)
+- [Administration](docs/operations/admin.md) (accounts, tenant operations, audit log, GDPR,
+  statistics) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
 
 Installation, operation and user guides will be published with the first release.
 

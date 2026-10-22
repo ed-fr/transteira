@@ -188,17 +188,20 @@ func (r faultRepo) sweep(ctx context.Context) ([]store.TenantTransfer, error) {
 	return r.inner.sweep(ctx)
 }
 
-// faultVault wraps the vault with faults "open" and "seal".
+// faultVault wraps the vault with faults "open" (data keys), "openSecret"
+// (download tokens) and "seal".
 type faultVault struct {
 	inner *masterkey.Vault
 	f     *faults
 }
 
 func (v faultVault) Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID string) ([]byte, error) {
-	if p == crypto.PurposeDEK {
-		if err := v.f.hit("open"); err != nil {
-			return nil, err
-		}
+	name := "open"
+	if p == crypto.PurposeSecret {
+		name = "openSecret"
+	}
+	if err := v.f.hit(name); err != nil {
+		return nil, err
 	}
 	return v.inner.Open(ctx, tid, p, wkID)
 }

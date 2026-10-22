@@ -2,6 +2,8 @@ package mail
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -446,13 +448,31 @@ func jobAttrs(job Job) []slog.Attr {
 	}
 }
 
-// AddressHash returns a short, stable pseudonym of an e-mail address for
-// logs: the first 16 hex digits of the SHA-256 of the trimmed, lowercased
-// address. It lets an operator correlate entries for a known address without
-// writing the address itself.
+// addressHashKey keys [AddressHash]. It is drawn from crypto/rand when the
+// process starts and only ever held in memory, so that a pseudonym cannot
+// be linked to a known address once the process is gone (after a GDPR
+// erasure, for instance), nor computed by anyone reading the logs.
+var addressHashKey = newAddressHashKey()
+
+// newAddressHashKey returns a random 32-byte key (crypto/rand.Read never
+// fails and always fills its buffer).
+func newAddressHashKey() []byte {
+	k := make([]byte, 32)
+	_, _ = rand.Read(k)
+	return k
+}
+
+// AddressHash returns a short pseudonym of an e-mail address for logs: the
+// first 16 hex digits of the HMAC-SHA256 of the trimmed, lowercased address,
+// keyed by a random per-process key. It is stable within one process run
+// only: an operator can correlate the entries of one run (and, with the
+// running process, those of a known address), but the hashes of two runs
+// differ and a hash cannot be recomputed from an address once the process
+// is gone, which keeps the logs unlinkable after an erasure.
 func AddressHash(addr string) string {
-	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(addr))))
-	return hex.EncodeToString(sum[:8])
+	m := hmac.New(sha256.New, addressHashKey)
+	m.Write([]byte(strings.ToLower(strings.TrimSpace(addr))))
+	return hex.EncodeToString(m.Sum(nil)[:8])
 }
 
 // redactAddresses replaces the recipients, which an SMTP server often

@@ -174,7 +174,8 @@ func TestRLSOwnerCannotDisablePolicies(t *testing.T) {
 	for _, table := range []string{
 		"tenants", "tenant_network_rules", "blocklist_entries", "wrapped_keys", "master_keys", "key_rotations",
 		"system_secrets", "admins", "admin_tenants", "admin_sessions", "admin_recovery_codes", "admin_activations",
-		"admin_login_failures", "audit_events",
+		"admin_login_failures", "audit_events", "tenant_email_templates", "tenant_legal_documents", "tenant_daily_stats",
+		"tenant_quota_alerts",
 	} {
 		stmts := []string{
 			`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`,

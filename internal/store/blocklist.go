@@ -46,6 +46,8 @@ var (
 	qBlockListKind = tenantQuery(
 		`SELECT ` + blockColumns + ` FROM blocklist_entries
 		WHERE tenant_id = ? AND kind = ? AND id > ? ORDER BY id LIMIT ?`)
+	qBlockGet = tenantQuery(
+		`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND id = ?`)
 	qBlockDelete = tenantQuery(
 		`DELETE FROM blocklist_entries WHERE tenant_id = ? AND id = ?`)
 	// qBlockMatch finds the entries blocking an address, its domain (or a
@@ -117,7 +119,7 @@ type Blocklist struct {
 func (db *DB) Blocklist() *Blocklist { return &Blocklist{db: db} }
 
 // scanBlock reads one row of blockColumns.
-func scanBlock(r *sql.Rows) (BlocklistEntry, error) {
+func scanBlock(r interface{ Scan(...any) error }) (BlocklistEntry, error) {
 	var (
 		e       BlocklistEntry
 		kind    string
@@ -173,7 +175,7 @@ func (r *Blocklist) List(ctx context.Context, tid tenant.ID, f BlocklistFilter) 
 		if err != nil {
 			return err
 		}
-		items, err = collect(rows, scanBlock)
+		items, err = collect(rows, func(r *sql.Rows) (BlocklistEntry, error) { return scanBlock(r) })
 		return err
 	})
 	if err != nil {
@@ -218,6 +220,14 @@ func (r *Blocklist) Create(ctx context.Context, tid tenant.ID, e BlocklistEntry)
 		return BlocklistEntry{}, wrap("create blocklist entry", err)
 	}
 	return out, nil
+}
+
+// Get returns the entry entryID of tenant tid. It returns ErrNotFound when
+// the entry does not exist or belongs to another tenant.
+func (r *Blocklist) Get(ctx context.Context, tid tenant.ID, entryID string) (BlocklistEntry, error) {
+	return readScoped(ctx, r.db, tid, "get blocklist entry", func(tx *ScopedTx) (BlocklistEntry, error) {
+		return scanBlock(tx.QueryRow(ctx, qBlockGet, entryID))
+	})
 }
 
 // Delete removes the entry entryID of tenant tid. It returns ErrNotFound
@@ -270,7 +280,7 @@ func (r *Blocklist) Match(ctx context.Context, tid tenant.ID, email, sha256 stri
 		if err != nil {
 			return err
 		}
-		out, err = collect(rows, scanBlock)
+		out, err = collect(rows, func(r *sql.Rows) (BlocklistEntry, error) { return scanBlock(r) })
 		return err
 	})
 	if err != nil {

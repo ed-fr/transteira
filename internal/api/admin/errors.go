@@ -15,7 +15,10 @@ import (
 // Field error codes of the admin operations.
 const (
 	fieldInvalidFormat = "invalid-format"
-	fieldRequired      = "required"
+	// fieldInvalidEmail is a value of a mail address field that is not a
+	// bare address.
+	fieldInvalidEmail = "invalid-email"
+	fieldRequired     = "required"
 	// fieldNotNullable is a null member of a merge patch on a field that
 	// cannot be removed.
 	fieldNotNullable = "not-nullable"
@@ -40,7 +43,7 @@ func serviceError(err error) error {
 	)
 	switch {
 	case errors.As(err, &invalid):
-		return validationFailed(invalid.Field, fieldInvalidFormat)
+		return validationFailed(invalid.Field, formatCode(invalid.Field == adminauth.FieldEmail))
 	case errors.As(err, &limited):
 		return problem.New(problem.CodeRateLimited, problem.WithRetryAfter(limited.RetryAfter))
 	case errors.Is(err, adminauth.ErrInvalid):
@@ -66,6 +69,15 @@ func serviceError(err error) error {
 	default:
 		return err
 	}
+}
+
+// formatCode returns the field code of a malformed value: invalid-email
+// for a mail address field, invalid-format otherwise.
+func formatCode(address bool) string {
+	if address {
+		return fieldInvalidEmail
+	}
+	return fieldInvalidFormat
 }
 
 // validationFailed returns a 400 validation-failed Problem naming field.

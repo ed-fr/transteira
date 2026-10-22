@@ -207,6 +207,25 @@ func TestBlocklistIsolation(t *testing.T) {
 			}
 		})
 
+		t.Run("get from A with B's IDs is indistinguishable from a missing ID", func(t *testing.T) {
+			_, refErr := bl.Get(ctx, f.a.ID, id.New(id.Blocklist))
+			assertNotFound(t, "Get(A, missing)", refErr)
+			targets := []string{f.blockB[0].ID + "' OR '1'='1", "' OR 1=1 --", ""}
+			for _, b := range f.blockB {
+				targets = append(targets, b.ID)
+			}
+			for _, target := range targets {
+				_, err := bl.Get(ctx, f.a.ID, target)
+				assertNotFound(t, "Get(A, "+target+")", err)
+				if err != nil && refErr != nil && err.Error() != refErr.Error() {
+					t.Errorf("Get(A, %q) err %q differs from missing-ID err %q", target, err, refErr)
+				}
+			}
+			if got, err := bl.Get(ctx, f.a.ID, f.blockA[0].ID); err != nil || got != f.blockA[0] {
+				t.Errorf("Get(A, own entry) = %+v, %v", got, err)
+			}
+		})
+
 		t.Run("delete from A with B's IDs is indistinguishable from a missing ID", func(t *testing.T) {
 			missing := id.New(id.Blocklist)
 			refErr := bl.Delete(ctx, f.a.ID, missing)

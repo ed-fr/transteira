@@ -107,7 +107,10 @@ func (h errorHandlers) requestError(w http.ResponseWriter, r *http.Request, err 
 // client sees a truncated response rather than a seemingly complete one.
 // A client that went away is logged at Debug level, and a client cut for
 // not reading within the write idle timeout ([os.ErrDeadlineExceeded]) at
-// Info level, since neither is a server fault.
+// Info level, since neither is a server fault. Likewise, a server error
+// returned once the client went away (its request context is done, for
+// instance while the operation waited between retries) is only logged at
+// Debug level.
 func (h errorHandlers) responseError(w http.ResponseWriter, r *http.Request, err error) {
 	if middleware.ResponseStarted(w) {
 		level := slog.LevelError
@@ -134,7 +137,13 @@ func (h errorHandlers) responseError(w http.ResponseWriter, r *http.Request, err
 	p := problem.From(err)
 	if p.Status >= http.StatusInternalServerError {
 		level := slog.LevelError
-		if p.Code == problem.CodeMaintenance {
+		switch {
+		case p.Code == problem.CodeMaintenance:
+			level = slog.LevelDebug
+		case r.Context().Err() != nil:
+			// The client went away (or its deadline passed) while the
+			// operation ran, typically during a wait between retries: not
+			// a server fault, and nobody reads the answer.
 			level = slog.LevelDebug
 		}
 		h.logger.Log(r.Context(), level, "request failed",

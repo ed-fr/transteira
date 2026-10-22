@@ -3,7 +3,11 @@
 // setup, login with TOTP, own account and administrator accounts
 // (CLAUDE.md sections 6.5 and 6.6), and the configuration of the tenants
 // (sections 5, 12, 13 and 14: general settings, branding, network rules,
-// SMTP, mail templates and legal documents) over internal/tenantadmin.
+// SMTP, mail templates and legal documents) over internal/tenantadmin, and
+// the operation of the tenants (sections 6.5, 9, 15.2, 20 and 21:
+// transfers, invitations, blocklist, audit log, statistics and the rights
+// of the data subjects) over internal/tenantops, internal/stats and
+// internal/datasubject.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -85,6 +89,14 @@ type Server struct {
 	tenants Tenants
 	// tenantSvc configures the tenants; nil until WithTenantService.
 	tenantSvc TenantService
+	// opsSvc serves the transfers, invitations, blocklist and audit log of
+	// the tenants; nil until WithOperationsService.
+	opsSvc OperationsService
+	// subjectSvc serves the data subject rights; nil until
+	// WithDataSubjectService.
+	subjectSvc DataSubjectService
+	// statsSvc computes the statistics; nil until WithStatsService.
+	statsSvc StatsService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

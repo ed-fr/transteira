@@ -163,6 +163,49 @@ and the project follows [Semantic Versioning](https://semver.org/).
   worst-case images; one decode and at most 4 buffered upload bodies at a time; backgrounds
   scaled with an approximate bilinear filter, which needs no temporary buffer. `internal/netpolicy` now holds the SMTP dial guard and the
   shared CIDR parser.
+- Tenant operations (step 12): migration `0010_operations` (sender IP and download count on
+  transfers, daily usage counters `tenant_daily_stats` backfilled from finalized transfers,
+  quota alert levels `tenant_quota_alerts`, indexes for the admin lists and GDPR searches;
+  row-level security on the new tables); admin operations in `internal/tenantops`: transfer
+  list, detail (metadata only), deletion before expiry with crypto-erase (`409` with
+  `Retry-After` while an upload is in progress) and notification resend (original recipients
+  only, 5 per hour per transfer, existing link never shown nor rotated), invitation list and
+  revocation, blocklist management, tenant audit log with filters and instance-wide audit log
+  for the super admin. Audit events are now written for transfers (`transfer.created`,
+  `.finalized`, `.downloaded`, `.deleted`, `.notification_resent`), invitations
+  (`invitation.created`, `.used`, `.revoked`), `address.verified`, the antivirus
+  (`file.infected`, `file.not_scanned`), quotas (`quota.warning`, `quota.reached`),
+  `blocklist.updated` and data subject rights; the audit package refuses any detail holding
+  `@` and `audit.RedactAddresses` redacts free-text reasons (500 characters). Statistics
+  (`internal/usage`, `internal/stats`): per-tenant daily counters of finalized transfers,
+  bytes uploaded, download starts, bytes served and virus detections, flushed every 30 s and
+  kept 13 months, by day (7d, 30d) or month (12m), plus storage against quota; global view
+  with disk usage (`internal/diskusage`). Quota alerts (`internal/quota`): 80 % and 100 %
+  mails to the delegated admins (else the super admins) through the tenant SMTP, one per
+  crossing with hysteresis (75 % / 95 %), audited even without SMTP, checked after each
+  creation or refusal and every 15 minutes. GDPR (`internal/datasubject`): search and
+  erasure of an address within one tenant (sent and received transfers, invitations, codes,
+  sessions, verified address), audit actor replaced by a per-erasure salted pseudonym
+  `erased-<16 hex>`, replayable steps (`409` + `Retry-After` when an upload blocks it).
+  Antivirus hold (`scan.Worker.Hold`): a transfer deleted while being scanned is withdrawn
+  from the analysis before its keys are destroyed and never mails its recipients; holds carry
+  an intent (`lifecycle.HoldForErase` drops the mails of a conclusion committed meanwhile,
+  `HoldForEdit`, used when a GDPR erasure removes a recipient, defers them and the last
+  release sends them from the current state of the transfer), re-checked under the worker
+  lock right before sending. Download starts are deduplicated per transfer, object (file or
+  archive) and client (IPv4 address or IPv6 /64) over one hour, in a bounded in-memory table
+  (100,000 entries): one audit event, download count and usage count per window, and at most
+  1,000 recorded starts per transfer per window whatever the clients (a client cycling IPv6
+  /64s cannot defeat the deduplication by eviction), while bytes served stay exact. Staged shutdown with per-stage budgets (HTTP server 5 s, handler drain
+  1 s, background workers 1 s, usage flush and admin mails 1 s, mail queue drain 1 s: 9 s in
+  the worst case, below Docker's default 10 s stop grace period). Strict mail address
+  validation for admin accounts, the first-run setup and GDPR searches, like deposits and
+  transfers (`mail.ParseAddress`, then store normalization: no display name, angle brackets,
+  list or quoted local part); the OpenAPI `Email` schema maps to a Go `string`
+  (`x-go-type`) and malformed addresses answer `validation-failed` with the field code
+  `invalid-email`. The mail queue logs recipients as an HMAC keyed per process.
+  `docs/operations/admin.md` (operations, audit log, GDPR procedure and limits, statistics)
+  and quota alerts in `docs/operations/tenants.md`; threat model v0.13 (T-146 to T-151).
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
   now starts when it becomes available (`expiresAt` is set then); a file that times out, drops

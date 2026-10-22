@@ -31,6 +31,15 @@ const (
 	// downloaded in full for the first time (CLAUDE.md section 12.2), sent
 	// once per transfer; data: [FirstDownloadData].
 	TemplateFirstDownload = "first_download"
+	// TemplateQuotaWarning warns the delegated administrators of an entity
+	// that 80 % of its storage quota is used (CLAUDE.md sections 8.5 and
+	// 12.2); data: [QuotaAlertData].
+	TemplateQuotaWarning = "quota_warning"
+	// TemplateQuotaReached tells the delegated administrators of an entity
+	// that its storage quota is reached and new deposits are refused until
+	// space is freed (CLAUDE.md sections 8.5 and 12.2); data:
+	// [QuotaAlertData].
+	TemplateQuotaReached = "quota_reached"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -190,4 +199,23 @@ type FirstDownloadData struct {
 	// when the sender asked for deletion after the first download; zero
 	// when the transfer stays until its expiry.
 	DeleteAt time.Time
+}
+
+// QuotaAlertData is the data of [TemplateQuotaWarning] and
+// [TemplateQuotaReached]. The threshold shown (80 % or 100 %) follows from
+// the template. It holds no secret and no personal data.
+type QuotaAlertData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// UsedBytes is the storage used by the entity, formatted with
+	// [FormatSize].
+	UsedBytes int64
+	// QuotaBytes is the storage quota of the entity, formatted like
+	// UsedBytes. The share of the quota used is computed from both,
+	// rounded down; a quota of 0 or less counts as fully used.
+	QuotaBytes int64
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
 }

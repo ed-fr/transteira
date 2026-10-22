@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/id"
@@ -299,7 +300,25 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 		return Session{}, err
 	}
 	sess.Recognition = cookie
+	s.recordConfirmed(ctx, t, clientIP, ch.Email, sess.ID, inv)
 	return sess, nil
+}
+
+// recordConfirmed records the audit events of a confirmed code: the
+// verification of the address, then the first use of the invitation of an
+// external depositor (its LastUsedAt was zero when the challenge was
+// checked).
+func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, email, sessionID string, inv *store.Invitation) {
+	origin := originInternal
+	if inv != nil {
+		origin = originInvitation
+	}
+	s.record(ctx, t, clientIP, email, audit.ActionAddressVerified, audit.ObjectDepositSession, sessionID,
+		map[string]any{"origin": origin})
+	if inv != nil && inv.LastUsedAt.IsZero() {
+		s.record(ctx, t, clientIP, email, audit.ActionInvitationUsed, audit.ObjectInvitation, inv.ID,
+			map[string]any{"sessionId": sessionID})
+	}
 }
 
 // recheck verifies that the depositor of challenge ch is still eligible

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 var testNow = time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
@@ -109,5 +111,167 @@ func TestWriterRefusesSecrets(t *testing.T) {
 	page, err := db.AuditEvents().List(ctx, store.AuditFilter{})
 	if err != nil || len(page.Items) != 0 {
 		t.Errorf("List = %d items, %v, want none", len(page.Items), err)
+	}
+}
+
+// newTenant creates a tenant in db.
+func newTenant(t *testing.T, db *store.DB, fqdn string) *tenant.Tenant {
+	t.Helper()
+	tn, err := db.Tenants().Create(context.Background(), &tenant.Tenant{
+		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
+		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
+	})
+	if err != nil {
+		t.Fatalf("Create(%s): %v", fqdn, err)
+	}
+	return tn
+}
+
+func TestRecordScoped(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		db := openDB(t, e)
+		w := audit.New(db)
+		ta := newTenant(t, db, "transfer.entity-a.example.com")
+		tb := newTenant(t, db, "transfer.entity-b.example.com")
+
+		ev := audit.Event{
+			ActorKind: store.ActorSystem, Actor: "quota",
+			Action: audit.ActionQuotaWarning, ObjectKind: audit.ObjectTenant, ObjectID: string(ta.ID),
+			Details: map[string]any{"level": 80},
+		}
+		if err := w.RecordScoped(ctx, ta.ID, ev); err != nil {
+			t.Fatalf("RecordScoped = %v", err)
+		}
+		explicit := ev
+		explicit.TenantID = ta.ID
+		explicit.Action = audit.ActionQuotaReached
+		if err := w.RecordScoped(ctx, ta.ID, explicit); err != nil {
+			t.Fatalf("RecordScoped(explicit tenant) = %v", err)
+		}
+
+		// Another tenant, a malformed tenant, a malformed event and
+		// personal details are all refused.
+		other := ev
+		other.TenantID = tb.ID
+		if err := w.RecordScoped(ctx, ta.ID, other); !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("RecordScoped(other tenant) = %v, want ErrInvalid", err)
+		}
+		if err := w.RecordScoped(ctx, "bogus", ev); !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("RecordScoped(bogus tenant) = %v, want ErrInvalid", err)
+		}
+		bad := ev
+		bad.Action = "Not An Action"
+		if err := w.RecordScoped(ctx, ta.ID, bad); !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("RecordScoped(bad action) = %v, want ErrInvalid", err)
+		}
+		personal := ev
+		personal.Details = map[string]any{"to": "someone@example.com"}
+		if err := w.RecordScoped(ctx, ta.ID, personal); !errors.Is(err, audit.ErrPersonalDetail) {
+			t.Errorf("RecordScoped(personal) = %v, want ErrPersonalDetail", err)
+		}
+
+		// RecordScopedTx writes with the transaction, applies the same
+		// checks and refuses an event of another tenant.
+		sa, err := db.Scoped(ta.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inTx := explicit
+		inTx.Action = audit.ActionTransferDownloaded
+		if err := sa.Tx(ctx, func(tx *store.ScopedTx) error { return w.RecordScopedTx(ctx, tx, inTx) }); err != nil {
+			t.Fatalf("RecordScopedTx = %v", err)
+		}
+		errRollback := errors.New("rollback")
+		if err := sa.Tx(ctx, func(tx *store.ScopedTx) error {
+			if err := w.RecordScopedTx(ctx, tx, ev); err != nil {
+				return err
+			}
+			return errRollback
+		}); !errors.Is(err, errRollback) {
+			t.Fatalf("RecordScopedTx(rolled back) = %v", err)
+		}
+		secret := ev
+		secret.Details = map[string]any{"token": "x"}
+		for name, bad := range map[string]audit.Event{"secret": secret, "personal": personal, "other tenant": other} {
+			want := audit.ErrSecretDetail
+			switch name {
+			case "personal":
+				want = audit.ErrPersonalDetail
+			case "other tenant":
+				want = store.ErrInvalid
+			}
+			if err := sa.Tx(ctx, func(tx *store.ScopedTx) error { return w.RecordScopedTx(ctx, tx, bad) }); !errors.Is(err, want) {
+				t.Errorf("RecordScopedTx(%s) = %v, want %v", name, err, want)
+			}
+		}
+
+		page, err := db.AuditEvents().List(ctx, store.AuditFilter{TenantID: ta.ID})
+		if err != nil || len(page.Items) != 3 {
+			t.Fatalf("List(a) = %d items, %v, want 3", len(page.Items), err)
+		}
+		for _, got := range page.Items {
+			if got.TenantID != ta.ID || got.Actor != "quota" || got.ObjectKind != "tenant" {
+				t.Errorf("event = %+v", got)
+			}
+		}
+		page, err = db.AuditEvents().List(ctx, store.AuditFilter{TenantID: tb.ID})
+		if err != nil || len(page.Items) != 0 {
+			t.Errorf("List(b) = %d items, %v, want none", len(page.Items), err)
+		}
+	})
+}
+
+// typedAddress is a string type, to check that the guard sees through
+// named types.
+type typedAddress string
+
+// rawDetail marshals to a JSON string escaping its at sign.
+type rawDetail struct{}
+
+func (rawDetail) MarshalJSON() ([]byte, error) {
+	return []byte(strings.ReplaceAll(`"a#u0040example.com"`, "#", string(rune(0x5c)))), nil
+}
+
+func TestWriterRefusesPersonalDetails(t *testing.T) {
+	db := openDB(t, storetest.SQLite(t))
+	w := audit.New(db)
+	ctx := context.Background()
+	refused := map[string]map[string]any{
+		"string":       {"from": "noreply@example.com"},
+		"full-width":   {"from": "noreply" + string(rune(0xFF20)) + "example.com"},
+		"small":        {"from": "noreply" + string(rune(0xFE6B)) + "example.com"},
+		"typed string": {"from": typedAddress("a@example.com")},
+		"string slice": {"to": []string{"ok", "a@example.com"}},
+		"any slice":    {"to": []any{1, true, nil, "a@example.com"}},
+		"nested map":   {"smtp": map[string]any{"fields": []any{map[string]string{"from": "a@example.com"}}}},
+		"key":          {"a@example.com": 1},
+		"nested key":   {"m": map[string]int{"a@example.com": 1}},
+		"marshaler":    {"v": rawDetail{}},
+	}
+	for name, details := range refused {
+		ev := event(audit.ActionAdminLogin)
+		ev.Details = details
+		if err := w.Record(ctx, ev); !errors.Is(err, audit.ErrPersonalDetail) {
+			t.Errorf("Record(%s) = %v, want ErrPersonalDetail", name, err)
+		}
+		err := db.Admins().Tx(ctx, func(tx *store.SystemTx) error { return w.RecordTx(ctx, tx, ev) })
+		if !errors.Is(err, audit.ErrPersonalDetail) {
+			t.Errorf("RecordTx(%s) = %v, want ErrPersonalDetail", name, err)
+		}
+	}
+	// Details without an address pass, whatever their shape.
+	ok := event(audit.ActionAdminLogin)
+	ok.Details = map[string]any{
+		"fields": []string{"fromAddress", "host"}, "count": 3, "on": true, "none": nil,
+		"nested": map[string]any{"list": []any{1.5, "x", map[string]any{"k": "v"}}},
+		"reason": audit.RedactAddresses("asked by a@example.com"),
+	}
+	if err := w.Record(ctx, ok); err != nil {
+		t.Errorf("Record(no address) = %v", err)
+	}
+	page, err := db.AuditEvents().List(ctx, store.AuditFilter{})
+	if err != nil || len(page.Items) != 1 {
+		t.Errorf("List = %d items, %v, want 1", len(page.Items), err)
 	}
 }

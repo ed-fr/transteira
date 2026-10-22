@@ -141,6 +141,23 @@ func (w *Window) Allow(key string) (ok bool, retryAfter time.Duration) {
 	return true, 0
 }
 
+// Refund takes back the most recent event counted for key by Allow, for
+// an operation that reserved its slot first and then failed before doing
+// anything. It does nothing when no event of key is counted any more.
+func (w *Window) Refund(key string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	now := w.clock()
+	s, ok := w.states.peek(key, now)
+	if !ok {
+		return
+	}
+	w.prune(s, now)
+	if n := len(s.events); n > 0 {
+		s.events = s.events[:n-1]
+	}
+}
+
 // Fail records one failure for key. When the number of failures within the
 // last period reaches the limit, the key is locked for the lockout duration
 // and Fail returns true with the remaining lock. Failures recorded while the

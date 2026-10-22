@@ -250,7 +250,7 @@ func (s *Server) CreateInvitation(ctx context.Context, req gen.CreateInvitationR
 		return nil, depositError(err)
 	}
 	return gen.CreateInvitation201JSONResponse{
-		Id: inv.ID, Email: gen.Email(inv.Email), InvitedBy: gen.Email(inv.InvitedBy), Status: gen.InvitationStatus(inv.Status),
+		Id: inv.ID, Email: gen.Email(inv.Email), InvitedBy: inv.InvitedBy, Status: gen.InvitationStatus(inv.Status),
 		CreatedAt: inv.CreatedAt, ExpiresAt: inv.ExpiresAt,
 	}, nil
 }

@@ -32,7 +32,7 @@ Some codes carry extension members:
 |---|---|---|
 | `errors` | `validation-failed` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
 | `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid` | Number of attempts left before lockout or invalidation. |
-| `retryAfterSeconds` | `rate-limited`, `transfer-locked`, `maintenance` | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
+| `retryAfterSeconds` | `rate-limited`, `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
 | `maxTransferBytes` | `transfer-too-large` | Per-transfer size limit of the entity, in bytes. |
 | `files` | `upload-incomplete`, `checksum-mismatch` | Identifiers of the files concerned. |
 
@@ -50,14 +50,24 @@ use to ban the client IP.
 - **HTTP status:** 400 Bad Request
 - **Meaning:** the request is malformed (invalid JSON, wrong type) or a field is invalid.
   The `errors` member lists each invalid field with a reason code and, when relevant, the
-  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). In the tenant
-  configuration: an entity FQDN that is malformed or equal to an admin host (`/fqdn`), a
-  confirmation that is not the exact entity name when deleting it (`confirm`), a corrupt
-  branding image (`/image`), and a mail template that uses an unknown variable, any template
+  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). A mail address that
+  is not a bare address (`user@entity-a.example.com`; a display-name form such as
+  `Name <user@entity-a.example.com>` is refused, never rewritten) is reported with the code
+  `invalid-email` on its field: `/email` (deposit session, invitation, data subject search or
+  erasure, admin account, setup), `/recipients/<n>` (transfer creation, notification resend),
+  `/fromAddress` and `/to` (SMTP settings and test), and the `email` filter of the transfer
+  list. In the tenant configuration: an entity FQDN that is malformed or equal to an admin
+  host (`/fqdn`), a confirmation that is not the exact entity name when deleting it
+  (`confirm`), a corrupt branding image (`/image`), and a mail template that uses an unknown variable, any template
   syntax other than `{{snake_case}}` variables, or lacks a required variable (one
   `invalid-template` entry per problem, with its position). In a JSON Merge Patch, `null` on
   a field that cannot be removed is refused with one `not-nullable` entry per field (for
-  example `/name` when updating an entity).
+  example `/name` when updating an entity). In the operations of an entity: a blocklist value
+  that is not a valid email address, domain name or SHA-256 fingerprint for its kind (`/value`),
+  a notification resend to an address that is not an original recipient of the transfer
+  (`/recipients/<n>`, `invalid-format`), a missing address in a data subject search or
+  erasure (`/email`, `required`), and a list filter that is not valid (an unknown `status` or `kind`, an audit `action` that does
+  not have the `area.action` form, a `limit` outside 1 to 200, a malformed `cursor`).
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -92,7 +102,9 @@ use to ban the client IP.
   example a delegated admin calling a super admin endpoint, or a super admin trying to disable
   the TOTP that is mandatory for them). A delegated admin changing the name, FQDN, storage quota
   or transfer ceiling of its entity, or setting its transfer limit above the ceiling set by the
-  super admin, also gets `forbidden`, and nothing is changed.
+  super admin, also gets `forbidden`, and nothing is changed. The global statistics and the
+  instance-wide audit log are reserved to the super admin as well; a delegated admin reads the
+  statistics and the audit log of its own entities instead.
 - **Typical endpoints:** `/admin/system/*`, `/admin/admins`, `POST /admin/tenants`,
   `PATCH /admin/tenants/{tenantId}`, `DELETE /admin/tenants/{tenantId}`, `DELETE /admin/me/totp`.
 - **What to do:** do not retry; ask a super admin if the access is legitimately needed.
@@ -238,7 +250,15 @@ use to ban the client IP.
   cancelling or finalizing a transfer that is no longer being uploaded, or while one of its
   uploads is in progress (another request holds it); finalizing a transfer that has no file
   left because every upload was terminated, or one of whose files has no key any more; an
-  `Idempotency-Key` replayed with a different request body; resending an expired transfer;
+  `Idempotency-Key` replayed with a different request body; resending the notification of a
+  transfer that is not `available`; an admin deleting a transfer while one of its uploads (tus
+  `PATCH`) is in progress, answered with `Retry-After` (`retryAfterSeconds`): deleting a
+  transfer that has already ended is not a conflict but a `204` no-op; a GDPR erasure
+  (`eraseDataSubject`) that meets a transfer of the address being uploaded, or a deposit
+  started meanwhile with one of its invitations, answered with `Retry-After`: what was already
+  erased stays erased and every step can be replayed, so repeating the call after the delay
+  completes the erasure (revoking an invitation is never a conflict: an invitation already
+  revoked or expired is a `204` no-op);
   deleting, disabling, demoting or resetting the last usable super admin (not disabled,
   activated, TOTP enabled); an admin deleting, disabling, demoting or resetting their own
   account; promoting to super admin an account that is not activated or has no TOTP enabled;
@@ -246,11 +266,14 @@ use to ban the client IP.
   started or whose secret expired (15 minutes after the start).
 - **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
   `POST /transfers/{transferId}/finalize`,
+  `DELETE /admin/tenants/{tenantId}/transfers/{transferId}`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
+  `POST /admin/tenants/{tenantId}/data-subjects/erase`,
   `PUT /admin/system/maintenance`, `PATCH /admin/admins/{adminId}`,
   `DELETE /admin/admins/{adminId}`, `POST /admin/admins/{adminId}/reset-credentials`,
   `POST /admin/me/totp/confirm`.
-- **What to do:** reload the resource to get its current state before deciding what to do.
+- **What to do:** reload the resource to get its current state before deciding what to do;
+  when `Retry-After` is present, retry after that delay.
 
 ### already-exists
 
@@ -338,13 +361,15 @@ use to ban the client IP.
   15 minutes lock for 15 minutes; 5 wrong second factors of one admin, TOTP enrollment
   confirmations included, lock their second factor for 15 minutes), and a per-client limit of
   the sign-in steps (setup, password, second factor, TOTP enrollment confirmation, activation:
-  20 at once, then one every 3 seconds), and the SMTP tests of an entity (5 per administrator
-  and entity within 10 minutes).
+  20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
+  and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
+  transfer, whoever the administrator).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
-  `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`.
+  `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`,
+  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
@@ -360,13 +385,15 @@ use to ban the client IP.
 ### mail-unavailable
 
 - **HTTP status:** 503 Service Unavailable
-- **Meaning:** the verification or invitation email cannot be sent right now: no SMTP server is
-  configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity is
+- **Meaning:** the verification, invitation or notification email cannot be sent right now: no
+  SMTP server is configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity is
   open (its server failed several times in a row and is not tried again for a minute), or the
   mail queue is shutting down. Nothing was sent, and nothing was changed. Admin activation
   links are never mailed (they are returned by `POST /admin/admins` and
-  `POST /admin/admins/{adminId}/reset-credentials`), so the administration never answers it.
-- **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`.
+  `POST /admin/admins/{adminId}/reset-credentials`). In the administration, only the resend of
+  a transfer notification answers it, when no SMTP server is configured for the entity.
+- **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`,
+  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`.
 - **What to do:** retry later. If the error persists, contact the administrators of the service:
   the SMTP settings of the entity are probably missing.
 

@@ -80,9 +80,10 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 // finish ends the erasure of kind k of the transfer trfID of tid at now,
 // in one transaction: it checks inside it that the transfer is still due
 // (stillDue, which applies finalDue; errNotDue otherwise), destroys its
-// sealed download token if any, then marks it deleted (kindDelete) or
-// expired, or deletes its row (kindTenant). The store refuses while a file
-// key remains (store.ErrKeysRemain).
+// sealed download token if any, then marks it deleted (kindDelete, and
+// kindAdmin from any status) or expired, or deletes its row with its
+// recipients and files by cascade (kindTenant, kindSubject). The store
+// refuses while a file key remains (store.ErrKeysRemain).
 func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID string, now time.Time, stillDue func(store.Transfer) bool) error {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -104,7 +105,9 @@ func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID stri
 		switch k {
 		case kindDelete:
 			return r.db.Transfers().MarkDeletedTx(ctx, tx, trfID)
-		case kindTenant:
+		case kindAdmin:
+			return r.db.Transfers().SetStatusTx(ctx, tx, trfID, d.Status, store.TransferDeleted, now)
+		case kindTenant, kindSubject:
 			return r.db.Transfers().DeleteTx(ctx, tx, trfID)
 		}
 		return r.db.Transfers().MarkExpiredTx(ctx, tx, trfID, now)

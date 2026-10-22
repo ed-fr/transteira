@@ -3,6 +3,8 @@ package mail
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -235,6 +237,13 @@ func TestQueueRetryInterruptedByClose(t *testing.T) {
 func TestAddressHashAndRedaction(t *testing.T) {
 	if AddressHash(" Bob@Example.com ") != AddressHash("bob@example.com") || len(AddressHash("x")) != 16 {
 		t.Fatal("AddressHash must be case-insensitive and 16 hex digits")
+	}
+	plain := sha256.Sum256([]byte("bob@example.com"))
+	if AddressHash("bob@example.com") == hex.EncodeToString(plain[:8]) {
+		t.Fatal("AddressHash must be keyed, not a plain SHA-256")
+	}
+	if len(addressHashKey) != 32 || bytes.Equal(addressHashKey, make([]byte, 32)) || bytes.Equal(newAddressHashKey(), addressHashKey) {
+		t.Fatal("the AddressHash key must be 32 random bytes")
 	}
 	if AddressHash("a@example.com") == AddressHash("b@example.com") {
 		t.Fatal("collision")

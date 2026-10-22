@@ -772,3 +772,23 @@ func TestDepositInvitationLimit(t *testing.T) {
 		}
 	})
 }
+
+// TestDepositMalformedEmail: a malformed address when opening a deposit
+// session, inviting or naming the recipients of a transfer is refused with
+// the pointer of its field and the code invalid-email; a display-name form
+// is never rewritten into the bare address.
+func TestDepositMalformedEmail(t *testing.T) {
+	t.Parallel()
+	forEngine(t, func(t *testing.T, e storetest.Engine) {
+		d := startDeposit(t, e, serverOptions{}, true)
+		alice, _ := internalSession(t, d, "alice")
+		for _, bad := range []string{"not an address", "Bob <bob@" + domainA + ">", "<bob@" + domainA + ">"} {
+			c := &depositor{d: d, host: hostA, ip: insideA}
+			expectEmailError(t, c.start(t, bad, ""), "/email")
+			expectEmailError(t, alice.invite(t, `{"email":`+strconv.Quote(bad)+`}`, alice.withCSRF()), "/email")
+			expectEmailError(t, alice.createTransfer(t, transferCreate{
+				Recipients: []string{"carol@example.net", bad}, ExpiryDays: 7, Files: []fileDecl{{Name: "a.txt", Size: 1}},
+			}, ""), "/recipients/1")
+		}
+	})
+}

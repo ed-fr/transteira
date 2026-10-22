@@ -25,9 +25,11 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/datasubject"
 	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/health"
@@ -38,14 +40,18 @@ import (
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/securitylog"
+	"github.com/ed-fr/transteira/internal/stats"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
+	"github.com/ed-fr/transteira/internal/tenantops"
 	"github.com/ed-fr/transteira/internal/transfer"
 	"github.com/ed-fr/transteira/internal/upload"
+	"github.com/ed-fr/transteira/internal/usage"
 	"github.com/ed-fr/transteira/internal/version"
 )
 
@@ -59,21 +65,22 @@ const (
 	// MaxHeaderBytes bounds the size of request headers.
 	MaxHeaderBytes = 64 << 10
 	// ShutdownTimeout bounds the graceful shutdown of the HTTP server. With
-	// HandlerDrainTimeout, BackgroundCloseTimeout and MailDrainTimeout it
-	// makes a worst-case shutdown of 9 s, strictly below Docker's default
-	// 10 s stop grace period (stop_grace_period in docker-compose), so that
-	// connections still open are closed by TransTeira itself, with a
-	// warning, and the database is closed cleanly before Docker sends
-	// SIGKILL. Raise stop_grace_period before raising any of the four
-	// values.
-	ShutdownTimeout = 6 * time.Second
+	// HandlerDrainTimeout, BackgroundCloseTimeout, FinalCloseTimeout and
+	// MailDrainTimeout it makes a worst-case shutdown of 9 s, strictly below
+	// Docker's default 10 s stop grace period (stop_grace_period in
+	// docker-compose), so that connections still open are closed by
+	// TransTeira itself, with a warning, and the database is closed cleanly
+	// before Docker sends SIGKILL. Raise stop_grace_period before raising
+	// any of the five values.
+	ShutdownTimeout = 5 * time.Second
 	// HandlerDrainTimeout bounds the wait for handlers to return once the
 	// connections have been forcibly closed, before the database and the
 	// security log are closed.
 	HandlerDrainTimeout = time.Second
 	// BackgroundCloseTimeout bounds the wait for the background workers to
-	// stop at shutdown, after the HTTP server and before the mail queue and
-	// the database. They are closed at once, under this one deadline:
+	// stop at shutdown (first stage of closeStages), after the HTTP server
+	// and before the mail queue and the database. They are closed at once,
+	// under this one deadline:
 	//   - the antivirus workers: an analysis in progress is abandoned
 	//     without counting an attempt, and resumed by the sweep of the next
 	//     start;
@@ -82,9 +89,18 @@ const (
 	//   - the lifecycle sweeper: an erasure in progress stops before its next
 	//     transfer and is completed by a later run; a SQLite copy in progress
 	//     is interrupted (VACUUM INTO under a canceled context) and its
-	//     temporary file removed, the next night writes a new one.
+	//     temporary file removed, the next night writes a new one;
+	//   - the quota monitor: pending evaluations are dropped (the next start
+	//     sweeps every tenant), an alert already decided is still sent.
 	// It takes one second from the former 7 s of ShutdownTimeout.
 	BackgroundCloseTimeout = time.Second
+	// FinalCloseTimeout bounds the second stage of closeStages, which has
+	// its own deadline so that an exhausted first stage never deprives it:
+	// the retrier of the admin mails hands its jobs to the mail queue, and
+	// the usage recorder makes the final flush of the counters recorded
+	// until then (shutdown included), while the database is still open.
+	// It takes one second from the former 6 s of ShutdownTimeout.
+	FinalCloseTimeout = time.Second
 	// MailDrainTimeout bounds the delivery of the mails still queued at
 	// shutdown, once the HTTP server has stopped. Jobs left after it are
 	// dropped (a code or an invitation can be requested again). See
@@ -172,9 +188,12 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // administrator authentication (with the setup token generated and logged
 // while no administrator exists, see newAdminService), tenant configuration
 // service (sharing the tenant resolver, which it invalidates, and the
-// guarded SMTP sender), health checks, HTTP server. At shutdown the mail queue is drained
-// (at most MailDrainTimeout) after the HTTP server has stopped and before
-// the database is closed.
+// guarded SMTP sender), health checks, HTTP server. At shutdown, once the
+// HTTP server has stopped, the background workers stop (at most
+// BackgroundCloseTimeout), then the retrier of the admin mails and the
+// usage recorder with its final flush (at most FinalCloseTimeout), then the
+// mail queue is drained (at most MailDrainTimeout), before the database is
+// closed.
 func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	o := runOptions{logOutput: os.Stdout, shutdownTimeout: ShutdownTimeout}
 	for _, opt := range opts {
@@ -262,8 +281,13 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	vault := masterkey.NewVault(db, keys, logger)
 	// The mails of a tenant use its customized templates when it has some.
 	overrides := notify.StoreOverrides(db.TenantEmailTemplates())
-	deposits := deposit.New(db, keys, vault, mailQueue, secLog,
-		deposit.Options{SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides})
+	// One writer records the tenant audit events of the deposits, transfers,
+	// antivirus and quota alerts; one recorder counts the usage statistics.
+	auditLog := audit.New(db)
+	usageCounts := usage.New(db, usage.Options{Logger: logger})
+	deposits := deposit.New(db, keys, vault, mailQueue, secLog, deposit.Options{
+		SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides, Audit: auditLog,
+	})
 	files, err := storage.New(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -281,24 +305,43 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	passwords := crypto.NewPasswordHasher(transfer.DefaultHashConcurrency)
 	worker := scan.New(scan.Deps{
 		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
+		Audit: auditLog, Usage: usageCounts,
 	}, scanOptions(cfg, &o, logger))
 	downloads := download.New(download.Deps{
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
-		SecurityLog: secLog,
+		SecurityLog: secLog, Usage: usageCounts,
 	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger})
-	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, Files: files},
+	// The sweeper holds the antivirus worker before erasing a transfer, so
+	// that a transfer deleted while it is scanned is never made available.
+	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, Files: files, Holder: worker},
 		lifecycleOptions(cfg, &o, logger))
-	// Deferred after closeMailQueue, the data directory and the database, so
-	// it runs before them: the workers stop enqueueing mails and touching
-	// the files before the queue drains.
-	defer closeBackground(ctx, logger, worker, downloads, sweeper)
-	transfers := newTransferService(cfg, db, vault, uploads, secLog, passwords, worker.Enqueue, logger)
 	admins, err := newAdminService(ctx, cfg, db, adminDeps{
 		keys: keys, vault: vault, hasher: passwords, seclog: secLog,
 	}, logger)
 	if err != nil {
 		return err
 	}
+	// The quota alerts and the resent notifications are queued through one
+	// retrier, so that a full queue delays them instead of dropping them.
+	opsMails := mail.NewRetrier(mailQueue, mail.RetryOptions{Logger: logger})
+	quotas, err := quota.New(db, notifier, opsMails, auditLog, quota.Options{
+		AdminLink: adminBaseURL(cfg) + "/admin", Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// Deferred after closeMailQueue, the data directory and the database, so
+	// it runs before them: the workers stop enqueueing mails, touching the
+	// files and counting usage before the queue drains, then the retrier of
+	// the admin mails stops and the usage counters get their final flush,
+	// while the database is still open.
+	defer closeStages(ctx, logger,
+		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas}},
+		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, usageCounts}})
+	transfers := newTransferService(cfg, db, transferDeps{
+		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
+		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
+	}, logger)
 	// The resolver of the HTTP tenant middleware is invalidated by the
 	// tenant configuration after every change of a tenant row.
 	resolver := tenant.NewResolver(db.Tenants())
@@ -315,6 +358,26 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	}
 	if err := sweeper.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the lifecycle sweeper: %w", err)
+	}
+	if err := usageCounts.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the usage recorder: %w", err)
+	}
+	if err := quotas.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the quota monitor: %w", err)
+	}
+	operations, err := tenantops.New(db, tenantops.Options{
+		Vault: vault, Eraser: sweeper, Notifier: notifier, Mailer: opsMails, Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	subjects, err := datasubject.New(db, datasubject.Options{Eraser: sweeper, Holder: worker, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	statistics, err := stats.New(db, stats.Options{DataDir: cfg.DataDir, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
 	}
 
 	handler := httpserver.New(httpserver.Deps{
@@ -334,7 +397,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Sessions:   deposits,
 		AdminHosts: cfg.AdminHosts,
 		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
-			admin.WithTenantService(tenants)),
+			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
+			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
@@ -430,7 +494,7 @@ func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d ad
 	if len(cfg.AdminHosts) == 0 {
 		return nil, fmt.Errorf("app: %s is required", config.EnvAdminHosts)
 	}
-	baseURL := "https://" + cfg.AdminHosts[0]
+	baseURL := adminBaseURL(cfg)
 	setupToken := cfg.SetupToken.Reveal()
 	if setupToken == "" {
 		n, err := db.Admins().CountAll(ctx)
@@ -459,6 +523,13 @@ func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d ad
 		return nil, fmt.Errorf("app: %w", err)
 	}
 	return svc, nil
+}
+
+// adminBaseURL returns the absolute URL of the first admin host, the base
+// of the links put in the activation and quota alert mails (never derived
+// from a request). cfg.AdminHosts must not be empty.
+func adminBaseURL(cfg *config.Config) string {
+	return "https://" + cfg.AdminHosts[0]
 }
 
 // migrate applies the start-up migrations, then drops the owner
@@ -581,17 +652,31 @@ func drain(counter *atomic.Int64, timeout time.Duration) bool {
 	return true
 }
 
+// transferDeps are the dependencies of the transfer service.
+type transferDeps struct {
+	vault     *masterkey.Vault
+	uploads   *upload.Engine
+	secLog    *securitylog.Logger
+	passwords *crypto.PasswordHasher
+	// onFinalized (the antivirus worker's Enqueue) is called after each
+	// finalization.
+	onFinalized func(tenant.ID, string)
+	// onQuota (the quota monitor's Check) is called after each creation
+	// and each refusal for quota.
+	onQuota func(tenant.ID, bool)
+	audit   transfer.AuditRecorder
+	usage   transfer.UsageRecorder
+}
+
 // newTransferService builds the transfer service over the tus upload
-// engine uploads; onFinalized (the antivirus worker's Enqueue) is called
-// after each finalization. The uploads in flight at shutdown stop with the
-// base context of their request (canceled by serve): the engine saves a
+// engine of d. The uploads in flight at shutdown stop with the base
+// context of their request (canceled by serve): the engine saves a
 // checkpoint, and the client resumes after a HEAD.
-func newTransferService(cfg *config.Config, db *store.DB, vault *masterkey.Vault, uploads *upload.Engine,
-	secLog *securitylog.Logger, passwords *crypto.PasswordHasher, onFinalized func(tenant.ID, string), logger *slog.Logger,
-) *transfer.Service {
-	return transfer.New(db, vault, uploads, secLog, transfer.Options{
+func newTransferService(cfg *config.Config, db *store.DB, d transferDeps, logger *slog.Logger) *transfer.Service {
+	return transfer.New(db, d.vault, d.uploads, d.secLog, transfer.Options{
 		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
-		Hasher: passwords, OnFinalized: onFinalized, Logger: logger,
+		Hasher: d.passwords, OnFinalized: d.onFinalized, OnQuota: d.onQuota, Audit: d.audit, Usage: d.usage,
+		Logger: logger,
 	})
 }
 
@@ -670,12 +755,31 @@ type closer interface {
 	Close(ctx context.Context) error
 }
 
-// closeBackground stops the background components at once, all within
-// BackgroundCloseTimeout. A stop cut short is logged, not returned: what
-// was interrupted is resumed at the next start.
-func closeBackground(ctx context.Context, logger *slog.Logger, closers ...closer) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), BackgroundCloseTimeout)
-	defer cancel()
+// closeStage is a set of background components stopped at once, within
+// timeout.
+type closeStage struct {
+	timeout time.Duration
+	closers []closer
+}
+
+// closeStages stops the background components stage after stage, the
+// components of one stage at once, each stage within its own timeout
+// (not canceled with ctx, already done at shutdown): a later stage holds
+// the components the earlier ones feed (the retrier of the admin mails;
+// the usage recorder, whose Close makes the final flush of the counters),
+// and keeps its whole budget however long the earlier stages took. A stop
+// cut short is logged, not returned: what was interrupted is resumed at
+// the next start.
+func closeStages(ctx context.Context, logger *slog.Logger, stages ...closeStage) {
+	for _, st := range stages {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), st.timeout)
+		closeAll(sctx, logger, st.closers)
+		cancel()
+	}
+}
+
+// closeAll stops closers at once, within ctx, logging a stop cut short.
+func closeAll(ctx context.Context, logger *slog.Logger, closers []closer) {
 	var wg sync.WaitGroup
 	for _, c := range closers {
 		wg.Go(func() {

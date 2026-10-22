@@ -29,13 +29,37 @@ const (
 	// kindTenant erases every transfer of a tenant being deleted, whatever
 	// its status, and deletes its row ([Sweeper.EraseTenant]).
 	kindTenant
+	// kindAdmin erases a transfer an administrator deletes, whatever its
+	// status unless already expired or deleted; it ends deleted
+	// ([Sweeper.EraseTransfer], MarkDeleted).
+	kindAdmin
+	// kindSubject erases a transfer of a GDPR erasure, whatever its status,
+	// and deletes its row ([Sweeper.EraseTransfer], DeleteRow).
+	kindSubject
 	kindCount
 )
 
+// taskEraseTransfer names the erasures of [Sweeper.EraseTransfer] in the
+// logs; it is not a periodic task.
+const taskEraseTransfer Task = "erase-transfer"
+
 // task returns the task of k.
 func (k kind) task() Task {
-	return [kindCount]Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions}[k]
+	return [kindCount]Task{
+		TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions, taskEraseTransfer, taskEraseTransfer,
+	}[k]
 }
+
+// Steps of the erasure of one transfer, named in the logs and errors.
+const (
+	stepRead     = "read transfer"
+	stepActivity = "upload activity"
+	stepLock     = "lock files"
+	stepRelock   = "read transfer under lock"
+	stepRemove   = "remove files"
+	stepState    = "remove download state"
+	stepFinal    = "final transaction"
+)
 
 // stats counts what one run of an erasure task did.
 type stats struct {
@@ -56,7 +80,11 @@ type outcome int
 
 const (
 	erased outcome = iota
+	// skipped: no longer due.
 	skipped
+	// missing: the transfer does not exist (gone meanwhile, or not a
+	// transfer of the tenant).
+	missing
 	failed
 )
 
@@ -148,7 +176,7 @@ func (s *Sweeper) sweepPages(ctx context.Context, k kind, st *stats) error {
 				switch s.erase(ctx, k, tt, now) {
 				case erased:
 					st.erased++
-				case skipped:
+				case skipped, missing:
 					st.skipped++
 				default:
 					st.failed++
@@ -164,11 +192,21 @@ func (s *Sweeper) sweepPages(ctx context.Context, k kind, st *stats) error {
 }
 
 // erase erases the due transfer tt in the scope of its tenant (see the
-// package documentation for the steps).
+// package documentation for the steps); a failure is logged.
 func (s *Sweeper) erase(ctx context.Context, k kind, tt store.TenantTransfer, now time.Time) outcome {
-	d, out, ok := s.check(ctx, k, tt, now, "read transfer")
-	if !ok {
-		return out
+	out, step, err := s.eraseSteps(ctx, k, tt, now)
+	if out == failed {
+		return s.fail(ctx, k, tt, step, err)
+	}
+	return out
+}
+
+// eraseSteps erases the due transfer tt in the scope of its tenant and
+// returns the outcome, with the failed step and its error when it failed.
+func (s *Sweeper) eraseSteps(ctx context.Context, k kind, tt store.TenantTransfer, now time.Time) (outcome, string, error) {
+	d, out, step, err := s.check(ctx, k, tt, now, stepRead)
+	if out != erased {
+		return out, step, err
 	}
 	ids := make([]string, len(d.Files))
 	for i, f := range d.Files {
@@ -176,13 +214,13 @@ func (s *Sweeper) erase(ctx context.Context, k kind, tt store.TenantTransfer, no
 	}
 	unlock, err := s.remover.LockFiles(ids)
 	if err != nil {
-		return s.fail(ctx, k, tt, "lock files", err)
+		return failed, stepLock, err
 	}
 	defer unlock()
 	// Read again under the locks: a finalization, an upload or a
 	// cancellation may have changed the transfer meanwhile.
-	if d, out, ok = s.check(ctx, k, tt, now, "read transfer under lock"); !ok {
-		return out
+	if d, out, step, err = s.check(ctx, k, tt, now, stepRelock); out != erased {
+		return out, step, err
 	}
 	// Every file is passed, keyed or not: the keys still present are
 	// destroyed, and the removal of a file left on disk by an earlier
@@ -191,52 +229,54 @@ func (s *Sweeper) erase(ctx context.Context, k kind, tt store.TenantTransfer, no
 	// leftovers go with the tenant directory.
 	if len(d.Files) > 0 && (k != kindTenant || anyKeyed(d.Files)) {
 		if err := s.remover.RemoveFiles(ctx, tt.TenantID, d.Files); err != nil {
-			return s.fail(ctx, k, tt, "remove files", err)
+			return failed, stepRemove, err
 		}
 	}
 	if k == kindExpire && d.Status == store.TransferRejected {
-		return erased
+		return erased, "", nil
 	}
 	if err := s.files.RemoveState(tt.TenantID, storage.StateName(tt.TransferID)); err != nil {
-		return s.fail(ctx, k, tt, "remove download state", err)
+		return failed, stepState, err
 	}
 	started := d.Status
 	err = s.repo.finish(ctx, k, tt.TenantID, tt.TransferID, now, func(t store.Transfer) bool {
 		return finalDue(k, t, now, started, s.scanningMaxAge)
 	})
-	if errors.Is(err, errNotDue) || errors.Is(err, store.ErrNotFound) {
-		return skipped
-	}
-	if err != nil {
-		return s.fail(ctx, k, tt, "final transaction", err)
+	switch {
+	case errors.Is(err, errNotDue):
+		return skipped, "", nil
+	case errors.Is(err, store.ErrNotFound):
+		return missing, "", nil
+	case err != nil:
+		return failed, stepFinal, err
 	}
 	if k == kindExpire && started == store.TransferScanning {
 		s.logger.WarnContext(ctx, "lifecycle: transfer expired while still scanning (stuck analysis)",
 			slog.String("tenant", string(tt.TenantID)), slog.String("transfer", tt.TransferID),
 			slog.Duration("finalized_age", now.Sub(d.FinalizedAt)))
 	}
-	return erased
+	return erased, "", nil
 }
 
 // check reads the transfer tt and decides whether it is due for k at now.
-// ok is false when it is not; out is then skipped or failed (logged as
-// step).
-func (s *Sweeper) check(ctx context.Context, k kind, tt store.TenantTransfer, now time.Time, step string) (d store.TransferDetails, out outcome, ok bool) {
+// out is erased when it is due; otherwise it is skipped (not due), missing,
+// or failed with the failed step and its error (step names the read).
+func (s *Sweeper) check(ctx context.Context, k kind, tt store.TenantTransfer, now time.Time, step string) (store.TransferDetails, outcome, string, error) {
 	d, err := s.repo.transfer(ctx, tt.TenantID, tt.TransferID)
 	if errors.Is(err, store.ErrNotFound) {
-		return d, skipped, false
+		return d, missing, "", nil
 	}
 	if err != nil {
-		return d, s.fail(ctx, k, tt, step, err), false
+		return d, failed, step, err
 	}
 	due, err := s.due(ctx, k, tt.TenantID, d, now)
 	if err != nil {
-		return d, s.fail(ctx, k, tt, "upload activity", err), false
+		return d, failed, stepActivity, err
 	}
 	if !due {
-		return d, skipped, false
+		return d, skipped, "", nil
 	}
-	return d, erased, true
+	return d, erased, "", nil
 }
 
 // due reports whether d must be erased by k at now:
@@ -246,15 +286,18 @@ func (s *Sweeper) check(ctx context.Context, k kind, tt store.TenantTransfer, no
 //     that still has its data key;
 //   - kindAbandoned: uploading, with uploads that expired at or before now
 //     according to the upload engine;
-//   - kindTenant: always.
+//   - kindTenant and kindSubject: always;
+//   - kindAdmin: unless already expired or deleted.
 func (s *Sweeper) due(ctx context.Context, k kind, tid tenant.ID, d store.TransferDetails, now time.Time) (bool, error) {
 	switch k {
 	case kindDelete:
 		return dueDeletion(d.Transfer, now), nil
 	case kindExpire:
 		return dueExpiry(d.Transfer, now, s.scanningMaxAge) || rejectedKeyed(d), nil
-	case kindTenant:
+	case kindTenant, kindSubject:
 		return true, nil
+	case kindAdmin:
+		return !adminEnded(d.Status), nil
 	}
 	if d.Status != store.TransferUploading {
 		return false, nil
@@ -278,11 +321,21 @@ func finalDue(k kind, t store.Transfer, now time.Time, started store.TransferSta
 		return dueDeletion(t, now)
 	case kindExpire:
 		return dueExpiry(t, now, scanningMaxAge) || (started == store.TransferScanning && t.Status == store.TransferAvailable)
-	case kindTenant:
+	case kindTenant, kindSubject:
 		return true
+	case kindAdmin:
+		return !adminEnded(t.Status)
 	default:
 		return t.Status == store.TransferUploading
 	}
+}
+
+// adminEnded reports whether an administrator's deletion of a transfer
+// with status st has nothing left to do: it already expired or was
+// deleted. A rejected transfer may still hold the keys of files that could
+// not be analyzed: it is erased and ends deleted.
+func adminEnded(st store.TransferStatus) bool {
+	return st == store.TransferExpired || st == store.TransferDeleted
 }
 
 // dueDeletion reports whether t must be deleted at now: available, with a

@@ -2452,7 +2452,7 @@ paths:
         - name: email
           in: query
           description: Filter on sender or recipient address (exact match).
-          schema: { type: string, format: email }
+          schema: { $ref: '#/components/schemas/Email' }
           example: alice@entity-a.example.com
         - name: createdAfter
           in: query
@@ -2483,6 +2483,7 @@ paths:
                     firstDownloadedAt: null
                     downloadCount: 0
                 nextCursor: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2533,7 +2534,20 @@ paths:
       tags: [Admin operations]
       operationId: deleteTenantTransfer
       summary: Delete a transfer before expiry
-      description: Deletes files with crypto-erase and records the action in the audit log.
+      description: |
+        Deletes the transfer with crypto-erase: the key of each file is destroyed first, then the
+        files, so that copies in backups become unreadable. The transfer is marked `deleted`, its
+        download link answers `410 transfer-gone` and the space is freed from the quota. A transfer
+        being scanned by the antivirus is withdrawn from the scan first: it is never made
+        available and no notification is sent to its recipients.
+
+        The optional `reason` is recorded in the audit log (`transfer.deleted`) after the e-mail
+        addresses it contains are replaced by `[address]` and it is cut to 500 characters.
+
+        Deleting a transfer that has already ended (`expired` or `deleted`) is a no-op answered
+        `204`, without audit. When an upload (tus `PATCH`) of the transfer is in progress, the
+        deletion is refused with `409 state-conflict` and a `Retry-After` header: retry after the
+        delay. Requires the right to change the tenant.
       security:
         - adminSession: []
           csrfToken: []
@@ -2544,9 +2558,24 @@ paths:
             schema: { $ref: '#/components/schemas/AdminReason' }
             example: { reason: Sent to the wrong recipient at the sender's request. }
       responses:
-        '204': { description: Transfer deleted. }
+        '204': { description: "Transfer deleted, or already ended (no-op)." }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: An upload of the transfer is in progress; retry after `Retry-After`.
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict
+                title: Operation not allowed in the current state
+                status: 409
+                code: state-conflict
+                retryAfterSeconds: 5
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/tenants/{tenantId}/transfers/{transferId}/resend:
@@ -2557,7 +2586,18 @@ paths:
       tags: [Admin operations]
       operationId: resendTransferNotification
       summary: Resend the notification email to recipients
-      description: "Queues the notification email again for all or some of the original recipients of an available transfer. Audited."
+      description: |
+        Queues the notification email again, through the SMTP settings of the tenant, for all or
+        some of the original recipients of an `available` transfer (otherwise `409
+        state-conflict`). Every listed recipient must be an original recipient of the transfer
+        (otherwise `400 validation-failed`); without a list, the notification goes to all of them.
+
+        The mail carries the existing download link: the link is never returned to the admin nor
+        written to any log, and the download token is never rotated, so links already received
+        keep working. At most 5 resends per hour per transfer (`429 rate-limited`). When no SMTP
+        server is configured for the tenant, nothing is queued (`503 mail-unavailable`). Audited
+        as `transfer.notification_resent` with the number of recipients only. Requires the right
+        to change the tenant.
       security:
         - adminSession: []
           csrfToken: []
@@ -2571,9 +2611,21 @@ paths:
         '202': { description: Notification queued. }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503':
+          description: No SMTP server is configured for the tenant; nothing was queued.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
+                title: Email cannot be sent
+                status: 503
+                code: mail-unavailable
 
   /admin/tenants/{tenantId}/invitations:
     parameters:
@@ -2582,7 +2634,7 @@ paths:
       tags: [Admin operations]
       operationId: listTenantInvitations
       summary: List invitations with their issuer
-      description: "Lists the invitations of the tenant with their issuer and status."
+      description: "Lists the invitations of the tenant, most recent first, with their issuer and status. After a GDPR erasure of the issuer, its invitations are revoked and `invitedBy` holds the pseudonym `erased-<16 hex>` instead of the address."
       security:
         - adminSession: []
       parameters:
@@ -2607,6 +2659,7 @@ paths:
                     status: pending
                     createdAt: '2026-10-19T16:00:00Z'
                     expiresAt: '2027-10-19T16:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2624,13 +2677,14 @@ paths:
       tags: [Admin operations]
       operationId: revokeInvitation
       summary: Revoke an invitation
-      description: "Revokes a pending invitation; its link stops working immediately. Audited."
+      description: "Revokes an invitation that is still usable (pending, or used but not expired); its link stops working immediately. Audited as `invitation.revoked`. Revoking an invitation that is already revoked or expired is a no-op answered `204`, without audit. Requires the right to change the tenant."
       security:
         - adminSession: []
           csrfToken: []
       responses:
-        '204': { description: Invitation revoked. }
+        '204': { description: "Invitation revoked, or already revoked or expired (no-op)." }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2662,6 +2716,7 @@ paths:
                 items:
                   - { id: blk_01JABCH2J3K415M6N7P8Q9R0S1, kind: domain, value: spam.example.net, comment: Repeated abuse, createdBy: admin.entity-a, createdAt: '2026-10-10T08:00:00Z' }
                   - { id: blk_01JABCH3K415M6N7P8Q9R0S1T2, kind: sha256, value: 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f, comment: Known malware sample, createdBy: admin.entity-a, createdAt: '2026-10-11T08:00:00Z' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2669,7 +2724,16 @@ paths:
       tags: [Admin operations]
       operationId: createBlocklistEntry
       summary: Add a blocklist entry
-      description: "Adds an email address, a domain or a SHA-256 fingerprint to the tenant blocklist. Values are normalised to lower case; the change is audited."
+      description: |
+        Adds an email address, a domain or a SHA-256 fingerprint to the tenant blocklist. The value
+        is trimmed and normalised to lower case, then validated according to its kind: an email
+        address (`email`), a domain name without `@` (`domain`, such as `spam.example.net`), or
+        64 hexadecimal characters (`sha256`); otherwise `400 validation-failed` on `/value`. A
+        value already listed for the same kind is refused with `409 already-exists`.
+
+        Audited as `blocklist.updated`: the value is stored in the audit details for the `domain`
+        and `sha256` kinds only, never for an `email` entry (only its kind and identifier).
+        Requires the right to change the tenant.
       security:
         - adminSession: []
           csrfToken: []
@@ -2688,6 +2752,7 @@ paths:
               example: { id: blk_01JABCH415M6N7P8Q9R0S1T2V3, kind: email, value: mallory@example.net, comment: Phishing attempts, createdBy: admin.entity-a, createdAt: '2026-10-19T16:15:00Z' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/AlreadyExists' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2705,13 +2770,14 @@ paths:
       tags: [Admin operations]
       operationId: deleteBlocklistEntry
       summary: Remove a blocklist entry
-      description: "Removes an entry from the tenant blocklist. Audited."
+      description: "Removes an entry from the tenant blocklist. Audited as `blocklist.updated`, with the value for the `domain` and `sha256` kinds only. Requires the right to change the tenant."
       security:
         - adminSession: []
           csrfToken: []
       responses:
         '204': { description: Entry removed. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2856,13 +2922,13 @@ paths:
       tags: [Admin operations]
       operationId: listTenantAuditEvents
       summary: Audit log of the tenant (12-month retention)
-      description: "Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period."
+      description: "Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period. Only the events of this tenant are returned, never events without tenant nor those of another tenant. Readable by any admin attached to the tenant."
       security:
         - adminSession: []
       parameters:
         - name: action
           in: query
-          description: "Filter by audit action."
+          description: "Filter by audit action. The list of actions is extensible: any value of the `AuditAction` form is accepted, and an unknown action simply matches no event."
           schema: { $ref: '#/components/schemas/AuditAction' }
           example: transfer.deleted
         - name: actor
@@ -2898,6 +2964,7 @@ paths:
                     action: transfer.finalized
                     object: { kind: transfer, id: trf_01JABCD8E3W5Q2Z7K9M4N6P0RS }
                     details: { fileCount: 2, totalBytes: 12900630528 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2909,7 +2976,12 @@ paths:
       tags: [Admin operations]
       operationId: getTenantStats
       summary: Tenant dashboard statistics
-      description: "Returns the dashboard statistics of the tenant for a period: volumes, transfers, downloads, antivirus detections and quota usage."
+      description: |
+        Returns the dashboard statistics of the tenant for a period: volumes, transfers,
+        downloads, antivirus detections and quota usage. The counters come from daily aggregates
+        that hold no personal data (see `TenantStats` for the definition of each counter); the
+        storage figures are the current values. Days are UTC days. Readable by any admin attached
+        to the tenant.
       security:
         - adminSession: []
       parameters:
@@ -2925,18 +2997,24 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TenantStats' }
               example:
-                period: 30d
-                transferCount: 412
-                bytesUploaded: 1932735283200
-                downloadCount: 1287
-                bytesDownloaded: 4123168604160
-                virusDetections: 2
+                period: 7d
+                transferCount: 61
+                bytesUploaded: 225485783040
+                downloadCount: 190
+                bytesDownloaded: 512110190592
+                virusDetections: 1
                 storageUsedBytes: 274877906944
                 storageQuotaBytes: 1099511627776
                 storageUsedRatio: 0.25
                 series:
+                  - { date: '2026-10-13', transfers: 12, bytesUploaded: 42949672960 }
+                  - { date: '2026-10-14', transfers: 15, bytesUploaded: 53687091200 }
+                  - { date: '2026-10-15', transfers: 8, bytesUploaded: 32212254720 }
+                  - { date: '2026-10-16', transfers: 0, bytesUploaded: 0 }
+                  - { date: '2026-10-17', transfers: 0, bytesUploaded: 0 }
                   - { date: '2026-10-18', transfers: 17, bytesUploaded: 64424509440 }
                   - { date: '2026-10-19', transfers: 9, bytesUploaded: 32212254720 }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2948,7 +3026,11 @@ paths:
       tags: [Admin operations]
       operationId: searchDataSubject
       summary: GDPR - find all data linked to an email address
-      description: POST is used so that the address does not appear in URLs and proxy logs.
+      description: |
+        Counts the data of this tenant linked to an email address. Only this tenant is searched:
+        the same address in another tenant is neither counted nor revealed. POST is used so that
+        the address does not appear in URLs and proxy logs. The search is itself audited as
+        `data_subject.searched`, without the address. Requires the right to change the tenant.
       security:
         - adminSession: []
           csrfToken: []
@@ -2974,6 +3056,7 @@ paths:
                 securityEvents: 0
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2985,10 +3068,38 @@ paths:
       operationId: eraseDataSubject
       summary: GDPR - erase all data linked to an email address
       description: |
-        Deletes transfers sent by the address (with crypto-erase), removes the address from
-        recipient lists (a transfer left without recipient is deleted), deletes its verified
-        address record, verification codes and invitations, and pseudonymises it in audit and
-        security log entries. The erase itself is audited without the address in clear.
+        Erases the data of this tenant linked to an email address. Only this tenant is affected:
+        the same address in another tenant is left untouched. Requires the right to change the
+        tenant. Each step can be replayed safely, so a failed erasure can simply be repeated.
+
+        What is erased:
+
+        - transfers sent by the address, or tied to an invitation of which the address is the
+          invitee: crypto-erased (keys destroyed, then files) and their rows deleted;
+        - transfers received: the address is removed from the recipient list, and a transfer left
+          without any recipient is deleted (crypto-erased) as well;
+        - invitations of which the address is the invitee: deleted; invitations it issued:
+          revoked, the issuer being replaced by the pseudonym;
+        - verification codes, deposit sessions and the verified address record: deleted;
+        - audit log: the address is replaced by the pseudonym wherever it is the actor.
+
+        The pseudonym has the form `erased-<16 hex>`: the first 16 hexadecimal characters of an
+        HMAC-SHA256 of the address with a random salt drawn for this erasure and then discarded.
+        It groups the events of one person within one erasure without allowing the address to be
+        recovered. The security log never records e-mail addresses, so it has nothing to erase.
+
+        What is kept, on purpose:
+
+        - blocklist entries, so that an abuser is not unblocked;
+        - client IP addresses in the audit log, for their 12-month retention (legitimate security
+          interest);
+        - mails already queued for sending;
+        - backups: crypto-erasure makes the backed-up files unreadable, since their keys are
+          destroyed.
+
+        The erasure is audited as `data_subject.erased`, without the address, with the counts of
+        the report. While an upload of a transfer of the address is in progress, the erasure
+        stops with `409 state-conflict` and a `Retry-After` header: repeat it after the delay.
       security:
         - adminSession: []
           csrfToken: []
@@ -3012,7 +3123,21 @@ paths:
                 logEntriesPseudonymised: 7
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: "A transfer of the address is being uploaded (tus `PATCH` in progress), or a deposit was started with one of its invitations meanwhile; what was erased stays erased. Retry after `Retry-After` to complete the erasure."
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict
+                title: Operation not allowed in the current state
+                status: 409
+                code: state-conflict
+                retryAfterSeconds: 5
         '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
@@ -3268,7 +3393,7 @@ paths:
       tags: [Admin system]
       operationId: getGlobalStats
       summary: Global dashboard (super admin)
-      description: "Returns the disk usage of the instance and the statistics of every tenant. Reserved to the super admin."
+      description: "Returns the disk usage of the filesystem holding the data directory and the statistics of every active tenant (one row per tenant, tenants being deleted excluded), computed like `getTenantStats`. Reserved to the super admin: `403 forbidden` for any other admin."
       security:
         - adminSession: []
       parameters:
@@ -3294,6 +3419,7 @@ paths:
                     storageUsedBytes: 274877906944
                     storageQuotaBytes: 1099511627776
                     storageUsedRatio: 0.25
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -3476,18 +3602,22 @@ paths:
       tags: [Admin system]
       operationId: listGlobalAuditEvents
       summary: Instance-wide audit log (super admin)
-      description: All tenants plus events without tenant (setup, admin management, maintenance, key rotation).
+      description: |
+        Returns the audit log of the whole instance, most recent first. Without `tenantId`, it
+        includes the events of every tenant plus the events without tenant (`tenantId` absent:
+        setup, admin management, maintenance, key rotation); with `tenantId`, only the events of
+        that tenant. Reserved to the super admin: `403 forbidden` for any other admin.
       security:
         - adminSession: []
       parameters:
         - name: tenantId
           in: query
-          description: "Filter by tenant."
+          description: "Filter by tenant; events without tenant are then excluded."
           schema: { type: string, pattern: '^ten_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
           example: ten_01JAB00000000000000ENT1TYA
         - name: action
           in: query
-          description: "Filter by audit action."
+          description: "Filter by audit action. The list of actions is extensible: any value of the `AuditAction` form is accepted, and an unknown action simply matches no event."
           schema: { $ref: '#/components/schemas/AuditAction' }
           example: maintenance.enabled
         - $ref: '#/components/parameters/Limit'
@@ -3502,11 +3632,11 @@ paths:
                 items:
                   - id: aud_01JABCN9R0S1T2V3V4W5X6Y7Z8
                     occurredAt: '2026-10-19T18:00:00Z'
-                    tenantId: null
                     actor: { kind: admin, id: superadmin }
                     ip: 10.10.1.5
                     action: maintenance.enabled
                     object: { kind: system, id: maintenance }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -4139,9 +4269,16 @@ components:
       description: Supported UI language (ISO 639-1). New languages may be added.
       enum: [fr, en]
     Email:
+      description: >-
+        A bare mail address (`user@entity-a.example.com`), without display name. A request
+        value that is not an acceptable address is refused with a `validation-failed`
+        problem naming the field (`invalid-email`).
       type: string
       format: email
       maxLength: 254
+      # Decoded as a plain string: the services validate the address and answer a
+      # field error with its JSON pointer, which the decoder could not give.
+      x-go-type: string
     Sha256:
       type: string
       pattern: '^[0-9a-f]{64}$'
@@ -4404,7 +4541,10 @@ components:
       properties:
         id: { type: string }
         email: { $ref: '#/components/schemas/Email' }
-        invitedBy: { $ref: '#/components/schemas/Email' }
+        invitedBy:
+          type: string
+          maxLength: 254
+          description: "Email address of the internal user who issued the invitation, or the pseudonym `erased-<16 hex>` when that user's data was erased (GDPR); such an invitation is always revoked."
         status: { $ref: '#/components/schemas/InvitationStatus' }
         createdAt: { type: string, format: date-time }
         expiresAt: { type: string, format: date-time }
@@ -4915,14 +5055,19 @@ components:
         createdAt: { type: string, format: date-time }
         expiresAt: { type: [string, 'null'], format: date-time }
         firstDownloadedAt: { type: [string, 'null'], format: date-time }
-        downloadCount: { type: integer }
+        downloadCount:
+          type: integer
+          minimum: 0
+          description: "Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded)."
     AdminTransferDetail:
       allOf:
         - $ref: '#/components/schemas/AdminTransfer'
         - type: object
           required: [files]
           properties:
-            senderIp: { type: string }
+            senderIp:
+              type: [string, 'null']
+              description: "Client IP address of the sender when the transfer was created. Absent or null when unknown: transfers created before this field existed."
             files:
               type: array
               items:
@@ -4944,7 +5089,10 @@ components:
     AdminReason:
       type: object
       properties:
-        reason: { type: string, maxLength: 500, description: Recorded in the audit log. }
+        reason:
+          type: string
+          maxLength: 500
+          description: "Free text recorded in the audit log after its e-mail addresses are replaced by `[address]`, then cut to 500 characters (the replacement may lengthen it)."
       additionalProperties: false
     ResendRequest:
       type: object
@@ -4962,7 +5110,11 @@ components:
       required: [kind, value]
       properties:
         kind: { $ref: '#/components/schemas/BlocklistKind' }
-        value: { type: string, maxLength: 320, description: Normalised to lower case. }
+        value:
+          type: string
+          minLength: 1
+          maxLength: 320
+          description: "Trimmed and normalised to lower case, then validated according to `kind`: an email address, a domain name (no `@`), or a SHA-256 fingerprint (64 hexadecimal characters)."
         comment: { type: string, maxLength: 500 }
       additionalProperties: false
     BlocklistEntry:
@@ -5025,6 +5177,15 @@ components:
     AuditAction:
       type: string
       x-extensible-enum: true
+      description: |
+        Audit action, `<object>.<verb>`. The list is extensible: new actions may be added within
+        the API version, so clients must accept unknown values, and filters accept any value of
+        this form (`^[a-z_]+\.[a-z_]+$`, at most 64 characters). Notable actions:
+        `transfer.downloaded` is recorded at the start of the download of a file or of the
+        archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
+        the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
+        address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
+        `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
       enum:
         - transfer.created
         - transfer.finalized
@@ -5061,8 +5222,18 @@ components:
         - tenant.updated
         - tenant.deletion_started
         - tenant.deleted
+        - tenant.branding_updated
+        - tenant.asset_uploaded
+        - tenant.asset_deleted
+        - tenant.network_updated
+        - tenant.smtp_updated
+        - tenant.smtp_tested
+        - tenant.template_updated
+        - tenant.template_reset
+        - tenant.legal_updated
         - config.updated
         - blocklist.updated
+        - data_subject.searched
         - data_subject.erased
         - maintenance.enabled
         - maintenance.disabled
@@ -5075,7 +5246,9 @@ components:
       properties:
         id: { type: string }
         occurredAt: { type: string, format: date-time }
-        tenantId: { type: [string, 'null'] }
+        tenantId:
+          description: Tenant of the event; absent for an event without tenant (setup, admin management, maintenance, key rotation).
+          type: [string, 'null']
         actor:
           type: object
           required: [kind, id]
@@ -5102,16 +5275,39 @@ components:
       required: [period, transferCount, bytesUploaded, downloadCount, bytesDownloaded, virusDetections, storageUsedBytes, storageQuotaBytes, storageUsedRatio, series]
       properties:
         period: { type: string, enum: [7d, 30d, 12m] }
-        transferCount: { type: integer }
-        bytesUploaded: { $ref: '#/components/schemas/ByteSize' }
-        downloadCount: { type: integer }
-        bytesDownloaded: { $ref: '#/components/schemas/ByteSize' }
-        virusDetections: { type: integer }
-        storageUsedBytes: { $ref: '#/components/schemas/ByteSize' }
-        storageQuotaBytes: { $ref: '#/components/schemas/ByteSize' }
-        storageUsedRatio: { type: number, minimum: 0 }
+        transferCount:
+          type: integer
+          minimum: 0
+          description: "Transfers finalized during the period (counted when they are finalized, whatever happened to them afterwards)."
+        bytesUploaded:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Total size of the transfers counted in `transferCount`."
+        downloadCount:
+          type: integer
+          minimum: 0
+          description: "Download starts of a file or of the archive during the period; HEAD requests and resumed ranges are not counted."
+        bytesDownloaded:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Plaintext bytes actually served to recipients during the period."
+        virusDetections:
+          type: integer
+          minimum: 0
+          description: "Files found infected by the antivirus during the period."
+        storageUsedBytes:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Storage currently used by the tenant (current value, not limited to the period)."
+        storageQuotaBytes:
+          allOf: [{ $ref: '#/components/schemas/ByteSize' }]
+          description: "Storage quota of the tenant."
+        storageUsedRatio: { type: number, minimum: 0, description: "`storageUsedBytes` / `storageQuotaBytes` (may exceed 1)." }
         series:
           type: array
+          description: |
+            Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
+            zero-filled point for every period without activity: one point per UTC day for `7d`
+            (7 points) and `30d` (30 points), today included; one point per calendar month (UTC)
+            for `12m` (12 points, current month included), whose `date` is the first day of the
+            month.
           items:
             type: object
             required: [date, transfers, bytesUploaded]
@@ -5134,8 +5330,8 @@ components:
         transfersAsSender: { type: integer }
         transfersAsRecipient: { type: integer }
         invitations: { type: integer }
-        auditEvents: { type: integer }
-        securityEvents: { type: integer }
+        auditEvents: { type: integer, description: "Audit events of the tenant whose actor is the address." }
+        securityEvents: { type: integer, description: "Always 0: the security log never records e-mail addresses." }
     DataSubjectEraseReport:
       type: object
       required: [transfersDeleted, recipientEntriesRemoved, verifiedAddressDeleted, invitationsDeleted, logEntriesPseudonymised]
@@ -5154,14 +5350,18 @@ components:
         period: { type: string, enum: [7d, 30d, 12m] }
         disk:
           type: object
+          description: "Usage of the filesystem that holds the data directory (encrypted files)."
           required: [totalBytes, usedBytes, usedRatio, alertThreshold]
           properties:
             totalBytes: { $ref: '#/components/schemas/ByteSize' }
             usedBytes: { $ref: '#/components/schemas/ByteSize' }
-            usedRatio: { type: number }
-            alertThreshold: { type: number }
+            usedRatio: { type: number, minimum: 0, maximum: 1 }
+            alertThreshold:
+              type: number
+              description: "Ratio above which the super admin is alerted. Fixed at 0.85 until the runtime system settings are available (`diskAlertThreshold`)."
         tenants:
           type: array
+          description: "One row per active tenant (tenants being deleted are excluded); counters defined as in `TenantStats`."
           items:
             type: object
             required: [tenantId, name, transferCount, bytesUploaded, storageUsedBytes, storageQuotaBytes, storageUsedRatio]

@@ -346,6 +346,12 @@ func TestTenantErrors(t *testing.T) {
 	if !reflect.DeepEqual(p.Errors, []problem.FieldError{{Field: "/fqdn", Code: fieldInvalidFormat}}) {
 		t.Errorf("field errors %+v", p.Errors)
 	}
+	for _, field := range []string{tenantadmin.FieldFromAddress, tenantadmin.FieldTo} {
+		p = expectProblem(t, tenantError(&tenantadmin.InvalidError{Field: field, Reason: "must be a mail address"}), problem.CodeValidationFailed)
+		if !reflect.DeepEqual(p.Errors, []problem.FieldError{{Field: field, Code: fieldInvalidEmail}}) {
+			t.Errorf("%s: field errors %+v", field, p.Errors)
+		}
+	}
 	p = expectProblem(t, tenantError(&tenantadmin.InvalidError{Reason: "invalid smtp settings"}), problem.CodeValidationFailed)
 	if len(p.Errors) != 0 {
 		t.Errorf("request-wide error has field errors %+v", p.Errors)

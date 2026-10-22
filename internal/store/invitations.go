@@ -178,7 +178,7 @@ func (r *Invitations) CountByInviterSinceTx(ctx context.Context, tx *ScopedTx, i
 }
 
 // scanInvitation reads one row of invitationColumns.
-func scanInvitation(row *Row) (Invitation, error) {
+func scanInvitation(row interface{ Scan(...any) error }) (Invitation, error) {
 	var (
 		inv              Invitation
 		created, expires int64

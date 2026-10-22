@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -102,6 +103,19 @@ type SecurityLog interface {
 	Log(ev securitylog.Event) error
 }
 
+// AuditRecorder records tenant audit events. *audit.Writer implements it.
+type AuditRecorder interface {
+	RecordScoped(ctx context.Context, tid tenant.ID, ev audit.Event) error
+}
+
+// Audit detail values of the origin of a verification.
+const (
+	// originInternal is a verification by an internal depositor.
+	originInternal = "internal"
+	// originInvitation is a verification through an invitation.
+	originInvitation = "invitation"
+)
+
 // Options tunes a [Service].
 type Options struct {
 	// SessionTTL is the absolute lifetime of a deposit session
@@ -118,6 +132,10 @@ type Options struct {
 	// the default templates for every tenant. A lookup failure falls back
 	// to the default template (see [Service.prepareMail]).
 	Overrides mail.OverrideLookup
+	// Audit records the tenant audit events (address verified, invitation
+	// created and first used), best effort after the commit: a failure is
+	// logged, never returned. nil records nothing.
+	Audit AuditRecorder
 }
 
 // Service identifies depositors. It is safe for concurrent use.
@@ -131,6 +149,7 @@ type Service struct {
 	sessionTTL time.Duration
 	clock      func() time.Time
 	overrides  mail.OverrideLookup
+	audit      AuditRecorder
 	// Mail rendering and random sources, replaced by the tests.
 	render   func(ctx context.Context, lookup mail.OverrideLookup, tenantID, name, lang string, data any) (mail.Message, error)
 	rand     io.Reader
@@ -154,7 +173,7 @@ func New(db *store.DB, keys Keys, secrets Secrets, queue MailQueue, seclog Secur
 	s := &Service{
 		repo: storeRepo{db: db}, keys: keys, secrets: secrets, queue: queue, seclog: seclog,
 		logger: opts.Logger, sessionTTL: opts.SessionTTL, clock: opts.Now, overrides: opts.Overrides,
-		render: mail.DefaultTemplates().RenderFor, rand: rand.Reader, newToken: id.NewToken,
+		audit: opts.Audit, render: mail.DefaultTemplates().RenderFor, rand: rand.Reader, newToken: id.NewToken,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s
@@ -219,4 +238,23 @@ func (s *Service) logEvent(ctx context.Context, t *tenant.Tenant, ip netip.Addr,
 func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, reason string) error {
 	s.logEvent(ctx, t, ip, securitylog.DepositRefused, securitylog.Field{Key: securitylog.KeyReason, Value: reason})
 	return ErrForbidden
+}
+
+// record appends a tenant audit event whose actor is the depositor address
+// email, best effort: a failure is only reported on the application log.
+// The address goes in the actor column, never in details.
+func (s *Service) record(ctx context.Context, t *tenant.Tenant, ip netip.Addr, email string,
+	action audit.Action, objectKind, objectID string, details map[string]any,
+) {
+	if s.audit == nil {
+		return
+	}
+	ev := audit.Event{
+		ActorKind: store.ActorDepositor, Actor: email, IP: ip,
+		Action: action, ObjectKind: objectKind, ObjectID: objectID, Details: details,
+	}
+	if err := s.audit.RecordScoped(context.WithoutCancel(ctx), t.ID, ev); err != nil {
+		s.logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(action)),
+			slog.String("tenant", t.FQDN), slog.String("error", err.Error()))
+	}
 }

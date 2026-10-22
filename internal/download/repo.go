@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -34,11 +35,26 @@ type repo interface {
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
 	// markFirst records the first complete download of the transfer.
 	markFirst(ctx context.Context, tid tenant.ID, trfID string, now, deleteAfter time.Time) (bool, error)
+	// started records a download start of the transfer trfID: the audit
+	// event ev, through the checks of the audit package, and one more
+	// download, in one transaction.
+	started(ctx context.Context, tid tenant.ID, trfID string, ev audit.Event) error
 }
 
 // storeRepo implements repo over a *store.DB.
 type storeRepo struct {
 	db *store.DB
+	// audit writes the audit events, nil when db is (a service built
+	// without a database, in the tests only).
+	audit *audit.Writer
+}
+
+// auditWriter returns the audit writer of db, nil for a nil db.
+func auditWriter(db *store.DB) *audit.Writer {
+	if db == nil {
+		return nil
+	}
+	return audit.New(db)
 }
 
 func (r storeRepo) byToken(ctx context.Context, tid tenant.ID, hash []byte) (store.TransferDetails, error) {
@@ -100,4 +116,13 @@ func (r storeRepo) markFirst(ctx context.Context, tid tenant.ID, trfID string, n
 		return err
 	})
 	return first, err
+}
+
+func (r storeRepo) started(ctx context.Context, tid tenant.ID, trfID string, ev audit.Event) error {
+	return r.tx(ctx, tid, func(tx *store.ScopedTx) error {
+		if err := r.audit.RecordScopedTx(ctx, tx, ev); err != nil {
+			return err
+		}
+		return r.db.Transfers().IncrementDownloadsTx(ctx, tx, trfID)
+	})
 }

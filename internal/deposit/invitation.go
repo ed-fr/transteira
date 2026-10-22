@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -159,6 +160,8 @@ func (s *Service) Invite(ctx context.Context, t *tenant.Tenant, session SessionI
 		}
 		return Invitation{}, err
 	}
+	s.record(ctx, t, clientIP, session.Email, audit.ActionInvitationCreated, audit.ObjectInvitation, rec.ID,
+		map[string]any{"language": rec.Language})
 	return Invitation{
 		ID: rec.ID, Email: rec.Email, InvitedBy: rec.InvitedBy, Status: InvitationPending,
 		Language: rec.Language, CreatedAt: rec.CreatedAt, ExpiresAt: rec.ExpiresAt,

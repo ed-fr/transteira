@@ -1,0 +1,14 @@
+Bonjour,
+
+L'entité Entity A & Co a atteint son quota de stockage : 100 % est utilisé (100 Go sur 100 Go).
+
+Les nouveaux dépôts sont refusés jusqu'à ce que de l'espace soit libéré, à l'expiration ou à la suppression de transferts.
+
+Vous pouvez supprimer les transferts devenus inutiles, ou demander au super administrateur un quota plus élevé.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

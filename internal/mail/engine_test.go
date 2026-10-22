@@ -408,6 +408,8 @@ func TestPreviewAndVariables(t *testing.T) {
 		TemplateFileProblems:         "infected_files,withheld_files,outcome",
 		TemplateFileNotScanned:       "files",
 		TemplateFirstDownload:        "download_datetime,deletion_notice",
+		TemplateQuotaWarning:         "usage_percent",
+		TemplateQuotaReached:         "usage_percent",
 	}
 	for name, w := range want {
 		vars, _ := Variables(name)
