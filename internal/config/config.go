@@ -168,8 +168,9 @@ type Config struct {
 	LogLevel slog.Level
 	// Maintenance is true when the instance starts in maintenance mode.
 	Maintenance bool
-	// APIDocsPublic is true when the API documentation is served to anonymous
-	// visitors.
+	// APIDocsPublic is true when the interactive API documentation is served
+	// to anonymous visitors on the tenant FQDNs, in addition to the admin
+	// sessions on the admin host.
 	APIDocsPublic bool
 	// SetupToken, when set, must be provided to create the first super admin.
 	// When it is unset, the server generates a random token at each start

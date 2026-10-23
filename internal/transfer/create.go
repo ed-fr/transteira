@@ -50,14 +50,14 @@ var expiryDays = map[int]bool{1: true, 7: true, 30: true}
 
 // CreateRequest is the body of a creation request (OpenAPI TransferCreate).
 type CreateRequest struct {
-	// SenderEmail is mandatory with an API token and forbidden with a
-	// deposit session. Only the session path exists today: a non-empty
-	// value is refused. The API token path (a later step) will add a Sender
-	// kind whose address comes from this field, checked against the tenant
-	// internal domains, without changing this type.
+	// SenderEmail is the sender address: mandatory with an API token (a
+	// plain address of a tenant internal domain, checked with the strict
+	// syntax of the recipients) and forbidden with a deposit session, whose
+	// verified address is used.
 	SenderEmail string
 	// Recipients are the recipient addresses: mandatory for an internal
-	// sender, ignored for an external one (the inviter is the recipient).
+	// sender and an API token, ignored for an external one (the inviter is
+	// the recipient).
 	Recipients []string
 	// Message is the optional plain-text message.
 	Message string
@@ -91,6 +91,8 @@ type FileDeclaration struct {
 
 // plan is a validated creation request.
 type plan struct {
+	// sender is the normalized SenderEmail of an API token request.
+	sender     string
 	recipients []string
 	message    string
 	password   []byte
@@ -115,12 +117,12 @@ func (v *validator) err() error {
 	return &ValidationError{Fields: v.errs}
 }
 
-// validate checks req for a sender of kind kind, collecting every invalid
-// field, and returns the normalized plan: recipients (internal senders
-// only), sanitized message, NFC file names, lowercase expected SHA-256 and
-// the declared total (math.MaxInt64 when it overflows, which no limit
-// allows).
-func (s *Service) validate(req CreateRequest, kind store.DepositorKind, key string) (plan, error) {
+// validate checks req for sender, collecting every invalid field, and
+// returns the normalized plan: sender address (API token only), recipients
+// (internal senders and API tokens only), sanitized message, NFC file
+// names, lowercase expected SHA-256 and the declared total (math.MaxInt64
+// when it overflows, which no limit allows).
+func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, error) {
 	var (
 		v validator
 		p plan
@@ -128,10 +130,19 @@ func (s *Service) validate(req CreateRequest, kind store.DepositorKind, key stri
 	if key != "" && !validIdempotencyKey(key) {
 		v.add(FieldIdempotencyKey, CodeInvalidFormat)
 	}
-	if req.SenderEmail != "" {
+	switch {
+	case sender.APITokenID == "" && req.SenderEmail != "":
 		v.add(FieldSenderEmail, CodeNotAllowed)
+	case sender.APITokenID != "" && req.SenderEmail == "":
+		v.add(FieldSenderEmail, CodeRequired)
+	case sender.APITokenID != "":
+		email, ok := parseAddress(req.SenderEmail)
+		if !ok {
+			v.add(FieldSenderEmail, CodeInvalidEmail)
+		}
+		p.sender = email
 	}
-	if kind == store.DepositorInternal {
+	if sender.Kind == store.DepositorInternal {
 		p.recipients = s.validateRecipients(&v, req.Recipients)
 	}
 	switch {
@@ -180,7 +191,7 @@ func (s *Service) validateRecipients(v *validator, raw []string) []string {
 	seen := make(map[string]bool, len(raw))
 	for i, r := range raw {
 		pointer := FieldRecipients + "/" + strconv.Itoa(i)
-		email, ok := parseRecipient(r)
+		email, ok := parseAddress(r)
 		switch {
 		case !ok:
 			v.add(pointer, CodeInvalidEmail)
@@ -194,10 +205,11 @@ func (s *Service) validateRecipients(v *validator, raw []string) []string {
 	return out
 }
 
-// parseRecipient validates a recipient address with the restricted syntax
-// of mail.ParseAddress (threat T-80), then normalizes it like the store.
-// Both checks run because each one refuses what the other accepts.
-func parseRecipient(raw string) (string, bool) {
+// parseAddress validates a recipient or API token sender address with the
+// restricted syntax of mail.ParseAddress (threat T-80: no display name),
+// then normalizes it like the store. Both checks run because each one
+// refuses what the other accepts.
+func parseAddress(raw string) (string, bool) {
 	mailbox, err := mail.ParseAddress(strings.TrimSpace(raw))
 	if err != nil {
 		return "", false
@@ -282,10 +294,12 @@ const scopeOpenTransfers = "open_transfers"
 
 // fingerprint returns the SHA-256, in lowercase hexadecimal, of the
 // canonical form of a validated request, kept with its idempotency key: the
-// sorted normalized recipients, the sanitized message, the validity, the
-// presence of a password (never its value), the deletion option, the
-// language and the files in order (NFC name, size, media type, lowercase
-// expected SHA-256).
+// normalized sender address of an API token request (the key is scoped to
+// the token, whose deposits may use several addresses), the sorted
+// normalized recipients, the sanitized message, the validity, the presence
+// of a password (never its value), the deletion option, the language and
+// the files in order (NFC name, size, media type, lowercase expected
+// SHA-256).
 func fingerprint(p plan, req CreateRequest) string {
 	type file struct {
 		Name      string `json:"n"`
@@ -294,6 +308,7 @@ func fingerprint(p plan, req CreateRequest) string {
 		SHA256    string `json:"h"`
 	}
 	canonical := struct {
+		Sender     string   `json:"s,omitempty"`
 		Recipients []string `json:"r"`
 		Message    string   `json:"m"`
 		ExpiryDays int      `json:"e"`
@@ -302,6 +317,7 @@ func fingerprint(p plan, req CreateRequest) string {
 		Language   string   `json:"l"`
 		Files      []file   `json:"f"`
 	}{
+		Sender:     p.sender,
 		Recipients: slices.Sorted(slices.Values(p.recipients)), Message: p.message, ExpiryDays: req.ExpiryDays,
 		Password: p.password != nil, Delete: req.DeleteAfterFirstDownload, Language: req.Language,
 		Files: make([]file, len(p.files)),
@@ -326,27 +342,36 @@ func fingerprint(p plan, req CreateRequest) string {
 //     as deposit_refused;
 //  2. validation of every field (*ValidationError): the recipients of an
 //     external sender are ignored and replaced by the inviter (T-17);
+//     for an API token sender, steps 2 and 1 run in that order, since the
+//     eligibility (blocklist, internal domain and allowed senders of the
+//     token, without the IP part, replaced by the ranges of the token)
+//     applies to the validated SenderEmail;
 //  3. per-transfer limit of the tenant (*TooLargeError);
-//  4. with an idempotency key, a transfer the same sender created with it
-//     in the last store.IdempotencyRetention is returned as is, provided
-//     the request has the same fingerprint (see fingerprint);
-//     ErrIdempotencyMismatch otherwise;
+//  4. with an idempotency key, a transfer the same sender (the same API
+//     token for a token sender) created with it in the last
+//     store.IdempotencyRetention is returned as is, provided the request
+//     has the same fingerprint (see fingerprint); ErrIdempotencyMismatch
+//     otherwise;
 //  5. the password is hashed with argon2id (bounded concurrency, T-125),
 //     before the transaction so that the lock is not held meanwhile; its
 //     plaintext bytes are cleared afterwards;
 //  6. in one transaction, under the tenant lock: the cap on the unfinished
 //     transfers of the sender (Options.MaxOpenTransfers for an internal
-//     sender, MaxOpenTransfersExternal for an external one; until the
-//     cleanup job exists, nothing else frees the quota held by a transfer
-//     that is never uploaded): *RateLimitError, logged as rate_limited
-//     with scope open_transfers; the quota check (a total exactly at the
-//     quota fits; ErrQuotaExceeded otherwise, T-124); a data key per file
-//     (decision P6); the rows.
+//     sender and per API token, MaxOpenTransfersExternal for an external
+//     one; until the cleanup job exists, nothing else frees the quota held
+//     by a transfer that is never uploaded): *RateLimitError, logged as
+//     rate_limited with scope open_transfers; the quota check (a total
+//     exactly at the quota fits; ErrQuotaExceeded otherwise, T-124); a
+//     data key per file (decision P6); the rows.
 //
 // After the commit, Options.OnQuota is called (refused false) and the
-// transfer.created audit event is recorded (best effort); a quota refusal
-// calls Options.OnQuota with refused true. A replayed request does neither.
-// The client IP is stored as the sender IP of the transfer.
+// transfer.created audit event is recorded (best effort), followed for an
+// API token by api_token.used, whose actor is the sender address (a
+// depositor, so that the GDPR requests on that address find and
+// pseudonymize it), whose object is the token and whose details hold the
+// transfer identifier; a quota refusal calls Options.OnQuota with refused
+// true. A replayed request does none of this. The client IP is stored as
+// the sender IP of the transfer, and the API token on a token transfer.
 //
 // A zero-length file is completed after the commit: the upload engine
 // writes its encrypted form and the store records its completion. If that
@@ -355,11 +380,7 @@ func fingerprint(p plan, req CreateRequest) string {
 // completes it on the first empty PATCH, and until then the finalization
 // answers ErrIncomplete.
 func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, idempotencyKey string) (Details, error) {
-	email, inv, err := s.checkEligible(ctx, t, sender)
-	if err != nil {
-		return Details{}, err
-	}
-	p, err := s.validate(req, sender.Kind, idempotencyKey)
+	email, inv, p, err := s.admit(ctx, t, sender, req, idempotencyKey)
 	defer clear(p.password) // the paths that return before hashing
 	if err != nil {
 		return Details{}, err
@@ -395,7 +416,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	}
 	now := s.now()
 	rec := store.Transfer{
-		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID,
+		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
 		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
 		DeleteAfterFirstDownload: req.DeleteAfterFirstDownload, IdempotencyKey: idempotencyKey,
 		RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
@@ -446,7 +467,8 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		return Details{}, ErrQuotaExceeded
 	case errors.Is(err, store.ErrNotFound):
 		// The tenant's deletion started after its resolution (or the
-		// invitation was deleted meanwhile): nothing was created.
+		// invitation was deleted, or the API token revoked or expired,
+		// meanwhile): nothing was created.
 		return Details{}, ErrForbidden
 	case err != nil:
 		return Details{}, fmt.Errorf("transfer: create transfer: %w", err)
@@ -454,6 +476,12 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	s.onQuota(t.ID, false)
 	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID,
 		map[string]any{"fileCount": len(p.files), "totalBytes": p.total, "origin": origin(sender)})
+	if sender.APITokenID != "" {
+		s.write(ctx, t, audit.Event{
+			ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP, Action: audit.ActionAPITokenUsed,
+			ObjectKind: audit.ObjectAPIToken, ObjectID: sender.APITokenID, Details: map[string]any{"transferId": trfID},
+		})
+	}
 	s.completeEmpty(ctx, t, p.files, deks, now)
 	d, err := s.repo.transfer(ctx, t.ID, trfID)
 	if err != nil {
@@ -462,23 +490,47 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	return s.details(ctx, t, d)
 }
 
-// checkOpenCap refuses a new transfer of sender (normalized address email)
-// when it already has as many unfinished transfers as its cap, inside the
-// creation transaction (under the tenant lock). Transfers created more
-// than Options.UploadMaxAge ago are expired and never counted. When the
-// count reaches the cap, the recent ones are examined (at most
-// maxOpenScan, newest first) and those whose uploads expired, according to
-// the upload engine, are ignored: with no cleanup job yet, a sender who
-// abandoned transfers is not locked out. A transfer refused at
-// finalization for a blocked file is not expired and still counts; the
-// sender can cancel it.
+// admit checks the eligibility of sender and validates req (steps 1 and 2
+// of Create, in the order of the sender kind) and returns the normalized
+// sender address, the invitation of an external sender and the plan. The
+// plan is returned with its password even on error, for the caller to
+// clear it.
+func (s *Service) admit(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, key string) (string, store.Invitation, plan, error) {
+	if sender.APITokenID == "" {
+		email, inv, err := s.checkEligible(ctx, t, sender)
+		if err != nil {
+			return "", store.Invitation{}, plan{}, err
+		}
+		p, err := s.validate(req, sender, key)
+		return email, inv, p, err
+	}
+	p, err := s.validate(req, sender, key)
+	if err != nil {
+		return "", store.Invitation{}, p, err
+	}
+	sender.Email = p.sender
+	email, _, err := s.checkEligible(ctx, t, sender)
+	return email, store.Invitation{}, p, err
+}
+
+// checkOpenCap refuses a new transfer of sender (normalized address email;
+// counted per token for an API token sender) when it already has as many
+// unfinished transfers as its cap, inside the creation transaction (under
+// the tenant lock). Transfers created more than Options.UploadMaxAge ago
+// are expired and never counted. When the count reaches the cap, the
+// recent ones are examined (at most maxOpenScan, newest first) and those
+// whose uploads expired, according to the upload engine, are ignored: with
+// no cleanup job yet, a sender who abandoned transfers is not locked out.
+// A transfer refused at finalization for a blocked file is not expired and
+// still counts; the sender can cancel it.
 func (s *Service) checkOpenCap(ctx context.Context, tid tenant.ID, tx txRepo, sender Sender, email string, now time.Time) error {
 	limit, since := s.openCap(sender), now.Add(-s.uploadMaxAge)
-	open, err := tx.countUploading(ctx, email, since)
+	o := ownerOf(sender, email)
+	open, err := tx.countUploading(ctx, o, since)
 	if err != nil || open < limit {
 		return err
 	}
-	list, err := tx.listUploading(ctx, email, since, maxOpenScan)
+	list, err := tx.listUploading(ctx, o, since, maxOpenScan)
 	if err != nil {
 		return err
 	}
@@ -541,12 +593,13 @@ func (s *Service) completeEmpty(ctx context.Context, t *tenant.Tenant, files []s
 }
 
 // replay returns the transfer that sender (whose normalized address is
-// email) created with key in the last store.IdempotencyRetention, with ok
-// true, or ok false when there is none. The same address under another
-// invitation gets ErrConflict, and a request whose fingerprint fp differs
-// from the recorded one ErrIdempotencyMismatch.
+// email; the API token of a token sender) created with key in the last
+// store.IdempotencyRetention, with ok true, or ok false when there is none.
+// The same address under another invitation gets ErrConflict, and a
+// request whose fingerprint fp differs from the recorded one
+// ErrIdempotencyMismatch.
 func (s *Service) replay(ctx context.Context, t *tenant.Tenant, sender Sender, email, key, fp string) (Details, bool, error) {
-	d, err := s.repo.transferByKey(ctx, t.ID, email, key, s.now().Add(-store.IdempotencyRetention))
+	d, err := s.repo.transferByKey(ctx, t.ID, ownerOf(sender, email), key, s.now().Add(-store.IdempotencyRetention))
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return Details{}, false, nil

@@ -46,7 +46,7 @@ func (r *recorder) record(name string, args ...any) error {
 
 var (
 	sampleTransfer = tenantops.Transfer{
-		ID: "trf_01", Status: store.TransferAvailable, Origin: store.DepositorInternal,
+		ID: "trf_01", Status: store.TransferAvailable, Origin: tenantops.OriginInternal,
 		SenderEmail: "alice@entity-a.example.com", Recipients: []string{"carol@customer.example.net"},
 		FileCount: 1, TotalBytes: 2048, PasswordProtected: true, CreatedAt: now.Add(-time.Hour),
 		ExpiresAt: now.Add(24 * time.Hour), DownloadCount: 3,
@@ -413,6 +413,19 @@ func TestTransferOperations(t *testing.T) {
 	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
 	if _, body = decode(t, got); body["senderIp"] != nil {
 		t.Errorf("unknown sender IP rendered: %v", body["senderIp"])
+	}
+
+	// A transfer created with an API token names it.
+	o.transfer.Origin, o.transfer.APITokenID = tenantops.OriginAPI, "tok_01"
+	o.detail.Origin, o.detail.APITokenID = tenantops.OriginAPI, "tok_01"
+	resp, _ = s.ListTenantTransfers(ctx, gen.ListTenantTransfersRequestObject{TenantId: "ten_a"})
+	_, body = decode(t, resp)
+	if item := body["items"].([]any)[0].(map[string]any); item["origin"] != "api" || item["apiTokenId"] != "tok_01" {
+		t.Errorf("token transfer listed as %v", item)
+	}
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	if _, body = decode(t, got); body["origin"] != "api" || body["apiTokenId"] != "tok_01" {
+		t.Errorf("token transfer detail = %v", body)
 	}
 
 	del, err := s.DeleteTenantTransfer(ctx, gen.DeleteTenantTransferRequestObject{

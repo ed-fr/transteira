@@ -49,6 +49,24 @@ func (s *SecurityEvents) RateLimited(ctx context.Context, ip netip.Addr, tenantF
 	})
 }
 
+// APITokenInvalid records an api_token_invalid event: an empty,
+// malformed, unknown, revoked or expired API token. The token itself is
+// never written.
+func (s *SecurityEvents) APITokenInvalid(ctx context.Context, ip netip.Addr, tenantFQDN string) {
+	s.write(ctx, securitylog.Event{Type: securitylog.APITokenInvalid, IP: ip, Tenant: tenantFQDN})
+}
+
+// DepositRefused records a deposit_refused event with its reason (one of
+// the securitylog Reason* deposit values).
+func (s *SecurityEvents) DepositRefused(ctx context.Context, ip netip.Addr, tenantFQDN, reason string) {
+	s.write(ctx, securitylog.Event{
+		Type:   securitylog.DepositRefused,
+		IP:     ip,
+		Tenant: tenantFQDN,
+		Fields: []securitylog.Field{{Key: securitylog.KeyReason, Value: reason}},
+	})
+}
+
 func (s *SecurityEvents) write(ctx context.Context, ev securitylog.Event) {
 	if err := s.log.Log(ev); err != nil {
 		s.logger.ErrorContext(ctx, "security log write failed",

@@ -282,8 +282,9 @@ func Variables() []Var {
 		},
 		{
 			Name: EnvAPIDocsPublic, Group: "Operations", Default: "false",
-			Description: "Serve the interactive API documentation to anonymous visitors " +
-				"(true/false/1/0). By default it is reserved to authenticated admins.",
+			Description: "Serve the interactive API documentation (/api/docs) to anonymous visitors " +
+				"on the tenant FQDNs (true/false/1/0). By default it is only served on the admin " +
+				"host, to authenticated admins.",
 		},
 		{
 			Name: EnvSetupToken, Group: "Operations", Secret: true,

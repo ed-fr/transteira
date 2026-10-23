@@ -142,10 +142,11 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 }
 
 // Get returns the transfer trfID of tenant t as its sender sees it (OpenAPI
-// getTransfer). Only the sender who created it may read it
-// ([store.Depositor.Owns]: same address and, for an external sender, same
-// invitation); anyone else gets ErrNotFound, as for an unknown transfer or
-// a transfer of another tenant. The offsets of the incomplete files come
+// getTransfer). Only the sender who created it, or the API token that
+// created it, may read it ([store.Depositor.Owns]: same address and, for an
+// external sender, same invitation; same token for a token transfer);
+// anyone else gets ErrNotFound, as for an unknown transfer or a transfer of
+// another tenant. The offsets of the incomplete files come
 // from the upload engine while the transfer is uploading.
 func (s *Service) Get(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) (Details, error) {
 	if _, err := normalize(sender); err != nil {
@@ -203,7 +204,9 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 // set. Checks, in order:
 //
 //  1. eligibility, checked again (T-25): ErrForbidden;
-//  2. the transfer exists and belongs to the sender: ErrNotFound;
+//  2. the transfer exists and belongs to the sender: ErrNotFound (for an
+//     API token sender, this check comes first, and the eligibility of
+//     step 1 applies to the sender address stored on the transfer);
 //  3. it is uploading and has at least one file (tus terminations may
 //     have removed them all; that is a state of the transfer rather than
 //     an incomplete upload, hence state-conflict): ErrConflict; ErrBusy when
@@ -223,8 +226,13 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 // After the commit, Options.OnFinalized and Options.Usage are called and
 // the transfer.finalized audit event is recorded (best effort).
 func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) (Details, error) {
-	email, _, err := s.checkEligible(ctx, t, sender)
-	if err != nil {
+	var email string
+	if sender.APITokenID == "" {
+		var err error
+		if email, _, err = s.checkEligible(ctx, t, sender); err != nil {
+			return Details{}, err
+		}
+	} else if _, err := normalize(sender); err != nil {
 		return Details{}, err
 	}
 	d, unlock, err := s.lockUploading(ctx, t.ID, sender, trfID)
@@ -232,6 +240,12 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 		return Details{}, err
 	}
 	defer unlock()
+	if sender.APITokenID != "" {
+		sender.Email = d.SenderEmail
+		if email, _, err = s.checkEligible(ctx, t, sender); err != nil {
+			return Details{}, err
+		}
+	}
 	if len(d.Files) == 0 {
 		return Details{}, ErrConflict
 	}

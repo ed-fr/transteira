@@ -157,9 +157,10 @@ func noStore(next http.Handler) http.Handler {
 }
 
 // newAdminHandler builds the router of the admin hosts: the admin
-// operations under AdminPrefix and the version; any other path is a 404
-// Problem. No tenant is resolved. The per-operation middlewares, from
-// outermost to innermost, are: deadlines, the per-IP limit of the login
+// operations under AdminPrefix, the version and the interactive API
+// documentation (adminDocsHandler); any other path is a 404 Problem. No
+// tenant is resolved. The per-operation middlewares, from outermost to
+// innermost, are: deadlines, the per-IP limit of the login
 // steps, the admin session cookie (401), the Origin and Sec-Fetch-Site
 // checks of the open login steps and the CSRF checks of the session
 // operations (403), the body limit (413) and the JSON media type (415),
@@ -198,6 +199,9 @@ func newAdminHandler(deps Deps, eh errorHandlers, events middleware.SecurityEven
 	mux := http.NewServeMux()
 	mux.Handle(AdminPrefix+"/", api404)
 	mux.Handle(APIBaseURL+"/version", api404)
+	docs := adminDocsHandler(sessions, logger)
+	mux.Handle(DocsPath, docs)
+	mux.Handle(DocsPath+"/", docs)
 	// The bare prefix would otherwise be redirected by the mux.
 	mux.Handle(AdminPrefix, http.HandlerFunc(notFound))
 	return middleware.Chain(withProblemFallback(mux), noStore, rejectUncleanAPIPaths)

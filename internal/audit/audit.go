@@ -113,6 +113,17 @@ const (
 	// ActionDataSubjectErased: an administrator erased the data linked to an
 	// address (the address is never recorded).
 	ActionDataSubjectErased Action = "data_subject.erased"
+	// ActionAPITokenCreated: an administrator created an API token (never
+	// recorded with its secret).
+	ActionAPITokenCreated Action = "api_token.created"
+	// ActionAPITokenUpdated: an administrator renamed an API token or
+	// replaced its allowed IP ranges.
+	ActionAPITokenUpdated Action = "api_token.updated"
+	// ActionAPITokenRevoked: an administrator revoked an API token.
+	ActionAPITokenRevoked Action = "api_token.revoked"
+	// ActionAPITokenUsed: an API token created a transfer (once per
+	// transfer, not per request).
+	ActionAPITokenUsed Action = "api_token.used"
 )
 
 // Object kinds.
@@ -135,6 +146,9 @@ const (
 	// ObjectDepositSession is a deposit session (object ID: its session
 	// ID).
 	ObjectDepositSession = "deposit_session"
+	// ObjectAPIToken is an API token (object ID: its "tok_" ID, never the
+	// secret).
+	ObjectAPIToken = "api_token"
 )
 
 // ErrSecretDetail reports details whose key names a secret (password,

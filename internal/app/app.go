@@ -25,6 +25,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/apitoken"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
@@ -380,6 +381,13 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 
+	// apiTokens authenticates the API tokens of the deposit operations
+	// (httpserver.Deps.APITokens) and serves their administration.
+	apiTokens, err := apitoken.New(db, apitoken.Options{Logger: logger})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,
@@ -395,14 +403,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
 			public.WithTenantService(tenants), public.WithMaintenance(maintenance.Load)),
 		Sessions:   deposits,
+		APITokens:  apiTokens,
 		AdminHosts: cfg.AdminHosts,
 		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
 			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
-			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics)),
+			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
+			admin.WithAPITokenService(apiTokens)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
 		Spec:                api.OpenAPISpec,
+		APIDocsPublic:       cfg.APIDocsPublic,
 		Logger:              logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)

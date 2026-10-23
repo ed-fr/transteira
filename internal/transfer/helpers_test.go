@@ -276,6 +276,13 @@ func (r *faultRepo) invitation(ctx context.Context, tid tenant.ID, invID string)
 	return r.inner.invitation(ctx, tid, invID)
 }
 
+func (r *faultRepo) apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error) {
+	if err := r.check("apiToken"); err != nil {
+		return store.APIToken{}, err
+	}
+	return r.inner.apiToken(ctx, tid, tokID)
+}
+
 func (r *faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	if err := r.check("tenant"); err != nil {
 		return nil, err
@@ -290,11 +297,11 @@ func (r *faultRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (
 	return r.inner.transfer(ctx, tid, trfID)
 }
 
-func (r *faultRepo) transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error) {
+func (r *faultRepo) transferByKey(ctx context.Context, tid tenant.ID, o owner, key string, since time.Time) (store.TransferDetails, error) {
 	if err := r.check("transferByKey"); err != nil {
 		return store.TransferDetails{}, err
 	}
-	return r.inner.transferByKey(ctx, tid, sender, key, since)
+	return r.inner.transferByKey(ctx, tid, o, key, since)
 }
 
 func (r *faultRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, sum string, size int64, now time.Time) error {
@@ -328,18 +335,18 @@ func (t faultTx) usedBytes(ctx context.Context) (int64, error) {
 	return t.inner.usedBytes(ctx)
 }
 
-func (t faultTx) countUploading(ctx context.Context, sender string, since time.Time) (int, error) {
+func (t faultTx) countUploading(ctx context.Context, o owner, since time.Time) (int, error) {
 	if err := t.r.check("countUploading"); err != nil {
 		return 0, err
 	}
-	return t.inner.countUploading(ctx, sender, since)
+	return t.inner.countUploading(ctx, o, since)
 }
 
-func (t faultTx) listUploading(ctx context.Context, sender string, since time.Time, limit int) ([]store.Transfer, error) {
+func (t faultTx) listUploading(ctx context.Context, o owner, since time.Time, limit int) ([]store.Transfer, error) {
 	if err := t.r.check("listUploading"); err != nil {
 		return nil, err
 	}
-	return t.inner.listUploading(ctx, sender, since, limit)
+	return t.inner.listUploading(ctx, o, since, limit)
 }
 
 func (t faultTx) listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error) {

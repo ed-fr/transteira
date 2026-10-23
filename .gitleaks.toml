@@ -9,11 +9,21 @@ description = "TransTeira API token"
 regex = '''\btt_[A-Za-z0-9]{40,}\b'''
 keywords = ["tt_"]
 
-# The API specification and the documentation contain fake tokens and passwords in their
-# examples. Only the token-like rules are relaxed there; every other rule still applies.
+# Example API tokens, wherever they appear (specification, documentation, code), use the
+# unmistakably fake shape "tt_EXAMPLE" followed by base62 characters. Only that shape is
+# allowed: any other token-shaped value is reported, in docs/ and api/ too.
+[[rules.allowlists]]
+description = "Fake example API tokens (tt_EXAMPLE...)"
+regexTarget = "match"
+regexes = [
+  '''^tt_EXAMPLE[A-Za-z0-9]*$''',
+]
+
+# The API specification and the documentation contain fake passwords and keys in their
+# examples. Only the generic rule is relaxed there; every other rule still applies.
 [[allowlists]]
 description = "Fake example values in the API specification and documentation"
-targetRules = ["generic-api-key", "transteira-api-token"]
+targetRules = ["generic-api-key"]
 paths = [
   '''^api/openapi\.yaml$''',
   '''^docs/''',

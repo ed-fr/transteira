@@ -11,6 +11,11 @@ func TestDepositorOwns(t *testing.T) {
 	external := store.Transfer{
 		SenderEmail: "bob@partner.example.org", SenderKind: store.DepositorExternal, InvitationID: "inv_01JAAAAAAAAAAAAAAAAAAAAAAA",
 	}
+	const (
+		tokenA = "tok_01JAAAAAAAAAAAAAAAAAAAAAAA"
+		tokenB = "tok_01JBBBBBBBBBBBBBBBBBBBBBBB"
+	)
+	byTokenA := store.Transfer{SenderEmail: "alice@entity-a.example.com", SenderKind: store.DepositorInternal, APITokenID: tokenA}
 	cases := []struct {
 		name string
 		d    store.Depositor
@@ -26,6 +31,11 @@ func TestDepositorOwns(t *testing.T) {
 		{"other invitation", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorExternal, InvitationID: "inv_01JBBBBBBBBBBBBBBBBBBBBBBB"}, external, false},
 		{"external without invitation", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorExternal}, external, false},
 		{"internal claiming the external", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorInternal}, external, false},
+		{"token owns its transfer", store.Depositor{APITokenID: tokenA}, byTokenA, true},
+		{"token owns its transfer whatever the address", store.Depositor{Email: "eve@entity-a.example.com", APITokenID: tokenA}, byTokenA, true},
+		{"other token", store.Depositor{Email: "alice@entity-a.example.com", Kind: store.DepositorInternal, APITokenID: tokenB}, byTokenA, false},
+		{"session never owns a token transfer", store.Depositor{Email: "alice@entity-a.example.com", Kind: store.DepositorInternal}, byTokenA, false},
+		{"token never owns a session transfer", store.Depositor{Email: "alice@entity-a.example.com", Kind: store.DepositorInternal, APITokenID: tokenA}, internal, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

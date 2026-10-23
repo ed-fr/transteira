@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/filename"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/textsafe"
 )
@@ -13,7 +14,8 @@ import (
 // FuzzValidate checks the invariants of the validation of a creation
 // request: no panic, accepted names pass the file name policy, the total is
 // never negative, recipients are normalized and unique, the message holds
-// no hidden character and the fingerprint is deterministic.
+// no hidden character and the fingerprint is deterministic. With an API
+// token, an accepted sender address is a normalized plain address.
 func FuzzValidate(f *testing.F) {
 	f.Add("plans.pdf", "b.txt", int64(1), int64(2), "Dave@Customer.example.net,erin@customer.example.net",
 		"Hello", 7, "pw", true, "fr", "")
@@ -34,7 +36,15 @@ func FuzzValidate(f *testing.F) {
 		if withPw {
 			req.Password = &pw
 		}
-		p, err := s.validate(req, store.DepositorInternal, "")
+		tokReq := req
+		tokReq.SenderEmail = strings.Split(rcpts, ",")[0]
+		tok := Sender{Depositor: store.Depositor{Kind: store.DepositorInternal, APITokenID: id.New(id.APIToken)}}
+		if tp, err := s.validate(tokReq, tok, ""); err == nil {
+			if norm, err := store.NormalizeEmail(tp.sender); err != nil || norm != tp.sender || strings.ContainsAny(tp.sender, "<> ") {
+				t.Fatalf("token sender %q is not a normalized plain address", tp.sender)
+			}
+		}
+		p, err := s.validate(req, Sender{Depositor: store.Depositor{Kind: store.DepositorInternal}}, "")
 		if err != nil {
 			var verr *ValidationError
 			if !errors.As(err, &verr) || len(verr.Fields) == 0 || !errors.Is(err, ErrInvalid) {
@@ -63,7 +73,7 @@ func FuzzValidate(f *testing.F) {
 		if strings.ContainsFunc(p.message, textsafe.IsHidden) {
 			t.Fatalf("message %q keeps a hidden character", p.message)
 		}
-		again, err := s.validate(req, store.DepositorInternal, "")
+		again, err := s.validate(req, Sender{Depositor: store.Depositor{Kind: store.DepositorInternal}}, "")
 		if err != nil || fingerprint(p, req) != fingerprint(again, req) {
 			t.Fatal("fingerprint is not deterministic")
 		}

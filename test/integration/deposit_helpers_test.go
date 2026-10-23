@@ -327,6 +327,7 @@ type depositor struct {
 	cookie string // raw session token; "" sends no cookie
 	csrf   string
 	known  string // recognition cookie value; "" sends none
+	bearer string // API token sent as Authorization: Bearer; "" sends none
 }
 
 // newDepositor returns a depositor of tenant A from insideA.
@@ -353,6 +354,9 @@ func (c *depositor) send(t *testing.T, method, path, body string, extra http.Hea
 	}
 	if len(cookies) > 0 {
 		h.Set("Cookie", strings.Join(cookies, "; "))
+	}
+	if c.bearer != "" {
+		h.Set("Authorization", "Bearer "+c.bearer)
 	}
 	for k, vs := range extra {
 		h[k] = vs

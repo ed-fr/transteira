@@ -432,17 +432,26 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at, sender_ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`created_at, sender_ip, api_token_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
-		`WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at < ?`: 0,
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
+	`UPDATE transfers SET idempotency_key = NULL ` +
+		`WHERE tenant_id = ? AND api_token_id = ? AND idempotency_key = ? AND created_at < ?`: 0,
 	`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND id = ?`: 0,
 	`SELECT ` + transferColumns + ` FROM transfers ` +
-		`WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at >= ?`: 0,
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at >= ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND api_token_id = ? AND idempotency_key = ? AND created_at >= ?`: 0,
 	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND id = ?`: 0,
 	`SELECT count(*) FROM transfers ` +
-		`WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ?`: 0,
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND status = 'uploading' AND created_at >= ?`: 0,
 	`SELECT ` + transferColumns + ` FROM transfers ` +
-		`WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ? ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND status = 'uploading' AND created_at >= ? ` +
+		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT count(*) FROM transfers ` +
+		`WHERE tenant_id = ? AND api_token_id = ? AND status = 'uploading' AND created_at >= ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND api_token_id = ? AND status = 'uploading' AND created_at >= ? ` +
 		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
 	`SELECT CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
 		`WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`: 0,
@@ -454,6 +463,18 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`:          0,
 	`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`:   0,
 	`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
+	// API tokens.
+	`INSERT INTO api_tokens (tenant_id, id, name, prefix, token_hash, allowed_cidrs, allowed_senders, created_by, ` +
+		`created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? AND id = ?`:                        0,
+	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? AND token_hash = ?`:                0,
+	`SELECT ` + apiTokenColumns + ` FROM api_tokens WHERE tenant_id = ? ORDER BY created_at DESC, id DESC`: 0,
+	`SELECT count(*) FROM api_tokens WHERE tenant_id = ? AND id = ?`:                                       0,
+	`UPDATE api_tokens SET revoked_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`:           1,
+	`UPDATE api_tokens SET name = COALESCE(?, name), allowed_cidrs = COALESCE(?, allowed_cidrs), ` +
+		`allowed_senders = COALESCE(?, allowed_senders) WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 3,
+	`UPDATE api_tokens SET last_used_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: 1,
 	// Transfer files.
 	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, name, size, media_type, expected_sha256, ` +
 		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status) ` +

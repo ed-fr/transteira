@@ -22,7 +22,11 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Simple for users**: no account for depositors (email verification by one-time code),
   invitations for external users, password-protected transfers, SHA-256 fingerprints, ZIP
   download generated on the fly.
-- **API first**: documented REST API ([OpenAPI 3.1](api/openapi.yaml)) with per-entity API tokens.
+- **API first**: documented REST API ([OpenAPI 3.1](api/openapi.yaml)) with an interactive
+  documentation embedded in the binary (`/api/docs`, no CDN, admins only by default), and
+  per-entity API tokens (hashed, restricted to allowed IP ranges and optionally to allowed
+  sender addresses, optional expiry, revocable at any time) for scripted, resumable deposits
+  of large files.
 - **Light to operate**: a single Go binary in a minimal Docker image, SQLite by default or
   PostgreSQL, configuration by environment variables, reverse proxy configurations for Caddy,
   Nginx, Traefik and Apache.
@@ -34,14 +38,17 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 
 ## Documentation
 
-- [API specification](api/openapi.yaml)
+- [API specification](api/openapi.yaml), browsable at `https://<admin host>/api/docs` on a
+  running instance
+- [API integration guide](docs/api/integration.md): API tokens and scripted, resumable uploads
+  with tus (bash/curl and PowerShell examples); [error codes](docs/api/errors.md)
 - [Project structure](docs/architecture/project-structure.md)
 - [Threat model (STRIDE, in French)](docs/security/threat-model.md)
 - [Master key](docs/operations/master-key.md): generate the key and store a copy in a password
   vault **before the first start**; without it, encrypted files cannot be recovered.
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec)
-- [Administration](docs/operations/admin.md) (accounts, tenant operations, audit log, GDPR,
-  statistics) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
+- [Administration](docs/operations/admin.md) (accounts, tenant operations, API tokens, audit
+  log, GDPR, statistics) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
 
 Installation, operation and user guides will be published with the first release.
 

@@ -102,7 +102,7 @@ const IdempotencyRetention = 24 * time.Hour
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
 	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
-	`ended_at, sender_ip, download_count`
+	`ended_at, sender_ip, download_count, api_token_id`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -121,29 +121,48 @@ var (
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at, sender_ip)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	// qTransferReleaseKey clears an idempotency key of the sender older
-	// than the retention, so that the key can be reused.
+		created_at, sender_ip, api_token_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	// qTransferReleaseKey clears an idempotency key of the sender (deposit
+	// session transfers) older than the retention, so that the key can be
+	// reused.
 	qTransferReleaseKey = tenantQuery(
 		`UPDATE transfers SET idempotency_key = NULL
-		WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at < ?`)
+		WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`)
+	// qTransferReleaseTokenKey is qTransferReleaseKey for the transfers of
+	// an API token.
+	qTransferReleaseTokenKey = tenantQuery(
+		`UPDATE transfers SET idempotency_key = NULL
+		WHERE tenant_id = ? AND api_token_id = ? AND idempotency_key = ? AND created_at < ?`)
 	qTransferGet = tenantQuery(
 		`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND id = ?`)
 	qTransferGetByKey = tenantQuery(
 		`SELECT ` + transferColumns + ` FROM transfers
-		WHERE tenant_id = ? AND sender_email = ? AND idempotency_key = ? AND created_at >= ?`)
+		WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at >= ?`)
+	qTransferGetByTokenKey = tenantQuery(
+		`SELECT ` + transferColumns + ` FROM transfers
+		WHERE tenant_id = ? AND api_token_id = ? AND idempotency_key = ? AND created_at >= ?`)
 	qTransferCount = tenantQuery(
 		`SELECT count(*) FROM transfers WHERE tenant_id = ? AND id = ?`)
-	// qTransferCountUploading counts the open transfers of a sender created
-	// since a time.
+	// qTransferCountUploading counts the open transfers of a sender
+	// (deposit session transfers) created since a time.
 	qTransferCountUploading = tenantQuery(
 		`SELECT count(*) FROM transfers
-		WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ?`)
+		WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND status = 'uploading' AND created_at >= ?`)
 	// qTransferListUploading lists them, newest first, up to a limit.
 	qTransferListUploading = tenantQuery(
 		`SELECT ` + transferColumns + ` FROM transfers
-		WHERE tenant_id = ? AND sender_email = ? AND status = 'uploading' AND created_at >= ?
+		WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND status = 'uploading' AND created_at >= ?
+		ORDER BY created_at DESC, id DESC LIMIT ?`)
+	// qTransferCountTokenUploading counts the open transfers of an API
+	// token created since a time.
+	qTransferCountTokenUploading = tenantQuery(
+		`SELECT count(*) FROM transfers
+		WHERE tenant_id = ? AND api_token_id = ? AND status = 'uploading' AND created_at >= ?`)
+	// qTransferListTokenUploading lists them, newest first, up to a limit.
+	qTransferListTokenUploading = tenantQuery(
+		`SELECT ` + transferColumns + ` FROM transfers
+		WHERE tenant_id = ? AND api_token_id = ? AND status = 'uploading' AND created_at >= ?
 		ORDER BY created_at DESC, id DESC LIMIT ?`)
 	// qTransferUsedBytes sums the declared sizes held against the quota.
 	// The CAST keeps an integer result on PostgreSQL (sum of BIGINT is
@@ -295,6 +314,11 @@ type Transfer struct {
 	// DownloadCount counts the download starts of a file or of the archive
 	// ([Transfers.IncrementDownloadsTx]); 0 for a new transfer.
 	DownloadCount int64
+	// APITokenID is the API token that created the transfer ("tok_" +
+	// ULID, same tenant, usable at the creation), "" for a transfer of a
+	// deposit session. Such a transfer has an internal sender kind; only
+	// that token owns it ([Depositor.Owns]).
+	APITokenID string
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -457,6 +481,10 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("an external sender needs an invitation, an internal one none")
 	case t.InvitationID != "" && !id.Valid(id.Invitation, t.InvitationID):
 		return Transfer{}, invalid("malformed invitation id")
+	case t.APITokenID != "" && !id.Valid(id.APIToken, t.APITokenID):
+		return Transfer{}, invalid("malformed api token id")
+	case t.APITokenID != "" && t.SenderKind != DepositorInternal:
+		return Transfer{}, invalid("an api token sender is internal")
 	case !validText(t.Message, MaxTransferMessageLen, false):
 		return Transfer{}, invalid("message must be text of at most %d characters", MaxTransferMessageLen)
 	case t.Language != "" && !tenant.IsLanguage(t.Language):
@@ -575,12 +603,15 @@ func checkKey(ctx context.Context, tx *ScopedTx, keyID, purpose, msg string) err
 // distinct recipients and 1 to MaxTransferFiles files are required; a file
 // may be created completed, such as an empty file), ErrNotFound when the
 // tenant is not active (its deletion started: checked under the tenant
-// lock, in the same transaction as the inserts), or when the invitation or
-// a data key does not exist (or belongs to another tenant), and ErrConflict when an identifier, an upload
-// identifier, a storage name or a data key is already used, or when the
-// sender used the idempotency key for another transfer within
-// IdempotencyRetention of t.CreatedAt (a key older than that is released
-// first). After an error, the caller must abort the transaction.
+// lock, in the same transaction as the inserts), when the invitation or a
+// data key does not exist (or belongs to another tenant), or when the API
+// token does not exist, belongs to another tenant, or is revoked or expired
+// at t.CreatedAt, and ErrConflict when an identifier, an upload identifier,
+// a storage name or a data key is already used, or when the sender (the API
+// token for a token transfer, the address otherwise) used the idempotency
+// key for another transfer within IdempotencyRetention of t.CreatedAt (a
+// key older than that is released first). After an error, the caller must
+// abort the transaction.
 func (r *Transfers) CreateTx(ctx context.Context, tx *ScopedTx, t Transfer, recipients []string, files []TransferFile) error {
 	if err := r.create(ctx, tx, t, recipients, files); err != nil {
 		return wrap("create transfer", err)
@@ -620,9 +651,17 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		return err
 	}
 	created := r.db.orNow(t.CreatedAt)
+	if t.APITokenID != "" {
+		if err := checkAPIToken(ctx, tx, t.APITokenID, created); err != nil {
+			return err
+		}
+	}
 	if t.IdempotencyKey != "" {
-		_, err := tx.Exec(ctx, qTransferReleaseKey, t.SenderEmail, t.IdempotencyKey,
-			toMillis(created.Add(-IdempotencyRetention)))
+		release, owner := qTransferReleaseKey, t.SenderEmail
+		if t.APITokenID != "" {
+			release, owner = qTransferReleaseTokenKey, t.APITokenID
+		}
+		_, err := tx.Exec(ctx, release, owner, t.IdempotencyKey, toMillis(created.Add(-IdempotencyRetention)))
 		if err != nil {
 			return err
 		}
@@ -634,7 +673,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 	_, err = tx.Exec(ctx, qTransferInsert, t.ID, string(t.Status), t.SenderEmail, string(t.SenderKind),
 		nullText(t.InvitationID), t.Message, t.Language, t.ExpiryDays, nullText(t.PasswordHash),
 		t.DeleteAfterFirstDownload, t.TotalBytes, nullText(t.IdempotencyKey), nullText(t.RequestFingerprint),
-		toMillis(created), senderIP)
+		toMillis(created), senderIP, nullText(t.APITokenID))
 	if err != nil {
 		return err
 	}
@@ -674,13 +713,14 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		t                                Transfer
 		status, kind                     string
 		inv, pwd, key, fp, tokenKey, ip  sql.NullString
+		apiToken                         sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
 		downloaded, deleteAfter, ended   sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
-		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount)
+		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -689,7 +729,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.CreatedAt, t.FinalizedAt, t.ExpiresAt = fromMillis(created), nullMillis(finalized), nullMillis(expiration)
 	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
 	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
-	t.SenderIP = parseIP(ip.String)
+	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
 	return t, nil
 }
 
@@ -800,8 +840,9 @@ func (r *Transfers) GetTx(ctx context.Context, tx *ScopedTx, trfID string) (Tran
 	return d, nil
 }
 
-// GetByIdempotencyKey returns the transfer of tenant tid that the sender
-// created with the idempotency key at or after since (callers pass now -
+// GetByIdempotencyKey returns the transfer of tenant tid that the sender,
+// through a deposit session (never an API token), created with the
+// idempotency key at or after since (callers pass now -
 // IdempotencyRetention), with its recipients and files. It returns
 // ErrNotFound when there is none (an older key is ignored), including for a
 // transfer of another tenant, and ErrInvalid for a malformed address or
@@ -841,8 +882,9 @@ func (r *Transfers) UsedBytesTx(ctx context.Context, tx *ScopedTx) (int64, error
 }
 
 // CountUploadingTx returns the number of transfers of the tenant tx is
-// bound to that sender (normalized) created at or after since and has not
-// finalized yet (status uploading), inside tx. Called after
+// bound to that sender (normalized) created through a deposit session (not
+// an API token) at or after since and has not finalized yet (status
+// uploading), inside tx. Called after
 // [Transfers.UsedBytesTx] in the creation transaction, it runs under the
 // tenant lock, so that a per-sender cap on open transfers cannot be
 // exceeded by concurrent creations. It returns ErrInvalid for a malformed
@@ -879,6 +921,65 @@ func (r *Transfers) ListUploadingTx(ctx context.Context, tx *ScopedTx, sender st
 	}
 	if err != nil {
 		return nil, wrap("list open transfers", err)
+	}
+	return out, nil
+}
+
+// GetByTokenIdempotencyKey returns the transfer of tenant tid that the API
+// token tokID created with the idempotency key at or after since (callers
+// pass now - IdempotencyRetention), with its recipients and files. It
+// returns ErrNotFound when there is none (an older key is ignored),
+// including for a transfer of another tenant or of another token, and
+// ErrInvalid for a malformed token identifier or key.
+func (r *Transfers) GetByTokenIdempotencyKey(ctx context.Context, tid tenant.ID, tokID, key string, since time.Time) (TransferDetails, error) {
+	if _, err := r.db.Scoped(tid); err != nil {
+		return TransferDetails{}, err
+	}
+	if !id.Valid(id.APIToken, tokID) {
+		return TransferDetails{}, invalid("malformed api token id")
+	}
+	if !validIdempotencyKey(key) {
+		return TransferDetails{}, invalid("idempotency key must hold 1 to %d visible ASCII characters", MaxIdempotencyKeyLen)
+	}
+	return readScoped(ctx, r.db, tid, "get transfer by token idempotency key", func(tx *ScopedTx) (TransferDetails, error) {
+		return details(ctx, tx, tx.QueryRow(ctx, qTransferGetByTokenKey, tokID, key, toMillis(since)))
+	})
+}
+
+// CountUploadingByTokenTx is [Transfers.CountUploadingTx] for the
+// transfers the API token tokID created: the per-token cap on open
+// transfers. It returns ErrInvalid for a malformed token identifier. After
+// an error, the caller must abort the transaction.
+func (r *Transfers) CountUploadingByTokenTx(ctx context.Context, tx *ScopedTx, tokID string, since time.Time) (int, error) {
+	if !id.Valid(id.APIToken, tokID) {
+		return 0, invalid("malformed api token id")
+	}
+	var n int
+	if err := tx.QueryRow(ctx, qTransferCountTokenUploading, tokID, toMillis(since)).Scan(&n); err != nil {
+		return 0, wrap("count open token transfers", err)
+	}
+	return n, nil
+}
+
+// ListUploadingByTokenTx returns, inside tx, the transfers counted by
+// [Transfers.CountUploadingByTokenTx] (without recipients or files), newest
+// first, at most limit of them (1 to MaxTransferFiles). It returns
+// ErrInvalid for a malformed token identifier or limit. After an error, the
+// caller must abort the transaction.
+func (r *Transfers) ListUploadingByTokenTx(ctx context.Context, tx *ScopedTx, tokID string, since time.Time, limit int) ([]Transfer, error) {
+	if !id.Valid(id.APIToken, tokID) {
+		return nil, invalid("malformed api token id")
+	}
+	if limit < 1 || limit > MaxTransferFiles {
+		return nil, invalid("limit must be between 1 and %d", MaxTransferFiles)
+	}
+	var out []Transfer
+	rows, err := tx.Query(ctx, qTransferListTokenUploading, tokID, toMillis(since), limit)
+	if err == nil {
+		out, err = collect(rows, func(r *sql.Rows) (Transfer, error) { return scanTransfer(r) })
+	}
+	if err != nil {
+		return nil, wrap("list open token transfers", err)
 	}
 	return out, nil
 }

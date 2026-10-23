@@ -16,9 +16,10 @@ type repo interface {
 	blocked(ctx context.Context, tid tenant.ID, email, sha256 string) (bool, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
 	invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error)
+	apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error)
 	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
-	transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error)
+	transferByKey(ctx context.Context, tid tenant.ID, o owner, key string, since time.Time) (store.TransferDetails, error)
 	completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error
 	downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
 	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
@@ -27,13 +28,21 @@ type repo interface {
 // txRepo is the part of the store used inside a tenant-scoped transaction.
 type txRepo interface {
 	usedBytes(ctx context.Context) (int64, error)
-	countUploading(ctx context.Context, sender string, since time.Time) (int, error)
-	listUploading(ctx context.Context, sender string, since time.Time, limit int) ([]store.Transfer, error)
+	countUploading(ctx context.Context, o owner, since time.Time) (int, error)
+	listUploading(ctx context.Context, o owner, since time.Time, limit int) ([]store.Transfer, error)
 	listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error)
 	newDEK(ctx context.Context) (wkID string, dek []byte, err error)
 	createTransfer(ctx context.Context, t store.Transfer, recipients []string, files []store.TransferFile) error
 	finalize(ctx context.Context, trfID string, now time.Time) error
 	deleteTransfer(ctx context.Context, trfID string) error
+}
+
+// owner names whose transfers the open transfer cap and the idempotency
+// keys are counted for: the API token when token is set, the normalized
+// sender address of the deposit session transfers otherwise.
+type owner struct {
+	email string
+	token string
 }
 
 // storeRepo implements repo over a *store.DB, creating the data keys with
@@ -56,6 +65,10 @@ func (r storeRepo) invitation(ctx context.Context, tid tenant.ID, invID string) 
 	return r.db.Invitations().Get(ctx, tid, invID)
 }
 
+func (r storeRepo) apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error) {
+	return r.db.APITokens().Get(ctx, tid, tokID)
+}
+
 func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	return r.db.Tenants().Get(ctx, tid)
 }
@@ -64,8 +77,11 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 	return r.db.Transfers().Get(ctx, tid, trfID)
 }
 
-func (r storeRepo) transferByKey(ctx context.Context, tid tenant.ID, sender, key string, since time.Time) (store.TransferDetails, error) {
-	return r.db.Transfers().GetByIdempotencyKey(ctx, tid, sender, key, since)
+func (r storeRepo) transferByKey(ctx context.Context, tid tenant.ID, o owner, key string, since time.Time) (store.TransferDetails, error) {
+	if o.token != "" {
+		return r.db.Transfers().GetByTokenIdempotencyKey(ctx, tid, o.token, key, since)
+	}
+	return r.db.Transfers().GetByIdempotencyKey(ctx, tid, o.email, key, since)
 }
 
 func (r storeRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error {
@@ -95,12 +111,18 @@ func (t storeTx) usedBytes(ctx context.Context) (int64, error) {
 	return t.db.Transfers().UsedBytesTx(ctx, t.tx)
 }
 
-func (t storeTx) countUploading(ctx context.Context, sender string, since time.Time) (int, error) {
-	return t.db.Transfers().CountUploadingTx(ctx, t.tx, sender, since)
+func (t storeTx) countUploading(ctx context.Context, o owner, since time.Time) (int, error) {
+	if o.token != "" {
+		return t.db.Transfers().CountUploadingByTokenTx(ctx, t.tx, o.token, since)
+	}
+	return t.db.Transfers().CountUploadingTx(ctx, t.tx, o.email, since)
 }
 
-func (t storeTx) listUploading(ctx context.Context, sender string, since time.Time, limit int) ([]store.Transfer, error) {
-	return t.db.Transfers().ListUploadingTx(ctx, t.tx, sender, since, limit)
+func (t storeTx) listUploading(ctx context.Context, o owner, since time.Time, limit int) ([]store.Transfer, error) {
+	if o.token != "" {
+		return t.db.Transfers().ListUploadingByTokenTx(ctx, t.tx, o.token, since, limit)
+	}
+	return t.db.Transfers().ListUploadingTx(ctx, t.tx, o.email, since, limit)
 }
 
 func (t storeTx) listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error) {

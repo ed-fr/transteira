@@ -28,9 +28,17 @@
 // the invitation is the only recipient (T-17). An internal sender names 1
 // to Options.MaxRecipients recipients (TT_MAX_RECIPIENTS, decision P15).
 //
-// The API token path (senderEmail in the request) belongs to a later step:
-// today a non-empty senderEmail is refused, and the API layer answers 401
-// for token authentication.
+// An API token sender (the HTTP layer has checked the client IP against
+// the ranges of the token) names the sender address in senderEmail, which
+// is mandatory (and forbidden with a deposit session): a plain address,
+// checked with the strict syntax of the recipients, of a tenant internal
+// domain and not blocklisted; the IP part of the internal rule does not
+// apply. Its transfers have an internal sender kind and carry the token:
+// only that token reads, cancels, finalizes and uploads them, never a
+// deposit session, even with the same address ([store.Depositor.Owns]).
+// The cap on unfinished transfers and the idempotency keys are counted per
+// token, and the audit events name the token, never the address, with
+// origin api, plus one api_token.used event per created transfer.
 //
 // # Quota and limits
 //

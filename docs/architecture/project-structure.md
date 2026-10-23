@@ -36,8 +36,10 @@ transteira/
 │   │   └── middleware/              # request-id, IP réelle (proxys de confiance), résolution du tenant,
 │   │                                # en-têtes de sécurité / CSP, limitation de débit, limite de corps
 │   │                                # et type JSON, récupération des panics, cookie de session de dépôt et CSRF
-│   │                                # (jeton X-CSRF-Token, Origin, Sec-Fetch-Site).
-│   │                                # Mode maintenance et délais par opération : httpserver/
+│   │                                # (jeton X-CSRF-Token, Origin, Sec-Fetch-Site), contexte du jeton d'API.
+│   │                                # Mode maintenance et délais par opération : httpserver/ ; voie jeton d'API
+│   │                                # (préséance du Bearer, verrouillage par IP) : apitoken.go ; page /api/docs
+│   │                                # (CSP propre, accès admin par défaut) : docs.go
 │   ├── api/
 │   │   ├── gen/                     # Code généré depuis openapi.yaml (ne pas modifier à la main)
 │   │   ├── stubs/                   # Stubs générés (tools/genstubs) : chaque opération non écrite → 404
@@ -76,7 +78,9 @@ transteira/
 │   ├── adminauth/                   # Comptes admin, argon2id, TOTP, codes de secours, sessions, premier lancement
 │   │                                # (couche d'authentification prévue pour accueillir un fournisseur OIDC en V2)
 │   ├── (authz → adminauth)          # Rôles et périmètres dans adminauth/authz.go (super_admin, delegated_admin ; auditor en V2)
-│   ├── apitoken/                    # Jetons d'API par entité (hachés, expiration optionnelle, révocation)
+│   ├── apitoken/                    # Jetons d'API par entité : génération (tt_ + 256 bits), empreinte SHA-256,
+│   │                                # plages autorisées, expiration optionnelle, révocation, administration auditée,
+│   │                                # authentification dans la portée de l'entité, dernière utilisation (au plus 1/min)
 │   ├── crypto/                      # Primitives pures : clé maître, enveloppe (DEK chiffrée par la clé maître),
 │   │                                # format de fichier AES-256-GCM par blocs, points de reprise tus, clés MAC
 │   │                                # dérivées, hachage des mots de passe argon2id (PHC, parallélisme borné)
@@ -154,7 +158,8 @@ transteira/
 │   │   ├── styles/                  # Variables de thème CSS (clair en V1, sombre prêt pour la V1.1)
 │   │   └── locales/                 # fr.json, en.json
 │   ├── static/                      # Image de fond par défaut, favicon
-│   ├── apidocs/                     # Documentation interactive de l'API (Scalar ou Redoc), vendorisée, sans CDN
+│   ├── apidocs/                     # Documentation interactive /api/docs : Scalar vendorisé (version épinglée,
+│   │                                # empreinte dans README.md), index.html et init.js sans script en ligne, embed.go
 │   └── dist/                        # Résultat de la compilation (ignoré par git)
 │
 ├── test/
@@ -185,15 +190,16 @@ transteira/
 │                                    # (V1.1 : grafana/, zabbix/)
 │
 ├── docs/
-│   ├── api/                         # Guide d'intégration : jetons, tus, exemples curl et PowerShell, errors.md
+│   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md
 │   ├── user/
 │   │   ├── embed.go                 # Source de l'aide intégrée
 │   │   ├── fr/                      # deposant.md, destinataire.md, admin-delegue.md, super-admin.md
 │   │   ├── en/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md
 │   │   └── screenshots/             # Générées par Playwright (ne pas modifier à la main)
 │   ├── install/                     # Docker, reverse proxy, SMTP (dont relais vers Microsoft 365), première installation
-│   ├── operations/                  # master-key.md (clé maître, rotation), security-log.md ; à venir :
-│   │                                # sauvegarde / restauration, maintenance
+│   ├── operations/                  # admin.md (administration, jetons d'API), tenants.md, antivirus.md,
+│   │                                # backup.md, master-key.md (clé maître, rotation), security-log.md ;
+│   │                                # à venir : maintenance
 │   ├── security/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/

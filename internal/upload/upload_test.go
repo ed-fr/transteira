@@ -459,6 +459,48 @@ func TestAuthorization(t *testing.T) {
 	})
 }
 
+// TestAuthorizationAPIToken checks that an API token reaches only the
+// uploads of its own transfers, and a deposit session never those of a
+// token, even with the same address.
+func TestAuthorizationAPIToken(t *testing.T) {
+	run(t, func(t *testing.T, ev *env) {
+		tok, tok2 := ev.token(t, ev.a), ev.token(t, ev.a)
+		ut := ev.newUpload(t, ev.a, tok, 100, time.Time{})
+		us := ev.newUpload(t, ev.a, internal, 100, time.Time{})
+		withEmail := tok
+		withEmail.Email = internal.Email
+		cases := map[string]struct {
+			tid tenant.ID
+			p   Principal
+			id  string
+		}{
+			"other token":               {ev.a, tok2, ut.id},
+			"session of the same email": {ev.a, internal, ut.id},
+			"token on a session upload": {ev.a, tok, us.id},
+			"token with the address":    {ev.a, withEmail, us.id},
+			"foreign tenant":            {ev.b, tok, ut.id},
+		}
+		for name, c := range cases {
+			t.Run(name, func(t *testing.T) {
+				ctx := t.Context()
+				_, err := ev.eng.Status(ctx, c.tid, c.p, c.id)
+				expectErr(t, err, ErrNotFound)
+				_, err = ev.eng.Append(ctx, c.tid, c.p, c.id, 0, bytes.NewReader(make([]byte, 100)))
+				expectErr(t, err, ErrNotFound)
+				expectErr(t, ev.eng.Terminate(ctx, c.tid, c.p, c.id), ErrNotFound)
+			})
+		}
+		// The token uploads its own file; the session still has its own.
+		ev.appendOK(t, ut, 0, make([]byte, 100))
+		if st := ev.statusOK(t, us); st.Offset != 0 {
+			t.Fatalf("status = %+v", st)
+		}
+		if err := ev.eng.Terminate(t.Context(), ut.tid, tok, ut.id); err != nil {
+			t.Fatalf("Terminate by its token: %v", err)
+		}
+	})
+}
+
 func TestTerminate(t *testing.T) {
 	run(t, func(t *testing.T, ev *env) {
 		ctx := t.Context()

@@ -39,10 +39,8 @@ const (
 	uploadPath = apiBase + "/uploads/"
 )
 
-// transferSender returns the tenant and the sender of the request: the
-// deposit session set by the session middleware and the real client IP.
-// The API token path is not implemented yet: without a session the
-// request is unauthenticated.
+// transferSender returns the tenant and the sender of the request (see
+// requestSender).
 func (s *Server) transferSender(ctx context.Context) (*tenant.Tenant, transfer.Sender, error) {
 	t, ok := tenant.FromContext(ctx)
 	if !ok {
@@ -51,11 +49,30 @@ func (s *Server) transferSender(ctx context.Context) (*tenant.Tenant, transfer.S
 	if s.transfers == nil {
 		return nil, transfer.Sender{}, errNoTransferService
 	}
-	info, _, err := currentSession(ctx)
+	sender, err := requestSender(ctx)
 	if err != nil {
 		return nil, transfer.Sender{}, err
 	}
-	return t, senderOf(ctx, info), nil
+	return t, sender, nil
+}
+
+// requestSender returns the sender of a deposit request with the real
+// client IP: the API token set by the HTTP layer when the request carries
+// one (its ranges already checked; the sender address of a creation comes
+// from the body), the deposit session set by the session middleware
+// otherwise. Without either, the request is unauthenticated.
+func requestSender(ctx context.Context) (transfer.Sender, error) {
+	if tok, ok := middleware.APITokenFrom(ctx); ok {
+		return transfer.Sender{
+			Depositor: store.Depositor{Kind: store.DepositorInternal, APITokenID: tok.TokenID},
+			ClientIP:  middleware.ClientIP(ctx),
+		}, nil
+	}
+	info, _, err := currentSession(ctx)
+	if err != nil {
+		return transfer.Sender{}, err
+	}
+	return senderOf(ctx, info), nil
 }
 
 // senderOf builds the transfer sender of a deposit session.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sync"
@@ -351,6 +352,20 @@ func (ev *env) external(t *testing.T, tid tenant.ID) Principal {
 	return Principal{Email: "bob@partner.example.org", Kind: store.DepositorExternal, InvitationID: inv.ID}
 }
 
+// token returns the principal of a new usable API token of tid (its
+// transfers are sent as alice, the address of internal).
+func (ev *env) token(t *testing.T, tid tenant.ID) Principal {
+	t.Helper()
+	tok := store.APIToken{
+		ID: id.New(id.APIToken), Name: "scanner", Prefix: "tt_test", TokenHash: randomBytes(t, store.TokenHashSize),
+		AllowedCIDRs: []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}, CreatedBy: "admin",
+	}
+	if _, err := ev.db.APITokens().Create(t.Context(), tid, tok); err != nil {
+		t.Fatalf("APITokens.Create: %v", err)
+	}
+	return Principal{Kind: store.DepositorInternal, APITokenID: tok.ID}
+}
+
 // randomBytes returns n random bytes.
 func randomBytes(t *testing.T, n int) []byte {
 	t.Helper()
@@ -411,9 +426,13 @@ func (ev *env) newTransfer(t *testing.T, tid tenant.ID, p Principal, sizes []int
 				ID: u.fileID, Name: "data.bin", Size: u.size, DEKKeyID: wk, StorageName: storage.NewName(), UploadID: u.id,
 			}
 		}
+		sender := p.Email
+		if p.APITokenID != "" {
+			sender = internal.Email
+		}
 		tr := store.Transfer{
-			ID: trfID, SenderEmail: p.Email, SenderKind: p.Kind, InvitationID: p.InvitationID,
-			ExpiryDays: 7, CreatedAt: createdAt,
+			ID: trfID, SenderEmail: sender, SenderKind: p.Kind, InvitationID: p.InvitationID,
+			APITokenID: p.APITokenID, ExpiryDays: 7, CreatedAt: createdAt,
 		}
 		return ev.db.Transfers().CreateTx(ctx, tx, tr, []string{"carol@partner.example.org"}, files)
 	})

@@ -26,17 +26,33 @@ import (
 // AdminReason).
 const MaxReasonLen = 500
 
+// Origin tells how the sender of a transfer was allowed to deposit
+// (OpenAPI TransferOrigin).
+type Origin string
+
+// Transfer origins.
+const (
+	// OriginInternal is an internal depositor (deposit session).
+	OriginInternal Origin = "internal"
+	// OriginExternal is an invited external depositor.
+	OriginExternal Origin = "external"
+	// OriginAPI is an API token.
+	OriginAPI Origin = "api"
+)
+
 // Transfer is a transfer as the administration lists it (OpenAPI
 // AdminTransfer): metadata only, never a link or a file content.
 type Transfer struct {
 	ID     string
 	Status store.TransferStatus
-	// Origin tells how the sender was allowed to deposit (OpenAPI
-	// TransferOrigin): internal or external.
-	Origin                   store.DepositorKind
-	SenderEmail              string
-	Recipients               []string
-	InvitationID             string
+	// Origin tells how the sender was allowed to deposit.
+	Origin       Origin
+	SenderEmail  string
+	Recipients   []string
+	InvitationID string
+	// APITokenID is the API token that created the transfer ("tok_" +
+	// ULID), "" for a deposit session transfer.
+	APITokenID               string
 	FileCount                int
 	TotalBytes               int64
 	PasswordProtected        bool
@@ -93,12 +109,23 @@ var transferStatuses = map[store.TransferStatus]bool{
 	store.TransferRejected: true, store.TransferExpired: true, store.TransferDeleted: true,
 }
 
+// originOf returns the origin of a stored transfer.
+func originOf(t store.Transfer) Origin {
+	switch {
+	case t.APITokenID != "":
+		return OriginAPI
+	case t.SenderKind == store.DepositorExternal:
+		return OriginExternal
+	}
+	return OriginInternal
+}
+
 // transferOf converts a stored transfer.
 func transferOf(t store.Transfer, recipients []string, fileCount int) Transfer {
 	out := Transfer{
-		ID: t.ID, Status: t.Status, Origin: t.SenderKind, SenderEmail: t.SenderEmail,
-		Recipients: append([]string{}, recipients...), InvitationID: t.InvitationID, FileCount: fileCount,
-		TotalBytes: t.TotalBytes, PasswordProtected: t.PasswordProtected(),
+		ID: t.ID, Status: t.Status, Origin: originOf(t), SenderEmail: t.SenderEmail,
+		Recipients: append([]string{}, recipients...), InvitationID: t.InvitationID, APITokenID: t.APITokenID,
+		FileCount: fileCount, TotalBytes: t.TotalBytes, PasswordProtected: t.PasswordProtected(),
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
 	}

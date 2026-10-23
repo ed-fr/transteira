@@ -147,7 +147,7 @@ func TestCleanupDriverFaults(t *testing.T) {
 		{"expire count keys", faultQuery, "dek_key_id IS NOT NULL", func(_ *testing.T, f *transferFixture) func() error { return expire(f) }},
 		{"expire", faultExec, "SET status = 'expired'", func(_ *testing.T, f *transferFixture) func() error { return expireUnkeyed(f) }},
 		{"expire rows", faultRows, "SET status = 'expired'", func(_ *testing.T, f *transferFixture) func() error { return expireUnkeyed(f) }},
-		{"expire probe", faultQuery, "download_count FROM transfers WHERE tenant_id = ? AND id = ?", func(_ *testing.T, f *transferFixture) func() error {
+		{"expire probe", faultQuery, "api_token_id FROM transfers WHERE tenant_id = ? AND id = ?", func(_ *testing.T, f *transferFixture) func() error {
 			return expireDeleted(f)
 		}},
 		{"list ended", faultQuery, "ORDER BY ended_at, id LIMIT", func(_ *testing.T, f *transferFixture) func() error { return listEnded(f) }},

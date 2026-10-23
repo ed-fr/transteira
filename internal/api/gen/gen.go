@@ -56,6 +56,7 @@ const (
 	AuditActionAdminUpdated               AuditAction = "admin.updated"
 	AuditActionApiTokenCreated            AuditAction = "api_token.created"
 	AuditActionApiTokenRevoked            AuditAction = "api_token.revoked"
+	AuditActionApiTokenUpdated            AuditAction = "api_token.updated"
 	AuditActionApiTokenUsed               AuditAction = "api_token.used"
 	AuditActionBlocklistUpdated           AuditAction = "blocklist.updated"
 	AuditActionConfigUpdated              AuditAction = "config.updated"
@@ -130,6 +131,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionApiTokenCreated:
 		return true
 	case AuditActionApiTokenRevoked:
+		return true
+	case AuditActionApiTokenUpdated:
 		return true
 	case AuditActionApiTokenUsed:
 		return true
@@ -1323,19 +1326,43 @@ type AdminWithActivation struct {
 // AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
 type AllowedCidrs = []string
 
+// AllowedSenders Sender addresses the token may deposit as. Each entry is either a full address (strict
+// syntax, no display name; normalized to lowercase with a punycode domain) or a mail domain
+// (normalized to lowercase punycode, no trailing dot). A `senderEmail` is allowed when it
+// equals an address entry or its domain equals a domain entry exactly: a domain entry does
+// not cover its subdomains. Two entries equal once normalized are refused. An empty list
+// (the default) allows any address of the tenant's internal domains; in every case the
+// address must also belong to an internal domain and not be blocklisted.
+type AllowedSenders = []string
+
 // ApiToken defines model for ApiToken.
 type ApiToken struct {
 	// AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
 	AllowedCidrs AllowedCidrs `json:"allowedCidrs"`
-	CreatedAt    time.Time    `json:"createdAt"`
-	CreatedBy    string       `json:"createdBy"`
-	ExpiresAt    *time.Time   `json:"expiresAt,omitempty"`
-	Id           string       `json:"id"`
-	LastUsedAt   *time.Time   `json:"lastUsedAt,omitempty"`
-	Name         string       `json:"name"`
+
+	// AllowedSenders Sender addresses the token may deposit as. Each entry is either a full address (strict
+	// syntax, no display name; normalized to lowercase with a punycode domain) or a mail domain
+	// (normalized to lowercase punycode, no trailing dot). A `senderEmail` is allowed when it
+	// equals an address entry or its domain equals a domain entry exactly: a domain entry does
+	// not cover its subdomains. Two entries equal once normalized are refused. An empty list
+	// (the default) allows any address of the tenant's internal domains; in every case the
+	// address must also belong to an internal domain and not be blocklisted.
+	AllowedSenders AllowedSenders `json:"allowedSenders"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	CreatedBy      string         `json:"createdBy"`
+
+	// ExpiresAt Optional expiry; `null` means the token never expires.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt Last successful use of the token. Updated at most once a minute per token, so it may lag behind the real last use by up to a minute.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	Name       string     `json:"name"`
 
 	// Prefix First characters of the token, to recognise it.
-	Prefix    string     `json:"prefix"`
+	Prefix string `json:"prefix"`
+
+	// RevokedAt Revocation date; a revoked token is refused immediately.
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 }
 
@@ -1343,35 +1370,51 @@ type ApiToken struct {
 type ApiTokenCreate struct {
 	// AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
 	AllowedCidrs AllowedCidrs `json:"allowedCidrs"`
-	ExpiresAt    *time.Time   `json:"expiresAt,omitempty"`
-	Name         string       `json:"name"`
+
+	// AllowedSenders Optional; absent or empty allows any address of the tenant's internal domains.
+	AllowedSenders *AllowedSenders `json:"allowedSenders,omitempty"`
+	ExpiresAt      *time.Time      `json:"expiresAt,omitempty"`
+	Name           string          `json:"name"`
 }
 
 // ApiTokenCreated defines model for ApiTokenCreated.
 type ApiTokenCreated struct {
 	// AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
 	AllowedCidrs AllowedCidrs `json:"allowedCidrs"`
-	CreatedAt    time.Time    `json:"createdAt"`
-	CreatedBy    string       `json:"createdBy"`
-	ExpiresAt    *time.Time   `json:"expiresAt,omitempty"`
-	Id           string       `json:"id"`
-	LastUsedAt   *time.Time   `json:"lastUsedAt,omitempty"`
-	Name         string       `json:"name"`
+
+	// AllowedSenders Sender addresses the token may deposit as. Each entry is either a full address (strict
+	// syntax, no display name; normalized to lowercase with a punycode domain) or a mail domain
+	// (normalized to lowercase punycode, no trailing dot). A `senderEmail` is allowed when it
+	// equals an address entry or its domain equals a domain entry exactly: a domain entry does
+	// not cover its subdomains. Two entries equal once normalized are refused. An empty list
+	// (the default) allows any address of the tenant's internal domains; in every case the
+	// address must also belong to an internal domain and not be blocklisted.
+	AllowedSenders AllowedSenders `json:"allowedSenders"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	CreatedBy      string         `json:"createdBy"`
+
+	// ExpiresAt Optional expiry; `null` means the token never expires.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt Last successful use of the token. Updated at most once a minute per token, so it may lag behind the real last use by up to a minute.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	Name       string     `json:"name"`
 
 	// Prefix First characters of the token, to recognise it.
-	Prefix    string     `json:"prefix"`
+	Prefix string `json:"prefix"`
+
+	// RevokedAt Revocation date; a revoked token is refused immediately.
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 
 	// Token Secret value, returned only once.
 	Token string `json:"token"`
 }
 
-// ApiTokenUpdate defines model for ApiTokenUpdate.
-type ApiTokenUpdate struct {
-	// AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
-	AllowedCidrs *AllowedCidrs `json:"allowedCidrs,omitempty"`
-	Name         *string       `json:"name,omitempty"`
-}
+// ApiTokenUpdate JSON Merge Patch of an API token; `null` is refused on every field. A list given replaces
+// the current one: `allowedSenders: []` lifts the sender restriction (any internal address).
+// An unknown member is refused (`400 validation-failed`, `invalid-format` on its pointer).
+type ApiTokenUpdate = json.RawMessage
 
 // AuditAction Audit action, `<object>.<verb>`. The list is extensible: new actions may be added within
 // the API version, so clients must accept unknown values, and filters accept any value of
@@ -1380,7 +1423,9 @@ type ApiTokenUpdate struct {
 // archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
 // the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
 // address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
-// `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
+// `quota.warning` and `quota.reached` are recorded even when no mail can be sent;
+// `api_token.created`, `api_token.updated` and `api_token.revoked` never contain the secret;
+// `api_token.used` is recorded once per transfer created with an API token (not per request).
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -1392,7 +1437,9 @@ type AuditEvent struct {
 	// archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
 	// the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
 	// address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
-	// `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
+	// `quota.warning` and `quota.reached` are recorded even when no mail can be sent;
+	// `api_token.created`, `api_token.updated` and `api_token.revoked` never contain the secret;
+	// `api_token.used` is recorded once per transfer created with an API token (not per request).
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id   string              `json:"id"`
@@ -2307,7 +2354,10 @@ type TransferCreate struct {
 	// Recipients Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient).
 	Recipients *[]Email `json:"recipients,omitempty"`
 
-	// SenderEmail Mandatory with an API token, forbidden with a deposit session.
+	// SenderEmail Mandatory with an API token, forbidden with a deposit session (`400
+	// validation-failed` on `/senderEmail` otherwise). With a token, it must belong to one of
+	// the tenant's internal domains, match the token's `allowedSenders` when that list is
+	// not empty, and the blocklist applies to it.
 	SenderEmail *Email `json:"senderEmail,omitempty"`
 }
 
@@ -2423,8 +2473,14 @@ type AlreadyExists = Problem
 // CsrfInvalid RFC 9457 Problem Details with TransTeira extension members.
 type CsrfInvalid = Problem
 
+// DepositCredentialForbidden RFC 9457 Problem Details with TransTeira extension members.
+type DepositCredentialForbidden = Problem
+
 // DepositForbidden RFC 9457 Problem Details with TransTeira extension members.
 type DepositForbidden = Problem
+
+// DepositUnauthenticated RFC 9457 Problem Details with TransTeira extension members.
+type DepositUnauthenticated = Problem
 
 // DownloadLocked RFC 9457 Problem Details with TransTeira extension members.
 type DownloadLocked = Problem
@@ -2461,6 +2517,9 @@ type ServiceUnavailable = Problem
 
 // StateConflict RFC 9457 Problem Details with TransTeira extension members.
 type StateConflict = Problem
+
+// TokenIpNotAllowed RFC 9457 Problem Details with TransTeira extension members.
+type TokenIpNotAllowed = Problem
 
 // TooManyStreams RFC 9457 Problem Details with TransTeira extension members.
 type TooManyStreams = Problem
@@ -3017,7 +3076,7 @@ type ServerInterface interface {
 	// RevokeApiToken Revoke an API token (immediate)
 	// (DELETE /admin/tenants/{tenantId}/api-tokens/{tokenId})
 	RevokeApiToken(w http.ResponseWriter, r *http.Request, tenantId TenantId, tokenId string)
-	// UpdateApiToken Rename a token or change its allowed IP ranges
+	// UpdateApiToken Rename a token or change its allowed IP ranges or senders
 	// (PATCH /admin/tenants/{tenantId}/api-tokens/{tokenId})
 	UpdateApiToken(w http.ResponseWriter, r *http.Request, tenantId TenantId, tokenId string)
 	// ListTenantAuditEvents Audit log of the tenant (12-month retention)
@@ -6255,7 +6314,18 @@ type AlreadyExistsApplicationProblemPlusJSONResponse Problem
 
 type CsrfInvalidApplicationProblemPlusJSONResponse Problem
 
+type DepositCredentialForbiddenApplicationProblemPlusJSONResponse Problem
+
 type DepositForbiddenApplicationProblemPlusJSONResponse Problem
+
+type DepositUnauthenticatedResponseHeaders struct {
+	WWWAuthenticate *string
+}
+type DepositUnauthenticatedApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers DepositUnauthenticatedResponseHeaders
+}
 
 type DownloadLockedApplicationProblemPlusJSONResponse Problem
 
@@ -6301,6 +6371,8 @@ type ServiceUnavailableApplicationProblemPlusJSONResponse struct {
 }
 
 type StateConflictApplicationProblemPlusJSONResponse Problem
+
+type TokenIpNotAllowedApplicationProblemPlusJSONResponse Problem
 
 type TooManyStreamsResponseHeaders struct {
 	RetryAfter *int
@@ -9224,6 +9296,22 @@ func (response CreateApiToken401ApplicationProblemPlusJSONResponse) VisitCreateA
 	return err
 }
 
+type CreateApiToken403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateApiToken403ApplicationProblemPlusJSONResponse) VisitCreateApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateApiToken404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -9285,6 +9373,22 @@ func (response RevokeApiToken401ApplicationProblemPlusJSONResponse) VisitRevokeA
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeApiToken403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeApiToken403ApplicationProblemPlusJSONResponse) VisitRevokeApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9373,6 +9477,22 @@ func (response UpdateApiToken401ApplicationProblemPlusJSONResponse) VisitUpdateA
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateApiToken403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateApiToken403ApplicationProblemPlusJSONResponse) VisitUpdateApiTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13917,16 +14037,19 @@ func (response CreateTransfer400ApplicationProblemPlusJSONResponse) VisitCreateT
 }
 
 type CreateTransfer401ApplicationProblemPlusJSONResponse struct {
-	UnauthenticatedApplicationProblemPlusJSONResponse
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
 }
 
 func (response CreateTransfer401ApplicationProblemPlusJSONResponse) VisitCreateTransferResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
 	w.WriteHeader(401)
 	_, err := buf.WriteTo(w)
 	return err
@@ -14081,23 +14204,26 @@ func (response CancelTransfer204Response) VisitCancelTransferResponse(w http.Res
 }
 
 type CancelTransfer401ApplicationProblemPlusJSONResponse struct {
-	UnauthenticatedApplicationProblemPlusJSONResponse
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
 }
 
 func (response CancelTransfer401ApplicationProblemPlusJSONResponse) VisitCancelTransferResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
 	w.WriteHeader(401)
 	_, err := buf.WriteTo(w)
 	return err
 }
 
 type CancelTransfer403ApplicationProblemPlusJSONResponse struct {
-	CsrfInvalidApplicationProblemPlusJSONResponse
+	DepositCredentialForbiddenApplicationProblemPlusJSONResponse
 }
 
 func (response CancelTransfer403ApplicationProblemPlusJSONResponse) VisitCancelTransferResponse(w http.ResponseWriter) error {
@@ -14160,6 +14286,25 @@ func (response CancelTransfer421ApplicationProblemPlusJSONResponse) VisitCancelT
 	return err
 }
 
+type CancelTransfer429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response CancelTransfer429ApplicationProblemPlusJSONResponse) VisitCancelTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CancelTransfer500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -14199,17 +14344,36 @@ func (response GetTransfer200JSONResponse) VisitGetTransferResponse(w http.Respo
 }
 
 type GetTransfer401ApplicationProblemPlusJSONResponse struct {
-	UnauthenticatedApplicationProblemPlusJSONResponse
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
 }
 
 func (response GetTransfer401ApplicationProblemPlusJSONResponse) VisitGetTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTransfer403ApplicationProblemPlusJSONResponse struct {
+	TokenIpNotAllowedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTransfer403ApplicationProblemPlusJSONResponse) VisitGetTransferResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(401)
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -14242,6 +14406,25 @@ func (response GetTransfer421ApplicationProblemPlusJSONResponse) VisitGetTransfe
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTransfer429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTransfer429ApplicationProblemPlusJSONResponse) VisitGetTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -14285,16 +14468,19 @@ func (response FinalizeTransfer202JSONResponse) VisitFinalizeTransferResponse(w 
 }
 
 type FinalizeTransfer401ApplicationProblemPlusJSONResponse struct {
-	UnauthenticatedApplicationProblemPlusJSONResponse
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
 }
 
 func (response FinalizeTransfer401ApplicationProblemPlusJSONResponse) VisitFinalizeTransferResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
 	w.WriteHeader(401)
 	_, err := buf.WriteTo(w)
 	return err
@@ -14356,6 +14542,25 @@ func (response FinalizeTransfer421ApplicationProblemPlusJSONResponse) VisitFinal
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinalizeTransfer429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response FinalizeTransfer429ApplicationProblemPlusJSONResponse) VisitFinalizeTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -14529,6 +14734,14 @@ func (response TerminateUpload412Response) VisitTerminateUploadResponse(w http.R
 	return nil
 }
 
+type TerminateUpload429Response struct {
+}
+
+func (response TerminateUpload429Response) VisitTerminateUploadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(429)
+	return nil
+}
+
 type TerminateUpload500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -14590,6 +14803,14 @@ func (response GetUploadOffset401Response) VisitGetUploadOffsetResponse(w http.R
 	return nil
 }
 
+type GetUploadOffset403Response struct {
+}
+
+func (response GetUploadOffset403Response) VisitGetUploadOffsetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
 type GetUploadOffset404Response struct {
 }
 
@@ -14613,6 +14834,14 @@ func (response GetUploadOffset412Response) VisitGetUploadOffsetResponse(w http.R
 		w.Header().Set("Tus-Version", fmt.Sprint(*response.Headers.TusVersion))
 	}
 	w.WriteHeader(412)
+	return nil
+}
+
+type GetUploadOffset429Response struct {
+}
+
+func (response GetUploadOffset429Response) VisitGetUploadOffsetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(429)
 	return nil
 }
 
@@ -14737,6 +14966,14 @@ type AppendUploadChunk415Response struct {
 
 func (response AppendUploadChunk415Response) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
 	w.WriteHeader(415)
+	return nil
+}
+
+type AppendUploadChunk429Response struct {
+}
+
+func (response AppendUploadChunk429Response) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(429)
 	return nil
 }
 
@@ -15079,7 +15316,7 @@ type StrictServerInterface interface {
 	// RevokeApiToken Revoke an API token (immediate)
 	// (DELETE /admin/tenants/{tenantId}/api-tokens/{tokenId})
 	RevokeApiToken(ctx context.Context, request RevokeApiTokenRequestObject) (RevokeApiTokenResponseObject, error)
-	// UpdateApiToken Rename a token or change its allowed IP ranges
+	// UpdateApiToken Rename a token or change its allowed IP ranges or senders
 	// (PATCH /admin/tenants/{tenantId}/api-tokens/{tokenId})
 	UpdateApiToken(ctx context.Context, request UpdateApiTokenRequestObject) (UpdateApiTokenResponseObject, error)
 	// ListTenantAuditEvents Audit log of the tenant (12-month retention)

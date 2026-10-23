@@ -222,7 +222,8 @@ func adminTransferBody(t tenantops.Transfer) gen.AdminTransfer {
 	}
 	return gen.AdminTransfer{
 		Id: t.ID, Status: gen.TransferStatus(t.Status), Origin: gen.TransferOrigin(t.Origin), SenderEmail: t.SenderEmail,
-		Recipients: recipients, InvitationId: optional(t.InvitationID), FileCount: t.FileCount, TotalBytes: t.TotalBytes,
+		Recipients: recipients, InvitationId: optional(t.InvitationID), ApiTokenId: optional(t.APITokenID),
+		FileCount: t.FileCount, TotalBytes: t.TotalBytes,
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: optionalTime(t.ExpiresAt), FirstDownloadedAt: optionalTime(t.FirstDownloadedAt),
 		DownloadCount: int(t.DownloadCount),
@@ -243,7 +244,7 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 	t := adminTransferBody(d.Transfer)
 	resp := gen.GetTenantTransfer200JSONResponse{
 		Id: t.Id, Status: t.Status, Origin: t.Origin, SenderEmail: t.SenderEmail, Recipients: t.Recipients,
-		InvitationId: t.InvitationId, FileCount: t.FileCount, TotalBytes: t.TotalBytes,
+		InvitationId: t.InvitationId, ApiTokenId: t.ApiTokenId, FileCount: t.FileCount, TotalBytes: t.TotalBytes,
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, FirstDownloadedAt: t.FirstDownloadedAt,
 		DownloadCount: t.DownloadCount,

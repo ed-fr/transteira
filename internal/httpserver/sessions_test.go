@@ -238,11 +238,6 @@ func TestSessionResolverWithoutTenant(t *testing.T) {
 
 // --- Route policies versus the OpenAPI security requirements -------------
 
-// unimplementedSchemes are the security schemes of the OpenAPI document
-// that no middleware implements yet: an alternative made of them only is
-// ignored, so that the operation requires the deposit session meanwhile.
-var unimplementedSchemes = map[string]bool{"apiToken": true}
-
 // specOperation is the part of an OpenAPI operation the test reads.
 type specOperation struct {
 	OperationID string                 `yaml:"operationId"`
@@ -268,28 +263,19 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 			if err := node.Decode(&op); err != nil {
 				t.Fatal(err)
 			}
-			var session, csrf, only bool
-			if op.Security != nil {
-				only = len(*op.Security) > 0
-				for _, alt := range *op.Security {
-					_, s := alt["depositSession"]
-					_, c := alt["csrfToken"]
-					session, csrf = session || s, csrf || c
-					only = only && (s || pendingOnly(alt))
-				}
-			}
+			session, csrf, token, ok := depositSecurity(op.Security)
 			pattern := method + " " + APIBaseURL + path
 			p, declared := routePolicies[pattern]
 			seen[pattern] = true
 			switch {
+			case !ok:
+				t.Errorf("%s (%s): security alternatives %v are not supported", pattern, op.OperationID, *op.Security)
 			case !session:
-				if declared && (p.depositSession || p.csrf) {
-					t.Errorf("%s (%s): route policy requires a deposit session, the spec does not", pattern, op.OperationID)
+				if declared && (p.depositSession || p.csrf || p.apiToken) {
+					t.Errorf("%s (%s): route policy requires a deposit session or a token, the spec does not", pattern, op.OperationID)
 				}
-			case !only:
-				t.Errorf("%s (%s): deposit session as one of several alternatives is not supported yet", pattern, op.OperationID)
-			case !declared || !p.depositSession || p.csrf != csrf:
-				t.Errorf("%s (%s): route policy %+v, want depositSession and csrf=%v", pattern, op.OperationID, p, csrf)
+			case !declared || !p.depositSession || p.csrf != csrf || p.apiToken != token:
+				t.Errorf("%s (%s): route policy %+v, want depositSession, csrf=%v and apiToken=%v", pattern, op.OperationID, p, csrf, token)
 			}
 		}
 	}
@@ -300,13 +286,31 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 	}
 }
 
-// pendingOnly reports whether every scheme of the security alternative alt
-// is unimplemented.
-func pendingOnly(alt map[string][]string) bool {
-	for scheme := range alt {
-		if !unimplementedSchemes[scheme] {
-			return false
+// depositSecurity reads the security requirements of a public operation:
+// session is set when depositSession is required (with csrfToken when
+// csrf), token when apiToken is its alternative. ok is false for any
+// combination the route policies cannot express: the deposit session must
+// be an alternative of its own (with or without csrfToken), apiToken an
+// alternative of its own and only beside the deposit session. The
+// alternatives without either (admin session, none) are not read.
+func depositSecurity(security *[]map[string][]string) (session, csrf, token, ok bool) {
+	if security == nil {
+		return false, false, false, true
+	}
+	for _, alt := range *security {
+		_, s := alt["depositSession"]
+		_, c := alt["csrfToken"]
+		_, k := alt["apiToken"]
+		switch {
+		case s && len(alt) == 1:
+			session = true
+		case s && c && len(alt) == 2:
+			session, csrf = true, true
+		case k && len(alt) == 1:
+			token = true
+		case s || k:
+			return false, false, false, false
 		}
 	}
-	return len(alt) > 0
+	return session, csrf, token, !token || session
 }

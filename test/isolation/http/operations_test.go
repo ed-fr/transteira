@@ -197,6 +197,15 @@ var isolationCases = map[string]isolationCase{
 	// tenant.
 	"listGlobalAuditEvents": superAdminOperation,
 	"getGlobalStats":        superAdminOperation,
+	// API tokens (apitokens_test.go): served on the admin host only; the
+	// delegated admin of tenant A gets for tenant B's ID exactly the answer
+	// of an unknown tenant ID, and, under A's own path, for a token of B
+	// exactly the answer of an unknown token; B's token is never listed,
+	// renamed nor revoked, and A's new token is never listed for B.
+	"listApiTokens":  adminAPIToken,
+	"createApiToken": adminAPIToken,
+	"updateApiToken": adminAPIToken,
+	"revokeApiToken": adminAPIToken,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -222,7 +231,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
-			case "listApiTokens", "getSystemSettings": // stubs answering not-implemented
+			case "getSystemSettings", "getMaintenance": // stubs answering not-implemented
 				if !isStub(t, op) {
 					t.Errorf("isStub(%s) = false, want true", op.id)
 				}

@@ -113,6 +113,8 @@ const (
 	// originInvitation is a transfer of an external sender holding an
 	// invitation.
 	originInvitation = "invitation"
+	// originAPI is a transfer created with an API token.
+	originAPI = "api"
 	// deletedBySender tells that the sender canceled the transfer.
 	deletedBySender = "sender"
 )
@@ -123,8 +125,8 @@ type Options struct {
 	// (DefaultMaxRecipients when <= 0, at most store.MaxTransferRecipients).
 	MaxRecipients int
 	// MaxOpenTransfers caps the unfinished transfers of an internal sender
-	// (DefaultMaxOpenTransfers when <= 0); external senders are capped at
-	// MaxOpenTransfersExternal.
+	// and of an API token (DefaultMaxOpenTransfers when <= 0); external
+	// senders are capped at MaxOpenTransfersExternal.
 	MaxOpenTransfers int
 	// UploadMaxAge is the longest life of an unfinished upload after the
 	// creation of its transfer (TT_UPLOAD_MAX_AGE, upload.DefaultMaxAge when
@@ -163,9 +165,15 @@ type Options struct {
 }
 
 // Sender is the authenticated depositor acting on a transfer, as the HTTP
-// layer builds it from the deposit session (deposit.SessionInfo) and the
-// real client IP. Its store.Depositor holds the ownership rule shared with
-// the upload engine ([store.Depositor.Owns]).
+// layer builds it from the deposit session (deposit.SessionInfo) or the API
+// token of the request, and the real client IP. Its store.Depositor holds
+// the ownership rule shared with the upload engine ([store.Depositor.Owns]).
+//
+// An API token sender has Kind store.DepositorInternal, no invitation and
+// its APITokenID; its Email is ignored (the sender address of a creation
+// comes from CreateRequest.SenderEmail, and the other operations use the
+// address stored on the transfer). The HTTP layer has already checked the
+// client IP against the ranges of the token.
 type Sender struct {
 	store.Depositor
 	// ClientIP is the real client IP of the request (trusted-proxy aware).
@@ -240,8 +248,17 @@ func (s *Service) now() time.Time {
 
 // normalize checks the shape of the sender and returns its normalized
 // address. A malformed sender is a wiring error of the caller (the session
-// holds a normalized address), not a client error.
+// holds a normalized address), not a client error. An API token sender
+// without address is valid and gets "".
 func normalize(sender Sender) (string, error) {
+	if sender.APITokenID != "" {
+		if !id.Valid(id.APIToken, sender.APITokenID) || sender.Kind != store.DepositorInternal || sender.InvitationID != "" {
+			return "", errors.New("transfer: malformed api token sender")
+		}
+		if sender.Email == "" {
+			return "", nil
+		}
+	}
 	email, err := store.NormalizeEmail(sender.Email)
 	if err != nil {
 		return "", errors.New("transfer: malformed sender address")
@@ -252,6 +269,15 @@ func normalize(sender Sender) (string, error) {
 		return "", errors.New("transfer: malformed sender kind or invitation")
 	}
 	return email, nil
+}
+
+// ownerOf returns the owner of the open transfer cap and of the
+// idempotency keys of sender, whose normalized address is email.
+func ownerOf(sender Sender, email string) owner {
+	if sender.APITokenID != "" {
+		return owner{token: sender.APITokenID}
+	}
+	return owner{email: email}
 }
 
 // openCap returns the cap on the unfinished transfers of sender.
@@ -282,14 +308,25 @@ func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, r
 // obligation of internal/deposit): neither its address nor its domain is
 // blocklisted; an internal sender still satisfies the internal rule from
 // the current client IP; an external sender's invitation is still active
-// and names the same address. It returns the normalized address and, for
-// an external sender, the invitation (whose inviter is the recipient,
-// T-17). A refusal is logged as deposit_refused with reason blocklist, ip,
-// domain or invitation, and returns ErrForbidden.
+// and names the same address. An API token sender (whose Email the caller
+// sets to the sender address) needs an address of an internal domain that
+// the current allowed senders of its token accept
+// ([store.APIToken.AllowsSender], read again on every call so that a change
+// applies at once): the IP part of the internal rule is replaced by the
+// ranges of the token, checked by the HTTP layer. It returns the normalized
+// address and, for an external sender, the invitation (whose inviter is the
+// recipient, T-17). A refusal is logged as deposit_refused with reason
+// blocklist, ip, domain (outside the internal domains, or not an allowed
+// sender of the token) or invitation, and returns ErrForbidden. A token
+// revoked, expired or deleted meanwhile is ErrForbidden too, not logged
+// (the HTTP layer refuses its next request).
 func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (string, store.Invitation, error) {
 	email, err := normalize(sender)
 	if err != nil {
 		return "", store.Invitation{}, err
+	}
+	if email == "" {
+		return "", store.Invitation{}, errors.New("transfer: api token sender without address")
 	}
 	blocked, err := s.repo.blocked(ctx, t.ID, email, "")
 	if err != nil {
@@ -304,11 +341,18 @@ func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Se
 			return "", store.Invitation{}, fmt.Errorf("transfer: read network rules: %w", err)
 		}
 		v := netpolicy.Evaluate(netpolicy.Rules{CIDRs: rules.CIDRs, Domains: rules.Domains}, sender.ClientIP, email)
+		// The ranges of an API token replace the tenant ranges.
+		v.IPOK = v.IPOK || sender.APITokenID != ""
 		switch {
 		case !v.IPOK:
 			return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonIP)
 		case !v.DomainOK:
 			return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonDomain)
+		}
+		if sender.APITokenID != "" {
+			if err := s.checkTokenSender(ctx, t, sender, email); err != nil {
+				return "", store.Invitation{}, err
+			}
 		}
 		return email, store.Invitation{}, nil
 	}
@@ -322,6 +366,23 @@ func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Se
 		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
 	}
 	return email, inv, nil
+}
+
+// checkTokenSender checks that the API token of sender is still usable and
+// allows email as sender (see checkEligible).
+func (s *Service) checkTokenSender(ctx context.Context, t *tenant.Tenant, sender Sender, email string) error {
+	tok, err := s.repo.apiToken(ctx, t.ID, sender.APITokenID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return ErrForbidden
+	case err != nil:
+		return fmt.Errorf("transfer: read api token: %w", err)
+	case !tok.Usable(s.now()):
+		return ErrForbidden
+	case !tok.AllowsSender(email):
+		return s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonDomain)
+	}
+	return nil
 }
 
 // load returns the transfer trfID of tenant tid when sender owns it
@@ -390,27 +451,46 @@ func (s *Service) lockUploading(ctx context.Context, tid tenant.ID, sender Sende
 
 // origin returns the audit origin of a transfer of sender.
 func origin(sender Sender) string {
-	if sender.Kind == store.DepositorExternal {
+	switch {
+	case sender.APITokenID != "":
+		return originAPI
+	case sender.Kind == store.DepositorExternal:
 		return originInvitation
 	}
 	return originInternal
 }
 
-// record appends a tenant audit event on the transfer trfID whose actor is
-// the sender address email, best effort: a failure is only reported on the
-// application log. The address goes in the actor column, never in details.
+// record appends a tenant audit event on the transfer trfID, best effort
+// (see actor and write).
 func (s *Service) record(ctx context.Context, t *tenant.Tenant, sender Sender, email string,
 	action audit.Action, trfID string, details map[string]any,
 ) {
+	kind, actor := actorOf(sender, email)
+	s.write(ctx, t, audit.Event{
+		ActorKind: kind, Actor: actor, IP: sender.ClientIP,
+		Action: action, ObjectKind: audit.ObjectTransfer, ObjectID: trfID, Details: details,
+	})
+}
+
+// actorOf returns the audit actor of the transfer events of sender: its
+// address email, or the API token of an API token sender (whose address is
+// then recorded only by the api_token.used event, as a depositor).
+func actorOf(sender Sender, email string) (store.AuditActorKind, string) {
+	if sender.APITokenID != "" {
+		return store.ActorAPIToken, sender.APITokenID
+	}
+	return store.ActorDepositor, email
+}
+
+// write appends the tenant audit event ev, best effort: a failure is only
+// reported on the application log. A mail address goes in the actor
+// column, never in details.
+func (s *Service) write(ctx context.Context, t *tenant.Tenant, ev audit.Event) {
 	if s.audit == nil {
 		return
 	}
-	ev := audit.Event{
-		ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP,
-		Action: action, ObjectKind: audit.ObjectTransfer, ObjectID: trfID, Details: details,
-	}
 	if err := s.audit.RecordScoped(context.WithoutCancel(ctx), t.ID, ev); err != nil {
-		s.logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(action)),
+		s.logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(ev.Action)),
 			slog.String("tenant", t.FQDN), slog.String("error", err.Error()))
 	}
 }

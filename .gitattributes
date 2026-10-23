@@ -10,3 +10,6 @@
 *.webp binary
 *.ico binary
 *.woff2 binary
+
+# Vendored third-party bundle: kept byte for byte (its SHA-256 is recorded in web/apidocs/README.md).
+web/apidocs/scalar.js -text -diff linguist-vendored

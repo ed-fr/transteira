@@ -206,6 +206,51 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `invalid-email`. The mail queue logs recipients as an HMAC keyed per process.
   `docs/operations/admin.md` (operations, audit log, GDPR procedure and limits, statistics)
   and quota alerts in `docs/operations/tenants.md`; threat model v0.13 (T-146 to T-151).
+- API tokens and interactive API documentation (step 13): migration `0011_api_tokens` (table
+  `api_tokens` under forced row-level security, `transfers.api_token_id`, idempotency index
+  scoped to the token, index for the per-token open-transfer cap); `internal/apitoken`
+  (100 % coverage): secrets `tt_` + 43 base62 characters (256 bits) shown once and stored as
+  SHA-256, 1 to 100 mandatory allowed CIDR ranges ("any address" only as `0.0.0.0/0` and
+  `::/0`), optional `allowedSenders` (up to 100 addresses or domains, exact match, no
+  subdomains; empty allows any internal address), optional expiry, revocation and expiry
+  effective on the next request (an upload already streaming continues until it ends or
+  idles), last use recorded at most once a minute;
+  admin operations `listApiTokens`, `createApiToken`, `updateApiToken` (name, ranges and
+  allowed senders;
+  `409` on a revoked token) and `revokeApiToken`, audited as `api_token.created`,
+  `.updated` (new action) and `.revoked` without secret. Token deposits: an
+  `Authorization: Bearer` header takes precedence over the deposit session (cookie dropped,
+  no CSRF check) on `createTransfer`, `getTransfer`, `cancelTransfer`, `finalizeTransfer` and
+  the tus `HEAD`, `PATCH` and `DELETE`; the token is looked up in the scope of the tenant
+  resolved from `Host` (a token of another tenant is unknown, and a token opens nothing on the
+  admin host); unknown, revoked or expired tokens get `401 invalid-credentials` and an
+  `api_token_invalid` security event (`401` answers carry `WWW-Authenticate: Bearer`), then
+  10 failures from one IP within 10 minutes lock it for 15 minutes: further invalid tokens
+  get `429` (`rate_limited scope="api_token"`) while valid tokens keep working; a valid
+  token used outside its ranges gets `403 ip-not-allowed` (`deposit_refused reason="ip"`).
+  `senderEmail` is mandatory and must belong to an internal domain of the tenant (blocklist
+  applied) and match the token's `allowedSenders` when set (`403 deposit-not-allowed`,
+  checked again at finalization); a transfer belongs to the token that created it only, with
+  the open-transfer cap and the `Idempotency-Key` counted per token; `api_token.used` once
+  per transfer created, with the sender address as actor (kind `depositor`, pseudonymised by
+  a GDPR erasure), and the transfer events carry the `api_token` actor; admin transfer views
+  show the origin `api`
+  and `apiTokenId`. `/api/docs`: Scalar `@scalar/api-reference` 1.73.1 vendored unmodified in
+  `web/apidocs/` (integrity and SHA-256 recorded, remote services disabled), embedded in the
+  binary (bundle SHA-256 pinned by a test), served on the admin host to signed-in admins
+  (`401` otherwise) and on known tenant FQDNs only with `TT_API_DOCS_PUBLIC=true` (an unknown
+  FQDN keeps `421`), under its own CSP (`style-src 'unsafe-inline'`
+  on that page only, no inline script, same-origin requests only). Integration guide
+  `docs/api/integration.md` (token creation, choice of the allowed ranges and senders, secret
+  storage, admin session and CSRF token kept in a private header file rather than on the
+  command line, resumable tus deposit, complete bash/curl and PowerShell 7.2 scripts with
+  resumption after a
+  cut or a restart, error handling, revocation and rotation), API tokens in
+  `docs/operations/admin.md`, token review after a restore in `docs/operations/backup.md`;
+  threat model v0.14 (T-68 to T-73 implemented, T-115, new T-152 for the documentation page,
+  new T-153 for a token impersonating an internal sender). The gitleaks rule
+  `transteira-api-token` no longer exempts `docs/` and `api/openapi.yaml`: only example tokens
+  of the fake shape `tt_EXAMPLE…` are allowed, anywhere.
 - Scan statuses `not_scanned_encrypted` (encrypted archives and documents ClamAV cannot read) and
   partial analyses (`Heuristics.Limits.Exceeded`) reported as not fully scanned; a transfer's validity
   now starts when it becomes available (`expiresAt` is set then); a file that times out, drops

@@ -2,20 +2,22 @@
 
 This page covers the admin host, the first-run setup, admin accounts, the
 second factor and how to recover access, then the daily operation of a
-tenant: transfers, invitations, blocklist, audit log, data subject rights
-(GDPR) and statistics. Tenant configuration and quota alerts are in
+tenant: transfers, invitations, blocklist, API tokens, audit log, data
+subject rights (GDPR) and statistics. Tenant configuration and quota alerts are in
 [Tenants](tenants.md).
 
 - Variables: `TT_ADMIN_HOSTS` (required), `TT_ADMIN_SESSION_IDLE_TIMEOUT`,
-  `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`, see
+  `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`,
+  `TT_API_DOCS_PUBLIC`, `TT_MAX_OPEN_TRANSFERS` (per API token), see
   `.env.example`.
 - Commands: `transteira admin list`, `transteira admin reset-totp <username>`,
   `transteira admin reset-password <username>`.
 - Implementation: `internal/adminauth`, `internal/audit`,
   `internal/api/admin`, `internal/tenantops` (operations),
+  `internal/apitoken` (API tokens),
   `internal/datasubject` (GDPR), `internal/stats` and `internal/usage`
   (statistics).
-- Threat model: T-58 to T-67, T-102, T-104, T-111, T-112, T-146 to
+- Threat model: T-58 to T-73, T-102, T-104, T-111, T-112, T-146 to
   T-151 in `docs/security/threat-model.md`.
 
 ## Admin host
@@ -29,6 +31,14 @@ tenant FQDN: TransTeira refuses to start if it is.
 Configure the admin host in the reverse proxy like a tenant host (TLS
 certificate, real client IP). You can restrict it further at the proxy, for
 example to your internal networks or a VPN.
+
+The admin host also serves the interactive API documentation at
+`/api/docs`, generated in the browser from the OpenAPI specification and
+embedded in the binary (no external resource). It requires an admin
+session (401 otherwise). Set `TT_API_DOCS_PUBLIC=true` to also serve it,
+without authentication, on the tenant FQDNs, for example for partners who
+integrate with the API; the specification itself is always downloadable at
+`/api/openapi.yaml`.
 
 ## First-run setup
 
@@ -215,6 +225,96 @@ a blocked fingerprint refuses the file at finalization. Adding or removing
 an entry records `blocklist.updated`, with the value for a domain or a
 fingerprint, never for an address (only its kind and identifier).
 
+### API tokens
+
+API tokens let scripts and third-party software deposit files without a
+verification code (CLAUDE.md section 16.4). The integration side (scripts,
+tus uploads, error handling) is described in
+[`docs/api/integration.md`](../api/integration.md).
+
+- **List** (`GET …/api-tokens`), for any admin attached to the tenant:
+  name, prefix (`tt_` and 4 characters), allowed ranges, allowed senders,
+  creator, creation,
+  last use, expiry and revocation dates, revoked tokens included. The
+  secret is never shown again.
+- **Create** (`POST …/api-tokens`): a name (1 to 100 characters), the
+  allowed IP ranges (`allowedCidrs`, 1 to 100 IPv4 or IPv6 CIDR prefixes,
+  mandatory), the allowed senders (`allowedSenders`, optional, recommended,
+  see below) and an optional expiry (`expiresAt`; none by default). The
+  response holds the secret (`tt_` followed by 43 characters) **once**:
+  TransTeira stores only its SHA-256 fingerprint. Give it to the person in
+  charge of the script through a channel you trust, and never by mail in
+  clear text.
+- **Change** (`PATCH …/api-tokens/{tokenId}`, JSON Merge Patch): rename it
+  or replace its allowed ranges or allowed senders (`[]` lifts the sender
+  restriction); the secret does not change. The expiry
+  cannot be changed: create a new token instead. A revoked token cannot be
+  changed (409).
+- **Revoke** (`DELETE …/api-tokens/{tokenId}`): effective on the next
+  request, which gets `401 invalid-credentials`. An upload request already
+  streaming is not cut: it goes on until its body ends or stalls
+  (`TT_UPLOAD_IDLE_TIMEOUT`), after which the transfer can no longer be
+  resumed or finalized. Expiry behaves the same way. Revoking a token
+  already revoked does nothing (204, no audit). Transfers created by the
+  token stay available to their recipients; one still uploading can no
+  longer be finished and is cleaned up when its uploads expire.
+
+Creating, changing and revoking a token need the right to change the
+tenant and the CSRF token. A tenant the admin is not attached to, and a
+token of another tenant, answer 404.
+
+What a token can do, and the rules you choose for it:
+
+- It is valid only on the FQDN of its tenant, never on another tenant's
+  FQDN nor on the admin host, and only for deposits: create, follow,
+  finalize or cancel a transfer, and upload its files. It never reaches the
+  administration.
+- **Allowed ranges.** Requests from any other client address get
+  `403 ip-not-allowed` and a `deposit_refused reason="ip"` line in the
+  [security log](security-log.md). List the exact addresses the scripts
+  leave from (as seen behind the trusted reverse proxies); "any address" is
+  possible only by listing both `0.0.0.0/0` and `::/0`, and then deserves
+  an expiry date. The ranges of a token replace the internal IP ranges of
+  the tenant for its deposits.
+- **Sender.** Each deposit names its sender (`senderEmail`), which must
+  belong to an internal domain of the tenant and is subject to the
+  blocklist. That address receives the confirmation, the antivirus alerts
+  and the download receipts.
+- **Allowed senders.** Without `allowedSenders`, a token can deposit as
+  any internal address: whoever holds it can make a transfer look as if it
+  came from any colleague. Set it to the address (or addresses) the job
+  really uses: up to 100 entries, each a full address
+  (`reporting@entity-a.example.com`) or a domain (`entity-a.example.com`,
+  which does not cover its subdomains). A deposit whose sender matches no
+  entry gets `403 deposit-not-allowed` and a
+  `deposit_refused reason="domain"` line in the security log; the rule is
+  checked again at finalization against the current list. Leave the list
+  empty only for software that genuinely deposits on behalf of many
+  people, with narrow ranges.
+- **Limits.** The per-transfer limit, the storage quota, the blocklist and
+  the antivirus apply as for an internal user. The cap on unfinished
+  transfers (`TT_MAX_OPEN_TRANSFERS`) counts per token.
+- **Ownership.** A token sees only the transfers it created; no other
+  token, and no deposit session, reaches them. In the transfer list and
+  detail, such a transfer shows the origin `api` and the token identifier
+  (`apiTokenId`).
+- **Last use** (`lastUsedAt`) is updated at most once a minute per token.
+  Review the list regularly and revoke the tokens nobody uses any more.
+- **Invalid tokens.** A missing, unknown, revoked or expired token gets
+  `401` and an `api_token_invalid` line in the security log; 10 invalid
+  tokens from one client address within 10 minutes lock that address for
+  15 minutes: further invalid tokens get `429`, while valid tokens keep
+  working, so that a neighbour behind the same NAT cannot block your
+  scripts. The lockout limits floods; the 256-bit secret is what makes
+  guessing impossible.
+
+Good practice: one token per application and per server, the narrowest
+ranges, the allowed senders set, an expiry for anything temporary, and a yearly rotation (create,
+deploy, check `lastUsedAt`, revoke the old one). If a secret may have
+leaked, revoke the token first and investigate afterwards. After restoring
+a database backup, review the tokens: see
+[Backup and restore](backup.md#review-the-api-tokens).
+
 ## Audit log
 
 Entries are kept 12 months, then purged by the cleanup task. There is no
@@ -251,11 +351,12 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Antivirus | `file.infected` (signature name), `file.not_scanned` (reason `too_large` or `encrypted`) |
 | Quotas | `quota.warning` (80 %), `quota.reached` (100 %), see [Tenants](tenants.md#quota-alerts) |
 | Blocklist | `blocklist.updated` (`op`, `kind`, `entryId`, and the value for a domain or a fingerprint) |
+| API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token; actor: the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; object: the token) |
 | Data subject rights | `data_subject.searched`, `data_subject.erased` (counts only; object: the pseudonym) |
 
-The list is extensible: later versions add actions (API tokens,
-maintenance, key rotation…). A filter on an action of the right form that
-does not exist yet simply returns nothing.
+The list is extensible: later versions add actions (maintenance, key
+rotation…). A filter on an action of the right form that does not exist
+yet simply returns nothing.
 
 ### Filters
 
@@ -329,6 +430,9 @@ address gives another pseudonym.
 ### What is kept, and the limits
 
 - **Blocklist entries**, so that an erasure never unblocks an abuser.
+- **Addresses listed in an API token's `allowedSenders`**: admin
+  configuration, kept like the blocklist; remove them by updating the token
+  if the person must no longer be allowed as a sender.
 - **Client IP addresses** in the audit log, until their 12-month retention
   ends (legitimate security interest), now attached to the pseudonym.
 - **Mails already queued** for sending still go out: a notification, a

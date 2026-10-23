@@ -50,6 +50,51 @@ info:
     tenant and the address, worthless under another tenant. It proves nothing by itself; the
     database remains authoritative.
 
+    ## API tokens
+    An API token (`apiToken`) is an alternative to the deposit session on `POST /transfers`,
+    `GET /transfers/{transferId}`, `DELETE /transfers/{transferId}`,
+    `POST /transfers/{transferId}/finalize` and the tus operations `HEAD`, `PATCH` and `DELETE`
+    on `/uploads/{uploadId}`. It is created by an admin of the tenant
+    (`/admin/tenants/{tenantId}/api-tokens`) and its secret is shown once.
+    - **Precedence:** when a request carries an `Authorization: Bearer` header, only the token is
+      considered: a deposit session cookie sent along is ignored, and no `X-CSRF-Token` is needed
+      (a browser never adds this header by itself). Without the header, nothing changes.
+    - **Host:** a token is only valid on the FQDN of its own tenant; presented on another
+      tenant's FQDN it is unknown (`401 invalid-credentials`). It never opens anything on the
+      admin host (`404` on the deposit paths, `401` on `/admin/*`).
+    - **Order of the checks:** the token is authenticated first: a missing `Authorization`
+      header on an operation that has no other credential gives `401 unauthenticated`; an
+      unknown, revoked or expired token gives `401 invalid-credentials`, whatever the client IP,
+      and is written to the security log (`api_token_invalid`). Repeated invalid tokens from the
+      same IP get `429 rate-limited` (written to the security log as well). Only then is the
+      client IP checked against the token's `allowedCidrs`: outside them, `403 ip-not-allowed`,
+      written to the security log.
+    - **Ownership:** a token reads, cancels, finalizes and uploads only the transfers it created
+      (`404` for any other, including those of another token of the same tenant). A deposit
+      session never reaches a transfer created by a token, even with the same address, and a
+      token never reaches a transfer created with a deposit session.
+    - **Senders:** the `senderEmail` of a token deposit must be an address of one of the
+      tenant's internal domains, not blocklisted. A token may further restrict it with
+      `allowedSenders`: a list of full addresses and domains; the address must then equal one of
+      the addresses or have exactly one of the domains as its domain (no subdomain matching).
+      An empty list allows any internal address. A mismatch gives `403 deposit-not-allowed`
+      (security log `deposit_refused`, reason `domain`); the rule is checked again on finalize,
+      with the token's current `allowedSenders`.
+    - **Limits:** the per-transfer limit, the storage quota, the blocklist and the antivirus
+      apply as for an internal depositor; the cap on unfinished transfers
+      (`TT_MAX_OPEN_TRANSFERS`) and the `Idempotency-Key` are counted per token.
+    - **Audit:** `api_token.used` is recorded once per transfer created with a token, with the
+      sender address as actor (a depositor, covered by the GDPR requests on that address), the
+      token as object and the transfer identifier in its details; the transfer events name the
+      token (`tok_...`) as actor.
+
+    ## Interactive documentation
+    An interactive documentation generated from this specification is served at `/api/docs`
+    (embedded in the binary, no external resource). By default it is served on the admin host
+    only and requires an admin session (`401` otherwise); when `TT_API_DOCS_PUBLIC=true`, it is
+    also served, without authentication, on the tenant FQDNs. This specification itself is always
+    downloadable at `/api/openapi.yaml`.
+
     ## Errors
     All errors use **RFC 9457 Problem Details** (`application/problem+json`). Each problem carries
     a stable machine-readable `code` extension member; the full catalogue is documented in
@@ -74,9 +119,8 @@ info:
     resume from.
 
     Upload resources are reached with the deposit session of the sender of the transfer (same
-    address and, for an external depositor, same invitation); any other caller gets `404`.
-    The `apiToken` alternative of these operations, and of the transfer operations, is not
-    implemented yet: until it is, a request without a deposit session cookie gets `401`.
+    address and, for an external depositor, same invitation), or with the API token that
+    created the transfer; any other caller gets `404`.
 
     ## Pagination
     List endpoints use opaque cursors: `?limit=50&cursor=...`; responses contain `items` and
@@ -540,11 +584,18 @@ paths:
         `POST /transfers/{transferId}/finalize` is called.
 
         With an API token, the token is authenticated first (an unknown, revoked or expired token
-        always gives `401`, whatever the client IP), then the client IP must belong to the token's
-        `allowedCidrs` (otherwise
-        `403 ip-not-allowed`, written to the security log), `senderEmail` is mandatory and must
-        belong to one of the tenant's internal domains; no email verification is performed (the
-        token is the proof).
+        always gives `401 invalid-credentials`, whatever the client IP), then the client IP must
+        belong to the token's `allowedCidrs` (otherwise `403 ip-not-allowed`, written to the
+        security log). `senderEmail` is then mandatory and must belong to one of the tenant's
+        internal domains; no email verification is performed (the token is the proof), but the
+        blocklist applies to the address and its domain (`403 deposit-not-allowed`), and
+        `recipients` is mandatory. When the token has `allowedSenders`, `senderEmail` must also
+        equal one of its addresses or belong exactly to one of its domains (`403
+        deposit-not-allowed`, security log reason `domain`); an empty list allows any internal
+        address. The internal rule of public deposits (tenant IP ranges and
+        internal domain) is replaced by the token's `allowedCidrs` and the internal domain. The
+        transfer belongs to the token only (see "API tokens" above); the `Idempotency-Key` is
+        scoped to the token.
         With a deposit session, `senderEmail` must be omitted: the verified session address is used.
         An invited external depositor cannot choose recipients: files are addressed to the
         internal user who issued the invitation.
@@ -557,9 +608,9 @@ paths:
 
         A sender may have only a limited number of unfinished (uploading) transfers at once:
         `TT_MAX_OPEN_TRANSFERS` (10 by default) for an internal depositor, 3 for an invited
-        external one; transfers whose uploads have expired do not count. Beyond it the creation
-        gets `429 rate-limited` with `Retry-After`; finalizing or cancelling a transfer frees a
-        slot.
+        external one, and `TT_MAX_OPEN_TRANSFERS` per API token; transfers whose uploads have
+        expired do not count. Beyond it the creation gets `429 rate-limited` with `Retry-After`;
+        finalizing or cancelling a transfer frees a slot.
       security:
         - depositSession: []
           csrfToken: []
@@ -631,12 +682,14 @@ paths:
                     uploadOffset: 0
                     scanStatus: pending
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '401': { $ref: '#/components/responses/DepositUnauthenticated' }
         '403':
           description: |
             The depositor is not allowed to deposit (`deposit-not-allowed`: eligibility is checked
-            again), an API token is used outside its ranges (`ip-not-allowed`), or the CSRF check
-            failed (`csrf-invalid`).
+            again; with an API token, `senderEmail` outside the internal domains, blocklisted or
+            not matching the token's `allowedSenders`),
+            an API token is used from an IP outside its `allowedCidrs` (`ip-not-allowed`, written
+            to the security log), or the CSRF check of a session request failed (`csrf-invalid`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -676,8 +729,12 @@ paths:
       summary: Follow a transfer as its sender
       description: |
         Returns the state of a transfer to any deposit session of the same sender (same
-        address, kind and invitation) or to an API token of the same tenant; anyone else gets
-        `404`. Used to poll antivirus progress after finalization.
+        address, kind and invitation) for a transfer created with a deposit session, or to the
+        API token that created it for a transfer created with a token; anyone else gets `404`
+        (another token of the same tenant, or a session for a token-created transfer, included).
+        Used to poll antivirus progress after finalization.
+        With an API token: `401` for an invalid token, then `403 ip-not-allowed` from an IP
+        outside its `allowedCidrs`.
       security:
         - depositSession: []
         - apiToken: []
@@ -713,9 +770,11 @@ paths:
                     mediaType: video/mp4
                     sha256: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
                     scanStatus: not_scanned_too_large
-        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '401': { $ref: '#/components/responses/DepositUnauthenticated' }
+        '403': { $ref: '#/components/responses/TokenIpNotAllowed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Transfers]
@@ -725,8 +784,8 @@ paths:
         Deletes the transfer, its uploads and files, with crypto-erase of the file keys.
         In V1 a sender may only cancel a transfer that is still `uploading` (`409 state-conflict`
         otherwise, and while one of its uploads is in progress); deleting a finalized transfer is
-        reserved to admins (and to the V1.1 "My transfers" feature).
-        API tokens may delete any transfer they created.
+        reserved to admins (and to the V1.1 "My transfers" feature). The same rule applies to an
+        API token, which may only cancel the transfers it created (`404` for any other).
       security:
         - depositSession: []
           csrfToken: []
@@ -734,11 +793,12 @@ paths:
       responses:
         '204':
           description: Transfer deleted.
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '401': { $ref: '#/components/responses/DepositUnauthenticated' }
+        '403': { $ref: '#/components/responses/DepositCredentialForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /transfers/{transferId}/finalize:
@@ -773,6 +833,9 @@ paths:
         The antivirus is **fail-closed**: while ClamAV is unreachable, files stay `scanning`, the
         analysis is retried with back-off (and resumed after a restart), and nothing is made
         available.
+
+        Only the sender may finalize: the deposit session of the sender for a session transfer,
+        the API token that created it for a token transfer (`404` otherwise).
       security:
         - depositSession: []
           csrfToken: []
@@ -800,12 +863,13 @@ paths:
                     mediaType: application/pdf
                     sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
                     scanStatus: scanning
-        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '401': { $ref: '#/components/responses/DepositUnauthenticated' }
         '403':
           description: |
             A file hash is on the tenant blocklist (`blocked-file`), the depositor is no longer
-            allowed to deposit (`deposit-not-allowed`: eligibility is checked again), or the CSRF
-            check failed (`csrf-invalid`).
+            allowed to deposit (`deposit-not-allowed`: eligibility is checked again), an API token
+            is used from an IP outside its `allowedCidrs` (`ip-not-allowed`, written to the
+            security log), or the CSRF check of a session request failed (`csrf-invalid`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -823,6 +887,12 @@ paths:
                     title: Deposit not allowed
                     status: 403
                     code: deposit-not-allowed
+                ipNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+                    title: Address not allowed for this token
+                    status: 403
+                    code: ip-not-allowed
                 csrfInvalid:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
@@ -860,6 +930,7 @@ paths:
                     status: 409
                     code: state-conflict
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/MaintenanceMode' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -914,10 +985,12 @@ paths:
               schema: { type: integer, format: int64, minimum: 0 }
               example: 12884901888
             Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
-        '401': { description: Unauthenticated. }
+        '401': { description: 'Missing deposit session or `Authorization` header, or invalid, revoked or expired API token (written to the security log). No body.' }
+        '403': { description: 'API token used from an IP outside its `allowedCidrs` (written to the security log). No body.' }
         '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
         '410': { description: 'Upload expired, or transfer no longer being uploaded.' }
         '412': { $ref: '#/components/responses/TusVersionUnsupported' }
+        '429': { description: 'Too many invalid API tokens from this IP (written to the security log); retry after `Retry-After`. No body.' }
         '500': { $ref: '#/components/responses/InternalError' }
     patch:
       tags: [Uploads (tus)]
@@ -955,8 +1028,8 @@ paths:
             Upload-Offset: { $ref: '#/components/headers/UploadOffset' }
             Upload-Expires: { $ref: '#/components/headers/UploadExpires' }
         '400': { description: '`Upload-Offset` header missing or malformed, or request body interrupted (the bytes received are kept; resume after `HEAD`).' }
-        '401': { description: Unauthenticated. }
-        '403': { description: CSRF failure. }
+        '401': { description: 'Missing deposit session or `Authorization` header, or invalid, revoked or expired API token (written to the security log). No body.' }
+        '403': { description: 'CSRF failure of a session request, or API token used from an IP outside its `allowedCidrs` (written to the security log). No body.' }
         '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
         '409': { description: '`Upload-Offset` does not match the current offset, another request is uploading to this resource, or the transfer is no longer being uploaded.' }
         '410': { description: Upload expired. }
@@ -964,6 +1037,7 @@ paths:
         '413': { description: 'Bytes beyond the declared `Upload-Length`: the bytes up to `Upload-Length` are kept, the rest is discarded. An empty `PATCH` at `Upload-Offset` = `Upload-Length` then completes the upload.' }
         '415': { description: 'Content-Type is not `application/offset+octet-stream`.' }
         '503': { description: Maintenance mode; retry after `Retry-After`. Uploads already started may be resumed after maintenance. }
+        '429': { description: 'Too many invalid API tokens from this IP (written to the security log); retry after `Retry-After`. No body.' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
       tags: [Uploads (tus)]
@@ -981,11 +1055,12 @@ paths:
           description: Upload terminated.
           headers:
             Tus-Resumable: { $ref: '#/components/headers/TusResumable' }
-        '401': { description: Unauthenticated. }
-        '403': { description: CSRF failure. }
+        '401': { description: 'Missing deposit session or `Authorization` header, or invalid, revoked or expired API token (written to the security log). No body.' }
+        '403': { description: 'CSRF failure of a session request, or API token used from an IP outside its `allowedCidrs` (written to the security log). No body.' }
         '404': { description: "Unknown upload, or upload belonging to another sender or tenant." }
         '409': { description: 'Transfer no longer being uploaded, or another request is uploading to this resource.' }
         '412': { $ref: '#/components/responses/TusVersionUnsupported' }
+        '429': { description: 'Too many invalid API tokens from this IP (written to the security log); retry after `Retry-After`. No body.' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   # ---------------------------------------------------------------------------
@@ -2788,7 +2863,7 @@ paths:
       tags: [Admin operations]
       operationId: listApiTokens
       summary: List API tokens (never the secret)
-      description: "Lists the API tokens of the tenant with their allowed IP ranges and usage dates. Secrets are never returned."
+      description: "Lists the API tokens of the tenant (revoked ones included) with their allowed IP ranges and usage dates. Secrets are never returned. Readable by any admin attached to the tenant; a tenant the admin is not attached to answers `404`. `lastUsedAt` is updated at most once a minute per token."
       security:
         - adminSession: []
       responses:
@@ -2802,8 +2877,9 @@ paths:
               example:
                 - id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                   name: Nightly ERP export
-                  prefix: tt_9fK2
+                  prefix: tt_EXAM
                   allowedCidrs: [10.10.20.15/32]
+                  allowedSenders: [reporting@entity-a.example.com]
                   createdBy: admin.entity-a
                   createdAt: '2026-10-01T08:00:00Z'
                   lastUsedAt: '2026-10-19T02:00:12Z'
@@ -2819,7 +2895,13 @@ paths:
       description: |
         The secret is returned **once** in this response and stored hashed. No expiry by default.
         `allowedCidrs` is mandatory: list the IP ranges the token may be used from, or
-        `0.0.0.0/0` and `::/0` to allow any address explicitly.
+        `0.0.0.0/0` and `::/0` to allow any address explicitly. `allowedSenders` optionally
+        restricts the sender addresses the token may deposit as (see `AllowedSenders`); errors on
+        one entry name `/allowedSenders/<index>`.
+
+        Requires the right to change the tenant; a tenant the admin is not attached to answers
+        `404`. Audited as `api_token.created` (never with the secret; the allowed senders are
+        recorded as a count only, never the addresses).
       security:
         - adminSession: []
           csrfToken: []
@@ -2831,7 +2913,7 @@ paths:
             examples:
               singleHost:
                 summary: Restricted to one server
-                value: { name: Nightly ERP export, allowedCidrs: [10.10.20.15/32], expiresAt: null }
+                value: { name: Nightly ERP export, allowedCidrs: [10.10.20.15/32], allowedSenders: [reporting@entity-a.example.com], expiresAt: null }
               anyAddress:
                 summary: Usable from any address (explicit)
                 value: { name: Partner integration, allowedCidrs: [0.0.0.0/0, '::/0'], expiresAt: '2027-06-30T23:59:59Z' }
@@ -2844,16 +2926,18 @@ paths:
               example:
                 id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                 name: Nightly ERP export
-                prefix: tt_9fK2
+                prefix: tt_EXAM
                 allowedCidrs: [10.10.20.15/32]
+                allowedSenders: [reporting@entity-a.example.com]
                 createdBy: admin.entity-a
                 createdAt: '2026-10-19T16:20:00Z'
                 lastUsedAt: null
                 expiresAt: null
                 revokedAt: null
-                token: tt_9fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5dF8gH1jK4
+                token: tt_EXAMPLE4fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5dF
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2869,8 +2953,8 @@ paths:
     patch:
       tags: [Admin operations]
       operationId: updateApiToken
-      summary: Rename a token or change its allowed IP ranges
-      description: "Renames an API token or replaces its allowed IP ranges. A revoked token cannot be modified. Audited."
+      summary: Rename a token or change its allowed IP ranges or senders
+      description: "Renames an API token or replaces its allowed IP ranges or allowed senders (`allowedSenders: []` allows any internal address again). A revoked token cannot be modified (`409 state-conflict`). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.updated` (the allowed senders as a count only)."
       security:
         - adminSession: []
           csrfToken: []
@@ -2889,8 +2973,9 @@ paths:
               example:
                 id: tok_01JABCJ5M6N7P8Q9R0S1T2V3V4
                 name: Nightly ERP export
-                prefix: tt_9fK2
+                prefix: tt_EXAM
                 allowedCidrs: [10.10.20.16/32]
+                allowedSenders: [reporting@entity-a.example.com]
                 createdBy: admin.entity-a
                 createdAt: '2026-10-01T08:00:00Z'
                 lastUsedAt: '2026-10-19T02:00:12Z'
@@ -2898,6 +2983,7 @@ paths:
                 revokedAt: null
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2905,13 +2991,14 @@ paths:
       tags: [Admin operations]
       operationId: revokeApiToken
       summary: Revoke an API token (immediate)
-      description: "Revokes an API token; subsequent calls with it are refused immediately. Audited."
+      description: "Revokes an API token; subsequent calls with it are refused immediately (`401 invalid-credentials`). Revoking a token that is already revoked is a no-op answered `204` (not audited again). Requires the right to change the tenant; a tenant the admin is not attached to, or a token of another tenant, answers `404`. Audited as `api_token.revoked`."
       security:
         - adminSession: []
           csrfToken: []
       responses:
-        '204': { description: Token revoked. }
+        '204': { description: 'Token revoked, or already revoked.' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -3914,6 +4001,68 @@ components:
             title: Invalid credentials
             status: 401
             code: invalid-credentials
+    DepositUnauthenticated:
+      description: |
+        No usable credential on an operation that accepts a deposit session or an API token.
+        `unauthenticated`: no deposit session cookie (or an expired one) and no `Authorization`
+        header. `invalid-credentials`: the `Authorization: Bearer` token is malformed, unknown
+        (including a token of another tenant), revoked or expired; it is answered whatever the
+        client IP and written to the security log (`api_token_invalid`). When a bearer token is
+        present, a deposit session cookie sent along is ignored.
+      headers:
+        WWW-Authenticate:
+          description: "`Bearer` (RFC 6750): the challenge of the API token scheme."
+          schema: { type: string }
+          example: Bearer
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            unauthenticated:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#unauthenticated
+                title: Authentication required
+                status: 401
+                code: unauthenticated
+            invalidCredentials:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#invalid-credentials
+                title: Invalid credentials
+                status: 401
+                code: invalid-credentials
+    TokenIpNotAllowed:
+      description: |
+        The API token is valid but the client IP is outside its `allowedCidrs`
+        (`ip-not-allowed`). Checked after the token is authenticated; written to the security log.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+            title: Address not allowed for this token
+            status: 403
+            code: ip-not-allowed
+    DepositCredentialForbidden:
+      description: |
+        The CSRF check of a deposit session request failed (`csrf-invalid`), or a valid API token
+        is used from an IP outside its `allowedCidrs` (`ip-not-allowed`, written to the security
+        log). Requests made with an API token are not subject to the CSRF check.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            csrfInvalid:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                title: Invalid CSRF token
+                status: 403
+                code: csrf-invalid
+            ipNotAllowed:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#ip-not-allowed
+                title: Address not allowed for this token
+                status: 403
+                code: ip-not-allowed
     Forbidden:
       description: Authenticated but not allowed (role).
       content:
@@ -4090,7 +4239,7 @@ components:
             code: quota-exceeded
             detail: The storage space of this service is full. Please try again later.
     RateLimited:
-      description: Too many requests. Written to the security log.
+      description: Too many requests (including repeated invalid API tokens from the same IP). Written to the security log.
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
       content:
@@ -4455,7 +4604,11 @@ components:
       properties:
         senderEmail:
           allOf: [{ $ref: '#/components/schemas/Email' }]
-          description: Mandatory with an API token, forbidden with a deposit session.
+          description: |
+            Mandatory with an API token, forbidden with a deposit session (`400
+            validation-failed` on `/senderEmail` otherwise). With a token, it must belong to one of
+            the tenant's internal domains, match the token's `allowedSenders` when that list is
+            not empty, and the blocklist applies to it.
         recipients:
           type: array
           description: Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient).
@@ -5140,32 +5293,60 @@ components:
       uniqueItems: true
       description: IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
       items: { type: string, maxLength: 43 }
+    AllowedSenders:
+      type: array
+      maxItems: 100
+      uniqueItems: true
+      description: |
+        Sender addresses the token may deposit as. Each entry is either a full address (strict
+        syntax, no display name; normalized to lowercase with a punycode domain) or a mail domain
+        (normalized to lowercase punycode, no trailing dot). A `senderEmail` is allowed when it
+        equals an address entry or its domain equals a domain entry exactly: a domain entry does
+        not cover its subdomains. Two entries equal once normalized are refused. An empty list
+        (the default) allows any address of the tenant's internal domains; in every case the
+        address must also belong to an internal domain and not be blocklisted.
+      items: { type: string, minLength: 1, maxLength: 254 }
+      example: [reporting@entity-a.example.com, erp.entity-a.example.com]
     ApiToken:
       type: object
-      required: [id, name, prefix, allowedCidrs, createdBy, createdAt]
+      required: [id, name, prefix, allowedCidrs, allowedSenders, createdBy, createdAt]
       properties:
         id: { type: string }
         name: { type: string }
         prefix: { type: string, description: "First characters of the token, to recognise it." }
         allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+        allowedSenders: { $ref: '#/components/schemas/AllowedSenders' }
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
-        lastUsedAt: { type: [string, 'null'], format: date-time }
-        expiresAt: { type: [string, 'null'], format: date-time }
-        revokedAt: { type: [string, 'null'], format: date-time }
+        lastUsedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Last successful use of the token. Updated at most once a minute per token, so it may lag behind the real last use by up to a minute.
+        expiresAt: { type: [string, 'null'], format: date-time, description: "Optional expiry; `null` means the token never expires." }
+        revokedAt: { type: [string, 'null'], format: date-time, description: "Revocation date; a revoked token is refused immediately." }
     ApiTokenCreate:
       type: object
       required: [name, allowedCidrs]
       properties:
         name: { type: string, minLength: 1, maxLength: 100 }
         allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+        allowedSenders:
+          allOf: [{ $ref: '#/components/schemas/AllowedSenders' }]
+          description: Optional; absent or empty allows any address of the tenant's internal domains.
         expiresAt: { type: [string, 'null'], format: date-time }
       additionalProperties: false
     ApiTokenUpdate:
       type: object
+      description: |
+        JSON Merge Patch of an API token; `null` is refused on every field. A list given replaces
+        the current one: `allowedSenders: []` lifts the sender restriction (any internal address).
+        An unknown member is refused (`400 validation-failed`, `invalid-format` on its pointer).
+      # Decoded by the handler itself, which must tell a null field (refused) from an absent one.
+      x-go-type: json.RawMessage
       properties:
         name: { type: string, minLength: 1, maxLength: 100 }
         allowedCidrs: { $ref: '#/components/schemas/AllowedCidrs' }
+        allowedSenders: { $ref: '#/components/schemas/AllowedSenders' }
       additionalProperties: false
     ApiTokenCreated:
       allOf:
@@ -5185,7 +5366,9 @@ components:
         archive (never for HEAD requests or resumed ranges); `transfer.deleted` by an admin carries
         the redacted reason; `data_subject.searched` and `data_subject.erased` never contain the
         address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
-        `quota.warning` and `quota.reached` are recorded even when no mail can be sent.
+        `quota.warning` and `quota.reached` are recorded even when no mail can be sent;
+        `api_token.created`, `api_token.updated` and `api_token.revoked` never contain the secret;
+        `api_token.used` is recorded once per transfer created with an API token (not per request).
       enum:
         - transfer.created
         - transfer.finalized
@@ -5202,6 +5385,7 @@ components:
         - quota.warning
         - quota.reached
         - api_token.created
+        - api_token.updated
         - api_token.used
         - api_token.revoked
         - admin.login

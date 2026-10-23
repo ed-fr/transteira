@@ -75,20 +75,30 @@ use to ban the client IP.
 
 - **HTTP status:** 401 Unauthorized
 - **Meaning:** credentials are missing or expired: no admin session, expired deposit session,
-  or missing API token. On the admin host, it also answers an expired or revoked session
+  or, on an operation that also accepts an API token, neither a deposit session nor an
+  `Authorization` header (a present but invalid token gives `invalid-credentials` instead);
+  on those operations the response carries `WWW-Authenticate: Bearer`. On the admin host, it
+  also answers an expired or revoked session
   (logout, password change, TOTP re-enrollment or disabling from another session, account
   disabled or reset) and a session of a disabled account, and the session cookie is then
   cleared; and an admin session whose login step does not open the operation (a session still
-  waiting for its TOTP code or enrollment only opens that step), which keeps its cookie.
-- **Typical endpoints:** `/admin/*`, `/transfers`, `/invitations`, `/deposit-sessions/current`.
+  waiting for its TOTP code or enrollment only opens that step), which keeps its cookie. The
+  interactive documentation `/api/docs` answers it on the admin host without an admin session.
+- **Typical endpoints:** `/admin/*`, `/transfers`, `/invitations`, `/deposit-sessions/current`,
+  `/api/docs`.
 - **What to do:** sign in again, verify the email address again, or send the
   `Authorization: Bearer <token>` header.
 
 ### invalid-credentials
 
 - **HTTP status:** 401 Unauthorized
-- **Meaning:** wrong username or password, wrong TOTP code, or an invalid, revoked or expired
-  API token. The response does not say which part was wrong.
+- **Meaning:** wrong username or password, wrong TOTP code, or a malformed, unknown, revoked or
+  expired API token (a token of another entity is unknown on this entity's host). The response
+  does not say which part was wrong. A token is checked before the client IP: an invalid token
+  gets this answer from any address, and is written to the security log
+  (`api_token_invalid`). On an operation that accepts an API token, the response carries
+  `WWW-Authenticate: Bearer` (RFC 6750). A revoked or expired token is refused from the next
+  request on; an upload request already streaming continues until its body ends or stalls.
 - **Typical endpoints:** `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/me/totp` (from an authenticated session), `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `DELETE /admin/me/totp`, any endpoint called with an API token.
@@ -133,18 +143,29 @@ use to ban the client IP.
 - **Meaning:** a public deposit is refused. The code is deliberately generic and identical for
   every reason (client outside the internal IP ranges of the entity, email domain not internal,
   address or domain on the blocklist), so that the response does not reveal which check failed.
-  The precise reason is written to the security log only.
+  The precise reason is written to the security log only. With an API token, the client IP is
+  checked against the token instead (`ip-not-allowed`), and this code answers a `senderEmail`
+  outside the internal domains of the entity, on the blocklist, or not allowed by the token
+  (when the token has `allowedSenders`, the address must equal one of its addresses or have
+  exactly one of its domains; checked on `POST /transfers` and again on
+  `POST /transfers/{transferId}/finalize`).
 - **Typical endpoints:** `POST /deposit-sessions`,
-  `POST /verification-challenges/{challengeId}/confirm`, `POST /transfers`, `POST /invitations`.
+  `POST /verification-challenges/{challengeId}/confirm`, `POST /transfers`, `POST /invitations`,
+  `POST /transfers/{transferId}/finalize` (API token).
 - **What to do:** deposit from the internal network with an internal address, or ask an internal
-  user for an invitation.
+  user for an invitation. With an API token, use a sender address of an internal domain allowed
+  by the token, or ask an admin to update the token's `allowedSenders`.
 
 ### ip-not-allowed
 
 - **HTTP status:** 403 Forbidden
-- **Meaning:** an API token was used from an IP address outside the `allowedCidrs` configured
-  for that token. This code is only visible to the token holder.
-- **Typical endpoints:** any endpoint called with an API token, mainly `POST /transfers`.
+- **Meaning:** a valid API token was used from an IP address outside the `allowedCidrs`
+  configured for that token. This code is only visible to the token holder, since the token is
+  authenticated first. Written to the security log. The tus operations answer `403` without a
+  body.
+- **Typical endpoints:** any endpoint called with an API token: `POST /transfers`,
+  `GET` and `DELETE /transfers/{transferId}`, `POST /transfers/{transferId}/finalize`, and
+  `HEAD`, `PATCH` and `DELETE /uploads/{uploadId}`.
 - **What to do:** call from an allowed address, or ask an admin to update the token's allowed
   ranges.
 
@@ -197,7 +218,10 @@ use to ban the client IP.
   host every `/admin/*` path answers `not-found`, and under the admin host every entity
   endpoint does. An unknown, used or expired activation link also answers `not-found`, and so
   does an entity a delegated admin is not assigned to, exactly like an entity that does not
-  exist, and an entity being deleted. The public branding images answer `not-found` for a logo
+  exist, and an entity being deleted. A transfer or an upload created by another API token, or
+  by a deposit session, answers `not-found` to a token (and one created by a token answers it to
+  any deposit session), and a deposit operation called with an API token on the admin host
+  answers it too. The public branding images answer `not-found` for a logo
   the entity has not configured (the background falls back to the default image), and a legal
   document the entity has written in neither the negotiated nor its default language.
 - **Typical endpoints:** any endpoint with an identifier in its path, `/admin/*` on an entity
@@ -263,7 +287,8 @@ use to ban the client IP.
   activated, TOTP enabled); an admin deleting, disabling, demoting or resetting their own
   account; promoting to super admin an account that is not activated or has no TOTP enabled;
   resetting the credentials of a disabled account; confirming a TOTP enrollment that was not
-  started or whose secret expired (15 minutes after the start).
+  started or whose secret expired (15 minutes after the start); renaming or re-scoping an API
+  token that is revoked.
 - **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
   `POST /transfers/{transferId}/finalize`,
   `DELETE /admin/tenants/{tenantId}/transfers/{transferId}`,
@@ -271,7 +296,7 @@ use to ban the client IP.
   `POST /admin/tenants/{tenantId}/data-subjects/erase`,
   `PUT /admin/system/maintenance`, `PATCH /admin/admins/{adminId}`,
   `DELETE /admin/admins/{adminId}`, `POST /admin/admins/{adminId}/reset-credentials`,
-  `POST /admin/me/totp/confirm`.
+  `POST /admin/me/totp/confirm`, `PATCH /admin/tenants/{tenantId}/api-tokens/{tokenId}`.
 - **What to do:** reload the resource to get its current state before deciding what to do;
   when `Retry-After` is present, retry after that delay.
 
@@ -351,10 +376,13 @@ use to ban the client IP.
 - **Meaning:** too many requests were made from this client, for this address or by this user,
   or the service is temporarily saturated. Examples: verification codes (5 per hour per
   address, 20 per hour per client IP), invitations (20 per hour per inviting address), sign-in
-  attempts, API calls, the mail queue of the service (or of the entity) being full, or the
+  attempts, repeated invalid API tokens from the same client IP (10 within 10 minutes lock that
+  IP, an IPv6 address counting as its /64, for 15 minutes: every further invalid token gets
+  `429`, while a valid token keeps working; the tus operations answer `429` without a body),
+  the mail queue of the service (or of the entity) being full, or the
   open-transfer cap: a sender may have only a limited number of unfinished transfers at once
-  (`TT_MAX_OPEN_TRANSFERS`, 10 by default, for an internal user; 3 for an invited external
-  depositor; finalizing or cancelling one frees a slot), or too many simultaneous download
+  (`TT_MAX_OPEN_TRANSFERS`, 10 by default, for an internal user and for each API token; 3 for an
+  invited external depositor; finalizing or cancelling one frees a slot), or too many simultaneous download
   streams (2 per client for one transfer, 4 for one transfer, 8 per client across the
   transfers of the entity; a client is an IP address, an IPv6 address counting as its /64).
   On the admin host: failed sign-ins (5 per username and client IP, 20 per client IP within

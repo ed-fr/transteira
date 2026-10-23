@@ -80,13 +80,30 @@ lines usually mean a reverse proxy that does not forward the client address
 | `verification_code_invalid` | Wrong e-mail verification code entered. | Optional context. |
 | `transfer_password_invalid` | Wrong password entered to unlock a download. | `transfer`: the first 14 characters of the transfer identifier (`trf_` and the time part of the ULID): enough to group the attempts on one transfer, not enough to identify it. The download token and the password are never written. |
 | `admin_login_failed` | Failed admin authentication, on the admin host (`tenant=-`): wrong password (also an unknown, disabled or not yet activated username, without telling them apart), wrong TOTP code, wrong recovery code, or wrong setup token on the first-run setup. | `reason`: `password`, `totp`, `recovery_code` or `setup_token`. The username is never written. |
-| `api_token_invalid` | Unknown, revoked or expired API token. | Optional context. |
+| `api_token_invalid` | API token refused on a deposit operation (`Authorization: Bearer`): empty, malformed, unknown on this tenant (a token of another tenant included), revoked or expired, without telling them apart. Answered `401 invalid-credentials`. | None. The token is never written. |
 | `unknown_fqdn` | `Host` header matching neither a tenant nor an admin host (`TT_ADMIN_HOSTS`): the request is rejected with `421 Misdirected Request` on every path except `/healthz` and `/api/openapi.yaml`, which answer without a tenant. | `host`: the received Host (escaped, truncated). |
-| `deposit_refused` | Deposit refused. | `reason`: `ip` (outside the tenant's IP ranges), `domain` (address outside the allowed domains), `blocklist`, `invitation` (missing, unknown or expired). |
-| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). See [Admin host scopes](#admin-host-scopes) for `admin_login` and `admin_auth`. |
+| `deposit_refused` | Deposit refused. | `reason`: `ip` (outside the tenant's IP ranges, or a valid API token used from outside its allowed ranges: `403 ip-not-allowed`; the token identifier is in the application log, never here), `domain` (address outside the allowed domains, or a token deposit whose sender is not in the token's `allowedSenders`), `blocklist`, `invitation` (missing, unknown or expired). |
+| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). See [Admin host scopes](#admin-host-scopes) for `admin_login` and `admin_auth`, and [API token scope](#api-token-scope) for `api_token`. |
 
 See [Log throttling](#log-throttling) for the events that are not written
 for every occurrence.
+
+### API token scope
+
+The `api_token` scope locks a client (IPv4 address or IPv6 /64) out of
+the API token path, in memory: **10 invalid tokens** (`api_token_invalid`)
+within a sliding **10-minute** window lock it for **15 minutes**. While it
+is locked, every request carrying `Authorization: Bearer` on a deposit
+operation gets `429 rate-limited` with `Retry-After`, a valid token
+included, before any lookup; requests with a deposit session are not
+affected. The `rate_limited` line is throttled like every other scope (one
+per client every 10 seconds) and counted by the shipped fail2ban filter
+and CrowdSec scenario.
+
+```text
+2026-10-20T07:41:00.123Z ip=203.0.113.9 tenant=transfer.entity-a.example.com event=api_token_invalid
+2026-10-20T07:41:00.123Z ip=203.0.113.9 tenant=transfer.entity-a.example.com event=rate_limited scope="api_token"
+```
 
 ### Admin host scopes
 

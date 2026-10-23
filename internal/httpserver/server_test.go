@@ -116,6 +116,8 @@ type envConfig struct {
 	opts     []Option
 	trusted  func(netip.Addr) bool
 	sessions DepositSessions
+	// tokens is Deps.APITokens.
+	tokens APITokens
 	// adminAPI and adminSessions are Deps.AdminAPI and Deps.AdminSessions;
 	// the admin host is always hostAdmin.
 	adminAPI      gen.StrictServerInterface
@@ -123,6 +125,8 @@ type envConfig struct {
 	idle          time.Duration
 	// downloadIdle is Deps.DownloadIdleTimeout.
 	downloadIdle time.Duration
+	// docsPublic is Deps.APIDocsPublic.
+	docsPublic bool
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -144,11 +148,13 @@ func newEnv(t *testing.T, c envConfig) *env {
 		Maintenance:         e.maintenance,
 		API:                 c.api,
 		Sessions:            c.sessions,
+		APITokens:           c.tokens,
 		AdminHosts:          []string{hostAdmin},
 		AdminAPI:            c.adminAPI,
 		AdminSessions:       c.adminSessions,
 		UploadIdleTimeout:   c.idle,
 		DownloadIdleTimeout: c.downloadIdle,
+		APIDocsPublic:       c.docsPublic,
 		Spec:                []byte("openapi: 3.1.0\n"),
 		Logger:              slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, c.opts...)
@@ -718,7 +724,8 @@ func TestRoutePolicies(t *testing.T) {
 	t.Parallel()
 	cases := map[string]routePolicy{
 		"PATCH /api/v1/uploads/{uploadId}": {
-			bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, tus: true, idleBody: true,
+			bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, apiToken: true, tus: true,
+			idleBody: true,
 		},
 		"HEAD /api/v1/uploads/{uploadId}":                       tusPolicy(false),
 		"DELETE /api/v1/uploads/{uploadId}":                     tusPolicy(true),
@@ -731,8 +738,9 @@ func TestRoutePolicies(t *testing.T) {
 		"DELETE /api/v1/admin/tenants/{tenantId}":               {bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline},
 		"PUT /api/v1/admin/tenants/{tenantId}/branding":         defaultPolicy,
 		"GET /api/v1/downloads/{linkToken}":                     defaultPolicy,
-		"POST /api/v1/transfers":                                sessionPolicy(true),
-		"GET /api/v1/transfers/{transferId}":                    sessionPolicy(false),
+		"POST /api/v1/transfers":                                tokenPolicy(true),
+		"GET /api/v1/transfers/{transferId}":                    tokenPolicy(false),
+		"POST /api/v1/invitations":                              sessionPolicy(true),
 		"":                                                      defaultPolicy,
 	}
 	for pattern, want := range cases {

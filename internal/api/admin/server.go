@@ -7,7 +7,8 @@
 // the operation of the tenants (sections 6.5, 9, 15.2, 20 and 21:
 // transfers, invitations, blocklist, audit log, statistics and the rights
 // of the data subjects) over internal/tenantops, internal/stats and
-// internal/datasubject.
+// internal/datasubject, and the API tokens of the tenants (section 16.4)
+// over internal/apitoken.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -97,6 +98,9 @@ type Server struct {
 	subjectSvc DataSubjectService
 	// statsSvc computes the statistics; nil until WithStatsService.
 	statsSvc StatsService
+	// tokenSvc manages the API tokens of the tenants; nil until
+	// WithAPITokenService.
+	tokenSvc APITokenService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

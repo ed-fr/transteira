@@ -107,9 +107,10 @@ type Options struct {
 	Logger *slog.Logger
 }
 
-// Principal is the authenticated depositor of an upload request. It is
-// store.Depositor, whose Owns method is the single ownership rule shared
-// with the transfers.
+// Principal is the authenticated depositor of an upload request: a deposit
+// session or an API token. It is store.Depositor, whose Owns method is the
+// single ownership rule shared with the transfers (an API token reaches
+// only the uploads of the transfers it created).
 type Principal = store.Depositor
 
 // Status is the state of an upload (tus HEAD and PATCH responses).

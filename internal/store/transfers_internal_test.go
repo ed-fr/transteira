@@ -159,7 +159,7 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"insert recipient", faultExec, "INSERT INTO transfer_recipients", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"check key", faultQuery, "FROM wrapped_keys WHERE tenant_id", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
 		{"insert file", faultExec, "INSERT INTO transfer_files", func(t *testing.T, f *transferFixture) func() error { return createNew(t, f, "") }},
-		{"get transfer scan", faultScanNil, "download_count FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
+		{"get transfer scan", faultScanNil, "api_token_id FROM transfers", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list recipients", faultQuery, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"scan recipients", faultScanNil, "FROM transfer_recipients", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
 		{"list files", faultQuery, "scan_status FROM transfer_files WHERE tenant_id = ? AND transfer_id", func(_ *testing.T, f *transferFixture) func() error { return get(f) }},
@@ -177,7 +177,7 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"set status count keys", faultQuery, "dek_key_id IS NOT NULL", func(_ *testing.T, f *transferFixture) func() error {
 			return setStatus(f, TransferUploading, TransferDeleted)
 		}},
-		{"set status read", faultQuery, "download_count FROM transfers WHERE tenant_id = ? AND id = ?", func(_ *testing.T, f *transferFixture) func() error {
+		{"set status read", faultQuery, "api_token_id FROM transfers WHERE tenant_id = ? AND id = ?", func(_ *testing.T, f *transferFixture) func() error {
 			return setStatusUnkeyed(f, TransferAvailable, TransferExpired)
 		}},
 		{"finalize probe", faultQuery, "SELECT count(*) FROM transfers", func(_ *testing.T, f *transferFixture) func() error {

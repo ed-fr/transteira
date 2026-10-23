@@ -77,7 +77,7 @@ func TestListTransfers(t *testing.T) {
 			t.Fatalf("listed %v (next %q), want %v", ids, page.NextCursor, want)
 		}
 		got := page.Items[1]
-		if got.Status != store.TransferAvailable || got.Origin != store.DepositorInternal || got.SenderEmail != alice ||
+		if got.Status != store.TransferAvailable || got.Origin != OriginInternal || got.SenderEmail != alice ||
 			!slices.Equal(got.Recipients, []string{carol, dave}) || got.FileCount != 2 || got.TotalBytes != 2000 ||
 			got.PasswordProtected || got.DeleteAfterFirstDownload || !got.CreatedAt.Equal(testStart.Add(2*time.Minute)) ||
 			!got.ExpiresAt.Equal(testStart.Add(2*time.Minute+7*24*time.Hour)) || !got.FirstDownloadedAt.IsZero() ||
@@ -474,4 +474,25 @@ func TestResendRateLimit(t *testing.T) {
 func notAnAddress(err error) bool {
 	var ie *InvalidError
 	return errors.As(err, &ie) && ie.NotAnAddress
+}
+
+// TestTransferOrigin maps the sender of a stored transfer to its origin,
+// and exposes the API token of a token transfer.
+func TestTransferOrigin(t *testing.T) {
+	t.Parallel()
+	tokID := id.New(id.APIToken)
+	for _, c := range []struct {
+		tr    store.Transfer
+		want  Origin
+		token string
+	}{
+		{store.Transfer{SenderKind: store.DepositorInternal}, OriginInternal, ""},
+		{store.Transfer{SenderKind: store.DepositorExternal, InvitationID: id.New(id.Invitation)}, OriginExternal, ""},
+		{store.Transfer{SenderKind: store.DepositorInternal, APITokenID: tokID}, OriginAPI, tokID},
+	} {
+		got := transferOf(c.tr, nil, 0)
+		if got.Origin != c.want || got.APITokenID != c.token {
+			t.Errorf("transferOf(%+v) = origin %q token %q, want %q %q", c.tr, got.Origin, got.APITokenID, c.want, c.token)
+		}
+	}
 }

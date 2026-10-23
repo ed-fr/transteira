@@ -239,7 +239,8 @@ func oneFile(name string, size int64) transferCreate {
 }
 
 // tusHeaders returns the headers of a tus request of c: session cookie,
-// client IP, Tus-Resumable and, for unsafe methods, the CSRF token.
+// API token, client IP, Tus-Resumable and, for unsafe methods, the CSRF
+// token.
 func (c *depositor) tusHeaders(method string) http.Header {
 	h := http.Header{hdrTusResumable: {tusVersion}}
 	if c.ip != "" {
@@ -247,6 +248,9 @@ func (c *depositor) tusHeaders(method string) http.Header {
 	}
 	if c.cookie != "" {
 		h.Set("Cookie", depositCookieName+"="+c.cookie)
+	}
+	if c.bearer != "" {
+		h.Set("Authorization", "Bearer "+c.bearer)
 	}
 	if method != http.MethodHead && method != http.MethodOptions && c.csrf != "" {
 		h.Set(hdrCSRF, c.csrf)

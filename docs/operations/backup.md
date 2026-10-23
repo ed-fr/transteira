@@ -150,6 +150,34 @@ The nightly copy and the data volume are usually a few hours apart:
 
 Tell the users concerned to send their most recent transfers again.
 
+### Review the API tokens
+
+A restored database knows the API tokens **as they were when the copy was
+taken** (threat model T-115):
+
+- a token **revoked after the copy is valid again**: its holder can deposit
+  with it until it is revoked a second time;
+- a token whose allowed ranges or allowed senders were narrowed after the
+  copy gets its former ranges or senders back;
+- a token created after the copy no longer exists: the scripts using it get
+  `401 invalid-credentials`.
+
+Right after the restore, before reopening the service if you can (for
+example in maintenance mode), list the tokens of every tenant
+(`GET /admin/tenants/{tenantId}/api-tokens`, see [API tokens](admin.md#api-tokens))
+and compare them with your records or with the `api_token.*` entries of
+the audit log you still have (the audit log is restored with the database,
+so the entries written after the copy are lost):
+
+1. revoke again every token that had been revoked or replaced since the
+   copy, and every token you do not recognise;
+2. restore the allowed ranges and senders that had been changed since the copy;
+3. create again, and deploy, the tokens created since the copy.
+
+When in doubt, rotate the tokens of the tenant (create a new token, deploy
+it, revoke the old one): a revoked token can never be reactivated by the
+application itself.
+
 ## Deleted tenants
 
 Deleting a tenant destroys its keys by cascade, so its files can no longer

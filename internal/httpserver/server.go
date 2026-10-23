@@ -14,17 +14,25 @@
 //  6. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
 //  7. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
-//     tenant resolution: it serves /api/v1/admin/* and /api/v1/version
-//     only, everything else is 404 (see newAdminHandler);
+//     tenant resolution: it serves /api/v1/admin/* and /api/v1/version,
+//     and the interactive API documentation (/api/docs) to an
+//     authenticated admin session; everything else is 404 (see
+//     newAdminHandler);
 //     - any other host goes through tenant resolution, before any routing
 //     (an unknown host gets 421 whatever the path, including paths that
 //     would be 404, 405 or a redirect); a known tenant host answers 404
-//     for /api/v1/admin and below, before any admin logic;
+//     for /api/v1/admin and below, before any admin logic, and, with
+//     TT_API_DOCS_PUBLIC, serves the interactive API documentation
+//     without authentication (without it, /api/docs is an ordinary
+//     unknown path);
 //  8. per-operation middlewares of the API router, before any body is read,
 //     all driven by the route policy table [routePolicies]: read and write
 //     deadlines (except streaming routes), maintenance mode (deposit
-//     operations get 503), deposit session cookie (401) and CSRF protection
-//     of unsafe methods (403), body limit (413) and JSON media type (415).
+//     operations get 503), API token of the operations accepting one when
+//     the request carries a Bearer Authorization header (401, 403, 429; see
+//     tokenAuth.middleware), otherwise deposit session cookie (401) and
+//     CSRF protection of unsafe methods (403), body limit (413) and JSON
+//     media type (415).
 //     The admin router has its own chain: deadlines, per-IP limit of the
 //     login steps (429), admin session cookie (401), CSRF and Origin
 //     checks (403), body limit and JSON media type.
@@ -121,11 +129,16 @@ type routePolicy struct {
 	// none, for streaming routes.
 	deadline time.Duration
 	// depositSession requires the deposit session cookie (OpenAPI security
-	// scheme depositSession as the only alternative).
+	// scheme depositSession).
 	depositSession bool
 	// csrf requires the CSRF checks on unsafe methods (OpenAPI security
 	// scheme csrfToken); it implies depositSession.
 	csrf bool
+	// apiToken accepts an API token as the alternative of the deposit
+	// session (OpenAPI security scheme apiToken): a request carrying a
+	// Bearer Authorization header is authenticated by the token only,
+	// without session nor CSRF checks (tokenAuth.middleware).
+	apiToken bool
 	// tus applies the tus protocol rules (tusMiddleware): Tus-Resumable on
 	// every response, 412 and 415 checks, bodyless error responses.
 	tus bool
@@ -155,9 +168,17 @@ func sessionPolicy(csrf bool) routePolicy {
 	return p
 }
 
-// tusPolicy is sessionPolicy for a tus operation on an upload resource.
-func tusPolicy(csrf bool) routePolicy {
+// tokenPolicy is sessionPolicy for an operation that also accepts an API
+// token.
+func tokenPolicy(csrf bool) routePolicy {
 	p := sessionPolicy(csrf)
+	p.apiToken = true
+	return p
+}
+
+// tusPolicy is tokenPolicy for a tus operation on an upload resource.
+func tusPolicy(csrf bool) routePolicy {
+	p := tokenPolicy(csrf)
 	p.tus = true
 	return p
 }
@@ -170,22 +191,24 @@ func tusPolicy(csrf bool) routePolicy {
 // downloads.
 //
 // The authentication flags mirror the security requirements of the
-// OpenAPI document (a test checks it). The apiToken alternative of the
-// transfer and upload operations is not implemented yet: they require the
-// deposit session, and a request without its cookie gets 401.
+// OpenAPI document (a test checks it). The transfer and upload operations
+// accept the deposit session or an API token: a request with a Bearer
+// Authorization header takes the token path, any other one the session
+// path (401 unauthenticated without the cookie).
 //
 // The tus PATCH reads its body with an idle read timeout
 // (Deps.UploadIdleTimeout) rather than a deadline.
 var routePolicies = map[string]routePolicy{
 	tusUploadPattern: {
-		bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, tus: true, idleBody: true,
+		bodyLimit: middleware.NoBodyLimit, rawBody: true, depositSession: true, csrf: true, apiToken: true, tus: true,
+		idleBody: true,
 	},
 	tusHeadPattern:   tusPolicy(false),
 	tusDeletePattern: tusPolicy(true),
-	http.MethodPost + " " + APIBaseURL + "/transfers":                           sessionPolicy(true),
-	http.MethodGet + " " + APIBaseURL + "/transfers/{transferId}":               sessionPolicy(false),
-	http.MethodDelete + " " + APIBaseURL + "/transfers/{transferId}":            sessionPolicy(true),
-	http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize":     sessionPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/transfers":                           tokenPolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/transfers/{transferId}":               tokenPolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/transfers/{transferId}":            tokenPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize":     tokenPolicy(true),
 	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/files/{fileId}": {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
 	http.MethodGet + " " + APIBaseURL + "/downloads/{linkToken}/archive":        {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
 	// The unlock of a download needs no session, but its wrong passwords
@@ -255,6 +278,9 @@ type Deps struct {
 	// Sessions resolves the deposit session cookies and checks the CSRF
 	// tokens (*deposit.Service); nil authenticates no session.
 	Sessions DepositSessions
+	// APITokens authenticates the API tokens of the operations accepting
+	// one (*apitoken.Service); nil refuses every token (401).
+	APITokens APITokens
 	// AdminHosts are the dedicated hosts of the administration
 	// (config.Config.AdminHosts). Empty, no host serves it: the admin
 	// operations then answer 404 everywhere.
@@ -273,6 +299,11 @@ type Deps struct {
 	DownloadIdleTimeout time.Duration
 	// Spec is the OpenAPI document served at SpecPath (api.OpenAPISpec).
 	Spec []byte
+	// APIDocsPublic serves the interactive API documentation (DocsPath)
+	// without authentication on every host but the admin hosts
+	// (TT_API_DOCS_PUBLIC). False, only an authenticated admin session on
+	// an admin host gets it.
+	APIDocsPublic bool
 	// Logger is the application logger; nil discards.
 	Logger *slog.Logger
 }
@@ -284,6 +315,7 @@ type options struct {
 	globalLimiter      middleware.Limiter
 	unknownHostLimiter middleware.Limiter
 	adminAuthLimiter   middleware.Limiter
+	tokenFailures      TokenFailures
 }
 
 // WithGlobalLimiter replaces the global per-IP limiter (GlobalRate and
@@ -304,6 +336,13 @@ func WithAdminAuthLimiter(l middleware.Limiter) Option {
 	return func(o *options) { o.adminAuthLimiter = l }
 }
 
+// WithAPITokenFailures replaces the per-IP counter of invalid API tokens
+// (APITokenFailureLimit, APITokenFailureWindow and APITokenLockout), for
+// tests.
+func WithAPITokenFailures(f TokenFailures) Option {
+	return func(o *options) { o.tokenFailures = f }
+}
+
 // New builds the HTTP handler of the application. It panics when a
 // required dependency is missing or an admin host is malformed, which are
 // wiring errors.
@@ -315,6 +354,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		globalLimiter:      ratelimit.New(GlobalRate, GlobalBurst),
 		unknownHostLimiter: ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
 		adminAuthLimiter:   ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
+		tokenFailures:      newTokenFailures(),
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -349,6 +389,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	}
 	events := NewSecurityEvents(deps.SecurityLog, logger)
 	eh := errorHandlers{logger: logger}
+	tokens := newTokenAuth(deps.APITokens, o.tokenFailures, events, logger)
 
 	// RequestMiddleware gives the operations the HTTP request (the download
 	// operations read the grant cookie and serve the files with
@@ -364,19 +405,22 @@ func New(deps Deps, opts ...Option) http.Handler {
 		BaseURL:    APIBaseURL,
 		BaseRouter: apiMux,
 		// The last middleware is the outermost one: the tus protocol rules,
-		// deadlines, maintenance, deposit session and CSRF, then the body
+		// deadlines, maintenance, API token (which, when it authenticates
+		// the request, turns the session, CSRF and Origin checks off),
+		// deposit session and CSRF, then the body
 		// limit and the JSON media type check, all before the body is
 		// decoded. The idle read timeout of the tus PATCH is set even
 		// earlier, around the router (idleBodyHandler).
 		Middlewares: []gen.MiddlewareFunc{
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
-			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf }),
-			middleware.SameOrigin(func(r *http.Request) bool { return policyOf(r).sameOrigin }),
+			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf && !tokenAuthenticated(r) }),
+			middleware.SameOrigin(func(r *http.Request) bool { return policyOf(r).sameOrigin && !tokenAuthenticated(r) }),
 			middleware.DepositSession(sessions, func(r *http.Request) bool {
 				p := policyOf(r)
-				return p.depositSession || p.csrf
+				return (p.depositSession || p.csrf) && !tokenAuthenticated(r)
 			}, logger),
+			tokens.middleware,
 			maintenanceMiddleware(maintenance),
 			idleWriteMiddleware(idleDownload, logger),
 			deadlineMiddleware(logger),
@@ -404,6 +448,13 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// prefix answers 404 before any admin middleware or handler.
 	tenantMux.Handle(AdminPrefix+"/", http.HandlerFunc(notFound))
 	tenantMux.Handle(AdminPrefix, http.HandlerFunc(notFound))
+	// The public API documentation is served on known tenant hosts only:
+	// an unknown host keeps its 421 and its unknown_fqdn event.
+	if deps.APIDocsPublic {
+		docs := publicDocsHandler(logger)
+		tenantMux.Handle(DocsPath, docs)
+		tenantMux.Handle(DocsPath+"/", docsPathsOnly(docs))
+	}
 	tenantScoped := middleware.Chain(withProblemFallback(tenantMux),
 		middleware.Tenant(deps.Resolver, events, o.unknownHostLimiter, logger),
 		rejectUncleanAPIPaths,

@@ -33,8 +33,7 @@ const (
 )
 
 // uploadPrincipal returns the tenant and the principal of a tus request:
-// the deposit session set by the session middleware (the API token path is
-// not implemented yet).
+// the API token or the deposit session of the request (requestSender).
 func (s *Server) uploadPrincipal(ctx context.Context) (*tenant.Tenant, upload.Principal, error) {
 	t, ok := tenant.FromContext(ctx)
 	if !ok {
@@ -43,11 +42,11 @@ func (s *Server) uploadPrincipal(ctx context.Context) (*tenant.Tenant, upload.Pr
 	if s.uploads == nil {
 		return nil, upload.Principal{}, errNoUploadService
 	}
-	info, _, err := currentSession(ctx)
+	sender, err := requestSender(ctx)
 	if err != nil {
 		return nil, upload.Principal{}, err
 	}
-	return t, senderOf(ctx, info).Depositor, nil
+	return t, sender.Depositor, nil
 }
 
 // uploadExpires formats the Upload-Expires header (RFC 9110 date), nil for
