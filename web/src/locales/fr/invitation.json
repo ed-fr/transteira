@@ -1,0 +1,46 @@
+{
+  "landing": {
+    "title": "Vous êtes invité à envoyer des fichiers",
+    "text": "{inviter} vous invite à envoyer des fichiers avec ce service. Les fichiers que vous enverrez lui seront adressés.",
+    "invitedBy": "Invité par",
+    "email": "Votre adresse mail",
+    "expires": "Invitation valable jusqu’au",
+    "message": "Message de la personne qui vous invite",
+    "next": "Pour continuer, vous allez recevoir un code de vérification à votre adresse mail.",
+    "continue": "Continuer"
+  },
+  "invalid": {
+    "title": "Invitation introuvable",
+    "text": "Ce lien d’invitation n’est pas valide. Vérifiez que vous l’avez copié en entier depuis le mail."
+  },
+  "expired": {
+    "title": "Invitation expirée",
+    "text": "Cette invitation a expiré ou n’est plus valable. Demandez une nouvelle invitation à la personne qui vous a invité."
+  },
+  "invite": {
+    "title": "Inviter une personne externe",
+    "intro": "La personne invitée pourra vous envoyer des fichiers : ils seront adressés à {inviter}.",
+    "email": "Adresse mail de la personne à inviter",
+    "emailHint": "Par exemple nom@example.com",
+    "message": "Message",
+    "messageHint": "Facultatif. Repris dans le mail d’invitation.",
+    "language": "Langue du mail d’invitation",
+    "languageHint": "Le mail est rédigé dans cette langue.",
+    "submit": "Envoyer l’invitation",
+    "backToDeposit": "Retour à l’envoi de fichiers",
+    "rateLimited": "Vous avez envoyé trop d’invitations au cours de la dernière heure.",
+    "sent": {
+      "title": "Invitation envoyée",
+      "text": "Une invitation a été envoyée à {email}. Le lien reste valable 12 mois s’il n’est pas utilisé.",
+      "another": "Inviter une autre personne"
+    },
+    "noSession": {
+      "title": "Identifiez-vous d’abord",
+      "text": "Seuls les utilisateurs internes identifiés sur la page d’envoi peuvent inviter des personnes externes. Identifiez-vous avec votre adresse mail professionnelle depuis le réseau de votre organisation, puis revenez sur cette page."
+    },
+    "notAllowed": {
+      "title": "Invitations indisponibles",
+      "text": "Votre adresse n’est pas autorisée à envoyer des invitations. Seuls les utilisateurs internes connectés depuis le réseau de votre organisation peuvent inviter des personnes externes."
+    }
+  }
+}

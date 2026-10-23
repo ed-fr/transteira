@@ -78,6 +78,9 @@ type DB struct {
 	logger  *slog.Logger
 	now     func() time.Time
 	newID   func(id.Prefix) (string, error)
+	// newAuditID generates the audit event identifiers: monotonic, so that
+	// two events of the same millisecond list in their recording order.
+	newAuditID func(id.Prefix) (string, error)
 	// migrationsFS holds the migrations, by engine directory.
 	migrationsFS fs.FS
 	// driverName and ownerDSN open the short-lived owner pool used by
@@ -105,6 +108,7 @@ func WithClock(now func() time.Time) Option {
 	return func(db *DB) {
 		db.now = now
 		db.newID = id.NewGenerator(now, nil).New
+		db.newAuditID = id.NewMonotonicGenerator(now, nil).New
 	}
 }
 
@@ -132,6 +136,8 @@ func newDB(d *dialect, write, read *sql.DB, opts []Option) *DB {
 		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		now:     time.Now,
 		newID:   id.NewGenerator(nil, nil).New,
+		// The audit log is listed by (at, id): see newAuditID.
+		newAuditID: id.NewMonotonicGenerator(nil, nil).New,
 
 		migrationsFS:  migrationFiles,
 		purgeBatch:    PurgeBatchSize,

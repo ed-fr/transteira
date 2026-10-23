@@ -1,0 +1,108 @@
+/* Small utility classes, all based on the design tokens (no inline style anywhere: CSP). */
+.tt-text-muted {
+  color: var(--tt-muted);
+}
+
+.tt-text-sm {
+  font-size: var(--tt-font-size-sm);
+}
+
+.tt-text-lg {
+  font-size: var(--tt-font-size-lg);
+}
+
+.tt-text-center {
+  text-align: center;
+}
+
+.tt-text-danger {
+  color: var(--tt-danger);
+}
+
+.tt-text-success {
+  color: var(--tt-success);
+}
+
+.tt-text-bold {
+  font-weight: var(--tt-font-weight-bold);
+}
+
+/* Long values (SHA-256 digests, file names, addresses) wrap instead of overflowing. */
+.tt-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.tt-mono {
+  font-family: var(--tt-font-mono);
+  font-size: var(--tt-font-size-sm);
+}
+
+.tt-mt-0 {
+  margin-top: 0;
+}
+
+.tt-mt-2 {
+  margin-top: var(--tt-space-2);
+}
+
+.tt-mt-4 {
+  margin-top: var(--tt-space-4);
+}
+
+.tt-mt-6 {
+  margin-top: var(--tt-space-6);
+}
+
+.tt-mb-0 {
+  margin-bottom: 0;
+}
+
+.tt-mb-2 {
+  margin-bottom: var(--tt-space-2);
+}
+
+.tt-mb-4 {
+  margin-bottom: var(--tt-space-4);
+}
+
+.tt-w-full {
+  width: 100%;
+}
+
+.tt-list-plain {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tt-hidden {
+  display: none !important;
+}
+
+/* Definition lists used for recaps (sender, expiry, total size...). */
+.tt-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--tt-space-1) var(--tt-space-4);
+  margin: 0 0 var(--tt-space-4);
+}
+
+.tt-dl dt {
+  font-weight: var(--tt-font-weight-bold);
+}
+
+.tt-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 30rem) {
+  .tt-dl {
+    grid-template-columns: 1fr;
+  }
+
+  .tt-dl dd {
+    margin-bottom: var(--tt-space-2);
+  }
+}

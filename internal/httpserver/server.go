@@ -16,15 +16,20 @@
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
 //     tenant resolution: it serves /api/v1/admin/* and /api/v1/version,
 //     and the interactive API documentation (/api/docs) to an
-//     authenticated admin session; everything else is 404 (see
-//     newAdminHandler);
+//     authenticated admin session, and the admin web interface: / redirects
+//     to /admin/, /admin/ and below serve the admin application, any other
+//     path outside /api serves it with 404, and /api paths are 404
+//     Problems (see newAdminHandler and webUI.adminHandler);
 //     - any other host goes through tenant resolution, before any routing
 //     (an unknown host gets 421 whatever the path, including paths that
 //     would be 404, 405 or a redirect); a known tenant host answers 404
 //     for /api/v1/admin and below, before any admin logic, and, with
 //     TT_API_DOCS_PUBLIC, serves the interactive API documentation
 //     without authentication (without it, /api/docs is an ordinary
-//     unknown path);
+//     unknown path); every other path is the public web interface (see
+//     webUI.tenantHandler): a 404 Problem under /api, a 405 Problem for a
+//     method other than GET and HEAD, the build files, and the public
+//     application (200 on its routes, 404 elsewhere);
 //  8. per-operation middlewares of the API router, before any body is read,
 //     all driven by the route policy table [routePolicies]: read and write
 //     deadlines (except streaming routes), maintenance mode (deposit
@@ -42,6 +47,7 @@
 package httpserver
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -59,6 +65,7 @@ import (
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/securitylog"
+	"github.com/ed-fr/transteira/web"
 )
 
 // Rate limits applied by New. They are deliberately generous for legitimate
@@ -304,6 +311,11 @@ type Deps struct {
 	// (TT_API_DOCS_PUBLIC). False, only an authenticated admin session on
 	// an admin host gets it.
 	APIDocsPublic bool
+	// WebUI is the build of the web interface (web/dist, see package web):
+	// public/index.html, admin/index.html, assets/* and the root files. Nil
+	// uses web.Dist(). It is loaded in memory by New; a missing entry page
+	// is logged at warning level and answered by a 503 fallback page.
+	WebUI fs.FS
 	// Logger is the application logger; nil discards.
 	Logger *slog.Logger
 }
@@ -387,6 +399,12 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if deps.Sessions != nil {
 		sessions = sessionResolver{svc: deps.Sessions}
 	}
+	webFS := deps.WebUI
+	if webFS == nil {
+		webFS = web.Dist()
+	}
+	ui, err := newWebUI(webFS)
+	logWebUILoad(logger, err)
 	events := NewSecurityEvents(deps.SecurityLog, logger)
 	eh := errorHandlers{logger: logger}
 	tokens := newTokenAuth(deps.APITokens, o.tokenFailures, events, logger)
@@ -442,7 +460,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// Tenant-scoped routes. The bare APIBaseURL would otherwise be
 	// redirected by the mux to APIBaseURL + "/".
 	tenantMux := http.NewServeMux()
-	tenantMux.Handle(APIBaseURL+"/", idleBodyHandler(apiMux, withProblemFallback(apiMux), idle, logger))
+	tenantMux.Handle(APIBaseURL+"/", tokenRobots(idleBodyHandler(apiMux, withProblemFallback(apiMux), idle, logger)))
 	tenantMux.Handle(APIBaseURL, http.HandlerFunc(notFound))
 	// The administration is never served on a tenant host: its whole
 	// prefix answers 404 before any admin middleware or handler.
@@ -455,13 +473,17 @@ func New(deps Deps, opts ...Option) http.Handler {
 		tenantMux.Handle(DocsPath, docs)
 		tenantMux.Handle(DocsPath+"/", docsPathsOnly(docs))
 	}
+	// Every other path, whatever the method, goes to the public web
+	// interface (404 Problem under /api, 405 Problem for a method other
+	// than GET and HEAD), on known tenant hosts only.
+	tenantMux.Handle("/", middleware.Chain(ui.tenantHandler(), fixedDeadline(RequestDeadline, logger)))
 	tenantScoped := middleware.Chain(withProblemFallback(tenantMux),
 		middleware.Tenant(deps.Resolver, events, o.unknownHostLimiter, logger),
 		rejectUncleanAPIPaths,
 	)
 
 	adminHosts := newHostSet(deps.AdminHosts)
-	adminScoped := newAdminHandler(deps, eh, events, o.adminAuthLimiter, logger)
+	adminScoped := newAdminHandler(deps, ui, eh, events, o.adminAuthLimiter, logger)
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -163,6 +164,10 @@ type envConfig struct {
 	downloadIdle time.Duration
 	// docsPublic is Deps.APIDocsPublic.
 	docsPublic bool
+	// webUI is Deps.WebUI; nil uses testWebUI(), unless embeddedWebUI is
+	// set (Deps.WebUI left nil: the build embedded in package web).
+	webUI         fs.FS
+	embeddedWebUI bool
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -171,6 +176,9 @@ func newEnv(t *testing.T, c envConfig) *env {
 	ok := health.CheckerFunc(func(context.Context) error { return nil })
 	if c.resolver == nil {
 		c.resolver = fakeResolver{}
+	}
+	if c.webUI == nil && !c.embeddedWebUI {
+		c.webUI = testWebUI()
 	}
 	e.handler = New(Deps{
 		TrustedProxy: c.trusted,
@@ -192,6 +200,7 @@ func newEnv(t *testing.T, c envConfig) *env {
 		DownloadIdleTimeout: c.downloadIdle,
 		APIDocsPublic:       c.docsPublic,
 		Spec:                []byte("openapi: 3.1.0\n"),
+		WebUI:               c.webUI,
 		Logger:              slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, c.opts...)
 	return e
@@ -313,15 +322,13 @@ func TestNotFound(t *testing.T) {
 	tests := []struct {
 		name, method, target, host string
 	}{
-		{"root", http.MethodGet, "/", hostA},
 		{"bare api base", http.MethodGet, "/api/v1", hostA},
 		{"api base with slash", http.MethodGet, "/api/v1/", hostA},
 		{"bare api prefix", http.MethodGet, "/api", hostA},
 		{"double slash under api", http.MethodGet, "/api/v1//version", hostA},
 		{"dot segment under api", http.MethodGet, "/api/v1/x/../version", hostA},
 		{"unclean spec path", http.MethodGet, "/api//openapi.yaml", hostA},
-		{"trailing slash on health", http.MethodGet, "/healthz/", hostA},
-		{"unknown outside api", http.MethodGet, "/nope", hostA},
+		{"unknown api prefix path", http.MethodGet, "/api/nope", hostA},
 		{"unknown api path", http.MethodGet, "/api/v1/nope", hostA},
 		{"operation answering not-found", http.MethodGet, "/api/v1/tenant/assets/logo", hostA},
 		{"admin operation on a tenant host", http.MethodGet, "/api/v1/admin/tenants/ten_x", hostA},

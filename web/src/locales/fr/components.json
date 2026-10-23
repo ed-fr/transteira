@@ -1,0 +1,61 @@
+{
+  "field": {
+    "required": "(obligatoire)",
+    "errorPrefix": "Erreur :"
+  },
+  "button": {
+    "loading": "Veuillez patienter…"
+  },
+  "textArea": {
+    "counter": {
+      "one": "{count} caractère sur {max}",
+      "other": "{count} caractères sur {max}"
+    }
+  },
+  "fileDrop": {
+    "instructions": "Glissez-déposez des fichiers ici, ou",
+    "browse": "choisissez des fichiers",
+    "active": "Relâchez pour ajouter les fichiers"
+  },
+  "fileList": {
+    "label": "Fichiers sélectionnés",
+    "remove": "Retirer {name}",
+    "total": {
+      "one": "{count} fichier, {size}",
+      "other": "{count} fichiers, {size}"
+    }
+  },
+  "progress": {
+    "value": "{percent} %"
+  },
+  "alert": {
+    "info": "Information :",
+    "success": "Succès :",
+    "warning": "Attention :",
+    "error": "Erreur :",
+    "dismiss": "Fermer ce message"
+  },
+  "dialog": {
+    "close": "Fermer"
+  },
+  "languageSwitch": {
+    "label": "Langue"
+  },
+  "copy": {
+    "label": "Copier",
+    "copied": "Copié dans le presse-papiers",
+    "failed": "Échec de la copie : sélectionnez le texte et copiez-le manuellement"
+  },
+  "spinner": {
+    "loading": "Chargement…"
+  },
+  "layout": {
+    "skipLink": "Aller au contenu principal"
+  },
+  "footer": {
+    "legal": "Informations légales"
+  },
+  "help": {
+    "label": "Aide"
+  }
+}

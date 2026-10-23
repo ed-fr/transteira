@@ -1,0 +1,146 @@
+{
+  "loading": "Loading the deposit page…",
+  "newTransfer": "New transfer",
+  "maintenance": {
+    "title": "Service under maintenance",
+    "text": "The service is under maintenance: new transfers are temporarily unavailable. Please try again later."
+  },
+  "error": {
+    "title": "The page could not be loaded",
+    "retry": "Try again"
+  },
+  "email": {
+    "title": "Send files",
+    "intro": "Enter your email address. A verification code will be sent to it the first time.",
+    "invitationIntro": "{invitedBy} invited you to send files. A verification code will be sent to your email address.",
+    "label": "Your email address",
+    "hint": "Example: name@example.com",
+    "invitationHint": "The address the invitation was sent to.",
+    "submit": "Continue",
+    "sending": "Sending the code…",
+    "notAllowed": "Deposits are only possible from the internal network with an address of the organisation. To send files from outside, ask an internal user to invite you.",
+    "invitationGone": "This invitation has expired or is no longer valid. Ask the person who invited you for a new invitation."
+  },
+  "code": {
+    "title": "Enter the verification code",
+    "intro": "A 6-digit code has been sent to {email}. Check your inbox, and your spam folder if needed.",
+    "expires": "The code is valid until {time}.",
+    "label": "Verification code",
+    "hint": "6 digits, for example 123456",
+    "submit": "Verify",
+    "resend": "Send a new code",
+    "changeEmail": "Use another address",
+    "format": "The code is made of 6 digits.",
+    "wrong": "The code is not correct.",
+    "exhausted": "The code has expired or too many wrong codes were entered. Ask for a new code.",
+    "resent": "A new code has been sent."
+  },
+  "session": {
+    "as": "Identified as {email}",
+    "invite": "Invite someone to send you files",
+    "end": "End session",
+    "ended": "Your session has ended.",
+    "expired": "Your session has expired. Identify yourself again to continue."
+  },
+  "form": {
+    "title": "New transfer",
+    "summary": {
+      "one": "{count} field needs your attention:",
+      "other": "{count} fields need your attention:"
+    },
+    "submit": "Send",
+    "submitting": "Preparing the transfer…",
+    "recipients": {
+      "label": "Recipients",
+      "hint": "One or more email addresses, separated by commas or line breaks.",
+      "external": "The files will be sent to {invitedBy}, who invited you.",
+      "addressError": "{address}: {message}",
+      "tooMany": "Enter at most {max} recipients."
+    },
+    "message": {
+      "label": "Message",
+      "hint": "Optional. Sent to the recipients with the link."
+    },
+    "expiry": {
+      "legend": "Available for",
+      "days": {
+        "one": "{count} day",
+        "other": "{count} days"
+      }
+    },
+    "password": {
+      "label": "Password",
+      "hint": "Optional. The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
+      "show": "Show",
+      "hide": "Hide"
+    },
+    "deleteAfterFirstDownload": {
+      "label": "Delete the transfer after the first download",
+      "hint": "The files are deleted as soon as one recipient has downloaded them."
+    },
+    "files": {
+      "label": "Files to send",
+      "hint": "Up to {max} in total and {count} files per transfer.",
+      "none": "Add at least one file.",
+      "tooMany": "A transfer can contain at most {max} files.",
+      "tooLarge": "The files exceed the maximum size of a transfer. Remove some files.",
+      "invalidNames": {
+        "one": "{count} file name is not accepted: rename the file and add it again.",
+        "other": "{count} file names are not accepted: rename the files and add them again."
+      },
+      "total": "Total: {total} of {max} allowed."
+    }
+  },
+  "upload": {
+    "overall": "Overall progress",
+    "files": "Files being sent",
+    "cancelled": "The transfer has been cancelled. You can change it and send it again.",
+    "confirmCancel": "Cancel the transfer",
+    "keepUploading": "Continue sending",
+    "cancelling": "Cancelling the transfer…",
+    "cancelFailed": "The transfer could not be cancelled on the server. Its incomplete files will be deleted automatically when the upload time limit expires.",
+    "leaveConfirm": "A transfer is being sent. Leaving this page will interrupt it. Leave anyway?"
+  },
+  "finalizing": {
+    "title": "Analysing the files",
+    "spinner": "Antivirus analysis in progress…",
+    "retry": "Try again"
+  },
+  "scan": {
+    "files": "Files of the transfer",
+    "status": "Antivirus: {status}",
+    "signature": "Threat detected: {signature}",
+    "sha256": "SHA-256:",
+    "copySha256": "Copy the SHA-256 fingerprint of {name}",
+    "pending": "waiting for analysis",
+    "scanning": "being analysed",
+    "clean": "no threat found",
+    "infected": "threat detected, file deleted",
+    "not_scanned_too_large": "not analysed (file too large)",
+    "not_scanned_encrypted": "not analysed (encrypted archive)",
+    "scan_error": "analysis failed, file withheld",
+    "other": "status unknown"
+  },
+  "done": {
+    "title": "Transfer sent",
+    "rejectedTitle": "Transfer refused",
+    "recipients": "Recipients notified",
+    "expires": "Available until",
+    "password": "Password",
+    "passwordNote": "The transfer is protected: remember to send the password to the recipients through another channel.",
+    "deleteAfterFirstDownload": "Deletion",
+    "deleteAfterFirstDownloadNote": "The transfer will be deleted after the first download.",
+    "files": "Files",
+    "warning": {
+      "infected": "This file contained a threat: it was deleted and will not be delivered.",
+      "notScanned": "This file could not be analysed by the antivirus: it is delivered and the recipients are told so.",
+      "scanError": "This file could not be analysed: it is withheld and will not be delivered."
+    }
+  },
+  "resume": {
+    "expected": "Files of the interrupted transfer",
+    "select": "Select the same files again",
+    "ready": "All the files needed are selected.",
+    "continue": "Continue the upload"
+  }
+}

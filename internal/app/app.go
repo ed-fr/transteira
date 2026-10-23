@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -58,6 +59,7 @@ import (
 	"github.com/ed-fr/transteira/internal/upload"
 	"github.com/ed-fr/transteira/internal/usage"
 	"github.com/ed-fr/transteira/internal/version"
+	"github.com/ed-fr/transteira/web"
 )
 
 // HTTP server settings. There is deliberately no global read or write
@@ -140,6 +142,13 @@ type runOptions struct {
 	lifecycleOpts   func(*lifecycle.Options)
 	diskAlertOpts   func(*diskalert.Options)
 	rotationOpts    func(*keyrotation.Options)
+	webUI           fs.FS
+}
+
+// WithWebUI serves the web interface from fsys instead of the build
+// embedded in the binary (web.Dist), for tests.
+func WithWebUI(fsys fs.FS) Option {
+	return func(o *runOptions) { o.webUI = fsys }
 }
 
 // WithRotationOptions lets edit change the options of the master key
@@ -484,9 +493,20 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
 		Spec:                api.OpenAPISpec,
 		APIDocsPublic:       cfg.APIDocsPublic,
+		WebUI:               webUI(&o),
 		Logger:              logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)
+}
+
+// webUI returns the build of the web interface to serve: the one embedded
+// in the binary unless WithWebUI replaced it. httpserver.New logs a warning
+// when an entry page is missing (binary built without make web-build).
+func webUI(o *runOptions) fs.FS {
+	if o.webUI != nil {
+		return o.webUI
+	}
+	return web.Dist()
 }
 
 // OpenDatabase opens the database as the server does: it applies the

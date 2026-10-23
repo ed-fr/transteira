@@ -6,8 +6,9 @@
 //
 //   - paragraphs, separated by blank lines; every line break inside a
 //     paragraph or a list item is kept as <br>;
-//   - headings "# ", "## " and "### " (h1 to h3); "#### " and deeper are
-//     plain text;
+//   - headings "# ", "## " and "### ", shifted down one level (h2 to h4)
+//     because the page that shows the document already has its own h1;
+//     "#### " and deeper are plain text;
 //   - unordered lists ("- ", "* " or "+ ") and ordered lists ("1. " or
 //     "1) "), one level; an indented line continues the previous item;
 //   - **bold** or __bold__, *italic* or _italic_ (an underscore inside a
@@ -69,7 +70,7 @@ func (r *renderer) line(line string) {
 	}
 	if m := headingLine.FindStringSubmatch(line); m != nil {
 		r.closeBlock()
-		tag := [...]string{"", "h1", "h2", "h3"}[len(m[1])]
+		tag := [...]string{"", "h2", "h3", "h4"}[len(m[1])]
 		r.out = append(r.out, "<"+tag+">"+inline(m[2], true)+"</"+tag+">")
 		return
 	}

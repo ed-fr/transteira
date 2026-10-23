@@ -1,0 +1,15 @@
+{
+  "required": "Ce champ est obligatoire.",
+  "invalid": "Cette valeur n'est pas valide.",
+  "invalid-format": "Cette valeur n'est pas au format attendu.",
+  "invalid-email": "Saisissez une adresse mail valide, par exemple nom@example.com.",
+  "invalid-file-name": "Ce nom de fichier n'est pas accepté.",
+  "invalid-template": "Ce modèle contient une erreur.",
+  "duplicate": "Cette valeur apparaît plusieurs fois.",
+  "not-allowed": "Cette valeur n'est pas autorisée.",
+  "not-nullable": "Ce champ ne peut pas être vidé.",
+  "too-long": "Cette valeur est trop longue.",
+  "too-many": "Il y a trop de valeurs.",
+  "too-many-values": "Il y a trop de valeurs.",
+  "unknown": "Ce champ n'est pas reconnu."
+}

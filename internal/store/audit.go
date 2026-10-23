@@ -168,7 +168,7 @@ func (r *AuditEvents) normalizeAudit(ev *AuditEvent) ([]any, error) {
 	case len(ev.Details) > 0 && (!json.Valid(ev.Details) || !bytes.HasPrefix(bytes.TrimSpace(ev.Details), []byte("{"))):
 		return nil, invalid("audit details must be a json object")
 	}
-	newID, err := r.db.newID(id.Audit)
+	newID, err := r.db.newAuditID(id.Audit)
 	if err != nil {
 		return nil, err
 	}

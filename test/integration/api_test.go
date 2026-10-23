@@ -161,7 +161,7 @@ func TestUnimplementedAndUnknownRoutes(t *testing.T) {
 			{"admin stub on the admin host", request{host: adminHost, path: exampleTenantPath}, 401, "unauthenticated", ""},
 			{"unknown API route", request{path: "/api/v1/nope"}, 404, "not-found", ""},
 			{"unknown API version", request{path: "/api/v2/version"}, 404, "not-found", ""},
-			{"unknown root route", request{path: "/admin"}, 404, "not-found", ""},
+			{"unknown route under the api prefix", request{path: "/api/nope"}, 404, "not-found", ""},
 			{"wrong method on version", request{method: http.MethodDelete, path: "/api/v1/version"}, 405, "method-not-allowed", "GET, HEAD"},
 			{"wrong method on spec", request{method: http.MethodPost, path: "/api/openapi.yaml", body: []byte(`{}`)}, 405, "method-not-allowed", "GET, HEAD"},
 			{"wrong method on healthz", request{method: http.MethodPut, path: "/healthz", body: []byte(`{}`)}, 405, "method-not-allowed", "GET, HEAD"},

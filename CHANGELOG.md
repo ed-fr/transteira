@@ -295,6 +295,42 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `docs/operations/admin.md`, rotation from the administration in
   `docs/operations/master-key.md`, new error cases in `docs/api/errors.md`; threat model v0.15
   (T-154 to T-158).
+- Web interface foundation and public interface (`web/`, Svelte 5 and Vite, Node 24 and npm 11
+  at build time only): two static applications embedded in the binary (`web/embed.go`), the
+  public one on every tenant host and the admin one under `/admin/` on the admin host (a shell
+  at this stage; `/` redirects there). Served by `internal/httpserver/webui.go` from memory:
+  fingerprinted assets cached for a year (`immutable`), entry pages `no-cache` (public) or
+  `no-store` (admin) with ETag and `304`, application routes `200` and unknown paths the
+  application page with `404`, `405` for other methods than `GET` / `HEAD`, `404` Problem under
+  `/api`, `X-Robots-Tag: noindex, nofollow`, and a static `503` fallback page when the binary
+  was built without the interface. Strict Content Security Policy per application (no inline
+  script or style, nothing from another origin; `data:` images on the admin host only for the
+  TOTP QR code), enforced on the sources by eslint (`svelte/no-at-html-tags`,
+  `svelte/no-inline-styles`, `no-restricted-syntax`) and on the build by
+  `scripts/check-dist.mjs`. Public screens: deposit with email verification by one-time code
+  (internal users and invited externals), recipients, message, expiry, optional password and
+  deletion after the first download, multiple files with a drop zone; resumable browser uploads
+  with tus 1.0.0 (retries with backoff, stall watchdog, pause and cancel, resumption after a page
+  reload by selecting the same files again), then antivirus status per file with SHA-256
+  fingerprints; invitations of external users and the invitation landing page; download page
+  with transfer password (lockout countdown), per-file and ZIP download, SHA-256 fingerprints
+  and warnings for files not scanned; legal notice and privacy pages (server-sanitised HTML);
+  not found, error, session expired and maintenance pages (maintenance banner). French and
+  English translations (`web/src/locales/<lang>/<area>.json`, language from the browser or the
+  tenant default, choice remembered in `localStorage`), tenant logo, colours (validated, contrast
+  checked) and background image, accessibility (RGAA: keyboard navigation, focus management and
+  live announcements on navigation, labelled fields and errors, no animation,
+  `prefers-reduced-motion`). Typed API client generated from `api/openapi.yaml`
+  (`src/shared/api/schema.ts`, staleness checked), CSRF token kept in memory only, every
+  API-provided URL filtered by `safeApiHref`. Dependency policy: a single runtime dependency
+  (`svelte`), exact versions published at least 14 days earlier, committed lockfile,
+  `npm ci --ignore-scripts`, `npm audit` (procedure in `web/README.md`). New make targets
+  `web-install`, `web-gen`, `web-check`, `web-build`; `make check` runs the web gates and build
+  first, and `make build` embeds the interface. Development loop through Caddy and the Vite dev
+  server (`web/dev/Caddyfile`, `*.localhost` hosts). Documentation: `web/README.md`, web layout
+  and serving rules in `docs/architecture/project-structure.md`, threat model v0.16 (T-91,
+  T-94 and T-95 completed for the interface, new T-159 npm supply chain, T-160 client-side state,
+  T-161 tokens in URL paths).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an

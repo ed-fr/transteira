@@ -1,0 +1,147 @@
+/*
+ * Base styles: reset, system fonts, visible focus, reduced motion, accessibility utilities.
+ * The layout and utility classes are bundled with them (Vite inlines these imports), so that
+ * the entry points only import tokens.css and base.css.
+ */
+@import './layout.css';
+@import './utilities.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--tt-font-sans);
+  font-size: 100%;
+  line-height: var(--tt-line-height);
+  color: var(--tt-text);
+  background: var(--tt-surface);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--tt-line-height-tight);
+  margin: 0 0 var(--tt-space-4);
+}
+
+h1 {
+  font-size: var(--tt-font-size-2xl);
+}
+
+h2 {
+  font-size: var(--tt-font-size-xl);
+}
+
+h3 {
+  font-size: var(--tt-font-size-lg);
+}
+
+p {
+  margin: 0 0 var(--tt-space-4);
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--tt-link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--tt-font-mono);
+}
+
+/*
+ * Visible focus (RGAA 10.7): a 3 px outline in --tt-focus (3:1 on the surface) doubled by a
+ * light ring, so it stays visible on the primary colour and on dark backgrounds.
+ */
+:focus-visible {
+  outline: var(--tt-focus-width) solid var(--tt-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 calc(var(--tt-focus-width) + 2px) var(--tt-focus-ring);
+}
+
+/* Headings focused by the router after a navigation (tabindex="-1") need no ring. */
+[tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Hidden visually, still read by screen readers. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Skip link (RGAA 12.7): hidden until focused, then shown at the top left. */
+.skip-link {
+  position: absolute;
+  top: var(--tt-space-2);
+  left: var(--tt-space-2);
+  z-index: 1000;
+  padding: var(--tt-space-2) var(--tt-space-4);
+  border-radius: var(--tt-radius);
+  background: var(--tt-surface);
+  color: var(--tt-link);
+  font-weight: var(--tt-font-weight-bold);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* Windows high contrast / forced colours: keep borders and focus visible. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

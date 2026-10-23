@@ -19,13 +19,14 @@ regexes = [
   '''^tt_EXAMPLE[A-Za-z0-9]*$''',
 ]
 
-# The API specification and the documentation contain fake passwords and keys in their
-# examples. Only the generic rule is relaxed there; every other rule still applies.
+# The API specification (and the web types generated from it, which copy its descriptions) and
+# the documentation contain fake passwords and keys in their examples. Only the generic rule is relaxed there; every other rule still applies.
 [[allowlists]]
-description = "Fake example values in the API specification and documentation"
+description = "Fake example values in the API specification, the types generated from it and the documentation"
 targetRules = ["generic-api-key"]
 paths = [
   '''^api/openapi\.yaml$''',
+  '''^web/src/shared/api/schema\.ts$''',
   '''^docs/''',
 ]
 
@@ -33,4 +34,14 @@ paths = [
 description = "Test fixtures use fake values"
 paths = [
   '''(^|/)testdata/''',
+]
+
+# Third-party npm packages and the web build output are not project sources (they are
+# reproduced from web/package-lock.json and web/src); scanning them only yields false positives.
+[[allowlists]]
+description = "npm dependencies and web build output"
+paths = [
+  '''^web/node_modules/''',
+  '''^web/dist/''',
+  '''^test/e2e/node_modules/''',
 ]

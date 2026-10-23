@@ -215,7 +215,7 @@ func TestGetTenantLegalDocument(t *testing.T) {
 	updated := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	svc := &fakeTenantConfig{legal: tenantadmin.PublicLegalDocument{
 		LegalDocument: tenantadmin.LegalDocument{Document: "privacy-policy", Language: "fr", Markdown: "# Politique", UpdatedAt: updated},
-		HTML:          "<h1>Politique</h1>\n",
+		HTML:          "<h2>Politique</h2>\n",
 	}}
 	s := NewServer(WithTenantService(svc))
 	accept := "en"
@@ -231,7 +231,7 @@ func TestGetTenantLegalDocument(t *testing.T) {
 	}
 	// The service fell back to the default language: the answer says so.
 	if got.Body.Language != "fr" || *got.Headers.ContentLanguage != "fr" || got.Body.Markdown != "# Politique" ||
-		*got.Body.Html != "<h1>Politique</h1>\n" || !got.Body.UpdatedAt.Equal(updated) || got.Body.Document != "privacy-policy" {
+		*got.Body.Html != "<h2>Politique</h2>\n" || !got.Body.UpdatedAt.Equal(updated) || got.Body.Document != "privacy-policy" {
 		t.Errorf("answer %+v", got.Body)
 	}
 

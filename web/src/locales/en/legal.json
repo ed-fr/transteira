@@ -1,0 +1,10 @@
+{
+  "title": "Legal information",
+  "legalNotice": "Legal notice",
+  "privacyPolicy": "Privacy policy",
+  "updatedAt": "Last updated on {date}",
+  "notFound": {
+    "title": "Document not available",
+    "text": "This document has not been published by this service."
+  }
+}

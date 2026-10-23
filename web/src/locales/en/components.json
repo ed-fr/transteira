@@ -1,0 +1,61 @@
+{
+  "field": {
+    "required": "(required)",
+    "errorPrefix": "Error:"
+  },
+  "button": {
+    "loading": "Please wait…"
+  },
+  "textArea": {
+    "counter": {
+      "one": "{count} character of {max}",
+      "other": "{count} characters of {max}"
+    }
+  },
+  "fileDrop": {
+    "instructions": "Drag and drop files here, or",
+    "browse": "choose files",
+    "active": "Release to add the files"
+  },
+  "fileList": {
+    "label": "Selected files",
+    "remove": "Remove {name}",
+    "total": {
+      "one": "{count} file, {size}",
+      "other": "{count} files, {size}"
+    }
+  },
+  "progress": {
+    "value": "{percent}%"
+  },
+  "alert": {
+    "info": "Information:",
+    "success": "Success:",
+    "warning": "Warning:",
+    "error": "Error:",
+    "dismiss": "Dismiss this message"
+  },
+  "dialog": {
+    "close": "Close"
+  },
+  "languageSwitch": {
+    "label": "Language"
+  },
+  "copy": {
+    "label": "Copy",
+    "copied": "Copied to the clipboard",
+    "failed": "Copy failed: select the text and copy it manually"
+  },
+  "spinner": {
+    "loading": "Loading…"
+  },
+  "layout": {
+    "skipLink": "Skip to main content"
+  },
+  "footer": {
+    "legal": "Legal information"
+  },
+  "help": {
+    "label": "Help"
+  }
+}

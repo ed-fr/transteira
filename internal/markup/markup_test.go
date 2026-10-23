@@ -15,12 +15,12 @@ func TestMarkdown(t *testing.T) {
 		"a\nb\r\nc\rd":     "<p>a<br>\nb<br>\nc<br>\nd</p>",
 		"p1\n\np2":         "<p>p1</p>\n<p>p2</p>",
 		"  indented":       "<p>indented</p>",
-		"# Title":          "<h1>Title</h1>",
-		"## Sub ##":        "<h2>Sub</h2>",
-		"### Third":        "<h3>Third</h3>",
+		"# Title":          "<h2>Title</h2>",
+		"## Sub ##":        "<h3>Sub</h3>",
+		"### Third":        "<h4>Third</h4>",
 		"#### Fourth":      "<p>#### Fourth</p>",
 		"#NoSpace":         "<p>#NoSpace</p>",
-		"intro\n# H\nnext": "<p>intro</p>\n<h1>H</h1>\n<p>next</p>",
+		"intro\n# H\nnext": "<p>intro</p>\n<h2>H</h2>\n<p>next</p>",
 		// Lists.
 		"- a\n* b\n+ c":                "<ul>\n<li>a</li>\n<li>b</li>\n<li>c</li>\n</ul>",
 		"1. a\n2) b":                   "<ol>\n<li>a</li>\n<li>b</li>\n</ol>",
@@ -58,7 +58,7 @@ func TestMarkdown(t *testing.T) {
 		"[x](https://e.example/\"onclick=\"alert)": `<p><a href="https://e.example/&#34;onclick=&#34;alert">x</a></p>`,
 		// No raw HTML.
 		`<script>alert(1)</script><b onclick="x">b</b> & 'q'`: "<p>&lt;script&gt;alert(1)&lt;/script&gt;&lt;b onclick=\"x\"&gt;b&lt;/b&gt; &amp; 'q'</p>",
-		"# <img src=x onerror=alert(1)>":                      "<h1>&lt;img src=x onerror=alert(1)&gt;</h1>",
+		"# <img src=x onerror=alert(1)>":                      "<h2>&lt;img src=x onerror=alert(1)&gt;</h2>",
 	}
 	for in, want := range cases {
 		if got := Markdown(in); got != want {

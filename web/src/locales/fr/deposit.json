@@ -1,0 +1,146 @@
+{
+  "loading": "Chargement de la page de dépôt…",
+  "newTransfer": "Nouveau transfert",
+  "maintenance": {
+    "title": "Service en maintenance",
+    "text": "Le service est en maintenance : les nouveaux transferts sont momentanément impossibles. Veuillez réessayer plus tard."
+  },
+  "error": {
+    "title": "La page n’a pas pu être chargée",
+    "retry": "Réessayer"
+  },
+  "email": {
+    "title": "Envoyer des fichiers",
+    "intro": "Saisissez votre adresse électronique. Un code de vérification y sera envoyé la première fois.",
+    "invitationIntro": "{invitedBy} vous invite à envoyer des fichiers. Un code de vérification va être envoyé à votre adresse électronique.",
+    "label": "Votre adresse électronique",
+    "hint": "Exemple : nom@example.com",
+    "invitationHint": "L’adresse à laquelle l’invitation a été envoyée.",
+    "submit": "Continuer",
+    "sending": "Envoi du code…",
+    "notAllowed": "Le dépôt n’est possible que depuis le réseau interne avec une adresse de l’organisation. Pour envoyer des fichiers depuis l’extérieur, demandez une invitation à un utilisateur interne.",
+    "invitationGone": "Cette invitation a expiré ou n’est plus valide. Demandez une nouvelle invitation à la personne qui vous a invité."
+  },
+  "code": {
+    "title": "Saisissez le code de vérification",
+    "intro": "Un code à 6 chiffres a été envoyé à {email}. Consultez votre boîte de réception et, si besoin, vos courriers indésirables.",
+    "expires": "Le code est valable jusqu’à {time}.",
+    "label": "Code de vérification",
+    "hint": "6 chiffres, par exemple 123456",
+    "submit": "Vérifier",
+    "resend": "Recevoir un nouveau code",
+    "changeEmail": "Utiliser une autre adresse",
+    "format": "Le code est composé de 6 chiffres.",
+    "wrong": "Le code n’est pas correct.",
+    "exhausted": "Le code a expiré ou trop de codes erronés ont été saisis. Demandez un nouveau code.",
+    "resent": "Un nouveau code a été envoyé."
+  },
+  "session": {
+    "as": "Identifié comme {email}",
+    "invite": "Inviter une personne à vous envoyer des fichiers",
+    "end": "Terminer la session",
+    "ended": "Votre session est terminée.",
+    "expired": "Votre session a expiré. Identifiez-vous de nouveau pour continuer."
+  },
+  "form": {
+    "title": "Nouveau transfert",
+    "summary": {
+      "one": "{count} champ demande votre attention :",
+      "other": "{count} champs demandent votre attention :"
+    },
+    "submit": "Envoyer",
+    "submitting": "Préparation du transfert…",
+    "recipients": {
+      "label": "Destinataires",
+      "hint": "Une ou plusieurs adresses électroniques, séparées par des virgules ou des retours à la ligne.",
+      "external": "Les fichiers seront envoyés à {invitedBy}, qui vous a invité.",
+      "addressError": "{address} : {message}",
+      "tooMany": "Saisissez au plus {max} destinataires."
+    },
+    "message": {
+      "label": "Message",
+      "hint": "Facultatif. Envoyé aux destinataires avec le lien."
+    },
+    "expiry": {
+      "legend": "Disponible pendant",
+      "days": {
+        "one": "{count} jour",
+        "other": "{count} jours"
+      }
+    },
+    "password": {
+      "label": "Mot de passe",
+      "hint": "Facultatif. Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
+      "show": "Afficher",
+      "hide": "Masquer"
+    },
+    "deleteAfterFirstDownload": {
+      "label": "Supprimer le transfert après le premier téléchargement",
+      "hint": "Les fichiers sont supprimés dès qu’un destinataire les a téléchargés."
+    },
+    "files": {
+      "label": "Fichiers à envoyer",
+      "hint": "Jusqu’à {max} au total et {count} fichiers par transfert.",
+      "none": "Ajoutez au moins un fichier.",
+      "tooMany": "Un transfert peut contenir au plus {max} fichiers.",
+      "tooLarge": "Les fichiers dépassent la taille maximale d’un transfert. Retirez des fichiers.",
+      "invalidNames": {
+        "one": "{count} nom de fichier n’est pas accepté : renommez le fichier puis ajoutez-le de nouveau.",
+        "other": "{count} noms de fichiers ne sont pas acceptés : renommez les fichiers puis ajoutez-les de nouveau."
+      },
+      "total": "Total : {total} sur {max} autorisés."
+    }
+  },
+  "upload": {
+    "overall": "Progression globale",
+    "files": "Fichiers en cours d’envoi",
+    "cancelled": "Le transfert a été annulé. Vous pouvez le modifier et l’envoyer de nouveau.",
+    "confirmCancel": "Annuler le transfert",
+    "keepUploading": "Poursuivre l’envoi",
+    "cancelling": "Annulation du transfert…",
+    "cancelFailed": "Le transfert n’a pas pu être annulé sur le serveur. Ses fichiers incomplets seront supprimés automatiquement à l’expiration du délai d’envoi.",
+    "leaveConfirm": "Un transfert est en cours d’envoi. Quitter cette page l’interrompra. Quitter quand même ?"
+  },
+  "finalizing": {
+    "title": "Analyse des fichiers",
+    "spinner": "Analyse antivirus en cours…",
+    "retry": "Réessayer"
+  },
+  "scan": {
+    "files": "Fichiers du transfert",
+    "status": "Antivirus : {status}",
+    "signature": "Menace détectée : {signature}",
+    "sha256": "SHA-256 :",
+    "copySha256": "Copier l’empreinte SHA-256 de {name}",
+    "pending": "en attente d’analyse",
+    "scanning": "analyse en cours",
+    "clean": "aucune menace détectée",
+    "infected": "menace détectée, fichier supprimé",
+    "not_scanned_too_large": "non analysé (fichier trop volumineux)",
+    "not_scanned_encrypted": "non analysé (archive chiffrée)",
+    "scan_error": "échec de l’analyse, fichier retenu",
+    "other": "statut inconnu"
+  },
+  "done": {
+    "title": "Transfert envoyé",
+    "rejectedTitle": "Transfert refusé",
+    "recipients": "Destinataires prévenus",
+    "expires": "Disponible jusqu’au",
+    "password": "Mot de passe",
+    "passwordNote": "Le transfert est protégé : pensez à transmettre le mot de passe aux destinataires par un autre canal.",
+    "deleteAfterFirstDownload": "Suppression",
+    "deleteAfterFirstDownloadNote": "Le transfert sera supprimé après le premier téléchargement.",
+    "files": "Fichiers",
+    "warning": {
+      "infected": "Ce fichier contenait une menace : il a été supprimé et ne sera pas remis.",
+      "notScanned": "Ce fichier n’a pas pu être analysé par l’antivirus : il est remis et les destinataires en sont informés.",
+      "scanError": "Ce fichier n’a pas pu être analysé : il est retenu et ne sera pas remis."
+    }
+  },
+  "resume": {
+    "expected": "Fichiers du transfert interrompu",
+    "select": "Sélectionnez de nouveau les mêmes fichiers",
+    "ready": "Tous les fichiers nécessaires sont sélectionnés.",
+    "continue": "Reprendre l’envoi"
+  }
+}

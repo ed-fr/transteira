@@ -26,6 +26,8 @@ TEST_POSTGRES_SUPERUSER_DSN ?= postgres://transteira_test:transteira_test@127.0.
 # Mailpit captures the mails sent by the tests (SMTP and HTTP API).
 TEST_MAILPIT_SMTP ?= 127.0.0.1:51025
 TEST_MAILPIT_API  ?= http://127.0.0.1:58025
+# npm audit queries the npm registry: `make check NPM_AUDIT=0` skips it when offline (never before a release).
+NPM_AUDIT         ?= 1
 GO_TEST           := $(GO) test $(RACE) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
 
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -37,7 +39,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help check fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
+.PHONY: help check web-install web-gen web-check web-build fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
 	test test-sqlite test-pg test-clamav test-env-up test-env-down cover env-example env-example-check build hooks \
 	e2e bigfile clean
 
@@ -45,8 +47,37 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 # `test` covers SQLite and PostgreSQL. e2e and bigfile join this list when the web and upload layers arrive.
-check: fmt-check vet lint vuln secrets api-lint generate-check env-example-check test cover ## Run every quality gate (must be green before each commit)
+check: web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check env-example-check test cover ## Run every quality gate (must be green before each commit)
 	@echo "make check: ALL GREEN"
+
+# Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
+# no dependency install script is ever executed.
+# The stamp lives in node_modules, so that deleting node_modules triggers a reinstall.
+WEB_STAMP := web/node_modules/.install-stamp
+
+web-install: $(WEB_STAMP) ## Install the web dependencies from the lockfile (npm ci, only when it changed)
+
+$(WEB_STAMP): web/package-lock.json web/package.json
+	cd web && npm ci --ignore-scripts --no-audit --no-fund
+	touch $(WEB_STAMP)
+
+web-gen: web-install ## Regenerate the web API types from the OpenAPI specification
+	cd web && npm run --silent gen
+
+web-check: web-install ## Web quality gates: generated types, svelte-check, eslint, prettier, vitest coverage, npm audit
+	cd web && npm run --silent gen:check
+	cd web && npm run --silent check
+	cd web && npm run --silent lint
+	cd web && npm run --silent format:check
+	cd web && npm run --silent test
+ifeq ($(NPM_AUDIT),0)
+	@echo "web-check: npm audit SKIPPED (NPM_AUDIT=0)"
+else
+	cd web && npm audit --audit-level=high
+endif
+
+web-build: web-install ## Build the web interface into web/dist (checked by scripts/check-dist.mjs)
+	cd web && npm run --silent build
 
 fmt: ## Format Go code (gofumpt + goimports)
 	$(GO) tool golangci-lint fmt ./...
@@ -127,7 +158,8 @@ env-example-check: ## Fail if .env.example is out of date
 		echo ".env.example is out of date: run 'make env-example'"; exit 1; \
 	fi; echo ".env.example is up to date"
 
-build: ## Build the static binary into bin/
+build: web-build ## Build the static binary into bin/ (with the web interface embedded)
+	@test -f web/dist/public/index.html || { echo "web/dist/public/index.html missing: the web build failed"; exit 1; }
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/transteira ./cmd/transteira
 
 hooks: ## Install the local git hooks (gitleaks on pre-push)
@@ -141,5 +173,6 @@ e2e: ## Playwright end-to-end tests (not available yet)
 bigfile: ## 20 GB upload test through Caddy (not available yet)
 	@echo "bigfile: NOT AVAILABLE YET (upload pipeline arrives in a later step)"
 
-clean: ## Remove build and coverage artefacts
-	rm -rf $(BIN_DIR) $(COVERPROFILE)
+clean: ## Remove build and coverage artefacts (web/dist keeps its committed .gitkeep)
+	rm -rf $(BIN_DIR) $(COVERPROFILE) web/coverage
+	node -e "const fs=require('fs'),p=require('path');for(const n of fs.readdirSync('web/dist'))if(n!=='.gitkeep')fs.rmSync(p.join('web/dist',n),{recursive:true,force:true})"

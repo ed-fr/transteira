@@ -30,7 +30,9 @@ coverage.out
 coverage.html
 *.test
 *.prof
-web/dist/
+web/dist/*
+!web/dist/.gitkeep
+web/coverage/
 web/node_modules/
 test/e2e/node_modules/
 test/e2e/test-results/

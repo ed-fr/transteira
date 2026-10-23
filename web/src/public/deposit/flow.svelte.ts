@@ -1,0 +1,983 @@
+// State machine of the public deposit page (CLAUDE.md sections 7, 8, 9; step 15 design,
+// "Public screens" item 1). The screens (*.svelte in this folder) only render the state and call
+// the actions below; every browser dependency is injected so that the flow is unit tested in
+// Node with a fake API (fetch) and a fake upload engine.
+//
+// Steps:
+//   loading → (maintenance | email | form | resume | error)
+//   email → code (202) | form (201)          code → form | email (code exhausted)
+//   form → upload → finalizing → done        upload → form (cancelled)
+//   resume (reload during an upload) → upload | form
+//   reload during the antivirus analysis → finalizing (polling only) → done; reload once the
+//   transfer is decided → done
+// The download link of a transfer is never shown to the depositor (design decision D2): the
+// done step is a recap only.
+import { ApiProblem, NetworkError, type ApiClient } from '../../shared/api/client';
+import { problemMessage, type Translator } from '../../shared/api/problem';
+import { languageValues, type components } from '../../shared/api/schema';
+import {
+  conflictDelay,
+  UploadError,
+  type UploadAnnouncement,
+  type UploadEngine,
+  type UploadFileSpec,
+  type UploadSnapshot,
+} from '../../shared/upload/engine';
+import {
+  IdempotencyKey,
+  uploadSpecs,
+  type FinalizeOptions,
+  type FinalizeOutcome,
+  type SenderTransfer,
+} from '../../shared/upload/finalize';
+import {
+  fingerprint,
+  matchFiles,
+  type FileFingerprint,
+  type ResumeRecord,
+  type ResumeStore,
+} from '../../shared/upload/resume-store';
+import {
+  addFiles,
+  defaultExpiry,
+  isEmail,
+  mapServerErrors,
+  parseRecipients,
+  validateForm,
+  type FormErrors,
+  type Message,
+} from './form';
+
+/** Public tenant description (GET /tenant). */
+export type PublicTenant = components['schemas']['PublicTenant'];
+/** Deposit session (POST /deposit-sessions 201, GET /deposit-sessions/current). */
+export type DepositSession = components['schemas']['DepositSession'];
+/** Verification challenge (POST /deposit-sessions 202). */
+export type VerificationChallenge = components['schemas']['VerificationChallenge'];
+/** Body of POST /transfers. */
+export type TransferCreate = components['schemas']['TransferCreate'];
+/** Scan status of a file. */
+export type ScanStatus = components['schemas']['ScanStatus'];
+
+/** Invitation the depositor arrived with (/i/:token, after the invitation landing). */
+export interface InvitationContext {
+  /** Invitation token (inv_...). */
+  token: string;
+  /** Invited address, used to request the code. */
+  email: string;
+  /** Internal user who issued the invitation (the recipient of the files). */
+  invitedBy: string;
+  /** Message of the inviter (plain text). */
+  message?: string | undefined;
+}
+
+/** Step of the deposit page. */
+export type Step =
+  | 'loading'
+  | 'error'
+  | 'maintenance'
+  | 'email'
+  | 'code'
+  | 'form'
+  | 'resume'
+  | 'upload'
+  | 'finalizing'
+  | 'done';
+
+/** File-like value accepted by the flow (File in the browser). */
+export interface DepositFile extends Blob {
+  readonly name: string;
+  readonly lastModified: number;
+}
+
+/** Values of the deposit form, bound by the form screen. */
+export interface DepositForm {
+  recipientsText: string;
+  message: string;
+  expiryDays: number | undefined;
+  password: string;
+  deleteAfterFirstDownload: boolean;
+  files: DepositFile[];
+}
+
+/** Error displayed on the current step: a translated message or an API error to describe. */
+export type StepError = { message: Message } | { cause: unknown };
+
+/** Outcome of finalizeAndWait (injected). */
+export type FinalizeFn = (transferId: string, options: FinalizeOptions) => Promise<FinalizeOutcome>;
+
+/** Builds the upload engine of a transfer (injected). */
+export type EngineFactory = (specs: UploadFileSpec[], cancelTransfer: () => Promise<void>) => UploadEngine;
+
+/** Dependencies of the flow. */
+export interface DepositFlowDeps {
+  api: ApiClient;
+  /** Translator (the shared i18n instance). */
+  tr: Translator;
+  /** Forgets the CSRF token when the session ends. */
+  clearCsrf: () => void;
+  resumeStore: ResumeStore;
+  createEngine: EngineFactory;
+  finalize: FinalizeFn;
+  /** Polls a transfer already finalized until it is decided (reload during the analysis). */
+  poll: FinalizeFn;
+  /** Asks the user a yes/no question (window.confirm), before leaving during an upload. */
+  confirm: (message: string) => boolean;
+  /** Waits ms milliseconds (setTimeout by default), between the cancellation attempts. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Live-region announcement. */
+  announce: (message: string, politeness?: 'polite' | 'assertive') => void;
+  /** Current UI language, sent as TransferCreate.language. */
+  language: () => string;
+  /** Idempotency-Key generator (crypto.randomUUID by default). */
+  newKey?: () => string;
+  /** Clock (Date.now by default), for rate-limit countdowns. */
+  now?: () => number;
+}
+
+/** Text of an upload engine announcement (pure). */
+export function announcementText(tr: Pick<Translator, 't'>, a: UploadAnnouncement): string {
+  switch (a.kind) {
+    case 'progress':
+      return tr.t('upload.announce.progress', { percent: a.percent });
+    case 'file-done':
+      return tr.t('upload.announce.fileDone', { name: a.name });
+    case 'paused':
+      return tr.t(a.reason === 'user' ? 'upload.announce.pausedUser' : 'upload.announce.pausedFailures');
+    case 'error':
+      return tr.t('upload.announce.error');
+    case 'completed':
+      return tr.t('upload.announce.completed');
+    case 'cancelled':
+      return tr.t('upload.announce.cancelled');
+  }
+}
+
+const FINALIZE_ERRORS = new Set(['checksum-mismatch', 'state-conflict', 'transfer-gone', 'network']);
+
+/** Translation key of a finalization failure. */
+export function finalizeErrorKey(code: string): string {
+  return FINALIZE_ERRORS.has(code) ? `upload.finalize.error.${code}` : 'upload.finalize.error.other';
+}
+
+/** Translation key of a scan status, for the recap (a generic key for a status unknown here). */
+export function scanStatusKey(tr: Pick<Translator, 'has'>, status: ScanStatus): string {
+  const key = `deposit.scan.${status}`;
+  return tr.has(key) ? key : 'deposit.scan.other';
+}
+
+/**
+ * Time during which DELETE /transfers/{id} is retried while it answers 409: the server keeps the
+ * lock of an upload whose connection it has not yet seen die until its read timeout.
+ */
+export const CANCEL_RETRY_BUDGET_MS = 90_000;
+
+/** Scan statuses that deserve a warning in the recap. */
+export function scanWarningKey(status: ScanStatus): string | undefined {
+  switch (status) {
+    case 'infected':
+      return 'deposit.done.warning.infected';
+    case 'not_scanned_too_large':
+    case 'not_scanned_encrypted':
+      return 'deposit.done.warning.notScanned';
+    case 'scan_error':
+      return 'deposit.done.warning.scanError';
+    default:
+      return undefined;
+  }
+}
+
+function isProblem(err: unknown, code?: string): err is ApiProblem {
+  return err instanceof ApiProblem && (code === undefined || err.code === code);
+}
+
+function emptyForm(expiryDays: readonly number[] = []): DepositForm {
+  return {
+    recipientsText: '',
+    message: '',
+    expiryDays: defaultExpiry(expiryDays),
+    password: '',
+    deleteAfterFirstDownload: false,
+    files: [],
+  };
+}
+
+/** The deposit flow of one page. Fields are reactive ($state) when read in components. */
+export class DepositFlow {
+  step = $state<Step>('loading');
+  /** An action is in progress (buttons show a loading state). */
+  busy = $state(false);
+  session = $state.raw<DepositSession | undefined>(undefined);
+  challenge = $state.raw<VerificationChallenge | undefined>(undefined);
+  /** Email field of the email step. */
+  email = $state('');
+  /** Code field of the code step. */
+  code = $state('');
+  /** Error of the current step (general message). */
+  stepError = $state.raw<StepError | undefined>(undefined);
+  /** Field error of the email or code field. */
+  fieldError = $state.raw<Message | undefined>(undefined);
+  /** Information message (code resent, session ended...). */
+  notice = $state.raw<Message | undefined>(undefined);
+  /** Remaining code attempts after a wrong code. */
+  attemptsRemaining = $state<number | undefined>(undefined);
+  /** Clock time before which a new attempt is refused (rate limited). */
+  retryAt = $state<number | undefined>(undefined);
+  /** Maintenance message (plain text), when the tenant has one. */
+  maintenanceMessage = $state<string | undefined>(undefined);
+  /** The invitation can no longer be used. */
+  invitationGone = $state(false);
+  /** Deposit form values. */
+  form = $state<DepositForm>(emptyForm());
+  /** Field errors of the form. */
+  formErrors = $state.raw<FormErrors>({});
+  /** Incremented each time the form is refused, so that the screen focuses the summary. */
+  formRefusals = $state(0);
+  /** Transfer being uploaded, scanned or recapped. */
+  transfer = $state.raw<SenderTransfer | undefined>(undefined);
+  /** Upload progress. */
+  upload = $state.raw<UploadSnapshot | undefined>(undefined);
+  /** Finalization failure message. */
+  finalizeError = $state.raw<Message | undefined>(undefined);
+  /** The finalization can be tried again. */
+  finalizeRetryable = $state(false);
+  /** Files refused by the blocklist at finalization. */
+  blockedFiles = $state.raw<string[] | undefined>(undefined);
+  /** Final state of the transfer on the done step. */
+  outcome = $state<'available' | 'rejected' | undefined>(undefined);
+  /** Interrupted upload found after a reload. */
+  resumeRecord = $state.raw<ResumeRecord | undefined>(undefined);
+  /** Files reselected on the resume step. */
+  resumeFiles = $state.raw<DepositFile[]>([]);
+
+  readonly tenant: PublicTenant;
+  readonly invitation: InvitationContext | undefined;
+  readonly #deps: DepositFlowDeps;
+  readonly #key: IdempotencyKey;
+  readonly #now: () => number;
+  readonly #sleep: (ms: number) => Promise<void>;
+  /** Serialized body of the last createTransfer attempt sent with the current key. */
+  #lastBody: string | undefined;
+  #engine: UploadEngine | undefined;
+  #unsubscribe: (() => void)[] = [];
+  #contents: (Blob | undefined)[] = [];
+  #finalizeAbort: AbortController | undefined;
+  #disposed = false;
+
+  constructor(tenant: PublicTenant, invitation: InvitationContext | undefined, deps: DepositFlowDeps) {
+    this.tenant = tenant;
+    this.invitation = invitation;
+    this.#deps = deps;
+    this.#key = new IdempotencyKey(deps.newKey);
+    this.#now = deps.now ?? Date.now;
+    this.#sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    if (invitation !== undefined) {
+      this.email = invitation.email;
+    }
+  }
+
+  // ---- Derived values ---------------------------------------------------------------------
+
+  /** The depositor is an invited external user: no recipients to choose. */
+  get isExternal(): boolean {
+    return this.session?.kind === 'external' || (this.session === undefined && this.invitation !== undefined);
+  }
+
+  /** Recipient of the files of an external depositor. */
+  get invitedBy(): string | undefined {
+    return this.session?.invitation?.invitedBy ?? this.invitation?.invitedBy;
+  }
+
+  /** The session may issue invitations (internal depositor). */
+  get canInvite(): boolean {
+    return this.session?.kind === 'internal' && this.session.canInvite;
+  }
+
+  /** Limits of the session (or of the tenant before identification). */
+  get limits(): { maxTransferBytes: number; expiryDays: number[] } {
+    return this.session?.limits ?? this.tenant.limits;
+  }
+
+  /** Total size of the selected files. */
+  get totalBytes(): number {
+    return this.form.files.reduce((sum, f) => sum + f.size, 0);
+  }
+
+  /** Addresses parsed from the recipients field. */
+  get recipients(): string[] {
+    return parseRecipients(this.form.recipientsText);
+  }
+
+  /** Text of the current step error. */
+  get errorText(): string | undefined {
+    const e = this.stepError;
+    if (e === undefined) return undefined;
+    return 'message' in e
+      ? this.#deps.tr.t(e.message.key, e.message.params)
+      : problemMessage(this.#deps.tr, e.cause);
+  }
+
+  /** Seconds before a new attempt is allowed (0 when not rate limited). */
+  secondsBeforeRetry(now: number = this.#now()): number {
+    return this.retryAt === undefined ? 0 : Math.max(0, Math.ceil((this.retryAt - now) / 1000));
+  }
+
+  /** Fingerprints of the interrupted transfer still missing a reselected file. */
+  get resumeMissing(): FileFingerprint[] {
+    const record = this.resumeRecord;
+    const transfer = this.transfer;
+    if (record === undefined || transfer === undefined) return [];
+    const match = matchFiles(record, this.resumeFiles);
+    return record.files.filter((fp, i) => {
+      const file = transfer.files[i];
+      const complete = file !== undefined && (file.uploadOffset ?? 0) >= file.size;
+      return match.files[i] === undefined && !complete;
+    });
+  }
+
+  /** True while bytes may still be sent (beforeunload warning). */
+  isUploading(): boolean {
+    return this.#engine?.isActive() === true;
+  }
+
+  /**
+   * Guard of an in-app navigation: asks for a confirmation while an upload is running.
+   * Returns true when the page may be left (the upload is then stopped by dispose()).
+   */
+  confirmLeave(): boolean {
+    return !this.isUploading() || this.#deps.confirm(this.#deps.tr.t('deposit.upload.leaveConfirm'));
+  }
+
+  // ---- Bootstrap and identification -----------------------------------------------------
+
+  /** Starts the flow: maintenance check, current session, interrupted upload. */
+  async start(): Promise<void> {
+    this.#reset();
+    this.step = 'loading';
+    if (this.tenant.maintenance) {
+      this.#maintenance(this.tenant.maintenanceMessage);
+      return;
+    }
+    let session: DepositSession | undefined;
+    try {
+      session = (await this.#deps.api.get('/deposit-sessions/current')).data;
+    } catch (err) {
+      if (!isProblem(err) || err.status !== 401) {
+        this.stepError = { cause: err };
+        this.step = 'error';
+        return;
+      }
+    }
+    if (session !== undefined && this.#sessionFits(session)) {
+      await this.#afterSession(session);
+      return;
+    }
+    if (this.invitation !== undefined) {
+      // The depositor clicked "Continue" on the invitation landing: send the code at once.
+      this.step = 'email';
+      await this.submitEmail();
+      return;
+    }
+    this.step = 'email';
+  }
+
+  /** Requests a code (or a session for a recognised internal address). */
+  async submitEmail(): Promise<void> {
+    if (this.busy || this.invitationGone) return;
+    const email = this.email.trim();
+    this.notice = undefined;
+    if (!isEmail(email)) {
+      this.fieldError = { key: email === '' ? 'fieldErrors.required' : 'fieldErrors.invalid-email' };
+      return;
+    }
+    this.fieldError = undefined;
+    this.stepError = undefined;
+    this.busy = true;
+    try {
+      const body =
+        this.invitation === undefined ? { email } : { email, invitationToken: this.invitation.token };
+      const res = await this.#deps.api.post('/deposit-sessions', { body });
+      this.retryAt = undefined;
+      if (res.status === 201) {
+        await this.#afterSession(res.data as DepositSession);
+      } else {
+        this.challenge = res.data as VerificationChallenge;
+        this.attemptsRemaining = undefined;
+        this.code = '';
+        this.step = 'code';
+      }
+    } catch (err) {
+      this.#identificationError(err);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Sends the code typed by the depositor. */
+  async submitCode(): Promise<void> {
+    const challenge = this.challenge;
+    if (this.busy || challenge === undefined) return;
+    const code = this.code.replace(/\s+/g, '');
+    this.notice = undefined;
+    if (!/^\d{6}$/.test(code)) {
+      this.fieldError = { key: code === '' ? 'fieldErrors.required' : 'deposit.code.format' };
+      return;
+    }
+    this.fieldError = undefined;
+    this.stepError = undefined;
+    this.busy = true;
+    try {
+      const res = await this.#deps.api.post('/verification-challenges/{challengeId}/confirm', {
+        path: { challengeId: challenge.challengeId },
+        body: { code },
+      });
+      this.challenge = undefined;
+      await this.#afterSession(res.data);
+    } catch (err) {
+      if (isProblem(err, 'verification-code-invalid')) {
+        this.attemptsRemaining = err.attemptsRemaining;
+        this.fieldError = { key: 'deposit.code.wrong' };
+        this.code = '';
+      } else if (isProblem(err, 'verification-exhausted') || isProblem(err, 'not-found')) {
+        this.challenge = undefined;
+        this.step = 'email';
+        this.notice = undefined;
+        this.stepError = { message: { key: 'deposit.code.exhausted' } };
+      } else {
+        this.#identificationError(err);
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Requests a new code for the same address. */
+  async resendCode(): Promise<void> {
+    if (this.busy) return;
+    await this.submitEmail();
+    if (this.step === 'code' && this.stepError === undefined && this.fieldError === undefined) {
+      this.notice = { key: 'deposit.code.resent' };
+    }
+  }
+
+  /** Goes back to the email step (another address). */
+  changeEmail(): void {
+    this.challenge = undefined;
+    this.code = '';
+    this.fieldError = undefined;
+    this.stepError = undefined;
+    this.notice = undefined;
+    this.attemptsRemaining = undefined;
+    this.step = 'email';
+  }
+
+  // ---- Form -------------------------------------------------------------------------------
+
+  /** Adds chosen or dropped files (duplicates skipped). */
+  addFiles(files: readonly DepositFile[]): void {
+    this.form.files = addFiles(this.form.files, files);
+    this.#clearFileErrors();
+  }
+
+  /** Removes the file at index. */
+  removeFile(index: number): void {
+    this.form.files = this.form.files.filter((_f, i) => i !== index);
+    this.#clearFileErrors();
+  }
+
+  /** Validates and creates the transfer, then starts the upload. */
+  async submitTransfer(): Promise<void> {
+    const session = this.session;
+    if (this.busy || session === undefined) return;
+    const needRecipients = session.kind !== 'external';
+    const errors = validateForm(this.form, session.limits, needRecipients);
+    this.stepError = undefined;
+    this.notice = undefined;
+    if (Object.keys(errors).length > 0) {
+      this.formErrors = errors;
+      this.formRefusals++;
+      return;
+    }
+    this.formErrors = {};
+    const files = [...this.form.files];
+    const body: TransferCreate = {
+      expiryDays: this.form.expiryDays as TransferCreate['expiryDays'],
+      deleteAfterFirstDownload: this.form.deleteAfterFirstDownload,
+      files: files.map((f) =>
+        f.type === '' ? { name: f.name, size: f.size } : { name: f.name, size: f.size, mediaType: f.type },
+      ),
+    };
+    if (needRecipients) body.recipients = parseRecipients(this.form.recipientsText);
+    if (this.form.message.trim() !== '') body.message = this.form.message;
+    if (this.form.password !== '') body.password = this.form.password;
+    const language = this.#deps.language();
+    if ((languageValues as readonly string[]).includes(language)) {
+      body.language = language as TransferCreate['language'];
+    }
+    // The key is kept across transient failures only while the request stays the same.
+    const serialized = JSON.stringify(body);
+    if (this.#lastBody !== undefined && this.#lastBody !== serialized) this.#key.renew();
+    this.#lastBody = serialized;
+    this.busy = true;
+    let transfer: SenderTransfer;
+    try {
+      transfer = (
+        await this.#deps.api.post('/transfers', { body, headers: { 'Idempotency-Key': this.#key.value } })
+      ).data;
+    } catch (err) {
+      this.busy = false;
+      this.#transferError(err);
+      return;
+    }
+    this.busy = false;
+    this.#renewKey();
+    this.retryAt = undefined;
+    this.#deps.resumeStore.save({ transferId: transfer.id, files: files.map((f) => fingerprint(f)) });
+    this.form.password = '';
+    this.#runUpload(transfer, files, true);
+  }
+
+  // ---- Upload -----------------------------------------------------------------------------
+
+  /** Pauses the upload. */
+  pause(): void {
+    this.#engine?.pause();
+  }
+
+  /** Resumes the upload (or retries at once while waiting). */
+  resume(): void {
+    this.#engine?.resume();
+  }
+
+  /**
+   * Cancels the upload and abandons the transfer; back to the form. The cancellation is retried
+   * while the server still holds the upload lock (409), then reported if it still fails.
+   */
+  async cancelUpload(): Promise<void> {
+    const engine = this.#engine;
+    if (engine === undefined || this.busy) return;
+    this.busy = true;
+    this.notice = { key: 'deposit.upload.cancelling' };
+    let failed = false;
+    try {
+      await engine.cancel();
+    } catch {
+      // The transfer expires on the server anyway (TT_UPLOAD_TTL): the user is told.
+      failed = true;
+    } finally {
+      this.busy = false;
+    }
+    if (this.#disposed || this.#engine !== engine) return;
+    this.#deps.resumeStore.clear();
+    this.#disposeEngine();
+    this.transfer = undefined;
+    this.upload = undefined;
+    this.notice = failed ? undefined : { key: 'deposit.upload.cancelled' };
+    this.stepError = failed ? { message: { key: 'deposit.upload.cancelFailed' } } : undefined;
+    this.step = 'form';
+  }
+
+  /** Tries the finalization again after a transient failure. */
+  async retryFinalize(): Promise<void> {
+    if (this.transfer !== undefined) {
+      await this.#finalize(this.transfer.id);
+    }
+  }
+
+  // ---- Resume after a reload ----------------------------------------------------------------
+
+  /** Adds reselected files on the resume step. */
+  addResumeFiles(files: readonly DepositFile[]): void {
+    this.resumeFiles = addFiles(this.resumeFiles, files);
+  }
+
+  /** Continues the interrupted upload with the reselected files. */
+  continueResume(): void {
+    const record = this.resumeRecord;
+    const transfer = this.transfer;
+    if (record === undefined || transfer === undefined || this.resumeMissing.length > 0) return;
+    const match = matchFiles(record, this.resumeFiles);
+    this.resumeRecord = undefined;
+    this.resumeFiles = [];
+    this.#runUpload(transfer, match.files, false);
+  }
+
+  /** Abandons the interrupted upload and shows an empty form. */
+  async discardResume(): Promise<void> {
+    const transfer = this.transfer;
+    this.#deps.resumeStore.clear();
+    this.resumeRecord = undefined;
+    this.resumeFiles = [];
+    this.transfer = undefined;
+    this.step = 'form';
+    // The previous page may have left an upload whose lock the server still holds.
+    if (transfer !== undefined && !(await this.#cancelOnServer(transfer.id, true)) && this.step === 'form') {
+      this.stepError = { message: { key: 'deposit.upload.cancelFailed' } };
+    }
+  }
+
+  // ---- Done -------------------------------------------------------------------------------
+
+  /** Starts a new transfer with the same session. */
+  newTransfer(): void {
+    this.#abortFinalize();
+    this.#disposeEngine();
+    this.#deps.resumeStore.clear();
+    this.transfer = undefined;
+    this.upload = undefined;
+    this.outcome = undefined;
+    this.blockedFiles = undefined;
+    this.finalizeError = undefined;
+    this.stepError = undefined;
+    this.notice = undefined;
+    this.formErrors = {};
+    this.form = emptyForm(this.limits.expiryDays);
+    this.#renewKey();
+    this.step = this.session === undefined ? 'email' : 'form';
+  }
+
+  /**
+   * Gives up a transfer that cannot complete (fatal upload error, refused finalization):
+   * abandons it on the server while it is still uploading, then shows an empty form.
+   */
+  async abandonTransfer(): Promise<void> {
+    const transfer = this.transfer;
+    this.newTransfer();
+    if (transfer !== undefined && transfer.status === 'uploading') {
+      await this.#cancelOnServer(transfer.id);
+    }
+  }
+
+  /** Ends the deposit session (DELETE /deposit-sessions/current). */
+  async endSession(): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    try {
+      await this.#deps.api.delete('/deposit-sessions/current');
+    } catch {
+      // Already expired or revoked: the local state is cleared anyway.
+    } finally {
+      this.busy = false;
+    }
+    this.#deps.clearCsrf();
+    this.newTransfer();
+    this.session = undefined;
+    this.step = 'email';
+    this.notice = { key: 'deposit.session.ended' };
+  }
+
+  /** Stops background work (page left). */
+  dispose(): void {
+    this.#disposed = true;
+    this.#abortFinalize();
+    this.#disposeEngine();
+  }
+
+  // ---- Internals --------------------------------------------------------------------------
+
+  #reset(): void {
+    this.stepError = undefined;
+    this.fieldError = undefined;
+    this.notice = undefined;
+    this.retryAt = undefined;
+  }
+
+  /** In invitation mode, an existing session is reused only if it is for this invitation. */
+  #sessionFits(session: DepositSession): boolean {
+    if (this.invitation === undefined) return true;
+    return (
+      session.kind === 'external' &&
+      session.email.toLowerCase() === this.invitation.email.toLowerCase() &&
+      session.invitation?.invitedBy.toLowerCase() === this.invitation.invitedBy.toLowerCase()
+    );
+  }
+
+  #maintenance(message: string | undefined): void {
+    this.maintenanceMessage = message === undefined || message === '' ? undefined : message;
+    this.step = 'maintenance';
+  }
+
+  async #afterSession(session: DepositSession): Promise<void> {
+    this.session = session;
+    this.fieldError = undefined;
+    this.stepError = undefined;
+    this.attemptsRemaining = undefined;
+    this.retryAt = undefined;
+    if (
+      this.form.expiryDays === undefined ||
+      !(session.limits.expiryDays as readonly number[]).includes(this.form.expiryDays)
+    ) {
+      this.form.expiryDays = defaultExpiry(session.limits.expiryDays);
+    }
+    const record = this.#deps.resumeStore.load();
+    if (record !== undefined) {
+      try {
+        const transfer = (
+          await this.#deps.api.get('/transfers/{transferId}', { path: { transferId: record.transferId } })
+        ).data;
+        if (transfer.status === 'uploading' && transfer.files.length === record.files.length) {
+          this.transfer = transfer;
+          this.resumeRecord = record;
+          this.resumeFiles = [];
+          this.step = 'resume';
+          return;
+        }
+        if (transfer.status === 'scanning') {
+          // Reloaded during the antivirus analysis: wait for the decision, do not finalize again.
+          this.transfer = transfer;
+          void this.#finalize(transfer.id, true);
+          return;
+        }
+        if (transfer.status === 'available' || transfer.status === 'rejected') {
+          this.#deps.resumeStore.clear();
+          this.transfer = transfer;
+          this.outcome = transfer.status;
+          this.step = 'done';
+          return;
+        }
+        this.#deps.resumeStore.clear();
+      } catch (err) {
+        if (!(err instanceof NetworkError)) {
+          this.#deps.resumeStore.clear();
+        }
+      }
+    }
+    this.step = 'form';
+  }
+
+  /** Handles the errors common to every request. Returns true when handled. */
+  #commonError(err: unknown): boolean {
+    if (isProblem(err, 'maintenance')) {
+      this.#maintenance(err.problem?.detail);
+      return true;
+    }
+    if (isProblem(err, 'rate-limited')) {
+      this.retryAt = this.#now() + (err.retryAfterSeconds ?? 60) * 1000;
+      this.stepError = { cause: err };
+      return true;
+    }
+    if (isProblem(err, 'unauthenticated') && this.step !== 'email' && this.step !== 'code') {
+      this.#sessionExpired();
+      return true;
+    }
+    return false;
+  }
+
+  #sessionExpired(): void {
+    this.#abortFinalize();
+    this.#disposeEngine();
+    this.session = undefined;
+    this.#deps.clearCsrf();
+    this.challenge = undefined;
+    this.step = 'email';
+    this.stepError = undefined;
+    this.notice = { key: 'deposit.session.expired' };
+  }
+
+  #identificationError(err: unknown): void {
+    if (this.#commonError(err)) return;
+    if (isProblem(err, 'deposit-not-allowed')) {
+      this.stepError = { message: { key: 'deposit.email.notAllowed' } };
+    } else if (isProblem(err, 'invitation-gone')) {
+      this.invitationGone = true;
+      this.challenge = undefined;
+      this.step = 'email';
+      this.stepError = { message: { key: 'deposit.email.invitationGone' } };
+    } else if (isProblem(err, 'validation-failed')) {
+      this.fieldError = { key: 'fieldErrors.invalid-email' };
+    } else {
+      this.stepError = { cause: err };
+    }
+  }
+
+  #transferError(err: unknown): void {
+    const transient =
+      err instanceof NetworkError || (err instanceof ApiProblem && (err.status >= 500 || err.status === 429));
+    if (!transient) {
+      // The next submission is a new request (its body may differ): new Idempotency-Key.
+      this.#renewKey();
+    }
+    if (this.#commonError(err)) return;
+    if (isProblem(err, 'validation-failed')) {
+      this.formErrors = mapServerErrors(err.errors, (key) => this.#deps.tr.has(key));
+      this.formRefusals++;
+    } else if (isProblem(err, 'transfer-too-large')) {
+      this.formErrors = { files: { key: 'deposit.form.files.tooLarge' } };
+      this.formRefusals++;
+    } else if (isProblem(err, 'deposit-not-allowed')) {
+      this.stepError = { message: { key: 'deposit.email.notAllowed' } };
+    } else {
+      this.stepError = { cause: err };
+    }
+  }
+
+  #clearFileErrors(): void {
+    const errors = this.formErrors;
+    if (Object.keys(errors).some((k) => k === 'files' || k.startsWith('files.'))) {
+      this.formErrors = Object.fromEntries(
+        Object.entries(errors).filter(([k]) => k !== 'files' && !k.startsWith('files.')),
+      );
+    }
+  }
+
+  /** Starts a new submission: new Idempotency-Key, no previous body. */
+  #renewKey(): void {
+    this.#key.renew();
+    this.#lastBody = undefined;
+  }
+
+  /**
+   * Uploads the files of transfer. fresh: transfer is the createTransfer answer (exact offsets);
+   * otherwise the engine asks the server for the offsets first.
+   */
+  #runUpload(transfer: SenderTransfer, contents: readonly (Blob | undefined)[], fresh: boolean): void {
+    this.#disposeEngine();
+    this.transfer = transfer;
+    this.#contents = [...contents];
+    this.finalizeError = undefined;
+    this.blockedFiles = undefined;
+    const engine = this.#deps.createEngine(uploadSpecs(transfer, contents, fresh), async () => {
+      if (!(await this.#cancelOnServer(transfer.id, true))) {
+        throw new Error('transfer not cancelled');
+      }
+    });
+    this.#engine = engine;
+    this.#unsubscribe.push(
+      engine.subscribe((snapshot) => {
+        this.upload = snapshot;
+      }),
+      engine.onAnnounce((a) => {
+        this.#deps.announce(announcementText(this.#deps.tr, a), a.kind === 'error' ? 'assertive' : 'polite');
+      }),
+    );
+    this.step = 'upload';
+    engine.start().then(
+      (result) => {
+        if (this.#engine === engine && result === 'completed') {
+          void this.#finalize(transfer.id);
+        }
+      },
+      (err: unknown) => {
+        if (this.#engine !== engine) return;
+        if (err instanceof UploadError && err.code === 'unauthenticated') {
+          this.#sessionExpired();
+        }
+        // Other fatal errors stay on the upload step (snapshot.error).
+      },
+    );
+  }
+
+  /** Finalizes the transfer then waits for the decision (pollOnly: already finalized). */
+  async #finalize(transferId: string, pollOnly = false): Promise<void> {
+    this.#abortFinalize();
+    const controller = new AbortController();
+    this.#finalizeAbort = controller;
+    this.step = 'finalizing';
+    this.finalizeError = undefined;
+    this.finalizeRetryable = false;
+    this.blockedFiles = undefined;
+    const outcome = await (pollOnly ? this.#deps.poll : this.#deps.finalize)(transferId, {
+      signal: controller.signal,
+      onUpdate: (t) => {
+        if (!controller.signal.aborted) this.transfer = t;
+      },
+    });
+    if (controller.signal.aborted || this.#disposed) return;
+    this.#finalizeAbort = undefined;
+    switch (outcome.kind) {
+      case 'available':
+      case 'rejected':
+        this.transfer = outcome.transfer;
+        this.outcome = outcome.kind;
+        this.#deps.resumeStore.clear();
+        this.#disposeEngine();
+        this.step = 'done';
+        this.#deps.announce(
+          this.#deps.tr.t(
+            outcome.kind === 'available' ? 'upload.finalize.available' : 'upload.finalize.rejected',
+          ),
+        );
+        return;
+      case 'upload-incomplete':
+        await this.#resumeIncomplete(transferId);
+        return;
+      case 'blocked':
+        this.blockedFiles = outcome.files;
+        this.#deps.resumeStore.clear();
+        this.#deps.announce(this.#deps.tr.t('upload.finalize.blocked'), 'assertive');
+        await this.#cancelOnServer(transferId);
+        return;
+      case 'failed':
+        if (outcome.code === 'unauthenticated') {
+          this.#sessionExpired();
+          return;
+        }
+        if (outcome.code === 'maintenance') {
+          this.finalizeRetryable = true;
+          this.finalizeError = { key: 'errors.maintenance' };
+          return;
+        }
+        this.finalizeRetryable =
+          outcome.code === 'network' || (outcome.status ?? 0) >= 500 || outcome.status === 429;
+        this.finalizeError = { key: finalizeErrorKey(outcome.code) };
+        if (!this.finalizeRetryable) this.#deps.resumeStore.clear();
+        this.#deps.announce(this.#deps.tr.t(this.finalizeError.key), 'assertive');
+        return;
+      case 'stopped':
+        return;
+    }
+  }
+
+  async #resumeIncomplete(transferId: string): Promise<void> {
+    this.notice = { key: 'upload.finalize.incomplete' };
+    try {
+      const transfer = (await this.#deps.api.get('/transfers/{transferId}', { path: { transferId } })).data;
+      this.#runUpload(transfer, this.#contents, false);
+    } catch (err) {
+      if (isProblem(err, 'unauthenticated')) {
+        this.#sessionExpired();
+        return;
+      }
+      this.finalizeRetryable = err instanceof NetworkError;
+      this.finalizeError = { key: finalizeErrorKey(err instanceof NetworkError ? 'network' : 'other') };
+    }
+  }
+
+  /**
+   * Abandons a transfer on the server. Returns false when it could not be abandoned; a transfer
+   * already gone counts as abandoned. retryConflicts: retries a 409 (the server still holds the
+   * upload lock of a request it has not yet seen die) after 1, 2, 4, 8, 10... s for up to
+   * CANCEL_RETRY_BUDGET_MS.
+   */
+  async #cancelOnServer(transferId: string, retryConflicts = false): Promise<boolean> {
+    let waited = 0;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.#deps.api.delete('/transfers/{transferId}', { path: { transferId } });
+        return true;
+      } catch (err) {
+        if (isProblem(err) && (err.status === 404 || err.status === 410)) return true;
+        const conflict = isProblem(err) && err.status === 409;
+        if (!retryConflicts || !conflict || waited >= CANCEL_RETRY_BUDGET_MS || this.#disposed) {
+          return false;
+        }
+        const delay = conflictDelay(attempt);
+        waited += delay;
+        await this.#sleep(delay);
+      }
+    }
+  }
+
+  #abortFinalize(): void {
+    this.#finalizeAbort?.abort();
+    this.#finalizeAbort = undefined;
+  }
+
+  /** Stops the current engine (no DELETE) and forgets it. */
+  #disposeEngine(): void {
+    for (const off of this.#unsubscribe) off();
+    this.#unsubscribe = [];
+    this.#engine?.stop();
+    this.#engine = undefined;
+  }
+}

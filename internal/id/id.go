@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -108,6 +109,10 @@ var (
 	ErrEntropy = errors.New("id: invalid token entropy")
 	// ErrPrefix reports an empty or malformed prefix.
 	ErrPrefix = errors.New("id: invalid prefix")
+	// ErrMonotonicOverflow reports that a monotonic generator exhausted the
+	// 80-bit entropy of the current millisecond (practically impossible
+	// with a random starting point).
+	ErrMonotonicOverflow = errors.New("id: monotonic entropy overflow")
 )
 
 // cryptoReader is the default random source. It is a variable only so that
@@ -115,11 +120,20 @@ var (
 var cryptoReader io.Reader = rand.Reader
 
 // Generator creates entity identifiers from an injectable clock and random
-// source. Use NewGenerator to build one. A Generator is safe for concurrent
-// use if its clock and random reader are (the defaults are).
+// source. Use NewGenerator or NewMonotonicGenerator to build one. A
+// Generator is safe for concurrent use if its clock and random reader are
+// (the defaults are).
 type Generator struct {
 	clock func() time.Time
 	rand  io.Reader
+	// monotonic makes the identifiers of a same millisecond strictly
+	// increasing (see NewMonotonicGenerator); mu guards the fields below.
+	monotonic bool
+	mu        sync.Mutex
+	// seeded reports whether lastMs and last hold a generated identifier.
+	seeded bool
+	lastMs uint64
+	last   [10]byte
 }
 
 // NewGenerator returns a Generator using clock and rand. A nil clock defaults
@@ -134,6 +148,23 @@ func NewGenerator(clock func() time.Time, rand io.Reader) *Generator {
 	return &Generator{clock: clock, rand: rand}
 }
 
+// NewMonotonicGenerator returns a Generator like NewGenerator whose
+// identifiers sort in generation order, even within a millisecond: the
+// first identifier of a millisecond gets fresh random entropy, the next
+// ones of the same millisecond the previous entropy plus one (the ULID
+// monotonic mode). It suits records listed by creation order, such as the
+// audit log, where two entries of the same millisecond must keep their
+// order; the entropy of all but the first identifier of a millisecond is
+// predictable from the previous one, which entity identifiers allow (they
+// are not secrets). When the clock does not move forward, a new
+// millisecond starts over with fresh entropy and no order is guaranteed
+// against the earlier identifiers.
+func NewMonotonicGenerator(clock func() time.Time, rand io.Reader) *Generator {
+	g := NewGenerator(clock, rand)
+	g.monotonic = true
+	return g
+}
+
 // New returns a new identifier "<p>_<ULID>". It fails if p is not a valid
 // prefix, if the clock is before the Unix epoch or beyond the 48-bit
 // millisecond range, or if the random source cannot supply 10 bytes.
@@ -145,11 +176,39 @@ func (g *Generator) New(p Prefix) (string, error) {
 	if ms < 0 || ms > maxTimestamp {
 		return "", ErrTimestamp
 	}
+	if g.monotonic {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.seeded && g.lastMs == uint64(ms) {
+			if !increment(&g.last) {
+				return "", ErrMonotonicOverflow
+			}
+			return string(p) + "_" + encode(uint64(ms), g.last), nil
+		}
+	}
 	var entropy [10]byte
 	if _, err := io.ReadFull(g.rand, entropy[:]); err != nil {
 		return "", fmt.Errorf("id: read random: %w", err)
 	}
+	if g.monotonic {
+		g.seeded, g.lastMs, g.last = true, uint64(ms), entropy
+	}
 	return string(p) + "_" + encode(uint64(ms), entropy), nil
+}
+
+// increment adds one to the big-endian 80-bit value e. It reports false,
+// leaving e unchanged, when e is already the largest value.
+func increment(e *[10]byte) bool {
+	for i := len(e) - 1; i >= 0; i-- {
+		if e[i] != 0xFF {
+			e[i]++
+			for j := i + 1; j < len(e); j++ {
+				e[j] = 0
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // New returns a new identifier "<p>_<ULID>" using the current time and

@@ -1,0 +1,69 @@
+{
+  "title": "Sending your files",
+  "phase": {
+    "idle": "Ready to send",
+    "uploading": "Sending…",
+    "retrying": "Connection lost, trying again…",
+    "paused": "Upload paused",
+    "completed": "All files sent",
+    "cancelled": "Upload cancelled",
+    "failed": "Upload stopped"
+  },
+  "retryIn": {
+    "one": "Next attempt in {count} second.",
+    "other": "Next attempt in {count} seconds."
+  },
+  "paused": {
+    "user": "The upload is paused. Resume it when you are ready: it continues where it stopped.",
+    "failures": "The connection keeps failing, so the upload is paused. Check your network connection, then resume: it continues where it stopped."
+  },
+  "actions": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "retryNow": "Try again now",
+    "cancel": "Cancel the transfer",
+    "confirmCancel": "Cancel this transfer? The files already sent will be deleted."
+  },
+  "fileProgress": "{name}: {uploaded} of {size}",
+  "fileDone": "{name}: sent",
+  "totalProgress": "{uploaded} of {total} sent ({percent}%)",
+  "leaveWarning": "Files are still being sent. Leaving this page interrupts the upload.",
+  "announce": {
+    "progress": "{percent}% sent.",
+    "fileDone": "File {name} sent.",
+    "pausedUser": "Upload paused.",
+    "pausedFailures": "Connection problems: upload paused.",
+    "completed": "All files sent. The antivirus analysis is starting.",
+    "cancelled": "Upload cancelled.",
+    "error": "The upload stopped because of an error."
+  },
+  "error": {
+    "unauthenticated": "Your session has expired. Identify yourself again, then select the same files to resume.",
+    "forbidden": "Sending these files is no longer allowed. Start a new transfer or contact your administrator.",
+    "upload-gone": "This upload has expired or no longer exists. Start a new transfer.",
+    "payload-too-large": "A file is larger than the size declared or allowed. Start a new transfer.",
+    "insufficient-storage": "The server has run out of storage space. Try again later or contact your administrator.",
+    "protocol-error": "The server gave an unexpected answer. Reload the page and try again.",
+    "file-missing": "A file to send is missing. Select the same files again."
+  },
+  "finalize": {
+    "scanning": "The antivirus is analysing the files. You can close this page: you will be notified by email when the transfer is ready.",
+    "incomplete": "Some files were not completely received. The upload resumes.",
+    "blocked": "Your organisation does not allow these files, the transfer was refused:",
+    "available": "The transfer is ready: the recipients have been notified.",
+    "rejected": "No file could be delivered: the transfer was refused after the antivirus analysis.",
+    "error": {
+      "checksum-mismatch": "A file was altered during the upload. Start a new transfer.",
+      "state-conflict": "This transfer can no longer be completed. Start a new transfer.",
+      "transfer-gone": "This transfer has expired or was deleted.",
+      "network": "The server could not be reached. Check your connection and try again.",
+      "other": "The transfer could not be completed. Try again later."
+    }
+  },
+  "resume": {
+    "title": "Resume the interrupted upload",
+    "text": "An upload was interrupted. Select the same files again to continue where it stopped.",
+    "missing": "These files are still missing: {names}",
+    "discard": "Start a new transfer instead"
+  }
+}

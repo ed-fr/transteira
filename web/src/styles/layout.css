@@ -1,0 +1,131 @@
+/*
+ * Page layout (CLAUDE.md section 13): one full-screen background image, a veil for legibility,
+ * and a centred card holding the content. Used by src/shared/components/PageLayout.svelte.
+ */
+.tt-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+/* Background image: decorative (alt="" aria-hidden="true"), covers the viewport. */
+.tt-page__background {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* Veil between the image and the content: guarantees legibility whatever the image. */
+.tt-page__veil {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--tt-veil);
+}
+
+.tt-page--plain {
+  background: var(--tt-surface-muted);
+}
+
+.tt-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tt-space-4);
+  padding: var(--tt-space-4) var(--tt-space-6);
+}
+
+.tt-page__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tt-space-3);
+  padding: var(--tt-space-2) var(--tt-space-3);
+  border-radius: var(--tt-radius);
+  background: var(--tt-surface);
+  color: var(--tt-text);
+  font-size: var(--tt-font-size-lg);
+  font-weight: var(--tt-font-weight-bold);
+  text-decoration: none;
+}
+
+.tt-page__logo {
+  display: block;
+  max-height: 3rem;
+  width: auto;
+}
+
+.tt-page__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--tt-space-4);
+}
+
+.tt-page__main:focus {
+  outline: none;
+}
+
+.tt-card {
+  width: 100%;
+  max-width: var(--tt-card-width);
+  padding: var(--tt-space-8);
+  border-radius: var(--tt-radius-lg);
+  background: var(--tt-surface);
+  color: var(--tt-text);
+  box-shadow: var(--tt-shadow);
+}
+
+.tt-card--wide {
+  max-width: var(--tt-content-width);
+}
+
+.tt-page__footer {
+  padding: var(--tt-space-4) var(--tt-space-6);
+}
+
+@media (max-width: 40rem) {
+  .tt-page__header,
+  .tt-page__footer {
+    padding: var(--tt-space-3);
+  }
+
+  .tt-page__main {
+    align-items: flex-start;
+    padding: var(--tt-space-2);
+  }
+
+  .tt-card {
+    padding: var(--tt-space-4);
+  }
+}
+
+/* Generic stack and cluster layouts. */
+.tt-stack > * + * {
+  margin-top: var(--tt-space-4);
+}
+
+.tt-stack--sm > * + * {
+  margin-top: var(--tt-space-2);
+}
+
+.tt-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tt-space-3);
+}
+
+.tt-cluster--end {
+  justify-content: flex-end;
+}
+
+.tt-cluster--between {
+  justify-content: space-between;
+}

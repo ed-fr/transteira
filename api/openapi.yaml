@@ -365,7 +365,7 @@ paths:
                 document: privacy-policy
                 language: en
                 markdown: "# Privacy policy\n\nEntity A processes the email addresses..."
-                html: "<h1>Privacy policy</h1>\n<p>Entity A processes the email addresses...</p>\n"
+                html: "<h2>Privacy policy</h2>\n<p>Entity A processes the email addresses...</p>\n"
                 updatedAt: '2026-10-01T09:00:00Z'
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
@@ -4661,7 +4661,7 @@ components:
         document: { type: string, enum: [legal-notice, privacy-policy] }
         language: { $ref: '#/components/schemas/Language' }
         markdown: { type: string, maxLength: 100000 }
-        html: { type: string, description: "Sanitized HTML rendering of `markdown` (public reads only)." }
+        html: { type: string, description: "Sanitized HTML rendering of `markdown` (public reads only). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`." }
         updatedAt: { type: string, format: date-time }
     LegalDocumentUpdate:
       type: object

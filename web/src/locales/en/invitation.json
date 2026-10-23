@@ -1,0 +1,46 @@
+{
+  "landing": {
+    "title": "You are invited to send files",
+    "text": "{inviter} invites you to send files with this service. The files you send will be addressed to them.",
+    "invitedBy": "Invited by",
+    "email": "Your email address",
+    "expires": "Invitation valid until",
+    "message": "Message from the person who invited you",
+    "next": "To continue, you will receive a verification code at your email address.",
+    "continue": "Continue"
+  },
+  "invalid": {
+    "title": "Invitation not found",
+    "text": "This invitation link is not valid. Check that you copied it completely from the email."
+  },
+  "expired": {
+    "title": "Invitation expired",
+    "text": "This invitation has expired or is no longer valid. Ask the person who invited you for a new invitation."
+  },
+  "invite": {
+    "title": "Invite an external person",
+    "intro": "The person you invite will be able to send you files: they will be addressed to {inviter}.",
+    "email": "Email address of the person to invite",
+    "emailHint": "For example name@example.com",
+    "message": "Message",
+    "messageHint": "Optional. Included in the invitation email.",
+    "language": "Language of the invitation email",
+    "languageHint": "The email is written in this language.",
+    "submit": "Send the invitation",
+    "backToDeposit": "Back to sending files",
+    "rateLimited": "You have sent too many invitations in the last hour.",
+    "sent": {
+      "title": "Invitation sent",
+      "text": "An invitation was sent to {email}. The link stays valid for 12 months if it is not used.",
+      "another": "Invite another person"
+    },
+    "noSession": {
+      "title": "Identify yourself first",
+      "text": "Only internal users identified on the sending page can invite external people. Identify yourself with your work email address from the network of your organisation, then come back to this page."
+    },
+    "notAllowed": {
+      "title": "Invitations not available",
+      "text": "Your address is not allowed to send invitations. Only internal users connected from the network of your organisation can invite external people."
+    }
+  }
+}

@@ -1850,7 +1850,7 @@ type Language string
 type LegalDocument struct {
 	Document LegalDocumentDocument `json:"document"`
 
-	// Html Sanitized HTML rendering of `markdown` (public reads only).
+	// Html Sanitized HTML rendering of `markdown` (public reads only). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`.
 	Html *string `json:"html,omitempty"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.

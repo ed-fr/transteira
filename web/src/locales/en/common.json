@@ -1,0 +1,48 @@
+{
+  "appName": "TransTeira",
+  "languageName": {
+    "fr": "Français",
+    "en": "English"
+  },
+  "language": "Language",
+  "notFound": {
+    "title": "Page not found",
+    "text": "The page you are looking for does not exist or is no longer available."
+  },
+  "navigation": {
+    "pageLoaded": "Page loaded: {title}"
+  },
+  "attemptsRemaining": {
+    "one": "{count} attempt remaining.",
+    "other": "{count} attempts remaining."
+  },
+  "retryAfter": {
+    "one": "Try again in {count} second.",
+    "other": "Try again in {count} seconds."
+  },
+  "home": {
+    "title": "Send files"
+  },
+  "backHome": "Go to the home page",
+  "retry": "Try again",
+  "error": {
+    "title": "Something went wrong",
+    "text": "An error occurred. Please try again."
+  },
+  "maintenance": {
+    "title": "Service under maintenance",
+    "text": "The service is under maintenance: new transfers and invitations are suspended for a while. Downloads remain available.",
+    "banner": "Maintenance in progress",
+    "bannerText": "New transfers are suspended for a while. Downloads remain available."
+  },
+  "sessionExpired": {
+    "title": "Session expired",
+    "text": "Your session has expired. Identify yourself again on the sending page.",
+    "action": "Go to the sending page"
+  },
+  "help": {
+    "title": "Help",
+    "comingSoon": "The integrated help is coming in a next version.",
+    "topic": "Requested topic: {topic}"
+  }
+}

@@ -1,0 +1,40 @@
+// Route table of the public application (tenant hosts). The server serves the application
+// shell on the same paths (internal/httpserver/webui.go) and answers other paths with 404.
+import type { Route } from '../shared/router/router.svelte';
+import Download from './screens/Download.svelte';
+import Help from './screens/Help.svelte';
+import Home from './screens/Home.svelte';
+import InvitationLanding from './screens/InvitationLanding.svelte';
+import Invite from './screens/Invite.svelte';
+import Legal from './screens/Legal.svelte';
+import NotFound from './screens/NotFound.svelte';
+import type { ScreenComponent } from './screens/types';
+
+/** Routes of the public application. */
+export const routes: readonly Route<ScreenComponent>[] = [
+  { pattern: '/', component: Home, titleKey: 'common.home.title', helpTopic: 'deposit' },
+  { pattern: '/d/:token', component: Download, titleKey: 'download.title', helpTopic: 'download' },
+  {
+    pattern: '/i/:token',
+    component: InvitationLanding,
+    titleKey: 'invitation.landing.title',
+    helpTopic: 'invitation',
+  },
+  { pattern: '/invite', component: Invite, titleKey: 'invitation.invite.title', helpTopic: 'invite' },
+  { pattern: '/legal/:document', component: Legal, titleKey: 'legal.title', helpTopic: 'legal' },
+  { pattern: '/help', component: Help, titleKey: 'common.help.title' },
+  { pattern: '/help/:topic', component: Help, titleKey: 'common.help.title' },
+];
+
+/** Route of unknown paths. */
+export const notFoundRoute: Route<ScreenComponent> = {
+  pattern: '*',
+  component: NotFound,
+  titleKey: 'common.notFound.title',
+  helpTopic: 'deposit',
+};
+
+/** Reports whether a route is the help itself (no help link in its footer). */
+export function isHelpRoute(route: Pick<Route, 'pattern'>): boolean {
+  return route.pattern === '/help' || route.pattern.startsWith('/help/');
+}

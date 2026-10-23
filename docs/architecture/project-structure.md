@@ -41,6 +41,7 @@ transteira/
 │   │                                # Mode maintenance et délais par opération : httpserver/ ; voie jeton d'API
 │   │                                # (préséance du Bearer, verrouillage par IP) : apitoken.go ; page /api/docs
 │   │                                # (CSP propre, accès admin par défaut) : docs.go
+│   │                                # ; interface web (deux applications, CSP, cache, repli) : webui.go
 │   ├── api/
 │   │   ├── gen/                     # Code généré depuis openapi.yaml (ne pas modifier à la main)
 │   │   ├── stubs/                   # Stubs générés (tools/genstubs) : chaque opération non écrite → 404
@@ -124,7 +125,7 @@ transteira/
 │   ├── usage/                       # Compteurs d'activité par entité et par jour UTC, cumulés en mémoire et écrits
 │   │                                # toutes les 30 s (table tenant_daily_stats, sans donnée personnelle)
 │   ├── diskusage/                   # Taille et espace libre du système de fichiers des données (statfs / Windows)
-│   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/)
+│   ├── i18n/                        # Négociation de langue (Accept-Language), catalogue de messages (locales/<langue>.json)
 │   ├── ratelimit/                   # Paniers par clé et fenêtres de verrouillage (bornés, horloge injectable)
 │   ├── health/                      # Vérifications /healthz (base, ClamAV, stockage)
 │   ├── id/                          # Identifiants préfixés (ULID) et jetons à forte entropie
@@ -144,31 +145,46 @@ transteira/
 │   │
 │   └── testutil/                    # Fabriques de données, horloge simulée, SMTP de test, clamd simulé
 │
-├── locales/                         # Traductions côté serveur (pages, mails, erreurs)
-│   ├── embed.go
-│   ├── fr.json
-│   └── en.json
+├── (traductions et modèles côté serveur) # Pas de dossier racine : traductions des pages et erreurs du serveur dans
+│                                    # internal/i18n/locales/<langue>.json, modèles de mails par défaut dans
+│                                    # internal/mail/templates/<langue>/ ; traductions de l'interface dans
+│                                    # web/src/locales/<langue>/<zone>.json
 │
-├── templates/
-│   └── email/                       # Modèles de mails par défaut
-│       ├── embed.go
-│       ├── fr/                      # verification-code.html / .txt / .subject, transfer-notification…, etc.
-│       └── en/
-│
-├── web/                             # Interface web (consomme exclusivement l'API)
-│   ├── embed.go                     # Embarque web/dist
-│   ├── package.json
-│   ├── src/
-│   │   ├── public/                  # Dépôt, vérification par code, invitation, téléchargement
-│   │   ├── admin/                   # Administration
-│   │   ├── help/                    # Aide intégrée (générée depuis docs/user)
-│   │   ├── shared/                  # Client API généré, i18n, composants accessibles (RGAA)
-│   │   ├── styles/                  # Variables de thème CSS (clair en V1, sombre prêt pour la V1.1)
-│   │   └── locales/                 # fr.json, en.json
-│   ├── static/                      # Image de fond par défaut, favicon
+├── web/                             # Interface web : deux applications Svelte 5 statiques construites par Vite,
+│   │                                # consommant exclusivement l'API (/api/v1) ; voir web/README.md
+│   ├── embed.go                     # Package web : embarque web/dist (Dist() fs.FS) ; embed_test.go
+│   ├── package.json                 # Une seule dépendance d'exécution (svelte), versions exactes, Node 24 / npm 11
+│   ├── package-lock.json            # Versionné ; installation par npm ci --ignore-scripts (T-159)
+│   ├── .npmrc                       # save-exact, engine-strict, ignore-scripts
+│   ├── vite.config.ts               # Deux entrées (public, admin), assets empreintés, aucun data: ni polyfill en ligne
+│   ├── svelte.config.js, tsconfig.json, eslint.config.js, .prettierrc, vitest.config.ts
+│   ├── src/                         # Racine Vite
+│   │   ├── public/                  # Application publique (FQDN d'entité) : index.html, main.ts, App.svelte,
+│   │   │                            # routes, écrans (dépôt avec vérification par code, invitation,
+│   │   │                            # téléchargement, mentions légales, erreurs, maintenance)
+│   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : coquille en V1 étape 15
+│   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 17)
+│   │   ├── shared/
+│   │   │   ├── api/                 # schema.ts (généré depuis api/openapi.yaml, versionné), client typé,
+│   │   │   │                        # lecture des Problem Details, jeton CSRF en mémoire
+│   │   │   ├── router/              # Routeur History API (titre, focus, annonce à chaque navigation)
+│   │   │   ├── i18n/                # Traductions, choix de la langue (localStorage tt.lang), pluriels, formats
+│   │   │   ├── upload/              # Moteur tus 1.0.0 (reprise, relances, transport XHR, reprise après rechargement)
+│   │   │   ├── theme/               # Couleurs de l'entité (validées puis écrites par le CSSOM), contraste WCAG
+│   │   │   ├── safe/                # safeApiHref : filtre des URL reçues de l'API
+│   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications
+│   │   ├── styles/                  # tokens.css (variables de thème, clair en V1, sombre prêt pour la V1.1),
+│   │   │                            # base.css, layout.css, utilities.css
+│   │   └── locales/                 # <langue>/<zone>.json (fr, en), montés sous le nom de la zone
+│   │                                # (upload.json : clés upload.*)
+│   ├── static/                      # Copiés tels quels à la racine de dist/ : favicon.svg, robots.txt (Disallow: /)
+│   ├── scripts/                     # gen-types.mjs (types de l'API, --check), check-dist.mjs (conformité du build
+│   │                                # à la CSP), keep-dist.mjs (recrée dist/.gitkeep)
+│   ├── dev/Caddyfile                # Boucle de développement : *.localhost en HTTPS (écoute sur la boucle locale seulement), /api vers Go, reste vers Vite
 │   ├── apidocs/                     # Documentation interactive /api/docs : Scalar vendorisé (version épinglée,
 │   │                                # empreinte dans README.md), index.html et init.js sans script en ligne, embed.go
-│   └── dist/                        # Résultat de la compilation (ignoré par git)
+│   └── dist/                        # Résultat de la compilation (public/index.html, admin/index.html, assets/) ;
+│                                    # seul dist/.gitkeep est versionné (build absent : page de repli 503)
 │
 ├── test/
 │   ├── integration/                 # Parcours complets contre un serveur réel (SQLite et PostgreSQL)
@@ -189,7 +205,7 @@ transteira/
 │
 ├── integrations/
 │   ├── reverse-proxy/
-│   │   ├── caddy/                   # Configuration de référence
+│   │   ├── caddy/                   # Configuration de référence (prévue : encode, caviardage de /d/ et /i/, § 3.5)
 │   │   ├── nginx/
 │   │   ├── traefik/
 │   │   └── apache/
@@ -265,6 +281,35 @@ transteira/
 ### 3.4 Tests sur les deux moteurs (§17, §24)
 
 - `make test` lance chaque suite deux fois (`TT_DB_DRIVER=sqlite` puis `postgres`). PostgreSQL est fourni par `test/docker-compose.test.yml`.
+
+### 3.5 Interface web (§4, §13, §16.2)
+
+Les deux applications sont construites par `make web-build` dans `web/dist`, embarquées par `web/embed.go` et chargées en mémoire au démarrage (`internal/httpserver/webui.go`). Seuls les fichiers d'extension autorisée (`.js`, `.css`, `.svg`, `.png`, `.ico`, `.txt`) sont servis.
+
+| Hôte | Chemin | Réponse | `Cache-Control` |
+|---|---|---|---|
+| FQDN d'entité | `/assets/<nom>` (fichiers empreintés) | fichier, ou `404` Problem si inconnu | `public, max-age=31536000, immutable` |
+| FQDN d'entité | `/favicon.svg`, `/robots.txt` (racine du build) | fichier, ETag et `304` | `no-cache` |
+| FQDN d'entité | `/`, `/d/{jeton}`, `/i/{jeton}`, `/legal/{document}`, `/invite`, `/help/…` | page de l'application publique, `200`, ETag et `304` | `no-cache` |
+| FQDN d'entité | tout autre chemin hors `/api` | page de l'application publique avec le statut `404` (écran « page introuvable ») | `no-cache` |
+| Hôte admin | `/` | `302` vers `/admin/` | `no-store` |
+| Hôte admin | `/admin/`, `/admin/…` | page de l'application d'administration, `200` | `no-store` |
+| Hôte admin | `/assets/<nom>` | fichier | `public, max-age=31536000, immutable` |
+| Hôte admin | tout autre chemin hors `/api` | page d'administration avec le statut `404` | `no-store` |
+| Les deux | `/api`, `/api/…` sans route | `404` Problem (jamais une page de l'interface) | |
+| Les deux | méthode autre que `GET` / `HEAD` | `405` Problem, `Allow: GET, HEAD` | |
+| Hôte inconnu | tout | `421` (aucun fichier de l'interface) | |
+
+- **CSP** posée sur chaque réponse de l'interface : application publique `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` ; administration identique avec `img-src 'self' data:` (QR code TOTP). Règles pour les contributeurs (aucun style ni script en ligne, `{@html}` réservé aux mentions légales, `safeApiHref`) : `web/README.md` et modèle de menaces T-91.
+- **`X-Robots-Tag: noindex, nofollow`** sur toutes les réponses de l'interface, `Referrer-Policy: no-referrer` et `X-Frame-Options: DENY` par le middleware d'en-têtes (T-161, T-94).
+- **L'application d'administration n'est jamais servie sur un FQDN d'entité**, ni l'application publique sur l'hôte admin.
+- **Repli** : un binaire construit sans `make web-build` (seul `dist/.gitkeep` présent) répond `503` avec une page statique bilingue, sans script ni style, et journalise un avertissement au démarrage ; `make build` refuse de produire un binaire sans l'interface.
+- **Aucune compression par l'application** : elle est confiée au reverse proxy.
+
+**Prévu pour les configurations de reverse proxy** (`integrations/reverse-proxy/`, à venir) :
+
+- **compression** des fichiers de l'interface par le proxy (Caddy : directive `encode zstd gzip`, limitée aux types textuels (HTML, JavaScript, CSS, SVG, JSON) : les envois tus, les fichiers téléchargés et les archives ne sont ni compressés ni mis en tampon) ;
+- **caviardage des jetons dans les journaux d'accès** : les chemins `/d/{jeton}` et `/i/{jeton}` (et `/api/v1/downloads/{jeton}/…`, `/api/v1/invitations/{jeton}`) ne doivent pas apparaître en clair dans les journaux du proxy (Caddy : filtre `log` → `format filter` sur `request.uri`, par exemple avec `regexp`, ou exclusion de ces chemins ; équivalents Nginx, Traefik et Apache) (T-161).
 
 ## 4. Décisions
 

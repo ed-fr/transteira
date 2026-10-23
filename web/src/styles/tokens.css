@@ -1,0 +1,91 @@
+/*
+ * Design tokens. Every colour, spacing and radius of the interface goes through these
+ * variables. Tenant colours (--tt-primary, --tt-on-primary, --tt-accent, --tt-link, --tt-focus)
+ * are overridden at runtime by src/shared/theme/theme.ts through the CSSOM (style.setProperty),
+ * never through an inline style attribute (blocked by the CSP), after strict #RRGGBB validation.
+ *
+ * Components only use these variables, never literal colours, so that the V1.1 dark theme
+ * (CLAUDE.md section 13.1) is a matter of redefining them under [data-theme='dark'].
+ * Every text colour below reaches WCAG AA (4.5:1) on --tt-surface; --tt-border and --tt-focus
+ * reach 3:1 (WCAG 1.4.11, RGAA 3.3).
+ */
+:root {
+  color-scheme: light;
+
+  /* Tenant colours (defaults, overridden per tenant by theme.ts). */
+  --tt-primary: #1d4ed8;
+  --tt-on-primary: #ffffff;
+  --tt-accent: #0f766e;
+  /* Link colour: the primary when it reaches AA on --tt-surface, else this default. */
+  --tt-link: #1d4ed8;
+
+  /* Surfaces and text. */
+  --tt-surface: #ffffff;
+  --tt-surface-muted: #f3f4f6;
+  --tt-text: #111827;
+  --tt-muted: #4b5563;
+  --tt-text-muted: var(--tt-muted);
+  --tt-border: #6b7280;
+  --tt-focus: #1d4ed8;
+  --tt-focus-ring: #ffffff;
+  /* Veil over the background image, behind the card (CLAUDE.md section 13). */
+  --tt-veil: rgb(17 24 39 / 55%);
+  --tt-shadow: 0 0.5rem 1.5rem rgb(17 24 39 / 25%);
+
+  /* Status colours (text AA on --tt-surface and on their -bg tint). */
+  --tt-success: #166534;
+  --tt-success-bg: #f0fdf4;
+  --tt-warning: #92400e;
+  --tt-warning-bg: #fffbeb;
+  --tt-danger: #b91c1c;
+  --tt-danger-bg: #fef2f2;
+  --tt-on-danger: #ffffff;
+  --tt-info: #1e40af;
+  --tt-info-bg: #eff6ff;
+
+  /* Spacing scale. */
+  --tt-space-1: 0.25rem;
+  --tt-space-2: 0.5rem;
+  --tt-space-3: 0.75rem;
+  --tt-space-4: 1rem;
+  --tt-space-5: 1.25rem;
+  --tt-space-6: 1.5rem;
+  --tt-space-8: 2rem;
+  --tt-space-10: 2.5rem;
+  --tt-space-12: 3rem;
+
+  /* Radii and borders. */
+  --tt-radius-sm: 0.25rem;
+  --tt-radius: 0.5rem;
+  --tt-radius-lg: 1rem;
+  --tt-border-width: 1px;
+  --tt-focus-width: 3px;
+
+  /* Typography (system fonts only: no web font, no CDN). */
+  --tt-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --tt-font-mono: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --tt-font-size-sm: 0.875rem;
+  --tt-font-size-base: 1rem;
+  --tt-font-size-lg: 1.125rem;
+  --tt-font-size-xl: 1.5rem;
+  --tt-font-size-2xl: 1.875rem;
+  --tt-line-height: 1.5;
+  --tt-line-height-tight: 1.25;
+  --tt-font-weight-normal: 400;
+  --tt-font-weight-bold: 600;
+
+  /* Layout. */
+  --tt-card-width: 36rem;
+  --tt-content-width: 72rem;
+  --tt-control-height: 2.75rem;
+}
+
+/*
+ * [V1.1] Dark mode (CLAUDE.md section 13.1): redefine the variables above with dark values
+ * reaching the same RGAA contrast requirements, set color-scheme: dark, and adapt --tt-veil.
+ * The theme follows prefers-color-scheme by default, with a manual switch stored in a technical
+ * cookie that sets data-theme on <html>.
+ */
+:root[data-theme='dark'] {
+  /* Intentionally empty in V1. */
+}

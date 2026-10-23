@@ -1,0 +1,54 @@
+{
+  "title": "Download files",
+  "sender": "Sent by",
+  "expires": "Available until",
+  "total": "Total",
+  "totalValue": {
+    "one": "{count} file, {size}",
+    "other": "{count} files, {size}"
+  },
+  "message": "Message from the sender",
+  "deleteAfterFirst": "This transfer is deleted after its first complete download. To be sure to get every file, download them all at once with the ZIP archive.",
+  "noFiles": "No file is available in this transfer.",
+  "integrity": "The SHA-256 fingerprint lets you check that a downloaded file is intact: compare it with the fingerprint computed on your computer.",
+  "archive": {
+    "button": "Download all files (ZIP)",
+    "hint": "The archive is not compressed: its size is close to the total size of the files."
+  },
+  "files": {
+    "caption": "Files of this transfer",
+    "name": "Name",
+    "size": "Size",
+    "sha256": "SHA-256 fingerprint",
+    "action": "Download",
+    "download": "Download",
+    "downloadName": "{name}",
+    "copySha": "Copy the SHA-256 fingerprint of {name}",
+    "unavailable": "Link unavailable"
+  },
+  "scan": {
+    "summary": "Some files could not be analysed by the antivirus. Open them only if you trust the sender.",
+    "notScannedTooLarge": "Not analysed by the antivirus: this file is too large to be analysed.",
+    "notScannedEncrypted": "Not analysed by the antivirus: this file is encrypted or protected by a password."
+  },
+  "locked": {
+    "title": "Password required",
+    "text": "This transfer is protected by a password. The sender gives it to you through another channel than the email (phone, message…).",
+    "label": "Password",
+    "submit": "Unlock",
+    "required": "Enter the password.",
+    "wrong": "The password is not correct.",
+    "locked": "Too many wrong passwords: the transfer is locked for a while.",
+    "unlocked": "Transfer unlocked: the files are listed.",
+    "unlockedAgain": "You can enter the password again.",
+    "expired": "Your access to the files has expired: enter the password again."
+  },
+  "notFound": {
+    "title": "Transfer not found",
+    "text": "This download link is not valid. Check that you copied it completely from the email."
+  },
+  "gone": {
+    "title": "Transfer no longer available",
+    "text": "This transfer has expired or has been deleted. Ask the sender to send the files again."
+  }
+}

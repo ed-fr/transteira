@@ -1,0 +1,48 @@
+{
+  "appName": "TransTeira",
+  "languageName": {
+    "fr": "Français",
+    "en": "English"
+  },
+  "language": "Langue",
+  "notFound": {
+    "title": "Page introuvable",
+    "text": "La page que vous cherchez n'existe pas ou n'est plus disponible."
+  },
+  "navigation": {
+    "pageLoaded": "Page chargée : {title}"
+  },
+  "attemptsRemaining": {
+    "one": "{count} essai restant.",
+    "other": "{count} essais restants."
+  },
+  "retryAfter": {
+    "one": "Réessayez dans {count} seconde.",
+    "other": "Réessayez dans {count} secondes."
+  },
+  "home": {
+    "title": "Envoyer des fichiers"
+  },
+  "backHome": "Aller à la page d’accueil",
+  "retry": "Réessayer",
+  "error": {
+    "title": "Une erreur est survenue",
+    "text": "Une erreur est survenue. Veuillez réessayer."
+  },
+  "maintenance": {
+    "title": "Service en maintenance",
+    "text": "Le service est en maintenance : les nouveaux envois et les invitations sont suspendus pour un moment. Les téléchargements restent disponibles.",
+    "banner": "Maintenance en cours",
+    "bannerText": "Les nouveaux envois sont suspendus pour un moment. Les téléchargements restent disponibles."
+  },
+  "sessionExpired": {
+    "title": "Session expirée",
+    "text": "Votre session a expiré. Identifiez-vous de nouveau sur la page d’envoi.",
+    "action": "Aller à la page d’envoi"
+  },
+  "help": {
+    "title": "Aide",
+    "comingSoon": "L’aide intégrée arrive dans une prochaine version.",
+    "topic": "Sujet demandé : {topic}"
+  }
+}

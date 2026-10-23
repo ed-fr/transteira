@@ -220,3 +220,41 @@ func TestAuditEvents(t *testing.T) {
 		}
 	})
 }
+
+// TestAuditSameMillisecondOrder checks that events recorded in the same
+// millisecond list in reverse recording order (monotonic identifiers),
+// through every append path.
+func TestAuditSameMillisecondOrder(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		repo := db.AuditEvents()
+		ta := newTenant(t, db, "transfer.entity-a.example.com")
+		const n = 30
+		for i := range n {
+			ev := auditEvent(ta.ID, "admin.login", "root", msNow)
+			ev.ObjectID = "obj" + strings.Repeat("x", i)
+			var err error
+			switch i % 2 {
+			case 0:
+				_, err = repo.Append(ctx, ev)
+			default:
+				_, err = repo.AppendScoped(ctx, ta.ID, ev)
+			}
+			if err != nil {
+				t.Fatalf("append %d: %v", i, err)
+			}
+		}
+		page, err := repo.List(ctx, store.AuditFilter{TenantID: ta.ID, Limit: n})
+		if err != nil || len(page.Items) != n {
+			t.Fatalf("List = %d items, %v", len(page.Items), err)
+		}
+		for i, ev := range page.Items {
+			if want := "obj" + strings.Repeat("x", n-1-i); ev.ObjectID != want {
+				t.Fatalf("item %d = %q, want %q", i, ev.ObjectID, want)
+			}
+		}
+	})
+}

@@ -357,6 +357,7 @@ func TestAdminFaultsWithoutRetry(t *testing.T) {
 	ctx := context.Background()
 	f := newAdminFixture(t)
 	f.db.newID = func(id.Prefix) (string, error) { return "", errInjected }
+	f.db.newAuditID = f.db.newID
 	if _, err := f.db.Admins().Create(ctx, Admin{Username: "x-new", Email: "x@example.com", Role: RoleSuperAdmin}); !errors.Is(err, errInjected) {
 		t.Errorf("Create with a failing id generator: %v", err)
 	}

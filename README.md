@@ -19,9 +19,12 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Security by default**: encryption at rest (AES-256-GCM, envelope encryption, master key
   rotation, crypto-erase), ClamAV antivirus scanning, admin authentication with mandatory TOTP
   for the super admin, strict HTTP security headers, security log ready for fail2ban and CrowdSec.
-- **Simple for users**: no account for depositors (email verification by one-time code),
-  invitations for external users, password-protected transfers, SHA-256 fingerprints, ZIP
-  download generated on the fly.
+- **Simple for users**: a web interface embedded in the binary, in French and English, with each
+  entity's logo, colours and background image; no account for depositors (email verification by
+  one-time code), resumable uploads from the browser, invitations for external users,
+  password-protected transfers, SHA-256 fingerprints, ZIP download generated on the fly.
+  Accessible (RGAA: keyboard navigation, screen reader labels, contrast checks) and served with a
+  strict Content Security Policy, without any CDN or third-party resource.
 - **API first**: documented REST API ([OpenAPI 3.1](api/openapi.yaml)) with an interactive
   documentation embedded in the binary (`/api/docs`, no CDN, admins only by default), and
   per-entity API tokens (hashed, restricted to allowed IP ranges and optionally to allowed
@@ -44,6 +47,7 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - [API integration guide](docs/api/integration.md): API tokens and scripted, resumable uploads
   with tus (bash/curl and PowerShell examples); [error codes](docs/api/errors.md)
 - [Project structure](docs/architecture/project-structure.md)
+- [Web interface](web/README.md): build, development loop, dependency policy, CSP rules
 - [Threat model (STRIDE, in French)](docs/security/threat-model.md)
 - [Master key](docs/operations/master-key.md): generate the key and store a copy in a password
   vault **before the first start**; without it, encrypted files cannot be recovered.
@@ -55,14 +59,29 @@ Installation, operation and user guides will be published with the first release
 
 ## Development
 
-Requirements: Go 1.27+, GNU make, Node.js (for the OpenAPI linter and the web interface),
-Docker. On Windows, run `make` from Git Bash.
+Requirements: Go 1.27+, GNU make, **Node.js 24 and npm 11** (to build the web interface, which
+is embedded in the binary, and for the OpenAPI linter), Docker. On Windows, run `make` from Git
+Bash.
 
 ```sh
-make hooks   # install the pre-push secret scan (gitleaks)
-make check   # every quality gate: format, vet, lint, govulncheck, OpenAPI lint, tests, coverage
-make help    # all targets
+make hooks         # install the pre-push secret scan (gitleaks)
+make check         # every quality gate: web checks and build, format, vet, lint, govulncheck,
+                   # OpenAPI lint, tests, coverage
+make build         # build the web interface, then the binary that embeds it (bin/)
+make web-install   # install the web dependencies from the lockfile (npm ci --ignore-scripts)
+make web-check     # web gates: generated types, svelte-check, eslint, prettier, vitest, npm audit
+make web-build     # build the web interface into web/dist (checked against the CSP)
+make web-gen       # regenerate the web API types after a change of api/openapi.yaml
+make help          # all targets
 ```
+
+`make check` includes `npm audit`, which needs the npm registry; offline, `make check NPM_AUDIT=0`
+skips that single step explicitly.
+
+The web interface (Svelte 5 and Vite, two static applications: public pages on every entity host,
+administration on the admin host) is described in [web/README.md](web/README.md), including the
+local development loop with Caddy and the Vite dev server. A binary built without the web
+interface (plain `go build`) still runs and answers its pages with a "service unavailable" page.
 
 There is no CI: `make check` must be green before every commit.
 

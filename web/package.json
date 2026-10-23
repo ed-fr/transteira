@@ -1,0 +1,40 @@
+{
+  "name": "transteira-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TransTeira web interface (public and admin applications), embedded in the Go binary.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "npm@11.17.0",
+  "scripts": {
+    "dev": "vite",
+    "gen": "node scripts/gen-types.mjs",
+    "gen:check": "node scripts/gen-types.mjs --check",
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run --coverage",
+    "build": "vite build && node scripts/keep-dist.mjs && node scripts/check-dist.mjs"
+  },
+  "dependencies": {
+    "svelte": "5.57.2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@vitest/coverage-v8": "5.0.3",
+    "eslint": "10.12.0",
+    "eslint-plugin-svelte": "3.23.0",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.9",
+    "prettier-plugin-svelte": "4.1.1",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}

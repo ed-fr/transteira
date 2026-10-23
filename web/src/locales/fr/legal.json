@@ -1,0 +1,10 @@
+{
+  "title": "Informations légales",
+  "legalNotice": "Mentions légales",
+  "privacyPolicy": "Politique de confidentialité",
+  "updatedAt": "Dernière mise à jour le {date}",
+  "notFound": {
+    "title": "Document indisponible",
+    "text": "Ce document n’a pas été publié par ce service."
+  }
+}

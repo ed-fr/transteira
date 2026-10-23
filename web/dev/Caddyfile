@@ -1,0 +1,95 @@
+# Development loop of the web interface (see web/README.md, "Development loop").
+#
+# One HTTPS origin per host, as in production, with a certificate from Caddy's local CA:
+#   https://transfer.entity-a.localhost  tenant A (public application)
+#   https://transfer.entity-b.localhost  tenant B (public application)
+#   https://admin.localhost              administration (admin application under /admin/)
+#
+#   /api, /api/*, /healthz  -> Go server (TT_LISTEN_ADDR=127.0.0.1:8080)
+#   everything else         -> Vite dev server (127.0.0.1:5173), hot reload over WebSocket
+#
+# Go server settings for this loop:
+#   TT_LISTEN_ADDR=127.0.0.1:8080
+#   TT_TRUSTED_PROXIES=127.0.0.1
+#   TT_ADMIN_HOSTS=admin.localhost
+# and the tenants transfer.entity-a.localhost / transfer.entity-b.localhost created in the
+# administration (internal ranges 127.0.0.1/32 and ::1/128 to deposit from this machine).
+#
+# Run from the repository root: caddy run --config web/dev/Caddyfile
+# Development only: never use this file in production (see the reverse proxy documentation).
+{
+	# No ACME, no public certificate: every site uses the local CA (run `caddy trust` once
+	# to make the browser trust it).
+	local_certs
+	# Loopback only: the development loop is never reachable from the network.
+	default_bind 127.0.0.1 [::1]
+}
+
+# Go server. Caddy keeps the original Host header (TransTeira resolves the tenant from Host
+# only), replaces any client-supplied X-Forwarded-For with the real client address and sets
+# X-Forwarded-Proto. X-Real-IP is added for completeness; both are honoured only because
+# 127.0.0.1 is listed in TT_TRUSTED_PROXIES. Uploads and downloads are streamed: no buffering.
+(go) {
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
+}
+
+# Vite dev server. WebSocket upgrades (hot module replacement) are proxied as is.
+(vite) {
+	reverse_proxy 127.0.0.1:5173
+}
+
+transfer.entity-a.localhost, transfer.entity-b.localhost {
+	tls internal
+
+	@go path /api /api/* /healthz
+	handle @go {
+		import go
+	}
+
+	handle {
+		# Routes of the public application: serve its entry page (the production server does
+		# the same, see internal/httpserver/webui.go). WebSocket upgrades are left untouched:
+		# the Vite client connects to "/".
+		@spa {
+			path / /invite /d/* /i/* /legal/* /help /help/*
+			not header Upgrade websocket
+		}
+		rewrite @spa /public/index.html
+
+		import vite
+	}
+}
+
+admin.localhost {
+	tls internal
+
+	@go path /api /api/* /healthz
+	handle @go {
+		import go
+	}
+
+	@root {
+		path /
+		not header Upgrade websocket
+	}
+	handle @root {
+		redir /admin/ 302
+	}
+
+	handle {
+		# Routes of the admin application (/admin and /admin/... without a file extension):
+		# serve its entry page; source modules (/admin/main.ts...) go to Vite unchanged
+		# (the entry pages load their module by absolute path).
+		@spa {
+			path /admin /admin/*
+			not path_regexp \.[A-Za-z0-9]+$
+			not header Upgrade websocket
+		}
+		rewrite @spa /admin/index.html
+
+		import vite
+	}
+}

@@ -277,3 +277,65 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+// TestMonotonicGenerator checks the ULID monotonic mode: same-millisecond
+// identifiers increase by one (carry included), a new millisecond reseeds,
+// and an exhausted entropy is an error.
+func TestMonotonicGenerator(t *testing.T) {
+	ts := time.Date(2026, 10, 19, 12, 0, 0, 123_000_000, time.UTC)
+	now := ts
+	clock := func() time.Time { return now }
+	seed := [10]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFE}
+	rnd := bytes.NewReader(append(append(seed[:0:0], seed[:]...), bytes.Repeat([]byte{0xFF}, 10)...))
+	g := NewMonotonicGenerator(clock, rnd)
+	ms := uint64(ts.UnixMilli())
+	want := []string{
+		refEncode(ms, seed),
+		refEncode(ms, [10]byte{9: 0xFF}),
+		refEncode(ms, [10]byte{8: 1}),
+	}
+	for i, w := range want {
+		got, err := g.New(Audit)
+		if err != nil || got != "aud_"+w {
+			t.Fatalf("id %d = %q, %v; want aud_%s", i, got, err, w)
+		}
+	}
+	// A new millisecond takes fresh entropy (all 0xFF), whose increment
+	// overflows; the failed call leaves the state unchanged.
+	now = ts.Add(time.Millisecond)
+	got, err := g.New(Audit)
+	if err != nil || got != "aud_"+refEncode(ms+1, [10]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}) {
+		t.Fatalf("reseed = %q, %v", got, err)
+	}
+	for range 2 {
+		if got, err := g.New(Audit); !errors.Is(err, ErrMonotonicOverflow) || got != "" {
+			t.Fatalf("overflow = %q, %v", got, err)
+		}
+	}
+	// The random source is exhausted: a new millisecond fails to reseed.
+	now = ts.Add(2 * time.Millisecond)
+	if _, err := g.New(Audit); err == nil {
+		t.Fatal("reseed without random: no error")
+	}
+	// Errors before the monotonic logic are unchanged.
+	if _, err := g.New(Prefix("A")); !errors.Is(err, ErrPrefix) {
+		t.Fatalf("bad prefix: %v", err)
+	}
+}
+
+// TestMonotonicGeneratorOrder checks that a burst of identifiers from the
+// real clock sorts in generation order.
+func TestMonotonicGeneratorOrder(t *testing.T) {
+	g := NewMonotonicGenerator(nil, nil)
+	prev := ""
+	for i := range 10_000 {
+		s, err := g.New(Audit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s <= prev {
+			t.Fatalf("id %d %q not after %q", i, s, prev)
+		}
+		prev = s
+	}
+}

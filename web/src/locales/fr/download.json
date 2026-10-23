@@ -1,0 +1,54 @@
+{
+  "title": "Télécharger les fichiers",
+  "sender": "Envoyé par",
+  "expires": "Disponible jusqu’au",
+  "total": "Total",
+  "totalValue": {
+    "one": "{count} fichier, {size}",
+    "other": "{count} fichiers, {size}"
+  },
+  "message": "Message de l’expéditeur",
+  "deleteAfterFirst": "Ce transfert est supprimé après son premier téléchargement complet. Pour être sûr de récupérer tous les fichiers, téléchargez-les en une fois avec l’archive ZIP.",
+  "noFiles": "Aucun fichier n’est disponible dans ce transfert.",
+  "integrity": "L’empreinte SHA-256 permet de vérifier qu’un fichier téléchargé est intact : comparez-la avec l’empreinte calculée sur votre ordinateur.",
+  "archive": {
+    "button": "Télécharger tous les fichiers (ZIP)",
+    "hint": "L’archive n’est pas compressée : sa taille est proche de la taille totale des fichiers."
+  },
+  "files": {
+    "caption": "Fichiers de ce transfert",
+    "name": "Nom",
+    "size": "Taille",
+    "sha256": "Empreinte SHA-256",
+    "action": "Téléchargement",
+    "download": "Télécharger",
+    "downloadName": "{name}",
+    "copySha": "Copier l’empreinte SHA-256 de {name}",
+    "unavailable": "Lien indisponible"
+  },
+  "scan": {
+    "summary": "Certains fichiers n’ont pas pu être analysés par l’antivirus. Ne les ouvrez que si vous faites confiance à l’expéditeur.",
+    "notScannedTooLarge": "Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.",
+    "notScannedEncrypted": "Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe."
+  },
+  "locked": {
+    "title": "Mot de passe requis",
+    "text": "Ce transfert est protégé par un mot de passe. L’expéditeur vous le transmet par un autre canal que le mail (téléphone, message…).",
+    "label": "Mot de passe",
+    "submit": "Déverrouiller",
+    "required": "Saisissez le mot de passe.",
+    "wrong": "Le mot de passe est incorrect.",
+    "locked": "Trop de mots de passe erronés : le transfert est bloqué pour un moment.",
+    "unlocked": "Transfert déverrouillé : les fichiers sont affichés.",
+    "unlockedAgain": "Vous pouvez de nouveau saisir le mot de passe.",
+    "expired": "Votre accès aux fichiers a expiré : saisissez de nouveau le mot de passe."
+  },
+  "notFound": {
+    "title": "Transfert introuvable",
+    "text": "Ce lien de téléchargement n’est pas valide. Vérifiez que vous l’avez copié en entier depuis le mail."
+  },
+  "gone": {
+    "title": "Transfert plus disponible",
+    "text": "Ce transfert a expiré ou a été supprimé. Demandez à l’expéditeur de renvoyer les fichiers."
+  }
+}

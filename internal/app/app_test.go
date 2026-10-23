@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/config"
@@ -27,6 +29,7 @@ import (
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/web"
 )
 
 const (
@@ -254,10 +257,23 @@ func TestRunServes(t *testing.T) {
 		if code, _ := s.get(t, "/api/v1/version", "transfer.unknown.localhost"); code != http.StatusMisdirectedRequest {
 			t.Fatalf("unknown host = %d", code)
 		}
+		// The build embedded in package web: the public application when it
+		// is built, the fallback page (with a warning) otherwise.
+		_, notBuilt := fs.Stat(web.Dist(), "public/index.html")
+		wantUI := http.StatusOK
+		if notBuilt != nil {
+			wantUI = http.StatusServiceUnavailable
+		}
+		if code, _ := s.get(t, "/", tenantHost); code != wantUI {
+			t.Fatalf("web interface = %d, want %d", code, wantUI)
+		}
 		if err := s.stop(t); err != nil {
 			t.Fatalf("Run = %v", err)
 		}
 		logs := s.logs.String()
+		if strings.Contains(logs, "web interface not built") != (notBuilt != nil) {
+			t.Errorf("web interface warning mismatch (built: %v): %s", notBuilt == nil, logs)
+		}
 		for _, want := range []string{"HTTP server listening", "stopped"} {
 			if !strings.Contains(logs, want) {
 				t.Errorf("logs lack %q: %s", want, logs)
@@ -273,6 +289,35 @@ func TestRunServes(t *testing.T) {
 		sec, err := os.ReadFile(filepath.Join(cfg.LogDir, SecurityLogName))
 		if err != nil || !strings.Contains(string(sec), `event=unknown_fqdn host="transfer.unknown.localhost"`) {
 			t.Errorf("security log %q, %v", sec, err)
+		}
+	})
+}
+
+// TestRunWebUIFallback checks the wiring of the web interface with an empty
+// build (a binary built without make web-build): its pages answer the 503
+// fallback page and a warning is logged at start-up.
+func TestRunWebUIFallback(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		cfg := testConfig(t, e)
+		prepare(t, cfg)
+		if e.Driver == config.DriverPostgres {
+			cfg.DBMigrateDSN = config.Secret{}
+		}
+		s := start(t, cfg, WithWebUI(fstest.MapFS{".gitkeep": {}}))
+		for _, c := range []struct{ path, host string }{{"/", tenantHost}, {"/d/x", tenantHost}, {"/admin/", adminHost}} {
+			if code, body := s.get(t, c.path, c.host); code != http.StatusServiceUnavailable || !strings.Contains(body, "Service temporarily unavailable") {
+				t.Errorf("%s%s = %d %q", c.host, c.path, code, body)
+			}
+		}
+		if code, _ := s.get(t, "/api/v1/version", tenantHost); code != http.StatusOK {
+			t.Errorf("version = %d", code)
+		}
+		if err := s.stop(t); err != nil {
+			t.Fatalf("Run = %v", err)
+		}
+		if logs := s.logs.String(); !strings.Contains(logs, "web interface not built") || !strings.Contains(logs, `"level":"WARN"`) {
+			t.Errorf("logs lack the web interface warning: %s", logs)
 		}
 	})
 }

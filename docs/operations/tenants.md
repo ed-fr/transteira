@@ -161,7 +161,9 @@ usage in the global statistics.
 ## Legal notice and privacy policy
 
 Written in limited Markdown (headings, paragraphs, bold, italics, lists,
-`https:` and `mailto:` links), per language; raw HTML is escaped. They are
+`https:` and `mailto:` links), per language; raw HTML is escaped. Headings
+`#`, `##` and `###` are rendered one level down (h2 to h4), below the
+page's own title. They are
 shown on the tenant's public pages in the visitor's language, or the
 tenant's default language, or else in any language it exists in. An empty
 text removes the document.
