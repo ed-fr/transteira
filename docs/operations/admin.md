@@ -3,22 +3,25 @@
 This page covers the admin host, the first-run setup, admin accounts, the
 second factor and how to recover access, then the daily operation of a
 tenant: transfers, invitations, blocklist, API tokens, audit log, data
-subject rights (GDPR) and statistics. Tenant configuration and quota alerts are in
-[Tenants](tenants.md).
+subject rights (GDPR) and statistics, and the instance settings of the
+super admin: maintenance mode, disk alert and system SMTP server. Tenant
+configuration and quota alerts are in [Tenants](tenants.md); the master key
+rotation is in [Master key](master-key.md).
 
 - Variables: `TT_ADMIN_HOSTS` (required), `TT_ADMIN_SESSION_IDLE_TIMEOUT`,
   `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`,
-  `TT_API_DOCS_PUBLIC`, `TT_MAX_OPEN_TRANSFERS` (per API token), see
-  `.env.example`.
+  `TT_API_DOCS_PUBLIC`, `TT_MAX_OPEN_TRANSFERS` (per API token),
+  `TT_MAINTENANCE`, `TT_SYSTEM_SMTP_*`, see `.env.example`.
 - Commands: `transteira admin list`, `transteira admin reset-totp <username>`,
   `transteira admin reset-password <username>`.
 - Implementation: `internal/adminauth`, `internal/audit`,
   `internal/api/admin`, `internal/tenantops` (operations),
   `internal/apitoken` (API tokens),
   `internal/datasubject` (GDPR), `internal/stats` and `internal/usage`
-  (statistics).
-- Threat model: T-58 to T-73, T-102, T-104, T-111, T-112, T-146 to
-  T-151 in `docs/security/threat-model.md`.
+  (statistics), `internal/maintenance`, `internal/systemsettings`,
+  `internal/diskalert` (instance settings).
+- Threat model: T-58 to T-73, T-102, T-104 to T-107, T-111, T-112, T-146
+  to T-151, T-154 to T-158 in `docs/security/threat-model.md`.
 
 ## Admin host
 
@@ -315,6 +318,166 @@ leaked, revoke the token first and investigate afterwards. After restoring
 a database backup, review the tokens: see
 [Backup and restore](backup.md#review-the-api-tokens).
 
+## Maintenance mode
+
+The maintenance mode refuses new deposits during an upgrade or an
+intervention, for every tenant, while downloads, the health check and the
+administration stay available.
+
+**Two sources** turn it on:
+
+| Source | How | Persistence |
+|---|---|---|
+| Environment | `TT_MAINTENANCE=true`, then restart | For the life of the process. It **always wins**: while it is set, the administration cannot turn the mode off (`409 state-conflict`). |
+| Administration | `PUT /admin/system/maintenance` (**super admin only**, 403 for a delegated admin) with `enabled` and an optional `message` | Stored in the database: it **survives a restart** until the super admin turns it off. |
+
+`GET /admin/system/maintenance` (any authenticated admin) shows `enabled`,
+`source` (`environment`, `admin` or `none`), `adminEnabled` (the stored
+choice of the super admin, also while the environment forces the mode),
+`since` (for the environment: the start of the process) and the messages.
+While `TT_MAINTENANCE` forces the mode, `enabled: true` is still accepted
+(the messages are stored and the source stays `environment`).
+
+**Messages.** `message` maps a supported language (`fr`, `en`) to the text
+shown to depositors, for example:
+
+```json
+{ "enabled": true,
+  "message": { "fr": "Mise à jour en cours, retour vers 20 h.",
+               "en": "Upgrade in progress, back around 8 pm." } }
+```
+
+- Each request **replaces** the stored messages entirely; without
+  `message`, there is none.
+- Each value is **plain text** of 1 to 500 characters. Line feeds are
+  allowed; other control characters, the Unicode line and paragraph
+  separators (U+2028, U+2029) and the bidirectional control characters
+  are refused (`400 validation-failed`, naming for example `/message/fr`).
+  The text is never interpreted as HTML: the web interface shows it as
+  text.
+- Do not put tenant names or other confidential details in it: the same
+  message is shown on every tenant.
+- The message shown is the one in the language negotiated from the
+  browser (`Accept-Language`), else in the tenant's default language, else
+  in English, else in any language that has one.
+
+**What is refused** while the mode is on, with `503` and
+`Retry-After: 300` (the `maintenance` problem, whose `detail` carries the
+message, see [errors](../api/errors.md#maintenance)):
+
+- opening a deposit session (`POST /deposit-sessions`);
+- creating a transfer (`POST /transfers`), by a depositor or an API token;
+- sending upload chunks (tus `PATCH`, answered `503` without a body, with
+  `Tus-Resumable` and `Retry-After`): uploads in progress pause and resume
+  after the maintenance;
+- finalizing a transfer (`POST /transfers/{id}/finalize`);
+- creating an invitation (`POST /invitations`).
+
+Everything else keeps working: downloads, the public tenant information
+(`GET /tenant` reports `maintenance: true` and the `maintenanceMessage` for
+the negotiated language), the administration and the health check
+(`/healthz` keeps its status and reports `"maintenance": true`).
+
+Every change by the super admin is audited (`maintenance.enabled` or
+`maintenance.disabled`, object `system` / `maintenance`, with the list of
+message languages only, never the text), in the same transaction as the
+change.
+
+## System settings and disk alert
+
+`GET` and `PATCH /admin/system/settings` (**super admin only**; `PATCH` is a
+JSON merge patch, `application/merge-patch+json`) hold two settings:
+
+| Setting | Rule |
+|---|---|
+| `diskAlertThreshold` | Share of the disk holding the data directory that raises the disk alert, from `0.50` to `0.99` (rounded to 0.0001). Default `0.85`. |
+| `alertEmail` | Optional address that receives the disk alert in addition to the super admins: a bare address (no display name). `null` removes it. It receives the alert in the language of the admin who set it. It is **not verified** (no code is sent to it): check it carefully, since a typo sends the alerts (disk figures and the administration URL, at most one mail per hour) to whoever owns that address. |
+
+Each change is audited as `config.updated` (object `system` / `settings`)
+with the **names** of the changed fields only, never the address: watch
+these events, since changing `alertEmail` redirects the alerts.
+
+**Disk alert.** TransTeira measures the filesystem of `TT_DATA_DIR` at
+start-up, every 5 minutes and right after a change of the settings:
+
+- when the used share reaches the threshold, the alert is **raised**: a
+  warning in the application log, the audit event `disk.alert_raised`
+  (system actor `disk`, details `usedPercent` and `thresholdPercent`) and,
+  if the [system SMTP server](#system-smtp-server) is configured, a mail to
+  every super admin that can sign in (enabled and activated), in their own
+  language, and to `alertEmail`, duplicates removed;
+- it is sent **once per crossing**: the alert level is stored in the
+  database, so a restart or concurrent evaluations never send it again
+  while the level stays raised;
+- the alert mails are **at least one hour apart**, whatever the number of
+  crossings: a crossing within the hour of the last mail (for example a
+  threshold toggled back and forth) is still logged and audited
+  (`disk.alert_raised`), but not mailed (log line `disk alert not mailed:
+  an alert mail was sent less than an hour ago`). The time of the last mail
+  is stored in the database, so a restart keeps the interval;
+- it **clears** once the usage falls 5 points below the threshold (for
+  example under 80 % with the default 85 %): audit event
+  `disk.alert_cleared`, no mail. The next crossing raises it again;
+- lowering the threshold below the current usage raises the alert at once;
+- a failure to measure the disk is logged once (and once when the measures
+  recover); the level is left as is.
+
+The global statistics (`GET /admin/system/stats`) show the disk figures,
+the threshold, `alertActive` (alert raised) and `alertMailConfigured`
+(system SMTP server configured). Without system SMTP, the alert is only
+visible there, in the audit log and in the application log: configure it.
+
+## System SMTP server
+
+The disk alert concerns the whole instance, so it is not sent through the
+SMTP server of a tenant: it uses a **system SMTP server** configured by
+environment variables (see `.env.example` for every rule):
+
+| Variable | Role |
+|---|---|
+| `TT_SYSTEM_SMTP_HOST` | Server name or IP address. Empty (default): system mail is disabled, and the other variables below (except the security mode and sender name) are refused. |
+| `TT_SYSTEM_SMTP_PORT` | Default 25 with `none`, 587 with `starttls`, 465 with `tls`. |
+| `TT_SYSTEM_SMTP_SECURITY` | `starttls` (default), `tls` (implicit TLS) or `none` (an unauthenticated relay on the internal network only). |
+| `TT_SYSTEM_SMTP_FROM`, `TT_SYSTEM_SMTP_FROM_NAME` | Sender address (required) and display name (default `TransTeira`). |
+| `TT_SYSTEM_SMTP_USERNAME`, `TT_SYSTEM_SMTP_PASSWORD_FILE` | Credentials, both or neither; refused with `none`. |
+
+- The password is **only read from a file**, such as a Docker secret. The
+  file must be an absolute path **outside** the data, backup and log
+  volumes and the database folder, like the master key; trailing line
+  breaks are removed. `TT_SYSTEM_SMTP_PASSWORD` is not supported: setting
+  it stops the start-up, so that the password never appears in the
+  environment (`docker inspect`). The password is never logged.
+- As an installation setting, the system server may be a relay on
+  loopback or on the internal Docker network: `TT_SMTP_DENY_NETWORKS`,
+  which protects the SMTP servers typed by tenant admins, does not apply.
+- An invalid configuration stops the start-up.
+- System mails have their own small queue, separate from the tenant mails.
+
+Example with an authenticated server and a Docker secret:
+
+```yaml
+services:
+  transteira:
+    environment:
+      TT_SYSTEM_SMTP_HOST: smtp.example.com
+      TT_SYSTEM_SMTP_SECURITY: starttls
+      TT_SYSTEM_SMTP_FROM: transteira@example.com
+      TT_SYSTEM_SMTP_USERNAME: transteira@example.com
+      TT_SYSTEM_SMTP_PASSWORD_FILE: /run/secrets/transteira_system_smtp_password
+    secrets:
+      - transteira_system_smtp_password
+
+secrets:
+  transteira_system_smtp_password:
+    file: /opt/secrets/transteira/system_smtp_password
+```
+
+With an unauthenticated relay on the internal Docker network (for example a
+relay to Microsoft Graph), set only `TT_SYSTEM_SMTP_HOST` (the relay
+container name), `TT_SYSTEM_SMTP_SECURITY: none`, `TT_SYSTEM_SMTP_PORT` and
+`TT_SYSTEM_SMTP_FROM`. As for the tenants, the sender domain needs SPF,
+DKIM and DMARC.
+
 ## Audit log
 
 Entries are kept 12 months, then purged by the cleanup task. There is no
@@ -353,10 +516,10 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Blocklist | `blocklist.updated` (`op`, `kind`, `entryId`, and the value for a domain or a fingerprint) |
 | API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token; actor: the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; object: the token) |
 | Data subject rights | `data_subject.searched`, `data_subject.erased` (counts only; object: the pseudonym) |
+| Instance (no tenant) | `maintenance.enabled`, `maintenance.disabled` (message languages only), `config.updated` (system settings: names of the changed fields only), `disk.alert_raised`, `disk.alert_cleared` (system actor `disk`), `master_key.rotation_started`, `master_key.rotation_completed`, `master_key.rotation_failed` (see [Master key](master-key.md#audit)) |
 
-The list is extensible: later versions add actions (maintenance, key
-rotation…). A filter on an action of the right form that does not exist
-yet simply returns nothing.
+The list is extensible: later versions add actions. A filter on an action
+of the right form that does not exist yet simply returns nothing.
 
 ### Filters
 
@@ -476,8 +639,10 @@ and `GET /admin/system/stats` (super admin only, 403 otherwise), with
 | `series` | One point per UTC day for `7d` and `30d` (today included), one per calendar month for `12m` (the current one included, dated on the 1st); days without activity are present with zeros. |
 
 The global statistics add the disk holding the data directory (total, used
-= total − free, ratio, and the 85 % alert threshold) and one row per active
-tenant (tenants being deleted are excluded).
+= total − free, ratio, the alert threshold of the
+[system settings](#system-settings-and-disk-alert), `alertActive` and
+`alertMailConfigured`) and one row per active tenant (tenants being
+deleted are excluded).
 
 The counters are daily aggregates per tenant, without personal data, kept
 13 months. They are accumulated in memory and written every 30 seconds, so
@@ -499,10 +664,13 @@ Docker's default 10 s stop grace period:
 |---|---|
 | HTTP server: stop accepting, cancel the requests in progress (uploads and downloads stop and can be resumed), wait for the connections to go idle, then close those still open (logged) | 5 s (`ShutdownTimeout`) |
 | Wait for the handlers to return | 1 s |
-| Background workers: antivirus, download mail retries, cleanup task, quota monitor | 1 s (`BackgroundCloseTimeout`) |
-| Final flush of the usage counters, hand-over of the queued admin mails | 1 s (`FinalCloseTimeout`) |
-| Delivery of the mails still queued (the rest is dropped and logged) | 1 s |
+| Background workers: antivirus, download mail retries, cleanup task, quota monitor, disk alert monitor, master key rotation worker (stopped at its current batch, resumable) | 1 s (`BackgroundCloseTimeout`) |
+| Final flush of the usage counters, hand-over of the queued admin and system mails | 1 s (`FinalCloseTimeout`) |
+| Delivery of the mails still queued, tenant and system queues in parallel (the rest is dropped and logged) | 1 s |
 
-The worst case is 9 s, after which the database is closed cleanly. Keep
+The worst case is 9 s, after which the database is closed cleanly. The
+only exception is a master key rotation worker still stopping: the master
+keys are destroyed only once it has stopped, even past the budget (a
+warning is logged), so that a rotation never sees its keys disappear. Keep
 `stop_grace_period` at 10 s or more: a shorter one lets Docker kill the
 process before the final flush.

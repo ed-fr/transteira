@@ -12,6 +12,10 @@ import (
 
 const keyCode = store.EmailTemplateVerificationCode
 
+// diskAlertKey is the API spelling of the instance disk alert mail, which
+// has a built-in template but is no tenant template key.
+const diskAlertKey = "disk-alert"
+
 // goodTemplate is a valid customization of the verification code mail.
 func goodTemplate() TemplateInput {
 	return TemplateInput{
@@ -31,10 +35,15 @@ func TestTemplates(t *testing.T) {
 		if len(list) != 2*len(templateKeys()) || list[0].Customized {
 			t.Fatalf("list: %+v", list)
 		}
+		// The disk alert has a built-in template, but it is an instance
+		// mail: it must never be offered to an entity.
+		if _, err := mail.Variables(diskAlertKey); err != nil {
+			t.Fatalf("the disk alert has no built-in template: %v", err)
+		}
 		listed := map[string]bool{}
 		for _, s := range list {
-			if s.Key == store.EmailTemplateDiskAlert {
-				t.Fatal("a key without built-in template is listed")
+			if s.Key == diskAlertKey || s.Key == mail.TemplateDiskAlert {
+				t.Fatal("the instance disk alert template is listed as a tenant template")
 			}
 			listed[s.Key] = true
 		}
@@ -130,7 +139,13 @@ func TestTemplates(t *testing.T) {
 		}
 
 		// Unknown keys and languages, and isolation.
-		for _, k := range [][2]string{{store.EmailTemplateDiskAlert, "en"}, {"verification_code", "en"}, {keyCode, "de"}} {
+		for _, k := range [][2]string{
+			{diskAlertKey, "en"},
+			{diskAlertKey, "fr"},
+			{mail.TemplateDiskAlert, "en"},
+			{"verification_code", "en"},
+			{keyCode, "de"},
+		} {
 			_, err = ev.svc.GetTemplate(ctx, ev.adminA, ev.a.ID, k[0], k[1])
 			wantErr(t, "get "+k[0]+"/"+k[1], err, ErrNotFound)
 			_, err = ev.svc.UpdateTemplate(ctx, ev.adminA, ev.a.ID, k[0], k[1], goodTemplate(), clientIP)

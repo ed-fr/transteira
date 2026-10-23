@@ -369,9 +369,15 @@ func TestRenderFor(t *testing.T) {
 
 func TestPreviewAndVariables(t *testing.T) {
 	for _, name := range TemplateNames() {
+		// The disk alert is an instance mail: it names the service, not
+		// an entity.
+		want := sampleTenant
+		if name == TemplateDiskAlert {
+			want = "TransTeira"
+		}
 		for _, lang := range i18n.Supported() {
 			m, err := Preview(name, lang, nil)
-			if err != nil || m.Subject == "" || !strings.Contains(m.HTML, sampleTenant) || m.Language != lang {
+			if err != nil || m.Subject == "" || !strings.Contains(m.HTML, want) || m.Language != lang {
 				t.Errorf("%s/%s preview: %v %+v", name, lang, err, m)
 			}
 		}

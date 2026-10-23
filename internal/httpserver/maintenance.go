@@ -3,11 +3,30 @@ package httpserver
 import (
 	"net/http"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/i18n"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
+
+// MaintenanceMode reports the maintenance mode (*maintenance.Mode).
+type MaintenanceMode interface {
+	// Active reports whether the maintenance mode is in effect; it is
+	// called on every deposit request and must be cheap.
+	Active() bool
+	// Message returns the maintenance message for the negotiated language
+	// lang on a tenant whose default language is tenantDefault, "" for
+	// none.
+	Message(lang, tenantDefault string) string
+}
+
+// noMaintenance is the maintenance mode of a server built without one:
+// never active.
+type noMaintenance struct{}
+
+func (noMaintenance) Active() bool               { return false }
+func (noMaintenance) Message(_, _ string) string { return "" }
 
 // MaintenanceRetryAfter is the delay suggested to clients refused during
 // maintenance (Retry-After header).
@@ -34,15 +53,19 @@ var maintenanceBlocked = map[string]struct{}{
 }
 
 // maintenanceMiddleware refuses the deposit operations with 503 and a
-// Retry-After header while flag is set. The tus PATCH operation gets a
+// Retry-After header while mode is active. The tus PATCH operation gets a
 // bodyless 503 with the Tus-Resumable header, as declared by the OpenAPI
-// document; the other operations get a 503 maintenance Problem. It runs as
-// a per-operation middleware of the API router, before the body limit and
-// before the request body is read or decoded.
-func maintenanceMiddleware(flag *atomic.Bool) func(http.Handler) http.Handler {
+// document; the other operations get a 503 maintenance Problem whose
+// detail is the maintenance message in the language negotiated from
+// Accept-Language and the tenant default (plain text, absent when none is
+// set). The Problem carries no Content-Language: its title stays English
+// whatever the language of the message. It runs as a per-operation
+// middleware of the API router, before the body limit and before the
+// request body is read or decoded.
+func maintenanceMiddleware(mode MaintenanceMode) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, blocked := maintenanceBlocked[r.Pattern]; !blocked || !flag.Load() {
+			if _, blocked := maintenanceBlocked[r.Pattern]; !blocked || !mode.Active() {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -53,7 +76,16 @@ func maintenanceMiddleware(flag *atomic.Bool) func(http.Handler) http.Handler {
 				w.WriteHeader(http.StatusServiceUnavailable)
 				return
 			}
-			writeProblem(w, r, problem.New(problem.CodeMaintenance, problem.WithRetryAfter(MaintenanceRetryAfter)))
+			opts := []problem.Option{problem.WithRetryAfter(MaintenanceRetryAfter)}
+			var tenantDefault string
+			if t, ok := tenant.FromContext(r.Context()); ok {
+				tenantDefault = t.DefaultLanguage
+			}
+			lang := i18n.Negotiate(r.Header.Get("Accept-Language"), tenantDefault)
+			if msg := mode.Message(lang, tenantDefault); msg != "" {
+				opts = append(opts, problem.WithDetail(msg))
+			}
+			writeProblem(w, r, problem.New(problem.CodeMaintenance, opts...))
 		})
 	}
 }

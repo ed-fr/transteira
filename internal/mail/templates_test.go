@@ -75,6 +75,9 @@ func goldenData() map[string]any {
 		TemplateQuotaReached: QuotaAlertData{
 			TenantName: "Entity A & Co", UsedBytes: 100<<30 + 1, QuotaBytes: 100 << 30, AdminLink: goldenAdminLink,
 		},
+		TemplateDiskAlert: DiskAlertData{
+			UsedBytes: 4000 << 30 / 100 * 91, TotalBytes: 4000 << 30, ThresholdPercent: 87.5, AdminLink: goldenAdminLink,
+		},
 	}
 }
 
@@ -102,7 +105,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "disk_alert,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -207,6 +210,43 @@ func TestQuotaPercent(t *testing.T) {
 		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Subject, "Entity A & Co") {
 			t.Errorf("%s: %v %s", name, err, m.Subject)
 		}
+	}
+}
+
+func TestTemplatesDiskAlert(t *testing.T) {
+	for _, c := range []struct {
+		lang string
+		p    float64
+		want string
+	}{
+		{"en", 85, "85%"},
+		{"en", 87.5, "87.5%"},
+		{"en", 85.004, "85%"},
+		{"en", 99.125, "99.13%"},
+		{"fr", 85, "85" + nbsp + "%"},
+		{"fr", 87.25, "87,25" + nbsp + "%"},
+	} {
+		if got := formatDecimalPercent(c.lang, c.p); got != c.want {
+			t.Errorf("formatDecimalPercent(%s, %v) = %q, want %q", c.lang, c.p, got, c.want)
+		}
+	}
+	data := goldenData()[TemplateDiskAlert].(DiskAlertData)
+	vals, ok := keyDefs[TemplateDiskAlert].values(labelsFor("en"), "en", data)
+	if !ok || vals["usage_percent"].text != "91%" || vals["threshold_percent"].text != "87.5%" ||
+		vals["total_size"].text != FormatSize("en", 4000<<30) {
+		t.Errorf("disk alert values: %+v", vals)
+	}
+	// A system mail: no tenant name, the console link is the only link.
+	for _, lang := range i18n.Supported() {
+		m, err := Render(TemplateDiskAlert, lang, data)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Subject, "TransTeira") ||
+			!strings.Contains(m.Text, goldenAdminLink) {
+			t.Errorf("%s: %v %s", lang, err, m.Subject)
+		}
+	}
+	// "disk-alert", the API spelling, names the same built-in template.
+	if v, err := Variables("disk-alert"); err != nil || len(v) != 5 || v[0].Name != "usage_percent" || !v[0].Required {
+		t.Errorf("Variables(disk-alert) = %+v, %v", v, err)
 	}
 }
 

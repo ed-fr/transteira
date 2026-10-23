@@ -385,7 +385,14 @@ func (d *depositEnv) qrOf(t *testing.T, msg mpDetail) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := gozxingqr.NewQRCodeReader().Decode(bmp, nil)
+	// The image is a clean server-generated code, so read it as a pure
+	// barcode first: the finder-pattern detection of gozxing misjudges the
+	// size of some codes ("dimension = 35"), which made this flaky.
+	reader := gozxingqr.NewQRCodeReader()
+	res, err := reader.Decode(bmp, map[gozxing.DecodeHintType]any{gozxing.DecodeHintType_PURE_BARCODE: true})
+	if err != nil {
+		res, err = reader.Decode(bmp, map[gozxing.DecodeHintType]any{gozxing.DecodeHintType_TRY_HARDER: true})
+	}
 	if err != nil {
 		t.Fatalf("decode the QR code: %v", err)
 	}

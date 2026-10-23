@@ -21,11 +21,15 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	netmail "net/mail"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Supported database drivers.
@@ -218,6 +222,10 @@ type Config struct {
 	// SMTPDenyNetworks lists the networks a tenant SMTP server may never
 	// resolve to (SSRF protection), checked at connection time.
 	SMTPDenyNetworks []netip.Prefix
+	// SystemSMTP is the SMTP server of the instance mails (disk alert to
+	// the super admins), distinct from the SMTP servers of the tenants.
+	// It is disabled when its Host is empty.
+	SystemSMTP SystemSMTP
 
 	// BackupTime is the UTC time of day of the nightly SQLite copy, as an
 	// offset since midnight in [0, 24h).
@@ -225,6 +233,51 @@ type Config struct {
 	// BackupKeep is the number of nightly database copies kept.
 	BackupKeep int
 }
+
+// Security modes of the system SMTP server (TT_SYSTEM_SMTP_SECURITY), the
+// values of the tenant SMTP settings.
+const (
+	SMTPSecurityNone     = "none"
+	SMTPSecurityStartTLS = "starttls"
+	SMTPSecurityTLS      = "tls"
+)
+
+// Limits of the system SMTP settings, those of the tenant SMTP settings of
+// the API.
+const (
+	maxSMTPFromNameLen = 100
+	maxSMTPUsernameLen = 320
+	maxSMTPPasswordLen = 1024
+	maxMailboxLen      = 254
+)
+
+// SystemSMTP is the SMTP server of the instance mails, configured by the
+// TT_SYSTEM_SMTP_* variables. It is an installation setting, trusted like
+// the database: unlike the tenant SMTP servers it may be a relay on
+// loopback or on the internal Docker network, so no deny list applies.
+type SystemSMTP struct {
+	// Host is the server name or IP address, "" when system mail is
+	// disabled.
+	Host string
+	// Port is the TCP port (by default 25, 587 or 465 for the security
+	// modes none, starttls and tls).
+	Port int
+	// Security is SMTPSecurityNone, SMTPSecurityStartTLS or SMTPSecurityTLS.
+	Security string
+	// From is the bare sender address.
+	From string
+	// FromName is the display name of the sender.
+	FromName string
+	// Username is the authentication identity, "" for an unauthenticated
+	// relay.
+	Username string
+	// Password is the authentication secret, read from
+	// TT_SYSTEM_SMTP_PASSWORD_FILE; set if and only if Username is.
+	Password Secret
+}
+
+// Enabled reports whether system mail is configured.
+func (s SystemSMTP) Enabled() bool { return s.Host != "" }
 
 // IsTrustedProxy reports whether addr belongs to a trusted proxy prefix.
 // IPv4-mapped IPv6 addresses are unmapped and zones ignored before matching.
@@ -420,7 +473,7 @@ func (l *loader) loadPaths(c *Config) {
 		if key.path == "" {
 			continue
 		}
-		if err := c.keyOutsideVolumes(key.path); err != nil {
+		if err := c.outsideVolumes(key.path, masterKeyWhat); err != nil {
 			l.fail(key.name, "%v", err)
 		}
 	}
@@ -480,20 +533,29 @@ func (c *Config) CheckMasterKeyPath(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%q %w", path, err)
 	}
-	if err := c.keyOutsideVolumes(clean); err != nil {
+	if err := c.outsideVolumes(clean, masterKeyWhat); err != nil {
 		return "", err
 	}
 	return clean, nil
 }
 
-// keyOutsideVolumes reports an error when the master key file path lies
-// inside one of the volumes of c. Only the folder of the SQLite database is
-// reported, never the DSN itself.
-func (c *Config) keyOutsideVolumes(path string) error {
+// Secret files that must stay outside the volumes, as named in the
+// problems.
+const (
+	masterKeyWhat          = "the master key"
+	systemSMTPPasswordWhat = "the system SMTP password file" //nolint:gosec // G101: a description, not a credential
+)
+
+// outsideVolumes reports an error when path, the file of a secret
+// described by what (the master key, the system SMTP password), lies
+// inside one of the volumes of c: the data, backup and log directories and
+// the folder of the SQLite database. Only that folder is reported, never
+// the DSN itself.
+func (c *Config) outsideVolumes(path, what string) error {
 	for _, vol := range c.volumes(true) {
 		if vol.dir != "" && pathWithin(path, vol.dir) {
-			return fmt.Errorf("must not be located inside %s (%s): the master key must stay outside the data volumes",
-				vol.name, vol.dir)
+			return fmt.Errorf("must not be located inside %s (%s): %s must stay outside the data volumes",
+				vol.name, vol.dir, what)
 		}
 	}
 	return nil
@@ -631,9 +693,11 @@ func (l *loader) loadDurations(c *Config) {
 	c.MaxOpenTransfers = n
 }
 
-// loadMail reads the SMTP timeout, the mail queue capacity and the networks
-// tenant SMTP servers may never resolve to.
+// loadMail reads the SMTP timeout, the mail queue capacity, the networks
+// tenant SMTP servers may never resolve to and the system SMTP server. It
+// must run after loadPaths.
 func (l *loader) loadMail(c *Config) {
+	l.loadSystemSMTP(c)
 	c.SMTPTimeout = l.duration(EnvSMTPTimeout, DefaultSMTPTimeout, minSMTPTimeout, maxSMTPTimeout)
 	n, err := parseInt(l.getOr(EnvMailQueueSize, DefaultMailQueueSize), minMailQueueSize, maxMailQueueSize)
 	if err != nil {
@@ -677,4 +741,149 @@ func (l *loader) loadMaintenance(c *Config) {
 		l.fail(EnvBackupKeep, "%v", err)
 	}
 	c.BackupKeep = n
+}
+
+// systemSMTPPorts are the default ports of the system SMTP security modes.
+var systemSMTPPorts = map[string]int{SMTPSecurityNone: 25, SMTPSecurityStartTLS: 587, SMTPSecurityTLS: 465}
+
+// loadSystemSMTP reads the TT_SYSTEM_SMTP_* variables. Without
+// TT_SYSTEM_SMTP_HOST, system mail is disabled and the variables of the
+// group that have no default are refused, so that a forgotten host never
+// silently disables the disk alert mail (the security mode and sender name
+// may keep their documented defaults). TT_SYSTEM_SMTP_PASSWORD is always refused: the
+// password only comes from a file outside the volumes.
+func (l *loader) loadSystemSMTP(c *Config) {
+	if l.get(EnvSystemSMTPPassword) != "" {
+		l.fail(EnvSystemSMTPPassword, "is not supported: put the password in a file (for example a Docker secret) "+
+			"and set %s to its path", EnvSystemSMTPPasswordFile)
+	}
+	host := l.get(EnvSystemSMTPHost)
+	if host == "" {
+		for _, name := range []string{
+			EnvSystemSMTPPort, EnvSystemSMTPFrom, EnvSystemSMTPUsername, EnvSystemSMTPPasswordFile,
+		} {
+			if l.get(name) != "" {
+				l.fail(name, "requires %s (system mail is disabled without it)", EnvSystemSMTPHost)
+			}
+		}
+		return
+	}
+	s := SystemSMTP{Host: strings.TrimSuffix(strings.ToLower(host), ".")}
+	if !validSMTPHost(s.Host) {
+		l.fail(EnvSystemSMTPHost, "%q is not a valid host name or IP address", host)
+	}
+	s.Security = strings.ToLower(l.getOr(EnvSystemSMTPSecurity, DefaultSystemSMTPSecurity))
+	defPort, ok := systemSMTPPorts[s.Security]
+	if !ok {
+		l.fail(EnvSystemSMTPSecurity, "%q is not supported (use %s, %s or %s)", s.Security,
+			SMTPSecurityNone, SMTPSecurityStartTLS, SMTPSecurityTLS)
+	}
+	s.Port = defPort
+	if raw := l.get(EnvSystemSMTPPort); raw != "" {
+		if err := parsePort(raw); err != nil {
+			l.fail(EnvSystemSMTPPort, "%v", err)
+		} else {
+			s.Port, _ = strconv.Atoi(raw) // parsePort accepted it
+		}
+	}
+	s.From = l.get(EnvSystemSMTPFrom)
+	switch {
+	case s.From == "":
+		l.fail(EnvSystemSMTPFrom, "is required with %s", EnvSystemSMTPHost)
+	case !validMailbox(s.From):
+		l.fail(EnvSystemSMTPFrom, "%q is not a bare mail address", s.From)
+	}
+	s.FromName = l.getOr(EnvSystemSMTPFromName, DefaultSystemSMTPFromName)
+	if !validSingleLine(s.FromName, maxSMTPFromNameLen) {
+		l.fail(EnvSystemSMTPFromName, "must be at most %d characters on a single line", maxSMTPFromNameLen)
+	}
+	s.Username = l.get(EnvSystemSMTPUsername)
+	if s.Username != "" {
+		if !validSingleLine(s.Username, maxSMTPUsernameLen) {
+			l.fail(EnvSystemSMTPUsername, "must be at most %d characters on a single line", maxSMTPUsernameLen)
+		}
+		if s.Security == SMTPSecurityNone {
+			l.fail(EnvSystemSMTPUsername, "is refused with %s=%s: credentials are never sent unencrypted",
+				EnvSystemSMTPSecurity, SMTPSecurityNone)
+		}
+	}
+	s.Password = l.systemSMTPPassword(c, s.Username != "")
+	c.SystemSMTP = s
+}
+
+// systemSMTPPassword reads TT_SYSTEM_SMTP_PASSWORD_FILE, required if and
+// only if a username is set: an absolute path outside the volumes and the
+// master key files, whose content is the password, trailing line breaks
+// removed (other whitespace is part of the password).
+func (l *loader) systemSMTPPassword(c *Config, wanted bool) Secret {
+	raw := l.get(EnvSystemSMTPPasswordFile)
+	switch {
+	case raw == "" && wanted:
+		l.fail(EnvSystemSMTPPasswordFile, "is required with %s", EnvSystemSMTPUsername)
+		return Secret{}
+	case raw == "":
+		return Secret{}
+	case !wanted:
+		l.fail(EnvSystemSMTPPasswordFile, "requires %s", EnvSystemSMTPUsername)
+		return Secret{}
+	}
+	path, err := checkAbsPath(raw)
+	if err != nil {
+		l.fail(EnvSystemSMTPPasswordFile, "%q %v", raw, err)
+		return Secret{}
+	}
+	if err := c.outsideVolumes(path, systemSMTPPasswordWhat); err != nil {
+		l.fail(EnvSystemSMTPPasswordFile, "%v", err)
+		return Secret{}
+	}
+	for _, key := range []string{c.MasterKeyFile, c.MasterKeyNewFile} {
+		if key != "" && samePath(path, key) {
+			l.fail(EnvSystemSMTPPasswordFile, "must not be a master key file")
+			return Secret{}
+		}
+	}
+	data, err := l.readFile(path)
+	if err != nil {
+		l.fail(EnvSystemSMTPPasswordFile, "cannot read file: %v", err)
+		return Secret{}
+	}
+	value := strings.TrimRight(string(data), "\r\n")
+	switch {
+	case value == "":
+		l.fail(EnvSystemSMTPPasswordFile, "file is empty")
+		return Secret{}
+	case len(value) > maxSMTPPasswordLen:
+		l.fail(EnvSystemSMTPPasswordFile, "the password must be at most %d bytes", maxSMTPPasswordLen)
+		return Secret{}
+	}
+	return NewSecret(value)
+}
+
+// validSMTPHost reports whether host is a host name or an IP address
+// without zone.
+func validSMTPHost(host string) bool {
+	if validHostname(host) {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Zone() == ""
+}
+
+// validMailbox reports whether s is a bare mail address (no display name,
+// no whitespace or control character). The application checks it again
+// with the stricter rules of the mail package at startup.
+func validMailbox(s string) bool {
+	if len(s) > maxMailboxLen || strings.ContainsFunc(s, unicode.IsSpace) {
+		return false
+	}
+	a, err := netmail.ParseAddress(s)
+	return err == nil && a.Name == "" && a.Address == s
+}
+
+// validSingleLine reports whether s is valid UTF-8 of at most maxRunes
+// characters without control characters or Unicode line separators, so
+// that it can never inject a mail header.
+func validSingleLine(s string, maxRunes int) bool {
+	return utf8.ValidString(s) && utf8.RuneCountInString(s) <= maxRunes &&
+		!strings.ContainsFunc(s, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 })
 }

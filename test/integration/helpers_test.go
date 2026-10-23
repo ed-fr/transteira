@@ -32,7 +32,10 @@ import (
 
 	"github.com/ed-fr/transteira/internal/app"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/diskalert"
+	"github.com/ed-fr/transteira/internal/keyrotation"
 	"github.com/ed-fr/transteira/internal/lifecycle"
+	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/store"
@@ -76,6 +79,18 @@ var securityHeaders = map[string]string{
 	"Cross-Origin-Resource-Policy": "same-origin",
 }
 
+// maintenanceFlag toggles the maintenance mode of a server started with
+// it in serverOptions.flag, like the environment override.
+type maintenanceFlag struct {
+	mode *maintenance.Mode
+}
+
+// Store forces the maintenance mode on or off.
+func (f *maintenanceFlag) Store(on bool) { f.mode.Force(on) }
+
+// Load reports whether the maintenance mode is active.
+func (f *maintenanceFlag) Load() bool { return f.mode.Active() }
+
 // serverOptions customizes startServer.
 type serverOptions struct {
 	// trustedProxies is TT_TRUSTED_PROXIES ("" leaves it unset).
@@ -84,8 +99,9 @@ type serverOptions struct {
 	maintenance bool
 	// clamd is TT_CLAMAV_ADDR; "" starts a fake clamd answering PONG.
 	clamd string
-	// flag, when set, is passed with app.WithMaintenance.
-	flag *atomic.Bool
+	// flag, when set, receives the maintenance mode of the server
+	// (app.WithMaintenanceMode).
+	flag *maintenanceFlag
 	// shutdownTimeout, when set, is passed with app.WithShutdownTimeout.
 	shutdownTimeout time.Duration
 	// env holds extra environment variables of the server (for example
@@ -100,6 +116,12 @@ type serverOptions struct {
 	// lifecycle, when set, edits the options of the lifecycle sweeper
 	// after lifecycleInterval (app.WithLifecycleOptions).
 	lifecycle func(*lifecycle.Options)
+	// diskAlert, when set, edits the options of the disk alert monitor
+	// (app.WithDiskAlertOptions: a fake Measure, a short Interval).
+	diskAlert func(*diskalert.Options)
+	// rotation, when set, edits the options of the master key rotation
+	// service (app.WithRotationOptions: batch size, progress hook).
+	rotation func(*keyrotation.Options)
 }
 
 // server is a running app.Run instance.
@@ -239,7 +261,7 @@ func launchServer(t *testing.T, cfg *config.Config, a, b *tenant.Tenant, o serve
 	}
 	opts := []app.Option{app.WithListener(ln), app.WithLogOutput(s.appLog)}
 	if o.flag != nil {
-		opts = append(opts, app.WithMaintenance(o.flag))
+		opts = append(opts, app.WithMaintenanceMode(func(m *maintenance.Mode) { o.flag.mode = m }))
 	}
 	if o.shutdownTimeout > 0 {
 		opts = append(opts, app.WithShutdownTimeout(o.shutdownTimeout))
@@ -253,6 +275,12 @@ func launchServer(t *testing.T, cfg *config.Config, a, b *tenant.Tenant, o serve
 				o.lifecycle(lo)
 			}
 		}))
+	}
+	if o.diskAlert != nil {
+		opts = append(opts, app.WithDiskAlertOptions(o.diskAlert))
+	}
+	if o.rotation != nil {
+		opts = append(opts, app.WithRotationOptions(o.rotation))
 	}
 	if o.scanRetry > 0 {
 		opts = append(opts, app.WithScanOptions(func(so *scan.Options) {

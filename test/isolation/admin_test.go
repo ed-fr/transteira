@@ -14,11 +14,12 @@ import (
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
-// adminTables are the system tables of the administration (0008_admin):
-// a tenant-scoped transaction must neither read nor write them.
+// adminTables are the system tables of the administration (0008_admin)
+// and the instance settings (0012_system): a tenant-scoped transaction
+// must neither read nor write them.
 var adminTables = []string{
 	"admins", "admin_tenants", "admin_sessions", "admin_recovery_codes", "admin_activations",
-	"admin_login_failures", "system_secrets",
+	"admin_login_failures", "system_secrets", "system_settings",
 }
 
 // adminFixture adds to f a super admin with a pending TOTP secret and
@@ -96,6 +97,8 @@ func TestRLSAdminTablesSystemOnly(t *testing.T) {
 				`UPDATE admin_recovery_codes SET used_at = NULL`,
 				`DELETE FROM admin_login_failures`,
 				`DELETE FROM admin_tenants`,
+				`UPDATE system_settings SET maintenance_enabled = true, alert_email = 'evil@example.com'`,
+				`DELETE FROM system_settings`,
 			} {
 				if n := affected(ctx, t, tx, stmt); n != 0 {
 					t.Errorf("%s affected %d rows from a tenant scope", stmt, n)
@@ -112,6 +115,7 @@ func TestRLSAdminTablesSystemOnly(t *testing.T) {
 			`INSERT INTO admin_login_failures (scope, key, failures) VALUES ('ip', '192.0.2.9', '')`,
 			`INSERT INTO system_secrets (id, purpose, key_id, blob, created_at)
 				VALUES ('ss_evil', 'admin-totp', 'mk_0123456789abcdef', '\x01'::bytea, 0)`,
+			`INSERT INTO system_settings (id, updated_at) VALUES (1, 0)`,
 		}
 		for _, stmt := range inserts {
 			err := inTenantTx(ctx, t, raw, scope, func(tx *sql.Tx) error {

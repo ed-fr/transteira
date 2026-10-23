@@ -62,6 +62,8 @@ const (
 	AuditActionConfigUpdated              AuditAction = "config.updated"
 	AuditActionDataSubjectErased          AuditAction = "data_subject.erased"
 	AuditActionDataSubjectSearched        AuditAction = "data_subject.searched"
+	AuditActionDiskAlertCleared           AuditAction = "disk.alert_cleared"
+	AuditActionDiskAlertRaised            AuditAction = "disk.alert_raised"
 	AuditActionFileInfected               AuditAction = "file.infected"
 	AuditActionFileNotScanned             AuditAction = "file.not_scanned"
 	AuditActionInvitationCreated          AuditAction = "invitation.created"
@@ -70,6 +72,7 @@ const (
 	AuditActionMaintenanceDisabled        AuditAction = "maintenance.disabled"
 	AuditActionMaintenanceEnabled         AuditAction = "maintenance.enabled"
 	AuditActionMasterKeyRotationCompleted AuditAction = "master_key.rotation_completed"
+	AuditActionMasterKeyRotationFailed    AuditAction = "master_key.rotation_failed"
 	AuditActionMasterKeyRotationStarted   AuditAction = "master_key.rotation_started"
 	AuditActionQuotaReached               AuditAction = "quota.reached"
 	AuditActionQuotaWarning               AuditAction = "quota.warning"
@@ -144,6 +147,10 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionDataSubjectSearched:
 		return true
+	case AuditActionDiskAlertCleared:
+		return true
+	case AuditActionDiskAlertRaised:
+		return true
 	case AuditActionFileInfected:
 		return true
 	case AuditActionFileNotScanned:
@@ -159,6 +166,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionMaintenanceEnabled:
 		return true
 	case AuditActionMasterKeyRotationCompleted:
+		return true
+	case AuditActionMasterKeyRotationFailed:
 		return true
 	case AuditActionMasterKeyRotationStarted:
 		return true
@@ -364,7 +373,6 @@ func (e DnsRecordCheckStatus) Valid() bool {
 // Defines values for EmailTemplateKey.
 const (
 	EmailTemplateKeyAntivirusUnavailable EmailTemplateKey = "antivirus-unavailable"
-	EmailTemplateKeyDiskAlert            EmailTemplateKey = "disk-alert"
 	EmailTemplateKeyFileNotScanned       EmailTemplateKey = "file-not-scanned"
 	EmailTemplateKeyFileProblems         EmailTemplateKey = "file-problems"
 	EmailTemplateKeyFirstDownload        EmailTemplateKey = "first-download"
@@ -380,8 +388,6 @@ const (
 func (e EmailTemplateKey) Valid() bool {
 	switch e {
 	case EmailTemplateKeyAntivirusUnavailable:
-		return true
-	case EmailTemplateKeyDiskAlert:
 		return true
 	case EmailTemplateKeyFileNotScanned:
 		return true
@@ -1425,7 +1431,15 @@ type ApiTokenUpdate = json.RawMessage
 // address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
 // `quota.warning` and `quota.reached` are recorded even when no mail can be sent;
 // `api_token.created`, `api_token.updated` and `api_token.revoked` never contain the secret;
-// `api_token.used` is recorded once per transfer created with an API token (not per request).
+// `api_token.used` is recorded once per transfer created with an API token (not per request);
+// `config.updated` (instance settings, without tenant) carries the names of the changed
+// fields only (`details.fields`), never their values; `maintenance.enabled` and
+// `maintenance.disabled` (object `system`/`maintenance`, without tenant) carry the list of
+// message languages only (`details.languages`); `master_key.rotation_started`,
+// `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
+// the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
+// (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
+// mail can be sent.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -1439,7 +1453,15 @@ type AuditEvent struct {
 	// address; `blocklist.updated` stores the value for the `domain` and `sha256` kinds only;
 	// `quota.warning` and `quota.reached` are recorded even when no mail can be sent;
 	// `api_token.created`, `api_token.updated` and `api_token.revoked` never contain the secret;
-	// `api_token.used` is recorded once per transfer created with an API token (not per request).
+	// `api_token.used` is recorded once per transfer created with an API token (not per request);
+	// `config.updated` (instance settings, without tenant) carries the names of the changed
+	// fields only (`details.fields`), never their values; `maintenance.enabled` and
+	// `maintenance.disabled` (object `system`/`maintenance`, without tenant) carry the list of
+	// message languages only (`details.languages`); `master_key.rotation_started`,
+	// `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
+	// the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
+	// (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
+	// mail can be sent.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id   string              `json:"id"`
@@ -1712,7 +1734,13 @@ type Fqdn = string
 type GlobalStats struct {
 	// Disk Usage of the filesystem that holds the data directory (encrypted files).
 	Disk struct {
-		// AlertThreshold Ratio above which the super admin is alerted. Fixed at 0.85 until the runtime system settings are available (`diskAlertThreshold`).
+		// AlertActive The disk alert is raised (the usage reached the threshold and has not yet fallen 5 points below it).
+		AlertActive bool `json:"alertActive"`
+
+		// AlertMailConfigured The system SMTP server (`TT_SYSTEM_SMTP_*`) is configured, so the disk alert is also sent by mail; otherwise it is only visible here, in the audit log and in the application log.
+		AlertMailConfigured bool `json:"alertMailConfigured"`
+
+		// AlertThreshold Ratio at or above which the super admins are alerted (`diskAlertThreshold` of the system settings).
 		AlertThreshold float32  `json:"alertThreshold"`
 		TotalBytes     ByteSize `json:"totalBytes"`
 		UsedBytes      ByteSize `json:"usedBytes"`
@@ -1875,21 +1903,46 @@ type MailDnsCheckDkimStatus string
 
 // Maintenance defines model for Maintenance.
 type Maintenance struct {
+	// AdminEnabled Choice stored by the super admin, shown even while the environment forces the mode.
+	AdminEnabled bool `json:"adminEnabled"`
+
+	// Enabled Maintenance mode is in effect.
 	Enabled bool `json:"enabled"`
 
-	// Message Message per language.
-	Message *map[string]string `json:"message,omitempty"`
-	Since   *time.Time         `json:"since,omitempty"`
-	Source  MaintenanceSource  `json:"source"`
+	// Message Maintenance message per supported language, as plain text of 1 to 500 characters without
+	// control characters other than line feed, without Unicode line or paragraph separators and
+	// without bidirectional control characters.
+	Message *MaintenanceMessages `json:"message,omitempty"`
+
+	// Since Start of the maintenance (process start when forced by the environment); absent when off.
+	Since *time.Time `json:"since,omitempty"`
+
+	// Source `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off.
+	Source MaintenanceSource `json:"source"`
 }
 
-// MaintenanceSource defines model for Maintenance.Source.
+// MaintenanceSource `environment` when `TT_MAINTENANCE=true` forces the mode (it always wins), `admin` when enabled by the super admin, `none` when off.
 type MaintenanceSource string
 
+// MaintenanceMessages Maintenance message per supported language, as plain text of 1 to 500 characters without
+// control characters other than line feed, without Unicode line or paragraph separators and
+// without bidirectional control characters.
+type MaintenanceMessages map[string]string
+
 // MaintenanceUpdate defines model for MaintenanceUpdate.
-type MaintenanceUpdate struct {
-	Enabled bool               `json:"enabled"`
-	Message *map[string]string `json:"message,omitempty"`
+type MaintenanceUpdate = json.RawMessage
+
+// MasterKeyStatus defines model for MasterKeyStatus.
+type MasterKeyStatus struct {
+	// ActiveKeyId Identifier of the master key in use (`TT_MASTER_KEY_FILE`), derived from the key (not secret).
+	ActiveKeyId    string       `json:"activeKeyId"`
+	LatestRotation *KeyRotation `json:"latestRotation,omitempty"`
+
+	// NewKeyId Identifier of the new master key (`TT_MASTER_KEY_NEW_FILE`); absent when none is configured.
+	NewKeyId *string `json:"newKeyId,omitempty"`
+
+	// RestartRequired A rotation to `newKeyId` has completed: restart the instance with the switched configuration (the new key as `TT_MASTER_KEY_FILE`).
+	RestartRequired bool `json:"restartRequired"`
 }
 
 // NetworkRules defines model for NetworkRules.
@@ -2008,7 +2061,12 @@ type PublicTenant struct {
 		ExpiryDays       []ExpiryDays `json:"expiryDays"`
 		MaxTransferBytes ByteSize     `json:"maxTransferBytes"`
 	} `json:"limits"`
-	Maintenance        bool    `json:"maintenance"`
+	Maintenance bool `json:"maintenance"`
+
+	// MaintenanceMessage Maintenance message set by the super admin, as plain text (render it as text, never as
+	// HTML): the message in the negotiated language (`Accept-Language`), else in the tenant
+	// default language, else in English, else in any language available. Absent when
+	// maintenance mode is off or no message is set.
 	MaintenanceMessage *string `json:"maintenanceMessage,omitempty"`
 	Name               string  `json:"name"`
 }
@@ -2196,10 +2254,17 @@ type SmtpTestResultStage string
 
 // SystemSettings defines model for SystemSettings.
 type SystemSettings struct {
-	// AlertEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
-	AlertEmail         *Email   `json:"alertEmail,omitempty"`
-	DiskAlertThreshold *float32 `json:"diskAlertThreshold,omitempty"`
+	// AlertEmail Additional recipient of the disk alert (besides the super admins); `null` when none.
+	AlertEmail *string `json:"alertEmail"`
+
+	// DiskAlertThreshold Disk usage ratio at or above which the disk alert is raised; it clears 5 points below.
+	DiskAlertThreshold float32 `json:"diskAlertThreshold"`
 }
+
+// SystemSettingsUpdate JSON Merge Patch of the instance settings. `alertEmail: null` removes the address;
+// `diskAlertThreshold: null` is refused. The address must be a bare mail address
+// (`invalid-email` otherwise). An unknown member is refused.
+type SystemSettingsUpdate = json.RawMessage
 
 // Tenant defines model for Tenant.
 type Tenant struct {
@@ -2566,6 +2631,9 @@ type ListGlobalAuditEventsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// StartMasterKeyRotationJSONBody defines parameters for StartMasterKeyRotation.
+type StartMasterKeyRotationJSONBody = json.RawMessage
+
 // GetGlobalStatsParams defines parameters for GetGlobalStats.
 type GetGlobalStatsParams struct {
 	// Period Statistics period: last 7 days, 30 days or 12 months.
@@ -2797,10 +2865,10 @@ type CreateSuperAdminJSONRequestBody = SetupRequest
 type SetMaintenanceJSONRequestBody = MaintenanceUpdate
 
 // StartMasterKeyRotationJSONRequestBody defines body for StartMasterKeyRotation for application/json ContentType.
-type StartMasterKeyRotationJSONRequestBody = TotpCode
+type StartMasterKeyRotationJSONRequestBody = StartMasterKeyRotationJSONBody
 
 // UpdateSystemSettingsApplicationMergePatchPlusJSONRequestBody defines body for UpdateSystemSettings for application/merge-patch+json ContentType.
-type UpdateSystemSettingsApplicationMergePatchPlusJSONRequestBody = SystemSettings
+type UpdateSystemSettingsApplicationMergePatchPlusJSONRequestBody = SystemSettingsUpdate
 
 // CreateTenantJSONRequestBody defines body for CreateTenant for application/json ContentType.
 type CreateTenantJSONRequestBody = TenantCreate
@@ -3037,6 +3105,9 @@ type ServerInterface interface {
 	// SetMaintenance Enable or disable maintenance mode (super admin)
 	// (PUT /admin/system/maintenance)
 	SetMaintenance(w http.ResponseWriter, r *http.Request)
+	// GetMasterKeyStatus Master key status (super admin)
+	// (GET /admin/system/master-key)
+	GetMasterKeyStatus(w http.ResponseWriter, r *http.Request)
 	// StartMasterKeyRotation Start a master key rotation (super admin)
 	// (POST /admin/system/master-key/rotations)
 	StartMasterKeyRotation(w http.ResponseWriter, r *http.Request)
@@ -3661,6 +3732,20 @@ func (siw *ServerInterfaceWrapper) SetMaintenance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetMaintenance(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMasterKeyStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetMasterKeyStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMasterKeyStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6301,6 +6386,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/system/settings", wrapper.UpdateSystemSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/maintenance", wrapper.GetMaintenance)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/system/maintenance", wrapper.SetMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/master-key", wrapper.GetMasterKeyStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/master-key/rotations", wrapper.StartMasterKeyRotation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/master-key/rotations/{rotationId}", wrapper.GetMasterKeyRotation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/audit-events", wrapper.ListGlobalAuditEvents)
@@ -8270,9 +8356,7 @@ func (response SetMaintenance403ApplicationProblemPlusJSONResponse) VisitSetMain
 	return err
 }
 
-type SetMaintenance409ApplicationProblemPlusJSONResponse struct {
-	StateConflictApplicationProblemPlusJSONResponse
-}
+type SetMaintenance409ApplicationProblemPlusJSONResponse Problem
 
 func (response SetMaintenance409ApplicationProblemPlusJSONResponse) VisitSetMaintenanceResponse(w http.ResponseWriter) error {
 
@@ -8291,6 +8375,75 @@ type SetMaintenance500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SetMaintenance500ApplicationProblemPlusJSONResponse) VisitSetMaintenanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMasterKeyStatusRequestObject struct {
+}
+
+type GetMasterKeyStatusResponseObject interface {
+	VisitGetMasterKeyStatusResponse(w http.ResponseWriter) error
+}
+
+type GetMasterKeyStatus200JSONResponse MasterKeyStatus
+
+func (response GetMasterKeyStatus200JSONResponse) VisitGetMasterKeyStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMasterKeyStatus401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMasterKeyStatus401ApplicationProblemPlusJSONResponse) VisitGetMasterKeyStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMasterKeyStatus403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetMasterKeyStatus403ApplicationProblemPlusJSONResponse) VisitGetMasterKeyStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMasterKeyStatus500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetMasterKeyStatus500ApplicationProblemPlusJSONResponse) VisitGetMasterKeyStatusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -8324,9 +8477,23 @@ func (response StartMasterKeyRotation202JSONResponse) VisitStartMasterKeyRotatio
 	return err
 }
 
-type StartMasterKeyRotation401ApplicationProblemPlusJSONResponse struct {
-	InvalidCredentialsApplicationProblemPlusJSONResponse
+type StartMasterKeyRotation400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
 }
+
+func (response StartMasterKeyRotation400ApplicationProblemPlusJSONResponse) VisitStartMasterKeyRotationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMasterKeyRotation401ApplicationProblemPlusJSONResponse Problem
 
 func (response StartMasterKeyRotation401ApplicationProblemPlusJSONResponse) VisitStartMasterKeyRotationResponse(w http.ResponseWriter) error {
 
@@ -8366,6 +8533,25 @@ func (response StartMasterKeyRotation409ApplicationProblemPlusJSONResponse) Visi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMasterKeyRotation429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response StartMasterKeyRotation429ApplicationProblemPlusJSONResponse) VisitStartMasterKeyRotationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -15277,6 +15463,9 @@ type StrictServerInterface interface {
 	// SetMaintenance Enable or disable maintenance mode (super admin)
 	// (PUT /admin/system/maintenance)
 	SetMaintenance(ctx context.Context, request SetMaintenanceRequestObject) (SetMaintenanceResponseObject, error)
+	// GetMasterKeyStatus Master key status (super admin)
+	// (GET /admin/system/master-key)
+	GetMasterKeyStatus(ctx context.Context, request GetMasterKeyStatusRequestObject) (GetMasterKeyStatusResponseObject, error)
 	// StartMasterKeyRotation Start a master key rotation (super admin)
 	// (POST /admin/system/master-key/rotations)
 	StartMasterKeyRotation(ctx context.Context, request StartMasterKeyRotationRequestObject) (StartMasterKeyRotationResponseObject, error)
@@ -16087,6 +16276,30 @@ func (sh *strictHandler) SetMaintenance(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetMaintenanceResponseObject); ok {
 		if err := validResponse.VisitSetMaintenanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMasterKeyStatus operation middleware
+func (sh *strictHandler) GetMasterKeyStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetMasterKeyStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMasterKeyStatus(ctx, request.(GetMasterKeyStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMasterKeyStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMasterKeyStatusResponseObject); ok {
+		if err := validResponse.VisitGetMasterKeyStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

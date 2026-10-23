@@ -68,8 +68,9 @@ const (
 	LoginWindow = 15 * time.Minute
 	// LoginLockDuration is how long a login limit stays locked.
 	LoginLockDuration = 15 * time.Minute
-	// MaxSessionTOTPFailures wrong second factors end the intermediate
-	// session.
+	// MaxSessionTOTPFailures wrong second factors end the session: the
+	// intermediate session of a login, or an authenticated session through
+	// its confirmations (Service.ConfirmTOTP).
 	MaxSessionTOTPFailures = 5
 	// RecoveryCodeCount is the number of recovery codes issued at each TOTP
 	// confirmation.

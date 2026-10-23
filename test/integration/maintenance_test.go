@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"net/http"
-	"sync/atomic"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -40,7 +39,7 @@ func depositRequests() map[string]request {
 func TestMaintenanceMode(t *testing.T) {
 	t.Parallel()
 	forEngine(t, func(t *testing.T, e storetest.Engine) {
-		flag := new(atomic.Bool)
+		flag := new(maintenanceFlag)
 		s := startServer(t, e, serverOptions{maintenance: true, flag: flag})
 		if !flag.Load() {
 			t.Fatal("TT_MAINTENANCE=true did not set the maintenance flag")

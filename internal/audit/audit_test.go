@@ -275,3 +275,57 @@ func TestWriterRefusesPersonalDetails(t *testing.T) {
 		t.Errorf("List = %d items, %v, want 1", len(page.Items), err)
 	}
 }
+
+// TestSystemActions records the instance events of step 14 (settings,
+// maintenance, master key rotation, disk alert) as global events, in one
+// transaction with a change of the system settings.
+func TestSystemActions(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		db := openDB(t, e)
+		w := audit.New(db)
+		events := []audit.Event{
+			{
+				ActorKind: store.ActorAdmin, Actor: "root", Action: audit.ActionConfigUpdated, ObjectKind: audit.ObjectSystem, ObjectID: "settings",
+				Details: map[string]any{"fields": []string{"diskAlertThreshold", "alertEmail"}},
+			},
+			{
+				ActorKind: store.ActorAdmin, Actor: "root", Action: audit.ActionMaintenanceEnabled, ObjectKind: audit.ObjectSystem, ObjectID: "maintenance",
+				Details: map[string]any{"languages": []string{"en", "fr"}},
+			},
+			{ActorKind: store.ActorAdmin, Actor: "root", Action: audit.ActionMaintenanceDisabled, ObjectKind: audit.ObjectSystem, ObjectID: "maintenance"},
+			{
+				ActorKind: store.ActorAdmin, Actor: "root", Action: audit.ActionMasterKeyRotationStarted, ObjectKind: audit.ObjectMasterKeyRotation, ObjectID: "rot_01JABCM8Q9R0S1T2V3V4W5X6Y7",
+				Details: map[string]any{"from": "mk_3f9a0c41d27be865", "to": "mk_b81e2d07c4a95f13", "total": 3, "resumed": false},
+			},
+			{ActorKind: store.ActorSystem, Actor: "master-key-rotation", Action: audit.ActionMasterKeyRotationCompleted, ObjectKind: audit.ObjectMasterKeyRotation, ObjectID: "rot_01JABCM8Q9R0S1T2V3V4W5X6Y7"},
+			{ActorKind: store.ActorSystem, Actor: "master-key-rotation", Action: audit.ActionMasterKeyRotationFailed, ObjectKind: audit.ObjectMasterKeyRotation, ObjectID: "rot_01JABCM8Q9R0S1T2V3V4W5X6Y7"},
+			{
+				ActorKind: store.ActorSystem, Actor: "disk", Action: audit.ActionDiskAlertRaised, ObjectKind: audit.ObjectSystem, ObjectID: "disk",
+				Details: map[string]any{"usedPercent": 91, "thresholdPercent": 85},
+			},
+			{ActorKind: store.ActorSystem, Actor: "disk", Action: audit.ActionDiskAlertCleared, ObjectKind: audit.ObjectSystem, ObjectID: "disk"},
+		}
+		_, err := db.SystemSettings().UpdateTx(ctx, func(tx *store.SystemTx, s *store.SystemSettingsRow) error {
+			s.MaintenanceEnabled = true
+			for _, ev := range events {
+				if err := w.RecordTx(ctx, tx, ev); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("UpdateTx with audit = %v", err)
+		}
+		page, err := db.AuditEvents().List(ctx, store.AuditFilter{})
+		if err != nil || len(page.Items) != len(events) {
+			t.Fatalf("List = %d events, %v", len(page.Items), err)
+		}
+		for _, ev := range page.Items {
+			if ev.TenantID != "" {
+				t.Errorf("%s has tenant %q, want a global event", ev.Action, ev.TenantID)
+			}
+		}
+	})
+}

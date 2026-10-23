@@ -37,9 +37,12 @@ import (
 )
 
 // DefaultDiskAlertThreshold is the share of the disk above which the super
-// admin is alerted, reported by the global statistics until the runtime
-// system settings exist.
-const DefaultDiskAlertThreshold = 0.85
+// admin is alerted, reported by the global statistics of a service without
+// Options.Settings.
+const DefaultDiskAlertThreshold = float64(store.DefaultDiskAlertThresholdBP) / basisPoints
+
+// basisPoints is the number of basis points in a ratio of 1.
+const basisPoints = 10000
 
 // Period is a statistics period.
 type Period string
@@ -124,8 +127,14 @@ type Disk struct {
 	UsedBytes uint64
 	// UsedRatio is UsedBytes / TotalBytes (0 for an empty filesystem).
 	UsedRatio float64
-	// AlertThreshold is the ratio above which the super admin is alerted.
+	// AlertThreshold is the ratio at or above which the super admins are
+	// alerted (the diskAlertThreshold of the system settings).
 	AlertThreshold float64
+	// AlertActive tells whether the disk alert is raised.
+	AlertActive bool
+	// AlertMailConfigured tells whether the system SMTP server is
+	// configured, so that the disk alert is also mailed.
+	AlertMailConfigured bool
 }
 
 // TenantRow is the row of a tenant in the global statistics.
@@ -160,8 +169,20 @@ type repo interface {
 	usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error)
 }
 
+// SettingsReader reads the instance settings. *store.SystemSettings
+// implements it.
+type SettingsReader interface {
+	Get(ctx context.Context) (store.SystemSettingsRow, error)
+}
+
 // Options configure a Service.
 type Options struct {
+	// Settings reads the disk alert threshold and level of the global
+	// statistics; nil reports DefaultDiskAlertThreshold and no alert.
+	Settings SettingsReader
+	// AlertMailConfigured tells whether the system SMTP server is
+	// configured (config.SystemSMTP.Enabled).
+	AlertMailConfigured bool
 	// DataDir is the data directory (encrypted files), whose filesystem the
 	// global statistics measure (required).
 	DataDir string
@@ -173,11 +194,13 @@ type Options struct {
 
 // Service computes the statistics. It is safe for concurrent use.
 type Service struct {
-	repo    repo
-	dataDir string
-	measure func(path string) (total, free uint64, err error)
-	now     func() time.Time
-	logger  *slog.Logger
+	repo     repo
+	settings SettingsReader
+	mailOK   bool
+	dataDir  string
+	measure  func(path string) (total, free uint64, err error)
+	now      func() time.Time
+	logger   *slog.Logger
 }
 
 // errInvalidOptions reports a [New] call without a database or data
@@ -194,7 +217,10 @@ func New(db *store.DB, opts Options) (*Service, error) {
 
 // newService returns the service over r.
 func newService(r repo, opts Options) *Service {
-	s := &Service{repo: r, dataDir: opts.DataDir, measure: diskusage.Measure, now: opts.Now, logger: opts.Logger}
+	s := &Service{
+		repo: r, settings: opts.Settings, mailOK: opts.AlertMailConfigured, dataDir: opts.DataDir,
+		measure: diskusage.Measure, now: opts.Now, logger: opts.Logger,
+	}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -257,7 +283,7 @@ func (s *Service) TenantStats(ctx context.Context, p adminauth.Principal, tid te
 // authenticated, ErrForbidden unless p is a super admin, ErrInvalidPeriod
 // for an unknown period (checked after the role; empty is DefaultPeriod),
 // and an error when the disk cannot be measured
-// (logged; never reported as zeros).
+// (logged; never reported as zeros) or the system settings cannot be read.
 func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period Period) (GlobalStats, error) {
 	if err := adminauth.RequireAuthenticated(p); err != nil {
 		return GlobalStats{}, err
@@ -275,6 +301,16 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 		s.logger.ErrorContext(ctx, "stats: disk usage unavailable", slog.String("error", err.Error()))
 		return GlobalStats{}, fmt.Errorf("stats: measure disk: %w", err)
 	}
+	d := disk(total, free)
+	d.AlertMailConfigured = s.mailOK
+	if s.settings != nil {
+		row, err := s.settings.Get(ctx)
+		if err != nil {
+			return GlobalStats{}, fmt.Errorf("stats: read the system settings: %w", err)
+		}
+		d.AlertThreshold = float64(row.DiskAlertThresholdBP) / basisPoints
+		d.AlertActive = row.DiskAlertLevel == store.DiskAlertLevelRaised
+	}
 	tenants, err := s.repo.activeTenants(ctx)
 	if err != nil {
 		return GlobalStats{}, fmt.Errorf("stats: list tenants: %w", err)
@@ -287,7 +323,7 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 	if err != nil {
 		return GlobalStats{}, fmt.Errorf("stats: read storage used: %w", err)
 	}
-	out := GlobalStats{Period: period, Disk: disk(total, free), Tenants: make([]TenantRow, 0, len(tenants))}
+	out := GlobalStats{Period: period, Disk: d, Tenants: make([]TenantRow, 0, len(tenants))}
 	for _, t := range tenants {
 		u := usage[t.ID]
 		out.Tenants = append(out.Tenants, TenantRow{

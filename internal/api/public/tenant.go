@@ -49,11 +49,21 @@ func WithTenantService(svc TenantService) Option {
 	return func(s *Server) { s.tenants = svc }
 }
 
-// WithMaintenance reports the maintenance mode in the public configuration
-// with active (the flag of the maintenance middleware). Without it the
-// maintenance mode is reported off.
-func WithMaintenance(active func() bool) Option {
-	return func(s *Server) { s.maintenance = active }
+// MaintenanceMode reports the maintenance mode (*maintenance.Mode).
+type MaintenanceMode interface {
+	// Active reports whether the maintenance mode is in effect.
+	Active() bool
+	// Message returns the maintenance message for the negotiated language
+	// lang on a tenant whose default language is tenantDefault, "" when
+	// the mode is off or no message is set.
+	Message(lang, tenantDefault string) string
+}
+
+// WithMaintenance reports the maintenance mode and its message in the
+// public configuration with m (the mode of the maintenance middleware).
+// Without it the maintenance mode is reported off.
+func WithMaintenance(m MaintenanceMode) Option {
+	return func(s *Server) { s.maintenance = m }
 }
 
 // errNoTenantService reports a server built without WithTenantService: a
@@ -82,8 +92,9 @@ func publicError(err error) error {
 }
 
 // GetPublicTenant returns the public configuration of the current tenant:
-// name, negotiated language, branding, limits, maintenance mode and the
-// legal documents it has written.
+// name, negotiated language, branding, limits, maintenance mode with its
+// message in the negotiated language (else the tenant default, English or
+// any language set) and the legal documents it has written.
 func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantRequestObject) (gen.GetPublicTenantResponseObject, error) {
 	t, svc, err := s.publicTenant(ctx)
 	if err != nil {
@@ -95,8 +106,14 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	}
 	lang := i18n.Negotiate(deref(req.Params.AcceptLanguage), t.DefaultLanguage)
 	body := gen.PublicTenant{
-		Name: t.Name, Language: gen.Language(lang), Maintenance: s.maintenance != nil && s.maintenance(),
+		Name: t.Name, Language: gen.Language(lang),
 		LegalDocuments: make([]gen.PublicTenantLegalDocuments, len(docs)),
+	}
+	if s.maintenance != nil && s.maintenance.Active() {
+		body.Maintenance = true
+		if msg := s.maintenance.Message(lang, t.DefaultLanguage); msg != "" {
+			body.MaintenanceMessage = &msg
+		}
 	}
 	for _, l := range i18n.Supported() {
 		body.AvailableLanguages = append(body.AvailableLanguages, gen.Language(l))

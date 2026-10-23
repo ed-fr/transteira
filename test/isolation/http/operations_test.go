@@ -206,6 +206,18 @@ var isolationCases = map[string]isolationCase{
 	"createApiToken": adminAPIToken,
 	"updateApiToken": adminAPIToken,
 	"revokeApiToken": adminAPIToken,
+	// System operations (system_test.go): instance-wide, served on the
+	// admin host only. The maintenance state holds no tenant data and is
+	// readable by every administrator; the other operations are reserved
+	// to the super admin (403 forbidden for tenant A's delegated admin,
+	// even with a valid body) and answer no tenant data.
+	"getMaintenance":         readMaintenance,
+	"setMaintenance":         systemOperation,
+	"getSystemSettings":      systemOperation,
+	"updateSystemSettings":   systemOperation,
+	"startMasterKeyRotation": systemOperation,
+	"getMasterKeyRotation":   systemOperation,
+	"getMasterKeyStatus":     systemOperation,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -231,7 +243,7 @@ func TestEveryOperationIsIsolatedOrStub(t *testing.T) {
 				if isStub(t, op) {
 					t.Errorf("isStub(%s) = true, want false: the detector would let implementations through", op.id)
 				}
-			case "getSystemSettings", "getMaintenance": // stubs answering not-implemented
+			case "getHealth", "getOpenApiSpec": // served before routing, stubs in the generated interface
 				if !isStub(t, op) {
 					t.Errorf("isStub(%s) = false, want true", op.id)
 				}

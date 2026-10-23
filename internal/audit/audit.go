@@ -126,6 +126,39 @@ const (
 	ActionAPITokenUsed Action = "api_token.used"
 )
 
+// Actions of the instance: settings, maintenance mode, master key
+// rotation and disk alert. They are global events (no tenant), each listed
+// in the AuditAction enumeration of the specification.
+const (
+	// ActionConfigUpdated: the super admin changed the instance settings
+	// (details carry the names of the changed fields only, never their
+	// values).
+	ActionConfigUpdated Action = "config.updated"
+	// ActionMaintenanceEnabled: the super admin enabled the maintenance
+	// mode (details carry the languages of the messages only).
+	ActionMaintenanceEnabled Action = "maintenance.enabled"
+	// ActionMaintenanceDisabled: the super admin disabled the maintenance
+	// mode.
+	ActionMaintenanceDisabled Action = "maintenance.disabled"
+	// ActionMasterKeyRotationStarted: a master key rotation started or
+	// resumed, from the administration or the local command (details carry
+	// the key identifiers, never key material).
+	ActionMasterKeyRotationStarted Action = "master_key.rotation_started"
+	// ActionMasterKeyRotationCompleted: every key was rewrapped under the
+	// new master key.
+	ActionMasterKeyRotationCompleted Action = "master_key.rotation_completed"
+	// ActionMasterKeyRotationFailed: a master key rotation stopped on an
+	// error (an interruption at shutdown is not a failure: the rotation
+	// stays resumable).
+	ActionMasterKeyRotationFailed Action = "master_key.rotation_failed"
+	// ActionDiskAlertRaised: the disk usage reached the alert threshold
+	// (recorded even when no system mail can be sent).
+	ActionDiskAlertRaised Action = "disk.alert_raised"
+	// ActionDiskAlertCleared: the disk usage fell 5 points below the alert
+	// threshold.
+	ActionDiskAlertCleared Action = "disk.alert_cleared"
+)
+
 // Object kinds.
 const (
 	// ObjectAdmin is an administrator account (object ID: its "adm_" ID).
@@ -149,6 +182,12 @@ const (
 	// ObjectAPIToken is an API token (object ID: its "tok_" ID, never the
 	// secret).
 	ObjectAPIToken = "api_token"
+	// ObjectSystem is a part of the instance (object ID: "settings",
+	// "maintenance", "disk"...).
+	ObjectSystem = "system"
+	// ObjectMasterKeyRotation is a master key rotation (object ID: its
+	// "rot_" ID).
+	ObjectMasterKeyRotation = "master_key_rotation"
 )
 
 // ErrSecretDetail reports details whose key names a secret (password,

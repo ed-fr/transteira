@@ -80,10 +80,11 @@ func (o Options) withDefaults() Options {
 // store.ErrRotationRunning when a rotation is already running (or
 // store.ErrKeyRetired when the new key is retired).
 //
-// It is the synchronous part of the future HTTP operation (202 Accepted):
-// the handler calls StartRotation, answers with the rotation, then runs
-// Rotate in the background under context.WithoutCancel(r.Context()), since
-// the request context ends with the response.
+// It is the synchronous part of the HTTP operation startMasterKeyRotation
+// (202 Accepted): package keyrotation calls StartRotation, answers with the
+// rotation, then runs Rotate in a background worker under a context owned
+// by its service (canceled at shutdown, not by the end of the request), as
+// the rotate-master-key command does with its own.
 func StartRotation(ctx context.Context, db *store.DB, kr *Keyring, now time.Time) (store.Rotation, error) {
 	if kr.NewID() == "" {
 		return store.Rotation{}, ErrNoNewKey
@@ -254,15 +255,18 @@ func drain(ctx context.Context, rotations *store.KeyRotations, rot *store.Rotati
 	}
 	for i := 0; ; {
 		n, err := sources[i]()
+		if err != nil && ctx.Err() != nil {
+			// Canceled (shutdown): never record a failure, even for a
+			// re-wrap error, which may then come from keys being destroyed
+			// by the shutdown. The rotation stays running and resumable.
+			logger.WarnContext(ctx, "master key rotation interrupted: run rotate-master-key again to resume it",
+				slog.String("rotation", rot.ID), slog.Int64("rewrapped", rot.RewrappedKeys))
+			return fmt.Errorf("masterkey: rotation %s interrupted: %w", rot.ID, ctx.Err())
+		}
 		if rerr, ok := errors.AsType[*rewrapError](err); ok {
 			return fail(ctx, rotations, rot, rerr, logger, opts.Now())
 		}
 		if err != nil {
-			if ctx.Err() != nil {
-				logger.WarnContext(ctx, "master key rotation interrupted: run rotate-master-key again to resume it",
-					slog.String("rotation", rot.ID), slog.Int64("rewrapped", rot.RewrappedKeys))
-				return fmt.Errorf("masterkey: rotation %s interrupted: %w", rot.ID, ctx.Err())
-			}
 			return fmt.Errorf("masterkey: rotate: %w", err)
 		}
 		rot.RewrappedKeys += int64(n)

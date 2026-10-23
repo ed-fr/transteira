@@ -44,6 +44,14 @@ const (
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
 	EnvSMTPDenyNetworks         = "TT_SMTP_DENY_NETWORKS"
+	EnvSystemSMTPHost           = "TT_SYSTEM_SMTP_HOST"
+	EnvSystemSMTPPort           = "TT_SYSTEM_SMTP_PORT"
+	EnvSystemSMTPSecurity       = "TT_SYSTEM_SMTP_SECURITY"
+	EnvSystemSMTPFrom           = "TT_SYSTEM_SMTP_FROM"
+	EnvSystemSMTPFromName       = "TT_SYSTEM_SMTP_FROM_NAME"
+	EnvSystemSMTPUsername       = "TT_SYSTEM_SMTP_USERNAME"
+	EnvSystemSMTPPassword       = "TT_SYSTEM_SMTP_PASSWORD"      //nolint:gosec // G101: variable name, not a credential
+	EnvSystemSMTPPasswordFile   = "TT_SYSTEM_SMTP_PASSWORD_FILE" //nolint:gosec // G101: variable name, not a credential
 	EnvBackupTime               = "TT_BACKUP_TIME"
 	EnvBackupKeep               = "TT_BACKUP_KEEP"
 )
@@ -73,6 +81,8 @@ const (
 	DefaultScanWorkers              = "2"
 	DefaultSMTPTimeout              = "30s"
 	DefaultMailQueueSize            = "1000"
+	DefaultSystemSMTPSecurity       = SMTPSecurityStartTLS
+	DefaultSystemSMTPFromName       = "TransTeira"
 	DefaultBackupTime               = "02:30"
 	DefaultBackupKeep               = "7"
 )
@@ -270,6 +280,53 @@ func Variables() []Var {
 				"consider adding the networks of the database and ClamAV containers. A value " +
 				"replaces the default entirely: to extend it, repeat the default list and append " +
 				"your networks, e.g. " + DefaultSMTPDenyNetworks + ",172.20.0.0/16.",
+		},
+		{
+			Name: EnvSystemSMTPHost, Group: "Mail",
+			Description: "Host name or IP address of the SMTP server of the instance mails (the disk " +
+				"alert sent to the super admins), distinct from the SMTP servers of the entities, " +
+				"which are set in the administration. Empty (default): system mail is disabled and " +
+				"the disk alert is only shown in the administration, the audit log and the " +
+				"application log; " + EnvSystemSMTPPort + ", " + EnvSystemSMTPFrom + ", " +
+				EnvSystemSMTPUsername + " and " + EnvSystemSMTPPasswordFile + " are then refused. As an installation setting it may be a relay on " +
+				"loopback or on the internal Docker network: " + EnvSMTPDenyNetworks + " does not apply.",
+		},
+		{
+			Name: EnvSystemSMTPPort, Group: "Mail",
+			Description: "Port of the system SMTP server (1 to 65535). Default: 25 with security none, " +
+				"587 with starttls, 465 with tls.",
+		},
+		{
+			Name: EnvSystemSMTPSecurity, Group: "Mail", Default: DefaultSystemSMTPSecurity,
+			Description: "Encryption of the system SMTP connection: none (unauthenticated relay on " +
+				"the internal network only), starttls or tls (implicit TLS).",
+		},
+		{
+			Name: EnvSystemSMTPFrom, Group: "Mail",
+			Description: "Bare sender address of the system mails, e.g. transteira@example.com. " +
+				"Required with " + EnvSystemSMTPHost + ".",
+		},
+		{
+			Name: EnvSystemSMTPFromName, Group: "Mail", Default: DefaultSystemSMTPFromName,
+			Description: "Display name of the sender of the system mails (at most 100 characters).",
+		},
+		{
+			Name: EnvSystemSMTPUsername, Group: "Mail",
+			Description: "User name of the system SMTP server, empty for an unauthenticated relay. " +
+				"Refused with security none; requires " + EnvSystemSMTPPasswordFile + ".",
+		},
+		{
+			Name: EnvSystemSMTPPasswordFile, Group: "Mail",
+			Description: "Path of a file (e.g. a Docker secret) containing the password of the system " +
+				"SMTP server, required if and only if " + EnvSystemSMTPUsername + " is set. Absolute, " +
+				"outside the data, backup and log volumes and the database folder (like the master " +
+				"key); trailing line breaks are removed.",
+		},
+		{
+			Name: EnvSystemSMTPPassword, Group: "Mail", Secret: true,
+			Description: "Not supported: setting it stops the startup. The password of the system " +
+				"SMTP server is only read from " + EnvSystemSMTPPasswordFile + ", so that it never " +
+				"appears in the environment.",
 		},
 		{
 			Name: EnvLogLevel, Group: "Logging", Default: DefaultLogLevel,

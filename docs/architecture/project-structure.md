@@ -19,7 +19,7 @@ transteira/
 ├── cmd/
 │   └── transteira/
 │       ├── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
-│       └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from
+│       └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from (auditée, acteur cli)
 │
 ├── api/
 │   ├── openapi.yaml                 # Spécification OpenAPI 3.1 (source de vérité)
@@ -27,7 +27,8 @@ transteira/
 │   └── oapi-codegen.yaml            # Configuration de la génération de code
 │
 ├── internal/
-│   ├── app/                         # Assemblage des dépendances, cycle de vie, arrêt propre
+│   ├── app/                         # Assemblage des dépendances, cycle de vie, arrêt propre ; file des mails
+│   │                                # système (systemmail.go, SMTP TT_SYSTEM_SMTP_*, sans liste d'exclusion)
 │   ├── config/                      # Lecture et validation des variables d'environnement (TT_*)
 │   ├── version/                     # Version SemVer injectée par -ldflags
 │   │
@@ -108,7 +109,14 @@ transteira/
 │   ├── audit/                       # Rédacteur du journal d'audit (table audit_events, cloisonnée par tenant, purge à 12 mois),
 │   │                                # garde-fou « aucune adresse dans les détails », caviardage des textes libres
 │   ├── securitylog/                 # Journal de sécurité (format ligne stable pour fail2ban / CrowdSec)
-│   ├── maintenance/                 # État du mode maintenance (variable d'environnement + administration)
+│   ├── maintenance/                 # Mode maintenance : TT_MAINTENANCE (prioritaire) ou choix du super admin stocké
+│   │                                # (system_settings, audité), messages par langue en texte brut, état atomique
+│   ├── systemsettings/              # Réglages de l'instance (super admin) : seuil d'alerte disque, adresse d'alerte
+│   │                                # supplémentaire ; config.updated audité avec les noms de champs seulement
+│   ├── diskalert/                   # Alerte d'espace disque : mesure toutes les 5 min, niveau en base (compare-and-swap),
+│   │                                # hystérésis de 5 points, mail disk_alert via le SMTP système, audit
+│   ├── keyrotation/                 # Rotation de la clé maître lancée depuis l'administration : reconfirmation TOTP,
+│   │                                # worker unique par instance, audit, état des clés (restartRequired)
 │   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
 │   ├── datasubject/                 # Droits des personnes (RGPD) : recherche et effacement des données d'une adresse
 │   │                                # dans une entité, pseudonymisation de l'audit (anciennement prévu sous le nom gdpr/)
@@ -198,8 +206,9 @@ transteira/
 │   │   └── screenshots/             # Générées par Playwright (ne pas modifier à la main)
 │   ├── install/                     # Docker, reverse proxy, SMTP (dont relais vers Microsoft 365), première installation
 │   ├── operations/                  # admin.md (administration, jetons d'API), tenants.md, antivirus.md,
-│   │                                # backup.md, master-key.md (clé maître, rotation), security-log.md ;
-│   │                                # à venir : maintenance
+│   │                                # backup.md, master-key.md (clé maître, rotation, y compris depuis
+│   │                                # l'administration), security-log.md ; maintenance, réglages système,
+│   │                                # alerte disque et SMTP système dans admin.md
 │   ├── security/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/

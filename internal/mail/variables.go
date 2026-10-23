@@ -205,6 +205,20 @@ var keyDefs = map[string]keyDef{
 	},
 	TemplateQuotaWarning: quotaKeyDef(QuotaWarningPercent, 82),
 	TemplateQuotaReached: quotaKeyDef(QuotaReachedPercent, 100),
+	TemplateDiskAlert: {
+		vars: []varSpec{
+			{"usage_percent", VarText, true, "Share of the disk used, with the percent sign, rounded down."},
+			{"threshold_percent", VarText, false, "Alert threshold, with the percent sign."},
+			{"used_size", VarText, false, "Space used on the disk of the data directory."},
+			{"total_size", VarText, false, "Size of the disk of the data directory."},
+			{"admin_link", VarURL, false, "Link to the administration console."},
+		},
+		values: diskAlertValues,
+		sample: DiskAlertData{
+			UsedBytes: 4000 << 30 / 100 * 87, TotalBytes: 4000 << 30, ThresholdPercent: 85,
+			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
 }
 
 // Thresholds of the quota alerts, in percent of the quota (CLAUDE.md
@@ -442,6 +456,21 @@ func quotaValues(threshold int64) func(*labels, string, any) (map[string]value, 
 	}
 }
 
+// diskAlertValues returns the variables of the disk_alert template from a DiskAlertData.
+func diskAlertValues(_ *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(DiskAlertData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"usage_percent":     textValue(formatPercent(lang, UsagePercent(d.UsedBytes, d.TotalBytes))),
+		"threshold_percent": textValue(formatDecimalPercent(lang, d.ThresholdPercent)),
+		"used_size":         textValue(FormatSize(lang, d.UsedBytes)),
+		"total_size":        textValue(FormatSize(lang, d.TotalBytes)),
+		"admin_link":        urlValue(d.AdminLink),
+	}, true
+}
+
 // UsagePercent is the share of quota that used represents, in percent,
 // rounded down, computed exactly (128-bit product, no float rounding); a
 // quota of 0 or less counts as fully used (100), a negative use as none.
@@ -467,6 +496,16 @@ func formatPercent(lang string, p int64) string {
 		return strconv.FormatInt(p, 10) + nbsp + "%"
 	}
 	return strconv.FormatInt(p, 10) + "%"
+}
+
+// formatDecimalPercent writes a percentage with at most two decimals the
+// way lang does: "87.5%" in English, "87,5 %" in French.
+func formatDecimalPercent(lang string, p float64) string {
+	n := strconv.FormatFloat(math.Round(p*100)/100, 'f', -1, 64)
+	if lang == i18n.French {
+		return strings.Replace(n, ".", ",", 1) + nbsp + "%"
+	}
+	return n + "%"
 }
 
 // --- Blocks ------------------------------------------------------------------

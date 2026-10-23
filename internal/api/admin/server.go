@@ -8,7 +8,10 @@
 // transfers, invitations, blocklist, audit log, statistics and the rights
 // of the data subjects) over internal/tenantops, internal/stats and
 // internal/datasubject, and the API tokens of the tenants (section 16.4)
-// over internal/apitoken.
+// over internal/apitoken, and the system operations of the super admin
+// (sections 4, 16.1 and 19: maintenance mode, instance settings and master
+// key rotation) over internal/maintenance, internal/systemsettings and
+// internal/keyrotation.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -101,6 +104,14 @@ type Server struct {
 	// tokenSvc manages the API tokens of the tenants; nil until
 	// WithAPITokenService.
 	tokenSvc APITokenService
+	// maintenance reads and changes the maintenance mode; nil until
+	// WithMaintenance.
+	maintenance MaintenanceService
+	// settings serves the instance settings; nil until WithSystemSettings.
+	settings SystemSettingsService
+	// rotations serves the master key rotations; nil until
+	// WithKeyRotation.
+	rotations KeyRotationService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

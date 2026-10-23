@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -601,7 +600,7 @@ func TestDepositMailUnavailable(t *testing.T) {
 func TestDepositMaintenance(t *testing.T) {
 	t.Parallel()
 	forEngine(t, func(t *testing.T, e storetest.Engine) {
-		flag := new(atomic.Bool)
+		flag := new(maintenanceFlag)
 		d := startDeposit(t, e, serverOptions{flag: flag}, true)
 		c := d.newDepositor()
 		c.openSession(t, uniqueEmail(t, "maint", domainA), "")

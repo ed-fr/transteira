@@ -517,6 +517,7 @@ func (s *Server) GetGlobalStats(ctx context.Context, req gen.GetGlobalStatsReque
 	resp := gen.GetGlobalStats200JSONResponse{Period: gen.GlobalStatsPeriod(st.Period)}
 	resp.Disk.TotalBytes, resp.Disk.UsedBytes = byteSize(st.Disk.TotalBytes), byteSize(st.Disk.UsedBytes)
 	resp.Disk.UsedRatio, resp.Disk.AlertThreshold = float32(st.Disk.UsedRatio), float32(st.Disk.AlertThreshold)
+	resp.Disk.AlertActive, resp.Disk.AlertMailConfigured = st.Disk.AlertActive, st.Disk.AlertMailConfigured
 	resp.Tenants = makeLike(resp.Tenants, len(st.Tenants))
 	for i, row := range st.Tenants {
 		out := &resp.Tenants[i]

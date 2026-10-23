@@ -32,7 +32,8 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   Nginx, Traefik and Apache.
 - **Administration**: super admin and delegated admins per entity, transfer overview with early
   deletion and notification resend, invitations and blocklist, audit log, statistics dashboard,
-  storage quota alerts.
+  storage quota alerts; for the super admin, maintenance mode with per-language messages, disk
+  space alert and master key rotation from the console with TOTP re-confirmation.
 - **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
   pseudonymised), technical cookies only.
 
@@ -48,7 +49,7 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   vault **before the first start**; without it, encrypted files cannot be recovered.
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec)
 - [Administration](docs/operations/admin.md) (accounts, tenant operations, API tokens, audit
-  log, GDPR, statistics) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
+  log, GDPR, statistics, maintenance mode, disk alert, system SMTP) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
 
 Installation, operation and user guides will be published with the first release.
 

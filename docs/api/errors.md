@@ -67,7 +67,14 @@ use to ban the client IP.
   a notification resend to an address that is not an original recipient of the transfer
   (`/recipients/<n>`, `invalid-format`), a missing address in a data subject search or
   erasure (`/email`, `required`), and a list filter that is not valid (an unknown `status` or `kind`, an audit `action` that does
-  not have the `area.action` form, a `limit` outside 1 to 200, a malformed `cursor`).
+  not have the `area.action` form, a `limit` outside 1 to 200, a malformed `cursor`). In the
+  system operations of the super admin: `PUT /admin/system/maintenance` requires `enabled`
+  (missing: `required`, null: `not-nullable`, not a boolean: `invalid-format`, on `/enabled`),
+  refuses an unknown member (`invalid-format` naming it) and a message in an unsupported
+  language or with forbidden characters (`/message/<lang>`); `PATCH /admin/system/settings`
+  refuses `diskAlertThreshold: null` (`not-nullable`), a threshold outside 0.50 to 0.99 and an
+  unknown member. These body checks come after the role check: another administrator gets
+  `403 forbidden` whatever the body.
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -84,8 +91,8 @@ use to ban the client IP.
   cleared; and an admin session whose login step does not open the operation (a session still
   waiting for its TOTP code or enrollment only opens that step), which keeps its cookie. The
   interactive documentation `/api/docs` answers it on the admin host without an admin session.
-- **Typical endpoints:** `/admin/*`, `/transfers`, `/invitations`, `/deposit-sessions/current`,
-  `/api/docs`.
+- **Typical endpoints:** `/admin/*` (including `POST /admin/system/master-key/rotations`),
+  `/transfers`, `/invitations`, `/deposit-sessions/current`, `/api/docs`.
 - **What to do:** sign in again, verify the email address again, or send the
   `Authorization: Bearer <token>` header.
 
@@ -99,9 +106,13 @@ use to ban the client IP.
   (`api_token_invalid`). On an operation that accepts an API token, the response carries
   `WWW-Authenticate: Bearer` (RFC 6750). A revoked or expired token is refused from the next
   request on; an upload request already streaming continues until its body ends or stalls.
+  Starting a master key rotation re-confirms the second factor: a wrong TOTP or recovery code
+  gives this answer, as does a TOTP code already used within its 30-second step (for example
+  the code just used to sign in: wait for the next one); the session stays open.
 - **Typical endpoints:** `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/me/totp` (from an authenticated session), `POST /admin/me/totp/confirm`,
-  `PUT /admin/me/password`, `DELETE /admin/me/totp`, any endpoint called with an API token.
+  `PUT /admin/me/password`, `DELETE /admin/me/totp`, `POST /admin/system/master-key/rotations`,
+  any endpoint called with an API token.
 - **What to do:** check the credentials. Repeated failures lead to `rate-limited` and may get
   the client IP banned.
 
@@ -288,13 +299,23 @@ use to ban the client IP.
   account; promoting to super admin an account that is not activated or has no TOTP enabled;
   resetting the credentials of a disabled account; confirming a TOTP enrollment that was not
   started or whose secret expired (15 minutes after the start); renaming or re-scoping an API
-  token that is revoked.
+  token that is revoked; disabling maintenance mode (`enabled: false`) while `TT_MAINTENANCE=true`
+  forces it (enabling it is accepted: the messages are stored); starting a master key rotation
+  while one is already running in this instance (or was started meanwhile by
+  `rotate-master-key`), while an interrupted rotation between other keys than the configured
+  ones exists (configure its keys to resume it, or abandon it with
+  `rotate-master-key -abandon`), or once the rotation to the configured new key has completed
+  (`restartRequired: true` in `GET /admin/system/master-key`: restart with the new key as
+  `TT_MASTER_KEY_FILE`). Each of these three rotation cases carries its own `detail` (rotation
+  running, rotation between other keys unfinished, restart required); it never names a key.
+  `GET /admin/system/master-key` reports the same state.
 - **Typical endpoints:** `POST /transfers`, `DELETE /transfers/{transferId}`,
   `POST /transfers/{transferId}/finalize`,
   `DELETE /admin/tenants/{tenantId}/transfers/{transferId}`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
   `POST /admin/tenants/{tenantId}/data-subjects/erase`,
-  `PUT /admin/system/maintenance`, `PATCH /admin/admins/{adminId}`,
+  `PUT /admin/system/maintenance`, `POST /admin/system/master-key/rotations`,
+  `PATCH /admin/admins/{adminId}`,
   `DELETE /admin/admins/{adminId}`, `POST /admin/admins/{adminId}/reset-credentials`,
   `POST /admin/me/totp/confirm`, `PATCH /admin/tenants/{tenantId}/api-tokens/{tokenId}`.
 - **What to do:** reload the resource to get its current state before deciding what to do;
@@ -387,7 +408,8 @@ use to ban the client IP.
   transfers of the entity; a client is an IP address, an IPv6 address counting as its /64).
   On the admin host: failed sign-ins (5 per username and client IP, 20 per client IP within
   15 minutes lock for 15 minutes; 5 wrong second factors of one admin, TOTP enrollment
-  confirmations included, lock their second factor for 15 minutes), and a per-client limit of
+  confirmations and the TOTP re-confirmation of a master key rotation included, lock their
+  second factor for 15 minutes), and a per-client limit of
   the sign-in steps (setup, password, second factor, TOTP enrollment confirmation, activation:
   20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
   and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
@@ -397,18 +419,27 @@ use to ban the client IP.
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
   `POST /admin/setup`, `POST /admin/activation`, `POST /admin/me/totp/confirm`,
   `PUT /admin/me/password`, `POST /admin/tenants/{tenantId}/smtp/test`,
-  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`.
+  `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
+  `POST /admin/system/master-key/rotations`.
 - **What to do:** wait for `Retry-After` (`retryAfterSeconds`) seconds before retrying. Scripts
   must not retry in a tight loop.
 
 ### maintenance
 
 - **HTTP status:** 503 Service Unavailable
-- **Meaning:** maintenance mode is active; new deposits are temporarily refused. Downloads and
-  the health check keep working.
+- **Meaning:** maintenance mode is active (`TT_MAINTENANCE=true` or enabled by the super admin);
+  new deposits are temporarily refused. Downloads, the administration and the health check keep
+  working. When the super admin set a maintenance message, `detail` carries it as plain text, in
+  the language negotiated from `Accept-Language`, else the entity's default language, else
+  English, else any language that has one; without a message, `detail` is absent. The `title`
+  stays in English. The response carries `Retry-After` (300 seconds, also in
+  `retryAfterSeconds`). The tus `PATCH` requests get a `503` without a body, with
+  `Tus-Resumable` and `Retry-After`: resume the upload (`HEAD`, then `PATCH`) after the
+  maintenance. `GET /tenant` reports `maintenance: true` and the same message as
+  `maintenanceMessage`.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`,
-  `POST /transfers/{transferId}/finalize`, `POST /invitations`.
-- **What to do:** retry later, after `Retry-After` when present.
+  `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`, `POST /invitations`.
+- **What to do:** retry after `Retry-After`; show `detail` (as text, never as HTML) to the user.
 
 ### mail-unavailable
 
@@ -459,10 +490,11 @@ use to ban the client IP.
 
 - **HTTP status:** 409 Conflict
 - **Meaning:** a master key rotation was requested but no new master key is provided to the
-  container.
+  container (`TT_MASTER_KEY_NEW_FILE`). It is checked before the TOTP code, so no attempt is
+  consumed.
 - **Typical endpoints:** `POST /admin/system/master-key/rotations`.
-- **What to do:** provide the new master key (Docker secret or mounted file, as described in the
-  installation guide), restart the container, then start the rotation again.
+- **What to do:** provide the new master key (Docker secret or mounted file, see
+  `docs/operations/master-key.md`), restart the container, then start the rotation again.
 
 ### internal-error
 

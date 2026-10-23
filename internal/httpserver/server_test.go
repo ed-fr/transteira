@@ -107,7 +107,43 @@ type env struct {
 	handler     http.Handler
 	secLog      *lockedBuffer
 	appLog      *lockedBuffer
-	maintenance *atomic.Bool
+	maintenance *fakeMaintenance
+}
+
+// fakeMaintenance is a maintenance mode toggled by the tests; Message
+// returns the message of the negotiated language, else of the tenant
+// default, and records the languages asked for.
+type fakeMaintenance struct {
+	active   atomic.Bool
+	mu       sync.Mutex
+	messages map[string]string
+	asked    [2]string
+}
+
+func (f *fakeMaintenance) Store(on bool) { f.active.Store(on) }
+
+func (f *fakeMaintenance) Active() bool { return f.active.Load() }
+
+func (f *fakeMaintenance) Message(lang, tenantDefault string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.asked = [2]string{lang, tenantDefault}
+	if msg, ok := f.messages[lang]; ok {
+		return msg
+	}
+	return f.messages[tenantDefault]
+}
+
+func (f *fakeMaintenance) setMessages(m map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.messages = m
+}
+
+func (f *fakeMaintenance) lastAsked() [2]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.asked
 }
 
 type envConfig struct {
@@ -131,7 +167,7 @@ type envConfig struct {
 
 func newEnv(t *testing.T, c envConfig) *env {
 	t.Helper()
-	e := &env{secLog: &lockedBuffer{}, appLog: &lockedBuffer{}, maintenance: new(atomic.Bool)}
+	e := &env{secLog: &lockedBuffer{}, appLog: &lockedBuffer{}, maintenance: &fakeMaintenance{}}
 	ok := health.CheckerFunc(func(context.Context) error { return nil })
 	if c.resolver == nil {
 		c.resolver = fakeResolver{}

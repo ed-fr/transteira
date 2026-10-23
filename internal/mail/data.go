@@ -40,6 +40,14 @@ const (
 	// space is freed (CLAUDE.md sections 8.5 and 12.2); data:
 	// [QuotaAlertData].
 	TemplateQuotaReached = "quota_reached"
+	// TemplateDiskAlert warns the super administrators, and the optional
+	// alert address of the system settings, that the filesystem holding
+	// the data directory reached the disk alert threshold (CLAUDE.md
+	// sections 12.2 and 19). It is an instance mail sent through the system
+	// SMTP server, never a tenant template: the store knows no tenant
+	// template key for it, so no entity can customize it; data:
+	// [DiskAlertData].
+	TemplateDiskAlert = "disk_alert"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -214,6 +222,25 @@ type QuotaAlertData struct {
 	// UsedBytes. The share of the quota used is computed from both,
 	// rounded down; a quota of 0 or less counts as fully used.
 	QuotaBytes int64
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
+}
+
+// DiskAlertData is the data of [TemplateDiskAlert]. It holds no secret and
+// no personal data.
+type DiskAlertData struct {
+	// UsedBytes is the space used on the filesystem of the data directory,
+	// formatted with [FormatSize].
+	UsedBytes int64
+	// TotalBytes is the size of that filesystem, formatted like UsedBytes.
+	// The share used is computed from both, rounded down; a size of 0 or
+	// less counts as fully used.
+	TotalBytes int64
+	// ThresholdPercent is the alert threshold, in percent (50 to 99),
+	// shown with at most two decimals.
+	ThresholdPercent float64
 	// AdminLink is the absolute URL of the administration console, built
 	// from the configured admin host, never from a request Host. It carries
 	// no token.

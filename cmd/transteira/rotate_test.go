@@ -13,6 +13,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
@@ -109,6 +110,31 @@ func TestRotateMasterKeyCommand(t *testing.T) {
 		t.Fatalf("rotate-master-key (completed) = %d, %q", code, errOut)
 	}
 	expectOpens(t, dsn, newKey, tid, wkID)
+	got := rotationAudit(t, dsn, newKey)
+	if len(got) != 2 || !strings.HasPrefix(got[0], "master_key.rotation_started system/cli rot_") ||
+		!strings.Contains(got[0], `"resumed":false`) || !strings.Contains(got[0], `"total":1`) ||
+		!strings.HasPrefix(got[1], "master_key.rotation_completed system/cli rot_") || !strings.Contains(got[1], `"rewrapped":1`) {
+		t.Errorf("audit = %q", got)
+	}
+}
+
+// rotationAudit returns the master key rotation audit events of the
+// database dsn, oldest first, as "action kind/actor object details".
+func rotationAudit(t *testing.T, dsn, keyFile string) []string {
+	t.Helper()
+	db, _ := keyStore(t, dsn, keyFile)
+	page, err := db.AuditEvents().List(context.Background(), store.AuditFilter{Limit: store.MaxPageSize})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for i := len(page.Items) - 1; i >= 0; i-- {
+		e := page.Items[i]
+		if strings.HasPrefix(e.Action, "master_key.") {
+			out = append(out, fmt.Sprintf("%s %s/%s %s %s", e.Action, e.ActorKind, e.Actor, e.ObjectID, e.Details))
+		}
+	}
+	return out
 }
 
 func TestRotateMasterKeyRecoverAndAbandon(t *testing.T) {
@@ -187,6 +213,24 @@ func TestRotateMasterKeyRecoverAndAbandon(t *testing.T) {
 	code, out, errOut = runCmd("rotate-master-key", "-abandon")
 	if code != exitOK || !strings.Contains(out, "Rotation "+rot.ID) || !strings.Contains(out, "abandoned") {
 		t.Errorf("-abandon = %d, %q, %q", code, out, errOut)
+	}
+	// Rotation, recovery, abandon: every step is audited by the command.
+	got := rotationAudit(t, dsn, k2)
+	want := []string{
+		"master_key.rotation_started system/cli", "master_key.rotation_completed system/cli",
+		"master_key.rotation_started system/cli", "master_key.rotation_completed system/cli",
+		"master_key.rotation_failed system/cli " + rot.ID,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("audit = %q", got)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(got[i], w) {
+			t.Errorf("audit[%d] = %q, want %q...", i, got[i], w)
+		}
+	}
+	if !strings.Contains(got[4], `"reason":"abandoned"`) || !strings.Contains(got[2], `"from":"`+k1ID+`"`) {
+		t.Errorf("audit details = %q", got)
 	}
 }
 
@@ -268,5 +312,65 @@ func TestInterrupted(t *testing.T) {
 	err := interrupted(store.Rotation{ID: "rot_x", RewrappedKeys: 3}, fmt.Errorf("wrapped: %w", context.Canceled))
 	if err == nil || !strings.Contains(err.Error(), "after 3 key(s)") || !strings.Contains(err.Error(), "rot_x") {
 		t.Errorf("interrupted(after start) = %v", err)
+	}
+}
+
+// TestRotateMasterKeyRecoverFirstBatchFails: a clean-up rotation whose
+// first batch fails still records its start before its failure.
+func TestRotateMasterKeyRecoverFirstBatchFails(t *testing.T) {
+	dsn := setMigrateEnv(t)
+	k1, k2 := writeKeyFile(t), writeKeyFile(t)
+	tid, _ := sealUnder(t, dsn, k1)
+	t.Setenv("TT_MASTER_KEY_FILE", k1)
+	t.Setenv("TT_MASTER_KEY_NEW_FILE", k2)
+	if code, _, errOut := runCmd("rotate-master-key"); code != exitOK {
+		t.Fatalf("rotate-master-key = %d, %q", code, errOut)
+	}
+	t.Setenv("TT_MASTER_KEY_FILE", k2)
+	t.Setenv("TT_MASTER_KEY_NEW_FILE", "")
+
+	// A corrupted straggler under the retired k1 (unregistered for the
+	// insert).
+	raw, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = raw.Close() }()
+	exec := func(q string) {
+		t.Helper()
+		if _, err := raw.ExecContext(context.Background(), q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	k1ID := keyID(t, k1)
+	exec(`DELETE FROM master_keys WHERE id = '` + k1ID + `'`)
+	db, _ := keyStore(t, dsn, k2)
+	bad := store.WrappedKey{
+		ID: id.New(id.WrappedKey), Purpose: store.KeyPurposeDEK, KeyID: k1ID,
+		Blob: []byte(strings.Repeat("x", 60)),
+	}
+	if err := db.WrappedKeys().Create(context.Background(), tid, bad); err != nil {
+		t.Fatal(err)
+	}
+	exec(fmt.Sprintf(`INSERT INTO master_keys (id, status, created_at, retired_at) VALUES ('%s', 'retired', 1, 2)`, k1ID))
+	code, out, errOut := runCmd("rotate-master-key", "-recover-from", k1)
+	if code != exitError || !strings.Contains(errOut, bad.ID) {
+		t.Fatalf("rotate-master-key -recover-from (corrupted row) = %d, %q, %q", code, out, errOut)
+	}
+	got := rotationAudit(t, dsn, k2)
+	want := []string{
+		"master_key.rotation_started system/cli", "master_key.rotation_completed system/cli",
+		"master_key.rotation_started system/cli", "master_key.rotation_failed system/cli",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("audit = %q", got)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(got[i], w) {
+			t.Errorf("audit[%d] = %q, want %q...", i, got[i], w)
+		}
+	}
+	if !strings.Contains(got[2], `"resumed":false`) || !strings.Contains(got[3], `"reason":"rewrap"`) {
+		t.Errorf("audit details = %q", got)
 	}
 }

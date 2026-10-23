@@ -13,7 +13,9 @@ import (
 
 // Mail template keys (OpenAPI EmailTemplateKey), as stored in
 // tenant_email_templates.template_key. Adding one requires a migration of
-// the table's check.
+// the table's check. The disk alert ("disk-alert", still allowed by the
+// check of 0009) is an instance mail sent to the super admins, never a
+// tenant template: it is deliberately absent.
 const (
 	EmailTemplateVerificationCode     = "verification-code"
 	EmailTemplateTransferNotification = "transfer-notification"
@@ -24,7 +26,6 @@ const (
 	EmailTemplateInvitation           = "invitation"
 	EmailTemplateQuotaWarning         = "quota-warning"
 	EmailTemplateQuotaReached         = "quota-reached"
-	EmailTemplateDiskAlert            = "disk-alert"
 	EmailTemplateAntivirusUnavailable = "antivirus-unavailable"
 )
 
@@ -48,7 +49,7 @@ const (
 
 // emailTemplateKeys lists the known template keys, sorted.
 var emailTemplateKeys = []string{
-	EmailTemplateAntivirusUnavailable, EmailTemplateDiskAlert, EmailTemplateFileNotScanned,
+	EmailTemplateAntivirusUnavailable, EmailTemplateFileNotScanned,
 	EmailTemplateFileProblems, EmailTemplateFirstDownload, EmailTemplateInvitation,
 	EmailTemplateQuotaReached, EmailTemplateQuotaWarning, EmailTemplateTransferConfirmation,
 	EmailTemplateTransferNotification, EmailTemplateVerificationCode,

@@ -21,6 +21,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
@@ -302,16 +303,16 @@ func TestRunMaintenance(t *testing.T) {
 	cfg := testConfig(t, storetest.SQLite(t))
 	prepare(t, cfg)
 	cfg.Maintenance = true
-	flag := new(atomic.Bool)
-	s := start(t, cfg, WithMaintenance(flag))
+	var mode *maintenance.Mode
+	s := start(t, cfg, WithMaintenanceMode(func(m *maintenance.Mode) { mode = m }))
 	code, body := s.do(t, http.MethodPost, "/api/v1/deposit-sessions", tenantHost, strings.NewReader(`{}`))
 	if code != http.StatusServiceUnavailable || !strings.Contains(body, `"maintenance"`) {
 		t.Fatalf("deposit in maintenance = %d %s", code, body)
 	}
-	if !flag.Load() {
-		t.Error("maintenance flag not initialized from the configuration")
+	if st := mode.State(); !st.Enabled || st.Source != maintenance.SourceEnvironment {
+		t.Errorf("maintenance mode not initialized from the configuration: %+v", st)
 	}
-	flag.Store(false)
+	mode.Force(false)
 	// The handler is reached again: the empty body lacks the address.
 	if code, body := s.do(t, http.MethodPost, "/api/v1/deposit-sessions", tenantHost, strings.NewReader(`{}`)); code != http.StatusBadRequest {
 		t.Errorf("deposit after maintenance = %d %s, want 400 from the handler", code, body)

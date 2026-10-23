@@ -77,11 +77,9 @@ func templateKeys() []string {
 // checkTemplate returns the variables of template key, or ErrNotFound for
 // an unknown key or language.
 func checkTemplate(key, lang string) ([]mail.Variable, error) {
-	if !store.IsEmailTemplateKey(key) || !tenant.IsLanguage(lang) {
-		return nil, ErrNotFound
-	}
+	// A key of the API without a built-in template is unknown too.
 	vars, err := mail.Variables(key)
-	if err != nil {
+	if err != nil || !store.IsEmailTemplateKey(key) || !tenant.IsLanguage(lang) {
 		return nil, ErrNotFound
 	}
 	return vars, nil

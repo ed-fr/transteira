@@ -8,10 +8,13 @@ covers the whole life cycle of the key.
 - Variables: `TT_MASTER_KEY_FILE` (required) and `TT_MASTER_KEY_NEW_FILE`
   (only during a rotation), see `.env.example`.
 - Command: `transteira rotate-master-key` (options `-batch-size`,
-  `-abandon`, `-recover-from`).
-- Implementation: `internal/crypto` (key format, envelope) and
-  `internal/masterkey` (keyring, startup check, rotation).
-- Threat model: T-35 to T-40, T-109, T-116 in `docs/security/threat-model.md`.
+  `-abandon`, `-recover-from`), or the super admin console (API
+  `startMasterKeyRotation`, `getMasterKeyRotation`, `getMasterKeyStatus`).
+- Implementation: `internal/crypto` (key format, envelope),
+  `internal/masterkey` (keyring, startup check, rotation) and
+  `internal/keyrotation` (rotation started from the administration).
+- Threat model: T-35 to T-40, T-109, T-116, T-156 in
+  `docs/security/threat-model.md`.
 
 > **If the master key is lost, the data is lost.** Every file and every
 > stored secret becomes unrecoverable, including in backups. There is no
@@ -208,7 +211,8 @@ terabytes of data.
    are still read with the old one. Restart **every** TransTeira process:
    one still running with the old key alone would keep wrapping keys under
    it.
-3. **Run the rotation**:
+3. **Run the rotation**, from the command line or from the super admin
+   console (see [Rotating from the administration](#rotating-from-the-administration)):
 
    ```sh
    docker compose exec transteira transteira rotate-master-key
@@ -234,25 +238,106 @@ terabytes of data.
    master key. When the last such backup has expired, **delete the old key**
    from the vault and from the host (see [Crypto-erase](#crypto-erase)).
 
-Planned: the rotation will also be available from the super admin
-interface, with a TOTP re-confirmation; it will run the same resumable
-process. Steps 1, 2 and 4 to 6 stay manual, since they change the
-deployment.
+Steps 1, 2 and 4 to 6 always stay manual, since they change the
+deployment or the vault. Only step 3 can also be run from the
+administration.
 
-The rotation is recorded in the database (`key_rotations`) and in the
-application log; it will also appear in the audit log once that log is
-available.
+Every rotation is recorded in the database (`key_rotations`), in the
+application log and in the instance audit log (see [Audit](#audit)),
+whether it was run from the command line or from the administration.
 
 **Effect of step 4 on users.** The master key also derives the MAC keys
-that protect three values: the stored hashes of email verification codes
-(valid 15 minutes), the CSRF tokens of deposit sessions (4 hours) and the
-entries of the browser recognition cookie `__Host-tt_known` (up to 12
-months). They always use the key named by `TT_MASTER_KEY_FILE` and are not
-re-wrapped, so they stay valid during the rotation but stop verifying at the
-restart of step 4: a user who was entering a code must request a new one, an
-open deposit page must be reloaded (or the session reopened), and every
-internal depositor is asked for a verification code once more on their next
-visit. Switch at a quiet time; no data is lost.
+that protect four values: the stored hashes of email verification codes
+(valid 15 minutes), the CSRF tokens of deposit sessions (4 hours), the CSRF
+tokens of admin sessions and the entries of the browser recognition cookie
+`__Host-tt_known` (up to 12 months). They always use the key named by
+`TT_MASTER_KEY_FILE` and are not re-wrapped, so they stay valid during the
+rotation but stop verifying at the restart of step 4: a user who was
+entering a code must request a new one, an open deposit page must be
+reloaded (or the session reopened), an open administration page must be
+reloaded (the admin session stays valid; a script fetches the new CSRF
+token with `GET /admin/me`; the administration front end, when it comes,
+must do the same on a `403 csrf-invalid` instead of signing the admin
+out), and every internal depositor is asked for a
+verification code once more on their next visit. Switch at a quiet time;
+no data is lost.
+
+### Rotating from the administration
+
+The super admin can run step 3 from the administration instead of the
+command line. It runs the same resumable process (`masterkey.Rotate`)
+inside the server, in a background worker.
+
+1. Steps 1 and 2 are done: the new key is in the vault and the server was
+   restarted with `TT_MASTER_KEY_NEW_FILE`. The administration shows the
+   current and new key IDs (`GET /admin/system/master-key`, fields
+   `activeKeyId` and `newKeyId`): check them against the vault.
+2. Start the rotation (`POST /admin/system/master-key/rotations`) with a
+   **current TOTP code**, or a recovery code (which is then consumed and
+   audited as `admin.recovery_code_used`). A code already used cannot be
+   used again within its 30-second step: **if you have just signed in,
+   wait for the next code** of your authenticator. A wrong code is answered
+   `401 invalid-credentials`, written to the security log, audited as
+   `admin.login_failed` (reason `totp`) and counts towards the same lockout
+   as the sign-in (`429 rate-limited` once locked); the session is neither
+   ended nor rotated. Without `TT_MASTER_KEY_NEW_FILE`, the request is
+   refused with `409 new-master-key-missing` before the code is checked, so
+   no attempt is consumed.
+3. The request answers `202` at once with the rotation (`rot_...`, status
+   `running`, `totalKeys`). Follow its progress with
+   `GET /admin/system/master-key/rotations/{rotationId}` (`rewrappedKeys`
+   out of `totalKeys`, then status `completed` or `failed`) or with
+   `GET /admin/system/master-key` (`latestRotation`).
+4. Once the rotation is `completed`, `GET /admin/system/master-key` reports
+   `restartRequired: true`: the database already records the new key as
+   active. Continue with step 4 (switch the configuration and restart),
+   then steps 5 and 6. Until the restart, a new start request is refused
+   with `409 state-conflict` (`ErrRestartRequired` in the server code).
+
+Keys created after step 2 (new transfers, a TOTP enrollment, an SMTP
+password) are already wrapped under the new key: only the keys that existed
+before step 2 are counted in `totalKeys` and re-wrapped.
+
+Behaviour to know:
+
+- **One rotation at a time per instance.** A start while the worker runs is
+  refused with `409 state-conflict`, as is a start while an interrupted
+  rotation between **other** keys exists (configure its keys to finish it,
+  or abandon it with `rotate-master-key -abandon`).
+- **Interruption and resumption.** A rotation interrupted by a restart or a
+  stop of the server stays `running` in the database: it is **never**
+  recorded as failed, and it is **never resumed automatically** at start-up
+  (that needs a TOTP re-confirmation); a warning in the application log says
+  that it is waiting. To resume it, **start the rotation again** after the
+  restart, with a new TOTP code: the answer is `202` with the **same
+  rotation identifier** (audited with `resumed: true`). Running
+  `rotate-master-key` resumes it as well.
+- **Command line and administration together** are safe: both re-wrap only
+  the rows still under the old key, in short transactions. If the command
+  completes (or abandons) the rotation while the worker runs, the worker
+  notices that it is no longer running, logs it and records nothing more;
+  the command records its own audit events.
+- At shutdown, the server cancels the worker, which stops at its current
+  batch, and waits for it before destroying the keys in memory.
+- No key material is ever sent or returned by the API: only key IDs, counts
+  and dates. The new key is provisioned by the operator (step 2); the
+  administration cannot create, upload or download a key.
+
+### Audit
+
+Every rotation writes instance audit events (object kind
+`master_key_rotation`, object ID the `rot_...` identifier; details hold key
+IDs and counts, never key material):
+
+| Action | Actor | Details |
+|---|---|---|
+| `master_key.rotation_started` | the super admin (with their IP), or the system actor `cli` for `rotate-master-key` | `from`, `to`, `total`, `resumed` |
+| `master_key.rotation_completed` | system actor `master-key-rotation` (administration) or `cli` | `from`, `to`, `rewrapped` |
+| `master_key.rotation_failed` | same | `from`, `to`, `rewrapped`, `reason`: `rewrap` (a row cannot be unwrapped; the rotation is marked `failed`, with `error`), `keys_still_created` / `error` (the rotation stopped but stays running, `resumable: true`), or `abandoned` (`rotate-master-key -abandon`, actor `cli`) |
+
+The clean-up rotations of `rotate-master-key -recover-from` are audited the
+same way (actor `cli`). An interruption by a shutdown or a Ctrl+C is not a failure and writes no
+event.
 
 ### Abandoning a rotation
 
@@ -401,7 +486,11 @@ return to the current key.
 | Start refused: the active master key is `mk_...`, which is not provided | Neither configured key is the active one | Provide the active key from the vault. |
 | `TT_MASTER_KEY_NEW_FILE` must differ from `TT_MASTER_KEY_FILE` | Both variables point to the same file | Point the new variable to the new key file. |
 | `rotate-master-key` refuses to run: no new master key configured | `TT_MASTER_KEY_NEW_FILE` not set in the running container | Rotation step 2 (set it and restart) before step 3. |
-| Rotation interrupted | Connection lost, container restarted, Ctrl+C | Run the command again; it resumes. |
+| Rotation interrupted | Connection lost, container restarted, Ctrl+C | Run the command again, or start the rotation again from the administration; it resumes (same rotation ID). |
+| Start from the administration: `409 new-master-key-missing` | `TT_MASTER_KEY_NEW_FILE` not set in the running server | Rotation step 2 (set it and restart). |
+| Start from the administration: `401 invalid-credentials` with a correct code | The code was already used (for example at sign-in) within the same 30-second step | Wait for the next TOTP code. |
+| Start from the administration: `409 state-conflict` | A rotation already runs in this instance; an interrupted rotation between other keys exists; or the rotation to the new key is completed (`restartRequired: true`) | Wait for the running one; finish or abandon the other one; or do step 4 (switch the configuration and restart). |
+| After step 4, the administration answers `403 csrf-invalid` | The admin CSRF token is derived from the master key | Reload the page (scripts: fetch the new token with `GET /admin/me`). |
 | Rotation failed: wrapped key `wk_...` cannot be unwrapped with master key `mk_...` | A corrupted row (disk fault, manual edit, row copied from elsewhere); the batch was rolled back and the rotation marked `failed` | Restore that row from a backup or, if what it protects is lost anyway, delete the transfer or setting that uses it; then run the command again (a new rotation starts). |
 | Keys keep being created under the old master key | A TransTeira process still runs without `TT_MASTER_KEY_NEW_FILE` (not restarted in step 2) | Restart every process with both keys, then run the command again; it resumes. |
 | The running rotation does not match the configured keys | A rotation between other keys is running (another new key, or a recovery) | Configure the keys it names to finish it, or `rotate-master-key -abandon` (a clean-up rotation always, a regular one if nothing is wrapped under its new key). |

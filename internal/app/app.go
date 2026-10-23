@@ -32,12 +32,15 @@ import (
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/datasubject"
 	"github.com/ed-fr/transteira/internal/deposit"
+	"github.com/ed-fr/transteira/internal/diskalert"
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/keyrotation"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
@@ -47,6 +50,7 @@ import (
 	"github.com/ed-fr/transteira/internal/stats"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/systemsettings"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
 	"github.com/ed-fr/transteira/internal/tenantops"
@@ -92,7 +96,11 @@ const (
 	//     is interrupted (VACUUM INTO under a canceled context) and its
 	//     temporary file removed, the next night writes a new one;
 	//   - the quota monitor: pending evaluations are dropped (the next start
-	//     sweeps every tenant), an alert already decided is still sent.
+	//     sweeps every tenant), an alert already decided is still sent;
+	//   - the master key rotation worker: the rotation stops at its current
+	//     batch and stays running, resumable (never recorded as failed); Run
+	//     waits for it, beyond this deadline if needed, before destroying
+	//     the master keys.
 	// It takes one second from the former 7 s of ShutdownTimeout.
 	BackgroundCloseTimeout = time.Second
 	// FinalCloseTimeout bounds the second stage of closeStages, which has
@@ -127,9 +135,18 @@ type runOptions struct {
 	listener        net.Listener
 	logOutput       io.Writer
 	shutdownTimeout time.Duration
-	maintenance     *atomic.Bool
+	maintenanceHook func(*maintenance.Mode)
 	scanOptions     func(*scan.Options)
 	lifecycleOpts   func(*lifecycle.Options)
+	diskAlertOpts   func(*diskalert.Options)
+	rotationOpts    func(*keyrotation.Options)
+}
+
+// WithRotationOptions lets edit change the options of the master key
+// rotation service before it is created (tests: a small batch size, a
+// progress hook).
+func WithRotationOptions(edit func(*keyrotation.Options)) Option {
+	return func(o *runOptions) { o.rotationOpts = edit }
 }
 
 // WithScanOptions lets edit change the options of the antivirus worker
@@ -143,6 +160,12 @@ func WithScanOptions(edit func(*scan.Options)) Option {
 // sweeper before it is created (tests: a short sweep interval).
 func WithLifecycleOptions(edit func(*lifecycle.Options)) Option {
 	return func(o *runOptions) { o.lifecycleOpts = edit }
+}
+
+// WithDiskAlertOptions lets edit change the options of the disk alert
+// monitor before it is created (tests: a fake Measure, a short Interval).
+func WithDiskAlertOptions(edit func(*diskalert.Options)) Option {
+	return func(o *runOptions) { o.diskAlertOpts = edit }
 }
 
 // WithListener serves on l instead of listening on cfg.ListenAddr (tests).
@@ -161,12 +184,16 @@ func WithShutdownTimeout(d time.Duration) Option {
 	return func(o *runOptions) { o.shutdownTimeout = d }
 }
 
-// WithMaintenance uses flag as the maintenance flag instead of a new one,
-// so that the caller can toggle it; Run sets it to cfg.Maintenance at
-// start-up.
-func WithMaintenance(flag *atomic.Bool) Option {
-	return func(o *runOptions) { o.maintenance = flag }
+// WithMaintenanceMode calls hook with the maintenance mode once it is
+// loaded, before the server starts (tests: toggle the mode with
+// maintenance.Mode.Force, read it with Active).
+func WithMaintenanceMode(hook func(*maintenance.Mode)) Option {
+	return func(o *runOptions) { o.maintenanceHook = hook }
 }
+
+// processStart is the start of the process, the start of a maintenance
+// forced by TT_MAINTENANCE.
+var processStart = time.Now()
 
 // Run starts the server described by cfg and blocks until ctx is canceled,
 // then shuts down gracefully and releases every resource. It returns nil
@@ -185,7 +212,8 @@ func WithMaintenance(flag *atomic.Bool) Option {
 // are expected to be applied by "transteira migrate"), drop of the owner
 // credentials and role verification, master key check (masterkey.Check),
 // refusal of an admin host that is also a tenant FQDN, tenant resolver,
-// security log, mail queue and depositor identification service,
+// security log, maintenance mode (TT_MAINTENANCE or the choice stored by
+// the super admin), mail queue and depositor identification service,
 // administrator authentication (with the setup token generated and logged
 // while no administrator exists, see newAdminService), tenant configuration
 // service (sharing the tenant resolver, which it invalidates, and the
@@ -261,13 +289,24 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	stopSIGHUP := secLog.HandleSIGHUP(ctx)
 	defer stopSIGHUP()
 
-	maintenance := o.maintenance
-	if maintenance == nil {
-		maintenance = new(atomic.Bool)
+	// One writer records the audit events of the whole application: the
+	// maintenance mode, deposits, transfers, antivirus, quota and disk
+	// alerts, settings and key rotation.
+	auditLog := audit.New(db)
+
+	// The maintenance mode: TT_MAINTENANCE forces it, otherwise the choice
+	// stored by the super admin applies.
+	maint, err := maintenance.New(ctx, db.SystemSettings(), auditLog,
+		maintenance.Options{Forced: cfg.Maintenance, Start: processStart})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
 	}
-	maintenance.Store(cfg.Maintenance)
-	if cfg.Maintenance {
-		logger.WarnContext(ctx, "maintenance mode is active: deposits are refused")
+	if st := maint.State(); st.Enabled {
+		logger.WarnContext(ctx, "maintenance mode is active: deposits are refused",
+			slog.String("source", string(st.Source)))
+	}
+	if o.maintenanceHook != nil {
+		o.maintenanceHook(maint)
 	}
 
 	// The queue owns the context of its deliveries, canceled by Close. Its
@@ -278,13 +317,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// denied networks (TT_SMTP_DENY_NETWORKS, threat model P21).
 	smtpSender := newSMTPSender(cfg)
 	mailQueue := mail.NewQueue(smtpSender, cfg.MailQueueSize, logger, mailQueueOptions(cfg)) //nolint:contextcheck // see above
-	defer closeMailQueue(ctx, mailQueue, logger)
+	// The instance mails (disk alert) have their own small queue and SMTP
+	// sender (TT_SYSTEM_SMTP_*, see systemMail), drained in parallel with
+	// the tenant queue.
+	sysMail, err := newSystemMail(cfg, logger) //nolint:contextcheck // the queue owns its context, see above
+	if err != nil {
+		return err
+	}
+	defer closeMailQueues(ctx, logger, mailQueue, sysMail.queue)
 	vault := masterkey.NewVault(db, keys, logger)
 	// The mails of a tenant use its customized templates when it has some.
 	overrides := notify.StoreOverrides(db.TenantEmailTemplates())
-	// One writer records the tenant audit events of the deposits, transfers,
-	// antivirus and quota alerts; one recorder counts the usage statistics.
-	auditLog := audit.New(db)
+	// One recorder counts the usage statistics.
 	usageCounts := usage.New(db, usage.Options{Logger: logger})
 	deposits := deposit.New(db, keys, vault, mailQueue, secLog, deposit.Options{
 		SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides, Audit: auditLog,
@@ -322,6 +366,16 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return err
 	}
+	// The master key rotations of the administration run in a worker of
+	// their own, stopped in the first close stage. Deferred before
+	// closeStages, so it runs after it but before the database and the keys
+	// are closed: the worker re-wraps keys with the keyring, so the keys are
+	// never destroyed under it, even past the stage budget.
+	rotations := keyrotation.New(db, keys, admins, auditLog, rotationOptions(&o, logger))
+	defer waitRotation(ctx, rotations, logger)
+	if err := rotations.WarnInterrupted(ctx); err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	// The quota alerts and the resent notifications are queued through one
 	// retrier, so that a full queue delays them instead of dropping them.
 	opsMails := mail.NewRetrier(mailQueue, mail.RetryOptions{Logger: logger})
@@ -331,14 +385,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	// Deferred after closeMailQueue, the data directory and the database, so
+	diskAlerts, err := diskalert.New(db, auditLog, diskAlertOptions(cfg, &o, sysMail, logger))
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// Deferred after closeMailQueues, the data directory and the database, so
 	// it runs before them: the workers stop enqueueing mails, touching the
 	// files and counting usage before the queue drains, then the retrier of
 	// the admin mails stops and the usage counters get their final flush,
 	// while the database is still open.
 	defer closeStages(ctx, logger,
-		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas}},
-		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, usageCounts}})
+		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, rotations}},
+		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
 		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
@@ -366,6 +424,15 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err := quotas.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the quota monitor: %w", err)
 	}
+	if err := diskAlerts.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the disk alert monitor: %w", err)
+	}
+	// A change of the system settings, served by the admin API,
+	// re-evaluates the disk alert at once.
+	systemSettings, err := systemsettings.New(db, auditLog, systemsettings.Options{OnChange: diskAlerts.Check})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	operations, err := tenantops.New(db, tenantops.Options{
 		Vault: vault, Eraser: sweeper, Notifier: notifier, Mailer: opsMails, Logger: logger,
 	})
@@ -376,7 +443,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	statistics, err := stats.New(db, stats.Options{DataDir: cfg.DataDir, Logger: logger})
+	statistics, err := stats.New(db, stats.Options{
+		DataDir: cfg.DataDir, Settings: db.SystemSettings(), AlertMailConfigured: cfg.SystemSMTP.Enabled(), Logger: logger,
+	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -398,17 +467,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			Storage:   health.Check{Checker: health.StorageCheck(cfg.DataDir)},
 			Logger:    logger,
 		},
-		Maintenance: maintenance,
+		Maintenance: maint,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
-			public.WithTenantService(tenants), public.WithMaintenance(maintenance.Load)),
+			public.WithTenantService(tenants), public.WithMaintenance(maint)),
 		Sessions:   deposits,
 		APITokens:  apiTokens,
 		AdminHosts: cfg.AdminHosts,
 		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
 			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
-			admin.WithAPITokenService(apiTokens)),
+			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
+			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
@@ -759,6 +829,37 @@ func scanOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) scan.Op
 		o.scanOptions(&opts)
 	}
 	return opts
+}
+
+// rotationOptions returns the options of the master key rotation service,
+// edited by WithRotationOptions when given.
+func rotationOptions(o *runOptions, logger *slog.Logger) keyrotation.Options {
+	opts := keyrotation.Options{Logger: logger}
+	if o.rotationOpts != nil {
+		o.rotationOpts(&opts)
+	}
+	return opts
+}
+
+// rotationWaiter is the part of *keyrotation.Service waitRotation uses.
+type rotationWaiter interface {
+	Done() <-chan struct{}
+}
+
+// waitRotation waits, at shutdown, for the master key rotation worker
+// (canceled by its Close in the first close stage) to stop, without any
+// time limit: the keys it re-wraps with are destroyed right after, and a
+// rotation must never see them destroyed. A canceled rotation stops at its
+// current batch, so the wait is short; a warning tells when it exceeds the
+// stage budget.
+func waitRotation(ctx context.Context, r rotationWaiter, logger *slog.Logger) {
+	select {
+	case <-r.Done():
+		return
+	default:
+	}
+	logger.WarnContext(ctx, "waiting for the master key rotation to stop before destroying the master keys")
+	<-r.Done()
 }
 
 // closer is a background component stopped at shutdown.

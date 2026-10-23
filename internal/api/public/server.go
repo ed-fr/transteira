@@ -41,7 +41,7 @@ type Server struct {
 	tenants TenantService
 	// maintenance reports the maintenance mode; nil (off) until
 	// WithMaintenance.
-	maintenance func() bool
+	maintenance MaintenanceMode
 	// now is the clock deriving the Max-Age of the session cookie from the
 	// session expiry (replaceable in tests).
 	now func() time.Time

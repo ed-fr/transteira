@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -296,4 +297,48 @@ func TestRotateStoreFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+// lateCancelContext reports a cancellation through Err once canceled is
+// set, without a Done channel: it simulates a shutdown canceling the
+// rotation while a batch is already running.
+type lateCancelContext struct {
+	context.Context
+	canceled atomic.Bool
+}
+
+func (c *lateCancelContext) Err() error {
+	if c.canceled.Load() {
+		return context.Canceled
+	}
+	return nil
+}
+
+// TestRotateCanceledNeverFails checks that a re-wrap error seen after a
+// cancellation (keys destroyed by a shutdown) interrupts the rotation
+// instead of recording it failed.
+func TestRotateCanceledNeverFails(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		f := newFixture(t, e)
+		// A corrupted row under k1, after the valid ones.
+		garbage := make([]byte, 60)
+		if _, err := rand.Read(garbage); err != nil {
+			t.Fatal(err)
+		}
+		bad := store.WrappedKey{ID: id.New(id.WrappedKey), Purpose: store.KeyPurposeDEK, KeyID: f.k1.ID(), Blob: garbage}
+		if err := f.db.WrappedKeys().Create(context.Background(), f.tenants[1], bad); err != nil {
+			t.Fatal(err)
+		}
+		ctx := &lateCancelContext{Context: context.Background()}
+		rot, err := masterkey.Rotate(ctx, f.db, f.both(t), nil, masterkey.Options{
+			BatchSize: 1, OnProgress: func(store.Rotation) { ctx.canceled.Store(true) },
+		})
+		if !errors.Is(err, context.Canceled) || errors.Is(err, masterkey.ErrRewrap) || rot.Status != store.RotationRunning {
+			t.Fatalf("Rotate(canceled) = %+v, %v", rot, err)
+		}
+		running, err := f.db.KeyRotations().Running(context.Background())
+		if err != nil || running.ID != rot.ID || running.Status != store.RotationRunning || running.Error != "" {
+			t.Fatalf("Running = %+v, %v", running, err)
+		}
+	})
 }

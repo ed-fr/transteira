@@ -613,7 +613,10 @@ func TestStatsOperations(t *testing.T) {
 	t.Parallel()
 	ctx := ctxWith(store.SessionAuthenticated, superRoot)
 	st := &fakeStats{global: stats.GlobalStats{
-		Disk: stats.Disk{TotalBytes: 1000, UsedBytes: 300, UsedRatio: 0.3, AlertThreshold: stats.DefaultDiskAlertThreshold},
+		Disk: stats.Disk{
+			TotalBytes: 1000, UsedBytes: 300, UsedRatio: 0.3, AlertThreshold: stats.DefaultDiskAlertThreshold,
+			AlertActive: true, AlertMailConfigured: true,
+		},
 		Tenants: []stats.TenantRow{{
 			TenantID: "ten_a", Name: "Entity A", Transfers: 4, BytesUploaded: 400,
 			Storage: stats.Storage{UsedBytes: 250, QuotaBytes: 1000, UsedRatio: 0.25},
@@ -657,7 +660,7 @@ func TestStatsOperations(t *testing.T) {
 	disk := body["disk"].(map[string]any)
 	row := body["tenants"].([]any)[0].(map[string]any)
 	if code != http.StatusOK || body["period"] != "12m" || disk["totalBytes"] != float64(1000) || disk["usedBytes"] != float64(300) ||
-		disk["alertThreshold"] != 0.85 || row["tenantId"] != "ten_a" || row["transferCount"] != float64(4) || row["storageQuotaBytes"] != float64(1000) {
+		disk["alertThreshold"] != 0.85 || disk["alertActive"] != true || disk["alertMailConfigured"] != true || row["tenantId"] != "ten_a" || row["transferCount"] != float64(4) || row["storageQuotaBytes"] != float64(1000) {
 		t.Errorf("global stats = %d %v", code, body)
 	}
 	gbad := gen.GetGlobalStatsParamsPeriod("1y")

@@ -47,7 +47,6 @@ import (
 	"net/netip"
 	"path"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -271,8 +270,9 @@ type Deps struct {
 	SecurityLog *securitylog.Logger
 	// Health is the service behind /healthz. Required.
 	Health *health.Service
-	// Maintenance is the maintenance flag; nil means never in maintenance.
-	Maintenance *atomic.Bool
+	// Maintenance is the maintenance mode (*maintenance.Mode); nil means
+	// never in maintenance.
+	Maintenance MaintenanceMode
 	// API implements the operations; nil uses public.NewServer().
 	API gen.StrictServerInterface
 	// Sessions resolves the deposit session cookies and checks the CSRF
@@ -369,7 +369,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	}
 	maintenance := deps.Maintenance
 	if maintenance == nil {
-		maintenance = new(atomic.Bool)
+		maintenance = noMaintenance{}
 	}
 	api := deps.API
 	if api == nil {
@@ -435,7 +435,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// is identical for every tenant. Nothing else is served without a known
 	// Host.
 	freeMux := http.NewServeMux()
-	freeMux.Handle(HealthPath, health.Handler(deps.Health, maintenance.Load))
+	freeMux.Handle(HealthPath, health.Handler(deps.Health, maintenance.Active))
 	freeMux.Handle(http.MethodGet+" "+SpecPath, public.SpecHandler(deps.Spec))
 	tenantFree := withProblemFallback(freeMux)
 

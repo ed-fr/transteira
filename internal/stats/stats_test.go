@@ -509,3 +509,63 @@ func TestStoreRepo(t *testing.T) {
 		}
 	})
 }
+
+// settingsFunc is a SettingsReader.
+type settingsFunc func(ctx context.Context) (store.SystemSettingsRow, error)
+
+func (f settingsFunc) Get(ctx context.Context) (store.SystemSettingsRow, error) { return f(ctx) }
+
+func TestGlobalStatsSettings(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+		ctx := context.Background()
+		super := principal(store.RoleSuperAdmin)
+		ev.svc.measure = func(string) (uint64, uint64, error) { return 1000, 100, nil }
+
+		// Without a reader: the default threshold, no alert, no mail.
+		g, err := ev.svc.GlobalStats(ctx, super, Period7Days)
+		if err != nil || g.Disk.AlertThreshold != DefaultDiskAlertThreshold || g.Disk.AlertActive || g.Disk.AlertMailConfigured {
+			t.Fatalf("no reader: %v %+v", err, g.Disk)
+		}
+
+		// The real settings: the stored threshold and level.
+		ev.svc.settings, ev.svc.mailOK = ev.db.SystemSettings(), true
+		if _, err := ev.db.SystemSettings().UpdateTx(ctx, func(_ *store.SystemTx, s *store.SystemSettingsRow) error {
+			s.DiskAlertThresholdBP = 9050
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		g, err = ev.svc.GlobalStats(ctx, super, Period7Days)
+		if err != nil || g.Disk.AlertThreshold != 0.905 || g.Disk.AlertActive || !g.Disk.AlertMailConfigured {
+			t.Fatalf("settings: %v %+v", err, g.Disk)
+		}
+		if ok, err := ev.db.SystemSettings().CompareAndSetDiskLevel(ctx, store.DiskAlertLevelNormal, store.DiskAlertLevelRaised, time.Time{}); !ok || err != nil {
+			t.Fatalf("raise: %v %v", ok, err)
+		}
+		g, err = ev.svc.GlobalStats(ctx, super, Period7Days)
+		if err != nil || !g.Disk.AlertActive {
+			t.Fatalf("raised: %v %+v", err, g.Disk)
+		}
+
+		// A settings failure is an error, never a default.
+		ev.svc.settings = settingsFunc(func(context.Context) (store.SystemSettingsRow, error) {
+			return store.SystemSettingsRow{}, errBoom
+		})
+		if _, err := ev.svc.GlobalStats(ctx, super, Period7Days); !errors.Is(err, errBoom) {
+			t.Fatalf("settings failure: %v", err)
+		}
+	})
+}
+
+func TestNewOptions(t *testing.T) {
+	db, err := store.Open(context.Background(), storetest.SQLite(t).Config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	s, err := New(db, Options{DataDir: t.TempDir(), Settings: db.SystemSettings(), AlertMailConfigured: true})
+	if err != nil || s.settings == nil || !s.mailOK {
+		t.Fatalf("New: %v %+v", err, s)
+	}
+}

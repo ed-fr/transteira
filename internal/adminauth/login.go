@@ -225,56 +225,170 @@ func (s *Service) VerifyTOTP(ctx context.Context, p Principal, code, recoveryCod
 	if p.State != store.SessionTOTPRequired {
 		return Session{}, ErrUnauthenticated
 	}
-	switch {
-	case (code == "") == (recoveryCode == ""):
-		return Session{}, invalid(FieldCode)
-	case code != "" && !crypto.ValidTOTPCode(code):
-		return Session{}, invalid(FieldCode)
-	case len(recoveryCode) > MaxRecoveryCodeLen:
-		return Session{}, invalid(FieldRecoveryCode)
-	case !clientIP.IsValid():
-		return Session{}, ErrNoClientIP
+	if err := checkFactorInput(code, recoveryCode, clientIP); err != nil {
+		return Session{}, err
 	}
-	a, err := s.repo.admin(ctx, p.Admin.ID)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return Session{}, ErrUnauthenticated
-	case err != nil:
-		return Session{}, fmt.Errorf("adminauth: read admin: %w", err)
-	case !a.TOTPEnabled || a.Disabled:
-		return Session{}, ErrUnauthenticated
-	}
-	rules := totpRules(a.ID, clientIP)
-	now := s.now()
-	out, err := s.reserve(ctx, rules, clientIP, now)
+	a, err := s.factorAdmin(ctx, p)
 	if err != nil {
 		return Session{}, err
 	}
-	reason, method := securitylog.ReasonTOTP, "totp"
-	var ok bool
-	if code != "" {
-		ok, err = s.checkTOTPCode(ctx, a, code, now)
-	} else {
-		reason, method = securitylog.ReasonRecoveryCode, "recovery_code"
-		ok, err = s.useRecoveryCode(ctx, a, recoveryCode, now)
-	}
+	f, err := s.checkSecondFactor(ctx, a, code, recoveryCode, clientIP)
 	if err != nil {
-		s.refund(ctx, rules, now)
 		return Session{}, err
 	}
-	if !ok {
-		return Session{}, s.totpFailure(ctx, p, a, clientIP, reason, out, now)
+	if !f.ok {
+		return Session{}, s.totpFailure(ctx, p, a, clientIP, f.reason, f.out, f.now)
 	}
-	s.refund(ctx, rules, now)
 	sess, err := s.rotate(ctx, p, store.SessionAuthenticated)
 	if err != nil {
 		return Session{}, err
 	}
-	if method == "recovery_code" {
+	if f.method == methodRecoveryCode {
 		s.record(ctx, adminEvent(a.Username, clientIP, audit.ActionAdminRecoveryCodeUsed, a.ID, nil))
 	}
-	s.loggedIn(ctx, a, clientIP, method)
+	s.loggedIn(ctx, a, clientIP, f.method)
 	return sess, nil
+}
+
+// ConfirmTOTP re-confirms the second factor of the administrator of the
+// authenticated session p before a sensitive operation (master key
+// rotation, threat T-156): a TOTP code (code) or a recovery code
+// (recoveryCode), exactly one of them. The session is never rotated and no
+// login is recorded.
+//
+// The rules are those of [Service.VerifyTOTP]: a TOTP code is accepted
+// once, so a code already used at the login (or by a previous
+// confirmation) within the same 30-second step is refused and the caller
+// must wait for the next code (T-60); a recovery code is consumed and
+// audited (admin.recovery_code_used). The attempt is counted first on the
+// limits of the administrator (5 wrong second factors within 15 minutes,
+// shared with the login) and of the IP, and every failure writes an
+// admin_login_failed security event. Every failure is also counted on the
+// session, like at the login: the MaxSessionTOTPFailures-th wrong code of
+// the session ends it (the counter is never reset by a success), so that a
+// stolen session without the authenticator can neither guess codes for its
+// whole lifetime nor keep the second factor of its administrator locked.
+// That failure still returns its own error (ErrInvalidCredentials, or the
+// *RateLimitError of a lock it sets); the next request of the session is
+// unauthenticated.
+//
+// It returns the account on success, ErrUnauthenticated unless p is
+// authenticated (or its account was deleted or disabled), ErrForbidden for
+// an account without TOTP enrolled, which cannot confirm, an *InvalidError
+// unless exactly one well-formed code is given, ErrNoClientIP, a
+// *RateLimitError while locked or when this failure sets a lock, and
+// ErrInvalidCredentials for a wrong, replayed or used code.
+func (s *Service) ConfirmTOTP(ctx context.Context, p Principal, code, recoveryCode string, clientIP netip.Addr) (Account, error) {
+	if err := RequireAuthenticated(p); err != nil {
+		return Account{}, err
+	}
+	if err := checkFactorInput(code, recoveryCode, clientIP); err != nil {
+		return Account{}, err
+	}
+	a, err := s.factorAdmin(ctx, p)
+	switch {
+	case errors.Is(err, errNoTOTP):
+		return Account{}, ErrForbidden
+	case err != nil:
+		return Account{}, err
+	}
+	f, err := s.checkSecondFactor(ctx, a, code, recoveryCode, clientIP)
+	if err != nil {
+		return Account{}, err
+	}
+	if !f.ok {
+		return Account{}, s.totpFailure(ctx, p, a, clientIP, f.reason, f.out, f.now)
+	}
+	if f.method == methodRecoveryCode {
+		s.record(ctx, adminEvent(a.Username, clientIP, audit.ActionAdminRecoveryCodeUsed, a.ID, nil))
+	}
+	return accountOf(a), nil
+}
+
+// Second factor methods, as recorded in the admin.login audit events.
+const (
+	methodTOTP         = "totp"
+	methodRecoveryCode = "recovery_code"
+)
+
+// errNoTOTP reports, inside the package, an account without TOTP enrolled
+// (see factorAdmin).
+var errNoTOTP = fmt.Errorf("%w: no totp enrolled", ErrUnauthenticated)
+
+// checkFactorInput checks the inputs of a second factor check: exactly one
+// of code and recoveryCode, well-formed, and a valid client IP.
+func checkFactorInput(code, recoveryCode string, clientIP netip.Addr) error {
+	switch {
+	case (code == "") == (recoveryCode == ""):
+		return invalid(FieldCode)
+	case code != "" && !crypto.ValidTOTPCode(code):
+		return invalid(FieldCode)
+	case len(recoveryCode) > MaxRecoveryCodeLen:
+		return invalid(FieldRecoveryCode)
+	case !clientIP.IsValid():
+		return ErrNoClientIP
+	}
+	return nil
+}
+
+// factorAdmin reads the administrator of p for a second factor check. It
+// returns ErrUnauthenticated for a deleted or disabled account, and
+// errNoTOTP (matching ErrUnauthenticated) for an account without TOTP.
+func (s *Service) factorAdmin(ctx context.Context, p Principal) (store.Admin, error) {
+	a, err := s.repo.admin(ctx, p.Admin.ID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return store.Admin{}, ErrUnauthenticated
+	case err != nil:
+		return store.Admin{}, fmt.Errorf("adminauth: read admin: %w", err)
+	case a.Disabled:
+		return store.Admin{}, ErrUnauthenticated
+	case !a.TOTPEnabled:
+		return store.Admin{}, errNoTOTP
+	}
+	return a, nil
+}
+
+// secondFactor is the outcome of checkSecondFactor.
+type secondFactor struct {
+	// ok reports an accepted code.
+	ok bool
+	// method is methodTOTP or methodRecoveryCode.
+	method string
+	// reason is the security log reason of a failure.
+	reason string
+	// out is the outcome of the counted attempt, for the failure path.
+	out store.FailureOutcome
+	// now is the time of the attempt.
+	now time.Time
+}
+
+// checkSecondFactor counts an attempt of a from ip on the second factor
+// limits, then checks code (a TOTP code, accepted once) or recoveryCode
+// (consumed). The attempt is withdrawn when the code is accepted or could
+// not be verified; a wrong code leaves it counted, for the caller's failure
+// path.
+func (s *Service) checkSecondFactor(ctx context.Context, a store.Admin, code, recoveryCode string, ip netip.Addr) (secondFactor, error) {
+	rules := totpRules(a.ID, ip)
+	now := s.now()
+	out, err := s.reserve(ctx, rules, ip, now)
+	if err != nil {
+		return secondFactor{}, err
+	}
+	f := secondFactor{method: methodTOTP, reason: securitylog.ReasonTOTP, out: out, now: now}
+	if code != "" {
+		f.ok, err = s.checkTOTPCode(ctx, a, code, now)
+	} else {
+		f.method, f.reason = methodRecoveryCode, securitylog.ReasonRecoveryCode
+		f.ok, err = s.useRecoveryCode(ctx, a, recoveryCode, now)
+	}
+	if err != nil || f.ok {
+		s.refund(ctx, rules, now)
+	}
+	if err != nil {
+		return secondFactor{}, err
+	}
+	return f, nil
 }
 
 // checkTOTPCode reports whether code is a TOTP code of a not used yet, and
@@ -322,9 +436,9 @@ func (s *Service) useRecoveryCode(ctx context.Context, a store.Admin, code strin
 	return consumed, nil
 }
 
-// totpFailure records a wrong second factor on the session p: the
-// failure events, then the session counter, which ends the session at
-// MaxSessionTOTPFailures.
+// totpFailure records a wrong second factor on the session p (at the login
+// or at a confirmation): the failure events, then the session counter,
+// which ends the session at MaxSessionTOTPFailures.
 func (s *Service) totpFailure(ctx context.Context, p Principal, a store.Admin, ip netip.Addr, reason string,
 	out store.FailureOutcome, now time.Time,
 ) error {

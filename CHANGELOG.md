@@ -260,6 +260,41 @@ and the project follows [Semantic Versioning](https://semver.org/).
   expires at most 7 days after its transfer was created, whatever its activity).
 - `internal/textsafe`: one sanitiser for free text (control, format, bidirectional and invisible
   characters), shared by invitations and transfers.
+- Instance administration (super admin): maintenance mode, system settings, disk alert and
+  master key rotation from the administration (migration `0012_system`, table
+  `system_settings` under RLS with PostgreSQL). Maintenance (`internal/maintenance`):
+  `TT_MAINTENANCE` forces the mode and always wins (`409 state-conflict` on `enabled: false`);
+  otherwise the super admin's choice is stored, survives a restart and is audited in the same
+  transaction (`maintenance.enabled` / `maintenance.disabled`, message languages only);
+  messages per language in plain text (1 to 500 characters; control characters other than
+  line feed, Unicode line/paragraph separators and bidirectional controls refused); refused
+  deposit operations get `503 maintenance` with the message in the negotiated language as
+  `detail` and `Retry-After` (tus `PATCH` bodyless); `GET /tenant` exposes
+  `maintenanceMessage`; `Maintenance.adminEnabled`. System settings
+  (`internal/systemsettings`): disk alert threshold 0.50 to 0.99 and an optional `alertEmail`
+  (merge patch, `null` removes it), audited as `config.updated` with field names only. Disk
+  alert (`internal/diskalert`): measure at start-up, every 5 minutes and after a settings
+  change; level stored in the database and moved by compare-and-swap (one alert per
+  crossing, none again after a restart), cleared 5 points below the threshold; audit events
+  `disk.alert_raised` / `disk.alert_cleared`; mail template `disk_alert` (fr, en) to the super
+  admins that can sign in and to `alertEmail`, deduplicated, through a new system SMTP server
+  (`TT_SYSTEM_SMTP_HOST`, `_PORT`, `_SECURITY`, `_FROM`, `_FROM_NAME`, `_USERNAME`,
+  `_PASSWORD_FILE`; the password only from a file outside the volumes, `TT_SYSTEM_SMTP_PASSWORD`
+  refused at start-up; own mail queue; no deny list); `GlobalStats.disk` gains `alertActive`
+  and `alertMailConfigured`. Master key rotation from the administration
+  (`internal/keyrotation`): `startMasterKeyRotation` with a TOTP (or recovery code)
+  re-confirmation (`adminauth.ConfirmTOTP`: no replay within a step, shared lockout, session
+  kept), new key required before the code is checked (`409 new-master-key-missing`), one
+  background worker per instance, resumption of an interrupted rotation between the same keys
+  with the same identifier, `409 state-conflict` when running, between other keys or once
+  completed; new `GET /admin/system/master-key` (`MasterKeyStatus`, `restartRequired`); an
+  interruption by the shutdown is never recorded as failed and the keys are destroyed only
+  after the worker stops; rotations audited (`master_key.rotation_started`, `_completed`,
+  `_failed`), including `rotate-master-key` (actor `cli`, `-abandon` and `-recover-from`).
+  Documentation: maintenance, system settings, disk alert and system SMTP in
+  `docs/operations/admin.md`, rotation from the administration in
+  `docs/operations/master-key.md`, new error cases in `docs/api/errors.md`; threat model v0.15
+  (T-154 to T-158).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -289,3 +324,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   infected files and the files withheld after an analysis error); `SenderFile` gains the optional
   sender-only `scanSignature`, `SenderTransfer.downloadUrl` is returned once the transfer is
   available, and `finalizeTransfer` documents the asynchronous, fail-closed analysis.
+- The `disk-alert` email template key is removed from the tenant templates (store key list and
+  OpenAPI `EmailTemplateKey`): the disk alert is an instance mail sent through the system SMTP
+  server with the built-in `disk_alert` template. The maintenance flag is now a
+  `maintenance.Mode` (environment or stored choice) instead of an in-memory boolean.

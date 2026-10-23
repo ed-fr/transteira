@@ -220,6 +220,11 @@ func (Unimplemented) GetMasterKeyRotation(_ context.Context, _ gen.GetMasterKeyR
 	return nil, ErrNotImplemented
 }
 
+// GetMasterKeyStatus answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetMasterKeyStatus(_ context.Context, _ gen.GetMasterKeyStatusRequestObject) (gen.GetMasterKeyStatusResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetNetworkRules answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetNetworkRules(_ context.Context, _ gen.GetNetworkRulesRequestObject) (gen.GetNetworkRulesResponseObject, error) {
 	return nil, ErrNotImplemented

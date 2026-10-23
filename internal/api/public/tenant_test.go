@@ -79,8 +79,8 @@ func TestPublicTenantWithoutTenantOrService(t *testing.T) {
 func TestGetPublicTenant(t *testing.T) {
 	t.Parallel()
 	svc := &fakeTenantConfig{docs: []string{"privacy-policy"}}
-	maintenance := true
-	s := NewServer(WithTenantService(svc), WithMaintenance(func() bool { return maintenance }))
+	mode := &fakeMaintenance{active: true, message: "Back at 8 pm."}
+	s := NewServer(WithTenantService(svc), WithMaintenance(mode))
 	accept := "en-GB,en;q=0.9"
 	resp, err := s.GetPublicTenant(brandedCtx(true), gen.GetPublicTenantRequestObject{
 		Params: gen.GetPublicTenantParams{AcceptLanguage: &accept},
@@ -92,6 +92,9 @@ func TestGetPublicTenant(t *testing.T) {
 	b := got.Body
 	if b.Name != "Entity A" || b.Language != "en" || *got.Headers.ContentLanguage != "en" || !b.Maintenance {
 		t.Errorf("body %+v", b)
+	}
+	if b.MaintenanceMessage == nil || *b.MaintenanceMessage != "Back at 8 pm." || mode.lang != "en" || mode.tenantDefault != "fr" {
+		t.Errorf("maintenance message %v asked for %q (default %q)", b.MaintenanceMessage, mode.lang, mode.tenantDefault)
 	}
 	if !reflect.DeepEqual(b.AvailableLanguages, []gen.Language{"fr", "en"}) && !reflect.DeepEqual(b.AvailableLanguages, []gen.Language{"en", "fr"}) {
 		t.Errorf("languages %v", b.AvailableLanguages)
@@ -107,7 +110,26 @@ func TestGetPublicTenant(t *testing.T) {
 		t.Errorf("legal documents %v", b.LegalDocuments)
 	}
 
-	// Without logo, without maintenance flag, default language.
+	// Maintenance without message: the member is absent.
+	mode.message = ""
+	resp, err = s.GetPublicTenant(brandedCtx(true), gen.GetPublicTenantRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; !b.Maintenance || b.MaintenanceMessage != nil || mode.lang != "fr" {
+		t.Errorf("maintenance without message: %v %v (lang %q)", b.Maintenance, b.MaintenanceMessage, mode.lang)
+	}
+	// Maintenance off: no flag and no message, even if one is stored.
+	mode.active, mode.message = false, "stale"
+	resp, err = s.GetPublicTenant(brandedCtx(true), gen.GetPublicTenantRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Maintenance || b.MaintenanceMessage != nil {
+		t.Errorf("maintenance off: %v %v", b.Maintenance, b.MaintenanceMessage)
+	}
+
+	// Without logo, without maintenance mode, default language.
 	resp, err = NewServer(WithTenantService(&fakeTenantConfig{})).GetPublicTenant(brandedCtx(false), gen.GetPublicTenantRequestObject{})
 	if err != nil {
 		t.Fatal(err)
@@ -225,4 +247,21 @@ func TestGetTenantLegalDocument(t *testing.T) {
 	if !errors.As(err, &p) || p.Code != problem.CodeNotFound {
 		t.Errorf("missing: %v", err)
 	}
+}
+
+// fakeMaintenance is a maintenance mode recording the languages asked for.
+type fakeMaintenance struct {
+	active              bool
+	message             string
+	lang, tenantDefault string
+}
+
+func (f *fakeMaintenance) Active() bool { return f.active }
+
+func (f *fakeMaintenance) Message(lang, tenantDefault string) string {
+	f.lang, f.tenantDefault = lang, tenantDefault
+	if !f.active {
+		return ""
+	}
+	return f.message
 }

@@ -193,18 +193,8 @@ func decodeAPITokenUpdate(raw []byte) (apitoken.UpdateInput, error) {
 	if err := json.Unmarshal(raw, &members); err != nil || members == nil {
 		return apitoken.UpdateInput{}, validationFailed("", fieldInvalidFormat)
 	}
-	var unknown []string
-	for name := range members {
-		if !slices.Contains(apiTokenPatchFields, name) {
-			unknown = append(unknown, name)
-		}
-	}
-	if len(unknown) > 0 {
-		field := ""
-		if name := slices.Min(unknown); len(name) <= maxEchoedMemberLen {
-			field = "/" + pointerEscape(name)
-		}
-		return apitoken.UpdateInput{}, validationFailed(field, fieldInvalidFormat)
+	if err := rejectUnknownMembers(members, apiTokenPatchFields); err != nil {
+		return apitoken.UpdateInput{}, err
 	}
 	var nulls []problem.FieldError
 	for _, name := range apiTokenPatchFields {
@@ -225,6 +215,28 @@ func decodeAPITokenUpdate(raw []byte) (apitoken.UpdateInput, error) {
 		return apitoken.UpdateInput{}, validationFailed(field, fieldInvalidFormat)
 	}
 	return apitoken.UpdateInput{Name: b.Name, AllowedCIDRs: b.AllowedCIDRs, AllowedSenders: b.AllowedSenders}, nil
+}
+
+// rejectUnknownMembers returns a 400 validation-failed Problem when
+// members holds a member not in fields: invalid-format on the pointer of
+// the first unknown member in sorted order, or on the whole body ("") when
+// that name is longer than maxEchoedMemberLen bytes. It returns nil when
+// every member is known.
+func rejectUnknownMembers(members map[string]json.RawMessage, fields []string) error {
+	var unknown []string
+	for name := range members {
+		if !slices.Contains(fields, name) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	field := ""
+	if name := slices.Min(unknown); len(name) <= maxEchoedMemberLen {
+		field = "/" + pointerEscape(name)
+	}
+	return validationFailed(field, fieldInvalidFormat)
 }
 
 // maxEchoedMemberLen bounds the unknown member name echoed in a

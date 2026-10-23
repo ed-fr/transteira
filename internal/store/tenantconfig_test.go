@@ -294,7 +294,7 @@ func TestTenantsDeleteRefusedWhileKeysRemain(t *testing.T) {
 func TestEmailTemplateKeys(t *testing.T) {
 	t.Parallel()
 	keys := store.EmailTemplateKeys()
-	if len(keys) != 11 || !slices.IsSorted(keys) {
+	if len(keys) != 10 || !slices.IsSorted(keys) {
 		t.Fatalf("EmailTemplateKeys = %v", keys)
 	}
 	for _, k := range keys {
@@ -306,7 +306,7 @@ func TestEmailTemplateKeys(t *testing.T) {
 	if store.EmailTemplateKeys()[0] == "x" {
 		t.Error("EmailTemplateKeys returns shared state")
 	}
-	for _, k := range []string{"", "expiry-reminder", "Invitation", "invitation "} {
+	for _, k := range []string{"", "expiry-reminder", "disk-alert", "Invitation", "invitation "} {
 		if store.IsEmailTemplateKey(k) {
 			t.Errorf("IsEmailTemplateKey(%q) = true", k)
 		}
@@ -459,7 +459,7 @@ func TestTenantEmailTemplates(t *testing.T) {
 		}
 		err = s.Tx(ctx, func(tx *store.ScopedTx) error {
 			x := tpl
-			x.Key, x.Subject = store.EmailTemplateDiskAlert, "Tx"
+			x.Key, x.Subject = store.EmailTemplateAntivirusUnavailable, "Tx"
 			if _, err := repo.PutTx(ctx, tx, x); err != nil {
 				return err
 			}

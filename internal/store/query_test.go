@@ -756,6 +756,15 @@ var systemAllowlist = map[string]string{
 	`DELETE FROM system_secrets WHERE id = ?`:                                                   reasonSystemSecrets,
 	`INSERT INTO system_secrets (id, purpose, key_id, blob, created_at) VALUES (?, ?, ?, ?, ?)`: reasonSystemSecrets,
 	`SELECT id, purpose, key_id, blob, created_at FROM system_secrets WHERE id = ?`:             reasonSystemSecrets,
+	// Instance settings (0012).
+	`SELECT disk_alert_threshold_bp, alert_email, alert_email_language, maintenance_enabled, maintenance_since, ` +
+		`maintenance_message, disk_alert_level, disk_alert_changed_at, disk_alert_mailed_at, updated_at FROM system_settings WHERE id = 1`: reasonSystemSettings,
+	`UPDATE system_settings SET updated_at = updated_at WHERE id = 1`: reasonSystemSettings,
+	`UPDATE system_settings SET disk_alert_threshold_bp = ?, alert_email = ?, alert_email_language = ?, ` +
+		`maintenance_enabled = ?, maintenance_since = ?, maintenance_message = ?, updated_at = ? WHERE id = 1`: reasonSystemSettings,
+	`UPDATE system_settings SET disk_alert_level = ?, disk_alert_changed_at = ? WHERE id = 1 AND disk_alert_level = ?`: reasonSystemSettings,
+	`UPDATE system_settings SET disk_alert_mailed_at = ? WHERE id = 1 AND ` +
+		`(disk_alert_mailed_at IS NULL OR disk_alert_mailed_at <= ? OR disk_alert_mailed_at > ?)`: reasonSystemSettings,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

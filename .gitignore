@@ -48,3 +48,8 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Locally built binaries
+/transteira
+/transteira.exe
+*.exe
