@@ -1,6 +1,6 @@
-// Pure helpers of the admin application shell (App.svelte, AdminLayout, TenantNav): initial
-// language (plan D5), aria-current of the navigation links, links of the tenant sub-navigation
-// and the redirect decided by the navigation guard.
+// Pure helpers of the admin application shell (App.svelte, AdminLayout, TenantNav, SystemNav):
+// initial language (plan D5), aria-current of the navigation links, links of the tenant and
+// system sub-navigations and the redirect decided by the navigation guard.
 import type { AccessDecision } from './auth/guard';
 import type { AdminMe } from './auth/machine';
 
@@ -46,15 +46,16 @@ export type AriaCurrent = 'page' | 'true' | undefined;
 /**
  * aria-current of a link to target while path is shown: "page" on the exact page, "true" on a
  * page below it (a section link stays marked on its sub-pages, except the root "/"), otherwise
- * undefined.
+ * undefined. With exact, only the exact page is marked (a link to a parent path that is itself a
+ * sibling section, such as the system overview "/system" next to "/system/maintenance").
  */
-export function navCurrent(path: string, target: string): AriaCurrent {
+export function navCurrent(path: string, target: string, exact = false): AriaCurrent {
   const here = trimSlash(path);
   const to = trimSlash(target);
   if (here === to) {
     return 'page';
   }
-  return to !== '/' && here.startsWith(`${to}/`) ? 'true' : undefined;
+  return !exact && to !== '/' && here.startsWith(`${to}/`) ? 'true' : undefined;
 }
 
 function trimSlash(path: string): string {
@@ -150,6 +151,46 @@ export function tenantLinkGroups(tenantId: string): TenantLinkGroup[] {
     group,
     labelKey,
     links: links.filter((link) => link.group === group),
+  }));
+}
+
+/** Sections of the system administration (super admin), in navigation order. */
+export const SYSTEM_SECTIONS = ['overview', 'maintenance', 'settings', 'audit', 'masterKey'] as const;
+
+/** A section of the system administration. */
+export type SystemSection = (typeof SYSTEM_SECTIONS)[number];
+
+/** A link of the system sub-navigation. */
+export interface SystemLink {
+  section: SystemSection;
+  /** Application path, for example "/system/maintenance". */
+  path: string;
+  /** Translation key of the link text (adminSystem.nav.*). */
+  labelKey: string;
+  /** Marks the link only on its exact page (navCurrent exact): the overview is the parent path. */
+  exact: boolean;
+}
+
+const SYSTEM_SEGMENTS: Record<SystemSection, string> = {
+  overview: '',
+  maintenance: '/maintenance',
+  settings: '/settings',
+  audit: '/audit',
+  masterKey: '/master-key',
+};
+
+/** Application path of a section of the system administration ("/system" for the overview). */
+export function systemPath(section: SystemSection): string {
+  return `/system${SYSTEM_SEGMENTS[section]}`;
+}
+
+/** Links of the system sub-navigation, in order. */
+export function systemLinks(): SystemLink[] {
+  return SYSTEM_SECTIONS.map((section) => ({
+    section,
+    path: systemPath(section),
+    labelKey: `adminSystem.nav.${section}`,
+    exact: section === 'overview',
   }));
 }
 

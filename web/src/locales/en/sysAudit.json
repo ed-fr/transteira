@@ -1,0 +1,16 @@
+{
+  "filters": {
+    "label": "Filter the global audit log",
+    "tenant": "Entity",
+    "tenantHint": "With an entity selected, the events of the instance itself are not shown.",
+    "allTenants": "All entities and the instance"
+  },
+  "list": {
+    "caption": "Audit events of the instance",
+    "tenantColumn": "Entity",
+    "instance": "Instance",
+    "empty": "No audit event has been recorded yet.",
+    "emptyFiltered": "No event matches these filters.",
+    "namesError": "The entity names could not be loaded: their identifiers are shown instead."
+  }
+}

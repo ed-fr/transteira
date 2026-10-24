@@ -31,6 +31,11 @@ import TokenCreate from './screens/ops/TokenCreate.svelte';
 import TokenList from './screens/ops/TokenList.svelte';
 import TransferDetail from './screens/ops/TransferDetail.svelte';
 import TransferList from './screens/ops/TransferList.svelte';
+import GlobalAudit from './screens/system/GlobalAudit.svelte';
+import Maintenance from './screens/system/Maintenance.svelte';
+import MasterKey from './screens/system/MasterKey.svelte';
+import SystemOverview from './screens/system/SystemOverview.svelte';
+import SystemSettings from './screens/system/SystemSettings.svelte';
 import LegalEdit from './screens/tenants/LegalEdit.svelte';
 import LegalList from './screens/tenants/LegalList.svelte';
 import TemplateEdit from './screens/tenants/TemplateEdit.svelte';
@@ -52,6 +57,8 @@ export interface AdminRoute extends Route<AdminScreenComponent> {
   access: RouteAccess;
   /** Shows the tenant sub-navigation (TenantNav) above the screen; the route has an :id. */
   tenantNav?: boolean;
+  /** Shows the system sub-navigation (SystemNav) above the screen; never with tenantNav. */
+  systemNav?: boolean;
 }
 
 /** Routes of the admin application (without the base path). */
@@ -255,6 +262,46 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminAccounts.list.title',
     access: 'super',
     helpTopic: 'admins',
+  },
+  {
+    pattern: '/system',
+    component: SystemOverview,
+    titleKey: 'adminSystem.overview.title',
+    access: 'super',
+    helpTopic: 'system-overview',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/maintenance',
+    component: Maintenance,
+    titleKey: 'adminSystem.maintenance.title',
+    access: 'super',
+    helpTopic: 'system-maintenance',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/settings',
+    component: SystemSettings,
+    titleKey: 'adminSystem.settings.title',
+    access: 'super',
+    helpTopic: 'system-settings',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/audit',
+    component: GlobalAudit,
+    titleKey: 'adminSystem.audit.title',
+    access: 'super',
+    helpTopic: 'system-audit',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/master-key',
+    component: MasterKey,
+    titleKey: 'adminSystem.masterKey.title',
+    access: 'super',
+    helpTopic: 'system-master-key',
+    systemNav: true,
   },
   { pattern: '/help', component: Help, titleKey: 'common.help.title', access: 'any' },
   { pattern: '/help/:topic', component: Help, titleKey: 'common.help.title', access: 'any' },

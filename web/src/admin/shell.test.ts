@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminMe } from './auth/machine';
 import {
+  SYSTEM_SECTIONS,
   TENANT_CONFIG_SECTIONS,
   TENANT_OPS_SECTIONS,
   TENANT_SECTIONS,
@@ -9,6 +10,8 @@ import {
   redirectTarget,
   roleKey,
   sectionGroup,
+  systemLinks,
+  systemPath,
   tenantLinkGroups,
   tenantLinks,
   tenantNameOf,
@@ -60,6 +63,59 @@ describe('navCurrent', () => {
     ['/account', '/admins', undefined],
   ])('%s against %s', (path, target, expected) => {
     expect(navCurrent(path, target)).toBe(expected);
+  });
+
+  it('marks a parent link of the main navigation on the system pages', () => {
+    expect(navCurrent('/system', '/system')).toBe('page');
+    expect(navCurrent('/system/maintenance', '/system')).toBe('true');
+    expect(navCurrent('/systems', '/system')).toBeUndefined();
+  });
+
+  it.each([
+    ['/system', '/system', 'page'],
+    ['/system/', '/system', 'page'],
+    ['/system/maintenance', '/system', undefined],
+    ['/system/master-key', '/system', undefined],
+    ['/tenants/new', '/tenants', undefined],
+  ])('exact: %s against %s', (path, target, expected) => {
+    expect(navCurrent(path, target, true)).toBe(expected);
+  });
+});
+
+describe('system navigation', () => {
+  it('builds the path of every section', () => {
+    expect(SYSTEM_SECTIONS.map(systemPath)).toEqual([
+      '/system',
+      '/system/maintenance',
+      '/system/settings',
+      '/system/audit',
+      '/system/master-key',
+    ]);
+  });
+
+  it('lists the links in order, the overview marked on its exact page only', () => {
+    const links = systemLinks();
+    expect(links.map((l) => l.section)).toEqual([...SYSTEM_SECTIONS]);
+    expect(links[0]).toEqual({
+      section: 'overview',
+      path: '/system',
+      labelKey: 'adminSystem.nav.overview',
+      exact: true,
+    });
+    expect(links.at(-1)).toEqual({
+      section: 'masterKey',
+      path: '/system/master-key',
+      labelKey: 'adminSystem.nav.masterKey',
+      exact: false,
+    });
+    expect(links.filter((l) => l.exact)).toHaveLength(1);
+  });
+
+  it('marks exactly one link on each system page', () => {
+    for (const page of systemLinks()) {
+      const marked = systemLinks().filter((l) => navCurrent(page.path, l.path, l.exact) !== undefined);
+      expect(marked.map((l) => l.section)).toEqual([page.section]);
+    }
   });
 });
 

@@ -10,8 +10,9 @@
   //   authentication state; a redirect replaces the history entry and bypasses the leave
   //   guards (an unsaved-changes guard cannot keep a lost access), a refused route shows the
   //   "not found" page (like the 404 of the server), a pending state a loading indicator.
-  // - Frame: AdminLayout (default theme, no tenant colours), TenantNav above the screens of a
-  //   tenant, the screen of the current route, the footer (help link, language switch).
+  // - Frame: AdminLayout (default theme, no tenant colours, maintenance banner), TenantNav above
+  //   the screens of a tenant, SystemNav above the system screens (super admin), the screen of
+  //   the current route, the footer (help link, language switch).
   // The flash message of the anonymous state (session expired, signed out) is read from the
   // session by the sign-in screen.
   import { onMount, untrack } from 'svelte';
@@ -23,6 +24,7 @@
   import { adminSession } from './api';
   import { resolveAccess, type AccessDecision } from './auth/guard';
   import AdminLayout from './components/AdminLayout.svelte';
+  import SystemNav from './components/SystemNav.svelte';
   import TenantNav from './components/TenantNav.svelte';
   import { ADMIN_BASE, adminRoute, isHelpRoute, notFoundRoute, routes } from './routes';
   import NotFound from './screens/NotFound.svelte';
@@ -110,6 +112,8 @@
   );
   const showNav = $derived(adminSession.state.kind === 'authenticated' && decision.kind !== 'pending');
   const tenantId = $derived(route.tenantNav === true ? match.params['id'] : undefined);
+  // The two sub-navigations are exclusive (the routes never declare both).
+  const systemNav = $derived(tenantId === undefined && route.systemNav === true);
   const helpTopic = $derived(isHelpRoute(route) ? null : route.helpTopic);
 
   // Guard: redirects replace the history entry (never towards the page already shown).
@@ -149,6 +153,8 @@
       {@const Screen = route.component}
       {#if tenantId !== undefined}
         <TenantNav {tenantId} tenantName={tenantNameOf(me, tenantId)} path={match.path} nav={router} />
+      {:else if systemNav}
+        <SystemNav path={match.path} nav={router} />
       {/if}
       {#key match.path}
         <Screen params={match.params} nav={router} />

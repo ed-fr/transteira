@@ -322,9 +322,12 @@ audited) are the same and are not repeated here.
 
 The home page depends on the role:
 
-- **Super admin**: the table of all tenants (name, FQDN, status, storage
-  used against the quota), loaded page by page, with a link to the full
-  **Entities** list.
+- **Super admin**: a **Maintenance mode** card (on or off, with its start
+  date and the mention "forced by the environment" when it applies, and a
+  link to the maintenance screen), a **Disk** card (see
+  [System overview](#system-overview)) and the table of all tenants (name,
+  FQDN, status, storage used against the quota), loaded page by page, with
+  a link to the full **Entities** list.
 - **Delegated admin**: one card per attached tenant with the transfers and
   the volume uploaded over the last 30 days, the current storage level and
   quick links to its transfers, audit log and statistics. The cards load
@@ -472,6 +475,215 @@ tenant only:
 The address only travels in POST bodies: it never appears in the page
 address, the browser storage or a screen reader announcement, and the
 address and results are forgotten when you leave the screen.
+
+## System in the web interface
+
+The **System** entry of the main menu is shown to the **super admin
+only**. Its sub-navigation has five screens: **Overview**, **Maintenance**,
+**Settings**, **Audit log** and **Master key**. A delegated admin has no
+**System** entry, and the `/system` addresses show "page not found" (the
+server also answers `403` to the underlying calls, except
+`GET /admin/system/maintenance`, readable by every admin for the
+maintenance banner). The screens use the
+operations described in [Maintenance mode](#maintenance-mode),
+[System settings and disk alert](#system-settings-and-disk-alert),
+[Audit log](#audit-log), [Statistics](#statistics) and
+[Master key](master-key.md); the rules are not repeated here.
+
+### Super admin dashboard
+
+The home page of the super admin starts with two cards, above the tenant
+table:
+
+- **Maintenance mode**: on or off, with the start date and "(forced by the
+  environment)" when `TT_MAINTENANCE=true` imposes it, and a link to the
+  maintenance screen.
+- **Disk**: the disk meter, the alert threshold and the alert state, as on
+  the [System overview](#system-overview), and a short warning when the
+  alert is not sent by mail. The card loads on its own (from the global
+  statistics); if it fails, it shows its message and a **Try again**
+  button without affecting the rest of the page.
+
+### System overview
+
+- **Period**: last 7 days, 30 days (the default) or 12 months, kept in the
+  page address like the tenant statistics.
+- **Data disk**: a meter of the space used on the filesystem of
+  `TT_DATA_DIR` ("120 GiB of 500 GiB (24 %)"), whose warning colour starts
+  at the **configured alert threshold** (not at 80 % as for the tenant
+  quotas), the threshold itself ("Alert threshold: 85 %") and a written
+  badge **Alert active** or **No alert** (the only state badge of the disk,
+  so that it never contradicts a quota-style level). The alert is raised
+  at the threshold and cleared 5 points below it.
+- **Alert mail not configured**: when no
+  [system SMTP server](#system-smtp-server) is configured, a prominent
+  warning says that the disk alert is only visible on this page, in the
+  audit log and in the application log. To receive it by mail, set
+  `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM` and the related variables
+  (see `.env.example`) and restart: the super admins then receive it, and
+  an additional alert address can be set in the
+  [settings](#system-settings-screen).
+- **Entities**: one row per active tenant, with its name (link to the
+  tenant), the transfers and the volume uploaded over the period, and its
+  storage level ("12 GiB of 100 GiB (12 %)" with a written badge, warning
+  from 80 % of the quota, full from 100 %).
+- The figures are indicative: the counters are written about every 30
+  seconds.
+
+### Maintenance screen
+
+- **Current state**: on or off, the **source** (none, environment
+  `TT_MAINTENANCE=true`, or turned on in the administration) and the start
+  date.
+- **Form**: the **Maintenance mode on** switch and one message per language
+  (French and English). Each message is optional, **plain text** of at most
+  **500 characters**; line breaks are kept, formatting and links are not.
+  The screen refuses, before sending, control characters other than line
+  breaks, the Unicode line and paragraph separators (U+2028, U+2029) and the
+  invisible bidirectional characters (a frequent cause: text pasted from
+  another application; type it again). This check only helps: the server
+  applies the same rules and has the final word. Emptying both messages
+  clears the stored messages.
+- **Warning**: the messages are shown on the public page of **every
+  tenant**, to anyone. Write nothing confidential (no tenant names,
+  internal addresses or details of the infrastructure).
+- **Preview**: the messages as they will be shown, as text, under the
+  standard maintenance text. A language without a message shows the
+  message of the other language, if any. The messages are never
+  interpreted as HTML, here or on the public pages.
+- **Confirmation**: turning the mode on or off asks for a confirmation,
+  since it blocks (or reopens) new deposits on every tenant; uploads in
+  progress pause until the end of the maintenance.
+- **Banner**: while the mode is on, every admin (super admin and delegated
+  admins) sees a banner at the top of the administration: "Maintenance
+  mode has been on since …: new deposits are refused on every entity",
+  with "(forced by the environment)" when it applies, and, for the super
+  admin, a link to this screen. The state is read at sign-in, on **each
+  navigation** in the administration, when the tab is **shown again**, and
+  right after a change on this screen. It is **never read on a timer**:
+  every request to the administration API extends the session, so a
+  background read would keep an unattended session open beyond its
+  30-minute idle timeout. A change made elsewhere (another tab, another
+  super admin, a restart with `TT_MAINTENANCE`) therefore appears at the
+  next navigation. When the state cannot be read, the dashboard card says
+  so, with the link to this screen. The maintenance message itself is
+  meant for the public pages and is not repeated in the banner.
+
+**Forced by the environment.** While `TT_MAINTENANCE=true` imposes the
+mode, the screen explains it and does not offer to turn it off (a refusal
+`409 state-conflict`, for example from another tab, is reported and the
+state reloaded). It shows the **choice recorded in the administration**
+(`adminEnabled`), which applies once the variable is removed and the
+instance restarted. The messages can still be edited, but the API cannot
+store messages with `enabled: false` while the environment forces the mode,
+so **saving them also records the mode as on** in the administration. When
+the recorded choice was off, the screen asks for a confirmation first:
+after removing `TT_MAINTENANCE` and restarting, the mode then stays on
+until you turn it off on this screen.
+
+### System settings screen
+
+- **Alert threshold**: a percentage from **50 to 99**, with at most two
+  decimals (`85`, `85.5` or `85,5`); it is stored as a ratio (`0.855`). The
+  alert is raised when the disk usage reaches the threshold and clears
+  once it falls **5 points below** it. Lowering the threshold below the
+  current usage raises the alert at once.
+- **Additional alert address**: optional, receives the disk alert in
+  addition to the super admins. The address is **not verified** (no code is
+  sent to it), which the screen points out: a new address must be **typed a
+  second time** to confirm it. Emptying the field **removes** the address
+  (`alertEmail: null`); the alert is then mailed to the super admins only,
+  and stays visible in the overview and in the audit log.
+- Only the changed fields are sent (merge patch). A reminder explains that
+  the alert mails go through the system SMTP server, and a link opens the
+  overview.
+
+### Global audit log screen
+
+- **Filters**: **Entity** (a list of all tenants, sorted by name, with
+  **All entities and the instance** first) and **action** (the grouped
+  list of the tenant audit log, plus the **Administrators and sign-in** and
+  **Instance** groups, or a code typed as **Other action**). Both are kept
+  in the page address.
+- There is **no "instance events only" filter**, because the API cannot
+  return them alone: without an entity, the log holds the events of every
+  tenant and of the instance; with an entity selected, only that tenant's
+  events, the instance events being excluded (the screen says so). There
+  is no actor or date filter on this log either.
+- **Columns**: an **Entity** column (the tenant name, linking to the
+  tenant; the raw identifier for a deleted tenant or when the names cannot
+  be loaded; **Instance** for an event without tenant, such as a sign-in,
+  an admin account change, the maintenance mode, the system settings, the
+  disk alert or a master key rotation), then the columns of the tenant
+  audit log (date, actor, action, object, IP, details). Object links point
+  to the tenant of the event.
+
+### Master key screen
+
+The screen runs step 3 of the
+[master key rotation](master-key.md#rotation) from the administration (see
+[Rotating from the administration](master-key.md#rotating-from-the-administration)).
+It shows **key identifiers only** (`mk_` and 16 hexadecimal characters),
+never key material: the API returns none, and the administration cannot
+create, upload or download a key.
+
+- **Master keys**: the current key (`TT_MASTER_KEY_FILE`) and the new key
+  (`TT_MASTER_KEY_NEW_FILE`, or "None configured"), with the invitation to
+  check them against the vault, and a **Restart required** badge after a
+  completed rotation.
+- **Latest rotation**: identifier, status (running, completed or failed),
+  from and to keys, start and end dates, progress and error.
+
+What the screen offers depends on the state:
+
+| State | What is shown |
+|---|---|
+| No new key configured | Steps 1 and 2 (generate the key and store it in the vault, mount it with `TT_MASTER_KEY_NEW_FILE` and restart), with the path of the documentation. **No start button.** |
+| Ready | A checklist of two boxes, **"The new key is stored in the password vault outside the VM"** and **"I checked both key identifiers"**, then **Start the rotation**. |
+| Running | The progress ("N keys re-wrapped out of M", bar capped at 100 %, since keys created under the old key meanwhile can push the count above the total). The rotation runs on the server: the page can be left. |
+| Interrupted | The rotation stays running but its progress has not moved for about **30 seconds** (and three reads): the screen suggests it was interrupted, for example by a restart, and offers **Resume the rotation** (checklist and a new code again). |
+| Unfinished rotation between other keys | Cannot be resumed from here: configure the keys it names, or abandon it with `rotate-master-key -abandon`. |
+| Completed (restart required) | The next steps: point `TT_MASTER_KEY_FILE` to the new key, remove `TT_MASTER_KEY_NEW_FILE` and restart; update the vault; keep the old key as long as older backups exist. After the restart, open pages must be reloaded (see the effect of step 4 in [Rotation](master-key.md#rotation)). No new start before the restart. |
+| Failed | The error reported by the server, as text, and **Start the rotation again** (a new rotation) once the cause is fixed. |
+
+**Starting.** Once both boxes are ticked, the start button opens a dialog
+that asks for the **current code of the authenticator** or, with the
+link to switch, a **recovery code** (consumed once used). **If you have
+just signed in, wait for the next code**: a code already used cannot be
+used again. A wrong code keeps the dialog open with the attempts left
+when the server gives them; once locked, the dialog shows the remaining
+wait. Wrong codes are counted per session together with those of the
+sign-in, and the dialog says so: the **fifth** wrong code is still answered
+as a wrong code (`401 invalid-credentials`) but ends the session, and the
+**next request** brings back the sign-in page. A refusal `409` closes the dialog, shows the reason on the page
+(no new key configured, a rotation already running, a rotation between
+other keys unfinished, a restart required) and reloads the state. The
+typed code is kept only in the page memory: it is cleared at each
+submission and when the dialog closes, and it never appears in the page
+address, the browser storage or an announcement.
+
+**Progress.** While a rotation runs, the screen reads its progress every
+**2 seconds**, every 10 seconds while the tab is hidden or the rotation
+looks interrupted, with a longer wait after failed reads; it stops on a
+final status and when you leave the screen. Since each read extends the
+session, the reads **pause after 10 minutes without activity** on the page
+(no click, no key press, tab not shown again): a notice says that updates
+are paused while you are away and that the rotation continues on the
+server, with **Resume updates**. After an error that is not worth retrying
+(other than a network or server error), the reads stop with a warning and
+a **Retry** button; reloading the status does not restart them. Screen
+readers hear the start, the 25, 50, 75 and 100 % milestones and the end,
+never every read.
+
+**Resuming.** The interruption detection is only a hint: the API cannot
+tell whether the worker runs. **Resume the rotation** sends a new start
+request: the server answers with the **same rotation identifier** and
+continues where it stopped. If the worker of this server instance was in
+fact still running, the server refuses with `409` (already running) and
+nothing changes. If another process runs it (the `rotate-master-key`
+command), the resumption runs alongside it safely: each key is re-wrapped
+with a conditional update, and the worker that finds the rotation finished
+elsewhere stops; part of the work is only done twice.
 
 ## Tenant operations
 

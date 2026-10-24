@@ -390,6 +390,39 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `web/README.md`, admin tree in `docs/architecture/project-structure.md`, threat model v0.18 (new
   T-167 API token secret shown once in the interface, T-168 personal data in the operation
   screens).
+- Web administration, part 3 (`web/src/admin`, super admin only): **System** menu entry with its
+  sub-navigation (`SystemNav`, routes `/system/*`, hidden and "page not found" for a delegated
+  admin) and system screens (`screens/system/`): overview (7 days, 30 days or 12 months in the URL,
+  disk meter whose warning level is the configured alert threshold, alert badge, prominent warning
+  when the alert cannot be mailed without the system SMTP server, activity and storage of every
+  tenant), maintenance mode (state and source, stored choice while `TT_MAINTENANCE` forces the
+  mode, French and English plain text messages of at most 500 characters with a client check of
+  the refused characters and a text-only preview, confirmations, warning that the messages are
+  shown on every tenant), system settings (disk alert threshold edited as a percentage from 50 to
+  99 with two decimals, additional alert address typed twice since it is not verified, removal),
+  global audit log (tenant and action filters in the URL, every action group including
+  administrators and instance, "Entity" column with "Instance" for the events without tenant; no
+  "instance only" filter since the API cannot return them alone) and master key rotation (key
+  identifiers only, steps 1 and 2 without a new key, two-box checklist then TOTP or recovery code
+  in a dialog with "wait for the next code" and the warning that repeated wrong codes end the
+  session, progress polled every 2 s with a self-scheduling poller stopped when the screen goes
+  away, paused after 10 minutes without user activity ("Resume updates", `activity.ts`) and
+  stopped after a persistent error ("Retry"), answers of an earlier polling ignored, bar capped
+  at 100 %, milestone announcements,
+  interruption detection after about 30 s without progress with a resume under the same
+  identifier, 401/429/409 handling, next steps after completion, error after a failure; the code
+  stays in component memory and is cleared after each submission). Maintenance banner shown to
+  every admin while the mode is on (start date, "forced by the environment", link for the super
+  admin), read at sign-in, on each navigation, when the tab is shown again and after a change,
+  never on a timer since every read extends the admin session (`maintenance.svelte.ts`,
+  `maintenanceBanner.ts`). Super admin dashboard: maintenance card ("state unknown" when it
+  cannot be read) and disk card. French and English translations (`adminSystem`, `sysStats`, `sysMaintenance`,
+  `sysSettings`, `sysAudit`, `sysMasterKey`). Documentation: system in the web interface in
+  `docs/operations/admin.md`, the master key screen in `docs/operations/master-key.md`, system
+  screens, maintenance store and poller in `web/README.md`, admin tree in
+  `docs/architecture/project-structure.md`, threat model v0.19 (new T-169 master key rotation from
+  the interface, T-170 maintenance message shown by the interface, T-165 extended: no
+  timer-driven read for an idle admin).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -435,3 +468,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Admin network screen: an added invalid line counts as a change, so saving shows the error
   summary instead of "no changes"; line list fields no longer repeat their error under the
   per-line list, and the summary reads "N lines are invalid."
+- Admin audit log: the display of the events (actor, action, object, details) moves to reusable
+  components (`AuditEventsTable`, `AuditActorCell`, `AuditActionCell`, `AuditObjectCell`,
+  `AuditDetails`), shared by the tenant and global logs; object links point to the tenant of the
+  event. The tenant audit log behaves as before.
+- Admin `QuotaMeter` and `quota.ts` accept a `warningRatio` option (default 80 %), used by the disk
+  meters with the configured alert threshold.
+- Admin shell: `navCurrent` takes an `exact` option, so that a link to a parent path (the system
+  overview `/system`) is not marked as current on its sibling sections.
+- `make check` runs the Go tests with a 30-minute timeout instead of the 10-minute default of
+  `go test`, which the slowest packages could exceed on a loaded machine.

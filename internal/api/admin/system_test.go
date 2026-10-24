@@ -580,3 +580,30 @@ func TestMasterKeyOperations(t *testing.T) {
 		t.Errorf("status failure: %v", err)
 	}
 }
+
+// TestRotationConflictDetails pins the exact texts of the 409 state-conflict
+// details of startMasterKeyRotation. The administration matches them (keep in
+// sync with conflictKind in web/src/admin/screens/system/masterKey.ts, which
+// looks for "already running", "other keys" and "restart"); changing one is a
+// breaking change for that screen and for the OpenAPI examples.
+func TestRotationConflictDetails(t *testing.T) {
+	cases := map[string]string{
+		detailRotationRunning:  "A master key rotation is already running.",
+		detailRotationMismatch: "A rotation between other keys is unfinished; finish or abandon it with the command line.",
+		detailRestartRequired:  "The last rotation is complete; restart with the new key as TT_MASTER_KEY_FILE before starting another.",
+	}
+	for got, want := range cases {
+		if got != want {
+			t.Errorf("detail = %q, want %q", got, want)
+		}
+	}
+	for detail, marker := range map[string]string{
+		detailRotationRunning:  "already running",
+		detailRotationMismatch: "other keys",
+		detailRestartRequired:  "restart",
+	} {
+		if !strings.Contains(strings.ToLower(detail), marker) {
+			t.Errorf("detail %q does not contain %q", detail, marker)
+		}
+	}
+}

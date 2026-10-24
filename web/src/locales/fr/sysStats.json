@@ -1,0 +1,36 @@
+{
+  "indicative": "Ces chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes. Seules les entités actives sont listées.",
+  "disk": {
+    "title": "Disque de données",
+    "label": "Espace disque occupé",
+    "threshold": "Seuil d’alerte : {percent}",
+    "thresholdHint": "L’alerte se lève au seuil et retombe 5 points en dessous.",
+    "alertActive": "Alerte active",
+    "alertInactive": "Aucune alerte",
+    "changeSettings": "Modifier le seuil et l’adresse d’alerte",
+    "mailWarningTitle": "L’alerte disque n’est pas envoyée par mail",
+    "mailWarning": "Aucun serveur SMTP système n’est configuré : l’alerte disque n’est visible que sur cette page, dans le journal d’audit et dans le journal applicatif.",
+    "mailWarningAction": "Pour la recevoir par mail, configurez le serveur SMTP système avec les variables d’environnement {variables} (voir la documentation d’installation et .env.example), et redémarrez l’application : les super administrateurs la recevront alors, et une adresse d’alerte supplémentaire peut être renseignée dans les paramètres système.",
+    "settingsLink": "Ouvrir les paramètres système"
+  },
+  "tenants": {
+    "title": "Entités",
+    "caption": "Activité et stockage des entités sur la période",
+    "empty": "Aucune entité active.",
+    "name": "Entité",
+    "transfers": "Transferts",
+    "volume": "Volume déposé",
+    "storage": "Stockage"
+  },
+  "home": {
+    "diskTitle": "Disque",
+    "diskLoading": "Chargement de l’occupation du disque…",
+    "diskError": "L’occupation du disque n’a pas pu être chargée.",
+    "overviewLink": "Ouvrir la vue d’ensemble du système",
+    "maintenanceTitle": "Mode maintenance",
+    "maintenanceOn": "Activé",
+    "maintenanceOff": "Désactivé",
+    "maintenanceUnknown": "L’état n’a pas pu être lu. Ouvrez l’écran de maintenance pour le consulter.",
+    "maintenanceLink": "Gérer le mode maintenance"
+  }
+}

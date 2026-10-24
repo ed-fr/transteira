@@ -8,6 +8,7 @@ import {
   quotaMeterAttributes,
   quotaRatio,
   quotaTexts,
+  warningRatioOrDefault,
   type QuotaLevel,
   type Translate,
 } from './quota';
@@ -40,6 +41,23 @@ describe('quotaLevel', () => {
     expect(quotaLevel(1.2)).toBe('full');
   });
 
+  it('warns from a custom warning ratio', () => {
+    expect(quotaLevel(0.84, 0.85)).toBe('ok');
+    expect(quotaLevel(0.85, 0.85)).toBe('warning');
+    expect(quotaLevel(0.5, 0.5)).toBe('warning');
+    expect(quotaLevel(1, 0.85)).toBe('full');
+  });
+
+  it('falls back to the default ratio when the custom one is invalid', () => {
+    expect(warningRatioOrDefault()).toBe(QUOTA_WARNING_RATIO);
+    expect(warningRatioOrDefault(0.85)).toBe(0.85);
+    expect(warningRatioOrDefault(1)).toBe(1);
+    for (const bad of [0, -0.2, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(warningRatioOrDefault(bad)).toBe(QUOTA_WARNING_RATIO);
+    }
+    expect(quotaLevel(0.8, Number.NaN)).toBe('warning');
+  });
+
   it('maps each level to a badge variant', () => {
     expect((['ok', 'warning', 'full'] as QuotaLevel[]).map(quotaBadgeVariant)).toEqual([
       'ok',
@@ -59,6 +77,11 @@ describe('quotaMeterAttributes', () => {
       high: 100,
       optimum: 0,
     });
+  });
+
+  it('sets low at a custom warning ratio', () => {
+    expect(quotaMeterAttributes(30, 200, 0.85).low).toBe(170);
+    expect(quotaMeterAttributes(30, 200, 2).low).toBe(160);
   });
 
   it('clamps the value', () => {
@@ -81,6 +104,11 @@ describe('quotaTexts', () => {
       usage: 'adminComponents.quota.usage {"used":"85B","quota":"100B","percent":"85%"}',
       level: 'adminComponents.quota.level.warning',
     });
+  });
+
+  it('uses a custom warning ratio for the level', () => {
+    expect(quotaTexts(84, 100, fmt, pct, fakeT, 0.85).level).toBe('adminComponents.quota.level.ok');
+    expect(quotaTexts(85, 100, fmt, pct, fakeT, 0.85).level).toBe('adminComponents.quota.level.warning');
   });
 
   it('states when no quota is set', () => {

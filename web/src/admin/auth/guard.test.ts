@@ -211,6 +211,15 @@ describe('resolveAccess', () => {
     expect(resolveAccess(delegated, req('auth', '/admins/:id', { id: 'adm_9' }))).toEqual({ kind: 'render' });
   });
 
+  it.each(['/system', '/system/maintenance', '/system/settings', '/system/audit', '/system/master-key'])(
+    'reserves the system page %s to the super admin',
+    (path) => {
+      expect(resolveAccess(superAdmin, req('super', path))).toEqual({ kind: 'render' });
+      expect(resolveAccess(delegated, req('super', path))).toEqual({ kind: 'notFound' });
+      expect(resolveAccess(anonymous, req('super', path))).toMatchObject({ kind: 'redirect' });
+    },
+  );
+
   it('limits tenant routes to the tenants of the admin', () => {
     expect(resolveAccess(delegated, req('auth', '/tenants/t1/general', { id: 't1' }))).toEqual({
       kind: 'render',

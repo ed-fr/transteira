@@ -1,0 +1,96 @@
+{
+  "keys": {
+    "title": "Clés maîtres",
+    "active": "Clé actuelle (TT_MASTER_KEY_FILE)",
+    "new": "Nouvelle clé (TT_MASTER_KEY_NEW_FILE)",
+    "none": "Aucune configurée",
+    "check": "Vérifiez ces identifiants dans les entrées de votre coffre de mots de passe. Seuls les identifiants sont affichés ici : les clés elles-mêmes ne quittent jamais le serveur.",
+    "restartRequired": "Redémarrage requis"
+  },
+  "prepare": {
+    "title": "Préparer une rotation",
+    "intro": "Aucune nouvelle clé maître n’est configurée : la rotation ne peut pas démarrer. Les étapes 1 et 2 de la rotation se font sur le serveur :",
+    "step1": "Générez une nouvelle clé et rangez-la aussitôt dans le coffre de mots de passe hors de la VM, avec son identifiant.",
+    "step2": "Montez le fichier de la nouvelle clé comme second secret, renseignez son chemin dans TT_MASTER_KEY_NEW_FILE (en laissant TT_MASTER_KEY_FILE sur la clé actuelle), puis redémarrez chaque processus TransTeira.",
+    "step3": "Revenez sur cette page : l’identifiant de la nouvelle clé s’affiche et la rotation peut démarrer.",
+    "doc": "Procédure complète :"
+  },
+  "latest": {
+    "title": "Dernière rotation",
+    "id": "Rotation",
+    "status": "Statut",
+    "from": "Clé de départ",
+    "to": "Clé d’arrivée",
+    "started": "Démarrée le",
+    "completed": "Terminée le",
+    "progressLabel": "Rechiffrement des clés",
+    "statuses": {
+      "running": "En cours",
+      "completed": "Terminée",
+      "failed": "Échouée"
+    },
+    "leave": "La rotation s’exécute sur le serveur : vous pouvez quitter cette page, elle continue. Les fichiers ne sont ni relus ni réécrits."
+  },
+  "progress": {
+    "text": "{done} clés rechiffrées sur {total}"
+  },
+  "poll": {
+    "error": "La progression n’a pas pu être lue. De nouvelles tentatives sont faites automatiquement.",
+    "stopped": "La progression ne peut plus être lue : les mises à jour sont arrêtées. La rotation continue sur le serveur.",
+    "idle": "Les mises à jour de la progression sont suspendues pendant votre absence. La rotation continue sur le serveur.",
+    "resume": "Reprendre les mises à jour"
+  },
+  "interrupted": {
+    "title": "La rotation semble interrompue",
+    "text": "La rotation semble interrompue (par exemple par un redémarrage du serveur) : sa progression n’a pas changé depuis un moment. Reprenez-la avec un nouveau code ; elle continue là où elle s’est arrêtée, avec le même identifiant."
+  },
+  "other": {
+    "title": "Rotation inachevée entre d’autres clés",
+    "text": "Une rotation entre d’autres clés que celles configurées est inachevée. Elle ne peut pas être reprise d’ici : configurez les clés qu’elle désigne pour la terminer, ou abandonnez-la en ligne de commande (rotate-master-key -abandon)."
+  },
+  "failed": {
+    "title": "La dernière rotation a échoué",
+    "text": "Erreur signalée par le serveur :",
+    "retry": "Un nouveau démarrage lance une nouvelle rotation. Corrigez d’abord la cause (voir la section de dépannage de la documentation)."
+  },
+  "done": {
+    "title": "Rotation terminée : redémarrez avec la nouvelle clé",
+    "intro": "La base enregistre déjà la nouvelle clé comme active. Terminez la rotation sur le serveur :",
+    "step1": "Faites pointer TT_MASTER_KEY_FILE vers le fichier de la nouvelle clé, retirez TT_MASTER_KEY_NEW_FILE (et le secret de l’ancienne clé), puis redémarrez. D’ici là, le prochain démarrage du serveur est refusé.",
+    "step2": "Mettez à jour le coffre de mots de passe : marquez la nouvelle clé comme actuelle, et l’ancienne comme retirée, avec la date de la rotation.",
+    "step3": "Conservez l’ancienne clé dans le coffre tant que vous gardez des sauvegardes antérieures à la rotation. Quand la dernière a expiré, supprimez l’ancienne clé du coffre et de l’hôte.",
+    "effect": "Effet du redémarrage pour les utilisateurs : les pages ouvertes (dépôt et administration) doivent être rechargées, un code en cours de saisie doit être redemandé, et les déposants internes doivent de nouveau saisir un code de vérification à leur prochaine visite. Redémarrez à un moment calme ; aucune donnée n’est perdue.",
+    "noStart": "Une nouvelle rotation ne pourra démarrer qu’après ce redémarrage."
+  },
+  "start": {
+    "intro": "La rotation rechiffre les clés enregistrées en base avec la nouvelle clé maître. Confirmez les deux points, puis saisissez un code de votre application d’authentification.",
+    "vault": "La nouvelle clé est rangée dans le coffre de mots de passe hors de la VM",
+    "ids": "J’ai vérifié les deux identifiants de clé",
+    "required": "Cochez les deux cases pour démarrer.",
+    "button": "Démarrer la rotation",
+    "resume": "Reprendre la rotation",
+    "again": "Relancer la rotation"
+  },
+  "dialog": {
+    "title": "Confirmer avec un code",
+    "intro": "Saisissez le code actuel de votre application d’authentification.",
+    "recoveryIntro": "Saisissez l’un de vos codes de secours. Il ne peut servir qu’une fois.",
+    "wait": "Si vous venez de vous connecter, attendez le code suivant : un code déjà utilisé ne peut pas resservir.",
+    "session": "Plusieurs codes faux de suite ferment votre session : après le cinquième, la requête suivante vous ramène à la page de connexion.",
+    "submit": "Démarrer",
+    "submitting": "Démarrage…",
+    "cancel": "Annuler"
+  },
+  "announce": {
+    "started": "Rotation de la clé maître démarrée.",
+    "milestone": "Rotation de la clé maître : {percent} % effectués.",
+    "completed": "Rotation de la clé maître terminée. Redémarrez le serveur avec la nouvelle clé.",
+    "failed": "La rotation de la clé maître a échoué."
+  },
+  "errors": {
+    "newKeyMissing": "Aucune nouvelle clé maître n’est configurée sur le serveur (TT_MASTER_KEY_NEW_FILE). Faites les étapes 1 et 2, puis revenez.",
+    "running": "Une rotation de la clé maître est déjà en cours. Sa progression est affichée ci-dessous.",
+    "otherKeys": "Une rotation entre d’autres clés est inachevée : terminez-la ou abandonnez-la en ligne de commande.",
+    "restartRequired": "La rotation vers la nouvelle clé est déjà terminée : redémarrez le serveur avec la nouvelle clé dans TT_MASTER_KEY_FILE avant de lancer une autre rotation."
+  }
+}

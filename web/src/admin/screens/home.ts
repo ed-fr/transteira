@@ -1,12 +1,14 @@
 // Logic of the administration home (dashboard), kept out of the component so that it is unit
 // tested in Node: kind of dashboard per role, cards of a delegated admin (30-day statistics,
-// storage quota, quick links) loaded with a bounded concurrency, and rows of the tenant table of
-// the super admin. The statistics mapping is deliberately minimal (the statistics screen has its
-// own).
+// storage quota, quick links) loaded with a bounded concurrency, and, for the super admin, the
+// rows of the tenant table, the disk card and the maintenance state. The statistics mapping is
+// deliberately minimal (the statistics screen has its own).
 import type { components } from '../../shared/api/schema';
 import type { AdminMe } from '../auth/machine';
 import { quotaBadgeVariant, quotaLevel, quotaRatio, quotaTexts, type QuotaLevel } from '../components/quota';
-import { tenantPath, type TenantSection } from '../shell';
+import { maintenanceBanner, maintenanceBannerText, type Maintenance } from '../maintenanceBanner';
+import { systemPath, tenantPath, type TenantSection } from '../shell';
+import { diskView, type DiskView, type GlobalStats } from './system/overview';
 import { statusView } from './tenants/tenants';
 import type { Translate } from '../../shared/i18n/messages';
 
@@ -182,5 +184,60 @@ export function tenantRow(
     level,
     levelVariant: quotaBadgeVariant(level),
     levelLabel: texts.level,
+  };
+}
+
+// ---- Super admin: disk card and maintenance state -------------------------------------------
+
+/** Period requested for the disk card (only the disk part of the answer is used). */
+export const DISK_CARD_PERIOD = '30d' as const;
+
+/** State of the disk card of the super admin, loaded independently of the tenant table. */
+export type DiskCard =
+  { state: 'loading' } | { state: 'ready'; disk: DiskView } | { state: 'error'; message: string };
+
+/** Disk card built from the global statistics. */
+export function diskCard(
+  stats: Pick<GlobalStats, 'disk'>,
+  t: Translate,
+  formatPercent: (r: number) => string,
+): DiskCard {
+  return { state: 'ready', disk: diskView(stats.disk, t, formatPercent) };
+}
+
+/** Maintenance line of the dashboard of the super admin. */
+export interface MaintenanceLine {
+  /** The state is known (read at least once). */
+  known: boolean;
+  /** The state is unknown because its read failed: the card says so instead of waiting. */
+  failed: boolean;
+  /** Badge: warning while the maintenance mode is on, ok otherwise. */
+  variant: 'warning' | 'ok';
+  /** Text of the badge. */
+  label: string;
+  /** Detail: the banner text while on (start date, forced by the environment), empty otherwise. */
+  text: string;
+  /** Link to the maintenance screen. */
+  linkPath: string;
+}
+
+/**
+ * Maintenance line for the last known state (undefined while unknown); failed tells that the
+ * latest read failed (adminMaintenance.failed).
+ */
+export function maintenanceLine(
+  state: Maintenance | undefined,
+  t: Translate,
+  formatDate: (iso: string) => string,
+  failed = false,
+): MaintenanceLine {
+  const view = maintenanceBanner(state, 'super_admin');
+  return {
+    known: state !== undefined,
+    failed: state === undefined && failed,
+    variant: view.visible ? 'warning' : 'ok',
+    label: t(view.visible ? 'sysStats.home.maintenanceOn' : 'sysStats.home.maintenanceOff'),
+    text: view.visible ? maintenanceBannerText(view, t, formatDate) : '',
+    linkPath: systemPath('maintenance'),
   };
 }

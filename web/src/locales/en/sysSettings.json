@@ -1,0 +1,29 @@
+{
+  "form": {
+    "title": "Disk usage alert"
+  },
+  "threshold": {
+    "label": "Alert threshold (% of the data disk)",
+    "hint": "A percentage from {min} to {max}. The alert is raised when disk usage reaches the threshold and clears once usage falls {points} points below it.",
+    "required": "Enter the alert threshold.",
+    "invalid": "Enter a number, with at most two decimals, for example 85.",
+    "range": "Enter a percentage from {min} to {max}."
+  },
+  "email": {
+    "label": "Additional alert address",
+    "hint": "Optional. Receives the disk alert in addition to the super admins. Leave empty to remove it.",
+    "unverified": "This address is not verified: no code is sent to it. Check it carefully, an error would send the alerts to someone else.",
+    "confirmLabel": "Alert address again",
+    "confirmHint": "Type the new address again to confirm it.",
+    "confirmRequired": "Type the new address again.",
+    "confirmMismatch": "The two addresses do not match.",
+    "invalid": "Enter a valid email address, for example alerts@example.com.",
+    "removing": "Once the address is removed, the disk alert is mailed to the super admins only. It stays visible in the system overview and in the audit log."
+  },
+  "smtp": {
+    "title": "Sending of the alerts",
+    "text": "Alert mails are sent through the system SMTP server of the instance, configured by environment variables ({host}, {from} and the related variables of the .env file). Without it, no alert mail is sent: the disk alert is only visible in the system overview, in the audit log and in the application log."
+  },
+  "overviewLink": "View the disk usage in the system overview",
+  "saved": "System settings saved."
+}

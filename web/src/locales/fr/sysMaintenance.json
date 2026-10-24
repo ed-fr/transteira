@@ -1,0 +1,73 @@
+{
+  "state": {
+    "title": "État actuel",
+    "label": "État",
+    "on": "Actif",
+    "off": "Inactif",
+    "since": "Depuis le"
+  },
+  "source": {
+    "label": "Source",
+    "none": "Aucune (le mode maintenance est inactif)",
+    "environment": "Environnement (TT_MAINTENANCE=true)",
+    "admin": "Activé depuis l’administration"
+  },
+  "stored": {
+    "label": "Choix enregistré dans l’administration",
+    "on": "Actif : le mode maintenance restera actif après le retrait de TT_MAINTENANCE",
+    "off": "Inactif : le mode maintenance prendra fin après le retrait de TT_MAINTENANCE"
+  },
+  "forced": {
+    "title": "Imposé par l’environnement",
+    "text": "L’instance a été démarrée avec TT_MAINTENANCE=true : le mode maintenance reste actif quel que soit le choix fait ici, jusqu’au retrait de la variable et au redémarrage de l’instance.",
+    "save": "Vous pouvez tout de même modifier les messages. Les enregistrer active aussi le mode maintenance dans l’administration : après le retrait de TT_MAINTENANCE, désactivez-le ici."
+  },
+  "form": {
+    "title": "Mode maintenance et messages",
+    "enabled": {
+      "label": "Mode maintenance actif",
+      "hint": "Refuse les nouveaux dépôts sur toutes les entités et affiche la page de maintenance.",
+      "forcedHint": "Impossible de le désactiver ici tant que TT_MAINTENANCE=true impose le mode."
+    },
+    "message": {
+      "fr": "Message en français",
+      "en": "Message en anglais",
+      "hint": "Facultatif, texte brut, {max} caractères au plus. Les sauts de ligne sont conservés, pas la mise en forme ni les liens. Il s’affiche sous le texte de maintenance standard ; s’il est vide, les visiteurs de cette langue voient le message de l’autre langue, s’il existe.",
+      "warning": "Ces messages s’affichent sur la page publique de toutes les entités, pour tout le monde : n’y écrivez rien de confidentiel (ni noms internes, ni adresses, ni détails de votre infrastructure)."
+    }
+  },
+  "preview": {
+    "title": "Aperçu",
+    "intro": "Les messages s’affichent en texte brut sous le texte de maintenance standard, exactement comme ci-dessous.",
+    "empty": "Aucun message dans cette langue : le message de l’autre langue s’affiche, s’il existe."
+  },
+  "confirm": {
+    "enable": {
+      "title": "Activer le mode maintenance ?",
+      "text": "Les nouveaux dépôts seront refusés sur toutes les entités jusqu’à la désactivation du mode maintenance. Les envois en cours sont suspendus et reprennent après sa désactivation.",
+      "action": "Activer"
+    },
+    "disable": {
+      "title": "Désactiver le mode maintenance ?",
+      "text": "Les nouveaux dépôts seront de nouveau acceptés sur toutes les entités.",
+      "action": "Désactiver"
+    },
+    "keepAfterEnvironment": {
+      "title": "Enregistrer le mode maintenance comme actif ?",
+      "text": "Tant que TT_MAINTENANCE=true impose le mode, enregistrer l’active aussi dans l’administration : le mode maintenance restera actif après le retrait de la variable, jusqu’à ce que vous le désactiviez ici.",
+      "action": "Enregistrer"
+    }
+  },
+  "saved": {
+    "enabled": "Le mode maintenance est actif : les nouveaux dépôts sont refusés sur toutes les entités.",
+    "disabled": "Le mode maintenance est inactif : les nouveaux dépôts sont de nouveau acceptés.",
+    "updated": "Réglages de maintenance enregistrés."
+  },
+  "notSaved": "Rien n’a été enregistré.",
+  "errors": {
+    "tooLong": "Le message dépasse {max} caractères.",
+    "forbiddenCharacter": "Le message contient un caractère invisible ou de contrôle (autre qu’un saut de ligne). Retirez-le, par exemple en retapant le texte au lieu de le coller.",
+    "invalidMessage": "Le message doit être un texte brut de 1 à {max} caractères, sans caractère de contrôle ni caractère invisible de direction, hors sauts de ligne.",
+    "forced": "Impossible de désactiver le mode maintenance : TT_MAINTENANCE=true l’impose. L’état a été rechargé."
+  }
+}

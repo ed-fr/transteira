@@ -165,7 +165,9 @@ transteira/
 │   │   │                            # téléchargement, mentions légales, erreurs, maintenance)
 │   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : index.html, main.ts,
 │   │   │   │                        # App.svelte (démarrage, garde, langue), routes.ts, shell.ts, api.ts (client admin
-│   │   │   │                        # et rappels onUnauthenticated / recoverCsrf)
+│   │   │   │                        # et rappels onUnauthenticated / recoverCsrf), maintenance.svelte.ts (état du
+│   │   │   │                        # mode maintenance, relu à la navigation, sans minuterie), maintenanceBanner.ts (bandeau)
+│   │   │   │                        # et activity.ts (activité de l'admin : pas de lecture sur minuterie si inactif)
 │   │   │   ├── auth/                # Machine d'état de l'authentification, garde de navigation et safeNext,
 │   │   │   │                        # session (connexion, TOTP, activation, déconnexion), états des formulaires
 │   │   │   ├── forms/               # Logique pure des formulaires : merge patch, SMTP, tailles, CIDR, domaines,
@@ -174,17 +176,23 @@ transteira/
 │   │   │   │                        # codes de secours, lien d'activation, habillage, images, éditeur et aperçu des
 │   │   │   │                        # modèles (TemplatePreview, seconde exception {@html}), liste déroulante
 │   │   │   │                        # (SelectField), barre de filtres (FilterBar), chiffre clé (StatCard), jauge de
-│   │   │   │                        # quota (QuotaMeter), graphique en barres SVG (BarChart, géométrie par attributs),
-│   │   │   │                        # secret affiché une fois (SecretOnceModal) ; logique en .ts testée
+│   │   │   │                        # quota (QuotaMeter, seuil d'avertissement réglable warningRatio), graphique en
+│   │   │   │                        # barres SVG (BarChart, géométrie par attributs), secret affiché une fois
+│   │   │   │                        # (SecretOnceModal), navigation système (SystemNav), affichage de l'audit
+│   │   │   │                        # (AuditEventsTable, AuditActorCell, AuditActionCell, AuditObjectCell,
+│   │   │   │                        # AuditDetails) ; logique en .ts testée
 │   │   │   └── screens/             # Accueil (tableau de bord : home.ts), compte, aide, page introuvable
 │   │   │       ├── auth/            # Initialisation, connexion, activation
 │   │   │       ├── tenants/         # Liste, création, général, habillage, réseau, SMTP, modèles, mentions légales
 │   │   │       ├── admins/          # Liste, création, modification des comptes admins
-│   │   │       └── ops/             # Opérations d'une entité : transferts (liste, détail), invitations, liste de
-│   │   │                            # blocage, jetons d'API (liste, création, modification), journal d'audit,
-│   │   │                            # statistiques, données personnelles ; filtres dans l'URL (filters.ts),
-│   │   │                            # pagination (paging.ts), libellés de l'audit (auditLabels.ts),
-│   │   │                            # aides communes des listes (common.ts)
+│   │   │       ├── ops/             # Opérations d'une entité : transferts (liste, détail), invitations, liste de
+│   │   │       │                    # blocage, jetons d'API (liste, création, modification), journal d'audit,
+│   │   │       │                    # statistiques, données personnelles ; filtres dans l'URL (filters.ts),
+│   │   │       │                    # pagination (paging.ts), libellés de l'audit (auditLabels.ts),
+│   │   │       │                    # aides communes des listes (common.ts)
+│   │   │       └── system/          # Système (super admin) : vue d'ensemble et disque (overview.ts), maintenance,
+│   │   │                            # paramètres système (settings.ts), journal d'audit global (globalAudit.ts),
+│   │   │                            # rotation de la clé maître (masterKey.ts), relecture périodique (poller.ts)
 │   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 19)
 │   │   ├── shared/
 │   │   │   ├── api/                 # schema.ts (généré depuis api/openapi.yaml, versionné), client typé,
@@ -204,7 +212,8 @@ transteira/
 │   │                                # (upload.json : clés upload.*) ; administration : admin, adminAuth,
 │   │                                # adminComponents, adminTenants, adminAccounts, adminHome, adminOps,
 │   │                                # opsTransfers, opsInvitations, opsBlocklist, opsTokens, opsAudit,
-│   │                                # opsStats, opsPrivacy
+│   │                                # opsStats, opsPrivacy, adminSystem, sysStats, sysMaintenance, sysSettings,
+│   │                                # sysAudit, sysMasterKey
 │   ├── static/                      # Copiés tels quels à la racine de dist/ : favicon.svg, robots.txt (Disallow: /)
 │   ├── scripts/                     # gen-types.mjs (types de l'API, --check), check-dist.mjs (conformité du build
 │   │                                # à la CSP), keep-dist.mjs (recrée dist/.gitkeep)

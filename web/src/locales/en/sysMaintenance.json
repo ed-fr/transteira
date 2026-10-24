@@ -1,0 +1,73 @@
+{
+  "state": {
+    "title": "Current state",
+    "label": "State",
+    "on": "On",
+    "off": "Off",
+    "since": "Since"
+  },
+  "source": {
+    "label": "Source",
+    "none": "None (maintenance mode is off)",
+    "environment": "Environment (TT_MAINTENANCE=true)",
+    "admin": "Turned on in the administration"
+  },
+  "stored": {
+    "label": "Choice recorded in the administration",
+    "on": "On: maintenance mode will stay on once TT_MAINTENANCE is removed",
+    "off": "Off: maintenance mode will end once TT_MAINTENANCE is removed"
+  },
+  "forced": {
+    "title": "Forced by the environment",
+    "text": "The instance was started with TT_MAINTENANCE=true: maintenance mode stays on whatever is chosen here, until the variable is removed and the instance restarted.",
+    "save": "You can still edit the messages. Saving them also records maintenance mode as on in the administration: after removing TT_MAINTENANCE, turn it off here."
+  },
+  "form": {
+    "title": "Maintenance mode and messages",
+    "enabled": {
+      "label": "Maintenance mode on",
+      "hint": "Refuses new deposits on every entity and shows the maintenance page.",
+      "forcedHint": "Cannot be turned off here while TT_MAINTENANCE=true forces the mode."
+    },
+    "message": {
+      "fr": "Message in French",
+      "en": "Message in English",
+      "hint": "Optional, plain text, {max} characters at most. Line breaks are kept; formatting and links are not. It is shown under the standard maintenance text; when empty, visitors using this language see the message of the other language, if any.",
+      "warning": "These messages are shown on the public page of every entity, to anyone: write nothing confidential (no internal names, addresses or details of your infrastructure)."
+    }
+  },
+  "preview": {
+    "title": "Preview",
+    "intro": "The messages are shown as plain text under the standard maintenance text, exactly as below.",
+    "empty": "No message in this language: the message of the other language is shown, if any."
+  },
+  "confirm": {
+    "enable": {
+      "title": "Turn maintenance mode on?",
+      "text": "New deposits will be refused on every entity until maintenance mode is turned off. Uploads in progress are suspended and resume once it is turned off.",
+      "action": "Turn on"
+    },
+    "disable": {
+      "title": "Turn maintenance mode off?",
+      "text": "New deposits will be accepted again on every entity.",
+      "action": "Turn off"
+    },
+    "keepAfterEnvironment": {
+      "title": "Record maintenance mode as on?",
+      "text": "While TT_MAINTENANCE=true forces the mode, saving also records it as on in the administration: maintenance mode will stay on once the variable is removed, until you turn it off here.",
+      "action": "Save"
+    }
+  },
+  "saved": {
+    "enabled": "Maintenance mode is on: new deposits are refused on every entity.",
+    "disabled": "Maintenance mode is off: new deposits are accepted again.",
+    "updated": "Maintenance settings saved."
+  },
+  "notSaved": "Nothing was saved.",
+  "errors": {
+    "tooLong": "The message is longer than {max} characters.",
+    "forbiddenCharacter": "The message contains an invisible or control character (other than a line break). Remove it, for example by typing the text again instead of pasting it.",
+    "invalidMessage": "The message must be plain text of 1 to {max} characters, without control or invisible direction characters other than line breaks.",
+    "forced": "Maintenance mode cannot be turned off: TT_MAINTENANCE=true forces it. The state has been reloaded."
+  }
+}

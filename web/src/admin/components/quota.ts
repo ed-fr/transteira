@@ -23,12 +23,25 @@ export function quotaRatio(used: number, quota: number): number {
   return u / quota;
 }
 
-/** Level of a fill ratio: full from 1, warning from QUOTA_WARNING_RATIO, ok below. */
-export function quotaLevel(ratio: number): QuotaLevel {
+/**
+ * Warning ratio actually used: the given ratio when it lies in ]0, 1], QUOTA_WARNING_RATIO
+ * otherwise (missing, not finite or out of range), so that a bad threshold never hides a level.
+ */
+export function warningRatioOrDefault(warningRatio?: number): number {
+  return warningRatio !== undefined && Number.isFinite(warningRatio) && warningRatio > 0 && warningRatio <= 1
+    ? warningRatio
+    : QUOTA_WARNING_RATIO;
+}
+
+/**
+ * Level of a fill ratio: full from 1, warning from warningRatio (default QUOTA_WARNING_RATIO,
+ * e.g. the configured disk alert threshold), ok below.
+ */
+export function quotaLevel(ratio: number, warningRatio?: number): QuotaLevel {
   if (ratio >= 1) {
     return 'full';
   }
-  return ratio >= QUOTA_WARNING_RATIO ? 'warning' : 'ok';
+  return ratio >= warningRatioOrDefault(warningRatio) ? 'warning' : 'ok';
 }
 
 /** StatusBadge variant of a level. */
@@ -47,14 +60,19 @@ export interface QuotaMeterAttributes {
 }
 
 /**
- * Attributes of the <meter>: low at 80 % of the quota, high at the quota, optimum 0 (the less
- * used, the better). The value is clamped to [0, max] as the element would do.
+ * Attributes of the <meter>: low at the warning ratio (default 80 %) of the quota, high at the
+ * quota, optimum 0 (the less used, the better). The value is clamped to [0, max] as the element
+ * would do.
  */
-export function quotaMeterAttributes(used: number, quota: number): QuotaMeterAttributes {
+export function quotaMeterAttributes(
+  used: number,
+  quota: number,
+  warningRatio?: number,
+): QuotaMeterAttributes {
   const max = Number.isFinite(quota) && quota > 0 ? quota : 1;
   const u = Number.isFinite(used) && used > 0 ? used : 0;
   const value = quota > 0 ? Math.min(u, max) : u > 0 ? max : 0;
-  return { min: 0, max, value, low: QUOTA_WARNING_RATIO * max, high: max, optimum: 0 };
+  return { min: 0, max, value, low: warningRatioOrDefault(warningRatio) * max, high: max, optimum: 0 };
 }
 
 /** Texts of a quota meter. */
@@ -67,7 +85,7 @@ export interface QuotaTexts {
 
 /**
  * Texts of a quota meter. The percentage is formatted by formatPercent (e.g. Intl percent
- * style), from the uncapped ratio.
+ * style), from the uncapped ratio; the level uses warningRatio (default QUOTA_WARNING_RATIO).
  */
 export function quotaTexts(
   used: number,
@@ -75,9 +93,10 @@ export function quotaTexts(
   formatBytes: (n: number) => string,
   formatPercent: (ratio: number) => string,
   t: Translate,
+  warningRatio?: number,
 ): QuotaTexts {
   const ratio = quotaRatio(used, quota);
-  const level = quotaLevel(ratio);
+  const level = quotaLevel(ratio, warningRatio);
   const usedText = formatBytes(Number.isFinite(used) && used > 0 ? used : 0);
   const usage =
     Number.isFinite(quota) && quota > 0

@@ -85,7 +85,10 @@
     <Spinner label={t('deposit.loading')} showLabel />
   {:else if flow.step === 'maintenance'}
     <h1 tabindex="-1">{t('deposit.maintenance.title')}</h1>
-    <p class="tt-break">{flow.maintenanceMessage ?? t('deposit.maintenance.text')}</p>
+    <p>{t('deposit.maintenance.text')}</p>
+    {#if flow.maintenanceMessage}
+      <p class="tt-break deposit-maintenance">{flow.maintenanceMessage}</p>
+    {/if}
   {:else if flow.step === 'error'}
     <h1 tabindex="-1">{t('deposit.error.title')}</h1>
     <Alert severity="error">{flow.errorText ?? t('errors.unknown')}</Alert>
@@ -106,3 +109,10 @@
     <DoneStep {flow} {onnavigate} />
   {/if}
 </div>
+
+<style>
+  /* The maintenance message keeps its line breaks (plain text, T-170). */
+  .deposit-maintenance {
+    white-space: pre-line;
+  }
+</style>

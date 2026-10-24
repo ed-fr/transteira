@@ -1,0 +1,16 @@
+{
+  "filters": {
+    "label": "Filtrer le journal d’audit global",
+    "tenant": "Entité",
+    "tenantHint": "Lorsqu’une entité est choisie, les événements de l’instance elle-même ne sont pas affichés.",
+    "allTenants": "Toutes les entités et l’instance"
+  },
+  "list": {
+    "caption": "Événements d’audit de l’instance",
+    "tenantColumn": "Entité",
+    "instance": "Instance",
+    "empty": "Aucun événement d’audit n’a encore été enregistré.",
+    "emptyFiltered": "Aucun événement ne correspond à ces filtres.",
+    "namesError": "Les noms des entités n’ont pas pu être chargés : leurs identifiants sont affichés à la place."
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "keys": {
+    "title": "Master keys",
+    "active": "Current key (TT_MASTER_KEY_FILE)",
+    "new": "New key (TT_MASTER_KEY_NEW_FILE)",
+    "none": "None configured",
+    "check": "Check these identifiers against the entries of your password vault. Only identifiers are shown here: the keys themselves never leave the server.",
+    "restartRequired": "Restart required"
+  },
+  "prepare": {
+    "title": "Prepare a rotation",
+    "intro": "No new master key is configured, so the rotation cannot start. Steps 1 and 2 of the rotation are done on the server:",
+    "step1": "Generate a new key and store it right away in the password vault outside the VM, with its identifier.",
+    "step2": "Mount the new key file as a second secret, set TT_MASTER_KEY_NEW_FILE to its path (keep TT_MASTER_KEY_FILE on the current key), then restart every TransTeira process.",
+    "step3": "Come back to this page: the new key identifier is shown and the rotation can start.",
+    "doc": "Full procedure:"
+  },
+  "latest": {
+    "title": "Latest rotation",
+    "id": "Rotation",
+    "status": "Status",
+    "from": "From key",
+    "to": "To key",
+    "started": "Started",
+    "completed": "Ended",
+    "progressLabel": "Re-wrapping of the keys",
+    "statuses": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "leave": "The rotation runs on the server: you can leave this page, it continues. Files are neither read nor rewritten."
+  },
+  "progress": {
+    "text": "{done} keys re-wrapped out of {total}"
+  },
+  "poll": {
+    "error": "The progress could not be read. New attempts are made automatically.",
+    "stopped": "The progress can no longer be read: updates have stopped. The rotation continues on the server.",
+    "idle": "Progress updates are paused while you are away. The rotation continues on the server.",
+    "resume": "Resume updates"
+  },
+  "interrupted": {
+    "title": "The rotation seems interrupted",
+    "text": "The rotation seems interrupted (for example by a restart of the server): its progress has not changed for a while. Resume it with a new code; it continues where it stopped, with the same identifier."
+  },
+  "other": {
+    "title": "Unfinished rotation between other keys",
+    "text": "A rotation between other keys than the configured ones is unfinished. It cannot be resumed from here: configure the keys it names to finish it, or abandon it with the command line (rotate-master-key -abandon)."
+  },
+  "failed": {
+    "title": "The latest rotation failed",
+    "text": "Error reported by the server:",
+    "retry": "A new start begins a new rotation. Fix the cause first (see the troubleshooting section of the documentation)."
+  },
+  "done": {
+    "title": "Rotation completed: restart with the new key",
+    "intro": "The database already records the new key as active. Finish the rotation on the server:",
+    "step1": "Point TT_MASTER_KEY_FILE to the new key file, remove TT_MASTER_KEY_NEW_FILE (and the secret of the old key), then restart. Until then, the next start of the server is refused.",
+    "step2": "Update the password vault: mark the new key as current, and the old one as retired with the date of the rotation.",
+    "step3": "Keep the old key in the vault as long as you keep backups taken before the rotation. When the last of them has expired, delete the old key from the vault and from the host.",
+    "effect": "Effect of the restart on users: open pages (deposit and administration) must be reloaded, a code being entered must be requested again, and internal depositors are asked for a verification code once more on their next visit. Restart at a quiet time; no data is lost.",
+    "noStart": "A new rotation can start only after this restart."
+  },
+  "start": {
+    "intro": "The rotation re-wraps the keys stored in the database with the new master key. Confirm both points, then enter a code of your authenticator.",
+    "vault": "The new key is stored in the password vault outside the VM",
+    "ids": "I checked both key identifiers",
+    "required": "Tick both boxes to start.",
+    "button": "Start the rotation",
+    "resume": "Resume the rotation",
+    "again": "Start the rotation again"
+  },
+  "dialog": {
+    "title": "Confirm with a code",
+    "intro": "Enter the current code of your authenticator app.",
+    "recoveryIntro": "Enter one of your recovery codes. It can be used only once.",
+    "wait": "If you have just signed in, wait for the next code: a code already used cannot be used again.",
+    "session": "Several wrong codes in a row end your session: after the fifth, the next request takes you back to the sign-in page.",
+    "submit": "Start",
+    "submitting": "Starting…",
+    "cancel": "Cancel"
+  },
+  "announce": {
+    "started": "Master key rotation started.",
+    "milestone": "Master key rotation: {percent}% done.",
+    "completed": "Master key rotation completed. Restart the server with the new key.",
+    "failed": "Master key rotation failed."
+  },
+  "errors": {
+    "newKeyMissing": "No new master key is configured on the server (TT_MASTER_KEY_NEW_FILE). Do steps 1 and 2, then come back.",
+    "running": "A master key rotation is already running. Its progress is shown below.",
+    "otherKeys": "A rotation between other keys is unfinished: finish it or abandon it with the command line.",
+    "restartRequired": "The rotation to the new key is already completed: restart the server with the new key as TT_MASTER_KEY_FILE before starting another rotation."
+  }
+}

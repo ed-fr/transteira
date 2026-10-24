@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "label": "System administration",
+    "overview": "Overview",
+    "maintenance": "Maintenance",
+    "settings": "Settings",
+    "audit": "Audit log",
+    "masterKey": "Master key"
+  },
+  "overview": {
+    "title": "System overview",
+    "intro": "Activity of every entity and use of the data disk of the instance."
+  },
+  "maintenance": {
+    "title": "Maintenance mode",
+    "intro": "While maintenance mode is on, new deposits are refused on every entity and a maintenance page is shown. Downloads and the administration keep working."
+  },
+  "settings": {
+    "title": "System settings",
+    "intro": "Settings of the whole instance: disk usage alert threshold and alert address."
+  },
+  "audit": {
+    "title": "Global audit log",
+    "intro": "Audit events of every entity and of the instance itself (setup, administrator accounts, maintenance, master key rotation)."
+  },
+  "masterKey": {
+    "title": "Master key",
+    "intro": "Master key used to protect the encryption keys of the files, and its rotation."
+  },
+  "banner": {
+    "text": "Maintenance mode is on: new deposits are refused on every entity.",
+    "textSince": "Maintenance mode has been on since {date}: new deposits are refused on every entity.",
+    "environment": "(forced by the environment)",
+    "manage": "Manage maintenance mode"
+  }
+}

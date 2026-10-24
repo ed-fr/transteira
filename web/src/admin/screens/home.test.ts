@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { AdminMe } from '../auth/machine';
 import {
   DASHBOARD_PERIOD,
+  DISK_CARD_PERIOD,
   QUICK_SECTIONS,
   STATS_CONCURRENCY,
   cardFigures,
   cardHeadingLevel,
   dashboardKind,
+  diskCard,
   initialCards,
+  maintenanceLine,
   mapLimit,
   quickLinks,
   tenantRow,
@@ -223,5 +226,78 @@ describe('super admin table', () => {
     expect(full.levelVariant).toBe('error');
     expect(full.statusVariant).toBe('warning');
     expect(full.statusKey).toBe('adminTenants.status.deleting');
+  });
+});
+
+describe('super admin disk card', () => {
+  const disk = {
+    totalBytes: 1000 * GiB,
+    usedBytes: 900 * GiB,
+    usedRatio: 0.9,
+    alertThreshold: 0.85,
+    alertActive: true,
+    alertMailConfigured: false,
+  };
+
+  it('uses 30 days and maps the disk part of the global statistics', () => {
+    expect(DISK_CARD_PERIOD).toBe('30d');
+    const card = diskCard({ disk }, t, percent);
+    expect(card.state).toBe('ready');
+    if (card.state !== 'ready') {
+      return;
+    }
+    expect(card.disk).toMatchObject({
+      used: 900 * GiB,
+      total: 1000 * GiB,
+      thresholdLabel: 'sysStats.disk.threshold {"percent":"85 %"}',
+      alertVariant: 'error',
+      alertLabel: 'sysStats.disk.alertActive',
+      mailWarning: true,
+    });
+  });
+});
+
+describe('maintenanceLine', () => {
+  const date = (iso: string): string => `D(${iso})`;
+
+  it('is unknown before the first read', () => {
+    expect(maintenanceLine(undefined, t, date)).toEqual({
+      known: false,
+      failed: false,
+      variant: 'ok',
+      label: 'sysStats.home.maintenanceOff',
+      text: '',
+      linkPath: '/system/maintenance',
+    });
+  });
+
+  it('is unknown when the read failed, until a state is known', () => {
+    expect(maintenanceLine(undefined, t, date, true)).toMatchObject({ known: false, failed: true });
+    const off = { enabled: false, source: 'none', adminEnabled: false } as const;
+    expect(maintenanceLine(off, t, date, true)).toMatchObject({ known: true, failed: false });
+  });
+
+  it('shows the off state', () => {
+    const line = maintenanceLine({ enabled: false, source: 'none', adminEnabled: false }, t, date);
+    expect(line).toMatchObject({
+      known: true,
+      variant: 'ok',
+      label: 'sysStats.home.maintenanceOff',
+      text: '',
+    });
+  });
+
+  it('shows the on state with its start date and source', () => {
+    const line = maintenanceLine(
+      { enabled: true, source: 'environment', since: '2026-10-24T08:00:00Z', adminEnabled: false },
+      t,
+      date,
+    );
+    expect(line.known).toBe(true);
+    expect(line.variant).toBe('warning');
+    expect(line.label).toBe('sysStats.home.maintenanceOn');
+    expect(line.text).toBe(
+      'adminSystem.banner.textSince {"date":"D(2026-10-24T08:00:00Z)"} adminSystem.banner.environment',
+    );
   });
 });

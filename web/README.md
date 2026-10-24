@@ -102,19 +102,49 @@ Besides the layout, data table, confirmation dialog, form sections and status ba
 application has the following components in `src/admin/components/`, each with its logic in a
 tested `.ts` module:
 
-| Component                           | Purpose                                                                                                                              |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `SelectField` (`select.ts`)         | labelled native `<select>`, flat options or option groups, hint and error                                                            |
-| `FilterBar` (`filterBar.ts`)        | filter form of a list: apply and reset buttons, busy state, result text announced after apply or reset                               |
-| `StatCard`                          | key figure (label, value, optional hint and variant)                                                                                 |
-| `QuotaMeter` (`quota.ts`)           | storage used against the quota: native `<meter>`, written text and badge (warning from 80 %, full from 100 %)                        |
-| `BarChart` (`charts.ts`)            | vertical bar chart in SVG with an accessible summary and an equivalent table of every value                                          |
-| `SecretOnceModal` (`secretOnce.ts`) | secret shown once (new API token): closable once copied successfully or acknowledged, navigation guard and `beforeunload` until then |
+| Component                           | Purpose                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SelectField` (`select.ts`)         | labelled native `<select>`, flat options or option groups, hint and error                                                                                                                                                                                                                                                     |
+| `FilterBar` (`filterBar.ts`)        | filter form of a list: apply and reset buttons, busy state, result text announced after apply or reset                                                                                                                                                                                                                        |
+| `StatCard`                          | key figure (label, value, optional hint and variant)                                                                                                                                                                                                                                                                          |
+| `QuotaMeter` (`quota.ts`)           | storage used against the quota: native `<meter>`, written text and badge (warning from 80 %, full from 100 %); the `warningRatio` option moves the warning level, for example to the disk alert threshold                                                                                                                     |
+| `BarChart` (`charts.ts`)            | vertical bar chart in SVG with an accessible summary and an equivalent table of every value                                                                                                                                                                                                                                   |
+| `SecretOnceModal` (`secretOnce.ts`) | secret shown once (new API token): closable once copied successfully or acknowledged, navigation guard and `beforeunload` until then                                                                                                                                                                                          |
+| `AuditEventsTable`                  | audit event table shared by the tenant and global audit logs, with an optional leading column (the tenant of the global log); cells `AuditActorCell`, `AuditActionCell`, `AuditObjectCell` (object links to the tenant of the event) and `AuditDetails` (details as plain text pairs), labels in `screens/ops/auditLabels.ts` |
+| `SystemNav`                         | sub-navigation of the system screens (super admin), from `systemLinks()` in `shell.ts`; the overview link is marked on its exact page only (`navCurrent(path, target, exact)`)                                                                                                                                                |
 
 Status and levels are always written out (text and badge), never conveyed by colour alone. The
 screens of the tenant operations are in `src/admin/screens/ops/` (one pure `.ts` module per
 screen, plus `filters.ts` and `paging.ts` shared by the lists), the dashboard in
 `src/admin/screens/Home.svelte` and `home.ts`.
+
+The system screens (super admin only, routes `/system/*` with `systemNav: true`) are in
+`src/admin/screens/system/`, each with its pure module: overview of the disk and the tenants
+(`overview.ts`, reused by the disk card of the dashboard), maintenance mode (`maintenance.ts`:
+client check of the messages, body of the `PUT`, confirmations), system settings (`settings.ts`:
+threshold edited as a percentage, merge patch), global audit log (`globalAudit.ts`) and master key
+rotation (`masterKey.ts`: screen states, clamped progress, milestone announcements, interruption
+detection, mapping of the start errors, halts of the polling). `poller.ts` is a self-scheduling
+poller (one step at a time, delay chosen by each step, runs at once when the page becomes visible
+again, `stop()` drops a step in flight); the master key screen polls the rotation progress with it
+and stops it when the screen goes away. The code typed to start a rotation stays in component
+memory and is cleared after each submission (threat model T-169).
+
+Every request to the administration API extends the admin session (sliding 30-minute idle
+timeout), so **no timer-driven read is made for an idle admin** (T-165). `src/admin/activity.ts`
+tracks the last user activity (pointer or key press, page shown again; injectable source and
+clock): the master key screen pauses its polling after 10 minutes without activity ("Resume
+updates"), and stops it after an error not worth retrying ("Retry"); both halts survive a reload
+of the status and end only on a user action or with another rotation.
+
+The maintenance state is kept by `src/admin/maintenance.svelte.ts` (`adminMaintenance`), without
+any timer: read at sign-in (`start()`), on each navigation (`routeChanged(path)`, called by
+`AdminLayout`), when the page becomes visible again, and on demand with `refresh()`; the
+maintenance screen records the answer of its `PUT` with `set(state)`. Answers are ordered (an
+older one never overwrites a newer one) and `failed` tells that the latest read failed (the
+dashboard then shows "state unknown"); `AdminLayout` starts and stops it. `maintenanceBanner.ts` builds the banner shown to every admin while the mode is on (start
+date, "forced by the environment", link to the screen for the super admin). Maintenance messages
+are always rendered as text, never as HTML (T-170).
 
 ## Development loop
 

@@ -6,9 +6,9 @@
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, TextField } from '../../../shared/components';
-  import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
+  import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
-  import DataTable from '../../components/DataTable.svelte';
+  import AuditEventsTable from '../../components/AuditEventsTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import type { AdminScreenProps } from '../types';
@@ -21,16 +21,7 @@
     type AuditForm,
     type AuditFormField,
   } from './audit';
-  import {
-    actionLabel,
-    actorView,
-    detailEntries,
-    isKnownAction,
-    objectPath,
-    objectView,
-    type AuditAction,
-    type AuditEvent,
-  } from './auditLabels';
+  import type { AuditAction, AuditEvent } from './auditLabels';
   import {
     ACTION_MAX_LENGTH,
     ACTOR_MAX_LENGTH,
@@ -141,62 +132,6 @@
   }
 </script>
 
-{#snippet dateCell(row: AuditEvent)}
-  <time datetime={row.occurredAt}
-    >{formatDate(row.occurredAt, { dateStyle: 'short', timeStyle: 'medium' })}</time
-  >
-{/snippet}
-
-{#snippet actorCell(row: AuditEvent)}
-  {@const view = actorView(row.actor, t)}
-  <span class="tt-audit__kind">{view.kind}</span>
-  <span class="tt-break">{view.id}</span>
-  {#if view.hint}<span class="tt-audit__hint">{view.hint}</span>{/if}
-{/snippet}
-
-{#snippet actionCell(row: AuditEvent)}
-  {actionLabel(row.action, t)}
-  {#if isKnownAction(row.action)}<code class="tt-audit__code">{row.action}</code>{/if}
-{/snippet}
-
-{#snippet objectCell(row: AuditEvent)}
-  {@const view = objectView(row.object, t)}
-  {@const path = objectPath(tenantId, row.object)}
-  <span class="tt-audit__kind">{view.kind}</span>
-  {#if path !== undefined}
-    <a
-      class="tt-break"
-      href={nav.href(path)}
-      use:nav.link
-      aria-label={t('opsAudit.list.openTransfer', { id: view.id })}>{view.id}</a
-    >
-  {:else}
-    <span class="tt-break">{view.id}</span>
-  {/if}
-  {#if view.hint}<span class="tt-audit__hint">{view.hint}</span>{/if}
-{/snippet}
-
-{#snippet ipCell(row: AuditEvent)}
-  {#if row.ip}<span class="tt-break">{row.ip}</span>{:else}{t('opsAudit.list.noIp')}{/if}
-{/snippet}
-
-{#snippet detailsCell(row: AuditEvent)}
-  {@const lines = detailEntries(row.details)}
-  {#if lines.length > 0}
-    <details class="tt-audit__details">
-      <summary>{t('opsAudit.list.showDetails')}</summary>
-      <dl>
-        {#each lines as line (line.key)}
-          <dt>{line.key}</dt>
-          <dd class="tt-break">{line.value}</dd>
-        {/each}
-      </dl>
-    </details>
-  {:else}
-    {t('opsAudit.list.noDetails')}
-  {/if}
-{/snippet}
-
 <h1 tabindex="-1">{t('adminOps.audit.title')}</h1>
 <p>{t('adminOps.audit.intro')}</p>
 
@@ -258,56 +193,17 @@
     <Button variant="secondary" onclick={retry}>{t('common.retry')}</Button>
   </Alert>
 {:else}
-  <DataTable
+  <AuditEventsTable
     caption={t('opsAudit.list.caption')}
-    captionHidden
     rows={list.items}
-    key={(row) => row.id}
+    {nav}
+    linkTenant={() => tenantId}
     loading={list.loading && !list.loaded}
     emptyText={t('opsAudit.list.empty')}
     nextCursor={list.nextCursor}
     onloadmore={loadMore}
-    columns={[
-      { id: 'date', header: t('opsAudit.list.columns.date'), cell: dateCell, rowHeader: true },
-      { id: 'actor', header: t('opsAudit.list.columns.actor'), cell: actorCell },
-      { id: 'action', header: t('opsAudit.list.columns.action'), cell: actionCell },
-      { id: 'object', header: t('opsAudit.list.columns.object'), cell: objectCell },
-      { id: 'ip', header: t('opsAudit.list.columns.ip'), cell: ipCell },
-      { id: 'details', header: t('opsAudit.list.columns.details'), cell: detailsCell },
-    ]}
   />
   {#if moreError !== ''}
     <Alert severity="error">{moreError}</Alert>
   {/if}
 {/if}
-
-<style>
-  .tt-audit__kind,
-  .tt-audit__hint,
-  .tt-audit__code {
-    display: block;
-    color: var(--tt-muted);
-    font-size: var(--tt-font-size-sm);
-  }
-
-  .tt-audit__code {
-    font-family: var(--tt-font-mono);
-    overflow-wrap: anywhere;
-  }
-
-  .tt-audit__details summary {
-    cursor: pointer;
-  }
-
-  .tt-audit__details dl {
-    margin: var(--tt-space-2) 0 0;
-  }
-
-  .tt-audit__details dt {
-    font-weight: var(--tt-font-weight-bold);
-  }
-
-  .tt-audit__details dd {
-    margin: 0 0 var(--tt-space-1);
-  }
-</style>

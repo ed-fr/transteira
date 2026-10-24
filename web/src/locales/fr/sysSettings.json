@@ -1,0 +1,29 @@
+{
+  "form": {
+    "title": "Alerte d’espace disque"
+  },
+  "threshold": {
+    "label": "Seuil d’alerte (% du disque de données)",
+    "hint": "Un pourcentage de {min} à {max}. L’alerte se lève quand l’occupation du disque atteint le seuil et retombe quand elle redescend {points} points en dessous.",
+    "required": "Saisissez le seuil d’alerte.",
+    "invalid": "Saisissez un nombre, avec au plus deux décimales, par exemple 85.",
+    "range": "Saisissez un pourcentage de {min} à {max}."
+  },
+  "email": {
+    "label": "Adresse d’alerte supplémentaire",
+    "hint": "Facultative. Reçoit l’alerte disque en plus des super admins. Laissez vide pour la retirer.",
+    "unverified": "Cette adresse n’est pas vérifiée : aucun code ne lui est envoyé. Contrôlez-la soigneusement, une erreur enverrait les alertes à quelqu’un d’autre.",
+    "confirmLabel": "Adresse d’alerte, de nouveau",
+    "confirmHint": "Saisissez de nouveau la nouvelle adresse pour la confirmer.",
+    "confirmRequired": "Saisissez de nouveau la nouvelle adresse.",
+    "confirmMismatch": "Les deux adresses ne correspondent pas.",
+    "invalid": "Saisissez une adresse mail valide, par exemple alertes@example.com.",
+    "removing": "Une fois l’adresse retirée, l’alerte disque n’est envoyée qu’aux super admins. Elle reste visible dans la vue d’ensemble du système et dans le journal d’audit."
+  },
+  "smtp": {
+    "title": "Envoi des alertes",
+    "text": "Les mails d’alerte partent par le serveur SMTP système de l’instance, configuré par variables d’environnement ({host}, {from} et les variables associées du fichier .env). Sans lui, aucun mail d’alerte n’est envoyé : l’alerte disque n’est visible que dans la vue d’ensemble du système, dans le journal d’audit et dans le journal applicatif."
+  },
+  "overviewLink": "Voir l’occupation du disque dans la vue d’ensemble du système",
+  "saved": "Réglages système enregistrés."
+}

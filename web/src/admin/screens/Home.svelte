@@ -4,14 +4,17 @@
   //   volume uploaded), the storage quota and quick links; the statistics are loaded with at
   //   most 4 requests at once, and a failed card shows its own message without affecting the
   //   others;
-  // - super admin: table of the tenants (GET /admin/tenants, page by page) with their status and
+  // - super admin: maintenance state (adminMaintenance, link to the maintenance screen), disk card
+  //   (GET /admin/system/stats?period=30d, loaded independently of the table, with its own error
+  //   and retry) and table of the tenants (GET /admin/tenants, page by page) with their status and
   //   storage level;
   // - always: the recommendation to enable two-factor authentication when it is off.
   import { onDestroy, untrack } from 'svelte';
   import { describeError } from '../../shared/api/problem';
   import { Alert, Button, Spinner } from '../../shared/components';
-  import { formatNumber, i18n, locale, t } from '../../shared/i18n/i18n.svelte';
+  import { formatDate, formatNumber, i18n, locale, t } from '../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../api';
+  import { adminMaintenance } from '../maintenance.svelte';
   import DataTable from '../components/DataTable.svelte';
   import QuotaMeter from '../components/QuotaMeter.svelte';
   import StatCard from '../components/StatCard.svelte';
@@ -20,20 +23,25 @@
   import { tenantPath } from '../shell';
   import {
     DASHBOARD_PERIOD,
+    DISK_CARD_PERIOD,
     STATS_CONCURRENCY,
     cardFigures,
     cardHeadingLevel,
+    diskCard as toDiskCard,
     dashboardKind,
     initialCards,
+    maintenanceLine,
     mapLimit,
     quickLinks,
     tenantRow,
     withError,
     withLoading,
     withStats,
+    type DiskCard,
     type TenantCard,
     type TenantRow,
   } from './home';
+  import { loadGlobalStats, OVERVIEW_PATH, type GlobalStats } from './system/overview';
   import { appendPage, type Tenant } from './tenants/tenants';
   import type { AdminScreenProps } from './types';
 
@@ -93,6 +101,40 @@
   let moreError = $state('');
   const rows = $derived(tenants.map((tenant) => tenantRow(tenant, t, formatBytes, formatPercent)));
 
+  // The raw disk figures are kept and the card derived from them, so that its texts follow the
+  // language.
+  let diskState = $state.raw<
+    | { state: 'loading' }
+    | { state: 'ready'; stats: Pick<GlobalStats, 'disk'> }
+    | { state: 'error'; message: string }
+  >({ state: 'loading' });
+  const disk = $derived<DiskCard>(
+    diskState.state === 'ready' ? toDiskCard(diskState.stats, t, formatPercent) : diskState,
+  );
+  // Same date style as the maintenance banner.
+  const maintenance = $derived(
+    maintenanceLine(
+      adminMaintenance.current,
+      t,
+      (iso) => formatDate(iso, { dateStyle: 'medium', timeStyle: 'short' }),
+      adminMaintenance.failed,
+    ),
+  );
+
+  async function loadDisk(): Promise<void> {
+    diskState = { state: 'loading' };
+    try {
+      const stats = await loadGlobalStats(adminApi, DISK_CARD_PERIOD);
+      if (alive) {
+        diskState = { state: 'ready', stats };
+      }
+    } catch (err) {
+      if (alive) {
+        diskState = { state: 'error', message: describeError(i18n, err).message };
+      }
+    }
+  }
+
   async function loadTenants(): Promise<void> {
     tenantsLoading = true;
     tenantsError = '';
@@ -137,6 +179,7 @@
     loadedFor = signature;
     untrack(() => {
       if (current.role === 'super_admin') {
+        void loadDisk();
         void loadTenants();
       } else {
         void loadCards(current.tenants);
@@ -227,6 +270,54 @@
     </ul>
   {/if}
 {:else if kind === 'super'}
+  <div class="tt-home__system">
+    <section class="tt-home__card" aria-labelledby="tt-home-maintenance">
+      <h2 id="tt-home-maintenance" class="tt-home__card-title">{t('sysStats.home.maintenanceTitle')}</h2>
+      {#if maintenance.known}
+        <p class="tt-home__line">
+          <StatusBadge variant={maintenance.variant} label={maintenance.label} />
+          {#if maintenance.text !== ''}<span>{maintenance.text}</span>{/if}
+        </p>
+      {:else if maintenance.failed}
+        <p>{t('sysStats.home.maintenanceUnknown')}</p>
+      {:else}
+        <Spinner />
+      {/if}
+      <p><a href={nav.href(maintenance.linkPath)} use:nav.link>{t('sysStats.home.maintenanceLink')}</a></p>
+    </section>
+    <section class="tt-home__card" aria-labelledby="tt-home-disk">
+      <h2 id="tt-home-disk" class="tt-home__card-title">{t('sysStats.home.diskTitle')}</h2>
+      {#if disk.state === 'loading'}
+        <Spinner label={t('sysStats.home.diskLoading')} />
+      {:else if disk.state === 'error'}
+        <Alert severity="error" live={false}>
+          <p>{t('sysStats.home.diskError')}</p>
+          <p>{disk.message}</p>
+          <Button variant="secondary" small onclick={() => void loadDisk()}
+            >{t('adminHome.card.retry')}</Button
+          >
+        </Alert>
+      {:else}
+        <QuotaMeter
+          label={t('sysStats.disk.label')}
+          showLevel={false}
+          used={disk.disk.used}
+          quota={disk.disk.total}
+          warningRatio={disk.disk.threshold}
+          {formatBytes}
+        />
+        <p class="tt-home__line">
+          <span>{disk.disk.thresholdLabel}</span>
+          <StatusBadge variant={disk.disk.alertVariant} label={disk.disk.alertLabel} />
+        </p>
+        {#if disk.disk.mailWarning}
+          <p>{t('sysStats.disk.mailWarningTitle')}</p>
+        {/if}
+      {/if}
+      <p><a href={nav.href(OVERVIEW_PATH)} use:nav.link>{t('sysStats.home.overviewLink')}</a></p>
+    </section>
+  </div>
+
   <h2>{t('adminHome.tenantsTitle')}</h2>
   {#if tenantsError !== ''}
     <Alert severity="error">
@@ -288,6 +379,20 @@
   .tt-home__links {
     margin: 0;
     padding-left: var(--tt-space-5);
+  }
+
+  .tt-home__system {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: var(--tt-space-4);
+    margin: var(--tt-space-4) 0;
+  }
+
+  .tt-home__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--tt-space-2);
   }
 
   .tt-home__storage {

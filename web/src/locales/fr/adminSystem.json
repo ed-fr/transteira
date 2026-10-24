@@ -1,0 +1,36 @@
+{
+  "nav": {
+    "label": "Administration du système",
+    "overview": "Vue d’ensemble",
+    "maintenance": "Maintenance",
+    "settings": "Paramètres",
+    "audit": "Journal d’audit",
+    "masterKey": "Clé maître"
+  },
+  "overview": {
+    "title": "Vue d’ensemble du système",
+    "intro": "Activité de toutes les entités et occupation du disque de données de l’instance."
+  },
+  "maintenance": {
+    "title": "Mode maintenance",
+    "intro": "Tant que le mode maintenance est actif, les nouveaux dépôts sont refusés sur toutes les entités et une page de maintenance s’affiche. Les téléchargements et l’administration restent disponibles."
+  },
+  "settings": {
+    "title": "Paramètres du système",
+    "intro": "Réglages de toute l’instance : seuil d’alerte d’occupation du disque et adresse d’alerte."
+  },
+  "audit": {
+    "title": "Journal d’audit global",
+    "intro": "Événements d’audit de toutes les entités et de l’instance elle-même (initialisation, comptes administrateurs, maintenance, rotation de la clé maître)."
+  },
+  "masterKey": {
+    "title": "Clé maître",
+    "intro": "Clé maître qui protège les clés de chiffrement des fichiers, et sa rotation."
+  },
+  "banner": {
+    "text": "Le mode maintenance est actif : les nouveaux dépôts sont refusés sur toutes les entités.",
+    "textSince": "Le mode maintenance est actif depuis le {date} : les nouveaux dépôts sont refusés sur toutes les entités.",
+    "environment": "(imposé par l’environnement)",
+    "manage": "Gérer le mode maintenance"
+  }
+}

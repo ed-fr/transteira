@@ -63,6 +63,13 @@ describe('admin routes', () => {
     ['/admin/admins', '/admins', 'super', 'admins'],
     ['/admin/admins/new', '/admins/new', 'super', 'admins'],
     ['/admin/admins/adm_1', '/admins/:id', 'super', 'admins'],
+    ['/admin/system', '/system', 'super', 'system-overview'],
+    ['/admin/system/', '/system', 'super', 'system-overview'],
+    ['/admin/system/maintenance', '/system/maintenance', 'super', 'system-maintenance'],
+    ['/admin/system/settings', '/system/settings', 'super', 'system-settings'],
+    ['/admin/system/audit', '/system/audit', 'super', 'system-audit'],
+    ['/admin/system/master-key', '/system/master-key', 'super', 'system-master-key'],
+    ['/admin/system/unknown', '*', 'any', 'admin'],
     ['/admin/help', '/help', 'any', undefined],
     ['/admin/help/tenants', '/help/:topic', 'any', undefined],
     ['/admin/tenants/ten_1', '*', 'any', 'admin'],
@@ -100,14 +107,39 @@ describe('admin routes', () => {
 
   it('reserves the creation and administrator routes to the super admin', () => {
     const superRoutes = routes.filter((r) => r.access === 'super').map((r) => r.pattern);
-    expect(superRoutes).toEqual(['/tenants/new', '/admins', '/admins/new', '/admins/:id']);
+    expect(superRoutes).toEqual([
+      '/tenants/new',
+      '/admins',
+      '/admins/new',
+      '/admins/:id',
+      '/system',
+      '/system/maintenance',
+      '/system/settings',
+      '/system/audit',
+      '/system/master-key',
+    ]);
+  });
+
+  it('marks exactly the system routes for the system navigation, never with the tenant one', () => {
+    for (const route of [...routes, notFoundRoute]) {
+      const isSystemPage = route.pattern === '/system' || route.pattern.startsWith('/system/');
+      expect(route.systemNav === true, route.pattern).toBe(isSystemPage);
+      if (isSystemPage) {
+        expect(route.access, route.pattern).toBe('super');
+        expect(route.tenantNav, route.pattern).toBeUndefined();
+        expect(route.titleKey, route.pattern).toMatch(/^adminSystem\.[a-zA-Z]+\.title$/);
+        expect(route.helpTopic, route.pattern).toMatch(/^system-/);
+      }
+    }
   });
 
   it('declares a unique pattern, a title and a help topic for every screen', () => {
     const patterns = routes.map((r) => r.pattern);
     expect(new Set(patterns).size).toBe(patterns.length);
     for (const route of routes) {
-      expect(route.titleKey).toMatch(/^(admin|adminAuth|adminTenants|adminAccounts|adminOps|common)\./);
+      expect(route.titleKey).toMatch(
+        /^(admin|adminAuth|adminTenants|adminAccounts|adminOps|adminSystem|common)\./,
+      );
       if (!isHelpRoute(route)) {
         expect(route.helpTopic, route.pattern).toMatch(/^[a-z][a-z-]*$/);
       }

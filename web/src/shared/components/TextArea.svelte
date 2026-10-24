@@ -1,7 +1,9 @@
 <script lang="ts">
   // Labelled multi-line input, with hint, error (aria-describedby, aria-invalid) and, when
-  // maxlength is set, a character counter linked to the field (read on focus, not live, so
-  // that typing is not interrupted by announcements).
+  // maxlength (or counterMax) is set, a character counter linked to the field (read on focus,
+  // not live, so that typing is not interrupted by announcements). counterMax shows the counter
+  // without limiting the input (the length is then checked on submit), and countLength changes
+  // how the value is counted (e.g. in Unicode code points).
   import type { HTMLTextareaAttributes } from 'svelte/elements';
   import { t } from '../i18n/i18n.svelte';
   import { describedBy } from './helpers';
@@ -24,6 +26,10 @@
     required?: boolean;
     /** Maximum length in characters; shows the counter. */
     maxlength?: number;
+    /** Maximum shown by the counter without limiting the input (ignored with maxlength). */
+    counterMax?: number;
+    /** Counts the value for the counter (default: its length in UTF-16 code units). */
+    countLength?: (value: string) => number;
     /** Visible rows. */
     rows?: number;
     /** The textarea element, for focus management. */
@@ -38,6 +44,8 @@
     error,
     required = false,
     maxlength,
+    counterMax,
+    countLength,
     rows = 4,
     element = $bindable(),
     class: className = '',
@@ -50,7 +58,8 @@
   const errorId = $derived(`${fieldId}-error`);
   const counterId = $derived(`${fieldId}-counter`);
   const invalid = $derived(error !== undefined && error !== '');
-  const count = $derived(value.length);
+  const counterLimit = $derived(maxlength ?? counterMax);
+  const count = $derived(countLength === undefined ? value.length : countLength(value));
 </script>
 
 <div class="tt-field {className}" class:tt-field--invalid={invalid}>
@@ -71,11 +80,14 @@
     {required}
     {maxlength}
     aria-invalid={invalid ? 'true' : undefined}
-    aria-describedby={describedBy(hint && hintId, maxlength !== undefined && counterId, invalid && errorId)}
-  ></textarea>
-  {#if maxlength !== undefined}
+    aria-describedby={describedBy(
+      hint && hintId,
+      counterLimit !== undefined && counterId,
+      invalid && errorId,
+    )}></textarea>
+  {#if counterLimit !== undefined}
     <p class="tt-field__counter" id={counterId}>
-      {t('components.textArea.counter', { count, max: maxlength })}
+      {t('components.textArea.counter', { count, max: counterLimit })}
     </p>
   {/if}
   {#if invalid}

@@ -1,0 +1,36 @@
+{
+  "indicative": "These figures are indicative: the counters are updated about every 30 seconds. Only active entities are listed.",
+  "disk": {
+    "title": "Data disk",
+    "label": "Disk space used",
+    "threshold": "Alert threshold: {percent}",
+    "thresholdHint": "The alert is raised at the threshold and cleared 5 points below it.",
+    "alertActive": "Alert active",
+    "alertInactive": "No alert",
+    "changeSettings": "Change the alert threshold and address",
+    "mailWarningTitle": "The disk alert is not sent by mail",
+    "mailWarning": "No system SMTP server is configured: the disk alert is only visible on this page, in the audit log and in the application log.",
+    "mailWarningAction": "To receive it by mail, configure the system SMTP server with the environment variables {variables} (see the installation documentation and .env.example), and restart the application: the super administrators then receive it, and an additional alert address can be set in the system settings.",
+    "settingsLink": "Open the system settings"
+  },
+  "tenants": {
+    "title": "Entities",
+    "caption": "Activity and storage of the entities over the period",
+    "empty": "No active entity.",
+    "name": "Entity",
+    "transfers": "Transfers",
+    "volume": "Volume uploaded",
+    "storage": "Storage"
+  },
+  "home": {
+    "diskTitle": "Disk",
+    "diskLoading": "Loading the disk usage…",
+    "diskError": "The disk usage could not be loaded.",
+    "overviewLink": "Open the system overview",
+    "maintenanceTitle": "Maintenance mode",
+    "maintenanceOn": "On",
+    "maintenanceOff": "Off",
+    "maintenanceUnknown": "The state could not be read. Open the maintenance screen to see it.",
+    "maintenanceLink": "Manage maintenance mode"
+  }
+}

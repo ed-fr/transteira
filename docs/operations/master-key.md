@@ -256,9 +256,9 @@ rotation but stop verifying at the restart of step 4: a user who was
 entering a code must request a new one, an open deposit page must be
 reloaded (or the session reopened), an open administration page must be
 reloaded (the admin session stays valid; a script fetches the new CSRF
-token with `GET /admin/me`; the administration front end, when it comes,
-must do the same on a `403 csrf-invalid` instead of signing the admin
-out), and every internal depositor is asked for a
+token with `GET /admin/me`, and the web administration does the same by
+itself on a `403 csrf-invalid` instead of signing the admin out), and
+every internal depositor is asked for a
 verification code once more on their next visit. Switch at a quiet time;
 no data is lost.
 
@@ -267,6 +267,36 @@ no data is lost.
 The super admin can run step 3 from the administration instead of the
 command line. It runs the same resumable process (`masterkey.Rotate`)
 inside the server, in a background worker.
+
+In the web administration, open **System → Master key** (see
+[Master key screen](admin.md#master-key-screen) for the details). The
+screen shows:
+
+- the identifiers of the current and new keys (never the keys), to check
+  against the vault, and a **Restart required** badge after a completed
+  rotation;
+- without `TT_MASTER_KEY_NEW_FILE`, steps 1 and 2 and **no start button**;
+- with a new key, a checklist of two boxes (the new key is in the vault,
+  both identifiers checked), then a dialog asking for a TOTP code or a
+  recovery code, with the reminder to wait for the next code after a
+  sign-in;
+- the progress of the latest rotation (read every 2 seconds while the
+  screen is open, bar capped at 100 %), its status, dates and error; since
+  each read extends the admin session, the reads pause after 10 minutes
+  without activity on the page (**Resume updates**), and stop after an
+  error that is not worth retrying (**Retry**); the rotation itself
+  continues on the server either way;
+- a running rotation whose progress has not moved for about 30 seconds as
+  probably interrupted, with **Resume the rotation** (a new code, same
+  rotation identifier; if the worker of this instance was in fact running,
+  the server refuses with `409` and nothing changes; if another process
+  runs it, such as `rotate-master-key`, the resumption runs alongside it
+  safely, see "One rotation at a time per instance" below);
+- once completed, steps 4 to 6 and the effect of the restart on open
+  pages; once failed, the error and a new start.
+
+The steps below describe the underlying API calls, for a script or to
+understand what the screen does.
 
 1. Steps 1 and 2 are done: the new key is in the vault and the server was
    restarted with `TT_MASTER_KEY_NEW_FILE`. The administration shows the
@@ -279,8 +309,11 @@ inside the server, in a background worker.
    wait for the next code** of your authenticator. A wrong code is answered
    `401 invalid-credentials`, written to the security log, audited as
    `admin.login_failed` (reason `totp`) and counts towards the same lockout
-   as the sign-in (`429 rate-limited` once locked); the session is neither
-   ended nor rotated. Without `TT_MASTER_KEY_NEW_FILE`, the request is
+   as the sign-in (`429 rate-limited` once locked). The session is not
+   rotated, but wrong codes are counted per session together with those of
+   the sign-in: the **fifth** is still answered `401 invalid-credentials`
+   and ends the session, so the next request gets `401 unauthenticated`
+   (the administration goes back to the sign-in page). Without `TT_MASTER_KEY_NEW_FILE`, the request is
    refused with `409 new-master-key-missing` before the code is checked, so
    no attempt is consumed.
 3. The request answers `202` at once with the rotation (`rot_...`, status
@@ -300,9 +333,15 @@ before step 2 are counted in `totalKeys` and re-wrapped.
 
 Behaviour to know:
 
-- **One rotation at a time per instance.** A start while the worker runs is
-  refused with `409 state-conflict`, as is a start while an interrupted
-  rotation between **other** keys exists (configure its keys to finish it,
+- **One rotation at a time per instance.** A start while the worker of
+  this instance runs is refused with `409 state-conflict`. The check is
+  per process: if another process runs the rotation (the
+  `rotate-master-key` command), a start that resumes it from the
+  administration is accepted and runs alongside it. This is safe: each key
+  is re-wrapped with a conditional update, and a worker that finds the
+  rotation finished elsewhere stops; part of the work is only done twice.
+  A start is also refused while an interrupted rotation between **other**
+  keys exists (configure its keys to finish it,
   or abandon it with `rotate-master-key -abandon`).
 - **Interruption and resumption.** A rotation interrupted by a restart or a
   stop of the server stays `running` in the database: it is **never**

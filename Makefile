@@ -28,7 +28,8 @@ TEST_MAILPIT_SMTP ?= 127.0.0.1:51025
 TEST_MAILPIT_API  ?= http://127.0.0.1:58025
 # npm audit queries the npm registry: `make check NPM_AUDIT=0` skips it when offline (never before a release).
 NPM_AUDIT         ?= 1
-GO_TEST           := $(GO) test $(RACE) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
+# The 10-minute default timeout of go test is too short for the slowest packages on a loaded machine.
+GO_TEST           := $(GO) test $(RACE) -timeout=30m -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
 
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # SemVer without the leading "v": the exact tag of HEAD when there is one, a dev version otherwise.
