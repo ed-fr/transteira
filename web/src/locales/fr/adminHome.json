@@ -1,0 +1,29 @@
+{
+  "welcome": "Bienvenue, {username}.",
+  "totpRecommended": "La double authentification n’est pas activée sur votre compte. Nous vous recommandons de l’activer.",
+  "accountLink": "L’activer depuis Mon compte",
+  "noTenant": "Aucune entité n’est encore rattachée à votre compte. Demandez à un super administrateur de vous rattacher à une entité.",
+  "tenantsTitle": "Entités",
+  "periodNote": "Chiffres des 30 derniers jours. Le stockage indique l’occupation actuelle.",
+  "allTenants": "Ouvrir la liste complète des entités",
+  "card": {
+    "transfers": "Transferts (30 jours)",
+    "volume": "Volume déposé (30 jours)",
+    "loading": "Chargement des statistiques de {name}…",
+    "error": "Les statistiques de {name} n’ont pas pu être chargées.",
+    "retry": "Réessayer"
+  },
+  "links": {
+    "transfers": "Transferts de {name}",
+    "audit": "Journal d’audit de {name}",
+    "stats": "Statistiques de {name}"
+  },
+  "table": {
+    "caption": "Entités et occupation du stockage",
+    "empty": "Aucune entité pour le moment. Créez-en une depuis la page Entités.",
+    "name": "Nom",
+    "fqdn": "Nom de domaine",
+    "status": "Statut",
+    "storage": "Stockage"
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "status": {
+    "active": "Actif",
+    "expired": "Expiré",
+    "revoked": "Révoqué"
+  },
+  "list": {
+    "caption": "Jetons d’API de l’entité",
+    "create": "Créer un jeton",
+    "empty": "Aucun jeton d’API pour cette entité pour le moment.",
+    "docsIntro": "Pour écrire un script, consultez le guide d’intégration (docs/api/integration.md dans le dépôt TransTeira) et la documentation interactive de l’API.",
+    "docsLink": "Ouvrir la documentation de l’API",
+    "columns": {
+      "name": "Nom",
+      "prefix": "Préfixe",
+      "cidrs": "Plages IP autorisées",
+      "senders": "Expéditeurs autorisés",
+      "created": "Création",
+      "lastUsed": "Dernière utilisation",
+      "expires": "Expiration",
+      "status": "Statut",
+      "actions": "Actions"
+    },
+    "anySender": "Toute adresse des domaines internes",
+    "createdBy": "{date} par {admin}",
+    "neverUsed": "Jamais utilisé",
+    "noExpiry": "Jamais",
+    "lastUsedNote": "La dernière utilisation est enregistrée au plus une fois par minute et par jeton : elle peut avoir jusqu’à une minute de retard.",
+    "edit": "Modifier",
+    "revoke": "Révoquer"
+  },
+  "edit": {
+    "title": "Modifier le jeton {name}",
+    "legend": "Paramètres du jeton",
+    "intro": "Le secret du jeton ne change pas. L’expiration ne peut pas être modifiée : créez plutôt un nouveau jeton.",
+    "saved": "Jeton mis à jour.",
+    "discardConfirm": "Vous avez des modifications non enregistrées. Fermer sans enregistrer ? Elles seront perdues."
+  },
+  "revoke": {
+    "title": "Révoquer le jeton {name} ?",
+    "text": "Toute requête faite avec ce jeton est refusée dès maintenant : les scripts qui l’utilisent cessent de fonctionner. Les transferts déjà créés restent disponibles pour leurs destinataires. Cette action est irréversible.",
+    "confirm": "Révoquer le jeton",
+    "done": "Jeton {name} révoqué."
+  },
+  "form": {
+    "title": "Paramètres du jeton",
+    "submit": "Créer le jeton",
+    "created": "Jeton créé.",
+    "back": "Retour aux jetons d’API",
+    "name": {
+      "label": "Nom",
+      "hint": "Décrit l’usage du jeton, par exemple « Export nocturne de l’ERP » (100 caractères au plus)."
+    },
+    "cidrs": {
+      "label": "Plages IP autorisées",
+      "hint": "Une plage IPv4 ou IPv6 par ligne, par exemple 192.0.2.10/32 : les adresses depuis lesquelles les scripts se connectent, vues derrière le reverse proxy. 100 plages au plus."
+    },
+    "anyAddress": "Autoriser toute adresse",
+    "anyAddressWarning": "Ce jeton peut être utilisé depuis n’importe quelle adresse. Préférez des plages restreintes, ou fixez au moins une date d’expiration.",
+    "senders": {
+      "label": "Expéditeurs autorisés",
+      "hint": "Une adresse mail (reporting@example.com) ou un domaine (example.com) par ligne. Un domaine ne couvre pas ses sous-domaines. 100 entrées au plus.",
+      "empty": "Avec une liste vide, le jeton peut déposer au nom de n’importe quelle adresse des domaines internes de l’entité. Limitez-le aux adresses réellement utilisées par le script."
+    },
+    "expiry": {
+      "label": "Date d’expiration (facultative)",
+      "hint": "Le jeton cesse de fonctionner à la fin de cette journée (heure locale). Laissez vide pour un jeton sans expiration ; vous pouvez le révoquer à tout moment."
+    }
+  },
+  "secret": {
+    "title": "Jeton {name} créé",
+    "text": "Copiez ce jeton maintenant et transmettez-le à la personne responsable du script par un canal de confiance, jamais en clair par mail.",
+    "label": "Jeton d’API"
+  },
+  "errors": {
+    "cidrsRequired": "Saisissez au moins une plage IP.",
+    "nameTooLong": "Le nom ne doit pas dépasser {max} caractères.",
+    "expiryInvalid": "Saisissez une date valide.",
+    "expiryPast": "Choisissez une date dans le futur.",
+    "entry": "Entrée {position} : {message}",
+    "revoked": "Ce jeton a été révoqué entre-temps et ne peut plus être modifié. Rechargez la page.",
+    "notFound": "Ce jeton n’existe plus. Rechargez la page.",
+    "sender": {
+      "email": "Cette adresse mail n’est pas valide.",
+      "domain": "Ce n’est ni une adresse mail valide ni un domaine valide.",
+      "domainSuggestion": "Supprimez le point final : {domain}.",
+      "tooLong": "Cette entrée est trop longue (254 caractères au plus)."
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "status": {
+    "uploading": "Uploading",
+    "scanning": "Being scanned",
+    "available": "Available",
+    "rejected": "Rejected",
+    "expired": "Expired",
+    "deleted": "Deleted"
+  },
+  "origin": {
+    "internal": "Internal user",
+    "external": "External guest",
+    "api": "API token"
+  },
+  "scan": {
+    "pending": "Waiting for scan",
+    "scanning": "Being scanned",
+    "clean": "Clean",
+    "infected": "Infected, file erased",
+    "not_scanned_too_large": "Not scanned: too large",
+    "not_scanned_encrypted": "Not scanned: encrypted",
+    "scan_error": "Scan failed, file withheld"
+  },
+  "wait": {
+    "seconds": {
+      "one": "{count} second",
+      "other": "{count} seconds"
+    },
+    "minutes": {
+      "one": "{count} minute",
+      "other": "{count} minutes"
+    }
+  },
+  "list": {
+    "filtersLabel": "Filter the transfers",
+    "status": "Status",
+    "statusAny": "Any status",
+    "email": "Email address",
+    "emailHint": "Sender or recipient, exact address.",
+    "createdAfter": "Created from",
+    "createdAfterHint": "Day included.",
+    "caption": "Transfers of the entity",
+    "columns": {
+      "date": "Created",
+      "sender": "Sender",
+      "recipients": "Recipients",
+      "files": "Files and size",
+      "status": "Status",
+      "origin": "Origin",
+      "downloads": "Downloads",
+      "expiry": "Expires"
+    },
+    "moreRecipients": {
+      "one": "{list} +{count} other",
+      "other": "{list} +{count} others"
+    },
+    "filesSize": {
+      "one": "{count} file, {size}",
+      "other": "{count} files, {size}"
+    },
+    "noExpiry": "No expiry",
+    "openLabel": "Details of the transfer from {sender}",
+    "empty": "No transfer yet.",
+    "emptyFiltered": "No transfer matches these filters.",
+    "loaded": {
+      "one": "{count} transfer shown.",
+      "other": "{count} transfers shown."
+    },
+    "loadedMore": {
+      "one": "{count} transfer shown, more can be loaded.",
+      "other": "{count} transfers shown, more can be loaded."
+    }
+  },
+  "detail": {
+    "loadingLabel": "Loading the transfer…",
+    "metadataTitle": "Information",
+    "status": "Status",
+    "created": "Created",
+    "expires": "Expires",
+    "noExpiry": "No expiry",
+    "firstDownload": "First download",
+    "never": "Not downloaded yet",
+    "downloadCount": "Downloads",
+    "sender": "Sender",
+    "senderIp": "Sender IP address",
+    "unknownIp": "Unknown",
+    "origin": "Origin",
+    "invitation": "Invitation",
+    "apiToken": "API token",
+    "passwordProtected": "Password protected",
+    "deleteAfterFirstDownload": "Deleted after the first download",
+    "yes": "Yes",
+    "no": "No",
+    "recipientsTitle": "Recipients",
+    "filesTitle": "Files",
+    "filesCaption": "Files of the transfer",
+    "filesColumns": {
+      "name": "Name",
+      "size": "Size",
+      "mediaType": "Type",
+      "sha256": "SHA-256",
+      "scan": "Antivirus"
+    },
+    "unknownMediaType": "Unknown",
+    "noSha256": "Not computed",
+    "copySha256": "Copy the SHA-256 of {name}",
+    "noContent": "File contents and download links are never available to administrators.",
+    "auditLink": "View the audit log from the day of this transfer",
+    "auditHint": "The log opens from the creation day of the transfer; its identifier appears in the Object column.",
+    "backToList": "Back to the transfers",
+    "notFoundTitle": "Transfer not found",
+    "notFoundText": "This transfer does not exist or no longer belongs to this entity.",
+    "actionsTitle": "Actions"
+  },
+  "resend": {
+    "button": "Resend the notification",
+    "title": "Resend the notification",
+    "text": "The notification email is sent again with the existing download link. At most 5 resends per hour.",
+    "legend": "Recipients",
+    "noneSelected": "Select at least one recipient.",
+    "submit": "Resend",
+    "submitting": "Sending…",
+    "success": {
+      "one": "Notification queued for {count} recipient.",
+      "other": "Notification queued for {count} recipients."
+    },
+    "errors": {
+      "notRecipient": "One of the selected addresses is not a recipient of this transfer. Reload the page and try again.",
+      "notAvailable": "This transfer is no longer available: its notification cannot be resent.",
+      "rateLimited": "The limit of 5 resends per hour is reached. Try again in {wait}.",
+      "rateLimitedNoDelay": "The limit of 5 resends per hour is reached. Try again later.",
+      "rateLimitedOver": "You can try again now.",
+      "mailUnavailable": "No SMTP server is configured for this entity: nothing was sent.",
+      "smtpLink": "Configure the SMTP server"
+    }
+  },
+  "delete": {
+    "button": "Delete the transfer",
+    "title": "Delete this transfer?",
+    "text": "The files are erased for good, including from backups (the encryption keys are destroyed). The download link stops working.",
+    "reasonLabel": "Reason (optional)",
+    "reasonHint": "Recorded in the audit log. Email addresses you type are replaced by [address].",
+    "confirm": "Delete",
+    "done": "The transfer has been deleted.",
+    "errors": {
+      "uploading": "An upload of this transfer is in progress. Try again in {wait}.",
+      "uploadingNoDelay": "An upload of this transfer is in progress. Try again in a moment.",
+      "notFound": "This transfer no longer exists."
+    }
+  }
+}

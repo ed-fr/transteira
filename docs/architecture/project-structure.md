@@ -172,12 +172,20 @@ transteira/
 │   │   │   │                        # DKIM, variables de modèle, TOTP, fragment d'activation, contraste
 │   │   │   ├── components/          # Mise en page, navigation de l'entité, tableau, confirmation, champs, TOTP,
 │   │   │   │                        # codes de secours, lien d'activation, habillage, images, éditeur et aperçu des
-│   │   │   │                        # modèles (TemplatePreview, seconde exception {@html}) ; logique en .ts testée
-│   │   │   └── screens/             # Accueil, compte, aide, page introuvable
+│   │   │   │                        # modèles (TemplatePreview, seconde exception {@html}), liste déroulante
+│   │   │   │                        # (SelectField), barre de filtres (FilterBar), chiffre clé (StatCard), jauge de
+│   │   │   │                        # quota (QuotaMeter), graphique en barres SVG (BarChart, géométrie par attributs),
+│   │   │   │                        # secret affiché une fois (SecretOnceModal) ; logique en .ts testée
+│   │   │   └── screens/             # Accueil (tableau de bord : home.ts), compte, aide, page introuvable
 │   │   │       ├── auth/            # Initialisation, connexion, activation
 │   │   │       ├── tenants/         # Liste, création, général, habillage, réseau, SMTP, modèles, mentions légales
-│   │   │       └── admins/          # Liste, création, modification des comptes admins
-│   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 17)
+│   │   │       ├── admins/          # Liste, création, modification des comptes admins
+│   │   │       └── ops/             # Opérations d'une entité : transferts (liste, détail), invitations, liste de
+│   │   │                            # blocage, jetons d'API (liste, création, modification), journal d'audit,
+│   │   │                            # statistiques, données personnelles ; filtres dans l'URL (filters.ts),
+│   │   │                            # pagination (paging.ts), libellés de l'audit (auditLabels.ts),
+│   │   │                            # aides communes des listes (common.ts)
+│   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 19)
 │   │   ├── shared/
 │   │   │   ├── api/                 # schema.ts (généré depuis api/openapi.yaml, versionné), client typé,
 │   │   │   │                        # lecture des Problem Details, jeton CSRF en mémoire
@@ -186,13 +194,17 @@ transteira/
 │   │   │   ├── upload/              # Moteur tus 1.0.0 (reprise, relances, transport XHR, reprise après rechargement)
 │   │   │   ├── theme/               # Couleurs de l'entité (validées puis écrites par le CSSOM), contraste WCAG
 │   │   │   ├── safe/                # safeApiHref : filtre des URL reçues de l'API
+│   │   │   ├── validation/          # Contrôles côté client partagés par les deux applications (isEmail)
 │   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications, dont
 │   │   │                            # LegalContent (mentions légales filtrées par le serveur, première exception
 │   │   │                            # {@html}, page publique et aperçu côté admin)
 │   │   ├── styles/                  # tokens.css (variables de thème, clair en V1, sombre prêt pour la V1.1),
 │   │   │                            # base.css, layout.css, utilities.css
 │   │   └── locales/                 # <langue>/<zone>.json (fr, en), montés sous le nom de la zone
-│   │                                # (upload.json : clés upload.*)
+│   │                                # (upload.json : clés upload.*) ; administration : admin, adminAuth,
+│   │                                # adminComponents, adminTenants, adminAccounts, adminHome, adminOps,
+│   │                                # opsTransfers, opsInvitations, opsBlocklist, opsTokens, opsAudit,
+│   │                                # opsStats, opsPrivacy
 │   ├── static/                      # Copiés tels quels à la racine de dist/ : favicon.svg, robots.txt (Disallow: /)
 │   ├── scripts/                     # gen-types.mjs (types de l'API, --check), check-dist.mjs (conformité du build
 │   │                                # à la CSP), keep-dist.mjs (recrée dist/.gitkeep)

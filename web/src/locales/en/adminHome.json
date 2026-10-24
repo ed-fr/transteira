@@ -1,0 +1,29 @@
+{
+  "welcome": "Welcome, {username}.",
+  "totpRecommended": "Two-factor authentication is not enabled on your account. We recommend enabling it.",
+  "accountLink": "Enable it from My account",
+  "noTenant": "No entity is attached to your account yet. Ask a super administrator to attach you to an entity.",
+  "tenantsTitle": "Entities",
+  "periodNote": "Figures for the last 30 days. Storage shows the current usage.",
+  "allTenants": "Open the full list of entities",
+  "card": {
+    "transfers": "Transfers (30 days)",
+    "volume": "Volume uploaded (30 days)",
+    "loading": "Loading the statistics of {name}…",
+    "error": "The statistics of {name} could not be loaded.",
+    "retry": "Try again"
+  },
+  "links": {
+    "transfers": "Transfers of {name}",
+    "audit": "Audit log of {name}",
+    "stats": "Statistics of {name}"
+  },
+  "table": {
+    "caption": "Entities and storage usage",
+    "empty": "No entity yet. Create one from the Entities page.",
+    "name": "Name",
+    "fqdn": "Domain name",
+    "status": "Status",
+    "storage": "Storage"
+  }
+}

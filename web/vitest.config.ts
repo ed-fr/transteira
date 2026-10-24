@@ -16,7 +16,7 @@ export default defineConfig({
       // held to 90 %. Every .ts file of these directories is measured, tested or not (generated
       // types, tests and the browser entry point excepted; .svelte components are not measured).
       include: [
-        'src/shared/{api,router,i18n,upload,safe,theme}/**/*.ts',
+        'src/shared/{api,router,i18n,upload,safe,theme,validation}/**/*.ts',
         'src/public/**/*.ts',
         'src/admin/**/*.ts',
       ],

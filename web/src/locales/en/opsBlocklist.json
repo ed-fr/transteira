@@ -1,0 +1,60 @@
+{
+  "caption": "Blocklist entries of the entity",
+  "filters": {
+    "label": "Filter the blocklist",
+    "kind": "Kind",
+    "allKinds": "All kinds"
+  },
+  "loaded": {
+    "one": "{count} entry loaded.",
+    "other": "{count} entries loaded."
+  },
+  "loadedMore": {
+    "one": "{count} entry loaded, more are available.",
+    "other": "{count} entries loaded, more are available."
+  },
+  "empty": "The blocklist is empty.",
+  "emptyFiltered": "No entry matches these filters.",
+  "kind": {
+    "email": "Email address",
+    "domain": "Domain",
+    "sha256": "SHA-256 digest"
+  },
+  "columns": {
+    "value": "Value",
+    "kind": "Kind",
+    "comment": "Comment",
+    "createdBy": "Added by",
+    "createdAt": "Added",
+    "actions": "Actions"
+  },
+  "form": {
+    "title": "Add an entry",
+    "intro": "A blocked address or domain can no longer deposit on this entity; a file whose SHA-256 digest is blocked is refused.",
+    "kind": "Kind",
+    "value": "Value",
+    "valueHint": {
+      "email": "A full email address, for example name@example.com.",
+      "domain": "A domain name without @, for example spam.example.net. Addresses of this domain are blocked.",
+      "sha256": "The 64 hexadecimal characters of the SHA-256 digest of the file."
+    },
+    "comment": "Comment (optional)",
+    "commentHint": "Why this entry was added, for the other administrators. Do not write personal data you do not need.",
+    "submit": "Add",
+    "submitting": "Adding…",
+    "added": "{value} has been added to the blocklist."
+  },
+  "errors": {
+    "sha256": "Enter 64 hexadecimal characters (0 to 9, a to f).",
+    "alreadyExists": "This value is already in the blocklist for this kind."
+  },
+  "delete": {
+    "button": "Remove",
+    "buttonFor": "Remove {value} from the blocklist",
+    "title": "Remove this entry?",
+    "text": "{value} will no longer be blocked on this entity.",
+    "confirm": "Remove the entry",
+    "busy": "Removing…",
+    "done": "{value} has been removed from the blocklist."
+  }
+}

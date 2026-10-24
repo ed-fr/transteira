@@ -1,0 +1,62 @@
+{
+  "yes": "Yes",
+  "no": "No",
+  "scope": "Only this entity is searched and erased. If the person also uses another entity, repeat the procedure there.",
+  "search": {
+    "title": "Search by email address",
+    "email": "Email address",
+    "hint": "The address is sent to the server without appearing in the page address, and is forgotten when you leave this page.",
+    "submit": "Search",
+    "submitting": "Searching…",
+    "done": "Search complete. The results are shown below the form."
+  },
+  "summary": {
+    "title": "Data found in this entity",
+    "for": "Results for the address",
+    "nothing": "No data linked to this address was found in this entity. Erasing still removes any pending verification code or deposit session.",
+    "verifiedAddress": "Verified address record",
+    "transfersAsSender": "Transfers sent",
+    "transfersAsRecipient": "Transfers received",
+    "invitations": "Invitations received or issued",
+    "auditEvents": "Audit log entries",
+    "securityNote": "The security log never records email addresses, so it holds nothing to erase."
+  },
+  "erase": {
+    "open": "Erase all data",
+    "title": "Erase all the data of this address",
+    "scope": "Only this entity is affected: the same address in another entity is left untouched.",
+    "erasedIntro": "What is erased:",
+    "erased": {
+      "verified": "verification codes, deposit sessions and the verified address record;",
+      "sent": "transfers sent by the address, or deposited through an invitation it received: files made unreadable (keys destroyed) and deleted;",
+      "received": "transfers received: the address is removed from the recipients, and a transfer left without recipients is deleted;",
+      "invitations": "invitations it received are deleted; invitations it issued are revoked;",
+      "audit": "audit log: the address is replaced by a pseudonym (erased-…)."
+    },
+    "keptIntro": "What is kept on purpose:",
+    "kept": {
+      "blocklist": "blocklist entries, so that an abuser is not unblocked;",
+      "tokenSenders": "the address in the allowed senders of an API token (update the token to remove it);",
+      "auditIps": "client IP addresses in the audit log, until their 12-month retention ends;",
+      "queuedMails": "mails already queued for sending, whose links keep working as long as the transfer exists (a received transfer that has other recipients is kept);",
+      "backups": "backups: their copies of the files become unreadable, since the keys are destroyed."
+    },
+    "irreversible": "This cannot be undone.",
+    "confirm": "Erase the data",
+    "busy": "Erasing…",
+    "conflict": "A transfer of this address is being uploaded. What was already erased stays erased: try again in {wait} to complete the erasure.",
+    "conflictNow": "A transfer of this address is being uploaded. What was already erased stays erased: try again in a moment to complete the erasure."
+  },
+  "report": {
+    "title": "Erasure report",
+    "done": "The data linked to the address has been erased from this entity.",
+    "verifiedAddressDeleted": "Verified address record deleted",
+    "transfersDeleted": "Transfers deleted",
+    "recipientEntriesRemoved": "Recipient entries removed",
+    "invitationsDeleted": "Invitations deleted",
+    "logEntriesPseudonymised": "Audit log entries pseudonymised",
+    "auditHint": "The erasure is recorded in the audit log without the address; its pseudonym appears as the object of the entry.",
+    "auditLink": "View in the audit log",
+    "newSearch": "New search"
+  }
+}

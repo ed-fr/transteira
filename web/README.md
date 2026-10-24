@@ -12,20 +12,21 @@ There is no SvelteKit, no component library and no CDN. The applications only ta
 
 ## Layout
 
-| Path                                             | Content                                                                       |
-| ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens       |
-| `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens           |
-| `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store   |
-| `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, `safeApiHref`                |
-| `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                         |
-| `src/shared/components/`                         | accessible components shared by both applications                             |
-| `src/styles/`                                    | design tokens (CSS variables) and base styles                                 |
-| `src/locales/`                                   | `<lang>/<area>.json`, mounted under the area name (`upload.json`: `upload.*`) |
-| `src/help/`                                      | reserved for the integrated help (step 17)                                    |
-| `static/`                                        | files copied as is to the root of `dist/` (`favicon.svg`, `robots.txt`)       |
-| `scripts/`                                       | `gen-types.mjs`, `check-dist.mjs`, `keep-dist.mjs`                            |
-| `dist/`                                          | build output, embedded by `embed.go`; only `dist/.gitkeep` is committed       |
+| Path                                             | Content                                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens        |
+| `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens            |
+| `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store    |
+| `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, `safeApiHref`                 |
+| `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                          |
+| `src/shared/validation/`                         | client-side checks shared by both applications (`isEmail`, `EMAIL_MAX_LENGTH`) |
+| `src/shared/components/`                         | accessible components shared by both applications                              |
+| `src/styles/`                                    | design tokens (CSS variables) and base styles                                  |
+| `src/locales/`                                   | `<lang>/<area>.json`, mounted under the area name (`upload.json`: `upload.*`)  |
+| `src/help/`                                      | reserved for the integrated help (step 19)                                     |
+| `static/`                                        | files copied as is to the root of `dist/` (`favicon.svg`, `robots.txt`)        |
+| `scripts/`                                       | `gen-types.mjs`, `check-dist.mjs`, `keep-dist.mjs`                             |
+| `dist/`                                          | build output, embedded by `embed.go`; only `dist/.gitkeep` is committed        |
 
 ## Prerequisites
 
@@ -51,7 +52,8 @@ with a fallback page; `make build` never produces a binary without the interface
 
 Unit tests (`*.test.ts`, Vitest) run in Node, without jsdom: the router, translations, API client
 and upload engine receive their browser dependencies (history, fetch, storage, transport, timers)
-by injection. Coverage must stay at 90 % or more on `src/shared/{api,router,i18n,upload,safe,theme}`
+by injection. Coverage must stay at 90 % or more on
+`src/shared/{api,router,i18n,upload,safe,theme,validation}`
 and on the `.ts` logic files of `src/public` and `src/admin` (the entry points `main.ts` excepted;
 `.svelte` components are not measured, so the logic of a screen lives in a `.ts` module next to it,
 for example `src/admin/auth/`, `src/admin/forms/`, `src/admin/components/*.ts`).
@@ -82,6 +84,37 @@ bypasses them: it is reserved for redirects the user cannot refuse (session expi
 access lost), which the admin shell (`src/admin/App.svelte`) performs with a replaced history
 entry; never use it for a user navigation. The admin return path after sign-in (`?next=`) always
 goes through `safeNext` (`src/admin/auth/guard.ts`), which only accepts internal paths (T-164).
+
+Admin screens receive `params` and `nav` (`src/admin/screens/types.ts`). `nav.current` is the
+reactive current location: `nav.current.path` (without the `/admin` base) and
+`nav.current.search` (the query string, with its leading `?`). The filters of the operation lists
+and the period of the statistics live in the query string (`src/admin/screens/ops/filters.ts`,
+`stats.ts`), so that a filtered view can be bookmarked and restored by the back button. App keys
+the screens on the path only, so a screen is **not** remounted when only the query string
+changes: derive the filters with `$derived(parseFilters(SPEC, nav.current.search))`, reload in an
+`$effect` when they change, and apply new filters with
+`nav.navigate(pathWithFilters(nav.current.path, SPEC, next))`. Never put a secret or a value typed
+for the data subject rights in the query string (T-168).
+
+## Admin components
+
+Besides the layout, data table, confirmation dialog, form sections and status badges, the admin
+application has the following components in `src/admin/components/`, each with its logic in a
+tested `.ts` module:
+
+| Component                           | Purpose                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `SelectField` (`select.ts`)         | labelled native `<select>`, flat options or option groups, hint and error                                                            |
+| `FilterBar` (`filterBar.ts`)        | filter form of a list: apply and reset buttons, busy state, result text announced after apply or reset                               |
+| `StatCard`                          | key figure (label, value, optional hint and variant)                                                                                 |
+| `QuotaMeter` (`quota.ts`)           | storage used against the quota: native `<meter>`, written text and badge (warning from 80 %, full from 100 %)                        |
+| `BarChart` (`charts.ts`)            | vertical bar chart in SVG with an accessible summary and an equivalent table of every value                                          |
+| `SecretOnceModal` (`secretOnce.ts`) | secret shown once (new API token): closable once copied successfully or acknowledged, navigation guard and `beforeunload` until then |
+
+Status and levels are always written out (text and badge), never conveyed by colour alone. The
+screens of the tenant operations are in `src/admin/screens/ops/` (one pure `.ts` module per
+screen, plus `filters.ts` and `paging.ts` shared by the lists), the dashboard in
+`src/admin/screens/Home.svelte` and `home.ts`.
 
 ## Development loop
 
@@ -177,6 +210,9 @@ and by `scripts/check-dist.mjs` on the build output:
   `src/styles/tokens.css`. Dynamic values go through the CSSOM
   (`element.style.setProperty('--tt-...', value)`, which the CSP does not govern), after strict
   validation (tenant colours must match `^#[0-9a-fA-F]{6}$`).
+- **Charts are drawn with SVG attributes**: the geometry computed by `src/admin/components/charts.ts`
+  is applied as `x`, `y`, `width` and `height` attributes of the SVG elements, never as inline
+  styles or the `style:` directive; colours come from classes and theme variables.
 - **No Svelte transitions or animations** (`transition:`, `in:`, `out:`): they write inline
   styles. Use CSS classes, and honour `prefers-reduced-motion`.
 - **No `{@html}`**, except in exactly two components, each carrying one eslint disable comment

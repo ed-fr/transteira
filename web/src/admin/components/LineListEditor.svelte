@@ -108,7 +108,7 @@
       countId,
       parsed.errors.length > 0 && errorsId,
       hasNotices && noticesId,
-      fieldInvalid && errorId,
+      fieldInvalid && parsed.errors.length === 0 && errorId,
     )}></textarea>
   <p class="tt-lines__count" id={countId}>{count}</p>
   {#if parsed.errors.length > 0}
@@ -151,7 +151,9 @@
       {/if}
     </div>
   {/if}
-  {#if fieldInvalid}
+  <!-- While lines are invalid, the per-line list above explains the field error (the form's
+       summary entry for this field): it is not repeated. -->
+  {#if fieldInvalid && parsed.errors.length === 0}
     <p class="tt-lines__error" id={errorId}>
       <span class="visually-hidden">{t('components.field.errorPrefix')}</span>
       {error}

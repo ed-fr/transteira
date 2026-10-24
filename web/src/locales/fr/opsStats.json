@@ -1,0 +1,36 @@
+{
+  "period": "Période",
+  "periods": {
+    "7d": "7 derniers jours",
+    "30d": "30 derniers jours",
+    "12m": "12 derniers mois"
+  },
+  "indicative": "Ces chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes.",
+  "figures": "Chiffres clés",
+  "storage": "Stockage",
+  "storageLabel": "Stockage occupé (actuel)",
+  "activity": "Activité",
+  "cards": {
+    "transfers": "Transferts déposés",
+    "bytesUploaded": "Volume déposé",
+    "downloads": "Téléchargements",
+    "bytesDownloaded": "Volume téléchargé",
+    "virusDetections": "Virus détectés"
+  },
+  "charts": {
+    "transfers": {
+      "day": "Transferts par jour",
+      "month": "Transferts par mois"
+    },
+    "volume": {
+      "day": "Volume déposé par jour",
+      "month": "Volume déposé par mois"
+    },
+    "labelHeader": {
+      "day": "Jour",
+      "month": "Mois"
+    },
+    "transfersHeader": "Transferts",
+    "volumeHeader": "Volume"
+  }
+}

@@ -4,9 +4,11 @@ import type { Router } from '../../shared/router/router.svelte';
 
 /**
  * Navigation helpers handed to the screens (App passes the router itself). addGuard lets a
- * form confirm leaving the page with unsaved changes (FormSection, ActivationLinkPanel).
+ * form confirm leaving the page with unsaved changes (FormSection, ActivationLinkPanel);
+ * current (reactive) gives the query string of list filters (current.search). A screen is
+ * kept when only the query string changes (App keys screens on the path).
  */
-export type Navigation = Pick<Router, 'href' | 'link' | 'navigate' | 'addGuard'>;
+export type Navigation = Pick<Router, 'current' | 'href' | 'link' | 'navigate' | 'addGuard'>;
 
 /** Registers a navigation guard and returns its removal (Router.addGuard). */
 export type AddGuard = Navigation['addGuard'];

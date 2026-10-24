@@ -20,13 +20,7 @@
     "unknown": "Unknown role"
   },
   "home": {
-    "title": "Home",
-    "welcome": "Welcome, {username}.",
-    "intro": "Choose a section in the menu to configure the entities or manage the administration accounts.",
-    "tenantsLink": "Manage the entities",
-    "adminsLink": "Manage the administrators",
-    "accountLink": "Manage my account",
-    "totpRecommended": "Two-factor authentication is not enabled on your account. We recommend enabling it from the My account page."
+    "title": "Home"
   },
   "common": {
     "save": "Save",

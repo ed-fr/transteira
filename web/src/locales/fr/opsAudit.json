@@ -1,0 +1,165 @@
+{
+  "filters": {
+    "label": "Filtrer le journal d’audit",
+    "action": "Action",
+    "anyAction": "Toutes les actions",
+    "customAction": "Autre action (saisir son code)",
+    "customCode": "Code de l’action",
+    "customHint": "Par exemple transfer.deleted : lettres minuscules et tirets bas, un point, puis lettres minuscules et tirets bas.",
+    "actor": "Acteur",
+    "actorHint": "Adresse mail exacte ou identifiant d’administrateur.",
+    "from": "Du",
+    "to": "Au",
+    "periodHint": "Les deux jours sont inclus.",
+    "range": "La fin de la période ne peut pas précéder son début."
+  },
+  "list": {
+    "caption": "Événements d’audit",
+    "empty": "Aucun événement ne correspond à ces filtres.",
+    "loaded": {
+      "one": "{count} événement chargé.",
+      "other": "{count} événements chargés."
+    },
+    "loadedMore": {
+      "one": "{count} événement chargé, d’autres sont disponibles.",
+      "other": "{count} événements chargés, d’autres sont disponibles."
+    },
+    "columns": {
+      "date": "Date",
+      "actor": "Acteur",
+      "action": "Action",
+      "object": "Objet",
+      "ip": "Adresse IP",
+      "details": "Détails"
+    },
+    "noIp": "Aucune",
+    "noDetails": "Aucun",
+    "showDetails": "Afficher les détails",
+    "openTransfer": "Ouvrir le transfert {id}"
+  },
+  "actor": {
+    "recipientLink": "lien du transfert",
+    "erasedHint": "Pseudonyme d’une adresse effacée à la demande de la personne concernée."
+  },
+  "actorKinds": {
+    "depositor": "Déposant",
+    "recipient": "Destinataire",
+    "admin": "Administrateur",
+    "api_token": "Jeton d’API",
+    "system": "Système"
+  },
+  "objectKinds": {
+    "transfer": "Transfert",
+    "file": "Fichier",
+    "invitation": "Invitation",
+    "api_token": "Jeton d’API",
+    "admin": "Administrateur",
+    "tenant": "Entité",
+    "blocklist_entry": "Entrée de la liste de blocage",
+    "data_subject": "Personne concernée",
+    "deposit_session": "Session de dépôt",
+    "master_key_rotation": "Rotation de la clé maître",
+    "system": "Système"
+  },
+  "groups": {
+    "transfers": "Transferts",
+    "invitations": "Invitations et adresses",
+    "antivirus": "Antivirus",
+    "quotas": "Quotas",
+    "blocklist": "Liste de blocage",
+    "tokens": "Jetons d’API",
+    "privacy": "Données personnelles",
+    "tenant": "Configuration de l’entité",
+    "accounts": "Administrateurs et connexion",
+    "instance": "Instance"
+  },
+  "actions": {
+    "transfer": {
+      "created": "Transfert commencé",
+      "finalized": "Transfert déposé",
+      "downloaded": "Téléchargement commencé",
+      "expired": "Transfert expiré",
+      "deleted": "Transfert supprimé",
+      "notification_resent": "Notification renvoyée"
+    },
+    "file": {
+      "infected": "Virus détecté",
+      "not_scanned": "Fichier non analysé"
+    },
+    "address": {
+      "verified": "Adresse vérifiée"
+    },
+    "invitation": {
+      "created": "Invitation envoyée",
+      "used": "Invitation utilisée",
+      "revoked": "Invitation révoquée"
+    },
+    "quota": {
+      "warning": "Quota atteint à 80 %",
+      "reached": "Quota atteint"
+    },
+    "api_token": {
+      "created": "Jeton d’API créé",
+      "updated": "Jeton d’API modifié",
+      "used": "Jeton d’API utilisé",
+      "revoked": "Jeton d’API révoqué"
+    },
+    "admin": {
+      "login": "Connexion d’un administrateur",
+      "login_failed": "Échec de connexion d’un administrateur",
+      "logout": "Déconnexion d’un administrateur",
+      "totp_enrolled": "Double authentification activée",
+      "totp_disabled": "Double authentification désactivée",
+      "recovery_code_used": "Code de secours utilisé",
+      "password_changed": "Mot de passe modifié",
+      "created": "Administrateur créé",
+      "updated": "Administrateur modifié",
+      "deleted": "Administrateur supprimé",
+      "credentials_reset": "Identifiants d’administrateur réinitialisés",
+      "activated": "Compte d’administrateur activé",
+      "totp_reset_local": "Double authentification réinitialisée depuis le serveur",
+      "password_reset_local": "Mot de passe réinitialisé depuis le serveur"
+    },
+    "tenant": {
+      "created": "Entité créée",
+      "updated": "Entité modifiée",
+      "deletion_started": "Suppression de l’entité commencée",
+      "deleted": "Entité supprimée",
+      "branding_updated": "Habillage modifié",
+      "asset_uploaded": "Image envoyée",
+      "asset_deleted": "Image supprimée",
+      "network_updated": "Réglages réseau modifiés",
+      "smtp_updated": "Réglages SMTP modifiés",
+      "smtp_tested": "Test SMTP envoyé",
+      "template_updated": "Modèle de mail modifié",
+      "template_reset": "Modèle de mail réinitialisé",
+      "legal_updated": "Textes légaux modifiés"
+    },
+    "config": {
+      "updated": "Paramètres système modifiés"
+    },
+    "blocklist": {
+      "updated": "Liste de blocage modifiée"
+    },
+    "data_subject": {
+      "searched": "Données personnelles recherchées",
+      "erased": "Données personnelles effacées"
+    },
+    "maintenance": {
+      "enabled": "Mode maintenance activé",
+      "disabled": "Mode maintenance désactivé"
+    },
+    "master_key": {
+      "rotation_started": "Rotation de la clé maître commencée",
+      "rotation_completed": "Rotation de la clé maître terminée",
+      "rotation_failed": "Échec de la rotation de la clé maître"
+    },
+    "disk": {
+      "alert_raised": "Alerte d’espace disque déclenchée",
+      "alert_cleared": "Alerte d’espace disque levée"
+    },
+    "setup": {
+      "completed": "Initialisation terminée"
+    }
+  }
+}

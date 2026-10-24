@@ -1,0 +1,165 @@
+{
+  "filters": {
+    "label": "Filter the audit log",
+    "action": "Action",
+    "anyAction": "Any action",
+    "customAction": "Other action (type its code)",
+    "customCode": "Action code",
+    "customHint": "For example transfer.deleted: lowercase letters and underscores, a dot, then lowercase letters and underscores.",
+    "actor": "Actor",
+    "actorHint": "Exact email address or administrator username.",
+    "from": "From",
+    "to": "To",
+    "periodHint": "Both days included.",
+    "range": "The end of the period must not be before its start."
+  },
+  "list": {
+    "caption": "Audit events",
+    "empty": "No event matches these filters.",
+    "loaded": {
+      "one": "{count} event loaded.",
+      "other": "{count} events loaded."
+    },
+    "loadedMore": {
+      "one": "{count} event loaded, more are available.",
+      "other": "{count} events loaded, more are available."
+    },
+    "columns": {
+      "date": "Date",
+      "actor": "Actor",
+      "action": "Action",
+      "object": "Object",
+      "ip": "IP address",
+      "details": "Details"
+    },
+    "noIp": "None",
+    "noDetails": "None",
+    "showDetails": "Show the details",
+    "openTransfer": "Open transfer {id}"
+  },
+  "actor": {
+    "recipientLink": "transfer link",
+    "erasedHint": "Pseudonym of an address erased at the request of the person concerned."
+  },
+  "actorKinds": {
+    "depositor": "Depositor",
+    "recipient": "Recipient",
+    "admin": "Administrator",
+    "api_token": "API token",
+    "system": "System"
+  },
+  "objectKinds": {
+    "transfer": "Transfer",
+    "file": "File",
+    "invitation": "Invitation",
+    "api_token": "API token",
+    "admin": "Administrator",
+    "tenant": "Entity",
+    "blocklist_entry": "Blocklist entry",
+    "data_subject": "Data subject",
+    "deposit_session": "Deposit session",
+    "master_key_rotation": "Master key rotation",
+    "system": "System"
+  },
+  "groups": {
+    "transfers": "Transfers",
+    "invitations": "Invitations and addresses",
+    "antivirus": "Antivirus",
+    "quotas": "Quotas",
+    "blocklist": "Blocklist",
+    "tokens": "API tokens",
+    "privacy": "Personal data",
+    "tenant": "Entity configuration",
+    "accounts": "Administrators and sign-in",
+    "instance": "Instance"
+  },
+  "actions": {
+    "transfer": {
+      "created": "Transfer started",
+      "finalized": "Transfer deposited",
+      "downloaded": "Download started",
+      "expired": "Transfer expired",
+      "deleted": "Transfer deleted",
+      "notification_resent": "Notification resent"
+    },
+    "file": {
+      "infected": "Virus detected",
+      "not_scanned": "File not scanned"
+    },
+    "address": {
+      "verified": "Address verified"
+    },
+    "invitation": {
+      "created": "Invitation sent",
+      "used": "Invitation used",
+      "revoked": "Invitation revoked"
+    },
+    "quota": {
+      "warning": "Quota 80% reached",
+      "reached": "Quota reached"
+    },
+    "api_token": {
+      "created": "API token created",
+      "updated": "API token updated",
+      "used": "API token used",
+      "revoked": "API token revoked"
+    },
+    "admin": {
+      "login": "Administrator signed in",
+      "login_failed": "Administrator sign-in failed",
+      "logout": "Administrator signed out",
+      "totp_enrolled": "Two-factor authentication enabled",
+      "totp_disabled": "Two-factor authentication disabled",
+      "recovery_code_used": "Recovery code used",
+      "password_changed": "Password changed",
+      "created": "Administrator created",
+      "updated": "Administrator updated",
+      "deleted": "Administrator deleted",
+      "credentials_reset": "Administrator credentials reset",
+      "activated": "Administrator account activated",
+      "totp_reset_local": "Two-factor authentication reset from the server",
+      "password_reset_local": "Password reset from the server"
+    },
+    "tenant": {
+      "created": "Entity created",
+      "updated": "Entity updated",
+      "deletion_started": "Entity deletion started",
+      "deleted": "Entity deleted",
+      "branding_updated": "Branding updated",
+      "asset_uploaded": "Image uploaded",
+      "asset_deleted": "Image deleted",
+      "network_updated": "Network settings updated",
+      "smtp_updated": "SMTP settings updated",
+      "smtp_tested": "SMTP test sent",
+      "template_updated": "Email template updated",
+      "template_reset": "Email template reset",
+      "legal_updated": "Legal texts updated"
+    },
+    "config": {
+      "updated": "System settings updated"
+    },
+    "blocklist": {
+      "updated": "Blocklist updated"
+    },
+    "data_subject": {
+      "searched": "Personal data searched",
+      "erased": "Personal data erased"
+    },
+    "maintenance": {
+      "enabled": "Maintenance mode enabled",
+      "disabled": "Maintenance mode disabled"
+    },
+    "master_key": {
+      "rotation_started": "Master key rotation started",
+      "rotation_completed": "Master key rotation completed",
+      "rotation_failed": "Master key rotation failed"
+    },
+    "disk": {
+      "alert_raised": "Disk space alert raised",
+      "alert_cleared": "Disk space alert cleared"
+    },
+    "setup": {
+      "completed": "Initial setup completed"
+    }
+  }
+}

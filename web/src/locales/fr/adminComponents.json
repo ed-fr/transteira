@@ -60,6 +60,10 @@
       "one": "{count} ligne est invalide :",
       "other": "{count} lignes sont invalides :"
     },
+    "invalidLines": {
+      "one": "{count} ligne est invalide.",
+      "other": "{count} lignes sont invalides."
+    },
     "lineError": "Ligne {line} : {message}",
     "applySuggestion": "Remplacer la ligne {line} par {value}",
     "duplicates": {
@@ -68,5 +72,48 @@
     },
     "tooMany": "Trop d'entrées : {max} au maximum sont autorisées.",
     "replaced": "Ligne {line} remplacée par {value}."
+  },
+  "filter": {
+    "label": "Filtres",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser"
+  },
+  "chart": {
+    "showTable": "Afficher le tableau des données",
+    "hideTable": "Masquer le tableau des données",
+    "label": "Période",
+    "value": "Valeur",
+    "empty": "Aucune donnée.",
+    "summary": {
+      "one": "{count} valeur : {max} ({maxLabel}).",
+      "other": "{count} valeurs, de {min} ({minLabel}) à {max} ({maxLabel}), total {total}."
+    }
+  },
+  "stat": {
+    "warning": "Avertissement :",
+    "danger": "Alerte :"
+  },
+  "quota": {
+    "label": "Stockage utilisé",
+    "usage": "{used} sur {quota} ({percent})",
+    "noQuota": "{used} utilisés, aucun quota défini",
+    "level": {
+      "ok": "OK",
+      "warning": "Presque plein",
+      "full": "Plein"
+    }
+  },
+  "secretOnce": {
+    "text": "Copiez ce secret dès maintenant et conservez-le en lieu sûr, par exemple dans un gestionnaire de mots de passe.",
+    "shownOnce": "Il ne sera plus affiché : une fois cette fenêtre fermée, il est impossible de le retrouver.",
+    "label": "Secret",
+    "copy": "Copier le secret",
+    "acknowledge": "J’ai conservé ce secret, il ne sera plus affiché",
+    "close": "Fermer",
+    "closeDisabled": "Copiez le secret ou cochez la case ci-dessus pour fermer cette fenêtre.",
+    "leaveConfirm": {
+      "title": "Le secret n’a pas été conservé.",
+      "text": "Il ne sera plus affiché. Voulez-vous vraiment quitter cette page ?"
+    }
   }
 }

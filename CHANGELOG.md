@@ -366,6 +366,30 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `{@html}` exceptions, new T-162 secrets on screen, T-163 stored XSS through the template
   preview, T-164 open redirect through `next`, T-165 session lifecycle in the interface, T-166
   branding uploads from the interface).
+- Web administration, part 2 (`web/src/admin`): dashboard by role (super admin: table of every
+  tenant with its storage level; delegated admin: one card per tenant with the transfers and
+  volume of the last 30 days, the storage quota and quick links, loaded at most 4 at a time, each
+  with its own error and retry; two-factor recommendation while TOTP is off); tenant
+  sub-navigation grouped into Configuration and Operations; tenant operation screens
+  (`screens/ops/`): transfers (filters in the URL, detail with files, SHA-256 fingerprints and
+  antivirus results, no download link, resend to chosen recipients with the 5 per hour limit and
+  its countdown, deletion with an optional reason and crypto-erase), invitations (status filter,
+  erased issuer, revocation), blocklist (kind filter, per-kind normalisation of the value,
+  duplicate reported on the field, removal), API tokens (list, creation with the "any address"
+  shortcut and its warning, allowed senders, optional expiry, secret shown once, edit, revocation
+  with the name typed again), audit log (action chosen in grouped lists of tenant actions or typed as a code, actor,
+  period, details rendered as text), statistics (7 days, 30 days or 12 months in the URL, key
+  figures, storage meter, bar charts with their data table) and personal data (search, erasure
+  confirmed by typing the address, report linked to the audit log; the address only in POST
+  bodies). New admin components: `SelectField`, `FilterBar`, `StatCard`, `QuotaMeter` (warning
+  from 80 %, full from 100 %, never by colour alone), `BarChart` (SVG geometry applied by
+  attributes, accessible summary and equivalent table) and `SecretOnceModal`. French and English
+  translations (`adminHome`, `adminOps`, `opsTransfers`, `opsInvitations`, `opsBlocklist`,
+  `opsTokens`, `opsAudit`, `opsStats`, `opsPrivacy`). Documentation: operating tenants in the web
+  interface in `docs/operations/admin.md`, admin components and query-string filters in
+  `web/README.md`, admin tree in `docs/architecture/project-structure.md`, threat model v0.18 (new
+  T-167 API token secret shown once in the interface, T-168 personal data in the operation
+  screens).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -403,3 +427,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
   (formerly `invalid-format`), so that the interface can explain why.
 - Generated TypeScript types (`web/scripts/gen-types.mjs`) keep request fields that have a default
   value optional, as the OpenAPI specification declares them.
+- Web interface: `isEmail` and `EMAIL_MAX_LENGTH` move to `web/src/shared/validation/email.ts`,
+  shared by the public and admin applications (still re-exported by `src/public/deposit/form.ts`),
+  and Vitest coverage includes `src/shared/validation`. The `Navigation` handed to the admin screens
+  exposes the router's reactive `current` location (path and query string), used by the list
+  filters; a screen is kept when only the query string changes.
+- Admin network screen: an added invalid line counts as a change, so saving shows the error
+  summary instead of "no changes"; line list fields no longer repeat their error under the
+  per-line list, and the summary reads "N lines are invalid."

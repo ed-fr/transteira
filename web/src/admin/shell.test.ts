@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminMe } from './auth/machine';
 import {
+  TENANT_CONFIG_SECTIONS,
+  TENANT_OPS_SECTIONS,
   TENANT_SECTIONS,
   navCurrent,
   pickAdminLanguage,
   redirectTarget,
   roleKey,
+  sectionGroup,
+  tenantLinkGroups,
   tenantLinks,
   tenantNameOf,
   tenantPath,
@@ -65,10 +69,41 @@ describe('tenant navigation', () => {
     expect(links.map((l) => l.section)).toEqual([...TENANT_SECTIONS]);
     expect(links[0]).toEqual({
       section: 'general',
+      group: 'configuration',
       path: '/tenants/ten_1/general',
       labelKey: 'adminTenants.nav.general',
     });
-    expect(links.at(-1)?.path).toBe('/tenants/ten_1/legal');
+    expect(links.at(-1)).toEqual({
+      section: 'privacy',
+      group: 'operations',
+      path: '/tenants/ten_1/privacy',
+      labelKey: 'adminOps.nav.privacy',
+    });
+  });
+
+  it('places the operation sections after the configuration ones', () => {
+    expect(TENANT_SECTIONS.indexOf('legal') + 1).toBe(TENANT_SECTIONS.indexOf('transfers'));
+    expect(sectionGroup('legal')).toBe('configuration');
+    expect(sectionGroup('transfers')).toBe('operations');
+  });
+
+  it('groups the links under titled groups', () => {
+    const groups = tenantLinkGroups('ten_1');
+    expect(groups.map((g) => [g.group, g.labelKey])).toEqual([
+      ['configuration', 'adminOps.nav.groupConfiguration'],
+      ['operations', 'adminOps.nav.groupOperations'],
+    ]);
+    expect(groups[0]?.links.map((l) => l.section)).toEqual([...TENANT_CONFIG_SECTIONS]);
+    expect(groups[1]?.links.map((l) => l.section)).toEqual([...TENANT_OPS_SECTIONS]);
+    for (const link of groups[1]?.links ?? []) {
+      expect(link.labelKey).toBe(`adminOps.nav.${link.section}`);
+    }
+  });
+
+  it('keeps a section link marked on its sub-pages', () => {
+    expect(navCurrent('/tenants/ten_1/transfers/trf_1', tenantPath('ten_1', 'transfers'))).toBe('true');
+    expect(navCurrent('/tenants/ten_1/tokens/new', tenantPath('ten_1', 'tokens'))).toBe('true');
+    expect(navCurrent('/tenants/ten_1/tokens', tenantPath('ten_1', 'transfers'))).toBeUndefined();
   });
 
   it('encodes the tenant id', () => {

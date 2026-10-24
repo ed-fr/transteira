@@ -1,0 +1,62 @@
+{
+  "yes": "Oui",
+  "no": "Non",
+  "scope": "Seule cette entité est concernée par la recherche et l’effacement. Si la personne utilise aussi une autre entité, recommencez la procédure dans celle-ci.",
+  "search": {
+    "title": "Recherche par adresse mail",
+    "email": "Adresse mail",
+    "hint": "L’adresse est envoyée au serveur sans apparaître dans l’adresse de la page, et elle est oubliée quand vous quittez cette page.",
+    "submit": "Rechercher",
+    "submitting": "Recherche…",
+    "done": "Recherche terminée. Les résultats sont affichés sous le formulaire."
+  },
+  "summary": {
+    "title": "Données trouvées dans cette entité",
+    "for": "Résultats pour l’adresse",
+    "nothing": "Aucune donnée liée à cette adresse n’a été trouvée dans cette entité. L’effacement supprime malgré tout un éventuel code de vérification ou une session de dépôt en cours.",
+    "verifiedAddress": "Adresse vérifiée enregistrée",
+    "transfersAsSender": "Transferts envoyés",
+    "transfersAsRecipient": "Transferts reçus",
+    "invitations": "Invitations reçues ou émises",
+    "auditEvents": "Entrées du journal d’audit",
+    "securityNote": "Le journal de sécurité n’enregistre jamais d’adresse mail : il n’y a rien à y effacer."
+  },
+  "erase": {
+    "open": "Effacer toutes les données",
+    "title": "Effacer toutes les données de cette adresse",
+    "scope": "Seule cette entité est concernée : la même adresse dans une autre entité n’est pas touchée.",
+    "erasedIntro": "Ce qui est effacé :",
+    "erased": {
+      "verified": "les codes de vérification, les sessions de dépôt et l’adresse vérifiée ;",
+      "sent": "les transferts envoyés par l’adresse, ou déposés grâce à une invitation qu’elle a reçue : fichiers rendus illisibles (clés détruites) puis supprimés ;",
+      "received": "les transferts reçus : l’adresse est retirée des destinataires, et un transfert qui n’a plus de destinataire est supprimé ;",
+      "invitations": "les invitations qu’elle a reçues sont supprimées ; celles qu’elle a émises sont révoquées ;",
+      "audit": "le journal d’audit : l’adresse est remplacée par un pseudonyme (erased-…)."
+    },
+    "keptIntro": "Ce qui est conservé volontairement :",
+    "kept": {
+      "blocklist": "les entrées de la liste de blocage, pour ne pas débloquer un abus ;",
+      "tokenSenders": "l’adresse dans les expéditeurs autorisés d’un jeton d’API (modifiez le jeton pour la retirer) ;",
+      "auditIps": "les adresses IP du journal d’audit, jusqu’à la fin de leur conservation de 12 mois ;",
+      "queuedMails": "les mails déjà en file d’envoi, dont les liens fonctionnent tant que le transfert existe (un transfert reçu qui a d’autres destinataires est conservé) ;",
+      "backups": "les sauvegardes : leurs copies des fichiers deviennent illisibles, car les clés sont détruites."
+    },
+    "irreversible": "Cette action est irréversible.",
+    "confirm": "Effacer les données",
+    "busy": "Effacement…",
+    "conflict": "Un transfert de cette adresse est en cours d’envoi. Ce qui a déjà été effacé le reste : réessayez dans {wait} pour terminer l’effacement.",
+    "conflictNow": "Un transfert de cette adresse est en cours d’envoi. Ce qui a déjà été effacé le reste : réessayez dans un instant pour terminer l’effacement."
+  },
+  "report": {
+    "title": "Rapport d’effacement",
+    "done": "Les données liées à l’adresse ont été effacées de cette entité.",
+    "verifiedAddressDeleted": "Adresse vérifiée supprimée",
+    "transfersDeleted": "Transferts supprimés",
+    "recipientEntriesRemoved": "Destinataires retirés",
+    "invitationsDeleted": "Invitations supprimées",
+    "logEntriesPseudonymised": "Entrées du journal d’audit pseudonymisées",
+    "auditHint": "L’effacement est enregistré dans le journal d’audit sans l’adresse ; son pseudonyme figure dans l’objet de l’entrée.",
+    "auditLink": "Voir dans le journal d’audit",
+    "newSearch": "Nouvelle recherche"
+  }
+}

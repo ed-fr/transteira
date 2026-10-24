@@ -20,13 +20,7 @@
     "unknown": "Rôle inconnu"
   },
   "home": {
-    "title": "Accueil",
-    "welcome": "Bienvenue, {username}.",
-    "intro": "Choisissez une rubrique dans le menu pour configurer les entités ou gérer les comptes d’administration.",
-    "tenantsLink": "Gérer les entités",
-    "adminsLink": "Gérer les administrateurs",
-    "accountLink": "Gérer mon compte",
-    "totpRecommended": "La double authentification n’est pas activée sur votre compte. Nous vous recommandons de l’activer depuis la page Mon compte."
+    "title": "Accueil"
   },
   "common": {
     "save": "Enregistrer",

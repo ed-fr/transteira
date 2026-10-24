@@ -61,19 +61,63 @@ function trimSlash(path: string): string {
   return path.replace(/\/+$/, '') || '/';
 }
 
-/** Sections of the configuration of a tenant, in navigation order. */
-export const TENANT_SECTIONS = ['general', 'branding', 'network', 'smtp', 'templates', 'legal'] as const;
+/** Sections of the configuration of a tenant (group "configuration"), in navigation order. */
+export const TENANT_CONFIG_SECTIONS = [
+  'general',
+  'branding',
+  'network',
+  'smtp',
+  'templates',
+  'legal',
+] as const;
 
-/** A section of the configuration of a tenant. */
+/** Sections of the operation of a tenant (group "operations"), in navigation order. */
+export const TENANT_OPS_SECTIONS = [
+  'transfers',
+  'invitations',
+  'blocklist',
+  'tokens',
+  'audit',
+  'stats',
+  'privacy',
+] as const;
+
+/** Sections of a tenant, in navigation order: configuration, then operations. */
+export const TENANT_SECTIONS = [...TENANT_CONFIG_SECTIONS, ...TENANT_OPS_SECTIONS] as const;
+
+/** A section of a tenant. */
 export type TenantSection = (typeof TENANT_SECTIONS)[number];
+
+/** A group of the tenant sub-navigation. */
+export type TenantSectionGroup = 'configuration' | 'operations';
+
+/** Groups of the tenant sub-navigation, in order, with their sections and heading key. */
+export const TENANT_SECTION_GROUPS: readonly {
+  group: TenantSectionGroup;
+  labelKey: string;
+  sections: readonly TenantSection[];
+}[] = [
+  { group: 'configuration', labelKey: 'adminOps.nav.groupConfiguration', sections: TENANT_CONFIG_SECTIONS },
+  { group: 'operations', labelKey: 'adminOps.nav.groupOperations', sections: TENANT_OPS_SECTIONS },
+];
 
 /** A link of the tenant sub-navigation. */
 export interface TenantLink {
   section: TenantSection;
+  /** Group of the section. */
+  group: TenantSectionGroup;
   /** Application path, for example "/tenants/ten_1/branding". */
   path: string;
-  /** Translation key of the link text. */
+  /** Translation key of the link text (adminTenants.nav.* or adminOps.nav.*). */
   labelKey: string;
+}
+
+/** A titled group of links of the tenant sub-navigation. */
+export interface TenantLinkGroup {
+  group: TenantSectionGroup;
+  /** Translation key of the group heading. */
+  labelKey: string;
+  links: TenantLink[];
 }
 
 /** Application path of a section of a tenant (the id is percent-encoded). */
@@ -81,12 +125,31 @@ export function tenantPath(tenantId: string, section: TenantSection): string {
   return `/tenants/${encodeURIComponent(tenantId)}/${section}`;
 }
 
-/** Links of the tenant sub-navigation. */
+/** Group of a section. */
+export function sectionGroup(section: TenantSection): TenantSectionGroup {
+  return (TENANT_OPS_SECTIONS as readonly string[]).includes(section) ? 'operations' : 'configuration';
+}
+
+/** Links of the tenant sub-navigation, in order (every group). */
 export function tenantLinks(tenantId: string): TenantLink[] {
-  return TENANT_SECTIONS.map((section) => ({
-    section,
-    path: tenantPath(tenantId, section),
-    labelKey: `adminTenants.nav.${section}`,
+  return TENANT_SECTIONS.map((section) => {
+    const group = sectionGroup(section);
+    return {
+      section,
+      group,
+      path: tenantPath(tenantId, section),
+      labelKey: `${group === 'operations' ? 'adminOps' : 'adminTenants'}.nav.${section}`,
+    };
+  });
+}
+
+/** Links of the tenant sub-navigation, by group (TenantNav renders one titled list each). */
+export function tenantLinkGroups(tenantId: string): TenantLinkGroup[] {
+  const links = tenantLinks(tenantId);
+  return TENANT_SECTION_GROUPS.map(({ group, labelKey }) => ({
+    group,
+    labelKey,
+    links: links.filter((link) => link.group === group),
   }));
 }
 

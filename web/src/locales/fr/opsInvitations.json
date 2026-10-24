@@ -1,0 +1,44 @@
+{
+  "caption": "Invitations de l’entité",
+  "filters": {
+    "label": "Filtrer les invitations",
+    "status": "Statut",
+    "allStatuses": "Tous les statuts"
+  },
+  "loaded": {
+    "one": "{count} invitation chargée.",
+    "other": "{count} invitations chargées."
+  },
+  "loadedMore": {
+    "one": "{count} invitation chargée, d’autres sont disponibles.",
+    "other": "{count} invitations chargées, d’autres sont disponibles."
+  },
+  "empty": "Aucune invitation pour le moment.",
+  "emptyFiltered": "Aucune invitation ne correspond à ces filtres.",
+  "columns": {
+    "email": "Adresse invitée",
+    "invitedBy": "Invitée par",
+    "status": "Statut",
+    "createdAt": "Création",
+    "expiresAt": "Expiration",
+    "lastUsedAt": "Dernière utilisation",
+    "actions": "Actions"
+  },
+  "status": {
+    "pending": "En attente",
+    "used": "Utilisée",
+    "expired": "Expirée",
+    "revoked": "Révoquée"
+  },
+  "erasedIssuer": "Adresse effacée",
+  "never": "Jamais",
+  "revoke": {
+    "button": "Révoquer",
+    "buttonFor": "Révoquer l’invitation de {email}",
+    "title": "Révoquer cette invitation ?",
+    "text": "L’invitation de {email} cesse de fonctionner immédiatement : son lien ne permet plus de déposer, et les dépôts déjà commencés avec elle prennent fin. Cette action est définitive ; une nouvelle invitation pourra être envoyée plus tard.",
+    "confirm": "Révoquer l’invitation",
+    "busy": "Révocation…",
+    "done": "L’invitation de {email} a été révoquée."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "groupConfiguration": "Configuration",
+    "groupOperations": "Exploitation",
+    "transfers": "Transferts",
+    "invitations": "Invitations",
+    "blocklist": "Liste de blocage",
+    "tokens": "Jetons d’API",
+    "audit": "Journal d’audit",
+    "stats": "Statistiques",
+    "privacy": "Données personnelles"
+  },
+  "transfers": {
+    "title": "Transferts",
+    "detailTitle": "Détail du transfert",
+    "intro": "Transferts de cette entité, du plus récent au plus ancien. Ouvrez un transfert pour voir ses fichiers, renvoyer sa notification ou le supprimer avant son expiration."
+  },
+  "invitations": {
+    "title": "Invitations",
+    "intro": "Invitations émises par les utilisateurs internes pour permettre à des personnes externes de déposer des fichiers. Vous pouvez révoquer une invitation à tout moment."
+  },
+  "blocklist": {
+    "title": "Liste de blocage",
+    "intro": "Adresses mail, domaines et empreintes SHA-256 de fichiers qui ne peuvent plus déposer ni être déposés sur cette entité."
+  },
+  "tokens": {
+    "title": "Jetons d’API",
+    "createTitle": "Nouveau jeton d’API",
+    "intro": "Les jetons permettent à des scripts et à des logiciels tiers de déposer des fichiers par l’API. Un jeton n’est affiché qu’une seule fois, à sa création."
+  },
+  "audit": {
+    "title": "Journal d’audit",
+    "intro": "Actions enregistrées pour cette entité au cours des 12 derniers mois : dépôts, téléchargements, invitations, actions des admins, etc."
+  },
+  "stats": {
+    "title": "Statistiques",
+    "intro": "Activité de cette entité sur une période : transferts, volumes envoyés et téléchargés, téléchargements, détections de virus et espace occupé."
+  },
+  "privacy": {
+    "title": "Données personnelles",
+    "intro": "Recherchez une adresse mail pour voir les données qui y sont liées dans cette entité, puis effacez-les si nécessaire (exercice des droits, RGPD)."
+  }
+}

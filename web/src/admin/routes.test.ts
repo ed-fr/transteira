@@ -46,6 +46,20 @@ describe('admin routes', () => {
     ],
     ['/admin/tenants/ten_1/legal', '/tenants/:id/legal', 'auth', 'tenant-legal'],
     ['/admin/tenants/ten_1/legal/privacy/en', '/tenants/:id/legal/:document/:lang', 'auth', 'tenant-legal'],
+    ['/admin/tenants/ten_1/transfers', '/tenants/:id/transfers', 'auth', 'tenant-transfers'],
+    [
+      '/admin/tenants/ten_1/transfers/trf_1',
+      '/tenants/:id/transfers/:transferId',
+      'auth',
+      'tenant-transfers',
+    ],
+    ['/admin/tenants/ten_1/invitations', '/tenants/:id/invitations', 'auth', 'tenant-invitations'],
+    ['/admin/tenants/ten_1/blocklist', '/tenants/:id/blocklist', 'auth', 'tenant-blocklist'],
+    ['/admin/tenants/ten_1/tokens', '/tenants/:id/tokens', 'auth', 'tenant-tokens'],
+    ['/admin/tenants/ten_1/tokens/new', '/tenants/:id/tokens/new', 'auth', 'tenant-tokens'],
+    ['/admin/tenants/ten_1/audit', '/tenants/:id/audit', 'auth', 'tenant-audit'],
+    ['/admin/tenants/ten_1/stats', '/tenants/:id/stats', 'auth', 'tenant-stats'],
+    ['/admin/tenants/ten_1/privacy', '/tenants/:id/privacy', 'auth', 'tenant-privacy'],
     ['/admin/admins', '/admins', 'super', 'admins'],
     ['/admin/admins/new', '/admins/new', 'super', 'admins'],
     ['/admin/admins/adm_1', '/admins/:id', 'super', 'admins'],
@@ -68,9 +82,13 @@ describe('admin routes', () => {
       lang: 'en',
     });
     expect(resolve('/admin/admins/adm_9').params).toEqual({ id: 'adm_9' });
+    expect(resolve('/admin/tenants/ten_1/transfers/trf_%2F1').params).toEqual({
+      id: 'ten_1',
+      transferId: 'trf_/1',
+    });
   });
 
-  it('marks exactly the tenant configuration routes for the tenant navigation', () => {
+  it('marks exactly the tenant routes (configuration and operations) for the tenant navigation', () => {
     for (const route of routes) {
       const isTenantPage = route.pattern.startsWith('/tenants/:id/');
       expect(route.tenantNav === true, route.pattern).toBe(isTenantPage);
@@ -89,7 +107,7 @@ describe('admin routes', () => {
     const patterns = routes.map((r) => r.pattern);
     expect(new Set(patterns).size).toBe(patterns.length);
     for (const route of routes) {
-      expect(route.titleKey).toMatch(/^(admin|adminAuth|adminTenants|adminAccounts|common)\./);
+      expect(route.titleKey).toMatch(/^(admin|adminAuth|adminTenants|adminAccounts|adminOps|common)\./);
       if (!isHelpRoute(route)) {
         expect(route.helpTopic, route.pattern).toMatch(/^[a-z][a-z-]*$/);
       }

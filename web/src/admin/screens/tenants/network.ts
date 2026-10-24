@@ -95,7 +95,7 @@ export interface NetworkFields {
 /** Error of one list, or undefined when it can be saved: an invalid line or too many entries. */
 function listError(list: LineList<string>): Msg | undefined {
   if (list.errors.length > 0) {
-    return { key: 'adminComponents.lineList.errorsTitle', params: { count: list.errors.length } };
+    return { key: 'adminComponents.lineList.invalidLines', params: { count: list.errors.length } };
   }
   if (list.tooMany) {
     return { key: 'fieldErrors.too-many' };

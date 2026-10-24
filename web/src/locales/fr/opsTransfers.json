@@ -1,0 +1,151 @@
+{
+  "status": {
+    "uploading": "Envoi en cours",
+    "scanning": "Analyse en cours",
+    "available": "Disponible",
+    "rejected": "Rejeté",
+    "expired": "Expiré",
+    "deleted": "Supprimé"
+  },
+  "origin": {
+    "internal": "Utilisateur interne",
+    "external": "Invité externe",
+    "api": "Jeton d’API"
+  },
+  "scan": {
+    "pending": "En attente d’analyse",
+    "scanning": "Analyse en cours",
+    "clean": "Sain",
+    "infected": "Infecté, fichier effacé",
+    "not_scanned_too_large": "Non analysé : trop gros",
+    "not_scanned_encrypted": "Non analysé : chiffré",
+    "scan_error": "Échec de l’analyse, fichier retenu"
+  },
+  "wait": {
+    "seconds": {
+      "one": "{count} seconde",
+      "other": "{count} secondes"
+    },
+    "minutes": {
+      "one": "{count} minute",
+      "other": "{count} minutes"
+    }
+  },
+  "list": {
+    "filtersLabel": "Filtrer les transferts",
+    "status": "Statut",
+    "statusAny": "Tous les statuts",
+    "email": "Adresse mail",
+    "emailHint": "Expéditeur ou destinataire, adresse exacte.",
+    "createdAfter": "Créés depuis le",
+    "createdAfterHint": "Jour inclus.",
+    "caption": "Transferts de l’entité",
+    "columns": {
+      "date": "Création",
+      "sender": "Expéditeur",
+      "recipients": "Destinataires",
+      "files": "Fichiers et taille",
+      "status": "Statut",
+      "origin": "Origine",
+      "downloads": "Téléchargements",
+      "expiry": "Expiration"
+    },
+    "moreRecipients": {
+      "one": "{list} +{count} autre",
+      "other": "{list} +{count} autres"
+    },
+    "filesSize": {
+      "one": "{count} fichier, {size}",
+      "other": "{count} fichiers, {size}"
+    },
+    "noExpiry": "Sans expiration",
+    "openLabel": "Détail du transfert de {sender}",
+    "empty": "Aucun transfert pour le moment.",
+    "emptyFiltered": "Aucun transfert ne correspond à ces filtres.",
+    "loaded": {
+      "one": "{count} transfert affiché.",
+      "other": "{count} transferts affichés."
+    },
+    "loadedMore": {
+      "one": "{count} transfert affiché, d’autres peuvent être chargés.",
+      "other": "{count} transferts affichés, d’autres peuvent être chargés."
+    }
+  },
+  "detail": {
+    "loadingLabel": "Chargement du transfert…",
+    "metadataTitle": "Informations",
+    "status": "Statut",
+    "created": "Création",
+    "expires": "Expiration",
+    "noExpiry": "Sans expiration",
+    "firstDownload": "Premier téléchargement",
+    "never": "Pas encore téléchargé",
+    "downloadCount": "Téléchargements",
+    "sender": "Expéditeur",
+    "senderIp": "Adresse IP de l’expéditeur",
+    "unknownIp": "Inconnue",
+    "origin": "Origine",
+    "invitation": "Invitation",
+    "apiToken": "Jeton d’API",
+    "passwordProtected": "Protégé par mot de passe",
+    "deleteAfterFirstDownload": "Supprimé après le premier téléchargement",
+    "yes": "Oui",
+    "no": "Non",
+    "recipientsTitle": "Destinataires",
+    "filesTitle": "Fichiers",
+    "filesCaption": "Fichiers du transfert",
+    "filesColumns": {
+      "name": "Nom",
+      "size": "Taille",
+      "mediaType": "Type",
+      "sha256": "SHA-256",
+      "scan": "Antivirus"
+    },
+    "unknownMediaType": "Inconnu",
+    "noSha256": "Non calculée",
+    "copySha256": "Copier l’empreinte SHA-256 de {name}",
+    "noContent": "Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.",
+    "auditLink": "Voir le journal d’audit depuis le jour de ce transfert",
+    "auditHint": "Le journal s’ouvre à partir du jour de création du transfert ; son identifiant figure dans la colonne Objet.",
+    "backToList": "Retour aux transferts",
+    "notFoundTitle": "Transfert introuvable",
+    "notFoundText": "Ce transfert n’existe pas ou n’appartient plus à cette entité.",
+    "actionsTitle": "Actions"
+  },
+  "resend": {
+    "button": "Renvoyer la notification",
+    "title": "Renvoyer la notification",
+    "text": "Le mail de notification est renvoyé avec le lien de téléchargement existant. 5 renvois par heure au plus.",
+    "legend": "Destinataires",
+    "noneSelected": "Sélectionnez au moins un destinataire.",
+    "submit": "Renvoyer",
+    "submitting": "Envoi…",
+    "success": {
+      "one": "Notification mise en file d’attente pour {count} destinataire.",
+      "other": "Notification mise en file d’attente pour {count} destinataires."
+    },
+    "errors": {
+      "notRecipient": "Une des adresses sélectionnées n’est pas destinataire de ce transfert. Rechargez la page et réessayez.",
+      "notAvailable": "Ce transfert n’est plus disponible : sa notification ne peut pas être renvoyée.",
+      "rateLimited": "La limite de 5 renvois par heure est atteinte. Réessayez dans {wait}.",
+      "rateLimitedNoDelay": "La limite de 5 renvois par heure est atteinte. Réessayez plus tard.",
+      "rateLimitedOver": "Vous pouvez réessayer maintenant.",
+      "mailUnavailable": "Aucun serveur SMTP n’est configuré pour cette entité : rien n’a été envoyé.",
+      "smtpLink": "Configurer le serveur SMTP"
+    }
+  },
+  "delete": {
+    "button": "Supprimer le transfert",
+    "title": "Supprimer ce transfert ?",
+    "text": "Les fichiers sont effacés définitivement, y compris des sauvegardes (les clés de chiffrement sont détruites). Le lien de téléchargement cesse de fonctionner.",
+    "reasonLabel": "Motif (facultatif)",
+    "reasonHint": "Enregistré dans le journal d’audit. Les adresses mail saisies sont remplacées par [address].",
+    "confirm": "Supprimer",
+    "done": "Le transfert a été supprimé.",
+    "errors": {
+      "uploading": "Un envoi de ce transfert est en cours. Réessayez dans {wait}.",
+      "uploadingNoDelay": "Un envoi de ce transfert est en cours. Réessayez dans un instant.",
+      "notFound": "Ce transfert n’existe plus."
+    }
+  }
+}

@@ -2,7 +2,10 @@ package integration_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -612,6 +615,7 @@ func (c *depositor) holdPatch(t *testing.T, trfID, uploadURL string, data []byte
 		case resp.status == http.StatusConflict && p.Code == "state-conflict":
 			return true
 		case resp.status == http.StatusConflict && p.Code == "upload-incomplete":
+			failIfAnswered(t, conn)
 			return false
 		}
 		t.Fatalf("finalize while waiting for the upload lock: %d %s", resp.status, resp.body)
@@ -623,6 +627,24 @@ func (c *depositor) holdPatch(t *testing.T, trfID, uploadURL string, data []byte
 		}
 		return readRawResponse(t, conn)
 	}
+}
+
+// failIfAnswered fails the test when the server already answered the
+// half-sent PATCH on conn (an early refusal): waiting for its upload lock
+// would otherwise run until the timeout without saying why.
+func failIfAnswered(t *testing.T, conn net.Conn) {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(time.Millisecond))
+	var first [1]byte
+	n, err := conn.Read(first[:])
+	_ = conn.SetReadDeadline(time.Time{})
+	var ne net.Error
+	if n == 0 && errors.As(err, &ne) && ne.Timeout() {
+		return
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	rest, _ := io.ReadAll(conn)
+	t.Fatalf("PATCH answered before its upload lock was seen (read error %v): %q", err, append(first[:n], rest...))
 }
 
 // expectRetryAfter checks a 409 state-conflict answer of an operation

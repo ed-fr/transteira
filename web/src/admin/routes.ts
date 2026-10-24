@@ -22,6 +22,15 @@ import Setup from './screens/auth/Setup.svelte';
 import Help from './screens/Help.svelte';
 import Home from './screens/Home.svelte';
 import NotFound from './screens/NotFound.svelte';
+import AuditLog from './screens/ops/AuditLog.svelte';
+import Blocklist from './screens/ops/Blocklist.svelte';
+import InvitationList from './screens/ops/InvitationList.svelte';
+import Privacy from './screens/ops/Privacy.svelte';
+import TenantStats from './screens/ops/TenantStats.svelte';
+import TokenCreate from './screens/ops/TokenCreate.svelte';
+import TokenList from './screens/ops/TokenList.svelte';
+import TransferDetail from './screens/ops/TransferDetail.svelte';
+import TransferList from './screens/ops/TransferList.svelte';
 import LegalEdit from './screens/tenants/LegalEdit.svelte';
 import LegalList from './screens/tenants/LegalList.svelte';
 import TemplateEdit from './screens/tenants/TemplateEdit.svelte';
@@ -152,6 +161,78 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminTenants.legal.title',
     access: 'auth',
     helpTopic: 'tenant-legal',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/transfers',
+    component: TransferList,
+    titleKey: 'adminOps.transfers.title',
+    access: 'auth',
+    helpTopic: 'tenant-transfers',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/transfers/:transferId',
+    component: TransferDetail,
+    titleKey: 'adminOps.transfers.detailTitle',
+    access: 'auth',
+    helpTopic: 'tenant-transfers',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/invitations',
+    component: InvitationList,
+    titleKey: 'adminOps.invitations.title',
+    access: 'auth',
+    helpTopic: 'tenant-invitations',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/blocklist',
+    component: Blocklist,
+    titleKey: 'adminOps.blocklist.title',
+    access: 'auth',
+    helpTopic: 'tenant-blocklist',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/tokens',
+    component: TokenList,
+    titleKey: 'adminOps.tokens.title',
+    access: 'auth',
+    helpTopic: 'tenant-tokens',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/tokens/new',
+    component: TokenCreate,
+    titleKey: 'adminOps.tokens.createTitle',
+    access: 'auth',
+    helpTopic: 'tenant-tokens',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/audit',
+    component: AuditLog,
+    titleKey: 'adminOps.audit.title',
+    access: 'auth',
+    helpTopic: 'tenant-audit',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/stats',
+    component: TenantStats,
+    titleKey: 'adminOps.stats.title',
+    access: 'auth',
+    helpTopic: 'tenant-stats',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/privacy',
+    component: Privacy,
+    titleKey: 'adminOps.privacy.title',
+    access: 'auth',
+    helpTopic: 'tenant-privacy',
     tenantNav: true,
   },
   {

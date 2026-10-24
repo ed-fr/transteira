@@ -1,0 +1,44 @@
+{
+  "caption": "Invitations of the entity",
+  "filters": {
+    "label": "Filter the invitations",
+    "status": "Status",
+    "allStatuses": "All statuses"
+  },
+  "loaded": {
+    "one": "{count} invitation loaded.",
+    "other": "{count} invitations loaded."
+  },
+  "loadedMore": {
+    "one": "{count} invitation loaded, more are available.",
+    "other": "{count} invitations loaded, more are available."
+  },
+  "empty": "No invitation yet.",
+  "emptyFiltered": "No invitation matches these filters.",
+  "columns": {
+    "email": "Invited address",
+    "invitedBy": "Invited by",
+    "status": "Status",
+    "createdAt": "Created",
+    "expiresAt": "Expires",
+    "lastUsedAt": "Last used",
+    "actions": "Actions"
+  },
+  "status": {
+    "pending": "Pending",
+    "used": "Used",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "erasedIssuer": "Erased address",
+  "never": "Never",
+  "revoke": {
+    "button": "Revoke",
+    "buttonFor": "Revoke the invitation of {email}",
+    "title": "Revoke this invitation?",
+    "text": "The invitation of {email} stops working immediately: its link no longer allows a deposit, and deposits already started with it end. This cannot be undone; a new invitation can be sent later.",
+    "confirm": "Revoke the invitation",
+    "busy": "Revoking…",
+    "done": "The invitation of {email} has been revoked."
+  }
+}

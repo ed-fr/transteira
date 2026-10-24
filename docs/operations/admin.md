@@ -310,6 +310,169 @@ your own account, the role change, disabling, reset and deletion are not
 offered (use **My account** instead), and the last usable super admin is
 protected as described in [Delegated admins](#delegated-admins).
 
+## Operating tenants in the web interface
+
+The screens below use the operations described in
+[Tenant operations](#tenant-operations), [Audit log](#audit-log),
+[Data subject rights](#data-subject-rights-gdpr) and
+[Statistics](#statistics); the rules (who may do what, limits, what is
+audited) are the same and are not repeated here.
+
+### Dashboard
+
+The home page depends on the role:
+
+- **Super admin**: the table of all tenants (name, FQDN, status, storage
+  used against the quota), loaded page by page, with a link to the full
+  **Entities** list.
+- **Delegated admin**: one card per attached tenant with the transfers and
+  the volume uploaded over the last 30 days, the current storage level and
+  quick links to its transfers, audit log and statistics. The cards load
+  independently (at most 4 requests at once); a card that fails shows its
+  own message and a **Try again** button. An admin attached to no tenant
+  is told to ask a super admin.
+
+Both see a recommendation to enable two-factor authentication while it is
+off on their account.
+
+### Tenant navigation
+
+The sub-navigation of a tenant has two groups: **Configuration** (General,
+Branding, Network, SMTP, Mail templates, Legal texts, see
+[Tenant configuration](#tenant-configuration)) and **Operations**
+(Transfers, Invitations, Blocklist, API tokens, Audit log, Statistics,
+Personal data).
+
+The filters of the lists (transfers, invitations, blocklist, audit log)
+and the period of the statistics are kept in the page address, so a
+filtered view can be bookmarked and the back button restores it. Lists are
+newest first; **Load more** fetches the next page.
+
+### Transfers screen
+
+- **Filters**: status, email address (exact match on the sender or a
+  recipient) and creation day (**Created from**, that day included).
+- **Detail**: status, dates, download count, sender and sender IP, origin
+  (internal user, external guest or API token, with the invitation or
+  token), options, recipients and, for each file, name, size, type,
+  SHA-256 fingerprint (with a copy button) and antivirus result: waiting
+  for scan, being scanned, clean, infected (file erased), not scanned
+  because too large, not scanned because encrypted, or scan failed (file
+  withheld). A status unknown to the interface is shown as is. A link
+  opens the audit log from the day the transfer was created (the transfer
+  identifier appears in the Object column).
+- **No download link and no file content** are ever shown to an admin.
+- **Resend the notification** (available transfers only): choose the
+  recipients (all by default; no address can be added). At most **5
+  resends per hour per transfer**; beyond, the screen shows the remaining
+  wait. Without an SMTP server for the tenant nothing is sent, and the
+  screen links to the SMTP settings.
+- **Delete the transfer** (before it expires), after confirmation, with an
+  optional reason recorded in the audit log (mail addresses typed in it
+  are replaced by `[address]`). The keys are destroyed (crypto-erase), so
+  the files become unreadable, backups included, and the link stops
+  working. While an upload is in progress, the screen asks to retry after
+  the delay given by the server.
+
+### Invitations screen
+
+Filter by status (pending, used, expired, revoked). The issuer of each
+invitation is shown, or "Erased address" after a GDPR erasure of the
+issuer. **Revoke** is offered for a pending or used invitation that has
+not expired; after confirmation it stops working at once.
+
+### Blocklist screen
+
+Filter by kind, add an entry (kind, value, optional comment) and remove
+one after confirmation. The kinds are **email address**, **domain** (without
+`@`, such as `spam.example.net`: the addresses of that domain are
+blocked) and **SHA-256 digest** (64
+hexadecimal characters). The screen normalises the value before sending
+it: addresses and digests are lower-cased, domains lower-cased and
+converted to punycode (a trailing dot is refused, with the name without it
+suggested); the server checks again and has the final word. A value
+already listed for the same kind is reported on the value field. Do not
+write personal data you do not need in the comment.
+
+### API tokens screen
+
+- **List**: name, prefix, allowed ranges, allowed senders ("any address of
+  the internal domains" when the list is empty), creation (date and
+  admin), last use, expiry and status (active, expired, revoked); active
+  tokens first. The last use is recorded at most once a minute per token,
+  so it may lag behind by up to a minute.
+- **Create a token**: name, allowed ranges (one per line), allowed senders
+  (one address or domain per line) and an optional expiry day (the token
+  stops at the end of that day, in your local time). **Allow any address**
+  adds `0.0.0.0/0` and `::/0` to the ranges and shows a warning: prefer
+  narrow ranges, or at least set an expiry. An empty sender list lets the
+  token deposit as any internal address, which the form points out (see
+  [API tokens](#api-tokens) for the semantics).
+- **The secret is shown once**, in a dialog that closes only once the
+  secret has been copied successfully or the admin confirmed storing it
+  (**I have stored this secret**); leaving the
+  page before that asks for a confirmation. It is never shown again: hand
+  it over through a channel you trust, never by mail in clear text.
+- **Edit** changes the name, ranges and senders (the secret and the expiry
+  do not change). **Revoke** asks you to type the token name; a revoked
+  token can no longer be edited.
+
+### Audit log screen
+
+- **Filters**: action, chosen in a list grouped by area (transfers,
+  invitations and addresses, antivirus, quotas, blocklist, API tokens,
+  personal data, entity configuration) or typed as a code (**Other
+  action**, form `domain.verb`, for example an action added by a later
+  version). Administrator sign-in and account actions, and instance
+  actions (maintenance, settings, disk alert, master key rotation), are
+  recorded without a tenant and never appear in a tenant audit log, so
+  they are not listed; actor (exact address or admin
+  username); period (**From** and **To**, both days included, in your
+  local time).
+- Each row shows the date, the actor (a pseudonym `erased-…` is labelled
+  as an erased address), the action, the object (a transfer links to its
+  detail), the IP and the details. Details are shown as plain text pairs,
+  never interpreted as HTML.
+- There is **no export** in V1: the export of the audit and security logs
+  to a SIEM through syslog comes with V1.1.
+
+### Statistics screen
+
+Choose the period (last 7 days, 30 days, the default, or 12 months). The
+screen shows the key figures (transfers deposited, volume deposited,
+downloads, volume downloaded, virus detections, highlighted when at least
+one), the current storage level and two bar charts (transfers and volume
+per day, or per month for 12 months), each with a table of its values.
+The figures are indicative: the counters are written about every 30
+seconds (see [Statistics](#statistics) for their definitions).
+
+The storage level, here and on the dashboard, reads for example
+"12 GiB of 100 GiB (12 %)" with a badge: normal, **warning from 80 %**
+of the quota (the preventive alert threshold) and **full from 100 %**
+(new deposits are refused). The level is always written out, never shown
+by colour alone.
+
+### Personal data screen
+
+The **Personal data** screen applies the
+[data subject rights procedure](#data-subject-rights-gdpr) to the current
+tenant only:
+
+1. **Search** an address: the screen lists what is held (verified address
+   record, transfers sent and received, invitations, audit entries). The
+   security log never records addresses, so it is not counted.
+2. **Erase all data**: the confirmation lists what is erased and what is
+   kept on purpose (see
+   [What is kept, and the limits](#what-is-kept-and-the-limits)), and asks
+   you to type the exact address.
+3. The **erasure report** gives the counts and links to the audit log
+   filtered on `data_subject.erased`, whose object is the pseudonym that
+   replaced the address.
+
+The address only travels in POST bodies: it never appears in the page
+address, the browser storage or a screen reader announcement, and the
+address and results are forgotten when you leave the screen.
+
 ## Tenant operations
 
 Every operation below is available to the super admin and to the delegated
@@ -747,9 +910,11 @@ address gives another pseudonym.
   confirmation or a resend already handed to the mail queue, or waiting in
   the retrier after a refusal (retried for up to the retry period), is not
   withdrawn and its retries do not check the erasure again. The person may
-  so still receive a mail sent just before the erasure; its link is dead
-  (410) once the transfer is erased, and its files unreadable (keys
-  destroyed).
+  so still receive a mail sent just before the erasure. Its link keeps
+  working as long as the transfer exists: a transfer it received that
+  still has other recipients is kept, and its link with it; the link is
+  dead (410), and the files unreadable (keys destroyed), only once the
+  transfer itself is erased.
 - **Messages and file names of other senders' transfers.** The free-text
   message and the file names of a transfer sent by someone else (to the
   person, or merely mentioning them) are not analysed and are kept until

@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "groupConfiguration": "Configuration",
+    "groupOperations": "Operations",
+    "transfers": "Transfers",
+    "invitations": "Invitations",
+    "blocklist": "Blocklist",
+    "tokens": "API tokens",
+    "audit": "Audit log",
+    "stats": "Statistics",
+    "privacy": "Personal data"
+  },
+  "transfers": {
+    "title": "Transfers",
+    "detailTitle": "Transfer details",
+    "intro": "Transfers of this entity, most recent first. Open a transfer to see its files, resend its notification or delete it before it expires."
+  },
+  "invitations": {
+    "title": "Invitations",
+    "intro": "Invitations sent by internal users to external people so they can deposit files. You can revoke an invitation at any time."
+  },
+  "blocklist": {
+    "title": "Blocklist",
+    "intro": "Email addresses, domains and SHA-256 file digests that can no longer deposit or be deposited on this entity."
+  },
+  "tokens": {
+    "title": "API tokens",
+    "createTitle": "New API token",
+    "intro": "Tokens let scripts and third-party software deposit files through the API. A token is shown only once, when it is created."
+  },
+  "audit": {
+    "title": "Audit log",
+    "intro": "Actions recorded for this entity over the last 12 months: deposits, downloads, invitations, administrator actions and more."
+  },
+  "stats": {
+    "title": "Statistics",
+    "intro": "Activity of this entity over a period: transfers, volumes sent and downloaded, downloads, virus detections and storage used."
+  },
+  "privacy": {
+    "title": "Personal data",
+    "intro": "Search for an email address to see the data linked to it in this entity, then erase it if needed (data subject rights, GDPR)."
+  }
+}

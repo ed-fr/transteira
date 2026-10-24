@@ -1,0 +1,90 @@
+{
+  "status": {
+    "active": "Active",
+    "expired": "Expired",
+    "revoked": "Revoked"
+  },
+  "list": {
+    "caption": "API tokens of the entity",
+    "create": "Create a token",
+    "empty": "No API token for this entity yet.",
+    "docsIntro": "To write a script, see the integration guide (docs/api/integration.md in the TransTeira repository) and the interactive API documentation.",
+    "docsLink": "Open the API documentation",
+    "columns": {
+      "name": "Name",
+      "prefix": "Prefix",
+      "cidrs": "Allowed IP ranges",
+      "senders": "Allowed senders",
+      "created": "Created",
+      "lastUsed": "Last used",
+      "expires": "Expires",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "anySender": "Any address of the internal domains",
+    "createdBy": "{date} by {admin}",
+    "neverUsed": "Never used",
+    "noExpiry": "Never",
+    "lastUsedNote": "The last use is recorded at most once a minute per token: it may lag behind by up to a minute.",
+    "edit": "Edit",
+    "revoke": "Revoke"
+  },
+  "edit": {
+    "title": "Edit the token {name}",
+    "legend": "Token settings",
+    "intro": "The secret of the token does not change. The expiry cannot be changed: create a new token instead.",
+    "saved": "Token updated.",
+    "discardConfirm": "You have unsaved changes. Close without saving? They will be lost."
+  },
+  "revoke": {
+    "title": "Revoke the token {name}?",
+    "text": "Every request made with this token is refused from now on, so the scripts using it stop working. Transfers already created stay available to their recipients. This cannot be undone.",
+    "confirm": "Revoke the token",
+    "done": "Token {name} revoked."
+  },
+  "form": {
+    "title": "Token settings",
+    "submit": "Create the token",
+    "created": "Token created.",
+    "back": "Back to the API tokens",
+    "name": {
+      "label": "Name",
+      "hint": "Describes what the token is used for, for example “Nightly ERP export” (100 characters at most)."
+    },
+    "cidrs": {
+      "label": "Allowed IP ranges",
+      "hint": "One IPv4 or IPv6 range per line, for example 192.0.2.10/32: the addresses the scripts connect from, as seen behind the reverse proxy. Up to 100 ranges."
+    },
+    "anyAddress": "Allow any address",
+    "anyAddressWarning": "This token can be used from any address. Prefer narrow ranges, or at least set an expiry date.",
+    "senders": {
+      "label": "Allowed senders",
+      "hint": "One email address (reporting@example.com) or domain (example.com) per line. A domain does not cover its subdomains. Up to 100 entries.",
+      "empty": "With an empty list, the token can deposit as any address of the internal domains of the entity. Restrict it to the addresses the script really uses."
+    },
+    "expiry": {
+      "label": "Expiry date (optional)",
+      "hint": "The token stops working at the end of this day (your local time). Leave empty for a token that never expires; you can revoke it at any time."
+    }
+  },
+  "secret": {
+    "title": "Token {name} created",
+    "text": "Copy this token now and give it to the person in charge of the script through a channel you trust, never by email in clear text.",
+    "label": "API token"
+  },
+  "errors": {
+    "cidrsRequired": "Enter at least one IP range.",
+    "nameTooLong": "The name must not exceed {max} characters.",
+    "expiryInvalid": "Enter a valid date.",
+    "expiryPast": "Choose a date in the future.",
+    "entry": "Entry {position}: {message}",
+    "revoked": "This token has been revoked in the meantime and can no longer be changed. Reload the page.",
+    "notFound": "This token no longer exists. Reload the page.",
+    "sender": {
+      "email": "This is not a valid email address.",
+      "domain": "This is neither a valid email address nor a valid domain.",
+      "domainSuggestion": "Remove the final dot: {domain}.",
+      "tooLong": "This entry is too long (254 characters at most)."
+    }
+  }
+}

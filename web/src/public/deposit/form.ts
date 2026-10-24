@@ -3,6 +3,9 @@
 // the mapping of validation-failed field errors back to the form.
 import type { ProblemFieldError } from '../../shared/api/client';
 import { normalizeField } from '../../shared/api/problem';
+import { EMAIL_MAX_LENGTH, isEmail } from '../../shared/validation/email';
+
+export { EMAIL_MAX_LENGTH, isEmail };
 
 /** Maximum length of the transfer message (TransferCreate.message). */
 export const MESSAGE_MAX_LENGTH = 5000;
@@ -14,8 +17,6 @@ export const MAX_FILES = 1000;
 export const FILE_NAME_MAX_LENGTH = 255;
 /** Maximum length of the transfer password (TransferCreate.password). */
 export const PASSWORD_MAX_LENGTH = 1024;
-/** Maximum length of an email address (Email). */
-export const EMAIL_MAX_LENGTH = 254;
 
 /** A message to display: a translation key with its parameters. */
 export interface Message {
@@ -47,16 +48,6 @@ export function parseRecipients(text: string): string[] {
     }
   }
   return out;
-}
-
-/**
- * Reports whether a value looks like a bare email address. Deliberately simple: the server has
- * the final word (validation-failed invalid-email), this only catches obvious typing mistakes.
- */
-export function isEmail(value: string): boolean {
-  return (
-    value.length <= EMAIL_MAX_LENGTH && /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:".]+$/.test(value)
-  );
 }
 
 // C0 and C1 controls, and the bidirectional formatting characters the server rejects.

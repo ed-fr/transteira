@@ -13,6 +13,11 @@
     title: string;
     /** Called after the dialog closed (Escape, close button or open set to false). */
     onclose?: () => void;
+    /**
+     * Asked before a close by the user (Escape, close button of the header): false keeps the
+     * dialog open (e.g. unsaved changes not confirmed). Setting open to false is not asked.
+     */
+    beforeclose?: () => boolean;
     /** Hides the close button of the header (the actions must then offer a way out). */
     hideCloseButton?: boolean;
     /** Content. */
@@ -26,6 +31,7 @@
     open = $bindable(false),
     title,
     onclose,
+    beforeclose,
     hideCloseButton = false,
     children,
     actions,
@@ -57,9 +63,21 @@
     }
     onclose?.();
   }
+
+  function handleCancel(event: Event): void {
+    if (beforeclose !== undefined && !beforeclose()) {
+      event.preventDefault();
+    }
+  }
 </script>
 
-<dialog bind:this={dialog} class="tt-dialog {className}" aria-labelledby="{uid}-title" onclose={handleClose}>
+<dialog
+  bind:this={dialog}
+  class="tt-dialog {className}"
+  aria-labelledby="{uid}-title"
+  onclose={handleClose}
+  oncancel={handleCancel}
+>
   <div class="tt-dialog__header">
     <h2 class="tt-dialog__title" id="{uid}-title">{title}</h2>
     {#if !hideCloseButton}
@@ -68,7 +86,9 @@
         class="tt-dialog__close"
         aria-label={t('components.dialog.close')}
         onclick={() => {
-          open = false;
+          if (beforeclose === undefined || beforeclose()) {
+            open = false;
+          }
         }}
       >
         <span aria-hidden="true">×</span>

@@ -1,0 +1,60 @@
+{
+  "caption": "Entrées de la liste de blocage de l’entité",
+  "filters": {
+    "label": "Filtrer la liste de blocage",
+    "kind": "Type",
+    "allKinds": "Tous les types"
+  },
+  "loaded": {
+    "one": "{count} entrée chargée.",
+    "other": "{count} entrées chargées."
+  },
+  "loadedMore": {
+    "one": "{count} entrée chargée, d’autres sont disponibles.",
+    "other": "{count} entrées chargées, d’autres sont disponibles."
+  },
+  "empty": "La liste de blocage est vide.",
+  "emptyFiltered": "Aucune entrée ne correspond à ces filtres.",
+  "kind": {
+    "email": "Adresse mail",
+    "domain": "Domaine",
+    "sha256": "Empreinte SHA-256"
+  },
+  "columns": {
+    "value": "Valeur",
+    "kind": "Type",
+    "comment": "Commentaire",
+    "createdBy": "Ajoutée par",
+    "createdAt": "Ajout",
+    "actions": "Actions"
+  },
+  "form": {
+    "title": "Ajouter une entrée",
+    "intro": "Une adresse ou un domaine bloqué ne peut plus déposer sur cette entité ; un fichier dont l’empreinte SHA-256 est bloquée est refusé.",
+    "kind": "Type",
+    "value": "Valeur",
+    "valueHint": {
+      "email": "Une adresse mail complète, par exemple nom@example.com.",
+      "domain": "Un nom de domaine sans @, par exemple spam.example.net. Les adresses de ce domaine sont bloquées.",
+      "sha256": "Les 64 caractères hexadécimaux de l’empreinte SHA-256 du fichier."
+    },
+    "comment": "Commentaire (facultatif)",
+    "commentHint": "La raison de cet ajout, pour les autres admins. N’y écrivez pas de données personnelles inutiles.",
+    "submit": "Ajouter",
+    "submitting": "Ajout…",
+    "added": "{value} a été ajouté à la liste de blocage."
+  },
+  "errors": {
+    "sha256": "Saisissez 64 caractères hexadécimaux (0 à 9, a à f).",
+    "alreadyExists": "Cette valeur figure déjà dans la liste de blocage pour ce type."
+  },
+  "delete": {
+    "button": "Retirer",
+    "buttonFor": "Retirer {value} de la liste de blocage",
+    "title": "Retirer cette entrée ?",
+    "text": "{value} ne sera plus bloqué sur cette entité.",
+    "confirm": "Retirer l’entrée",
+    "busy": "Retrait…",
+    "done": "{value} a été retiré de la liste de blocage."
+  }
+}

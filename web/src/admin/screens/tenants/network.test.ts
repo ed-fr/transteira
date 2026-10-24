@@ -105,8 +105,8 @@ describe('validateNetwork', () => {
   it('refuses invalid lines on both lists, in form order', () => {
     const errors = validateNetwork(parseCidrList('nope\nbad'), parseDomainList('-x'), fields, t);
     expect(errors).toEqual([
-      { id: 'cidrs', label: 'Ranges', message: 'adminComponents.lineList.errorsTitle {"count":2}' },
-      { id: 'domains', label: 'Domains', message: 'adminComponents.lineList.errorsTitle {"count":1}' },
+      { id: 'cidrs', label: 'Ranges', message: 'adminComponents.lineList.invalidLines {"count":2}' },
+      { id: 'domains', label: 'Domains', message: 'adminComponents.lineList.invalidLines {"count":1}' },
     ]);
   });
 

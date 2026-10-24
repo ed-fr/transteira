@@ -226,4 +226,16 @@ describe('resolveAccess', () => {
     });
     expect(resolveAccess(delegated, req('auth', '/tenants'))).toEqual({ kind: 'render' });
   });
+
+  it('limits the nested operation routes of a tenant to the tenants of the admin', () => {
+    const nested = req('auth', '/tenants/t2/transfers/trf_x', { id: 't2', transferId: 'trf_x' });
+    expect(resolveAccess(delegated, nested)).toEqual({ kind: 'notFound' });
+    expect(resolveAccess(superAdmin, nested)).toEqual({ kind: 'render' });
+    expect(resolveAccess(delegated, req('auth', '/tenants/t1/tokens/new', { id: 't1' }))).toEqual({
+      kind: 'render',
+    });
+    expect(resolveAccess(delegated, req('auth', '/tenants/t2/privacy', { id: 't2' }))).toEqual({
+      kind: 'notFound',
+    });
+  });
 });

@@ -60,6 +60,10 @@
       "one": "{count} line is invalid:",
       "other": "{count} lines are invalid:"
     },
+    "invalidLines": {
+      "one": "{count} line is invalid.",
+      "other": "{count} lines are invalid."
+    },
     "lineError": "Line {line}: {message}",
     "applySuggestion": "Replace line {line} with {value}",
     "duplicates": {
@@ -68,5 +72,48 @@
     },
     "tooMany": "Too many entries: at most {max} are allowed.",
     "replaced": "Line {line} replaced with {value}."
+  },
+  "filter": {
+    "label": "Filters",
+    "apply": "Apply",
+    "reset": "Reset"
+  },
+  "chart": {
+    "showTable": "Show the data table",
+    "hideTable": "Hide the data table",
+    "label": "Period",
+    "value": "Value",
+    "empty": "No data.",
+    "summary": {
+      "one": "{count} value: {max} ({maxLabel}).",
+      "other": "{count} values, from {min} ({minLabel}) to {max} ({maxLabel}), total {total}."
+    }
+  },
+  "stat": {
+    "warning": "Warning:",
+    "danger": "Alert:"
+  },
+  "quota": {
+    "label": "Storage used",
+    "usage": "{used} of {quota} ({percent})",
+    "noQuota": "{used} used, no quota set",
+    "level": {
+      "ok": "OK",
+      "warning": "Nearly full",
+      "full": "Full"
+    }
+  },
+  "secretOnce": {
+    "text": "Copy this secret now and store it in a safe place, such as a password manager.",
+    "shownOnce": "It will not be shown again: once this window is closed, it cannot be retrieved.",
+    "label": "Secret",
+    "copy": "Copy the secret",
+    "acknowledge": "I have stored this secret, it will not be shown again",
+    "close": "Close",
+    "closeDisabled": "Copy the secret or tick the box above to close this window.",
+    "leaveConfirm": {
+      "title": "The secret has not been stored.",
+      "text": "It will not be shown again. Do you really want to leave this page?"
+    }
   }
 }

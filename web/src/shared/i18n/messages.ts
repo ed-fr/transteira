@@ -9,6 +9,9 @@ export interface Messages {
 /** Interpolation parameters of a message. Numbers are formatted for the active language. */
 export type TranslateParams = Record<string, string | number>;
 
+/** Translation function (the t of the i18n module), passed to the pure logic modules. */
+export type Translate = (key: string, params?: TranslateParams) => string;
+
 /** Lazy loader of one locale module ({ default: Messages }), as returned by import.meta.glob. */
 export type LocaleLoader = () => Promise<unknown>;
 

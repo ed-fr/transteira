@@ -51,7 +51,16 @@
     internalCidrs: { id: ids.cidrs, label: t('adminTenants.network.cidrs.label') },
     internalDomains: { id: ids.domains, label: t('adminTenants.network.domains.label') },
   });
-  const dirty = $derived(saved !== undefined && !sameRules(saved, networkBody(cidrs, domains)));
+  // An invalid line or too many entries also counts as a change: the save then runs the
+  // validation (error summary) instead of answering that there is nothing to save.
+  const dirty = $derived(
+    saved !== undefined &&
+      (!sameRules(saved, networkBody(cidrs, domains)) ||
+        cidrs.errors.length > 0 ||
+        domains.errors.length > 0 ||
+        cidrs.tooMany ||
+        domains.tooMany),
+  );
   const tenantId = $derived(params['id'] ?? '');
 
   $effect(() => {

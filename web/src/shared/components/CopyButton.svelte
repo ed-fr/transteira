@@ -16,9 +16,11 @@
     /** Smaller button. */
     small?: boolean;
     class?: string;
+    /** Called once a copy attempt finished, with its result (true: copied). */
+    oncopy?: (ok: boolean) => void;
   }
 
-  let { text, label, ariaLabel, small = false, class: className = '' }: Props = $props();
+  let { text, label, ariaLabel, small = false, class: className = '', oncopy }: Props = $props();
 
   let status = $state<'idle' | 'copied' | 'failed'>('idle');
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -34,7 +36,9 @@
   async function copy(): Promise<void> {
     clearTimeout(timer);
     status = 'idle';
-    status = (await copyText(text)) ? 'copied' : 'failed';
+    const ok = await copyText(text);
+    status = ok ? 'copied' : 'failed';
+    oncopy?.(ok);
     timer = setTimeout(() => {
       status = 'idle';
     }, 4000);
