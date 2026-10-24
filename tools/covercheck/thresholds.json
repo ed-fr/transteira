@@ -13,6 +13,7 @@
     "internal/adminauth": 100,
     "internal/antivirus": 100,
     "internal/api/admin": 100,
+    "internal/api/apiutil": 100,
     "internal/apitoken": 100,
     "internal/audit": 100,
     "internal/branding": 100,

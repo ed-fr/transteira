@@ -8,7 +8,11 @@
 // - application/problem+json errors become ApiProblem; no HTTP answer becomes NetworkError.
 // - get/post/put/patch/delete are typed from the paths of the specification; request() is the
 //   untyped primitive underneath. Typed PATCH bodies are sent as application/merge-patch+json.
-//   Only JSON bodies are supported (multipart uploads of branding images are not covered).
+// - Bodies are JSON, except a Blob (branding images), sent as-is with Content-Type = blob.type.
+// - Optional hooks (admin application only; the public application sets none):
+//   onUnauthenticated is called on 401 unauthenticated (never on invalid-credentials, which is a
+//   form error); recoverCsrf is called on 403 csrf-invalid for an unsafe method and, when it
+//   answers true, the request is retried exactly once with the refreshed token.
 import type { components, paths } from './schema';
 
 /** RFC 9457 Problem Details body, as defined by the specification. */
@@ -30,7 +34,7 @@ export type QueryParams = Record<string, string | number | boolean | undefined>;
 export interface RequestOptions {
   /** Query string parameters. */
   params?: QueryParams;
-  /** JSON body (serialised with JSON.stringify). */
+  /** JSON body (serialised with JSON.stringify), or a Blob sent as-is with its own type. */
   body?: unknown;
   /** Extra request headers (for example Idempotency-Key). */
   headers?: Record<string, string>;
@@ -110,6 +114,17 @@ export interface ApiClientDeps {
   csrfToken: () => string | undefined;
   /** Receives the csrfToken member of a JSON answer (to update the in-memory store). */
   onCsrfToken?: (token: string) => void;
+  /**
+   * Called when an answer is 401 with the code unauthenticated (session missing or expired),
+   * before the ApiProblem is thrown. Not called for invalid-credentials.
+   */
+  onUnauthenticated?: (problem: ApiProblem, method: Method, path: string) => void;
+  /**
+   * Called once when an unsafe request is refused with 403 csrf-invalid. When it resolves to
+   * true (the CSRF token was refreshed), the request is sent again, once; a second refusal is
+   * thrown. A rejection counts as false.
+   */
+  recoverCsrf?: () => Promise<boolean>;
 }
 
 // ---- Types derived from the specification -------------------------------------------------
@@ -135,7 +150,9 @@ export type SuccessBody<O> = O extends { responses: infer R }
   ? { [S in keyof R]: S extends 200 | 201 | 202 | 203 | 204 | 206 ? JsonContent<R[S]> : never }[keyof R]
   : never;
 
-/** JSON (or JSON Merge Patch) request body of an operation. */
+type ImageContent<C> = keyof C extends `image/${string}` ? Blob : never;
+
+/** JSON (or JSON Merge Patch) request body of an operation; a Blob for image content. */
 export type RequestBodyOf<O> = O extends { requestBody?: infer RB }
   ? [NonNullable<RB>] extends [never]
     ? never
@@ -143,7 +160,9 @@ export type RequestBodyOf<O> = O extends { requestBody?: infer RB }
       ? B
       : NonNullable<RB> extends { content: { 'application/merge-patch+json': infer B } }
         ? B
-        : never
+        : NonNullable<RB> extends { content: infer C }
+          ? ImageContent<C>
+          : never
   : never;
 
 /** Path parameters of an operation. */
@@ -156,7 +175,14 @@ export type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : nev
 export type TypedOptions<O> = Omit<RequestOptions, 'body' | 'params'> &
   ([PathParamsOf<O>] extends [never] | [undefined] ? { path?: never } : { path: PathParamsOf<O> }) &
   ([QueryOf<O>] extends [never] | [undefined] ? { params?: never } : { params?: QueryOf<O> & QueryParams }) &
-  ([RequestBodyOf<O>] extends [never] ? { body?: never } : { body: RequestBodyOf<O> });
+  BodyOption<O>;
+
+/** Body option of a typed request: required when the request body is, optional when it is not. */
+type BodyOption<O> = [RequestBodyOf<O>] extends [never]
+  ? { body?: never }
+  : O extends { requestBody: unknown }
+    ? { body: RequestBodyOf<O> }
+    : { body?: RequestBodyOf<O> };
 
 type Args<O> =
   Partial<TypedOptions<O>> extends TypedOptions<O> ? [options?: TypedOptions<O>] : [options: TypedOptions<O>];
@@ -240,6 +266,23 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     path: string,
     options: RequestOptions = {},
   ): Promise<ApiResponse<T>> {
+    return send<T>(method, path, options, false);
+  }
+
+  async function recovered(): Promise<boolean> {
+    try {
+      return deps.recoverCsrf !== undefined && (await deps.recoverCsrf());
+    } catch {
+      return false;
+    }
+  }
+
+  async function send<T>(
+    method: Method,
+    path: string,
+    options: RequestOptions,
+    retried: boolean,
+  ): Promise<ApiResponse<T>> {
     const headers = new Headers(options.headers);
     headers.set('Accept', 'application/json');
     headers.set('Accept-Language', deps.language());
@@ -247,8 +290,13 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
     if (!SAFE_METHODS.has(method) && token !== undefined && token !== '') {
       headers.set('X-CSRF-Token', token);
     }
-    let body: string | undefined;
-    if (options.body !== undefined) {
+    let body: string | Blob | undefined;
+    if (options.body instanceof Blob) {
+      if (!headers.has('Content-Type') && options.body.type !== '') {
+        headers.set('Content-Type', options.body.type);
+      }
+      body = options.body;
+    } else if (options.body !== undefined) {
       if (!headers.has('Content-Type')) {
         headers.set('Content-Type', 'application/json');
       }
@@ -271,7 +319,19 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
       const problem = isMediaType(contentType, 'application/problem+json')
         ? asProblem(await readJson(response))
         : undefined;
-      throw new ApiProblem(response.status, problem);
+      const error = new ApiProblem(response.status, problem);
+      if (error.status === 401 && error.code === 'unauthenticated') {
+        deps.onUnauthenticated?.(error, method, path);
+      } else if (
+        error.status === 403 &&
+        error.code === 'csrf-invalid' &&
+        !SAFE_METHODS.has(method) &&
+        !retried &&
+        (await recovered())
+      ) {
+        return send<T>(method, path, options, true);
+      }
+      throw error;
     }
     let data: unknown;
     if (method !== 'HEAD' && isMediaType(contentType, 'application/json')) {

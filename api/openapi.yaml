@@ -2038,6 +2038,31 @@ paths:
         required: true
         schema: { type: string, enum: [logo, background] }
         example: background
+    get:
+      tags: [Admin tenants]
+      operationId: getBrandingAsset
+      summary: Get the custom logo or background image
+      description: |
+        Returns the custom image stored for the tenant, as re-encoded by the server (PNG for the
+        logo, JPEG for the background), never the uploaded bytes, so that the administration can
+        preview it. Unlike the public `getTenantAsset`, the built-in default background is never
+        returned: without a custom image the answer is `404`. The response is never cached
+        (`Cache-Control: no-store`) and carries a strong `ETag` (quoted SHA-256 of the image).
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: "Image content, with its exact media type (`image/png` for the logo, `image/jpeg` for the background), `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`."
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            image/png: { schema: { type: string, format: binary }, example: "<binary data>" }
+            image/jpeg: { schema: { type: string, format: binary }, example: "<binary data>" }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
     put:
       tags: [Admin tenants]
       operationId: uploadBrandingAsset
@@ -2340,6 +2365,7 @@ paths:
                 bodyHtml: '<p><strong>{{sender_email}}</strong> sent you {{file_count}} file(s).</p>{{message}}<p><a href="{{download_link}}">Download the files</a></p><p>Available until {{expiry_datetime}}.</p>{{password_notice}}{{qr_code}}{{files}}'
                 bodyText: "{{sender_email}} sent you {{file_count}} file(s).\n\n{{message}}\n\n{{download_link}}\n\nAvailable until {{expiry_datetime}}.\n\n{{password_notice}}\n\nFiles:\n{{files}}"
                 variables: [tenant_name, sender_email, message, download_link, expiry_datetime, password_notice, qr_code, files, file_count]
+                requiredVariables: [download_link, password_notice, files]
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -2389,6 +2415,7 @@ paths:
                 bodyHtml: '<p>Hello,</p><p>{{sender_email}} sent you files.</p><p><a href="{{download_link}}">Download</a></p>{{password_notice}}{{files}}'
                 bodyText: "Hello,\n{{sender_email}} sent you files.\n{{download_link}}\n\n{{password_notice}}\n\n{{files}}"
                 variables: [tenant_name, sender_email, message, download_link, expiry_datetime, password_notice, qr_code, files, file_count]
+                requiredVariables: [download_link, password_notice, files]
                 updatedAt: '2026-10-19T16:10:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -2457,7 +2484,7 @@ paths:
       tags: [Admin tenants]
       operationId: getLegalDocumentAdmin
       summary: Get a legal text
-      description: "Returns the Markdown source of a legal text of the tenant in one language."
+      description: "Returns the Markdown source of a legal text of the tenant in one language, with its sanitized HTML rendering as served on the public pages (empty source and HTML when not written)."
       security:
         - adminSession: []
       responses:
@@ -2470,6 +2497,7 @@ paths:
                 document: legal-notice
                 language: fr
                 markdown: "# Mentions légales\n\nÉditeur : Entity A..."
+                html: "<h2>Mentions légales</h2>\n<p>Éditeur : Entity A...</p>"
                 updatedAt: '2026-10-01T09:00:00Z'
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2478,7 +2506,7 @@ paths:
       tags: [Admin tenants]
       operationId: updateLegalDocument
       summary: Replace a legal text (Markdown, rendered without raw HTML)
-      description: "Replaces a legal text of the tenant (limited Markdown, rendered without raw HTML and sanitized when served). An empty or blank text removes it."
+      description: "Replaces a legal text of the tenant (limited Markdown, rendered without raw HTML and sanitized when served). An empty or blank text removes it. The saved text is returned with its sanitized HTML rendering."
       security:
         - adminSession: []
           csrfToken: []
@@ -2498,6 +2526,7 @@ paths:
                 document: legal-notice
                 language: fr
                 markdown: "# Mentions légales\n\nÉditeur : Entity A, 1 rue de l'Exemple..."
+                html: "<h2>Mentions légales</h2>\n<p>Éditeur : Entity A, 1 rue de l'Exemple...</p>"
                 updatedAt: '2026-10-19T16:12:00Z'
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -4661,7 +4690,7 @@ components:
         document: { type: string, enum: [legal-notice, privacy-policy] }
         language: { $ref: '#/components/schemas/Language' }
         markdown: { type: string, maxLength: 100000 }
-        html: { type: string, description: "Sanitized HTML rendering of `markdown` (public reads only). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`." }
+        html: { type: string, description: "Sanitized HTML rendering of `markdown`, the same on public reads and on admin reads and writes (empty when the document is not written). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`." }
         updatedAt: { type: string, format: date-time }
     LegalDocumentUpdate:
       type: object
@@ -5321,7 +5350,7 @@ components:
         updatedAt: { type: string, format: date-time }
     EmailTemplate:
       type: object
-      required: [key, language, customised, subject, bodyHtml, bodyText, variables]
+      required: [key, language, customised, subject, bodyHtml, bodyText, variables, requiredVariables]
       properties:
         key: { $ref: '#/components/schemas/EmailTemplateKey' }
         language: { $ref: '#/components/schemas/Language' }
@@ -5329,7 +5358,11 @@ components:
         subject: { type: string, maxLength: 255 }
         bodyHtml: { type: string, maxLength: 100000 }
         bodyText: { type: string, maxLength: 100000 }
-        variables: { type: array, items: { type: string } }
+        variables: { type: array, items: { type: string }, description: "Variables available in this template." }
+        requiredVariables:
+          type: array
+          items: { type: string }
+          description: "Subset of `variables` that must appear in both the HTML and the text body (such as the download link or the verification code); a template without one of them is refused. Empty when none is required."
         updatedAt: { type: string, format: date-time }
     EmailTemplateUpdate:
       type: object

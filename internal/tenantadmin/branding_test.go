@@ -10,6 +10,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -166,4 +167,50 @@ func TestBrandingFaults(t *testing.T) {
 	ev.faults("getTenant")
 	err = ev.svc.DeleteAsset(ctx, ev.adminA, ev.a.ID, "logo", clientIP)
 	wantErr(t, "get", err, errBoom)
+}
+
+func TestGetAsset(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		ev := newEnv(t, e)
+
+		// No custom image: 404 for both, never the default background.
+		for _, asset := range []string{"logo", "background", "favicon"} {
+			_, err := ev.svc.GetAsset(ctx, ev.adminA, ev.a.ID, asset)
+			wantErr(t, "missing "+asset, err, ErrNotFound)
+		}
+		logo := pngImage(t, 64, 32)
+		mustNoErr(t, "upload logo", ev.svc.UploadAsset(ctx, ev.adminA, ev.a.ID, "logo", bytes.NewReader(logo), clientIP))
+		mustNoErr(t, "upload background",
+			ev.svc.UploadAsset(ctx, ev.adminA, ev.a.ID, "background", bytes.NewReader(logo), clientIP))
+		tn, err := ev.db.Tenants().Get(ctx, ev.a.ID)
+		mustNoErr(t, "tenant", err)
+		for _, asset := range []string{"logo", "background"} {
+			for _, p := range []adminauth.Principal{ev.adminA, ev.super} {
+				img, err := ev.svc.GetAsset(ctx, p, ev.a.ID, asset)
+				mustNoErr(t, "get "+asset, err)
+				pub, err := ev.svc.Asset(ctx, tn, asset)
+				mustNoErr(t, "public "+asset, err)
+				if !bytes.Equal(img.Data, pub.Data) || img.ContentType != pub.ContentType || img.ETag != pub.ETag {
+					t.Fatalf("%s: admin %s %s, public %s %s", asset, img.ContentType, img.ETag, pub.ContentType, pub.ETag)
+				}
+			}
+		}
+		// Out of reach (other tenant, unknown tenant, unauthenticated): 404 or 401.
+		_, err = ev.svc.GetAsset(ctx, ev.adminB, ev.a.ID, "logo")
+		wantErr(t, "other tenant", err, ErrNotFound)
+		_, err = ev.svc.GetAsset(ctx, ev.super, "ten_unknown", "logo")
+		wantErr(t, "unknown tenant", err, ErrNotFound)
+		_, err = ev.svc.GetAsset(ctx, adminauth.Principal{}, ev.a.ID, "logo")
+		wantErr(t, "unauthenticated", err, ErrUnauthenticated)
+
+		// A flag whose file vanished: 404; a read failure is reported.
+		ev.assets.getErr = errBoom
+		_, err = ev.svc.GetAsset(ctx, ev.adminA, ev.a.ID, "logo")
+		wantErr(t, "read failure", err, errBoom)
+		ev.assets.getErr = nil
+		delete(ev.assets.data, assetKey(ev.a.ID, branding.KindLogo))
+		_, err = ev.svc.GetAsset(ctx, ev.adminA, ev.a.ID, "logo")
+		wantErr(t, "vanished logo", err, ErrNotFound)
+	})
 }

@@ -12,6 +12,8 @@
 // - Navigation guards (addGuard) may refuse an in-app navigation (a link, navigate(), back or
 //   forward), for example to confirm leaving a page during an upload. A refused back/forward
 //   navigation pushes the current URL back, so the address bar keeps matching the page.
+//   navigate(path, { force: true }) bypasses the guards: only for redirects the user cannot
+//   refuse (session expired, signed out, access lost), never for a user navigation.
 // Browser objects are injected (RouterEnv) so that the router is testable in Node.
 import { tick } from 'svelte';
 import { t as translate } from '../i18n/i18n.svelte';
@@ -79,6 +81,11 @@ export interface RouterOptions<C> {
 export interface NavigateOptions {
   /** Replace the history entry instead of adding one. */
   replace?: boolean;
+  /**
+   * Bypass the navigation guards. Only for access-driven redirects (session expired, logout,
+   * access change), which a leave guard must not be able to refuse.
+   */
+  force?: boolean;
 }
 
 /**
@@ -276,7 +283,7 @@ export function createRouter<C>(options: RouterOptions<C>): Router<C> {
   }
 
   async function navigate(path: string, navOptions: NavigateOptions = {}): Promise<void> {
-    if (!allowed(path)) {
+    if (navOptions.force !== true && !allowed(path)) {
       return;
     }
     const url = href(path);

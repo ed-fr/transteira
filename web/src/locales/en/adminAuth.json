@@ -1,0 +1,194 @@
+{
+  "password": {
+    "rules": "At least 12 characters. Passwords that are too common are refused. A passphrase is easy to remember and hard to guess.",
+    "confirm": "Confirm the password",
+    "mismatch": "The two passwords do not match.",
+    "tooShort": "The password must be at least 12 characters long.",
+    "rejected": "This password is not accepted: it is too short or too common. Choose another one."
+  },
+  "stepTimeout": "This step must be completed within 5 minutes. If you reload the page, you will have to start again from the beginning.",
+  "setup": {
+    "title": "TransTeira setup",
+    "intro": "Create the super administrator account. This account manages every entity and every administrator. Two-factor authentication is configured right after.",
+    "username": {
+      "label": "Username",
+      "hint": "3 to 64 characters: lowercase letters, digits, dot, hyphen or underscore. Starts with a letter or a digit."
+    },
+    "email": {
+      "label": "Email address",
+      "hint": "It receives the super administrator alerts, such as the disk space alert."
+    },
+    "password": {
+      "label": "Password"
+    },
+    "setupToken": {
+      "label": "Setup token",
+      "hint": "It protects this page until the first account is created. If it was not set with the TT_SETUP_TOKEN or TT_SETUP_TOKEN_FILE variable, TransTeira generated it at startup and wrote it to its log (docker logs command)."
+    },
+    "submit": "Create the super administrator",
+    "submitting": "Creating the account…",
+    "tokenInvalid": "The setup token is not valid. Check it in the server log or in the TT_SETUP_TOKEN variable.",
+    "alreadyDone": "The setup has already been completed. Sign in with the existing account.",
+    "nextStep": "Account created. Now configure two-factor authentication.",
+    "done": "Setup complete. Welcome to the administration."
+  },
+  "login": {
+    "title": "Sign in to the administration",
+    "intro": "Enter your username and password.",
+    "username": {
+      "label": "Username"
+    },
+    "password": {
+      "label": "Password"
+    },
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "invalid": "The username or password is not correct.",
+    "locked": {
+      "one": "Too many failed attempts. Try again in {count} second.",
+      "other": "Too many failed attempts. Try again in {count} seconds."
+    },
+    "lockedMinutes": {
+      "one": "Too many failed attempts. Try again in {count} minute.",
+      "other": "Too many failed attempts. Try again in {count} minutes."
+    },
+    "lockedNoDelay": "Too many failed attempts. Try again later.",
+    "forgotten": "Lost your password or authentication device? Ask a super administrator to reset your credentials."
+  },
+  "totp": {
+    "title": "Two-factor authentication",
+    "intro": "Enter the 6-digit code shown by your authenticator app.",
+    "code": {
+      "label": "Authentication code",
+      "hint": "6 digits, renewed every 30 seconds"
+    },
+    "recoveryCode": {
+      "label": "Recovery code",
+      "hint": "One of the recovery codes saved during the configuration. Each code can be used only once."
+    },
+    "recoveryIntro": "Enter one of your recovery codes.",
+    "useRecovery": "Use a recovery code",
+    "useTotp": "Use the authenticator app",
+    "submit": "Verify",
+    "submitting": "Verifying…",
+    "invalid": "The code is not correct.",
+    "attemptsRemaining": {
+      "one": "You have {count} attempt left.",
+      "other": "You have {count} attempts left."
+    },
+    "locked": {
+      "one": "Too many failed attempts. Try again in {count} second.",
+      "other": "Too many failed attempts. Try again in {count} seconds."
+    },
+    "lockedMinutes": {
+      "one": "Too many failed attempts. Try again in {count} minute.",
+      "other": "Too many failed attempts. Try again in {count} minutes."
+    },
+    "format": "The code is made of 6 digits.",
+    "cancel": "Cancel and go back to sign-in"
+  },
+  "enroll": {
+    "title": "Configure two-factor authentication",
+    "intro": "Two-factor authentication protects your account even if your password is compromised.",
+    "requiredIntro": "Two-factor authentication is required for your account. Configure it to continue.",
+    "step1": "Install an authenticator app on your phone or computer (for example a TOTP-compatible app or your password manager).",
+    "step2": "Scan the QR code below, or enter the key manually.",
+    "step3": "Enter the 6-digit code shown by the app to confirm.",
+    "qrAlt": "QR code to configure two-factor authentication. If you cannot scan it, use the key shown below.",
+    "qrUnavailable": "The QR code could not be displayed. Enter the key manually in your app.",
+    "manualKey": {
+      "label": "Setup key",
+      "hint": "Enter it without the spaces if your app asks for it. Type: time-based (TOTP).",
+      "copy": "Copy the key"
+    },
+    "account": "Account",
+    "issuer": "Issuer",
+    "code": {
+      "label": "Confirmation code",
+      "hint": "6 digits shown by your app"
+    },
+    "submit": "Enable two-factor authentication",
+    "submitting": "Enabling…",
+    "invalid": "The code is not correct. Check the time of your device, then enter the new code.",
+    "expired": "The configuration has expired. Start again to get a new key.",
+    "restart": "Start again",
+    "success": "Two-factor authentication is enabled."
+  },
+  "recovery": {
+    "title": "Recovery codes",
+    "intro": "These codes let you sign in if you lose access to your authenticator app. Each code can be used only once.",
+    "shownOnce": "They will never be shown again. Save them now in a safe place, such as your password manager.",
+    "listLabel": "Your recovery codes",
+    "copyAll": "Copy all codes",
+    "download": "Download (text file)",
+    "fileName": "transteira-recovery-codes.txt",
+    "fileHeader": "TransTeira recovery codes for the account {username}. Each code can be used only once.",
+    "fileHeaderGeneric": "TransTeira recovery codes. Each code can be used only once.",
+    "announced": "Your recovery codes are displayed. Save them before continuing.",
+    "acknowledge": "I have saved these recovery codes in a safe place.",
+    "acknowledgeRequired": "Confirm that you have saved your recovery codes.",
+    "continue": "Continue",
+    "leaveConfirm": {
+      "title": "Leave without saving your recovery codes?",
+      "text": "They will never be shown again. Without them, losing your authenticator app locks you out of your account."
+    }
+  },
+  "activation": {
+    "title": "Activate your account",
+    "intro": "Choose the password of your administration account.",
+    "password": {
+      "label": "New password"
+    },
+    "submit": "Set the password",
+    "submitting": "Saving…",
+    "invalidLink": {
+      "title": "Invalid activation link",
+      "text": "This activation link is not valid, has already been used or has expired. Ask a super administrator for a new one."
+    },
+    "goToLogin": "Go to sign-in"
+  },
+  "account": {
+    "title": "My account",
+    "profile": {
+      "title": "Profile",
+      "username": "Username",
+      "email": "Email address",
+      "role": "Role",
+      "tenants": "Entities",
+      "allTenants": "All entities"
+    },
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "submit": "Change the password",
+      "submitting": "Changing…",
+      "success": "Your password has been changed.",
+      "otherSessions": "Your other open sessions will be closed. This session stays active.",
+      "currentInvalid": "The current password is not correct."
+    },
+    "totp": {
+      "title": "Two-factor authentication",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "status": "Status: {status}",
+      "currentPassword": "Current password",
+      "reenroll": {
+        "title": "Change authentication device",
+        "text": "Configure a new authenticator app. The previous one will stop working and new recovery codes will replace the previous ones.",
+        "action": "Configure a new device",
+        "enableAction": "Enable two-factor authentication",
+        "confirmText": "Enter your current password to continue."
+      },
+      "disable": {
+        "title": "Disable two-factor authentication",
+        "text": "Your account will be protected by your password only. Your recovery codes will be deleted.",
+        "action": "Disable",
+        "confirmTitle": "Disable two-factor authentication?",
+        "confirmText": "Enter your current password to confirm.",
+        "success": "Two-factor authentication is disabled.",
+        "forbidden": "Two-factor authentication is required for your account: it cannot be disabled."
+      }
+    }
+  }
+}

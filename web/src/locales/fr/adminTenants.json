@@ -1,0 +1,480 @@
+{
+  "list": {
+    "title": "Entités",
+    "intro": "Chaque entité dispose de son adresse, de son habillage et de sa configuration propres.",
+    "caption": "Liste des entités",
+    "columns": {
+      "name": "Nom",
+      "fqdn": "Adresse (FQDN)",
+      "status": "Statut",
+      "quota": "Stockage utilisé",
+      "language": "Langue par défaut",
+      "actions": "Actions"
+    },
+    "quotaUsage": "{used} sur {quota} ({percent} %)",
+    "empty": "Aucune entité pour le moment.",
+    "emptyDelegated": "Aucune entité ne vous est rattachée. Contactez un super administrateur.",
+    "create": "Créer une entité",
+    "configure": "Configurer {name}"
+  },
+  "status": {
+    "active": "Active",
+    "deleting": "Suppression en cours"
+  },
+  "nav": {
+    "general": "Général",
+    "branding": "Habillage",
+    "network": "Réseau",
+    "smtp": "Messagerie (SMTP)",
+    "templates": "Modèles de mails",
+    "legal": "Mentions légales"
+  },
+  "fields": {
+    "name": {
+      "label": "Nom de l’entité",
+      "hint": "Affiché sur les pages publiques et dans les mails. 100 caractères au plus."
+    },
+    "fqdn": {
+      "label": "Adresse (FQDN)",
+      "hint": "Nom de domaine complet des pages publiques de l’entité, par exemple transfer.entity-a.example.com. Il doit pointer vers le reverse proxy.",
+      "taken": "Cette adresse est déjà utilisée par une autre entité.",
+      "reserved": "Cette adresse est réservée à l’administration et ne peut pas être attribuée à une entité."
+    },
+    "defaultLanguage": {
+      "label": "Langue par défaut",
+      "hint": "Utilisée lorsque la langue du navigateur n’est pas disponible, et pour les mails."
+    },
+    "storageQuota": {
+      "label": "Quota de stockage",
+      "hint": "Espace total que les transferts de l’entité peuvent occuper. Les nouveaux dépôts sont bloqués lorsqu’il est atteint."
+    },
+    "maxTransfer": {
+      "label": "Taille maximale par envoi",
+      "hint": "Somme des fichiers d’un envoi. 20 Go au plus.",
+      "hintCeiling": "Somme des fichiers d’un envoi. {ceiling} au plus, plafond fixé par le super administrateur.",
+      "aboveCeiling": "La taille ne peut pas dépasser le plafond de {ceiling}.",
+      "followsCeiling": "Somme des fichiers d’un envoi. Elle sera abaissée au nouveau plafond de {ceiling} à l’enregistrement."
+    },
+    "maxTransferCeiling": {
+      "label": "Plafond de la taille par envoi",
+      "hint": "Valeur maximale que les administrateurs délégués peuvent choisir pour la taille par envoi. L’abaisser en dessous de la taille actuelle réduit aussi celle-ci."
+    }
+  },
+  "create": {
+    "title": "Créer une entité",
+    "intro": "Les autres réglages (habillage, réseau, messagerie, modèles) se configurent une fois l’entité créée.",
+    "submit": "Créer l’entité",
+    "created": "L’entité {name} a été créée.",
+    "legend": "Informations de l’entité"
+  },
+  "general": {
+    "title": "Général",
+    "delegatedNote": "Seuls la langue par défaut et la taille maximale par envoi peuvent être modifiés par un administrateur délégué. Les autres réglages sont gérés par le super administrateur.",
+    "saved": "Les réglages généraux ont été enregistrés.",
+    "storage": "Stockage utilisé : {used} sur {quota} ({percent} %)",
+    "deletingBanner": "La suppression de cette entité est en cours. Elle reprendra automatiquement si elle a été interrompue.",
+    "delete": {
+      "title": "Supprimer l’entité",
+      "text": "La suppression efface définitivement tous les transferts, fichiers, adresses vérifiées, invitations, jetons d’API et réglages de l’entité. Cette action est irréversible.",
+      "action": "Supprimer l’entité…",
+      "confirmTitle": "Supprimer l’entité {name} ?",
+      "confirmText": "Tous les transferts et toutes les données de l’entité seront définitivement effacés. Les fichiers déjà sauvegardés deviendront illisibles.",
+      "confirmAction": "Supprimer définitivement",
+      "done": "L’entité {name} a été supprimée.",
+      "resumes": "La suppression n’a pas pu se terminer. Elle reprendra automatiquement : l’entité reste marquée « suppression en cours » d’ici là."
+    },
+    "legend": "Paramètres de l’entité"
+  },
+  "branding": {
+    "title": "Habillage",
+    "intro": "Logo, couleurs et image de fond des pages publiques de l’entité.",
+    "saved": "Les couleurs ont été enregistrées.",
+    "colors": {
+      "title": "Couleurs",
+      "primary": {
+        "label": "Couleur principale",
+        "hint": "Boutons et éléments actifs."
+      },
+      "accent": {
+        "label": "Couleur d’accent",
+        "hint": "Liens et éléments secondaires."
+      },
+      "picker": "Sélecteur de couleur : {label}",
+      "hex": "Code hexadécimal : {label}",
+      "hexHint": "Format #RRGGBB, par exemple #1A5FB4.",
+      "invalid": "Saisissez une couleur au format #RRGGBB."
+    },
+    "contrast": {
+      "title": "Contraste",
+      "intro": "Le rapport de contraste doit atteindre au moins 4,5:1 (niveau AA) pour que les textes restent lisibles (RGAA).",
+      "pair": {
+        "primary-on-light": "Couleur principale sur fond clair",
+        "accent-on-light": "Couleur d’accent sur fond clair",
+        "text-on-primary": "Texte sur la couleur principale"
+      },
+      "level": {
+        "AAA": "AAA (excellent)",
+        "AA": "AA (suffisant)",
+        "fail": "Insuffisant"
+      },
+      "ratio": "{ratio}:1",
+      "result": "{pair} : {ratio}:1, {level}",
+      "warning": "Au moins une couleur n’offre pas un contraste suffisant. Les textes risquent d’être difficiles à lire. L’enregistrement reste possible.",
+      "serverNote": "Le contrôle du serveur, affiché après l’enregistrement, fait foi."
+    },
+    "preview": {
+      "label": "Aperçu de la page publique",
+      "heading": "Envoyer des fichiers",
+      "text": "Déposez vos fichiers et partagez-les en toute sécurité.",
+      "link": "Exemple de lien",
+      "button": "Envoyer"
+    },
+    "image": {
+      "current": "Image enregistrée",
+      "localPreview": "Aperçu de l’image choisie",
+      "none": "Aucune image enregistrée.",
+      "choose": "Choisir une image",
+      "upload": "Envoyer l’image",
+      "uploading": "Envoi…",
+      "uploaded": "L’image a été enregistrée.",
+      "delete": "Supprimer l’image",
+      "deleteConfirmTitle": "Supprimer cette image ?",
+      "deleteConfirmText": "L’image sera retirée des pages publiques de l’entité.",
+      "deleted": "L’image a été supprimée.",
+      "types": "Formats acceptés : PNG, JPEG ou WebP. Taille maximale : {size}.",
+      "badType": "Ce format n’est pas accepté. Choisissez une image PNG, JPEG ou WebP.",
+      "tooLarge": "L’image dépasse la taille maximale de {size}.",
+      "tooLargeServer": "L’image est trop lourde ou ses dimensions sont trop grandes.",
+      "unsupportedServer": "Le serveur n’a pas reconnu ce fichier comme une image PNG, JPEG ou WebP."
+    },
+    "logo": {
+      "title": "Logo",
+      "hint": "Affiché en haut des pages publiques.",
+      "alt": "Logo de l’entité"
+    },
+    "background": {
+      "title": "Image de fond",
+      "hint": "Affichée en plein écran derrière la zone de dépôt. Sans image, l’image par défaut est utilisée.",
+      "alt": "Image de fond de l’entité"
+    }
+  },
+  "network": {
+    "title": "Réseau",
+    "intro": "Un utilisateur est interne lorsque son adresse IP appartient à une plage ci-dessous et que son adresse mail appartient à un domaine ci-dessous. Seuls les internes peuvent déposer librement et envoyer des invitations.",
+    "cidrs": {
+      "label": "Plages d’adresses IP internes",
+      "hint": "Une plage par ligne, au format CIDR, par exemple 192.0.2.0/24 ou 2001:db8::/32."
+    },
+    "domains": {
+      "label": "Domaines de messagerie internes",
+      "hint": "Un domaine par ligne, par exemple entity-a.example.com."
+    },
+    "errors": {
+      "cidr": {
+        "syntax": "Adresse IP ou plage CIDR invalide (par exemple 192.0.2.0/24 ou 2001:db8::/32).",
+        "zone": "Les identifiants de zone IPv6 (%…) ne sont pas acceptés.",
+        "prefixRange": "Longueur de préfixe trop grande : au plus /32 en IPv4 et /128 en IPv6.",
+        "hostBits": "L’adresse contient des bits d’hôte : saisissez l’adresse réseau de la plage.",
+        "hostBitsSuggestion": "L’adresse contient des bits d’hôte : la plage correspondante est {network}."
+      },
+      "domain": {
+        "syntax": "Nom de domaine invalide : saisissez le domaine seul, sans espace, @, :, / ni crochets.",
+        "ipLiteral": "Une adresse IP n’est pas un domaine de messagerie.",
+        "trailingDot": "Retirez le point final.",
+        "trailingDotSuggestion": "Retirez le point final : {domain}.",
+        "idn": "Ce nom de domaine international ne peut pas être converti en ASCII (punycode).",
+        "tooLong": "Le nom de domaine dépasse 253 caractères.",
+        "singleLabel": "Le domaine doit contenir au moins un point, par exemple example.com.",
+        "label": "Chaque partie du domaine ne peut contenir que des lettres, des chiffres et des tirets intérieurs, 63 caractères au plus.",
+        "tld": "La dernière partie du domaine (domaine de premier niveau) doit comporter au moins deux lettres."
+      }
+    },
+    "warnings": {
+      "emptyCidrs": "Aucune plage IP : personne ne sera considéré comme interne, et seules les invitations permettront de déposer.",
+      "emptyDomains": "Aucun domaine : personne ne sera considéré comme interne, et seules les invitations permettront de déposer.",
+      "catchAll": "La plage {range} couvre toutes les adresses IP : tout utilisateur d’un domaine interne pourra déposer depuis n’importe où."
+    },
+    "saved": "Les réglages réseau ont été enregistrés.",
+    "normalized": "Le serveur a normalisé certaines valeurs. Les listes affichées sont celles enregistrées.",
+    "form": {
+      "title": "Plages et domaines internes"
+    }
+  },
+  "smtp": {
+    "title": "Messagerie (SMTP)",
+    "intro": "Serveur par lequel l’entité envoie ses mails (codes de vérification, notifications, invitations, alertes).",
+    "notConfigured": "La messagerie n’est pas encore configurée : l’entité ne peut envoyer aucun mail.",
+    "host": {
+      "label": "Serveur SMTP",
+      "hint": "Nom d’hôte ou adresse IP, par exemple smtp.example.com ou smtp-relay."
+    },
+    "port": {
+      "label": "Port",
+      "suggested": "Port habituel pour ce mode : {port}.",
+      "useSuggested": "Utiliser le port {port}"
+    },
+    "security": {
+      "label": "Sécurité de la connexion",
+      "none": "Aucune (relais sur un réseau interne)",
+      "starttls": "STARTTLS (port 587 en général)",
+      "tls": "TLS implicite (port 465 en général)",
+      "noneHint": "Sans chiffrement : à réserver à un relais joignable uniquement par le réseau Docker interne."
+    },
+    "username": {
+      "label": "Nom d’utilisateur",
+      "hint": "Laissez vide pour un relais sans authentification.",
+      "requiredWithPassword": "Saisissez le nom d’utilisateur associé au mot de passe.",
+      "needsSecurity": "L’authentification exige STARTTLS ou TLS : choisissez l’un des deux, ou retirez le nom d’utilisateur."
+    },
+    "password": {
+      "label": "Mot de passe",
+      "set": "Un mot de passe est enregistré.",
+      "mode": "Mot de passe SMTP",
+      "keep": "Conserver le mot de passe enregistré",
+      "replace": "Remplacer le mot de passe",
+      "remove": "Retirer le mot de passe",
+      "new": "Nouveau mot de passe",
+      "reenter": "Le serveur, le port ou le nom d’utilisateur a changé : ressaisissez le mot de passe, ou retirez-le.",
+      "encrypted": "Le mot de passe est chiffré en base et n’est jamais réaffiché."
+    },
+    "fromAddress": {
+      "label": "Adresse d’expéditeur",
+      "hint": "Adresse utilisée dans le champ « De » des mails, par exemple transfer@entity-a.example.com."
+    },
+    "fromName": {
+      "label": "Nom d’expéditeur",
+      "hint": "Facultatif. Par défaut, le nom de l’entité."
+    },
+    "warnings": {
+      "credentialsOverNone": "L’authentification est refusée sans chiffrement : les identifiants circuleraient en clair. Choisissez STARTTLS ou TLS, ou retirez le nom d’utilisateur pour un relais sans authentification."
+    },
+    "saved": "La configuration SMTP a été enregistrée.",
+    "test": {
+      "title": "Test d’envoi",
+      "intro": "Envoie un mail de test avec la configuration enregistrée. Enregistrez d’abord vos modifications.",
+      "to": {
+        "label": "Adresse de destination",
+        "hint": "L’adresse qui recevra le mail de test."
+      },
+      "submit": "Envoyer un mail de test",
+      "sending": "Envoi du mail de test…",
+      "success": "Le mail de test a été accepté par le serveur en {duration} ms.",
+      "failure": "Le mail de test n’a pas pu être envoyé.",
+      "stageReached": "Étape : {stage}",
+      "duration": "Durée : {duration} ms",
+      "rateLimited": {
+        "one": "Trop de tests d’envoi. Réessayez dans {count} seconde.",
+        "other": "Trop de tests d’envoi. Réessayez dans {count} secondes."
+      },
+      "stage": {
+        "settings": "Lecture de la configuration",
+        "connect": "Connexion au serveur",
+        "tls": "Négociation TLS",
+        "greeting": "Accueil du serveur",
+        "starttls": "Passage en STARTTLS",
+        "auth": "Authentification",
+        "envelope": "Expéditeur et destinataire",
+        "data": "Envoi du message",
+        "done": "Terminé",
+        "unknown": "Étape inconnue"
+      },
+      "serverMessage": "Message du serveur :"
+    },
+    "dns": {
+      "title": "Contrôle DNS (SPF, DKIM, DMARC)",
+      "intro": "Contrôle indicatif des enregistrements DNS du domaine de l’adresse d’expéditeur. Sans eux, les mails risquent d’être classés comme indésirables.",
+      "selectors": {
+        "label": "Sélecteurs DKIM",
+        "hint": "Les sélecteurs ne peuvent pas être découverts automatiquement : saisissez-en jusqu’à 5, séparés par des virgules (par exemple selector1, selector2 pour Microsoft 365)."
+      },
+      "submit": "Contrôler le DNS",
+      "checking": "Contrôle en cours…",
+      "domain": "Domaine contrôlé : {domain}",
+      "spf": "SPF",
+      "dkim": "DKIM",
+      "dmarc": "DMARC",
+      "status": {
+        "ok": "Correct",
+        "warning": "À vérifier",
+        "missing": "Absent",
+        "error": "Erreur de contrôle"
+      },
+      "selectorFound": "Sélecteur {selector} : clé trouvée",
+      "selectorMissing": "Sélecteur {selector} : aucune clé",
+      "noSelectors": "Aucun sélecteur contrôlé.",
+      "notConfigured": "Enregistrez d’abord une adresse d’expéditeur pour contrôler son domaine.",
+      "columns": {
+        "check": "Contrôle",
+        "status": "Résultat",
+        "record": "Enregistrement trouvé",
+        "details": "Détails"
+      }
+    },
+    "form": {
+      "title": "Serveur et expéditeur"
+    }
+  },
+  "templates": {
+    "title": "Modèles de mails",
+    "intro": "Personnalisez les mails envoyés par l’entité, pour chaque langue. Un modèle non personnalisé utilise le texte par défaut.",
+    "caption": "Modèles de mails",
+    "columns": {
+      "template": "Modèle"
+    },
+    "customized": "Personnalisé",
+    "default": "Par défaut",
+    "edit": "Modifier le modèle {template} ({language})",
+    "key": {
+      "verification-code": "Code de vérification",
+      "transfer-notification": "Notification de transfert",
+      "transfer-confirmation": "Confirmation d’envoi",
+      "first-download": "Accusé de premier téléchargement",
+      "file-problems": "Fichier infecté ou retenu",
+      "file-not-scanned": "Fichier non analysé",
+      "invitation": "Invitation externe",
+      "quota-warning": "Alerte de quota (80 %)",
+      "quota-reached": "Quota atteint",
+      "antivirus-unavailable": "Antivirus indisponible"
+    },
+    "keyDescription": {
+      "verification-code": "Envoyé à l’expéditeur pour vérifier son adresse.",
+      "transfer-notification": "Envoyé aux destinataires avec le lien de téléchargement.",
+      "transfer-confirmation": "Envoyé à l’expéditeur une fois le transfert disponible.",
+      "first-download": "Envoyé à l’expéditeur au premier téléchargement.",
+      "file-problems": "Envoyé à l’expéditeur lorsqu’un fichier est infecté ou retenu.",
+      "file-not-scanned": "Envoyé à l’expéditeur lorsqu’un fichier n’a pas pu être analysé.",
+      "invitation": "Envoyé à la personne externe invitée à déposer.",
+      "quota-warning": "Envoyé aux administrateurs délégués à 80 % du quota.",
+      "quota-reached": "Envoyé aux administrateurs délégués lorsque le quota est atteint.",
+      "antivirus-unavailable": "Envoyé lorsque l’antivirus ne répond plus."
+    },
+    "editor": {
+      "title": "{template} ({language})",
+      "formTitle": "Contenu du modèle",
+      "text": {
+        "hint": "Version en texte brut, lue par les messageries qui n’affichent pas le HTML."
+      },
+      "syntax": "Les variables s’écrivent entre doubles accolades, par exemple {example}.",
+      "save": "Enregistrer le modèle",
+      "saved": "Le modèle a été enregistré.",
+      "back": "Retour aux modèles"
+    },
+    "variables": {
+      "title": "Variables disponibles",
+      "intro": "Cliquez sur une variable pour l’insérer à la position du curseur, dans le dernier champ utilisé.",
+      "insert": "Insérer {name}",
+      "required": "obligatoire",
+      "requiredNote": "Les variables obligatoires doivent figurer dans le modèle.",
+      "description": {
+        "tenant_name": "Nom de l’entité.",
+        "code": "Code de vérification à usage unique (6 chiffres).",
+        "validity_minutes": "Durée de validité du code, en minutes.",
+        "inviter_email": "Adresse de l’utilisateur interne qui envoie l’invitation.",
+        "message": "Message de l’expéditeur ou de la personne qui invite, cité ; vide s’il n’y en a pas.",
+        "invitation_link": "Lien d’invitation.",
+        "expiry_date": "Date d’expiration de l’invitation non utilisée.",
+        "sender_email": "Adresse de l’expéditeur.",
+        "download_link": "Lien de téléchargement.",
+        "expiry_datetime": "Date et heure d’expiration du transfert.",
+        "password_notice": "Mention du mot de passe transmis par un autre canal ; vide sans mot de passe.",
+        "qr_code": "QR code du lien de téléchargement (HTML uniquement ; vide dans le corps texte).",
+        "files": "Liste des fichiers.",
+        "file_count": "Nombre de fichiers.",
+        "recipients": "Liste des destinataires.",
+        "withheld_files": "Fichiers retenus faute d’avoir pu être analysés ; vide s’il n’y en a pas.",
+        "infected_files": "Fichiers infectés supprimés, avec la menace détectée ; vide s’il n’y en a pas.",
+        "problem_summary": "Résumé court pour l’objet (fichier infecté supprimé ou fichier retenu).",
+        "outcome": "Indique si les autres fichiers ont été envoyés ou si le transfert entier a été refusé.",
+        "advice": "Conduite à tenir.",
+        "download_datetime": "Date et heure du premier téléchargement complet.",
+        "deletion_notice": "Date d’effacement du transfert, ou mention que cet avis n’est envoyé qu’une fois.",
+        "usage_percent": "Part utilisée, avec le signe pour cent, arrondie à l’inférieur.",
+        "threshold_percent": "Seuil d’alerte, avec le signe pour cent.",
+        "used_size": "Espace utilisé.",
+        "quota_size": "Quota de stockage de l’entité.",
+        "total_size": "Taille du disque du dossier de données.",
+        "admin_link": "Lien vers l’administration."
+      },
+      "inserted": "{name} inséré dans le champ {field}."
+    },
+    "warnings": {
+      "missing": {
+        "one": "Variable obligatoire absente : {names}.",
+        "other": "Variables obligatoires absentes : {names}."
+      },
+      "unknown": {
+        "one": "Variable inconnue : {names}. Elle ne sera pas remplacée.",
+        "other": "Variables inconnues : {names}. Elles ne seront pas remplacées."
+      }
+    },
+    "serverError": {
+      "title": "Le modèle contient des erreurs",
+      "notSaved": "Le modèle n’a pas été enregistré : corrigez les erreurs indiquées ci-dessous.",
+      "location": "{part}, ligne {line}, colonne {column} :",
+      "noLocation": "{part} :",
+      "goTo": "Aller à l’erreur ({part}, ligne {line})",
+      "note": "Les messages d’erreur du serveur sont rédigés en anglais."
+    },
+    "part": {
+      "subject": "Objet",
+      "html": "Corps HTML",
+      "text": "Corps texte"
+    },
+    "preview": {
+      "title": "Aperçu",
+      "action": "Prévisualiser",
+      "loading": "Préparation de l’aperçu…",
+      "intro": "Aperçu avec des données d’exemple.",
+      "subject": "Objet : {subject}",
+      "html": "Version HTML",
+      "text": "Version texte",
+      "note": "Les styles en ligne des modèles, par défaut ou personnalisés, ne s’appliquent pas dans cet aperçu, et les liens y sont désactivés. Le mail reçu les affichera normalement.",
+      "linkDisabled": "Lien désactivé dans l’aperçu"
+    },
+    "reset": {
+      "action": "Revenir au modèle par défaut",
+      "confirmTitle": "Revenir au modèle par défaut ?",
+      "confirmText": "Votre personnalisation de ce modèle dans cette langue sera définitivement supprimée.",
+      "confirmAction": "Revenir au modèle par défaut",
+      "done": "Le modèle par défaut est rétabli.",
+      "reloadFailed": "Le modèle par défaut a été rétabli, mais il n’a pas pu être rechargé : {message}",
+      "retry": "Recharger le modèle",
+      "reloaded": "Le modèle a été rechargé."
+    }
+  },
+  "legal": {
+    "title": "Mentions légales",
+    "intro": "Textes affichés sur la page d’informations légales de l’entité, au format Markdown, pour chaque langue.",
+    "caption": "Documents légaux",
+    "columns": {
+      "document": "Document"
+    },
+    "document": {
+      "legal-notice": "Mentions légales",
+      "privacy-policy": "Politique de confidentialité"
+    },
+    "present": "Rédigé",
+    "absent": "Non rédigé",
+    "edit": "Modifier : {document} ({language})",
+    "editor": {
+      "title": "{document} ({language})",
+      "markdown": {
+        "label": "Texte (Markdown)",
+        "hint": "Titres avec #, listes avec -, liens avec [texte](adresse) (adresses https: ou mailto: uniquement). Le HTML n’est pas interprété."
+      },
+      "save": "Enregistrer",
+      "saved": "Le document a été enregistré.",
+      "removed": "Le document a été supprimé.",
+      "back": "Retour aux documents",
+      "preview": "Aperçu",
+      "previewEmpty": "Aucun aperçu : le texte est vide.",
+      "previewNote": "Aperçu du texte enregistré. Enregistrez pour mettre à jour l’aperçu.",
+      "emptyConfirm": {
+        "title": "Supprimer le document ?",
+        "text": "Le texte est vide : l’enregistrer supprime ce document, qui ne sera plus affiché sur les pages publiques dans cette langue.",
+        "action": "Supprimer le document"
+      },
+      "formTitle": "Contenu"
+    }
+  }
+}

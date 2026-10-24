@@ -331,6 +331,41 @@ and the project follows [Semantic Versioning](https://semver.org/).
   and serving rules in `docs/architecture/project-structure.md`, threat model v0.16 (T-91,
   T-94 and T-95 completed for the interface, new T-159 npm supply chain, T-160 client-side state,
   T-161 tokens in URL paths).
+- Web administration, part 1 (`web/src/admin`, under `/admin/` on the admin host):
+  first-run setup with the setup token, mandatory TOTP enrollment (QR code shown only when valid,
+  grouped setup key) and recovery codes shown once (copy, `.txt` download, required
+  acknowledgement); account activation from the link of a super admin (token read from the URL
+  fragment, then removed from the address bar and history); sign-in with password then TOTP or
+  recovery code, attempts left and lockout countdown, intermediate steps kept in memory only
+  (5-minute server expiry); navigation guard with role and tenant scope checks and a safe return
+  path (`safeNext`); sign-out and session expiry clearing the CSRF token and every in-memory store;
+  my account (password change closing the other sessions, new authentication device with new
+  recovery codes, disabling TOTP for a delegated admin when allowed); tenants list, creation,
+  general settings (merge patch, delegated admins limited to the language and the limit per
+  transfer) and deletion with the name typed again; branding with live contrast check, server
+  contrast warnings, logo and background upload, display and removal; network ranges and internal
+  domains with per-line errors and warnings; SMTP with password kept, replaced or removed, test
+  email and SPF / DKIM / DMARC check; mail template editor (variable insertion, required
+  variables, server errors with line and column, preview, reset); legal texts in Markdown with a
+  server-rendered preview; admin accounts (list, creation with a single-use activation link shown
+  once, edit, promotion, credentials reset, deletion). Generic admin components (layout, data
+  table with cursor pagination, confirmation dialog, form sections with error summary and
+  unsaved-changes guard, status badges). The typed API client sends `Blob` bodies with their
+  type and gains the optional `onUnauthenticated` and `recoverCsrf` hooks (one CSRF retry, only
+  when authenticated), used by the admin application only; `navigate(…, { force: true })`
+  bypasses the navigation guards for forced redirects. `LegalContent` moves to
+  `src/shared/components` and the mail template preview (`TemplatePreview`) becomes the second
+  and last `{@html}` exception. French and English translations (`admin`, `adminAuth`,
+  `adminComponents`, `adminTenants`, `adminAccounts`). Vitest coverage now includes `src/admin`.
+  API additions: `GET /admin/tenants/{tenantId}/branding/{asset}` (`getBrandingAsset`, stored
+  logo or background, `no-store`, `nosniff`, `ETag`, 404 outside the admin's scope, covered by
+  the tenant isolation tests), `EmailTemplate.requiredVariables`, and the sanitised `html` of a
+  legal document in the admin `GET` and `PUT` answers. Documentation: first launch and web
+  administration in `docs/operations/admin.md`, `web/README.md`, admin tree in
+  `docs/architecture/project-structure.md`, threat model v0.17 (T-91 updated for the two
+  `{@html}` exceptions, new T-162 secrets on screen, T-163 stored XSS through the template
+  preview, T-164 open redirect through `next`, T-165 session lifecycle in the interface, T-166
+  branding uploads from the interface).
 
 ### Changed
 - OpenAPI: every operation and parameter is described; the SMTP password is removed with an
@@ -364,3 +399,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   OpenAPI `EmailTemplateKey`): the disk alert is an instance mail sent through the system SMTP
   server with the built-in `disk_alert` template. The maintenance flag is now a
   `maintenance.Mode` (environment or stored choice) instead of an in-memory boolean.
+- A tenant FQDN equal to an admin host is refused with the field error code `reserved-host`
+  (formerly `invalid-format`), so that the interface can explain why.
+- Generated TypeScript types (`web/scripts/gen-types.mjs`) keep request fields that have a default
+  value optional, as the OpenAPI specification declares them.

@@ -19,9 +19,11 @@ rotation is in [Master key](master-key.md).
   `internal/apitoken` (API tokens),
   `internal/datasubject` (GDPR), `internal/stats` and `internal/usage`
   (statistics), `internal/maintenance`, `internal/systemsettings`,
-  `internal/diskalert` (instance settings).
+  `internal/diskalert` (instance settings); web interface in
+  `web/src/admin` (see `web/README.md`).
 - Threat model: T-58 to T-73, T-102, T-104 to T-107, T-111, T-112, T-146
-  to T-151, T-154 to T-158 in `docs/security/threat-model.md`.
+  to T-151, T-154 to T-158, T-162 to T-166 in
+  `docs/security/threat-model.md`.
 
 ## Admin host
 
@@ -45,27 +47,62 @@ integrate with the API; the specification itself is always downloadable at
 
 ## First-run setup
 
-While no admin exists, the setup creates the **super admin**. The web
-pages arrive with the web interface; until then, the same steps are
-available through the API (`/api/v1/admin/setup`, then
-`/api/v1/admin/me/totp/confirm`, see `docs/api/`).
+While no admin exists, the setup creates the **super admin**, through the
+web interface. The same steps are also available through the API
+(`/api/v1/admin/setup`, then `/api/v1/admin/me/totp/confirm`, see
+`docs/api/`).
 
-1. Open `https://<admin host>/admin/setup`.
+1. Open `https://<admin host>/admin/` (for example
+   `https://admin.transfer.example.com/admin/`; `/` on the admin host
+   redirects there). While no admin exists, every page of the
+   administration leads to the setup screen (`/admin/setup`).
 2. Enter the setup token:
    - if `TT_SETUP_TOKEN` (or `TT_SETUP_TOKEN_FILE`) is set, use that value;
-   - otherwise TransTeira generates a random token at each start and prints
-     it once in the container logs (`docker logs transteira`). It is valid
-     until the next restart.
-3. Choose a username, an email address and a password (12 to 1024
-   characters, no other rule).
-4. Scan the QR code with an authenticator app (TOTP) and confirm with a
-   code. **TOTP is mandatory for the super admin**: nothing else in the
-   administration is usable before it is confirmed.
-5. Write down the 8 recovery codes shown once, and keep them in your
-   password vault.
+   - otherwise TransTeira generates a random token (`stp_…`) at each start
+     and writes it once to the application log, in a warning that also
+     gives the setup address:
+
+     ```sh
+     docker logs transteira 2>&1 | grep "Setup token"
+     ```
+
+     It is valid until the next restart.
+
+   A wrong token is reported on its field and written to the security log
+   as a failed login (`admin_login_failed`, reason `setup_token`); repeated
+   attempts are rate limited (`429`), and the screen then counts down
+   before the next try.
+3. Choose a username, an email address (it receives the super admin
+   alerts, such as the disk alert) and a password (12 to 1024 characters,
+   no other rule).
+4. Scan the QR code with an authenticator app (TOTP), or type the setup key
+   shown below it (grouped by 4 characters, with a copy button), then
+   confirm with a 6-digit code. **TOTP is mandatory for the super admin**:
+   nothing else in the administration is usable before it is confirmed.
+5. The **8 recovery codes are shown once**. Copy them or download them as a
+   `.txt` file, store them in your password vault (not next to the
+   authenticator), then tick "I have saved these recovery codes in a safe place" to
+   continue. They are
+   never shown again; a new TOTP enrollment issues new ones.
+
+**Confirm the TOTP code (step 4) within 5 minutes** of submitting the form:
+until the code is confirmed, the session is only an intermediate sign-in
+step, which the server ends 5 minutes after it began (the pending TOTP secret
+itself stays valid for 15 minutes, which only matters when the enrollment is
+restarted from a full session, for example from the account page). This step
+only lives in the page (nothing is stored in the browser): reloading the page
+or waiting too long brings you back to the sign-in screen; sign in with the
+username and password you just chose, and the enrollment starts again.
+
+The recovery codes (step 5) are shown **after** the confirmation, once the
+session is complete, so this step has no 5-minute limit (only the usual idle
+timeout of the session). The codes, however, only live in the page: reloading
+it or leaving it signs you straight in and the codes are gone for good (a new
+TOTP enrollment from the account page issues new ones). The screen therefore
+warns and asks for a confirmation before you leave it.
 
 Once an admin exists, the setup is closed for good and no token is printed
-any more.
+any more; `/admin/setup` then leads to the sign-in screen.
 
 ## Sessions
 
@@ -74,7 +111,8 @@ any more.
 - Expires after `TT_ADMIN_SESSION_IDLE_TIMEOUT` of inactivity (30 min by
   default) and at the latest after `TT_ADMIN_SESSION_MAX_AGE` (12 h).
 - An intermediate step (password accepted, second factor or enrollment
-  pending) expires after 5 minutes.
+  pending) expires 5 minutes after it began; a pending TOTP secret can be
+  confirmed for 15 minutes.
 - Every state-changing request needs the CSRF token returned by the API and
   a same-origin request.
 
@@ -164,6 +202,113 @@ It clears the password, the TOTP and the recovery codes, revokes the
 sessions and prints an activation link valid 72 hours, once. Open it to
 choose a new password and enroll TOTP again. The action is written to the
 audit log.
+
+## Web administration
+
+The administration is a web application served under `/admin/` on the
+admin host. It only talks to the REST API, so everything below can also be
+done through the API (`docs/api/`). Pages are never cached (`no-store`) and
+nothing but the chosen interface language is stored in the browser.
+
+### Signing in
+
+1. Open `https://<admin host>/admin/`. Without a session, any page leads to
+   the sign-in screen and comes back to it once signed in (only paths of
+   the administration are accepted as return address).
+2. Enter the username and password. The message is the same whatever was
+   wrong, so it never tells whether an account exists.
+3. Enter the 6-digit code of the authenticator app, or choose **Use a recovery
+   code** and type one of the recovery codes (each works once). The screen
+   shows the attempts left after a wrong code. An account that must enroll
+   TOTP is taken to the enrollment instead (QR code, then recovery codes).
+
+The second step must be completed within **5 minutes**; reloading the page
+returns to step 1. After 5 failed logins (or wrong second factors) the
+server locks the attempt for 15 minutes, as described in
+[Brute-force protection](#brute-force-protection), and the screen shows a
+countdown. When the session expires, the next action brings you back to
+the sign-in screen with a message; unsaved changes on the current page are
+lost. **Sign out** (main navigation) closes the session on the server and clears
+everything the page held in memory.
+
+### Activation links
+
+Creating a delegated admin (**Administrators**, then **Create an
+administrator**) or resetting
+an account's credentials shows its **activation link once**, with its
+expiry date (72 hours) and a copy button. TransTeira never emails it: hand
+it over yourself through a channel you trust (see
+[Delegated admins](#delegated-admins)). The page asks for a confirmation if
+you leave before pressing "I have handed over the link"; once you leave,
+the link cannot be displayed again, and the only way to get a new one is a
+new credentials reset.
+
+The new admin opens the link (`https://<admin host>/admin/activate#act_…`).
+As soon as the page loads, before the application starts, the token is
+removed from the address bar and the browser history; the page then asks for a password and, when required (the default), a TOTP
+enrollment followed by the recovery codes. A used, expired or cancelled
+link shows "invalid link": ask the super admin for a new one.
+
+### My account
+
+**My account** (main navigation) shows the profile (username, email address,
+role, tenants, two-factor status) and offers:
+
+- **Change password**: requires the current password; the other sessions
+  of the account are closed, this one stays open.
+- **Change authentication device**: requires the current password, then a new
+  QR code to confirm and **new recovery codes** (the old ones stop
+  working). Replacing an active TOTP closes the other sessions.
+- **Disable two-factor authentication**: offered to a delegated admin only,
+  after confirmation with the current password. The server refuses it when
+  the super admin made TOTP mandatory for the account (the default), and
+  the super admin can never disable it.
+
+**Interface language**: the language switch in the footer applies to the
+administration and is remembered in this browser only (`localStorage`,
+`tt.lang`). Without a stored choice, the language of the admin profile is
+used, then the browser languages, then English. The API has no endpoint to
+change the language of an admin profile yet, so the choice does not follow
+the admin to another browser.
+
+### Tenant configuration
+
+**Entities** lists the tenants visible to the admin (name, FQDN, status,
+storage used, language); a delegated admin attached to a single tenant goes
+straight to it. The super admin creates tenants (**Create an entity**: name,
+FQDN, language, quota and size limits; a FQDN already used or equal to an
+admin host is refused on its field). Each tenant has the following
+screens; what each setting does and who may change it is described in
+[Tenants](tenants.md):
+
+| Screen | Content |
+|---|---|
+| General | name, FQDN, default language, quota, ceiling and limit per transfer (a delegated admin only changes the language and the limit, up to the ceiling); deletion by the super admin, who must type the tenant name |
+| Branding | colours with a live contrast check (the server's contrast warnings are shown but do not block), logo and background image (PNG, JPEG or WebP; 5 MiB and 10 MiB), with the stored image and a preview of the chosen one |
+| Network | internal IP ranges (CIDR) and internal mail domains, one per line, with an error per line and the list as normalised by the server; warnings for an empty list (nobody is internal) and `0.0.0.0/0` (everybody is) |
+| SMTP | server, port and security, optional username, password kept, replaced or removed (it must be typed again when the server, port or username changes), test email and SPF / DKIM / DMARC check |
+| Mail templates | one entry per template and language, marked when customised; editor with variable buttons (required variables flagged), line and column of server errors, preview, save and reset to the default |
+| Legal texts | legal notice and privacy policy per language, in Markdown, with a preview rendered by the server; saving an empty text deletes the document |
+
+A tenant outside the admin's scope shows "not found". Leaving a screen with
+unsaved changes asks for a confirmation.
+
+The template preview shows the email as the server renders it, with its
+links disabled. Inline styles of a customised template are not applied in
+the preview (the administration's Content Security Policy blocks them,
+which the browser console reports): the email itself keeps them.
+
+### Admin accounts
+
+**Administrators** is reserved to the super admin: the list of accounts with their
+role, status and tenants, the creation of delegated admins (tenants to
+attach, TOTP required by default, then the activation link), and for each
+account: change of email address, tenants, TOTP requirement, promotion to
+super admin (only for an activated account with TOTP) or demotion,
+disabling, **credentials reset** (new activation link) and deletion. On
+your own account, the role change, disabling, reset and deletion are not
+offered (use **My account** instead), and the last usable super admin is
+protected as described in [Delegated admins](#delegated-admins).
 
 ## Tenant operations
 

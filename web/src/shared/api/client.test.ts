@@ -251,3 +251,147 @@ describe('typed methods', () => {
     expect((call(fetch, 7)[1].headers as Headers).get('Content-Type')).toBe('application/merge-patch+json');
   });
 });
+
+function problemResponse(status: number, code: string): Response {
+  return jsonResponse(status, { title: code, status, code }, 'application/problem+json');
+}
+
+describe('Blob bodies', () => {
+  it('sends a Blob as-is with its own type', async () => {
+    const { fetch, api } = client(() => new Response(null, { status: 204 }));
+    const image = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' });
+    await api.put('/admin/tenants/{tenantId}/branding/{asset}', {
+      path: { tenantId: 't1', asset: 'logo' },
+      body: image,
+    });
+    const [url, init] = call(fetch);
+    expect(url).toBe('/api/v1/admin/tenants/t1/branding/logo');
+    expect(init.body).toBe(image);
+    expect((init.headers as Headers).get('Content-Type')).toBe('image/png');
+    expect((init.headers as Headers).get('X-CSRF-Token')).toBe('tok');
+  });
+
+  it('keeps an explicit Content-Type and sends none for an untyped Blob', async () => {
+    const { fetch, api } = client(() => new Response(null, { status: 204 }));
+    await api.request('PUT', '/x', {
+      body: new Blob(['a'], { type: 'image/png' }),
+      headers: { 'Content-Type': 'image/webp' },
+    });
+    expect((call(fetch, 0)[1].headers as Headers).get('Content-Type')).toBe('image/webp');
+    await api.request('PUT', '/x', { body: new Blob(['a']) });
+    expect((call(fetch, 1)[1].headers as Headers).has('Content-Type')).toBe(false);
+  });
+});
+
+describe('onUnauthenticated', () => {
+  it('is called on 401 unauthenticated before the problem is thrown', async () => {
+    const onUnauthenticated = vi.fn();
+    const { api } = client(() => problemResponse(401, 'unauthenticated'), { onUnauthenticated });
+    const err = await api.request('GET', '/admin/me', { params: { a: 1 } }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiProblem);
+    expect(onUnauthenticated).toHaveBeenCalledOnce();
+    expect(onUnauthenticated).toHaveBeenCalledWith(err, 'GET', '/admin/me');
+  });
+
+  it('is not called for invalid-credentials, other codes or without a hook', async () => {
+    const onUnauthenticated = vi.fn();
+    for (const response of [
+      () => problemResponse(401, 'invalid-credentials'),
+      () => new Response('x', { status: 401 }),
+      () => problemResponse(403, 'unauthenticated'),
+    ]) {
+      await client(response, { onUnauthenticated })
+        .api.request('POST', '/admin/auth/login')
+        .catch(() => undefined);
+    }
+    expect(onUnauthenticated).not.toHaveBeenCalled();
+    const err = await client(() => problemResponse(401, 'unauthenticated'))
+      .api.request('GET', '/x')
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiProblem);
+  });
+});
+
+describe('recoverCsrf', () => {
+  it('retries an unsafe request once with the refreshed token', async () => {
+    let token = 'old';
+    const responses = [problemResponse(403, 'csrf-invalid'), jsonResponse(200, { ok: true })];
+    const recoverCsrf = vi.fn(async () => {
+      token = 'new';
+      return true;
+    });
+    const { fetch, api } = client(() => responses.shift() as Response, {
+      csrfToken: () => token,
+      recoverCsrf,
+    });
+    const res = await api.request<{ ok: boolean }>('POST', '/admin/tenants', { body: { name: 'A' } });
+    expect(res.data.ok).toBe(true);
+    expect(recoverCsrf).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((call(fetch, 0)[1].headers as Headers).get('X-CSRF-Token')).toBe('old');
+    expect((call(fetch, 1)[1].headers as Headers).get('X-CSRF-Token')).toBe('new');
+    expect(call(fetch, 1)[1].body).toBe('{"name":"A"}');
+  });
+
+  it('re-sends a Blob body on the retry', async () => {
+    const responses = [problemResponse(403, 'csrf-invalid'), new Response(null, { status: 204 })];
+    const { fetch, api } = client(() => responses.shift() as Response, { recoverCsrf: async () => true });
+    const image = new Blob(['x'], { type: 'image/jpeg' });
+    await api.request('PUT', '/x', { body: image });
+    expect(call(fetch, 1)[1].body).toBe(image);
+  });
+
+  it('never retries twice', async () => {
+    const recoverCsrf = vi.fn(async () => true);
+    const { fetch, api } = client(() => problemResponse(403, 'csrf-invalid'), { recoverCsrf });
+    const err = (await api.request('DELETE', '/x').catch((e: unknown) => e)) as ApiProblem;
+    expect(err.code).toBe('csrf-invalid');
+    expect(recoverCsrf).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws the problem when recovery fails or rejects', async () => {
+    for (const recoverCsrf of [async () => false, async () => Promise.reject(new Error('x'))]) {
+      const { fetch, api } = client(() => problemResponse(403, 'csrf-invalid'), { recoverCsrf });
+      const err = (await api.request('PATCH', '/x', { body: {} }).catch((e: unknown) => e)) as ApiProblem;
+      expect(err.code).toBe('csrf-invalid');
+      expect(fetch).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('is not used for safe methods, other problems or without a hook', async () => {
+    const recoverCsrf = vi.fn(async () => true);
+    await client(() => problemResponse(403, 'csrf-invalid'), { recoverCsrf })
+      .api.request('GET', '/x')
+      .catch(() => undefined);
+    await client(() => problemResponse(403, 'forbidden'), { recoverCsrf })
+      .api.request('POST', '/x')
+      .catch(() => undefined);
+    expect(recoverCsrf).not.toHaveBeenCalled();
+    const { fetch, api } = client(() => problemResponse(403, 'csrf-invalid'));
+    await api.request('POST', '/x').catch(() => undefined);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('reports a 401 of the retried request', async () => {
+    const responses = [problemResponse(403, 'csrf-invalid'), problemResponse(401, 'unauthenticated')];
+    const onUnauthenticated = vi.fn();
+    const { api } = client(() => responses.shift() as Response, {
+      recoverCsrf: async () => true,
+      onUnauthenticated,
+    });
+    const err = (await api.request('POST', '/x').catch((e: unknown) => e)) as ApiProblem;
+    expect(err.status).toBe(401);
+    expect(onUnauthenticated).toHaveBeenCalledOnce();
+  });
+});
+
+describe('optional request bodies', () => {
+  it('may omit or pass the body of an operation whose body is optional', async () => {
+    const { fetch, api } = client(() => jsonResponse(200, { secret: 'S', otpauthUri: 'u', qrCodePng: 'q' }));
+    await api.post('/admin/me/totp');
+    expect(call(fetch, 0)[1].body).toBeNull();
+    await api.post('/admin/me/totp', { body: { currentPassword: 'p' } });
+    expect(call(fetch, 1)[1].body).toBe('{"currentPassword":"p"}');
+  });
+});

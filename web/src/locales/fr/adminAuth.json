@@ -1,0 +1,194 @@
+{
+  "password": {
+    "rules": "Au moins 12 caractères. Les mots de passe trop courants sont refusés. Une phrase de passe est facile à retenir et difficile à deviner.",
+    "confirm": "Confirmez le mot de passe",
+    "mismatch": "Les deux mots de passe ne sont pas identiques.",
+    "tooShort": "Le mot de passe doit comporter au moins 12 caractères.",
+    "rejected": "Ce mot de passe n’est pas accepté : il est trop court ou trop courant. Choisissez-en un autre."
+  },
+  "stepTimeout": "Cette étape doit être terminée dans les 5 minutes. Si vous rechargez la page, vous devrez recommencer depuis le début.",
+  "setup": {
+    "title": "Initialisation de TransTeira",
+    "intro": "Créez le compte du super administrateur. Ce compte gère toutes les entités et tous les administrateurs. La double authentification sera configurée juste après.",
+    "username": {
+      "label": "Identifiant",
+      "hint": "De 3 à 64 caractères : lettres minuscules, chiffres, point, tiret ou tiret bas. Commence par une lettre ou un chiffre."
+    },
+    "email": {
+      "label": "Adresse électronique",
+      "hint": "Elle reçoit les alertes du super administrateur, par exemple l’alerte d’espace disque."
+    },
+    "password": {
+      "label": "Mot de passe"
+    },
+    "setupToken": {
+      "label": "Jeton d’initialisation",
+      "hint": "Il protège cette page jusqu’à la création du premier compte. S’il n’a pas été défini par la variable TT_SETUP_TOKEN ou TT_SETUP_TOKEN_FILE, TransTeira l’a généré au démarrage et l’a écrit dans son journal (commande docker logs)."
+    },
+    "submit": "Créer le super administrateur",
+    "submitting": "Création du compte…",
+    "tokenInvalid": "Le jeton d’initialisation n’est pas valide. Vérifiez-le dans le journal du serveur ou dans la variable TT_SETUP_TOKEN.",
+    "alreadyDone": "L’initialisation a déjà été effectuée. Connectez-vous avec le compte existant.",
+    "nextStep": "Compte créé. Configurez maintenant la double authentification.",
+    "done": "Initialisation terminée. Bienvenue dans l’administration."
+  },
+  "login": {
+    "title": "Connexion à l’administration",
+    "intro": "Saisissez votre identifiant et votre mot de passe.",
+    "username": {
+      "label": "Identifiant"
+    },
+    "password": {
+      "label": "Mot de passe"
+    },
+    "submit": "Se connecter",
+    "submitting": "Connexion…",
+    "invalid": "L’identifiant ou le mot de passe n’est pas correct.",
+    "locked": {
+      "one": "Trop d’essais infructueux. Réessayez dans {count} seconde.",
+      "other": "Trop d’essais infructueux. Réessayez dans {count} secondes."
+    },
+    "lockedMinutes": {
+      "one": "Trop d’essais infructueux. Réessayez dans {count} minute.",
+      "other": "Trop d’essais infructueux. Réessayez dans {count} minutes."
+    },
+    "lockedNoDelay": "Trop d’essais infructueux. Réessayez plus tard.",
+    "forgotten": "Mot de passe ou appareil d’authentification perdu ? Demandez à un super administrateur de réinitialiser vos accès."
+  },
+  "totp": {
+    "title": "Double authentification",
+    "intro": "Saisissez le code à 6 chiffres affiché par votre application d’authentification.",
+    "code": {
+      "label": "Code d’authentification",
+      "hint": "6 chiffres, renouvelés toutes les 30 secondes"
+    },
+    "recoveryCode": {
+      "label": "Code de secours",
+      "hint": "L’un des codes de secours enregistrés lors de la configuration. Chaque code ne sert qu’une fois."
+    },
+    "recoveryIntro": "Saisissez l’un de vos codes de secours.",
+    "useRecovery": "Utiliser un code de secours",
+    "useTotp": "Utiliser l’application d’authentification",
+    "submit": "Vérifier",
+    "submitting": "Vérification…",
+    "invalid": "Le code n’est pas correct.",
+    "attemptsRemaining": {
+      "one": "Il vous reste {count} essai.",
+      "other": "Il vous reste {count} essais."
+    },
+    "locked": {
+      "one": "Trop d’essais infructueux. Réessayez dans {count} seconde.",
+      "other": "Trop d’essais infructueux. Réessayez dans {count} secondes."
+    },
+    "lockedMinutes": {
+      "one": "Trop d’essais infructueux. Réessayez dans {count} minute.",
+      "other": "Trop d’essais infructueux. Réessayez dans {count} minutes."
+    },
+    "format": "Le code est composé de 6 chiffres.",
+    "cancel": "Annuler et revenir à la connexion"
+  },
+  "enroll": {
+    "title": "Configurer la double authentification",
+    "intro": "La double authentification protège votre compte même si votre mot de passe est compromis.",
+    "requiredIntro": "La double authentification est obligatoire pour votre compte. Configurez-la pour continuer.",
+    "step1": "Installez une application d’authentification sur votre téléphone ou votre ordinateur (par exemple une application compatible TOTP ou votre gestionnaire de mots de passe).",
+    "step2": "Scannez le QR code ci-dessous, ou saisissez la clé manuellement.",
+    "step3": "Saisissez le code à 6 chiffres affiché par l’application pour confirmer.",
+    "qrAlt": "QR code de configuration de la double authentification. Si vous ne pouvez pas le scanner, utilisez la clé affichée en dessous.",
+    "qrUnavailable": "Le QR code n’a pas pu être affiché. Saisissez la clé manuellement dans votre application.",
+    "manualKey": {
+      "label": "Clé de configuration",
+      "hint": "Saisissez-la sans les espaces si votre application le demande. Type : basé sur le temps (TOTP).",
+      "copy": "Copier la clé"
+    },
+    "account": "Compte",
+    "issuer": "Émetteur",
+    "code": {
+      "label": "Code de confirmation",
+      "hint": "6 chiffres affichés par votre application"
+    },
+    "submit": "Activer la double authentification",
+    "submitting": "Activation…",
+    "invalid": "Le code n’est pas correct. Vérifiez l’heure de votre appareil, puis saisissez le nouveau code.",
+    "expired": "La configuration a expiré. Recommencez pour obtenir une nouvelle clé.",
+    "restart": "Recommencer",
+    "success": "La double authentification est activée."
+  },
+  "recovery": {
+    "title": "Codes de secours",
+    "intro": "Ces codes vous permettent de vous connecter si vous perdez l’accès à votre application d’authentification. Chaque code ne peut servir qu’une seule fois.",
+    "shownOnce": "Ils ne seront plus jamais affichés. Enregistrez-les maintenant dans un endroit sûr, par exemple votre gestionnaire de mots de passe.",
+    "listLabel": "Vos codes de secours",
+    "copyAll": "Copier tous les codes",
+    "download": "Télécharger (fichier texte)",
+    "fileName": "transteira-codes-de-secours.txt",
+    "fileHeader": "Codes de secours TransTeira pour le compte {username}. Chaque code ne sert qu’une fois.",
+    "fileHeaderGeneric": "Codes de secours TransTeira. Chaque code ne sert qu’une fois.",
+    "announced": "Vos codes de secours sont affichés. Enregistrez-les avant de continuer.",
+    "acknowledge": "J’ai enregistré ces codes de secours dans un endroit sûr.",
+    "acknowledgeRequired": "Confirmez que vous avez enregistré vos codes de secours.",
+    "continue": "Continuer",
+    "leaveConfirm": {
+      "title": "Quitter sans avoir enregistré vos codes de secours ?",
+      "text": "Ils ne seront plus jamais affichés. Sans eux, la perte de votre application d’authentification vous empêchera d’accéder à votre compte."
+    }
+  },
+  "activation": {
+    "title": "Activation de votre compte",
+    "intro": "Choisissez le mot de passe de votre compte d’administration.",
+    "password": {
+      "label": "Nouveau mot de passe"
+    },
+    "submit": "Définir le mot de passe",
+    "submitting": "Enregistrement…",
+    "invalidLink": {
+      "title": "Lien d’activation invalide",
+      "text": "Ce lien d’activation n’est pas valide, a déjà été utilisé ou a expiré. Demandez-en un nouveau à un super administrateur."
+    },
+    "goToLogin": "Aller à la connexion"
+  },
+  "account": {
+    "title": "Mon compte",
+    "profile": {
+      "title": "Profil",
+      "username": "Identifiant",
+      "email": "Adresse électronique",
+      "role": "Rôle",
+      "tenants": "Entités",
+      "allTenants": "Toutes les entités"
+    },
+    "password": {
+      "title": "Changer de mot de passe",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "submit": "Changer le mot de passe",
+      "submitting": "Changement…",
+      "success": "Votre mot de passe a été changé.",
+      "otherSessions": "Vos autres sessions ouvertes seront fermées. Cette session reste active.",
+      "currentInvalid": "Le mot de passe actuel n’est pas correct."
+    },
+    "totp": {
+      "title": "Double authentification",
+      "enabled": "Activée",
+      "disabled": "Désactivée",
+      "status": "État : {status}",
+      "currentPassword": "Mot de passe actuel",
+      "reenroll": {
+        "title": "Changer d’appareil d’authentification",
+        "text": "Configurez une nouvelle application d’authentification. L’ancienne cessera de fonctionner et de nouveaux codes de secours remplaceront les précédents.",
+        "action": "Configurer un nouvel appareil",
+        "enableAction": "Activer la double authentification",
+        "confirmText": "Saisissez votre mot de passe actuel pour continuer."
+      },
+      "disable": {
+        "title": "Désactiver la double authentification",
+        "text": "Votre compte ne sera plus protégé que par votre mot de passe. Vos codes de secours seront supprimés.",
+        "action": "Désactiver",
+        "confirmTitle": "Désactiver la double authentification ?",
+        "confirmText": "Saisissez votre mot de passe actuel pour confirmer.",
+        "success": "La double authentification est désactivée.",
+        "forbidden": "La double authentification est obligatoire pour votre compte : elle ne peut pas être désactivée."
+      }
+    }
+  }
+}

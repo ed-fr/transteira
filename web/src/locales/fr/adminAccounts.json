@@ -1,0 +1,115 @@
+{
+  "list": {
+    "title": "Administrateurs",
+    "intro": "Comptes ayant accès à l’administration. Un administrateur délégué ne gère que les entités qui lui sont rattachées.",
+    "caption": "Liste des administrateurs",
+    "columns": {
+      "username": "Identifiant",
+      "email": "Adresse électronique",
+      "role": "Rôle",
+      "tenants": "Entités",
+      "totp": "Double authentification",
+      "status": "Statut",
+      "lastLogin": "Dernière connexion",
+      "actions": "Actions"
+    },
+    "create": "Créer un administrateur",
+    "empty": "Aucun administrateur.",
+    "never": "Jamais",
+    "you": "(vous)",
+    "allTenants": "Toutes les entités",
+    "noTenant": "Aucune entité",
+    "edit": "Modifier {username}"
+  },
+  "status": {
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "pendingActivation": "En attente d’activation"
+  },
+  "totp": {
+    "enabled": "Activée",
+    "disabled": "Non activée",
+    "required": "Obligatoire"
+  },
+  "form": {
+    "createTitle": "Créer un administrateur délégué",
+    "createIntro": "Le compte est créé sans mot de passe. Un lien d’activation à usage unique vous sera remis pour que la personne choisisse son mot de passe.",
+    "editTitle": "Modifier l’administrateur {username}",
+    "username": {
+      "label": "Identifiant",
+      "hint": "De 3 à 64 caractères : lettres minuscules, chiffres, point, tiret ou tiret bas. Ne peut plus être modifié ensuite.",
+      "taken": "Cet identifiant est déjà utilisé."
+    },
+    "email": {
+      "label": "Adresse électronique",
+      "hint": "Elle reçoit les alertes de quota des entités rattachées."
+    },
+    "role": {
+      "label": "Rôle",
+      "hint": "Un super administrateur gère toutes les entités et tous les comptes."
+    },
+    "tenants": {
+      "legend": "Entités rattachées",
+      "hint": "L’administrateur délégué ne voit et ne gère que ces entités.",
+      "required": "Sélectionnez au moins une entité."
+    },
+    "requireTotp": {
+      "label": "Exiger la double authentification",
+      "hint": "Recommandé. L’administrateur devra la configurer à sa première connexion et ne pourra pas la désactiver."
+    },
+    "disabled": {
+      "label": "Compte désactivé",
+      "hint": "Un compte désactivé ne peut plus se connecter ; ses sessions ouvertes sont fermées."
+    },
+    "submitCreate": "Créer l’administrateur",
+    "save": "Enregistrer",
+    "created": "L’administrateur {username} a été créé.",
+    "saved": "Les modifications ont été enregistrées.",
+    "createLegend": "Informations du compte",
+    "editLegend": "Paramètres du compte"
+  },
+  "promotion": {
+    "hint": "Seul un compte activé, avec la double authentification configurée, peut devenir super administrateur. Ses rattachements aux entités sont alors retirés, puisqu’un super administrateur a accès à toutes les entités.",
+    "demoteHint": "Pour rétrograder un super administrateur, sélectionnez les entités qui lui seront rattachées."
+  },
+  "activationLink": {
+    "title": "Lien d’activation",
+    "intro": "Transmettez ce lien à {username} pour qu’il ou elle choisisse son mot de passe.",
+    "shownOnce": "Ce lien n’est affiché qu’une seule fois et n’est envoyé par aucun mail. Copiez-le maintenant.",
+    "label": "Lien d’activation",
+    "copy": "Copier le lien",
+    "expires": "Valable jusqu’au {date}.",
+    "warning": "Transmettez-le par un autre canal que la messagerie habituelle (par exemple de vive voix, par messagerie instantanée ou par téléphone) : toute personne qui l’obtient peut définir le mot de passe du compte.",
+    "done": "J’ai transmis le lien",
+    "leaveConfirm": {
+      "title": "Quitter sans copier le lien ?",
+      "text": "Vous n’avez pas copié le lien d’activation. Il ne pourra plus être affiché : il faudra réinitialiser les accès pour en obtenir un nouveau."
+    }
+  },
+  "reset": {
+    "action": "Réinitialiser les accès…",
+    "confirmTitle": "Réinitialiser les accès de {username} ?",
+    "confirmText": "Le mot de passe, la double authentification et les codes de secours du compte sont effacés, et ses sessions sont fermées. Un nouveau lien d’activation vous sera remis.",
+    "confirmAction": "Réinitialiser",
+    "done": "Les accès de {username} ont été réinitialisés."
+  },
+  "delete": {
+    "action": "Supprimer…",
+    "confirmTitle": "Supprimer l’administrateur {username} ?",
+    "confirmText": "Le compte et ses sessions seront supprimés définitivement. Les journaux d’audit conservent la trace de ses actions.",
+    "confirmAction": "Supprimer définitivement",
+    "done": "L’administrateur {username} a été supprimé."
+  },
+  "ownAccountNote": "C’est votre propre compte : vous ne pouvez ni le supprimer, ni le désactiver, ni le rétrograder, ni réinitialiser ses accès. Gérez votre mot de passe et votre double authentification depuis la page Mon compte.",
+  "errors": {
+    "lastSuperAdmin": "Impossible : ce compte est le dernier super administrateur utilisable. Créez ou promouvez d’abord un autre super administrateur.",
+    "ownAccount": "Impossible sur votre propre compte : vous perdriez l’accès à l’administration.",
+    "notPromotable": "Ce compte ne peut pas devenir super administrateur : il doit être activé et avoir configuré la double authentification.",
+    "accountDisabled": "Ce compte est désactivé : réactivez-le avant de réinitialiser ses accès.",
+    "conflict": "Cette action n’est pas possible pour ce compte dans son état actuel. Rechargez la page puis réessayez."
+  },
+  "notFound": {
+    "title": "Administrateur introuvable",
+    "text": "Ce compte administrateur n’existe pas ou a été supprimé."
+  }
+}

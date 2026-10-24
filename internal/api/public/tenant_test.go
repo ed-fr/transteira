@@ -214,8 +214,7 @@ func TestGetTenantLegalDocument(t *testing.T) {
 	t.Parallel()
 	updated := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	svc := &fakeTenantConfig{legal: tenantadmin.PublicLegalDocument{
-		LegalDocument: tenantadmin.LegalDocument{Document: "privacy-policy", Language: "fr", Markdown: "# Politique", UpdatedAt: updated},
-		HTML:          "<h2>Politique</h2>\n",
+		LegalDocument: tenantadmin.LegalDocument{Document: "privacy-policy", Language: "fr", Markdown: "# Politique", UpdatedAt: updated, HTML: "<h2>Politique</h2>\n"},
 	}}
 	s := NewServer(WithTenantService(svc))
 	accept := "en"

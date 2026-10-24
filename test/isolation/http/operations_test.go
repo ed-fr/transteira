@@ -154,6 +154,7 @@ var isolationCases = map[string]isolationCase{
 	"updateBranding":        adminTenantOp,
 	"uploadBrandingAsset":   adminTenantOp,
 	"deleteBrandingAsset":   adminTenantOp,
+	"getBrandingAsset":      adminBrandingAsset,
 	"getNetworkRules":       adminTenantOp,
 	"updateNetworkRules":    adminTenantOp,
 	"getSmtpSettings":       adminTenantOp,

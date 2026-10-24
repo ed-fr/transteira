@@ -1,0 +1,480 @@
+{
+  "list": {
+    "title": "Entities",
+    "intro": "Each entity has its own address, branding and configuration.",
+    "caption": "List of entities",
+    "columns": {
+      "name": "Name",
+      "fqdn": "Address (FQDN)",
+      "status": "Status",
+      "quota": "Storage used",
+      "language": "Default language",
+      "actions": "Actions"
+    },
+    "quotaUsage": "{used} of {quota} ({percent}%)",
+    "empty": "No entity yet.",
+    "emptyDelegated": "No entity is attached to your account. Contact a super administrator.",
+    "create": "Create an entity",
+    "configure": "Configure {name}"
+  },
+  "status": {
+    "active": "Active",
+    "deleting": "Deletion in progress"
+  },
+  "nav": {
+    "general": "General",
+    "branding": "Branding",
+    "network": "Network",
+    "smtp": "Mail (SMTP)",
+    "templates": "Email templates",
+    "legal": "Legal information"
+  },
+  "fields": {
+    "name": {
+      "label": "Entity name",
+      "hint": "Shown on the public pages and in the emails. At most 100 characters."
+    },
+    "fqdn": {
+      "label": "Address (FQDN)",
+      "hint": "Fully qualified domain name of the public pages of the entity, for example transfer.entity-a.example.com. It must point to the reverse proxy.",
+      "taken": "This address is already used by another entity.",
+      "reserved": "This address is reserved for the administration and cannot be given to an entity."
+    },
+    "defaultLanguage": {
+      "label": "Default language",
+      "hint": "Used when the browser language is not available, and for the emails."
+    },
+    "storageQuota": {
+      "label": "Storage quota",
+      "hint": "Total space the transfers of the entity may use. New deposits are blocked when it is reached."
+    },
+    "maxTransfer": {
+      "label": "Maximum size per transfer",
+      "hint": "Total of the files of a transfer. At most 20 GB.",
+      "hintCeiling": "Total of the files of a transfer. At most {ceiling}, the ceiling set by the super administrator.",
+      "aboveCeiling": "The size cannot exceed the ceiling of {ceiling}.",
+      "followsCeiling": "Total of the files of a transfer. It will be lowered to the new ceiling of {ceiling} when you save."
+    },
+    "maxTransferCeiling": {
+      "label": "Ceiling of the size per transfer",
+      "hint": "Largest value the delegated administrators may choose for the size per transfer. Lowering it below the current size lowers that size too."
+    }
+  },
+  "create": {
+    "title": "Create an entity",
+    "intro": "The other settings (branding, network, mail, templates) are configured once the entity is created.",
+    "submit": "Create the entity",
+    "created": "The entity {name} has been created.",
+    "legend": "Entity details"
+  },
+  "general": {
+    "title": "General",
+    "delegatedNote": "A delegated administrator can only change the default language and the maximum size per transfer. The other settings are managed by the super administrator.",
+    "saved": "The general settings have been saved.",
+    "storage": "Storage used: {used} of {quota} ({percent}%)",
+    "deletingBanner": "This entity is being deleted. The deletion resumes automatically if it was interrupted.",
+    "delete": {
+      "title": "Delete the entity",
+      "text": "Deletion permanently erases every transfer, file, verified address, invitation, API token and setting of the entity. This cannot be undone.",
+      "action": "Delete the entity…",
+      "confirmTitle": "Delete the entity {name}?",
+      "confirmText": "Every transfer and all the data of the entity will be permanently erased. Files already backed up will become unreadable.",
+      "confirmAction": "Delete permanently",
+      "done": "The entity {name} has been deleted.",
+      "resumes": "The deletion could not be completed. It will resume automatically: until then, the entity stays marked as “deletion in progress”."
+    },
+    "legend": "Entity settings"
+  },
+  "branding": {
+    "title": "Branding",
+    "intro": "Logo, colors and background image of the public pages of the entity.",
+    "saved": "The colors have been saved.",
+    "colors": {
+      "title": "Colors",
+      "primary": {
+        "label": "Primary color",
+        "hint": "Buttons and active elements."
+      },
+      "accent": {
+        "label": "Accent color",
+        "hint": "Links and secondary elements."
+      },
+      "picker": "Color picker: {label}",
+      "hex": "Hexadecimal code: {label}",
+      "hexHint": "Format #RRGGBB, for example #1A5FB4.",
+      "invalid": "Enter a color in the #RRGGBB format."
+    },
+    "contrast": {
+      "title": "Contrast",
+      "intro": "The contrast ratio must reach at least 4.5:1 (level AA) for the texts to stay readable (RGAA).",
+      "pair": {
+        "primary-on-light": "Primary color on light background",
+        "accent-on-light": "Accent color on light background",
+        "text-on-primary": "Text on the primary color"
+      },
+      "level": {
+        "AAA": "AAA (excellent)",
+        "AA": "AA (sufficient)",
+        "fail": "Insufficient"
+      },
+      "ratio": "{ratio}:1",
+      "result": "{pair}: {ratio}:1, {level}",
+      "warning": "At least one color does not offer sufficient contrast. The texts may be hard to read. You can still save.",
+      "serverNote": "The server check, shown after saving, is authoritative."
+    },
+    "preview": {
+      "label": "Preview of the public page",
+      "heading": "Send files",
+      "text": "Drop your files and share them securely.",
+      "link": "Sample link",
+      "button": "Send"
+    },
+    "image": {
+      "current": "Saved image",
+      "localPreview": "Preview of the chosen image",
+      "none": "No image saved.",
+      "choose": "Choose an image",
+      "upload": "Upload the image",
+      "uploading": "Uploading…",
+      "uploaded": "The image has been saved.",
+      "delete": "Delete the image",
+      "deleteConfirmTitle": "Delete this image?",
+      "deleteConfirmText": "The image will be removed from the public pages of the entity.",
+      "deleted": "The image has been deleted.",
+      "types": "Accepted formats: PNG, JPEG or WebP. Maximum size: {size}.",
+      "badType": "This format is not accepted. Choose a PNG, JPEG or WebP image.",
+      "tooLarge": "The image exceeds the maximum size of {size}.",
+      "tooLargeServer": "The image file or its dimensions are too large.",
+      "unsupportedServer": "The server did not recognize this file as a PNG, JPEG or WebP image."
+    },
+    "logo": {
+      "title": "Logo",
+      "hint": "Shown at the top of the public pages.",
+      "alt": "Logo of the entity"
+    },
+    "background": {
+      "title": "Background image",
+      "hint": "Shown full screen behind the deposit area. Without an image, the default image is used.",
+      "alt": "Background image of the entity"
+    }
+  },
+  "network": {
+    "title": "Network",
+    "intro": "A user is internal when their IP address belongs to a range below and their email address belongs to a domain below. Only internal users can deposit freely and send invitations.",
+    "cidrs": {
+      "label": "Internal IP address ranges",
+      "hint": "One range per line, in CIDR notation, for example 192.0.2.0/24 or 2001:db8::/32."
+    },
+    "domains": {
+      "label": "Internal email domains",
+      "hint": "One domain per line, for example entity-a.example.com."
+    },
+    "errors": {
+      "cidr": {
+        "syntax": "Not a valid IP address or CIDR range (for example 192.0.2.0/24 or 2001:db8::/32).",
+        "zone": "IPv6 zone identifiers (%…) are not allowed.",
+        "prefixRange": "The prefix length is too large: at most /32 for IPv4 and /128 for IPv6.",
+        "hostBits": "The address has host bits set: enter the network address of the range.",
+        "hostBitsSuggestion": "The address has host bits set: the matching range is {network}."
+      },
+      "domain": {
+        "syntax": "Not a valid domain name: enter the domain alone, without spaces, @, :, / or brackets.",
+        "ipLiteral": "An IP address is not a mail domain.",
+        "trailingDot": "Remove the trailing dot.",
+        "trailingDotSuggestion": "Remove the trailing dot: {domain}.",
+        "idn": "This international domain name cannot be converted to its ASCII (punycode) form.",
+        "tooLong": "The domain name is longer than 253 characters.",
+        "singleLabel": "The domain must contain at least one dot, for example example.com.",
+        "label": "Each part of the domain may contain only letters, digits and inner hyphens, 63 characters at most.",
+        "tld": "The last part of the domain (top-level domain) must have at least two letters."
+      }
+    },
+    "warnings": {
+      "emptyCidrs": "No IP range: nobody will be considered internal, and only invitations will allow deposits.",
+      "emptyDomains": "No domain: nobody will be considered internal, and only invitations will allow deposits.",
+      "catchAll": "The range {range} covers every IP address: any user of an internal domain will be able to deposit from anywhere."
+    },
+    "saved": "The network settings have been saved.",
+    "normalized": "The server normalized some values. The lists shown are the saved ones.",
+    "form": {
+      "title": "Internal ranges and domains"
+    }
+  },
+  "smtp": {
+    "title": "Mail (SMTP)",
+    "intro": "Server through which the entity sends its emails (verification codes, notifications, invitations, alerts).",
+    "notConfigured": "Mail is not configured yet: the entity cannot send any email.",
+    "host": {
+      "label": "SMTP server",
+      "hint": "Host name or IP address, for example smtp.example.com or smtp-relay."
+    },
+    "port": {
+      "label": "Port",
+      "suggested": "Usual port for this mode: {port}.",
+      "useSuggested": "Use port {port}"
+    },
+    "security": {
+      "label": "Connection security",
+      "none": "None (relay on an internal network)",
+      "starttls": "STARTTLS (usually port 587)",
+      "tls": "Implicit TLS (usually port 465)",
+      "noneHint": "No encryption: only for a relay reachable through the internal Docker network alone."
+    },
+    "username": {
+      "label": "Username",
+      "hint": "Leave empty for a relay without authentication.",
+      "requiredWithPassword": "Enter the username that goes with the password.",
+      "needsSecurity": "Authentication requires STARTTLS or TLS: choose one of them, or remove the username."
+    },
+    "password": {
+      "label": "Password",
+      "set": "A password is saved.",
+      "mode": "SMTP password",
+      "keep": "Keep the saved password",
+      "replace": "Replace the password",
+      "remove": "Remove the password",
+      "new": "New password",
+      "reenter": "The server, port or username has changed: enter the password again, or remove it.",
+      "encrypted": "The password is encrypted in the database and never shown again."
+    },
+    "fromAddress": {
+      "label": "Sender address",
+      "hint": "Address used in the “From” field of the emails, for example transfer@entity-a.example.com."
+    },
+    "fromName": {
+      "label": "Sender name",
+      "hint": "Optional. Defaults to the name of the entity."
+    },
+    "warnings": {
+      "credentialsOverNone": "Authentication is refused without encryption: the credentials would travel in clear. Choose STARTTLS or TLS, or remove the username for a relay without authentication."
+    },
+    "saved": "The SMTP settings have been saved.",
+    "test": {
+      "title": "Test email",
+      "intro": "Sends a test email with the saved settings. Save your changes first.",
+      "to": {
+        "label": "Recipient address",
+        "hint": "The address that will receive the test email."
+      },
+      "submit": "Send a test email",
+      "sending": "Sending the test email…",
+      "success": "The test email was accepted by the server in {duration} ms.",
+      "failure": "The test email could not be sent.",
+      "stageReached": "Stage: {stage}",
+      "duration": "Duration: {duration} ms",
+      "rateLimited": {
+        "one": "Too many test emails. Try again in {count} second.",
+        "other": "Too many test emails. Try again in {count} seconds."
+      },
+      "stage": {
+        "settings": "Reading the settings",
+        "connect": "Connecting to the server",
+        "tls": "TLS handshake",
+        "greeting": "Server greeting",
+        "starttls": "Switching to STARTTLS",
+        "auth": "Authentication",
+        "envelope": "Sender and recipient",
+        "data": "Sending the message",
+        "done": "Done",
+        "unknown": "Unknown stage"
+      },
+      "serverMessage": "Server message:"
+    },
+    "dns": {
+      "title": "DNS check (SPF, DKIM, DMARC)",
+      "intro": "Indicative check of the DNS records of the sender address domain. Without them, the emails may be classified as spam.",
+      "selectors": {
+        "label": "DKIM selectors",
+        "hint": "Selectors cannot be discovered automatically: enter up to 5, separated by commas (for example selector1, selector2 for Microsoft 365)."
+      },
+      "submit": "Check the DNS",
+      "checking": "Checking…",
+      "domain": "Domain checked: {domain}",
+      "spf": "SPF",
+      "dkim": "DKIM",
+      "dmarc": "DMARC",
+      "status": {
+        "ok": "Correct",
+        "warning": "To be checked",
+        "missing": "Missing",
+        "error": "Check failed"
+      },
+      "selectorFound": "Selector {selector}: key found",
+      "selectorMissing": "Selector {selector}: no key",
+      "noSelectors": "No selector checked.",
+      "notConfigured": "Save a sender address first to check its domain.",
+      "columns": {
+        "check": "Check",
+        "status": "Result",
+        "record": "Record found",
+        "details": "Details"
+      }
+    },
+    "form": {
+      "title": "Server and sender"
+    }
+  },
+  "templates": {
+    "title": "Email templates",
+    "intro": "Customize the emails sent by the entity, for each language. A template that is not customized uses the default text.",
+    "caption": "Email templates",
+    "columns": {
+      "template": "Template"
+    },
+    "customized": "Customized",
+    "default": "Default",
+    "edit": "Edit the template {template} ({language})",
+    "key": {
+      "verification-code": "Verification code",
+      "transfer-notification": "Transfer notification",
+      "transfer-confirmation": "Transfer confirmation",
+      "first-download": "First download receipt",
+      "file-problems": "Infected or withheld file",
+      "file-not-scanned": "File not scanned",
+      "invitation": "External invitation",
+      "quota-warning": "Quota alert (80%)",
+      "quota-reached": "Quota reached",
+      "antivirus-unavailable": "Antivirus unavailable"
+    },
+    "keyDescription": {
+      "verification-code": "Sent to the sender to verify their address.",
+      "transfer-notification": "Sent to the recipients with the download link.",
+      "transfer-confirmation": "Sent to the sender once the transfer is available.",
+      "first-download": "Sent to the sender at the first download.",
+      "file-problems": "Sent to the sender when a file is infected or withheld.",
+      "file-not-scanned": "Sent to the sender when a file could not be scanned.",
+      "invitation": "Sent to the external person invited to deposit.",
+      "quota-warning": "Sent to the delegated administrators at 80% of the quota.",
+      "quota-reached": "Sent to the delegated administrators when the quota is reached.",
+      "antivirus-unavailable": "Sent when the antivirus stops responding."
+    },
+    "editor": {
+      "title": "{template} ({language})",
+      "formTitle": "Content of the template",
+      "text": {
+        "hint": "Plain text version, read by the mail clients that do not display HTML."
+      },
+      "syntax": "Variables are written between double braces, for example {example}.",
+      "save": "Save the template",
+      "saved": "The template has been saved.",
+      "back": "Back to the templates"
+    },
+    "variables": {
+      "title": "Available variables",
+      "intro": "Click a variable to insert it at the cursor position, in the last field used.",
+      "insert": "Insert {name}",
+      "required": "required",
+      "requiredNote": "Required variables must appear in the template.",
+      "description": {
+        "tenant_name": "Name of the entity.",
+        "code": "One-time verification code (6 digits).",
+        "validity_minutes": "Lifetime of the code, in minutes.",
+        "inviter_email": "Address of the internal user who sends the invitation.",
+        "message": "Message of the sender or of the inviter, quoted; empty when there is none.",
+        "invitation_link": "Invitation link.",
+        "expiry_date": "Date when the unused invitation expires.",
+        "sender_email": "Address of the sender.",
+        "download_link": "Download link.",
+        "expiry_datetime": "Date and time when the transfer expires.",
+        "password_notice": "Notice that the password comes through another channel; empty without password.",
+        "qr_code": "QR code of the download link (HTML only; empty in the text body).",
+        "files": "List of the files.",
+        "file_count": "Number of files.",
+        "recipients": "List of the recipients.",
+        "withheld_files": "Files withheld because they could not be scanned; empty when there is none.",
+        "infected_files": "Infected files, deleted, with the detected threat; empty when there is none.",
+        "problem_summary": "Short summary for the subject (infected file deleted, or file withheld).",
+        "outcome": "Whether the other files were sent or the whole transfer was rejected.",
+        "advice": "What to do next.",
+        "download_datetime": "Date and time of the first complete download.",
+        "deletion_notice": "When the transfer will be erased, or that this notice is sent only once.",
+        "usage_percent": "Share used, with the percent sign, rounded down.",
+        "threshold_percent": "Alert threshold, with the percent sign.",
+        "used_size": "Space used.",
+        "quota_size": "Storage quota of the entity.",
+        "total_size": "Size of the disk of the data directory.",
+        "admin_link": "Link to the administration."
+      },
+      "inserted": "{name} inserted in the field {field}."
+    },
+    "warnings": {
+      "missing": {
+        "one": "Required variable missing: {names}.",
+        "other": "Required variables missing: {names}."
+      },
+      "unknown": {
+        "one": "Unknown variable: {names}. It will not be replaced.",
+        "other": "Unknown variables: {names}. They will not be replaced."
+      }
+    },
+    "serverError": {
+      "title": "The template contains errors",
+      "notSaved": "The template was not saved: correct the errors listed below.",
+      "location": "{part}, line {line}, column {column}:",
+      "noLocation": "{part}:",
+      "goTo": "Go to the error ({part}, line {line})",
+      "note": "The error messages of the server are written in English."
+    },
+    "part": {
+      "subject": "Subject",
+      "html": "HTML body",
+      "text": "Text body"
+    },
+    "preview": {
+      "title": "Preview",
+      "action": "Preview",
+      "loading": "Preparing the preview…",
+      "intro": "Preview with sample data.",
+      "subject": "Subject: {subject}",
+      "html": "HTML version",
+      "text": "Text version",
+      "note": "The inline styles of the templates, default or customized, are not applied in this preview, and links are disabled. The email received will show them normally.",
+      "linkDisabled": "Link disabled in the preview"
+    },
+    "reset": {
+      "action": "Restore the default template",
+      "confirmTitle": "Restore the default template?",
+      "confirmText": "Your customization of this template in this language will be permanently deleted.",
+      "confirmAction": "Restore the default template",
+      "done": "The default template has been restored.",
+      "reloadFailed": "The default template has been restored, but it could not be loaded again: {message}",
+      "retry": "Load the template again",
+      "reloaded": "The template has been loaded again."
+    }
+  },
+  "legal": {
+    "title": "Legal information",
+    "intro": "Texts shown on the legal information page of the entity, in Markdown, for each language.",
+    "caption": "Legal documents",
+    "columns": {
+      "document": "Document"
+    },
+    "document": {
+      "legal-notice": "Legal notice",
+      "privacy-policy": "Privacy policy"
+    },
+    "present": "Written",
+    "absent": "Not written",
+    "edit": "Edit: {document} ({language})",
+    "editor": {
+      "title": "{document} ({language})",
+      "markdown": {
+        "label": "Text (Markdown)",
+        "hint": "Headings with #, lists with -, links with [text](address) (https: or mailto: addresses only). HTML is not interpreted."
+      },
+      "save": "Save",
+      "saved": "The document has been saved.",
+      "removed": "The document has been deleted.",
+      "back": "Back to the documents",
+      "preview": "Preview",
+      "previewEmpty": "No preview: the text is empty.",
+      "previewNote": "Preview of the saved text. Save to update the preview.",
+      "emptyConfirm": {
+        "title": "Delete the document?",
+        "text": "The text is empty: saving it deletes this document, which will no longer be shown on the public pages in this language.",
+        "action": "Delete the document"
+      },
+      "formTitle": "Content"
+    }
+  }
+}

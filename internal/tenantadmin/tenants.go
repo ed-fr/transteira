@@ -397,7 +397,7 @@ func (s *Service) checkFQDN(raw string) (string, error) {
 		return "", invalid(FieldFQDN, "must be a valid host name")
 	}
 	if slices.Contains(s.adminHosts, fqdn) {
-		return "", invalid(FieldFQDN, "must not be an admin host")
+		return "", &InvalidError{Field: FieldFQDN, Reason: "must not be an admin host", Code: CodeAdminHost}
 	}
 	return fqdn, nil
 }

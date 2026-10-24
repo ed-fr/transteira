@@ -1,8 +1,70 @@
 {
   "appName": "TransTeira administration",
   "backHome": "Back to the administration home",
-  "placeholder": {
-    "title": "Administration",
-    "text": "Administration — coming in the next version."
+  "loading": "Loading the administration…",
+  "nav": {
+    "label": "Main navigation",
+    "home": "Home",
+    "tenants": "Entities",
+    "admins": "Administrators",
+    "account": "My account",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "signedInAs": "Signed in as {username}",
+    "roleOf": "Role: {role}",
+    "tenantNav": "Configuration of the entity {name}"
+  },
+  "role": {
+    "super_admin": "Super administrator",
+    "delegated_admin": "Delegated administrator",
+    "unknown": "Unknown role"
+  },
+  "home": {
+    "title": "Home",
+    "welcome": "Welcome, {username}.",
+    "intro": "Choose a section in the menu to configure the entities or manage the administration accounts.",
+    "tenantsLink": "Manage the entities",
+    "adminsLink": "Manage the administrators",
+    "accountLink": "Manage my account",
+    "totpRecommended": "Two-factor authentication is not enabled on your account. We recommend enabling it from the My account page."
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Changes saved.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "edit": "Edit",
+    "creating": "Creating…",
+    "back": "Back",
+    "confirm": "Confirm",
+    "loadMore": "Load more",
+    "loadingMore": "Loading more…",
+    "loading": "Loading…",
+    "no": "No",
+    "none": "None",
+    "actions": "Actions",
+    "show": "Show",
+    "noResults": "Nothing to show.",
+    "noChanges": "No changes to save.",
+    "lastUpdated": "Last updated: {date}",
+    "errorSummary": {
+      "title": "The form contains errors",
+      "count": {
+        "one": "{count} field needs to be corrected:",
+        "other": "{count} fields need to be corrected:"
+      }
+    }
+  },
+  "flash": {
+    "sessionExpired": "Your session has expired. Sign in again to continue.",
+    "stepExpired": "The sign-in step has expired or was interrupted. Start again from the beginning.",
+    "loggedOut": "You are signed out."
+  },
+  "unsupportedStep": {
+    "title": "Unsupported sign-in step",
+    "text": "The server asks for a sign-in step this interface cannot handle yet. Update the application or contact your super administrator.",
+    "action": "Back to sign-in"
   }
 }

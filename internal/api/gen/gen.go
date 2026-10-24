@@ -1666,10 +1666,15 @@ type EmailTemplate struct {
 	Key EmailTemplateKey `json:"key"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
-	Language  Language   `json:"language"`
-	Subject   string     `json:"subject"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	Variables []string   `json:"variables"`
+	Language Language `json:"language"`
+
+	// RequiredVariables Subset of `variables` that must appear in both the HTML and the text body (such as the download link or the verification code); a template without one of them is refused. Empty when none is required.
+	RequiredVariables []string   `json:"requiredVariables"`
+	Subject           string     `json:"subject"`
+	UpdatedAt         *time.Time `json:"updatedAt,omitempty"`
+
+	// Variables Variables available in this template.
+	Variables []string `json:"variables"`
 }
 
 // EmailTemplateKey Mail template of an entity. `file-problems` is the alert sent to the sender when files of
@@ -1850,7 +1855,7 @@ type Language string
 type LegalDocument struct {
 	Document LegalDocumentDocument `json:"document"`
 
-	// Html Sanitized HTML rendering of `markdown` (public reads only). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`.
+	// Html Sanitized HTML rendering of `markdown`, the same on public reads and on admin reads and writes (empty when the document is not written). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`.
 	Html *string `json:"html,omitempty"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -3171,6 +3176,9 @@ type ServerInterface interface {
 	// DeleteBrandingAsset Revert to the default image
 	// (DELETE /admin/tenants/{tenantId}/branding/{asset})
 	DeleteBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string)
+	// GetBrandingAsset Get the custom logo or background image
+	// (GET /admin/tenants/{tenantId}/branding/{asset})
+	GetBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string)
 	// UploadBrandingAsset Upload logo or background image
 	// (PUT /admin/tenants/{tenantId}/branding/{asset})
 	UploadBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string)
@@ -4446,6 +4454,41 @@ func (siw *ServerInterfaceWrapper) DeleteBrandingAsset(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteBrandingAsset(w, r, tenantId, asset)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBrandingAsset operation middleware
+func (siw *ServerInterfaceWrapper) GetBrandingAsset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "asset" -------------
+	var asset string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "asset", r.PathValue("asset"), &asset, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "asset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBrandingAsset(w, r, tenantId, asset)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6343,6 +6386,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding", wrapper.GetBranding)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding", wrapper.UpdateBranding)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.DeleteBrandingAsset)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.GetBrandingAsset)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.UploadBrandingAsset)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/network", wrapper.GetNetworkRules)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/network", wrapper.UpdateNetworkRules)
@@ -10348,6 +10392,129 @@ type DeleteBrandingAsset500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response DeleteBrandingAsset500ApplicationProblemPlusJSONResponse) VisitDeleteBrandingAssetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBrandingAssetRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Asset    string   `json:"asset"`
+}
+
+type GetBrandingAssetResponseObject interface {
+	VisitGetBrandingAssetResponse(w http.ResponseWriter) error
+}
+
+type GetBrandingAsset200ResponseHeaders struct {
+	CacheControl        *string
+	ETag                *string
+	XContentTypeOptions *string
+}
+
+type GetBrandingAsset200ImagejpegResponse struct {
+	Body          io.Reader
+	Headers       GetBrandingAsset200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetBrandingAsset200ImagejpegResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetBrandingAsset200ImagepngResponse struct {
+	Body          io.Reader
+	Headers       GetBrandingAsset200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetBrandingAsset200ImagepngResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetBrandingAsset401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetBrandingAsset401ApplicationProblemPlusJSONResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBrandingAsset404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetBrandingAsset404ApplicationProblemPlusJSONResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBrandingAsset500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetBrandingAsset500ApplicationProblemPlusJSONResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -15529,6 +15696,9 @@ type StrictServerInterface interface {
 	// DeleteBrandingAsset Revert to the default image
 	// (DELETE /admin/tenants/{tenantId}/branding/{asset})
 	DeleteBrandingAsset(ctx context.Context, request DeleteBrandingAssetRequestObject) (DeleteBrandingAssetResponseObject, error)
+	// GetBrandingAsset Get the custom logo or background image
+	// (GET /admin/tenants/{tenantId}/branding/{asset})
+	GetBrandingAsset(ctx context.Context, request GetBrandingAssetRequestObject) (GetBrandingAssetResponseObject, error)
 	// UploadBrandingAsset Upload logo or background image
 	// (PUT /admin/tenants/{tenantId}/branding/{asset})
 	UploadBrandingAsset(ctx context.Context, request UploadBrandingAssetRequestObject) (UploadBrandingAssetResponseObject, error)
@@ -16901,6 +17071,33 @@ func (sh *strictHandler) DeleteBrandingAsset(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(DeleteBrandingAssetResponseObject); ok {
 		if err := validResponse.VisitDeleteBrandingAssetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBrandingAsset operation middleware
+func (sh *strictHandler) GetBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string) {
+	var request GetBrandingAssetRequestObject
+
+	request.TenantId = tenantId
+	request.Asset = asset
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBrandingAsset(ctx, request.(GetBrandingAssetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBrandingAsset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBrandingAssetResponseObject); ok {
+		if err := validResponse.VisitGetBrandingAssetResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -1,0 +1,72 @@
+{
+  "dataTable": {
+    "loaded": {
+      "one": "{count} ligne supplémentaire chargée.",
+      "other": "{count} lignes supplémentaires chargées."
+    },
+    "noMore": "Toutes les lignes sont affichées."
+  },
+  "confirm": {
+    "typeToConfirm": "Pour confirmer, saisissez exactement {text} dans le champ ci-dessous. Le bouton reste désactivé tant que le texte ne correspond pas.",
+    "typeLabel": "Texte à saisir pour confirmer"
+  },
+  "form": {
+    "errorLink": "{label} : {message}",
+    "leaveConfirm": "Vous avez des modifications non enregistrées. Voulez-vous vraiment quitter cette page ? Elles seront perdues."
+  },
+  "password": {
+    "show": "Afficher {label}",
+    "confirmLabel": "Confirmation du mot de passe",
+    "mismatch": "Les deux mots de passe ne correspondent pas."
+  },
+  "secret": {
+    "set": "Une valeur est enregistrée. Elle n'est plus jamais affichée.",
+    "notSet": "Aucune valeur enregistrée.",
+    "keep": "Conserver la valeur enregistrée",
+    "replace": "Remplacer la valeur",
+    "remove": "Retirer la valeur",
+    "new": "Nouvelle valeur"
+  },
+  "byteSize": {
+    "unit": "Unité de {label}",
+    "max": "Au plus {max}.",
+    "errors": {
+      "required": "Saisissez une taille.",
+      "invalid": "Saisissez un nombre, avec au plus trois décimales.",
+      "notPositive": "Saisissez une taille supérieure à zéro.",
+      "tooLarge": "La taille ne peut pas dépasser {max}."
+    }
+  },
+  "status": {
+    "ok": "Conforme",
+    "warning": "Avertissement",
+    "missing": "Absent",
+    "error": "Erreur",
+    "aa": "AA",
+    "aaa": "AAA",
+    "fail": "Insuffisant",
+    "info": "Information"
+  },
+  "lineList": {
+    "count": {
+      "one": "{count} entrée.",
+      "other": "{count} entrées."
+    },
+    "countMax": {
+      "one": "{count} entrée sur {max} au maximum.",
+      "other": "{count} entrées sur {max} au maximum."
+    },
+    "errorsTitle": {
+      "one": "{count} ligne est invalide :",
+      "other": "{count} lignes sont invalides :"
+    },
+    "lineError": "Ligne {line} : {message}",
+    "applySuggestion": "Remplacer la ligne {line} par {value}",
+    "duplicates": {
+      "one": "La ligne {lines} répète une valeur précédente et sera ignorée.",
+      "other": "Les lignes {lines} répètent des valeurs précédentes et seront ignorées."
+    },
+    "tooMany": "Trop d'entrées : {max} au maximum sont autorisées.",
+    "replaced": "Ligne {line} remplacée par {value}."
+  }
+}

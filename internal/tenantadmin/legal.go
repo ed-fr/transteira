@@ -25,13 +25,15 @@ type LegalDocument struct {
 	Markdown string
 	// UpdatedAt is the time of the last change, zero when not written.
 	UpdatedAt time.Time
+	// HTML is the Markdown rendered to sanitized HTML ([markup.Markdown]),
+	// "" when not written.
+	HTML string
 }
 
-// PublicLegalDocument is a legal document served on the public pages.
+// PublicLegalDocument is a legal document served on the public pages, in
+// the language actually served.
 type PublicLegalDocument struct {
 	LegalDocument
-	// HTML is the Markdown rendered to sanitized HTML ([markup.Markdown]).
-	HTML string
 }
 
 // legalDocuments lists the legal documents, in the API order.
@@ -61,7 +63,15 @@ func (s *Service) GetLegal(ctx context.Context, p adminauth.Principal, tid tenan
 	case err != nil:
 		return LegalDocument{}, fmt.Errorf("tenantadmin: get legal document: %w", err)
 	}
-	return LegalDocument{Document: doc, Language: lang, Markdown: d.Content, UpdatedAt: d.UpdatedAt}, nil
+	return legalOf(doc, lang, d), nil
+}
+
+// legalOf returns the stored legal document d as doc in lang, with its
+// sanitized HTML rendering.
+func legalOf(doc, lang string, d store.LegalDocument) LegalDocument {
+	return LegalDocument{
+		Document: doc, Language: lang, Markdown: d.Content, UpdatedAt: d.UpdatedAt, HTML: markup.Markdown(d.Content),
+	}
 }
 
 // UpdateLegal replaces the legal document doc in lang of tenant tid with
@@ -100,7 +110,7 @@ func (s *Service) UpdateLegal(ctx context.Context, p adminauth.Principal, tid te
 		case err != nil:
 			return LegalDocument{}, fmt.Errorf("tenantadmin: put legal document: %w", err)
 		}
-		out.Markdown, out.UpdatedAt = d.Content, d.UpdatedAt
+		out = legalOf(doc, lang, d)
 	}
 	s.record(ctx, p, ip, tid, ActionTenantLegalUpdated, map[string]any{
 		"document": doc, "language": lang, "removed": out.Markdown == "",
@@ -139,10 +149,7 @@ func (s *Service) PublicLegal(ctx context.Context, t *tenant.Tenant, doc, lang s
 	case err != nil:
 		return PublicLegalDocument{}, fmt.Errorf("tenantadmin: get legal document: %w", err)
 	}
-	return PublicLegalDocument{
-		LegalDocument: LegalDocument{Document: doc, Language: l, Markdown: d.Content, UpdatedAt: d.UpdatedAt},
-		HTML:          markup.Markdown(d.Content),
-	}, nil
+	return PublicLegalDocument{LegalDocument: legalOf(doc, l, d)}, nil
 }
 
 // LegalDocuments returns the legal documents tenant t has written in at

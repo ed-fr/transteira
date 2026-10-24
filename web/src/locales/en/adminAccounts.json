@@ -1,0 +1,115 @@
+{
+  "list": {
+    "title": "Administrators",
+    "intro": "Accounts with access to the administration. A delegated administrator only manages the entities attached to their account.",
+    "caption": "List of administrators",
+    "columns": {
+      "username": "Username",
+      "email": "Email address",
+      "role": "Role",
+      "tenants": "Entities",
+      "totp": "Two-factor authentication",
+      "status": "Status",
+      "lastLogin": "Last sign-in",
+      "actions": "Actions"
+    },
+    "create": "Create an administrator",
+    "empty": "No administrator.",
+    "never": "Never",
+    "you": "(you)",
+    "allTenants": "All entities",
+    "noTenant": "No entity",
+    "edit": "Edit {username}"
+  },
+  "status": {
+    "active": "Active",
+    "disabled": "Disabled",
+    "pendingActivation": "Pending activation"
+  },
+  "totp": {
+    "enabled": "Enabled",
+    "disabled": "Not enabled",
+    "required": "Required"
+  },
+  "form": {
+    "createTitle": "Create a delegated administrator",
+    "createIntro": "The account is created without a password. You will receive a single-use activation link so that the person can choose their password.",
+    "editTitle": "Edit the administrator {username}",
+    "username": {
+      "label": "Username",
+      "hint": "3 to 64 characters: lowercase letters, digits, dot, hyphen or underscore. It cannot be changed afterwards.",
+      "taken": "This username is already taken."
+    },
+    "email": {
+      "label": "Email address",
+      "hint": "It receives the quota alerts of the attached entities."
+    },
+    "role": {
+      "label": "Role",
+      "hint": "A super administrator manages every entity and every account."
+    },
+    "tenants": {
+      "legend": "Attached entities",
+      "hint": "The delegated administrator only sees and manages these entities.",
+      "required": "Select at least one entity."
+    },
+    "requireTotp": {
+      "label": "Require two-factor authentication",
+      "hint": "Recommended. The administrator will have to configure it at the first sign-in and will not be able to disable it."
+    },
+    "disabled": {
+      "label": "Account disabled",
+      "hint": "A disabled account can no longer sign in; its open sessions are closed."
+    },
+    "submitCreate": "Create the administrator",
+    "save": "Save",
+    "created": "The administrator {username} has been created.",
+    "saved": "The changes have been saved.",
+    "createLegend": "Account details",
+    "editLegend": "Account settings"
+  },
+  "promotion": {
+    "hint": "Only an activated account with two-factor authentication configured can become a super administrator. Its entity assignments are then removed, since a super administrator has access to every entity.",
+    "demoteHint": "To demote a super administrator, select the entities to attach to the account."
+  },
+  "activationLink": {
+    "title": "Activation link",
+    "intro": "Give this link to {username} so that they can choose their password.",
+    "shownOnce": "This link is shown only once and is not sent by any email. Copy it now.",
+    "label": "Activation link",
+    "copy": "Copy the link",
+    "expires": "Valid until {date}.",
+    "warning": "Hand it over through another channel than the usual email (for example in person, by instant messaging or by phone): anyone who gets it can set the password of the account.",
+    "done": "I have handed over the link",
+    "leaveConfirm": {
+      "title": "Leave without copying the link?",
+      "text": "You have not copied the activation link. It cannot be shown again: you will have to reset the credentials to get a new one."
+    }
+  },
+  "reset": {
+    "action": "Reset credentials…",
+    "confirmTitle": "Reset the credentials of {username}?",
+    "confirmText": "The password, two-factor authentication and recovery codes of the account are erased, and its sessions are closed. You will receive a new activation link.",
+    "confirmAction": "Reset",
+    "done": "The credentials of {username} have been reset."
+  },
+  "delete": {
+    "action": "Delete…",
+    "confirmTitle": "Delete the administrator {username}?",
+    "confirmText": "The account and its sessions will be permanently deleted. The audit logs keep track of its actions.",
+    "confirmAction": "Delete permanently",
+    "done": "The administrator {username} has been deleted."
+  },
+  "ownAccountNote": "This is your own account: you cannot delete, disable or demote it, nor reset its credentials. Manage your password and two-factor authentication from the My account page.",
+  "errors": {
+    "lastSuperAdmin": "Not possible: this account is the last usable super administrator. Create or promote another super administrator first.",
+    "ownAccount": "Not possible on your own account: you would lose access to the administration.",
+    "notPromotable": "This account cannot become a super administrator: it must be activated and have two-factor authentication configured.",
+    "accountDisabled": "This account is disabled: enable it before resetting its credentials.",
+    "conflict": "This action is not possible for this account in its current state. Reload the page and try again."
+  },
+  "notFound": {
+    "title": "Administrator not found",
+    "text": "This administrator account does not exist or has been deleted."
+  }
+}

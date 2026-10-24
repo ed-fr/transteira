@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
+	"github.com/ed-fr/transteira/internal/api/apiutil"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/branding"
@@ -159,19 +159,7 @@ type assetResponse struct {
 
 // VisitGetTenantAssetResponse implements gen.GetTenantAssetResponseObject.
 func (a assetResponse) VisitGetTenantAssetResponse(w http.ResponseWriter) error {
-	h := w.Header()
-	h.Set("ETag", a.img.ETag)
-	h.Set("Cache-Control", AssetCacheControl)
-	h.Set("X-Content-Type-Options", "nosniff")
-	if a.notModified {
-		w.WriteHeader(http.StatusNotModified)
-		return nil
-	}
-	h.Set("Content-Type", a.img.ContentType)
-	h.Set("Content-Length", strconv.Itoa(len(a.img.Data)))
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(a.img.Data)
-	return err
+	return apiutil.WriteImage(w, a.img, AssetCacheControl, a.notModified)
 }
 
 // etagMatches reports whether the If-None-Match value header names etag

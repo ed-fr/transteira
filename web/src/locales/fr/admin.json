@@ -1,8 +1,70 @@
 {
   "appName": "Administration TransTeira",
   "backHome": "Retour à l’accueil de l’administration",
-  "placeholder": {
-    "title": "Administration",
-    "text": "Administration — disponible dans la prochaine version."
+  "loading": "Chargement de l’administration…",
+  "nav": {
+    "label": "Navigation principale",
+    "home": "Accueil",
+    "tenants": "Entités",
+    "admins": "Administrateurs",
+    "account": "Mon compte",
+    "signOut": "Se déconnecter",
+    "signingOut": "Déconnexion…",
+    "signedInAs": "Connecté en tant que {username}",
+    "roleOf": "Rôle : {role}",
+    "tenantNav": "Configuration de l’entité {name}"
+  },
+  "role": {
+    "super_admin": "Super administrateur",
+    "delegated_admin": "Administrateur délégué",
+    "unknown": "Rôle inconnu"
+  },
+  "home": {
+    "title": "Accueil",
+    "welcome": "Bienvenue, {username}.",
+    "intro": "Choisissez une rubrique dans le menu pour configurer les entités ou gérer les comptes d’administration.",
+    "tenantsLink": "Gérer les entités",
+    "adminsLink": "Gérer les administrateurs",
+    "accountLink": "Gérer mon compte",
+    "totpRecommended": "La double authentification n’est pas activée sur votre compte. Nous vous recommandons de l’activer depuis la page Mon compte."
+  },
+  "common": {
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Modifications enregistrées.",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "deleting": "Suppression…",
+    "edit": "Modifier",
+    "creating": "Création…",
+    "back": "Retour",
+    "confirm": "Confirmer",
+    "loadMore": "Charger plus",
+    "loadingMore": "Chargement de la suite…",
+    "loading": "Chargement…",
+    "no": "Non",
+    "none": "Aucun",
+    "actions": "Actions",
+    "show": "Afficher",
+    "noResults": "Aucun élément à afficher.",
+    "noChanges": "Aucune modification à enregistrer.",
+    "lastUpdated": "Dernière modification : {date}",
+    "errorSummary": {
+      "title": "Le formulaire contient des erreurs",
+      "count": {
+        "one": "{count} champ est à corriger :",
+        "other": "{count} champs sont à corriger :"
+      }
+    }
+  },
+  "flash": {
+    "sessionExpired": "Votre session a expiré. Connectez-vous de nouveau pour continuer.",
+    "stepExpired": "L’étape de connexion a expiré ou a été interrompue. Recommencez depuis le début.",
+    "loggedOut": "Vous êtes déconnecté."
+  },
+  "unsupportedStep": {
+    "title": "Étape de connexion non prise en charge",
+    "text": "Le serveur demande une étape de connexion que cette interface ne sait pas encore traiter. Mettez à jour l’application ou contactez votre super administrateur.",
+    "action": "Revenir à la connexion"
   }
 }

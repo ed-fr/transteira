@@ -175,6 +175,11 @@ func (Unimplemented) GetBranding(_ context.Context, _ gen.GetBrandingRequestObje
 	return nil, ErrNotImplemented
 }
 
+// GetBrandingAsset answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetBrandingAsset(_ context.Context, _ gen.GetBrandingAssetRequestObject) (gen.GetBrandingAssetResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetCurrentDepositSession answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetCurrentDepositSession(_ context.Context, _ gen.GetCurrentDepositSessionRequestObject) (gen.GetCurrentDepositSessionResponseObject, error) {
 	return nil, ErrNotImplemented

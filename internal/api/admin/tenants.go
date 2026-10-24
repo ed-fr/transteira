@@ -7,12 +7,15 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"net/http"
 	"net/netip"
 	"strings"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
+	"github.com/ed-fr/transteira/internal/api/apiutil"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
@@ -31,6 +34,7 @@ type TenantService interface {
 	DeleteTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, confirm string, ip netip.Addr) error
 	GetBranding(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.Branding, error)
 	UpdateBranding(ctx context.Context, p adminauth.Principal, tid tenant.ID, primary, accent string, ip netip.Addr) (tenantadmin.Branding, error)
+	GetAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string) (branding.Image, error)
 	UploadAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string, r io.Reader, ip netip.Addr) error
 	DeleteAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string, ip netip.Addr) error
 	GetNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.NetworkRules, error)
@@ -108,7 +112,8 @@ func tenantError(err error) error {
 
 // invalidProblem renders an invalid input: one field error per mail
 // template issue (with its part, line, column and message), else one
-// naming the field; none when the request as a whole is invalid.
+// naming the field, with the code of the error when it has one (an admin
+// host: reserved-host); none when the request as a whole is invalid.
 func invalidProblem(e *tenantadmin.InvalidError) *problem.Problem {
 	var fields []problem.FieldError
 	for _, is := range e.Issues {
@@ -121,8 +126,11 @@ func invalidProblem(e *tenantadmin.InvalidError) *problem.Problem {
 		})
 	}
 	if len(fields) == 0 && e.Field != "" {
-		address := e.Field == tenantadmin.FieldFromAddress || e.Field == tenantadmin.FieldTo
-		fields = append(fields, problem.FieldError{Field: e.Field, Code: formatCode(address)})
+		code := e.Code
+		if code == "" {
+			code = formatCode(e.Field == tenantadmin.FieldFromAddress || e.Field == tenantadmin.FieldTo)
+		}
+		fields = append(fields, problem.FieldError{Field: e.Field, Code: code})
 	}
 	return problem.New(problem.CodeValidationFailed, problem.WithFieldErrors(fields...))
 }
@@ -326,6 +334,35 @@ func (s *Server) UpdateBranding(ctx context.Context, req gen.UpdateBrandingReque
 		return nil, tenantError(err)
 	}
 	return gen.UpdateBranding200JSONResponse(brandingBody(b)), nil
+}
+
+// AssetCacheControl is the Cache-Control of a branding image served to
+// the administration: never cached, the preview always shows the image
+// stored at the time of the request.
+const AssetCacheControl = "no-store"
+
+// GetBrandingAsset returns the custom logo or background image of a
+// tenant, as re-encoded by the server, with its exact media type, nosniff,
+// a strong ETag and no-store; 404 without a custom image (the default
+// background is never returned here).
+func (s *Server) GetBrandingAsset(ctx context.Context, req gen.GetBrandingAssetRequestObject) (gen.GetBrandingAssetResponseObject, error) {
+	svc, p, err := s.tenantSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	img, err := svc.GetAsset(ctx, p, tenant.ID(req.TenantId), req.Asset)
+	if err != nil {
+		return nil, tenantError(err)
+	}
+	return brandingAssetResponse(img), nil
+}
+
+// brandingAssetResponse writes a branding image to the administration.
+type brandingAssetResponse branding.Image
+
+// VisitGetBrandingAssetResponse implements gen.GetBrandingAssetResponseObject.
+func (a brandingAssetResponse) VisitGetBrandingAssetResponse(w http.ResponseWriter) error {
+	return apiutil.WriteImage(w, branding.Image(a), AssetCacheControl, false)
 }
 
 // UploadBrandingAsset stores the logo or background image of a tenant
@@ -616,10 +653,13 @@ func templateBody(t tenantadmin.Template) gen.EmailTemplate {
 	out := gen.EmailTemplate{
 		Key: gen.EmailTemplateKey(t.Key), Language: gen.Language(t.Language), Customised: t.Customized, //nolint:misspell // field name of the generated OpenAPI type (spec spelling)
 		Subject: t.Subject, BodyHtml: t.HTML, BodyText: t.Text, Variables: make([]string, len(t.Variables)),
-		UpdatedAt: optionalTime(t.UpdatedAt),
+		RequiredVariables: []string{}, UpdatedAt: optionalTime(t.UpdatedAt),
 	}
 	for i, v := range t.Variables {
 		out.Variables[i] = v.Name
+		if v.Required {
+			out.RequiredVariables = append(out.RequiredVariables, v.Name)
+		}
 	}
 	return out
 }
@@ -658,11 +698,12 @@ func (s *Server) UpdateLegalDocument(ctx context.Context, req gen.UpdateLegalDoc
 	return gen.UpdateLegalDocument200JSONResponse(legalBody(d)), nil
 }
 
-// legalBody renders d as the OpenAPI LegalDocument (without HTML: the
-// admin edits the source).
+// legalBody renders d as the OpenAPI LegalDocument, with the sanitized
+// HTML rendering served on the public pages ("" when not written).
 func legalBody(d tenantadmin.LegalDocument) gen.LegalDocument {
+	html := d.HTML
 	return gen.LegalDocument{
 		Document: gen.LegalDocumentDocument(d.Document), Language: gen.Language(d.Language), Markdown: d.Markdown,
-		UpdatedAt: optionalTime(d.UpdatedAt),
+		Html: &html, UpdatedAt: optionalTime(d.UpdatedAt),
 	}
 }

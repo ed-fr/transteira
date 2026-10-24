@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ed-fr/transteira/internal/markup"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 )
@@ -16,7 +17,7 @@ func TestLegal(t *testing.T) {
 		ev := newEnv(t, e)
 		d, err := ev.svc.GetLegal(ctx, ev.adminA, ev.a.ID, store.LegalNotice, "fr")
 		mustNoErr(t, "get empty", err)
-		if d.Markdown != "" || !d.UpdatedAt.IsZero() {
+		if d.Markdown != "" || !d.UpdatedAt.IsZero() || d.HTML != "" {
 			t.Fatalf("empty: %+v", d)
 		}
 		docs, err := ev.svc.LegalDocuments(ctx, ev.a)
@@ -30,12 +31,12 @@ func TestLegal(t *testing.T) {
 		src := "# Mentions\n\n<script>alert(1)</script> [site](javascript:alert(1)) **gras**"
 		d, err = ev.svc.UpdateLegal(ctx, ev.adminA, ev.a.ID, store.LegalNotice, "fr", src, clientIP)
 		mustNoErr(t, "update", err)
-		if d.Markdown != src || d.UpdatedAt.IsZero() {
+		if d.Markdown != src || d.UpdatedAt.IsZero() || d.HTML != markup.Markdown(src) {
 			t.Fatalf("stored: %+v", d)
 		}
 		d, err = ev.svc.GetLegal(ctx, ev.adminA, ev.a.ID, store.LegalNotice, "fr")
 		mustNoErr(t, "get", err)
-		if d.Markdown != src {
+		if d.Markdown != src || d.HTML != markup.Markdown(src) {
 			t.Fatalf("get: %+v", d)
 		}
 
@@ -44,7 +45,7 @@ func TestLegal(t *testing.T) {
 		p, err := ev.svc.PublicLegal(ctx, ev.a, store.LegalNotice, "fr")
 		mustNoErr(t, "public fr", err)
 		if p.Language != "fr" || strings.Contains(p.HTML, "<script") || strings.Contains(p.HTML, "javascript:") ||
-			!strings.Contains(p.HTML, "<strong>gras</strong>") {
+			!strings.Contains(p.HTML, "<strong>gras</strong>") || p.HTML != d.HTML {
 			t.Fatalf("public: %+v", p)
 		}
 		p, err = ev.svc.PublicLegal(ctx, ev.a, store.LegalNotice, "en")
@@ -88,7 +89,7 @@ func TestLegal(t *testing.T) {
 		// A blank source removes the document.
 		d, err = ev.svc.UpdateLegal(ctx, ev.adminA, ev.a.ID, store.LegalNotice, "en", "  \n", clientIP)
 		mustNoErr(t, "remove", err)
-		if d.Markdown != "" {
+		if d.Markdown != "" || d.HTML != "" {
 			t.Fatalf("removed: %+v", d)
 		}
 		_, err = ev.svc.UpdateLegal(ctx, ev.adminA, ev.a.ID, store.LegalNotice, "en", "", clientIP)

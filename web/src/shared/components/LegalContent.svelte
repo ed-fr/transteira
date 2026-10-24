@@ -1,10 +1,11 @@
 <script lang="ts">
-  // Display of a legal document rendered by the server (LegalDocument.html). This is the only
-  // component allowed to use {@html} (eslint svelte/no-at-html-tags, threat model T-91): the
+  // Display of a legal document rendered by the server (LegalDocument.html), on the public legal
+  // page and in the admin preview. This is one of the only two components allowed to use {@html}
+  // (eslint svelte/no-at-html-tags, threat model T-91; the other is admin TemplatePreview): the
   // HTML comes from internal/markup, which renders limited Markdown, never passes raw HTML
   // through and sanitizes the result with an allowlist. Never pass any other string here.
   interface Props {
-    /** Sanitized HTML of GET /tenant/legal/{document} (internal/markup). */
+    /** Sanitized HTML of a LegalDocument (public or admin read, internal/markup). */
     html: string;
   }
 

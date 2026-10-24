@@ -56,8 +56,8 @@ use to ban the client IP.
   `invalid-email` on its field: `/email` (deposit session, invitation, data subject search or
   erasure, admin account, setup), `/recipients/<n>` (transfer creation, notification resend),
   `/fromAddress` and `/to` (SMTP settings and test), and the `email` filter of the transfer
-  list. In the tenant configuration: an entity FQDN that is malformed or equal to an admin
-  host (`/fqdn`), a confirmation that is not the exact entity name when deleting it
+  list. In the tenant configuration: an entity FQDN that is malformed (`/fqdn`,
+  `invalid-format`) or equal to an admin host (`/fqdn`, `reserved-host`), a confirmation that is not the exact entity name when deleting it
   (`confirm`), a corrupt branding image (`/image`), and a mail template that uses an unknown variable, any template
   syntax other than `{{snake_case}}` variables, or lacks a required variable (one
   `invalid-template` entry per problem, with its position). In a JSON Merge Patch, `null` on

@@ -968,7 +968,15 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get the custom logo or background image
+         * @description Returns the custom image stored for the tenant, as re-encoded by the server (PNG for the
+         *     logo, JPEG for the background), never the uploaded bytes, so that the administration can
+         *     preview it. Unlike the public `getTenantAsset`, the built-in default background is never
+         *     returned: without a custom image the answer is `404`. The response is never cached
+         *     (`Cache-Control: no-store`) and carries a strong `ETag` (quoted SHA-256 of the image).
+         */
+        get: operations["getBrandingAsset"];
         /**
          * Upload logo or background image
          * @description PNG, JPEG or WebP only, detected from the content (`415` otherwise, SVG included); the
@@ -1259,12 +1267,12 @@ export interface paths {
         };
         /**
          * Get a legal text
-         * @description Returns the Markdown source of a legal text of the tenant in one language.
+         * @description Returns the Markdown source of a legal text of the tenant in one language, with its sanitized HTML rendering as served on the public pages (empty source and HTML when not written).
          */
         get: operations["getLegalDocumentAdmin"];
         /**
          * Replace a legal text (Markdown, rendered without raw HTML)
-         * @description Replaces a legal text of the tenant (limited Markdown, rendered without raw HTML and sanitized when served). An empty or blank text removes it.
+         * @description Replaces a legal text of the tenant (limited Markdown, rendered without raw HTML and sanitized when served). An empty or blank text removes it. The saved text is returned with its sanitized HTML rendering.
          */
         put: operations["updateLegalDocument"];
         post?: never;
@@ -2173,7 +2181,7 @@ export interface components {
             document: "legal-notice" | "privacy-policy";
             language: components["schemas"]["Language"];
             markdown: string;
-            /** @description Sanitized HTML rendering of `markdown` (public reads only). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`. */
+            /** @description Sanitized HTML rendering of `markdown`, the same on public reads and on admin reads and writes (empty when the document is not written). Headings are shifted down one level (`#` gives `h2`, `###` gives `h4`): the page showing the document has its own `h1`. */
             html?: string;
             /** Format: date-time */
             updatedAt?: string;
@@ -2266,7 +2274,7 @@ export interface components {
             /** @description Optional; stored as an argon2id hash. */
             password?: string;
             /** @default false */
-            deleteAfterFirstDownload: boolean;
+            deleteAfterFirstDownload?: boolean;
             language?: components["schemas"]["Language"];
             files: components["schemas"]["FileDeclaration"][];
         };
@@ -2500,7 +2508,7 @@ export interface components {
             role: components["schemas"]["AdminRole"];
             tenantIds?: string[];
             /** @default true */
-            requireTotp: boolean;
+            requireTotp?: boolean;
         };
         /**
          * @description Changes of an account; absent fields are left unchanged. Promoting to `super_admin`
@@ -2559,7 +2567,7 @@ export interface components {
              * Format: int64
              * @default 21474836480
              */
-            maxTransferBytes: number;
+            maxTransferBytes?: number;
             /**
              * Format: int64
              * @description Ceiling of `maxTransferBytes` for the delegated admins; defaults to `maxTransferBytes`, which must not exceed it.
@@ -2637,7 +2645,7 @@ export interface components {
              * @description Remove the stored password (unauthenticated relay). Cannot be combined with `password`.
              * @default false
              */
-            removePassword: boolean;
+            removePassword?: boolean;
             fromAddress: components["schemas"]["Email"];
             fromName?: string | null;
         };
@@ -2702,7 +2710,10 @@ export interface components {
             subject: string;
             bodyHtml: string;
             bodyText: string;
+            /** @description Variables available in this template. */
             variables: string[];
+            /** @description Subset of `variables` that must appear in both the HTML and the text body (such as the download link or the verification code); a template without one of them is refused. Empty when none is required. */
+            requiredVariables: string[];
             /** Format: date-time */
             updatedAt?: string;
         };
@@ -5894,6 +5905,46 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    getBrandingAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Which image: `logo` or `background`.
+                 * @example background
+                 */
+                asset: "logo" | "background";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image content, with its exact media type (`image/png` for the logo, `image/jpeg` for the background), `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    "X-Content-Type-Options": components["headers"]["NoSniff"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /** @example <binary data> */
+                    "image/png": string;
+                    /** @example <binary data> */
+                    "image/jpeg": string;
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     uploadBrandingAsset: {
         parameters: {
             query?: never;
@@ -6347,6 +6398,11 @@ export interface operations {
                      *         "qr_code",
                      *         "files",
                      *         "file_count"
+                     *       ],
+                     *       "requiredVariables": [
+                     *         "download_link",
+                     *         "password_notice",
+                     *         "files"
                      *       ]
                      *     }
                      */
@@ -6418,6 +6474,11 @@ export interface operations {
                      *         "qr_code",
                      *         "files",
                      *         "file_count"
+                     *       ],
+                     *       "requiredVariables": [
+                     *         "download_link",
+                     *         "password_notice",
+                     *         "files"
                      *       ],
                      *       "updatedAt": "2026-10-19T16:10:00Z"
                      *     }
@@ -6565,6 +6626,7 @@ export interface operations {
                      *       "document": "legal-notice",
                      *       "language": "fr",
                      *       "markdown": "# Mentions légales\n\nÉditeur : Entity A...",
+                     *       "html": "<h2>Mentions légales</h2>\n<p>Éditeur : Entity A...</p>",
                      *       "updatedAt": "2026-10-01T09:00:00Z"
                      *     }
                      */
@@ -6621,6 +6683,7 @@ export interface operations {
                      *       "document": "legal-notice",
                      *       "language": "fr",
                      *       "markdown": "# Mentions légales\n\nÉditeur : Entity A, 1 rue de l'Exemple...",
+                     *       "html": "<h2>Mentions légales</h2>\n<p>Éditeur : Entity A, 1 rue de l'Exemple...</p>",
                      *       "updatedAt": "2026-10-19T16:12:00Z"
                      *     }
                      */

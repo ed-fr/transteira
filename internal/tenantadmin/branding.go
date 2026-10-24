@@ -129,6 +129,30 @@ func (s *Service) DeleteAsset(ctx context.Context, p adminauth.Principal, tid te
 	return nil
 }
 
+// GetAsset returns the logo or background image stored for tenant tid, for
+// the administration: always an image re-encoded by the server, with its
+// exact content type and a strong ETag. It returns ErrNotFound for an
+// unknown asset name, a tenant out of reach of p, or when the tenant has
+// no such custom image (the default background is never returned here).
+func (s *Service) GetAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string) (branding.Image, error) {
+	kind, err := branding.ParseKind(asset)
+	if err != nil {
+		return branding.Image{}, ErrNotFound
+	}
+	t, err := s.readable(ctx, p, tid)
+	if err != nil {
+		return branding.Image{}, err
+	}
+	img, ok, err := s.storedAsset(t, kind)
+	switch {
+	case err != nil:
+		return branding.Image{}, err
+	case !ok:
+		return branding.Image{}, ErrNotFound
+	}
+	return img, nil
+}
+
 // Asset returns the logo or background image of tenant t for the public
 // pages: the stored image, the default background when the tenant has
 // none, ErrNotFound for a missing logo or an unknown asset name. The image
@@ -139,23 +163,36 @@ func (s *Service) Asset(_ context.Context, t *tenant.Tenant, asset string) (bran
 	if err != nil {
 		return branding.Image{}, ErrNotFound
 	}
-	if (kind == branding.KindLogo && t.HasLogo) || (kind == branding.KindBackground && t.HasBackground) {
-		data, err := s.assets.Get(t.ID, kind)
-		switch {
-		case err == nil:
-			sum := sha256.Sum256(data)
-			return branding.Image{
-				Data: data, ContentType: kind.ContentType(), ETag: `"` + hex.EncodeToString(sum[:]) + `"`,
-			}, nil
-		case !errors.Is(err, fs.ErrNotExist):
-			return branding.Image{}, fmt.Errorf("tenantadmin: read %s: %w", kind, err)
-		}
-		// A flag without its file: serve the default, as without flag.
-	}
-	if kind == branding.KindBackground {
+	img, ok, err := s.storedAsset(t, kind)
+	switch {
+	case err != nil:
+		return branding.Image{}, err
+	case ok:
+		return img, nil
+	case kind == branding.KindBackground:
 		return branding.DefaultBackground(), nil
 	}
 	return branding.Image{}, ErrNotFound
+}
+
+// storedAsset returns the custom image of kind stored for t, and whether
+// there is one: false when the tenant has no such image, or when its flag
+// is set but the file is missing (the caller then acts as without flag).
+func (s *Service) storedAsset(t *tenant.Tenant, kind branding.Kind) (branding.Image, bool, error) {
+	if (kind == branding.KindLogo && !t.HasLogo) || (kind == branding.KindBackground && !t.HasBackground) {
+		return branding.Image{}, false, nil
+	}
+	data, err := s.assets.Get(t.ID, kind)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return branding.Image{}, false, nil
+	case err != nil:
+		return branding.Image{}, false, fmt.Errorf("tenantadmin: read %s: %w", kind, err)
+	}
+	sum := sha256.Sum256(data)
+	return branding.Image{
+		Data: data, ContentType: kind.ContentType(), ETag: `"` + hex.EncodeToString(sum[:]) + `"`,
+	}, true, nil
 }
 
 // setAssetFlag sets the flag of kind on t.

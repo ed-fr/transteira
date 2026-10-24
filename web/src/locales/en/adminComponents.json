@@ -1,0 +1,72 @@
+{
+  "dataTable": {
+    "loaded": {
+      "one": "{count} more row loaded.",
+      "other": "{count} more rows loaded."
+    },
+    "noMore": "All rows are shown."
+  },
+  "confirm": {
+    "typeToConfirm": "To confirm, type {text} exactly in the field below. The button stays disabled until the text matches.",
+    "typeLabel": "Text to type to confirm"
+  },
+  "form": {
+    "errorLink": "{label}: {message}",
+    "leaveConfirm": "You have unsaved changes. Do you really want to leave this page? They will be lost."
+  },
+  "password": {
+    "show": "Show {label}",
+    "confirmLabel": "Confirm the password",
+    "mismatch": "The two passwords do not match."
+  },
+  "secret": {
+    "set": "A value is saved. It is never shown again.",
+    "notSet": "No value saved.",
+    "keep": "Keep the saved value",
+    "replace": "Replace the value",
+    "remove": "Remove the value",
+    "new": "New value"
+  },
+  "byteSize": {
+    "unit": "Unit of {label}",
+    "max": "At most {max}.",
+    "errors": {
+      "required": "Enter a size.",
+      "invalid": "Enter a number, with at most three decimals.",
+      "notPositive": "Enter a size greater than zero.",
+      "tooLarge": "The size cannot exceed {max}."
+    }
+  },
+  "status": {
+    "ok": "OK",
+    "warning": "Warning",
+    "missing": "Missing",
+    "error": "Error",
+    "aa": "AA",
+    "aaa": "AAA",
+    "fail": "Insufficient",
+    "info": "Information"
+  },
+  "lineList": {
+    "count": {
+      "one": "{count} entry.",
+      "other": "{count} entries."
+    },
+    "countMax": {
+      "one": "{count} entry out of {max} at most.",
+      "other": "{count} entries out of {max} at most."
+    },
+    "errorsTitle": {
+      "one": "{count} line is invalid:",
+      "other": "{count} lines are invalid:"
+    },
+    "lineError": "Line {line}: {message}",
+    "applySuggestion": "Replace line {line} with {value}",
+    "duplicates": {
+      "one": "Line {lines} repeats an earlier value and will be ignored.",
+      "other": "Lines {lines} repeat earlier values and will be ignored."
+    },
+    "tooMany": "Too many entries: at most {max} are allowed.",
+    "replaced": "Line {line} replaced with {value}."
+  }
+}

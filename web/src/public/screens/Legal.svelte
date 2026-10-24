@@ -3,11 +3,10 @@
   // /tenant/legal/{document} in the interface language, reloaded when the language changes.
   import { api } from '../../shared/api/api';
   import type { components } from '../../shared/api/schema';
-  import { Spinner } from '../../shared/components';
+  import { LegalContent, Spinner } from '../../shared/components';
   import { formatDate, locale, t } from '../../shared/i18n/i18n.svelte';
   import { isPublishedLegalDocument } from '../bootstrap';
   import ErrorPage from './ErrorPage.svelte';
-  import LegalContent from './LegalContent.svelte';
   import NotFound from './NotFound.svelte';
   import { loadFailure } from './outcomes';
   import type { ScreenProps } from './types';

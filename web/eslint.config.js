@@ -4,7 +4,8 @@ import svelteConfig from './svelte.config.js';
 
 // CSP rules for contributors (web/README.md): no inline style attribute, no style: directive,
 // no Svelte transition (they all write inline styles, blocked by style-src 'self'), and
-// {@html} only in the legal page component (server-sanitised HTML, internal/markup).
+// {@html} only in two components (server-sanitised HTML): shared LegalContent (internal/markup)
+// and admin TemplatePreview (internal/mail), each with one eslint disable comment.
 // scripts/check-dist.mjs checks the same properties on the built output.
 export default tseslint.config(
   {

@@ -268,7 +268,9 @@ func TestUpdateTenantSuperAdmin(t *testing.T) {
 		_, err = ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{FQDN: ptr(hostB)}, clientIP)
 		wantErr(t, "duplicate fqdn", err, ErrAlreadyExists)
 		_, err = ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{FQDN: ptr(adminHost)}, clientIP)
-		wantInvalid(t, "admin host", err, FieldFQDN)
+		if ie := invalidOf(t, "admin host", err, FieldFQDN); ie.Code != CodeAdminHost {
+			t.Fatalf("admin host: code %q", ie.Code)
+		}
 	})
 }
 

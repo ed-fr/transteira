@@ -30,6 +30,13 @@ func operations(ev *env, logo []byte) map[string]func(p adminauth.Principal, tid
 			_, err := ev.svc.UpdateBranding(ctx, p, tid, "#000000", "#000000", clientIP)
 			return err
 		},
+		"GetAsset": func(p adminauth.Principal, tid tenant.ID) error {
+			// The super admin stores a background first (it fails on a
+			// missing tenant), so that only p's access decides.
+			_ = ev.svc.UploadAsset(ctx, ev.super, tid, "background", bytes.NewReader(logo), clientIP)
+			_, err := ev.svc.GetAsset(ctx, p, tid, "background")
+			return err
+		},
 		"UploadAsset": func(p adminauth.Principal, tid tenant.ID) error {
 			return ev.svc.UploadAsset(ctx, p, tid, "logo", bytes.NewReader(logo), clientIP)
 		},

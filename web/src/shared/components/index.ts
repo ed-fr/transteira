@@ -10,6 +10,7 @@ export { default as FileList } from './FileList.svelte';
 export { default as Footer } from './Footer.svelte';
 export { default as HelpLink } from './HelpLink.svelte';
 export { default as LanguageSwitch } from './LanguageSwitch.svelte';
+export { default as LegalContent } from './LegalContent.svelte';
 export { default as LiveRegion } from './LiveRegion.svelte';
 export { default as PageLayout } from './PageLayout.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';

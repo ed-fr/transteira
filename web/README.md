@@ -15,6 +15,7 @@ There is no SvelteKit, no component library and no CDN. The applications only ta
 | Path                                             | Content                                                                       |
 | ------------------------------------------------ | ----------------------------------------------------------------------------- |
 | `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens       |
+| `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens           |
 | `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store   |
 | `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, `safeApiHref`                |
 | `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                         |
@@ -51,7 +52,36 @@ with a fallback page; `make build` never produces a binary without the interface
 Unit tests (`*.test.ts`, Vitest) run in Node, without jsdom: the router, translations, API client
 and upload engine receive their browser dependencies (history, fetch, storage, transport, timers)
 by injection. Coverage must stay at 90 % or more on `src/shared/{api,router,i18n,upload,safe,theme}`
-and on the `.ts` logic files of `src/public` (the entry point `main.ts` excepted).
+and on the `.ts` logic files of `src/public` and `src/admin` (the entry points `main.ts` excepted;
+`.svelte` components are not measured, so the logic of a screen lives in a `.ts` module next to it,
+for example `src/admin/auth/`, `src/admin/forms/`, `src/admin/components/*.ts`).
+
+## API client and navigation
+
+The typed client (`src/shared/api/client.ts`) is shared by both applications:
+
+- **Bodies** are JSON, except a `Blob`, which is sent as is with its own type as `Content-Type`
+  (branding images: `PUT /admin/tenants/{id}/branding/{asset}`). Typed `PATCH` bodies are sent as
+  `application/merge-patch+json`.
+- **Optional hooks**, declared by the admin application only (`src/admin/api.ts`); the public
+  application declares none, so its behaviour is unchanged:
+  - `onUnauthenticated` is called on `401 unauthenticated` (never on `invalid-credentials`, which
+    stays a form error): the admin session goes back to the sign-in screen with a message and
+    clears every in-memory store;
+  - `recoverCsrf` is called on `403 csrf-invalid` for an unsafe method: when the admin is
+    authenticated, it reloads `GET /admin/me` (whose answer carries the current CSRF token, for
+    example after a master key switch) and the request is retried **exactly once**.
+- **Sign-out** (`POST /admin/auth/logout`) clears the CSRF token and every in-memory store.
+  Secrets shown by the admin screens (TOTP secret, recovery codes, activation link) stay in
+  component memory, are cleared on destroy and on sign-out, and are never written to storage, to
+  the URL or to an announcement (threat model T-162). The only `localStorage` entry is `tt.lang`.
+
+The router (`src/shared/router/router.svelte.ts`) runs navigation guards (unsaved changes, an
+activation link not yet handed over, an upload in progress). `navigate(path, { force: true })`
+bypasses them: it is reserved for redirects the user cannot refuse (session expired, signed out,
+access lost), which the admin shell (`src/admin/App.svelte`) performs with a replaced history
+entry; never use it for a user navigation. The admin return path after sign-in (`?next=`) always
+goes through `safeNext` (`src/admin/auth/guard.ts`), which only accepts internal paths (T-164).
 
 ## Development loop
 
@@ -138,7 +168,8 @@ Never add a runtime dependency without a review of its necessity, its maintenanc
 
 The interface is served with a strict Content Security Policy (`internal/httpserver/webui.go`):
 `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'` (plus `data:` images on
-the admin host), no inline script or style. Svelte builds the DOM from HTML template strings, so an
+the admin host, for the TOTP QR code and the local preview of a chosen branding image, each
+validated before use), no inline script or style. Svelte builds the DOM from HTML template strings, so an
 inline style written in a component would be blocked in production. The rules, checked by eslint
 and by `scripts/check-dist.mjs` on the build output:
 
@@ -148,16 +179,30 @@ and by `scripts/check-dist.mjs` on the build output:
   validation (tenant colours must match `^#[0-9a-fA-F]{6}$`).
 - **No Svelte transitions or animations** (`transition:`, `in:`, `out:`): they write inline
   styles. Use CSS classes, and honour `prefers-reduced-motion`.
-- **No `{@html}`**, except in the legal page component, which renders the HTML already sanitised
-  by the server (`internal/markup`); it carries the only eslint disable comment. Every other text,
-  including texts from the API (messages, tenant names, file names), is rendered as text.
+- **No `{@html}`**, except in exactly two components, each carrying one eslint disable comment
+  (`svelte/no-at-html-tags`), the only ones of the code base:
+  - `src/shared/components/LegalContent.svelte` renders a legal text already sanitised by the
+    server (`internal/markup`), on the public legal page and in the admin preview;
+  - `src/admin/components/TemplatePreview.svelte` renders the preview of a mail template,
+    sanitised by the server (`internal/mail` allowlist); once rendered, its links lose their
+    `href`, the roles, ids and tabindex of the email are removed and its headings are nested
+    below the preview sub-heading with `role="heading"` and `aria-level` (`neutralizePreview`),
+    and a visible note says that the inline styles of the templates are not applied: every
+    template has some, the default ones included, so the CSP blocks them on every preview and
+    the browser console reports these expected violations.
+
+  No third exception may be added. Every other text, including texts from the API (messages,
+  tenant names, file names), is rendered as text.
+
 - **No `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `srcdoc`,
   `createContextualFragment`, `DOMParser`, `eval` or `new Function`.**
 - **Every URL received from the API** (download links, logo, background image) goes through
   `safeApiHref` (`src/shared/safe/href.ts`), which only accepts same-origin relative paths under
   `/api/v1/downloads/` or `/api/v1/tenant/assets/`. Svelte does not filter `href` values. The tus
   upload URLs go through `safeUploadUrl` (same rules, under `/api/v1/uploads/`) before any byte is
-  sent.
+  sent. In the administration, the URL of a stored branding image is built by `assetUrl`
+  (`src/admin/components/branding.ts`) from a validated tenant ID and image name, never taken from
+  an answer.
 - **No external URL and no CDN**: fonts are system fonts, images are served by the application,
   and Vite never inlines assets as `data:` URIs (`assetsInlineLimit: 0`). Stylesheets have no
   `@import`, and their `url(...)` only target `/assets/` or relative same-origin paths.

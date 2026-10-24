@@ -89,7 +89,14 @@ type InvalidError struct {
 	Reason string
 	// Issues lists the problems of a mail template ([FieldTemplate]).
 	Issues []mail.Issue
+	// Code is the stable code of the problem when the API must tell it
+	// apart from a malformed value (CodeAdminHost); "" otherwise.
+	Code string
 }
+
+// CodeAdminHost is the [InvalidError.Code] of an entity FQDN equal to one of
+// the admin hosts: a well-formed host name that is reserved.
+const CodeAdminHost = "reserved-host"
 
 // Error implements error.
 func (e *InvalidError) Error() string {

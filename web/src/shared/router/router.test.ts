@@ -225,6 +225,24 @@ describe('createRouter', () => {
     expect(seen).toHaveLength(2);
   });
 
+  it('bypasses the guards only for a forced navigation', async () => {
+    const { env } = fakeEnv('/');
+    const router = createRouter({ routes, notFound, env, t, afterRender });
+    const guard = vi.fn(() => false);
+    router.addGuard(guard);
+    await router.navigate('/d/a', { replace: true });
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(router.current.route).toBe(home);
+    expect(env.history.replaceState).not.toHaveBeenCalled();
+    await router.navigate('/d/a', { replace: true, force: true });
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(router.current.route).toBe(download);
+    expect(env.history.replaceState).toHaveBeenCalledWith(null, '', '/d/a');
+    await router.navigate('/legal/x', { force: false });
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(router.current.route).toBe(download);
+  });
+
   it('puts the current URL back when a guard refuses back/forward navigation', () => {
     const fake = fakeEnv('/d/tok?x=1#h');
     const router = createRouter({ routes, notFound, env: fake.env, t, afterRender });

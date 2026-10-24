@@ -340,6 +340,10 @@ func (ev *env) waitHookHold(name string, tn *tenant.Tenant, trfID string) <-chan
 func (ev *env) waitHookHoldFor(name string, tn *tenant.Tenant, trfID string, intent lifecycle.HoldIntent) <-chan func() {
 	out := make(chan func(), 1)
 	ev.f.onCall(name, func() {
+		// Counted before the hold is taken: with a hold already in place
+		// (another hook), waiting for a non-zero count would not wait for
+		// this one.
+		before := ev.holdCount(tn, trfID)
 		go func() {
 			release, err := ev.w.Hold(context.Background(), tn.ID, trfID, intent)
 			if err != nil {
@@ -347,7 +351,7 @@ func (ev *env) waitHookHoldFor(name string, tn *tenant.Tenant, trfID string, int
 			}
 			out <- release
 		}()
-		for ev.holdCount(tn, trfID) == 0 {
+		for ev.holdCount(tn, trfID) <= before {
 			time.Sleep(time.Millisecond)
 		}
 	})

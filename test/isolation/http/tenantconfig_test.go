@@ -323,3 +323,37 @@ func tenantLegal(t *testing.T, h *harness, op operation) {
 		noLeak(t, h, op, c.host, resp)
 	}
 }
+
+// adminBrandingAsset is the isolation case of getBrandingAsset: served on
+// the admin host only, and on tenant B's ID with the operation's sample
+// asset the delegated admin of tenant A gets the answer of an unknown
+// tenant (adminTenantOp). With the logo, which only tenant B has, A's
+// admin still gets exactly that answer and never B's image, while the
+// super admin is served B's logo (no-store, nosniff).
+func adminBrandingAsset(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	adminTenantOp(t, h, op)
+	sess := h.session(t)
+	logo := func(s adminSession, tid string) response {
+		return h.adminCall(t, s, http.MethodGet, "/admin/tenants/"+tid+"/branding/logo", "")
+	}
+	foreign, missing := logo(sess, string(h.tenantB.ID)), logo(sess, id.New(id.Tenant))
+	if foreign.status != http.StatusNotFound || problemCode(foreign) != "not-found" || bytes.Contains(foreign.body, h.config.logoB) {
+		t.Fatalf("%s: B's logo for A's admin: %d %s, want 404 not-found", op, foreign.status, foreign.body)
+	}
+	if missing.status != foreign.status || !bytes.Equal(withoutInstance(t, missing), withoutInstance(t, foreign)) {
+		t.Errorf("%s: B's logo answers %d %s, an unknown tenant %d %s: they must be identical",
+			op, foreign.status, foreign.body, missing.status, missing.body)
+	}
+	h.noTenantB(t, op, foreign)
+	// Tenant A has no logo: 404, never B's.
+	if own := logo(sess, string(h.tenantA.ID)); own.status != http.StatusNotFound || bytes.Contains(own.body, h.config.logoB) {
+		t.Errorf("%s: A's logo for A's admin: %d %s, want 404", op, own.status, own.body)
+	}
+	// Control: the super admin reaches B's logo.
+	b := logo(h.superSession(t), string(h.tenantB.ID))
+	if b.status != http.StatusOK || !bytes.Equal(b.body, h.config.logoB) || b.header.Get("Content-Type") != "image/png" ||
+		b.header.Get("Cache-Control") != "no-store" || b.header.Get("X-Content-Type-Options") != "nosniff" || b.header.Get("ETag") == "" {
+		t.Errorf("%s: B's logo for the super admin: %d %v", op, b.status, b.header)
+	}
+}

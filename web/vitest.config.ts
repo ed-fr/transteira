@@ -12,13 +12,18 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text-summary', 'text'],
       reportsDirectory: 'coverage',
-      // CLAUDE.md section 24.3: the shared core and the logic of the public application are
+      // CLAUDE.md section 24.3: the shared core and the logic of the public and admin applications are
       // held to 90 %. Every .ts file of these directories is measured, tested or not (generated
       // types, tests and the browser entry point excepted; .svelte components are not measured).
-      include: ['src/shared/{api,router,i18n,upload,safe,theme}/**/*.ts', 'src/public/**/*.ts'],
+      include: [
+        'src/shared/{api,router,i18n,upload,safe,theme}/**/*.ts',
+        'src/public/**/*.ts',
+        'src/admin/**/*.ts',
+      ],
       exclude: [
         'src/shared/api/schema.ts',
         'src/public/main.ts',
+        'src/admin/main.ts',
         '**/*.d.ts',
         '**/*.test.ts',
         '**/*.test-helper.ts',

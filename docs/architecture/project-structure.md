@@ -47,6 +47,7 @@ transteira/
 │   │   ├── stubs/                   # Stubs générés (tools/genstubs) : chaque opération non écrite → 404
 │   │   ├── public/                  # Handlers : meta, tenant public, sessions de dépôt, transferts, invitations, téléchargements
 │   │   ├── admin/                   # Handlers : auth admin, tenants, opérations, système
+│   │   ├── apiutil/                 # Aides HTTP communes aux handlers (réponse d'image d'habillage, WriteImage)
 │   │   └── problem/                 # Construction des réponses RFC 9457 et catalogue des codes d'erreur
 │   │
 │   ├── tenant/                      # Modèle Tenant, contexte (tenant.FromContext), résolution par Host
@@ -162,7 +163,20 @@ transteira/
 │   │   ├── public/                  # Application publique (FQDN d'entité) : index.html, main.ts, App.svelte,
 │   │   │                            # routes, écrans (dépôt avec vérification par code, invitation,
 │   │   │                            # téléchargement, mentions légales, erreurs, maintenance)
-│   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : coquille en V1 étape 15
+│   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : index.html, main.ts,
+│   │   │   │                        # App.svelte (démarrage, garde, langue), routes.ts, shell.ts, api.ts (client admin
+│   │   │   │                        # et rappels onUnauthenticated / recoverCsrf)
+│   │   │   ├── auth/                # Machine d'état de l'authentification, garde de navigation et safeNext,
+│   │   │   │                        # session (connexion, TOTP, activation, déconnexion), états des formulaires
+│   │   │   ├── forms/               # Logique pure des formulaires : merge patch, SMTP, tailles, CIDR, domaines,
+│   │   │   │                        # DKIM, variables de modèle, TOTP, fragment d'activation, contraste
+│   │   │   ├── components/          # Mise en page, navigation de l'entité, tableau, confirmation, champs, TOTP,
+│   │   │   │                        # codes de secours, lien d'activation, habillage, images, éditeur et aperçu des
+│   │   │   │                        # modèles (TemplatePreview, seconde exception {@html}) ; logique en .ts testée
+│   │   │   └── screens/             # Accueil, compte, aide, page introuvable
+│   │   │       ├── auth/            # Initialisation, connexion, activation
+│   │   │       ├── tenants/         # Liste, création, général, habillage, réseau, SMTP, modèles, mentions légales
+│   │   │       └── admins/          # Liste, création, modification des comptes admins
 │   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 17)
 │   │   ├── shared/
 │   │   │   ├── api/                 # schema.ts (généré depuis api/openapi.yaml, versionné), client typé,
@@ -172,7 +186,9 @@ transteira/
 │   │   │   ├── upload/              # Moteur tus 1.0.0 (reprise, relances, transport XHR, reprise après rechargement)
 │   │   │   ├── theme/               # Couleurs de l'entité (validées puis écrites par le CSSOM), contraste WCAG
 │   │   │   ├── safe/                # safeApiHref : filtre des URL reçues de l'API
-│   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications
+│   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications, dont
+│   │   │                            # LegalContent (mentions légales filtrées par le serveur, première exception
+│   │   │                            # {@html}, page publique et aperçu côté admin)
 │   │   ├── styles/                  # tokens.css (variables de thème, clair en V1, sombre prêt pour la V1.1),
 │   │   │                            # base.css, layout.css, utilities.css
 │   │   └── locales/                 # <langue>/<zone>.json (fr, en), montés sous le nom de la zone
@@ -300,7 +316,7 @@ Les deux applications sont construites par `make web-build` dans `web/dist`, emb
 | Les deux | méthode autre que `GET` / `HEAD` | `405` Problem, `Allow: GET, HEAD` | |
 | Hôte inconnu | tout | `421` (aucun fichier de l'interface) | |
 
-- **CSP** posée sur chaque réponse de l'interface : application publique `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` ; administration identique avec `img-src 'self' data:` (QR code TOTP). Règles pour les contributeurs (aucun style ni script en ligne, `{@html}` réservé aux mentions légales, `safeApiHref`) : `web/README.md` et modèle de menaces T-91.
+- **CSP** posée sur chaque réponse de l'interface : application publique `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` ; administration identique avec `img-src 'self' data:` (QR code TOTP, aperçu local d'une image choisie). Règles pour les contributeurs (aucun style ni script en ligne, `{@html}` limité à exactement deux composants, `LegalContent` et `TemplatePreview`, qui affichent du HTML filtré par le serveur, `safeApiHref`) : `web/README.md` et modèle de menaces T-91, T-163.
 - **`X-Robots-Tag: noindex, nofollow`** sur toutes les réponses de l'interface, `Referrer-Policy: no-referrer` et `X-Frame-Options: DENY` par le middleware d'en-têtes (T-161, T-94).
 - **L'application d'administration n'est jamais servie sur un FQDN d'entité**, ni l'application publique sur l'hôte admin.
 - **Repli** : un binaire construit sans `make web-build` (seul `dist/.gitkeep` présent) répond `503` avec une page statique bilingue, sans script ni style, et journalise un avertissement au démarrage ; `make build` refuse de produire un binaire sans l'interface.

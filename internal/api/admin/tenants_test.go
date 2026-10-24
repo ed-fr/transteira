@@ -65,7 +65,9 @@ var (
 		HTML: "<p>{{download_link}}</p>", Text: "{{download_link}}",
 		Variables: []mail.Variable{{Name: "sender_email"}, {Name: "download_link", Required: true}}, UpdatedAt: now,
 	}
-	legalA = tenantadmin.LegalDocument{Document: "legal-notice", Language: "fr", Markdown: "# Mentions", UpdatedAt: now}
+	legalA = tenantadmin.LegalDocument{
+		Document: "legal-notice", Language: "fr", Markdown: "# Mentions", UpdatedAt: now, HTML: "<h2>Mentions</h2>",
+	}
 )
 
 func (f *fakeTenantService) ListTenants(_ context.Context, p adminauth.Principal, cursor string, limit int) (tenantadmin.TenantPage, error) {
@@ -96,6 +98,11 @@ func (f *fakeTenantService) GetBranding(_ context.Context, p adminauth.Principal
 
 func (f *fakeTenantService) UpdateBranding(_ context.Context, p adminauth.Principal, tid tenant.ID, primary, accent string, ip netip.Addr) (tenantadmin.Branding, error) {
 	return brandingA, f.record("UpdateBranding", p.SessionID, tid, primary, accent, ip)
+}
+
+func (f *fakeTenantService) GetAsset(_ context.Context, p adminauth.Principal, tid tenant.ID, asset string) (branding.Image, error) {
+	return branding.Image{Data: []byte("png"), ContentType: branding.ContentTypePNG, ETag: `"e1"`},
+		f.record("GetAsset", p.SessionID, tid, asset)
 }
 
 func (f *fakeTenantService) UploadAsset(_ context.Context, p adminauth.Principal, tid tenant.ID, asset string, r io.Reader, ip netip.Addr) error {
@@ -239,6 +246,8 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("GetBranding", err)
 	_, err = s.UpdateBranding(ctx, gen.UpdateBrandingRequestObject{TenantId: "ten_a", Body: &gen.BrandingUpdate{}})
 	call("UpdateBranding", err)
+	_, err = s.GetBrandingAsset(ctx, gen.GetBrandingAssetRequestObject{TenantId: "ten_a", Asset: "logo"})
+	call("GetAsset", err)
 	_, err = s.UploadBrandingAsset(ctx, gen.UploadBrandingAssetRequestObject{
 		TenantId: "ten_a", Asset: "logo", ContentType: "image/png", Body: strings.NewReader("png"),
 	})
@@ -302,8 +311,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 22 {
-		t.Fatalf("%d operations, want 22", len(ops))
+	if len(ops) != 23 {
+		t.Fatalf("%d operations, want 23", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)
@@ -345,6 +354,11 @@ func TestTenantErrors(t *testing.T) {
 	p = expectProblem(t, tenantError(&tenantadmin.InvalidError{Field: tenantadmin.FieldFQDN, Reason: "admin host"}), problem.CodeValidationFailed)
 	if !reflect.DeepEqual(p.Errors, []problem.FieldError{{Field: "/fqdn", Code: fieldInvalidFormat}}) {
 		t.Errorf("field errors %+v", p.Errors)
+	}
+	reserved := &tenantadmin.InvalidError{Field: tenantadmin.FieldFQDN, Reason: "admin host", Code: tenantadmin.CodeAdminHost}
+	p = expectProblem(t, tenantError(reserved), problem.CodeValidationFailed)
+	if !reflect.DeepEqual(p.Errors, []problem.FieldError{{Field: "/fqdn", Code: "reserved-host"}}) {
+		t.Errorf("reserved host: field errors %+v", p.Errors)
 	}
 	for _, field := range []string{tenantadmin.FieldFromAddress, tenantadmin.FieldTo} {
 		p = expectProblem(t, tenantError(&tenantadmin.InvalidError{Field: field, Reason: "must be a mail address"}), problem.CodeValidationFailed)
@@ -536,6 +550,20 @@ func TestBrandingHandlers(t *testing.T) {
 		t.Errorf("update args %v", svc.args["UpdateBranding"])
 	}
 
+	asset, err := s.GetBrandingAsset(ctx, gen.GetBrandingAssetRequestObject{TenantId: "ten_a", Asset: "logo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := visit(t, asset)
+	if h := rec.Header(); rec.Code != http.StatusOK || rec.Body.String() != "png" || h.Get("Content-Type") != "image/png" ||
+		h.Get("Cache-Control") != "no-store" || h.Get("X-Content-Type-Options") != "nosniff" || h.Get("ETag") != `"e1"` ||
+		h.Get("Content-Length") != "3" {
+		t.Errorf("get asset %d %q %v", rec.Code, rec.Body.String(), h)
+	}
+	if !reflect.DeepEqual(svc.args["GetAsset"], []any{"as_01", tenant.ID("ten_a"), "logo"}) {
+		t.Errorf("get asset args %v", svc.args["GetAsset"])
+	}
+
 	for _, ct := range []string{"image/png", "IMAGE/JPEG; charset=binary", "image/svg+xml"} {
 		resp, err := s.UploadBrandingAsset(ctx, gen.UploadBrandingAssetRequestObject{
 			TenantId: "ten_a", Asset: "background", ContentType: ct, Body: strings.NewReader("bytes"),
@@ -677,7 +705,7 @@ func TestTemplateHandlers(t *testing.T) {
 	want := gen.EmailTemplate{
 		Key: "transfer-notification", Language: "en", Subject: "Files from {{sender_email}}",
 		BodyHtml: "<p>{{download_link}}</p>", BodyText: "{{download_link}}", Variables: []string{"sender_email", "download_link"},
-		UpdatedAt: &now,
+		RequiredVariables: []string{"download_link"}, UpdatedAt: &now,
 	}
 	want.Customised = true //nolint:misspell // field name of the generated OpenAPI type (spec spelling)
 	got, err := s.GetEmailTemplate(ctx, gen.GetEmailTemplateRequestObject{TenantId: "ten_a", TemplateKey: "transfer-notification", Language: "en"})
@@ -730,7 +758,7 @@ func TestLegalHandlers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b := got.(gen.GetLegalDocumentAdmin200JSONResponse); b.Document != "legal-notice" || b.Language != "fr" ||
-		b.Markdown != "# Mentions" || !b.UpdatedAt.Equal(now) || b.Html != nil {
+		b.Markdown != "# Mentions" || !b.UpdatedAt.Equal(now) || b.Html == nil || *b.Html != "<h2>Mentions</h2>" {
 		t.Errorf("get %+v", b)
 	}
 	upd, err := s.UpdateLegalDocument(ctx, gen.UpdateLegalDocumentRequestObject{
@@ -740,7 +768,8 @@ func TestLegalHandlers(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A removed document: empty source, no time.
-	if b := upd.(gen.UpdateLegalDocument200JSONResponse); b.Markdown != "" || b.UpdatedAt != nil || b.Document != "privacy-policy" {
+	if b := upd.(gen.UpdateLegalDocument200JSONResponse); b.Markdown != "" || b.UpdatedAt != nil || b.Document != "privacy-policy" ||
+		b.Html == nil || *b.Html != "" {
 		t.Errorf("update %+v", b)
 	}
 	if !reflect.DeepEqual(svc.args["UpdateLegal"], []any{"as_01", tenant.ID("ten_a"), "privacy-policy", "en", "  ", clientIP}) {
