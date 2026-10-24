@@ -253,9 +253,10 @@ and by `scripts/check-dist.mjs` on the build output:
     sanitised by the server (`internal/mail` allowlist); once rendered, its links lose their
     `href`, the roles, ids and tabindex of the email are removed and its headings are nested
     below the preview sub-heading with `role="heading"` and `aria-level` (`neutralizePreview`),
-    and a visible note says that the inline styles of the templates are not applied: every
-    template has some, the default ones included, so the CSP blocks them on every preview and
-    the browser console reports these expected violations.
+    and a visible note says that the preview shows the structure of the email without its
+    styles: for the preview only, the server removes the style attributes (every template has
+    some, the default ones included) and replaces the images by their alt text
+    (`sanitize.ForPreview`), which the CSP would block, so a preview triggers no CSP violation.
 
   No third exception may be added. Every other text, including texts from the API (messages,
   tenant names, file names), is rendered as text.

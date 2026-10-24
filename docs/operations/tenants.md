@@ -103,7 +103,10 @@ body and text body.
   version is the filtered one.
 - Required variables (the link, the code, the file list…) must be present
   in both bodies.
-- Reset returns to the default template; preview renders sample data.
+- Reset returns to the default template; preview renders sample data,
+  without the inline styles and with images replaced by their description
+  (the administration's Content Security Policy would block them); the
+  mails sent keep them.
 
 If a customised template cannot be read when a mail is sent, the default
 one is used and a warning is logged: mails are never lost because of a

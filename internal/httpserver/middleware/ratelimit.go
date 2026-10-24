@@ -25,9 +25,11 @@ func RateLimit(limiter Limiter, events SecurityEvents, scope string) func(http.H
 
 // RateLimitIf is [RateLimit] applied only to the requests for which
 // required returns true; the others pass without consuming a token. It
-// limits individual operations, such as the admin login steps, on top of
-// the global limit, and must run where the operation is known (a
-// per-operation middleware of the API router).
+// serves per-operation limits, such as the admin login steps on top of the
+// global limit (run where the operation is known: a per-operation
+// middleware of the API router), or the global and asset limits with
+// complementary predicates, so that each request is charged to exactly one
+// of them.
 func RateLimitIf(limiter Limiter, events SecurityEvents, scope string, required func(*http.Request) bool) func(http.Handler) http.Handler {
 	return rateLimitIf(limiter, events, scope, required, time.Now)
 }

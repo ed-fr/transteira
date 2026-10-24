@@ -4,14 +4,16 @@
   // the other is shared LegalContent). The HTML comes from internal/mail: the template is
   // sanitized by an allowlist when saved and previewed (formatting tags, https:/mailto: links,
   // cid: images only; no script, style element, form, frame or event handler), and the CSP
-  // (script-src 'self', style-src 'self') stays the last barrier: the inline style attributes of
-  // every template (the default templates use them too, for the mail clients) are therefore not
-  // applied, as the visible note says, and each preview logs expected CSP violation reports in
-  // the browser console. Once rendered, the inertPreview action removes the href of every link
-  // and the roles, ids and tabindex of the email, and nests its headings (the default templates
-  // start with an <h1>) below the "HTML version" sub-heading through role="heading" and
-  // aria-level (neutralizePreview), so that the page keeps a single h1. Never pass any other
-  // string here.
+  // (script-src 'self', style-src 'self') stays the last barrier. For the preview only, the
+  // server also removes every style attribute (the default templates and the mail layout use
+  // them for the mail clients) and replaces every image by its alt text (sanitize.ForPreview):
+  // the CSP would block them, logging a violation for each. The preview thus shows the structure
+  // and content of the email without its styles, as the visible note says, and triggers no CSP
+  // violation; the mails sent keep their styles. Once rendered, the inertPreview action removes
+  // the href of every link and the roles, ids and tabindex of the email, and nests its headings
+  // (the default templates start with an <h1>) below the "HTML version" sub-heading through
+  // role="heading" and aria-level (neutralizePreview), so that the page keeps a single h1. Never
+  // pass any other string here.
   import { t } from '../../shared/i18n/i18n.svelte';
   import { neutralizePreview, previewBody, type EmailPreview } from './templates';
 
@@ -84,10 +86,6 @@
     border-radius: var(--tt-radius-sm);
     background: var(--tt-surface);
     color: var(--tt-text);
-  }
-
-  .tt-template-preview__html :global(img) {
-    max-width: 100%;
   }
 
   .tt-template-preview__html :global(a) {

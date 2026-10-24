@@ -351,12 +351,28 @@ describe('bootstrap', () => {
   it('shows the maintenance step without calling the API', async () => {
     const { flow, calls } = setup(
       {},
-      { tenant: { ...tenant, maintenance: true, maintenanceMessage: 'Back at 6' } },
+      {
+        tenant: {
+          ...tenant,
+          maintenance: true,
+          maintenanceMessage: 'Retour à 18 h',
+          maintenanceMessageLanguage: 'fr',
+        },
+      },
     );
     await flow.start();
     expect(flow.step).toBe('maintenance');
-    expect(flow.maintenanceMessage).toBe('Back at 6');
+    expect(flow.maintenanceMessage).toBe('Retour à 18 h');
+    expect(flow.maintenanceMessageLanguage).toBe('fr');
     expect(calls).toEqual([]);
+  });
+
+  it('shows the maintenance step without message nor language', async () => {
+    const { flow } = setup({}, { tenant: { ...tenant, maintenance: true, maintenanceMessage: '' } });
+    await flow.start();
+    expect(flow.step).toBe('maintenance');
+    expect(flow.maintenanceMessage).toBeUndefined();
+    expect(flow.maintenanceMessageLanguage).toBeUndefined();
   });
 
   it('opens the form for a current session, with the default expiry and limits', async () => {
@@ -504,13 +520,71 @@ describe('identification', () => {
   });
 
   it('switches to maintenance on a 503 maintenance problem', async () => {
-    const { flow } = await emailStep({
+    const { flow, calls } = await emailStep({
       'POST /deposit-sessions': problem(503, 'maintenance', { detail: 'Upgrade in progress' }),
     });
     flow.email = 'alice@entity-a.example.com';
     await flow.submitEmail();
     expect(flow.step).toBe('maintenance');
     expect(flow.maintenanceMessage).toBe('Upgrade in progress');
+    // GET /tenant is not routed: the language stays unknown.
+    await vi.waitFor(() => {
+      expect(calls.some((c) => c.path === '/tenant')).toBe(true);
+    });
+    await Promise.resolve();
+    expect(flow.maintenanceMessageLanguage).toBeUndefined();
+  });
+
+  it('reads the language of a 503 maintenance message from GET /tenant', async () => {
+    const maintenanceTenant = (message: string) => ({
+      status: 200,
+      body: { ...tenant, maintenance: true, maintenanceMessage: message, maintenanceMessageLanguage: 'fr' },
+    });
+    const { flow, calls } = await emailStep({
+      'POST /deposit-sessions': problem(503, 'maintenance', { detail: 'Retour à 18 h' }),
+      'GET /tenant': [maintenanceTenant('Retour à 18 h'), maintenanceTenant('Changed meanwhile')],
+    });
+    flow.email = 'alice@entity-a.example.com';
+    await flow.submitEmail();
+    expect(flow.maintenanceMessage).toBe('Retour à 18 h');
+    await vi.waitFor(() => {
+      expect(flow.maintenanceMessageLanguage).toBe('fr');
+    });
+    expect(calls.filter((c) => c.path === '/tenant')).toHaveLength(1);
+
+    // A message that no longer matches the tenant description gets no language.
+    await flow.submitEmail();
+    await vi.waitFor(() => {
+      expect(calls.filter((c) => c.path === '/tenant')).toHaveLength(2);
+    });
+    await Promise.resolve();
+    expect(flow.maintenanceMessageLanguage).toBeUndefined();
+  });
+
+  it('takes the language of a 503 maintenance message from the known tenant description', async () => {
+    const { flow, calls } = setup(
+      {
+        'GET /deposit-sessions/current': problem(401, 'unauthenticated'),
+        'POST /deposit-sessions': problem(503, 'maintenance', { detail: 'Back at 6' }),
+      },
+      { tenant: { ...tenant, maintenanceMessage: 'Back at 6', maintenanceMessageLanguage: 'en' } },
+    );
+    await flow.start();
+    flow.email = 'alice@entity-a.example.com';
+    await flow.submitEmail();
+    expect(flow.step).toBe('maintenance');
+    expect(flow.maintenanceMessageLanguage).toBe('en');
+    expect(calls.some((c) => c.path === '/tenant')).toBe(false);
+  });
+
+  it('gives no language to a 503 maintenance problem without detail', async () => {
+    const { flow, calls } = await emailStep({ 'POST /deposit-sessions': problem(503, 'maintenance') });
+    flow.email = 'alice@entity-a.example.com';
+    await flow.submitEmail();
+    expect(flow.step).toBe('maintenance');
+    expect(flow.maintenanceMessage).toBeUndefined();
+    expect(flow.maintenanceMessageLanguage).toBeUndefined();
+    expect(calls.some((c) => c.path === '/tenant')).toBe(false);
   });
 
   it('maps validation and unknown errors', async () => {

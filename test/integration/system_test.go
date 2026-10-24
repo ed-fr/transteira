@@ -142,10 +142,13 @@ func TestMaintenanceAdmin(t *testing.T) {
 			if !healthOf(t, a.server).Maintenance {
 				t.Errorf("%s: /healthz does not report the maintenance", label)
 			}
-			for lang, want := range map[string]string{"fr": maintenanceMessages["fr"], "en": maintenanceMessages["en"], "de": maintenanceMessages["en"]} {
+			// The language of the message is reported with it (RGAA 8.7).
+			for lang, wantLang := range map[string]string{"fr": "fr", "en": "en", "de": "en"} {
+				want := maintenanceMessages[wantLang]
 				p := publicMaintenance(t, a.server, lang)
-				if !p.Maintenance || p.MaintenanceMessage == nil || *p.MaintenanceMessage != want {
-					t.Errorf("%s: public tenant (%s) = %+v, want maintenance with %q", label, lang, p, want)
+				if !p.Maintenance || p.MaintenanceMessage == nil || *p.MaintenanceMessage != want ||
+					p.MaintenanceMessageLanguage == nil || *p.MaintenanceMessageLanguage != wantLang {
+					t.Errorf("%s: public tenant (%s) = %+v, want maintenance with %q in %q", label, lang, p, want, wantLang)
 				}
 			}
 		}
@@ -171,7 +174,7 @@ func TestMaintenanceAdmin(t *testing.T) {
 		if healthOf(t, a.server).Maintenance {
 			t.Error("/healthz still reports the maintenance")
 		}
-		if p := publicMaintenance(t, a.server, "fr"); p.Maintenance || p.MaintenanceMessage != nil {
+		if p := publicMaintenance(t, a.server, "fr"); p.Maintenance || p.MaintenanceMessage != nil || p.MaintenanceMessageLanguage != nil {
 			t.Errorf("public tenant after the maintenance = %+v", p)
 		}
 

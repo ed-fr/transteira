@@ -89,7 +89,7 @@ func TestMaintenanceMiddlewareWithoutTenant(t *testing.T) {
 func TestNoMaintenance(t *testing.T) {
 	t.Parallel()
 	var m MaintenanceMode = noMaintenance{}
-	if m.Active() || m.Message("en", "fr") != "" {
+	if msg, lang := m.Message("en", "fr"); m.Active() || msg != "" || lang != "" {
 		t.Error("noMaintenance is active or has a message")
 	}
 }

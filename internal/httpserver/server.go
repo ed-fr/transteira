@@ -10,7 +10,9 @@
 //  2. request identifier;
 //  3. real client IP (trusted proxies only);
 //  4. security headers;
-//  5. global rate limit per client IP;
+//  5. rate limit per client IP: the asset limit for the build files of
+//     the web interface (GET and HEAD under /assets/, any Host), the
+//     global limit for every other request;
 //  6. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
 //  7. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
@@ -73,10 +75,28 @@ import (
 // configurable yet.
 const (
 	// GlobalRate is the sustained number of requests per second allowed for
-	// one client IP, on every route.
+	// one client IP, on every route except the build files of the web
+	// interface (GET and HEAD under AssetsPrefix, see isAssetRequest), which
+	// are charged to the separate asset limiter (AssetRate and AssetBurst):
+	// a cold page load fetches dozens of script chunks, which would exhaust
+	// the bucket of a few users sharing one NAT address.
 	GlobalRate rate.Limit = 50
-	// GlobalBurst is the burst allowed for one client IP.
+	// GlobalBurst is the burst allowed for one client IP, on the same
+	// routes as GlobalRate.
 	GlobalBurst = 100
+	// AssetRate is the sustained number of requests per second allowed for
+	// one client IP on the build files of the web interface (GET and HEAD
+	// under AssetsPrefix, on any Host, see isAssetRequest). It is ten times
+	// GlobalRate, so that page loads behind a shared NAT address are not
+	// throttled, yet still bounded: an asset request with an unknown Host
+	// goes through tenant resolution (a database lookup on a cache miss)
+	// before the unknown-host limiter, and must not be an unthrottled way
+	// to force such lookups. Volumetric protection beyond this belongs to
+	// the reverse proxy and to fail2ban or CrowdSec.
+	AssetRate rate.Limit = 500
+	// AssetBurst is the burst allowed for one client IP, on the same
+	// requests as AssetRate.
+	AssetBurst = 1000
 	// UnknownHostInterval is the interval at which one client IP regains a
 	// token for requests carrying an unknown Host (5 per minute).
 	UnknownHostInterval = 12 * time.Second
@@ -117,6 +137,9 @@ const (
 	HealthPath = "/healthz"
 	// ScopeGlobal is the rate-limit scope of the global per-IP limiter.
 	ScopeGlobal = "global"
+	// ScopeAssets is the rate-limit scope of the per-IP limiter of the
+	// build files of the web interface (AssetRate and AssetBurst).
+	ScopeAssets = "assets"
 )
 
 // apiPrefix is the prefix under which every answer must be a Problem rather
@@ -325,6 +348,7 @@ type Option func(*options)
 
 type options struct {
 	globalLimiter      middleware.Limiter
+	assetLimiter       middleware.Limiter
 	unknownHostLimiter middleware.Limiter
 	adminAuthLimiter   middleware.Limiter
 	tokenFailures      TokenFailures
@@ -334,6 +358,12 @@ type options struct {
 // GlobalBurst), for tests.
 func WithGlobalLimiter(l middleware.Limiter) Option {
 	return func(o *options) { o.globalLimiter = l }
+}
+
+// WithAssetLimiter replaces the per-IP limiter of the build files of the
+// web interface (AssetRate and AssetBurst), for tests.
+func WithAssetLimiter(l middleware.Limiter) Option {
+	return func(o *options) { o.assetLimiter = l }
 }
 
 // WithUnknownHostLimiter replaces the per-IP limiter of unknown-host
@@ -364,6 +394,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 	}
 	o := options{
 		globalLimiter:      ratelimit.New(GlobalRate, GlobalBurst),
+		assetLimiter:       ratelimit.New(AssetRate, AssetBurst),
 		unknownHostLimiter: ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
 		adminAuthLimiter:   ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
 		tokenFailures:      newTokenFailures(),
@@ -501,8 +532,30 @@ func New(deps Deps, opts ...Option) http.Handler {
 		middleware.AssignRequestID,
 		middleware.RealIP(trusted),
 		middleware.SecurityHeaders(),
-		middleware.RateLimit(o.globalLimiter, events, ScopeGlobal),
+		// Every request is charged to exactly one of the two limiters:
+		// the asset limiter for the build files of the web interface, the
+		// global limiter for everything else.
+		middleware.RateLimitIf(o.globalLimiter, events, ScopeGlobal, func(r *http.Request) bool {
+			return !isAssetRequest(r)
+		}),
+		middleware.RateLimitIf(o.assetLimiter, events, ScopeAssets, isAssetRequest),
 	)
+}
+
+// isAssetRequest reports whether r is charged to the asset limiter rather
+// than to the global per-IP limiter: a GET or HEAD request for a build file
+// of the web interface, on any Host, whose path starts with AssetsPrefix
+// and is already clean (an unclean path, such as /assets/../x, is
+// redirected or resolved elsewhere and stays under the global limiter).
+// Such files, unknown names included (a 404), are answered from memory.
+// Everything else, entry pages, API and documentation included, is charged
+// to the global limiter.
+func isAssetRequest(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	p := r.URL.Path
+	return strings.HasPrefix(p, AssetsPrefix) && cleanPath(p) == p
 }
 
 // isTenantFree reports whether p is one of the paths served without a

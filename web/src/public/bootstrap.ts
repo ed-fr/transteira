@@ -78,15 +78,21 @@ export function isPublishedLegalDocument(
   return (tenant.legalDocuments as readonly string[]).includes(document);
 }
 
-/** Maintenance message to display, or undefined when maintenance is off. */
+/**
+ * Maintenance message to display with the language it is written in (lang attribute, RGAA 8.7;
+ * undefined without message), or undefined when maintenance is off.
+ */
 export function maintenanceNotice(
-  tenant: Pick<PublicTenant, 'maintenance' | 'maintenanceMessage'>,
-): { message: string | undefined } | undefined {
+  tenant: Pick<PublicTenant, 'maintenance' | 'maintenanceMessage' | 'maintenanceMessageLanguage'>,
+): { message: string | undefined; language: string | undefined } | undefined {
   if (!tenant.maintenance) {
     return undefined;
   }
   const message = tenant.maintenanceMessage?.trim();
-  return { message: message === undefined || message === '' ? undefined : message };
+  if (message === undefined || message === '') {
+    return { message: undefined, language: undefined };
+  }
+  return { message, language: tenant.maintenanceMessageLanguage };
 }
 
 /** Document title: "<page> – <site>", or the page alone when the site name is unknown. */

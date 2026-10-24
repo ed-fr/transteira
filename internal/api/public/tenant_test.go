@@ -79,7 +79,8 @@ func TestPublicTenantWithoutTenantOrService(t *testing.T) {
 func TestGetPublicTenant(t *testing.T) {
 	t.Parallel()
 	svc := &fakeTenantConfig{docs: []string{"privacy-policy"}}
-	mode := &fakeMaintenance{active: true, message: "Back at 8 pm."}
+	// The message falls back to French although English was negotiated.
+	mode := &fakeMaintenance{active: true, message: "Retour vers 20 h.", messageLang: "fr"}
 	s := NewServer(WithTenantService(svc), WithMaintenance(mode))
 	accept := "en-GB,en;q=0.9"
 	resp, err := s.GetPublicTenant(brandedCtx(true), gen.GetPublicTenantRequestObject{
@@ -93,8 +94,11 @@ func TestGetPublicTenant(t *testing.T) {
 	if b.Name != "Entity A" || b.Language != "en" || *got.Headers.ContentLanguage != "en" || !b.Maintenance {
 		t.Errorf("body %+v", b)
 	}
-	if b.MaintenanceMessage == nil || *b.MaintenanceMessage != "Back at 8 pm." || mode.lang != "en" || mode.tenantDefault != "fr" {
+	if b.MaintenanceMessage == nil || *b.MaintenanceMessage != "Retour vers 20 h." || mode.lang != "en" || mode.tenantDefault != "fr" {
 		t.Errorf("maintenance message %v asked for %q (default %q)", b.MaintenanceMessage, mode.lang, mode.tenantDefault)
+	}
+	if b.MaintenanceMessageLanguage == nil || *b.MaintenanceMessageLanguage != "fr" {
+		t.Errorf("maintenance message language %v", b.MaintenanceMessageLanguage)
 	}
 	if !reflect.DeepEqual(b.AvailableLanguages, []gen.Language{"fr", "en"}) && !reflect.DeepEqual(b.AvailableLanguages, []gen.Language{"en", "fr"}) {
 		t.Errorf("languages %v", b.AvailableLanguages)
@@ -116,8 +120,9 @@ func TestGetPublicTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; !b.Maintenance || b.MaintenanceMessage != nil || mode.lang != "fr" {
-		t.Errorf("maintenance without message: %v %v (lang %q)", b.Maintenance, b.MaintenanceMessage, mode.lang)
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; !b.Maintenance || b.MaintenanceMessage != nil ||
+		b.MaintenanceMessageLanguage != nil || mode.lang != "fr" {
+		t.Errorf("maintenance without message: %v %v %v (lang %q)", b.Maintenance, b.MaintenanceMessage, b.MaintenanceMessageLanguage, mode.lang)
 	}
 	// Maintenance off: no flag and no message, even if one is stored.
 	mode.active, mode.message = false, "stale"
@@ -125,8 +130,8 @@ func TestGetPublicTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Maintenance || b.MaintenanceMessage != nil {
-		t.Errorf("maintenance off: %v %v", b.Maintenance, b.MaintenanceMessage)
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Maintenance || b.MaintenanceMessage != nil || b.MaintenanceMessageLanguage != nil {
+		t.Errorf("maintenance off: %v %v %v", b.Maintenance, b.MaintenanceMessage, b.MaintenanceMessageLanguage)
 	}
 
 	// Without logo, without maintenance mode, default language.
@@ -248,19 +253,20 @@ func TestGetTenantLegalDocument(t *testing.T) {
 	}
 }
 
-// fakeMaintenance is a maintenance mode recording the languages asked for.
+// fakeMaintenance is a maintenance mode recording the languages asked for;
+// its message is written in messageLang.
 type fakeMaintenance struct {
-	active              bool
-	message             string
-	lang, tenantDefault string
+	active               bool
+	message, messageLang string
+	lang, tenantDefault  string
 }
 
 func (f *fakeMaintenance) Active() bool { return f.active }
 
-func (f *fakeMaintenance) Message(lang, tenantDefault string) string {
+func (f *fakeMaintenance) Message(lang, tenantDefault string) (msg, msgLang string) {
 	f.lang, f.tenantDefault = lang, tenantDefault
-	if !f.active {
-		return ""
+	if !f.active || f.message == "" {
+		return "", ""
 	}
-	return f.message
+	return f.message, f.messageLang
 }

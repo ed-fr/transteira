@@ -83,7 +83,7 @@ lines usually mean a reverse proxy that does not forward the client address
 | `api_token_invalid` | API token refused on a deposit operation (`Authorization: Bearer`): empty, malformed, unknown on this tenant (a token of another tenant included), revoked or expired, without telling them apart. Answered `401 invalid-credentials`. | None. The token is never written. |
 | `unknown_fqdn` | `Host` header matching neither a tenant nor an admin host (`TT_ADMIN_HOSTS`): the request is rejected with `421 Misdirected Request` on every path except `/healthz` and `/api/openapi.yaml`, which answer without a tenant. | `host`: the received Host (escaped, truncated). |
 | `deposit_refused` | Deposit refused. | `reason`: `ip` (outside the tenant's IP ranges, or a valid API token used from outside its allowed ranges: `403 ip-not-allowed`; the token identifier is in the application log, never here), `domain` (address outside the allowed domains, or a token deposit whose sender is not in the token's `allowedSenders`), `blocklist`, `invitation` (missing, unknown or expired). |
-| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). See [Admin host scopes](#admin-host-scopes) for `admin_login` and `admin_auth`, and [API token scope](#api-token-scope) for `api_token`. |
+| `rate_limited` | A rate limit was exceeded. | `scope`: the limiter (for example `global`, `assets`, `verification_code`, `admin_login`, or `transfer_password` when an unlock is refused because the transfer or the client IP is locked: 3 wrong passwords within a sliding 15-minute window lock for 15 minutes; a right password clears the transfer counter and withdraws only the failure it had just added to the IP counter, so failures on other transfers still count; this scope also carries the `transfer` field described above; or `download_streams` when a download is refused because too many streams are open at once: 2 per client for one transfer, 4 for one transfer across all clients, 8 per client across all transfers of the tenant, where a client is an IPv4 address or an IPv6 /64; this scope carries the same truncated `transfer` field). See [Admin host scopes](#admin-host-scopes) for `admin_login` and `admin_auth`, and [API token scope](#api-token-scope) for `api_token`. |
 
 See [Log throttling](#log-throttling) for the events that are not written
 for every occurrence.
@@ -120,6 +120,22 @@ fail2ban filter and CrowdSec scenario like every other scope but
 
 The other admin operations need a session and only count against the
 `global` limit.
+
+Every request counts against exactly one of two per-client limits (IPv4
+address or IPv6 /64), checked before the tenant is resolved:
+
+- `assets`: the build files of the web interface (`GET` and `HEAD` under
+  `/assets/`, with a clean path, whatever the `Host`): 500 requests per
+  second sustained, with a burst of 1000. A cold load of an admin page
+  fetches dozens of script chunks, which the `global` limit would refuse to
+  users sharing one NAT address; the files are served from memory, but an
+  unknown `Host` still costs a tenant lookup, so they are not unlimited.
+- `global`: every other request, entry pages, the API, the documentation
+  and the help included: 50 requests per second sustained, with a burst
+  of 100.
+
+Volumetric protection beyond these limits belongs to the reverse proxy and
+to fail2ban or CrowdSec.
 
 New event types and new fields may be added in later versions; existing
 names never change. Parsers must ignore unknown fields.

@@ -34,12 +34,16 @@
 // Templates use the same filter through [Template], which also recognizes
 // {{name}} placeholders: in text, in title and alt attributes, and as the
 // whole value of href (a URL produced by the server, typed [URL]).
+//
+// [ForPreview] removes the inline styles and images of a rendered mail for
+// the administration preview, whose CSP would block them.
 package sanitize
 
 import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -472,6 +476,59 @@ var (
 // EscapeAttr escapes a value for a double-quoted attribute, the way the
 // sanitizer does.
 func EscapeAttr(s string) string { return escapeAttr(s) }
+
+// ForPreview returns the HTML document doc, a rendered mail, made fit for
+// the administration preview of mail templates (threats T-91 and T-163),
+// re-serialized from the parsed tree: style attributes and style elements
+// are removed, and each image is replaced by its alt text in brackets (an
+// image without alt text is removed). The strict CSP of the administration
+// (style-src 'self', img-src 'self' data:) would block every inline style
+// and every "cid:" image anyway, logging a CSP violation in the browser for
+// each; a preview therefore shows the structure and content of the mail
+// without its styles. The mails sent are not affected.
+func ForPreview(doc string) string {
+	root, _ := html.Parse(strings.NewReader(doc)) // strings.Reader never fails
+	forPreview(root)
+	var b strings.Builder
+	// Render only fails on a writer error, or on a tree that the parser
+	// never builds (a void element with children); strings.Builder never
+	// fails.
+	_ = html.Render(&b, root)
+	return b.String()
+}
+
+// forPreview applies [ForPreview] to the subtree of n.
+func forPreview(n *html.Node) {
+	n.Attr = slices.DeleteFunc(n.Attr, func(a html.Attribute) bool {
+		return a.Namespace == "" && strings.EqualFold(a.Key, "style")
+	})
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		switch {
+		case c.Type != html.ElementNode:
+		case c.DataAtom == atom.Style:
+			n.RemoveChild(c)
+		case c.DataAtom == atom.Img:
+			if alt := strings.TrimSpace(attrValue(c, "alt")); alt != "" {
+				n.InsertBefore(&html.Node{Type: html.TextNode, Data: "[" + alt + "]"}, c)
+			}
+			n.RemoveChild(c)
+		default:
+			forPreview(c)
+		}
+		c = next
+	}
+}
+
+// attrValue returns the value of the attribute key of n, or "".
+func attrValue(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Namespace == "" && a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
+}
 
 // HasContent reports whether sanitized HTML shows something: text other
 // than whitespace, or an image.

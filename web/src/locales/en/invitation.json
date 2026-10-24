@@ -29,6 +29,7 @@
     "submit": "Send the invitation",
     "backToDeposit": "Back to sending files",
     "rateLimited": "You have sent too many invitations in the last hour.",
+    "refused": "This invitation cannot be sent. Check the address or contact your administrator.",
     "sent": {
       "title": "Invitation sent",
       "text": "An invitation was sent to {email}. The link stays valid for 12 months if it is not used.",

@@ -428,7 +428,7 @@
       "subject": "Objet : {subject}",
       "html": "Version HTML",
       "text": "Version texte",
-      "note": "Les styles en ligne des modèles, par défaut ou personnalisés, ne s’appliquent pas dans cet aperçu, et les liens y sont désactivés. Le mail reçu les affichera normalement.",
+      "note": "Cet aperçu montre la structure et le contenu du mail sans ses styles : les images y sont remplacées par leur description et les liens sont désactivés. Le mail reçu les affiche normalement.",
       "linkDisabled": "Lien désactivé dans l’aperçu"
     },
     "reset": {

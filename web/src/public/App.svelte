@@ -124,7 +124,11 @@
     {#snippet banner()}
       {#if showBanner}
         <Alert severity="warning" live={false} title={t('common.maintenance.banner')}>
-          <span class="tt-break banner-text">{notice?.message ?? t('common.maintenance.bannerText')}</span>
+          {#if notice?.message !== undefined}
+            <span class="tt-break banner-text" lang={notice.language}>{notice.message}</span>
+          {:else}
+            <span class="tt-break banner-text">{t('common.maintenance.bannerText')}</span>
+          {/if}
         </Alert>
       {/if}
     {/snippet}

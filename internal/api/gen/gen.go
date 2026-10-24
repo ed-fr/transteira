@@ -1642,6 +1642,7 @@ type Email = string
 
 // EmailPreview defines model for EmailPreview.
 type EmailPreview struct {
+	// BodyHtml Complete HTML document of the mail, sanitized. Style attributes and style elements are removed in the preview (the administration CSP would block them), and images are replaced by their alt text in brackets; the mail sent keeps them.
 	BodyHtml string `json:"bodyHtml"`
 	BodyText string `json:"bodyText"`
 	Subject  string `json:"subject"`
@@ -2071,9 +2072,16 @@ type PublicTenant struct {
 	// MaintenanceMessage Maintenance message set by the super admin, as plain text (render it as text, never as
 	// HTML): the message in the negotiated language (`Accept-Language`), else in the tenant
 	// default language, else in English, else in any language available. Absent when
-	// maintenance mode is off or no message is set.
+	// maintenance mode is off or no message is set. Its language is
+	// `maintenanceMessageLanguage`, which may differ from `language`.
 	MaintenanceMessage *string `json:"maintenanceMessage,omitempty"`
-	Name               string  `json:"name"`
+
+	// MaintenanceMessageLanguage Language the `maintenanceMessage` is written in, after the fallback described there (it
+	// may differ from `language`, for example when the message only exists in English): a
+	// client shows the message marked up with this language (HTML `lang` attribute, RGAA
+	// criterion 8.7). Present if and only if `maintenanceMessage` is present.
+	MaintenanceMessageLanguage *Language `json:"maintenanceMessageLanguage,omitempty"`
+	Name                       string    `json:"name"`
 }
 
 // PublicTenantLegalDocuments defines model for PublicTenant.LegalDocuments.

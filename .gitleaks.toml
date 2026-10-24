@@ -45,3 +45,16 @@ paths = [
   '''^web/dist/''',
   '''^test/e2e/node_modules/''',
 ]
+
+# End-to-end run artefacts (gitignored): the seeded throwaway credentials of the run
+# (test/e2e/.run/state.json, storage states with session cookies) and the Playwright traces and
+# reports, which record request headers. They only exist locally and hold no real secret.
+[[allowlists]]
+description = "End-to-end run artefacts (gitignored, throwaway credentials of a local run)"
+paths = [
+  '''^test/e2e/\.run/''',
+  # Run lock of a run in progress (owner.json: PID and a random lock token).
+  '''^test/e2e/\.run\.lock''',
+  '''^test/e2e/test-results/''',
+  '''^test/e2e/playwright-report/''',
+]

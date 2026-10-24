@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -416,6 +417,49 @@ func TestTokenAuthMiddleware(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if seen != nil || rec.Code != http.StatusInternalServerError || !strings.Contains(buf.String(), "without tenant") {
 		t.Errorf("without tenant: %d, %s", rec.Code, buf.String())
+	}
+}
+
+// TestTokenAuthFailureLevel checks that a token lookup failure is logged
+// at Error level, and only at Debug level when the client canceled the
+// request.
+func TestTokenAuthFailureLevel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		err    error
+		cancel bool
+		level  string
+	}{
+		{"server failure", errors.New("database is locked"), false, "ERROR"},
+		{"client canceled", fmt.Errorf("lookup: %w", context.Canceled), true, "DEBUG"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var buf lockedBuffer
+			logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			a := newTokenAuth(fakeTokens{err: tt.err}, newTokenFailures(), NewSecurityEvents(securitylog.New(&lockedBuffer{}), logger), logger)
+			h := middleware.RealIP(func(netip.Addr) bool { return false })(
+				a.middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("handler reached") })))
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/transfers/trf_x", nil)
+			req.Pattern = http.MethodGet + " " + APIBaseURL + "/transfers/{transferId}"
+			req.Header.Set("Authorization", "Bearer "+newSecret(t))
+			ctx := tenant.WithTenant(req.Context(), &tenant.Tenant{ID: "ten_a", FQDN: hostA})
+			if tt.cancel {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req.WithContext(ctx))
+			if rec.Code != http.StatusInternalServerError {
+				t.Fatalf("status %d, want 500", rec.Code)
+			}
+			if got := buf.String(); !strings.Contains(got, `"level":"`+tt.level+`"`) || !strings.Contains(got, "api token lookup failed") {
+				t.Errorf("log %s, want the failure at level %s", got, tt.level)
+			}
+		})
 	}
 }
 

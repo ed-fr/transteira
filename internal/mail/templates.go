@@ -302,13 +302,23 @@ func (t *Templates) RenderFor(ctx context.Context, lookup OverrideLookup, tenant
 
 // Preview renders template key in lang with the sample data of the key
 // (see [Variables]): override when not nil, else the default template.
+// The HTML of a preview is shown inside the administration, whose CSP
+// blocks inline styles and "cid:" images: its style attributes and style
+// elements are removed and its images replaced by their alt text
+// ([sanitize.ForPreview]), so a preview shows the structure and content of
+// the mail without its styles; the mails sent keep them.
 // Errors wrap [ErrUnknownTemplate] or [ErrInvalidTemplate].
 func (t *Templates) Preview(key, lang string, override *TemplateSource) (Message, error) {
 	name, _, err := lookupKey(key)
 	if err != nil {
 		return Message{}, err
 	}
-	return t.RenderOverride(name, lang, keyDefs[name].sample, override)
+	m, err := t.RenderOverride(name, lang, keyDefs[name].sample, override)
+	if err != nil {
+		return Message{}, err
+	}
+	m.HTML = sanitize.ForPreview(m.HTML)
+	return m, nil
 }
 
 // --- Rendering ---------------------------------------------------------------

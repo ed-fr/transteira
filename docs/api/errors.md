@@ -435,8 +435,10 @@ use to ban the client IP.
   stays in English. The response carries `Retry-After` (300 seconds, also in
   `retryAfterSeconds`). The tus `PATCH` requests get a `503` without a body, with
   `Tus-Resumable` and `Retry-After`: resume the upload (`HEAD`, then `PATCH`) after the
-  maintenance. `GET /tenant` reports `maintenance: true` and the same message as
-  `maintenanceMessage`.
+  maintenance. The problem carries no `Content-Language` and does not say which language the
+  `detail` is written in (it may be a fallback); `GET /tenant` reports `maintenance: true`, the
+  same message as `maintenanceMessage` and its language as `maintenanceMessageLanguage`, to mark
+  the message up (for example the HTML `lang` attribute).
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`,
   `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`, `POST /invitations`.
 - **What to do:** retry after `Retry-After`; show `detail` (as text, never as HTML) to the user.

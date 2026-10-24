@@ -76,7 +76,7 @@ func TestAdminLifecycle(t *testing.T) {
 			st.Message == nil || len(st.Message) != 0 {
 			t.Fatalf("initial state %+v, %v", st, err)
 		}
-		if m.Message("fr", "fr") != "" {
+		if message(m, "fr", "fr") != "" {
 			t.Error("message while off")
 		}
 
@@ -90,11 +90,11 @@ func TestAdminLifecycle(t *testing.T) {
 			t.Fatalf("state after Set on %+v", st)
 		}
 		msgs["fr"] = "changed by the caller"
-		if m.Message("fr", "en") != "Retour vers 20 h." {
+		if message(m, "fr", "en") != "Retour vers 20 h." {
 			t.Error("the caller's map is shared with the mode")
 		}
 		st.Message["en"] = "changed through the state"
-		if m.Message("en", "en") != "Back around 8 pm.\nSorry." {
+		if message(m, "en", "en") != "Back around 8 pm.\nSorry." {
 			t.Error("the state map is shared with the mode")
 		}
 
@@ -107,13 +107,13 @@ func TestAdminLifecycle(t *testing.T) {
 
 		// Enabled again: the start is kept, the messages replaced.
 		st, err = m.Set(ctx, superAdmin, true, nil, clientIP)
-		if err != nil || !st.Since.Equal(storeNow) || len(st.Message) != 0 || m.Message("en", "fr") != "" {
+		if err != nil || !st.Since.Equal(storeNow) || len(st.Message) != 0 || message(m, "en", "fr") != "" {
 			t.Fatalf("Set on again: %+v, %v", st, err)
 		}
 
 		st, err = m.Set(ctx, superAdmin, false, map[string]string{"en": "kept for next time"}, clientIP)
 		if err != nil || st.Enabled || st.Source != maintenance.SourceNone || st.AdminEnabled || !st.Since.IsZero() ||
-			st.Message["en"] != "kept for next time" || m.Active() || m.Message("en", "en") != "" {
+			st.Message["en"] != "kept for next time" || m.Active() || message(m, "en", "en") != "" {
 			t.Fatalf("Set off: %+v, %v", st, err)
 		}
 
@@ -163,7 +163,7 @@ func TestForcedByEnvironment(t *testing.T) {
 		}
 		st, err := m.Set(ctx, superAdmin, true, map[string]string{"en": "Upgrade."}, clientIP)
 		if err != nil || st.Source != maintenance.SourceEnvironment || !st.AdminEnabled || !st.Since.Equal(procStart) ||
-			m.Message("fr", "fr") != "Upgrade." {
+			message(m, "fr", "fr") != "Upgrade." {
 			t.Fatalf("enable while forced: %+v, %v", st, err)
 		}
 		// Lifting the override leaves the stored choice in effect.
@@ -217,18 +217,17 @@ func TestForce(t *testing.T) {
 // default, English, then any supported language, then any key.
 func TestMessageFallback(t *testing.T) {
 	tests := []struct {
-		name          string
-		messages      map[string]string
-		lang, deflt   string
-		want          string
-		wantNoMessage bool
+		name           string
+		messages       map[string]string
+		lang, deflt    string
+		want, wantLang string
 	}{
-		{"negotiated", map[string]string{"fr": "FR", "en": "EN"}, "fr", "en", "FR", false},
-		{"tenant default", map[string]string{"fr": "FR", "en": "EN"}, "de", "fr", "FR", false},
-		{"english", map[string]string{"fr": "FR", "en": "EN"}, "de", "it", "EN", false},
-		{"any supported", map[string]string{"fr": "FR"}, "en", "en", "FR", false},
-		{"any key", map[string]string{"zz": "ZZ", "yy": "YY"}, "en", "fr", "YY", false},
-		{"none", map[string]string{}, "en", "fr", "", true},
+		{"negotiated", map[string]string{"fr": "FR", "en": "EN"}, "fr", "en", "FR", "fr"},
+		{"tenant default", map[string]string{"fr": "FR", "en": "EN"}, "de", "fr", "FR", "fr"},
+		{"english", map[string]string{"fr": "FR", "en": "EN"}, "de", "it", "EN", "en"},
+		{"any supported", map[string]string{"fr": "FR"}, "en", "en", "FR", "fr"},
+		{"any key", map[string]string{"zz": "ZZ", "yy": "YY"}, "en", "fr", "YY", "yy"},
+		{"none", map[string]string{}, "en", "fr", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -237,8 +236,8 @@ func TestMessageFallback(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := m.Message(tt.lang, tt.deflt); got != tt.want {
-				t.Errorf("Message(%q, %q) = %q, want %q", tt.lang, tt.deflt, got, tt.want)
+			if got, gotLang := m.Message(tt.lang, tt.deflt); got != tt.want || gotLang != tt.wantLang {
+				t.Errorf("Message(%q, %q) = %q, %q, want %q, %q", tt.lang, tt.deflt, got, gotLang, tt.want, tt.wantLang)
 			}
 		})
 	}
@@ -259,7 +258,7 @@ func TestMessageNoAlloc(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range [][2]string{{"fr", "en"}, {"de", "fr"}, {"de", "it"}} {
-		if n := testing.AllocsPerRun(100, func() { _ = m.Message(c[0], c[1]) }); n != 0 {
+		if n := testing.AllocsPerRun(100, func() { _, _ = m.Message(c[0], c[1]) }); n != 0 {
 			t.Errorf("Message(%q, %q) allocates %v times, want 0", c[0], c[1], n)
 		}
 	}
@@ -424,7 +423,7 @@ func TestConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for range 200 {
 				_ = m.Active()
-				_ = m.Message("en", "fr")
+				_, _ = m.Message("en", "fr")
 				_ = m.State()
 			}
 		}()
@@ -473,3 +472,9 @@ func (f *fakeRepo) UpdateTx(_ context.Context, fn func(*store.SystemTx, *store.S
 type fakeAuditor struct{ err error }
 
 func (f *fakeAuditor) RecordTx(context.Context, *store.SystemTx, audit.Event) error { return f.err }
+
+// message returns the maintenance message of m without its language.
+func message(m *maintenance.Mode, lang, tenantDefault string) string {
+	msg, _ := m.Message(lang, tenantDefault)
+	return msg
+}

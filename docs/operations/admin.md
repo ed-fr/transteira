@@ -293,10 +293,12 @@ screens; what each setting does and who may change it is described in
 A tenant outside the admin's scope shows "not found". Leaving a screen with
 unsaved changes asks for a confirmation.
 
-The template preview shows the email as the server renders it, with its
-links disabled. Inline styles of a customised template are not applied in
-the preview (the administration's Content Security Policy blocks them,
-which the browser console reports): the email itself keeps them.
+The template preview shows the structure and content of the email as the
+server renders it, with its links disabled. For the preview only, the
+server removes the inline styles (of the default and customised templates
+alike) and replaces the images, such as the QR code, by their description:
+the administration's Content Security Policy would block them. The email
+itself keeps its styles and images.
 
 ### Admin accounts
 
@@ -894,8 +896,12 @@ message, see [errors](../api/errors.md#maintenance)):
 - creating an invitation (`POST /invitations`).
 
 Everything else keeps working: downloads, the public tenant information
-(`GET /tenant` reports `maintenance: true` and the `maintenanceMessage` for
-the negotiated language), the administration and the health check
+(`GET /tenant` reports `maintenance: true`, the `maintenanceMessage` for
+the negotiated language and, in `maintenanceMessageLanguage`, the language it
+is actually written in: when no message exists in the negotiated language,
+the tenant default, English or any written language is used instead, and the
+public interface marks the message up with that language for screen readers,
+RGAA criterion 8.7), the administration and the health check
 (`/healthz` keeps its status and reports `"maintenance": true`).
 
 Every change by the super admin is audited (`maintenance.enabled` or

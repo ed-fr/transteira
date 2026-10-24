@@ -16,17 +16,17 @@ type MaintenanceMode interface {
 	// called on every deposit request and must be cheap.
 	Active() bool
 	// Message returns the maintenance message for the negotiated language
-	// lang on a tenant whose default language is tenantDefault, "" for
-	// none.
-	Message(lang, tenantDefault string) string
+	// lang on a tenant whose default language is tenantDefault, with the
+	// language it is written in; two empty strings for none.
+	Message(lang, tenantDefault string) (msg, msgLang string)
 }
 
 // noMaintenance is the maintenance mode of a server built without one:
 // never active.
 type noMaintenance struct{}
 
-func (noMaintenance) Active() bool               { return false }
-func (noMaintenance) Message(_, _ string) string { return "" }
+func (noMaintenance) Active() bool                              { return false }
+func (noMaintenance) Message(_, _ string) (msg, msgLang string) { return "", "" }
 
 // MaintenanceRetryAfter is the delay suggested to clients refused during
 // maintenance (Retry-After header).
@@ -59,7 +59,10 @@ var maintenanceBlocked = map[string]struct{}{
 // detail is the maintenance message in the language negotiated from
 // Accept-Language and the tenant default (plain text, absent when none is
 // set). The Problem carries no Content-Language: its title stays English
-// whatever the language of the message. It runs as a per-operation
+// whatever the language of the message, and the language of the detail
+// (which may be a fallback) is not reported; a client that shows the
+// message marked up with its language reads PublicTenant.maintenanceMessage
+// and maintenanceMessageLanguage instead. It runs as a per-operation
 // middleware of the API router, before the body limit and before the
 // request body is read or decoded.
 func maintenanceMiddleware(mode MaintenanceMode) func(http.Handler) http.Handler {
@@ -82,7 +85,7 @@ func maintenanceMiddleware(mode MaintenanceMode) func(http.Handler) http.Handler
 				tenantDefault = t.DefaultLanguage
 			}
 			lang := i18n.Negotiate(r.Header.Get("Accept-Language"), tenantDefault)
-			if msg := mode.Message(lang, tenantDefault); msg != "" {
+			if msg, _ := mode.Message(lang, tenantDefault); msg != "" {
 				opts = append(opts, problem.WithDetail(msg))
 			}
 			writeProblem(w, r, problem.New(problem.CodeMaintenance, opts...))

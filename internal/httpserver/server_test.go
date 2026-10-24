@@ -125,14 +125,17 @@ func (f *fakeMaintenance) Store(on bool) { f.active.Store(on) }
 
 func (f *fakeMaintenance) Active() bool { return f.active.Load() }
 
-func (f *fakeMaintenance) Message(lang, tenantDefault string) string {
+func (f *fakeMaintenance) Message(lang, tenantDefault string) (msg, msgLang string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked = [2]string{lang, tenantDefault}
-	if msg, ok := f.messages[lang]; ok {
-		return msg
+	if text, ok := f.messages[lang]; ok {
+		return text, lang
 	}
-	return f.messages[tenantDefault]
+	if text, ok := f.messages[tenantDefault]; ok {
+		return text, tenantDefault
+	}
+	return "", ""
 }
 
 func (f *fakeMaintenance) setMessages(m map[string]string) {
@@ -538,6 +541,138 @@ func TestGlobalRateLimit(t *testing.T) {
 	if !strings.Contains(e.secLog.String(), "ip=192.0.2.10 tenant=- event=rate_limited scope=\"global\"") {
 		t.Errorf("security log %q", e.secLog.String())
 	}
+}
+
+// budgetLimiter allows its first n requests, then denies every request.
+type budgetLimiter struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (b *budgetLimiter) Allow(string) (bool, time.Duration) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.n <= 0 {
+		return false, 3 * time.Second
+	}
+	b.n--
+	return true, 0
+}
+
+// countingResolver is fakeResolver counting its lookups.
+type countingResolver struct {
+	fakeResolver
+	calls atomic.Int64
+}
+
+func (c *countingResolver) Resolve(ctx context.Context, host string) (*tenant.Tenant, error) {
+	c.calls.Add(1)
+	return c.fakeResolver.Resolve(ctx, host)
+}
+
+// TestAssetLimiter checks that the build files of the web interface (GET
+// and HEAD under AssetsPrefix, on every kind of host, unknown names
+// included) are charged to the asset limiter and never to the global
+// limiter, while entry pages, the API, other methods and unclean asset
+// paths are charged to the global limiter only; and that an exhausted
+// asset bucket refuses asset requests, unknown hosts included, before any
+// tenant resolution.
+func TestAssetLimiter(t *testing.T) {
+	t.Parallel()
+	global := &budgetLimiter{n: 3}
+	exempt := []struct {
+		method, target, host string
+		status               int
+	}{
+		{http.MethodGet, "/assets/public-abc.js", hostA, http.StatusOK},
+		{http.MethodHead, "/assets/public-abc.css", hostA, http.StatusOK},
+		{http.MethodGet, "/assets/missing-abc.js", hostA, http.StatusNotFound},
+		{http.MethodGet, "/assets/public-abc.js", hostAdmin, http.StatusOK},
+		{http.MethodGet, "/assets/public-abc.js", hostUnknown, http.StatusMisdirectedRequest},
+	}
+	const rounds = 10
+	assetBudget := rounds*len(exempt) + len(exempt)
+	assets := &budgetLimiter{n: assetBudget}
+	resolver := &countingResolver{}
+	e := newEnv(t, envConfig{resolver: resolver, opts: []Option{
+		WithGlobalLimiter(global),
+		WithAssetLimiter(assets),
+		// The unknown-host limiter must not mask the asset limiter.
+		WithUnknownHostLimiter(&budgetLimiter{n: 1 << 30}),
+	}})
+	// Well beyond the global budget: an asset request consumes no global
+	// token.
+	for range rounds {
+		for _, tt := range exempt {
+			if rec := e.do(t, tt.method, tt.target, tt.host, nil); rec.Code != tt.status {
+				t.Fatalf("%s %s on %s: status %d, want %d", tt.method, tt.target, tt.host, rec.Code, tt.status)
+			}
+		}
+	}
+	// The global budget is intact: three limited requests pass, the next
+	// ones are refused.
+	for i := range 3 {
+		if rec := e.do(t, http.MethodGet, "/api/v1/version", hostA, nil); rec.Code != http.StatusOK {
+			t.Fatalf("API request %d: status %d, want 200", i, rec.Code)
+		}
+	}
+	limited := []struct{ method, target, host string }{
+		{http.MethodGet, "/api/v1/version", hostA},
+		{http.MethodGet, "/", hostA},
+		{http.MethodGet, "/admin/", hostAdmin},
+		{http.MethodGet, "/api/v1/version", hostUnknown},
+		{http.MethodPost, "/assets/public-abc.js", hostA},
+		{http.MethodGet, "/assets/../assets/public-abc.js", hostA},
+		{http.MethodGet, "/assets//public-abc.js", hostA},
+		{http.MethodGet, "/assetsx/public-abc.js", hostA},
+	}
+	for _, tt := range limited {
+		rec := e.do(t, tt.method, tt.target, tt.host, nil)
+		decodeProblem(t, rec, http.StatusTooManyRequests, problem.CodeRateLimited)
+	}
+	// Assets are still served once the global bucket is empty, and none of
+	// the limited requests consumed an asset token: exactly the remaining
+	// asset budget passes.
+	for _, tt := range exempt {
+		if rec := e.do(t, tt.method, tt.target, tt.host, nil); rec.Code != tt.status {
+			t.Errorf("%s %s on %s with an empty global bucket: status %d, want %d", tt.method, tt.target, tt.host, rec.Code, tt.status)
+		}
+	}
+	// The asset bucket is now empty: every asset request is refused,
+	// unknown hosts included, without resolving the tenant.
+	before := resolver.calls.Load()
+	for _, tt := range exempt {
+		rec := e.do(t, tt.method, tt.target, tt.host, nil)
+		if tt.method == http.MethodHead {
+			if rec.Code != http.StatusTooManyRequests {
+				t.Errorf("%s %s on %s with an empty asset bucket: status %d, want 429", tt.method, tt.target, tt.host, rec.Code)
+			}
+			continue
+		}
+		decodeProblem(t, rec, http.StatusTooManyRequests, problem.CodeRateLimited)
+	}
+	if got := resolver.calls.Load(); got != before {
+		t.Errorf("tenant resolved %d times for refused asset requests", got-before)
+	}
+	if !strings.Contains(e.secLog.String(), "ip=192.0.2.10 tenant=- event=rate_limited scope=\"assets\"") {
+		t.Errorf("asset rate limit not logged: %q", e.secLog.String())
+	}
+}
+
+func TestDefaultAssetLimiter(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, envConfig{})
+	// Same reasoning as TestDefaultGlobalLimiter, with the asset bucket.
+	const attempts = 20 * AssetBurst
+	for i := range attempts {
+		if e.do(t, http.MethodGet, "/assets/public-abc.js", hostA, nil).Code == http.StatusTooManyRequests {
+			if i < AssetBurst {
+				t.Errorf("refused after %d asset requests, below AssetBurst %d", i, AssetBurst)
+			}
+			return
+		}
+	}
+	t.Errorf("the default asset limiter never refused any of %d requests", attempts)
 }
 
 func TestDefaultGlobalLimiter(t *testing.T) {

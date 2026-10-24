@@ -235,30 +235,32 @@ func (m *Mode) State() State {
 
 // Message returns the maintenance message to show to a client whose
 // negotiated language is lang, on a tenant whose default language is
-// tenantDefault: the message in lang, else in tenantDefault, else in
-// English, else in the first supported language that has one. It returns
-// "" when the maintenance mode is off or no message is set.
-func (m *Mode) Message(lang, tenantDefault string) string {
+// tenantDefault, with the language it is written in: the message in lang,
+// else in tenantDefault, else in English, else in the first supported
+// language that has one. It returns two empty strings when the maintenance
+// mode is off or no message is set. The language lets a client mark the
+// message up with it (RGAA 8.7): it may differ from lang.
+func (m *Mode) Message(lang, tenantDefault string) (msg, msgLang string) {
 	s := m.state.Load()
 	if !s.active || len(s.messages) == 0 {
-		return ""
+		return "", ""
 	}
 	// The usual cases first, without allocating (Message runs on every
 	// request during a maintenance).
 	for _, l := range [...]string{lang, tenantDefault, i18n.English} {
-		if msg, ok := s.messages[l]; ok {
-			return msg
+		if text, ok := s.messages[l]; ok {
+			return text, l
 		}
 	}
 	for _, l := range i18n.Supported() {
-		if msg, ok := s.messages[l]; ok {
-			return msg
+		if text, ok := s.messages[l]; ok {
+			return text, l
 		}
 	}
 	// Unreachable while the stored keys are supported languages, which the
 	// store enforces; kept so that a message is never silently lost.
 	keys := slices.Sorted(maps.Keys(s.messages))
-	return s.messages[keys[0]]
+	return s.messages[keys[0]], keys[0]
 }
 
 // Force turns the environment override on or off at run time: Run sets it

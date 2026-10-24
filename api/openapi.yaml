@@ -275,22 +275,47 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublicTenant' }
-              example:
-                name: Entity A
-                language: fr
-                availableLanguages: [fr, en]
-                branding:
-                  primaryColor: '#0B5FFF'
-                  accentColor: '#00875A'
-                  hasLogo: true
-                  hasBackground: false
-                  logoUrl: /api/v1/tenant/assets/logo
-                  backgroundUrl: /api/v1/tenant/assets/background
-                limits:
-                  maxTransferBytes: 21474836480
-                  expiryDays: [1, 7, 30]
-                maintenance: false
-                legalDocuments: [legal-notice, privacy-policy]
+              examples:
+                normal:
+                  summary: Usual configuration
+                  value:
+                    name: Entity A
+                    language: fr
+                    availableLanguages: [fr, en]
+                    branding:
+                      primaryColor: '#0B5FFF'
+                      accentColor: '#00875A'
+                      hasLogo: true
+                      hasBackground: false
+                      logoUrl: /api/v1/tenant/assets/logo
+                      backgroundUrl: /api/v1/tenant/assets/background
+                    limits:
+                      maxTransferBytes: 21474836480
+                      expiryDays: [1, 7, 30]
+                    maintenance: false
+                    legalDocuments: [legal-notice, privacy-policy]
+                maintenance:
+                  summary: Maintenance mode, message only written in English
+                  description: |
+                    The client negotiated French, but the super admin wrote the maintenance message
+                    in English only: `maintenanceMessageLanguage` reports the fallback language.
+                  value:
+                    name: Entity A
+                    language: fr
+                    availableLanguages: [fr, en]
+                    branding:
+                      primaryColor: '#0B5FFF'
+                      accentColor: '#00875A'
+                      hasLogo: false
+                      hasBackground: false
+                      backgroundUrl: /api/v1/tenant/assets/background
+                    limits:
+                      maxTransferBytes: 21474836480
+                      expiryDays: [1, 7, 30]
+                    maintenance: true
+                    maintenanceMessage: Upgrade in progress, back around 8 pm.
+                    maintenanceMessageLanguage: en
+                    legalDocuments: []
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2446,7 +2471,12 @@ paths:
       tags: [Admin tenants]
       operationId: previewEmailTemplate
       summary: Render a template with sample data
-      description: Renders the submitted (unsaved) template, or the stored one when the body is empty.
+      description: >-
+        Renders the submitted (unsaved) template, or the stored one when the body is empty.
+        The HTML of the preview is meant to be shown inside the administration: style
+        attributes and style elements are removed (the administration CSP would block them)
+        and each image is replaced by its alt text in brackets (inline `cid:` images cannot be
+        loaded by a browser). The mails sent keep their styles and images.
       security:
         - adminSession: []
           csrfToken: []
@@ -2467,7 +2497,7 @@ paths:
               schema: { $ref: '#/components/schemas/EmailPreview' }
               example:
                 subject: Files from alice@entity-a.example.com
-                bodyHtml: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Files from alice@entity-a.example.com</title>\n</head>\n<body>\n<div role=\"main\">\n<p>alice@entity-a.example.com sent you files.</p><p><a href=\"https://transfer.entity-a.example.com/d/dl_sample\">Download</a></p><p><strong>This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.</strong></p><ul>\n<li><strong>report.pdf</strong> (1.5 MB)<br>\n<span>SHA-256: <code>abababababababababababababababababababababababababababababababab</code></span></li>\n</ul>\n</div>\n</body>\n</html>\n"
+                bodyHtml: "<!DOCTYPE html><html lang=\"en\"><head>\n<meta charset=\"utf-8\"/>\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>\n<title>Files from alice@entity-a.example.com</title>\n</head>\n<body>\n<div role=\"main\">\n<p>alice@entity-a.example.com sent you files.</p><p><a href=\"https://transfer.entity-a.example.com/d/dl_sample\">Download</a></p><p><strong>This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.</strong></p><ul>\n<li><strong>report.pdf</strong> (1.5 MB)<br/>\n<span>SHA-256: <code>abababababababababababababababababababababababababababababababab</code></span></li>\n</ul>\n</div>\n</body></html>"
                 bodyText: "alice@entity-a.example.com sent you files.\nhttps://transfer.entity-a.example.com/d/dl_sample\n\nThis transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.\n\n- report.pdf (1.5 MB)\n  SHA-256: abababababababababababababababababababababababababababababababab\n"
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -4681,7 +4711,17 @@ components:
             Maintenance message set by the super admin, as plain text (render it as text, never as
             HTML): the message in the negotiated language (`Accept-Language`), else in the tenant
             default language, else in English, else in any language available. Absent when
-            maintenance mode is off or no message is set.
+            maintenance mode is off or no message is set. Its language is
+            `maintenanceMessageLanguage`, which may differ from `language`.
+          example: Upgrade in progress, back around 8 pm.
+        maintenanceMessageLanguage:
+          allOf: [{ $ref: '#/components/schemas/Language' }]
+          description: |
+            Language the `maintenanceMessage` is written in, after the fallback described there (it
+            may differ from `language`, for example when the message only exists in English): a
+            client shows the message marked up with this language (HTML `lang` attribute, RGAA
+            criterion 8.7). Present if and only if `maintenanceMessage` is present.
+          example: en
         legalDocuments: { type: array, items: { type: string, enum: [legal-notice, privacy-policy] } }
     LegalDocument:
       type: object
@@ -5377,7 +5417,12 @@ components:
       required: [subject, bodyHtml, bodyText]
       properties:
         subject: { type: string }
-        bodyHtml: { type: string }
+        bodyHtml:
+          type: string
+          description: >-
+            Complete HTML document of the mail, sanitized. Style attributes and style elements
+            are removed in the preview (the administration CSP would block them), and images are
+            replaced by their alt text in brackets; the mail sent keeps them.
         bodyText: { type: string }
 
     # --- Admin operations -------------------------------------------------

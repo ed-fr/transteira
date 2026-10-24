@@ -107,13 +107,20 @@ describe('helpers', () => {
 
   it('describes the maintenance notice', () => {
     expect(maintenanceNotice(tenant())).toBeUndefined();
-    expect(maintenanceNotice(tenant({ maintenance: true }))).toEqual({ message: undefined });
-    expect(maintenanceNotice(tenant({ maintenance: true, maintenanceMessage: '  ' }))).toEqual({
+    expect(maintenanceNotice(tenant({ maintenance: true }))).toEqual({
       message: undefined,
+      language: undefined,
     });
-    expect(maintenanceNotice(tenant({ maintenance: true, maintenanceMessage: ' Back at 6 ' }))).toEqual({
-      message: 'Back at 6',
-    });
+    expect(
+      maintenanceNotice(
+        tenant({ maintenance: true, maintenanceMessage: '  ', maintenanceMessageLanguage: 'fr' }),
+      ),
+    ).toEqual({ message: undefined, language: undefined });
+    expect(
+      maintenanceNotice(
+        tenant({ maintenance: true, maintenanceMessage: ' Back at 6 ', maintenanceMessageLanguage: 'en' }),
+      ),
+    ).toEqual({ message: 'Back at 6', language: 'en' });
   });
 
   it('builds document titles', () => {

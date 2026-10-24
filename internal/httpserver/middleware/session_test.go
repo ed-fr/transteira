@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -298,5 +299,59 @@ func TestSameOrigin(t *testing.T) {
 				t.Errorf("status %d problem %+v, want 403 csrf-invalid", rec.Code, p)
 			}
 		})
+	}
+}
+
+// TestCookieSessionFailureLevel checks that a resolver failure is logged at
+// Error level, and only at Debug level when the client canceled the
+// request (a browser leaving a page), for both session cookies.
+func TestCookieSessionFailureLevel(t *testing.T) {
+	t.Parallel()
+	type mw func(SessionResolver, func(*http.Request) bool, *slog.Logger) func(http.Handler) http.Handler
+	kinds := []struct {
+		name   string
+		mw     mw
+		cookie string
+		what   string
+	}{
+		{"deposit", DepositSession, DepositCookie, "deposit session lookup failed"},
+		{"admin", AdminSession, AdminCookie, "admin session lookup failed"},
+	}
+	tests := []struct {
+		name   string
+		err    error
+		cancel bool
+		level  string
+	}{
+		{"server failure", errors.New("db down"), false, "ERROR"},
+		{"client canceled", fmt.Errorf("lookup: %w", context.Canceled), true, "DEBUG"},
+		{"cancellation error without canceled request", context.Canceled, false, "ERROR"},
+		{"other error after cancellation", errors.New("db down"), true, "ERROR"},
+	}
+	for _, k := range kinds {
+		for _, tt := range tests {
+			t.Run(k.name+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+				var logs bytes.Buffer
+				logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+				h := k.mw(&fakeSessions{err: tt.err}, always, logger)(sessionEcho)
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/x", nil)
+				req.AddCookie(&http.Cookie{Name: k.cookie, Value: "good"})
+				if tt.cancel {
+					ctx, cancel := context.WithCancel(req.Context())
+					cancel()
+					req = req.WithContext(ctx)
+				}
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				if rec.Code != http.StatusInternalServerError {
+					t.Fatalf("status = %d, want 500", rec.Code)
+				}
+				got := logs.String()
+				if !strings.Contains(got, "level="+tt.level) || !strings.Contains(got, k.what) {
+					t.Errorf("log = %q, want %q at level %s", got, k.what, tt.level)
+				}
+			})
+		}
 	}
 }

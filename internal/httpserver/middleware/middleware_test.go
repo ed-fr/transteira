@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -88,5 +91,30 @@ func TestTenantFQDN(t *testing.T) {
 	ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{FQDN: "transfer.example.com"})
 	if got := tenantFQDN(ctx); got != "transfer.example.com" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestClientGone(t *testing.T) {
+	t.Parallel()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancel2 := context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer cancel2()
+	tests := []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{"live context", context.Background(), context.Canceled, false},
+		{"canceled, wrapped cancellation", canceled, fmt.Errorf("query: %w", context.Canceled), true},
+		{"canceled, other error", canceled, errors.New("db down"), false},
+		{"expired, deadline error", expired, context.DeadlineExceeded, true},
+		{"expired, cancellation error", expired, context.Canceled, false},
+	}
+	for _, tt := range tests {
+		if got := ClientGone(tt.ctx, tt.err); got != tt.want {
+			t.Errorf("%s: ClientGone = %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }

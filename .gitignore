@@ -37,6 +37,10 @@ web/node_modules/
 test/e2e/node_modules/
 test/e2e/test-results/
 test/e2e/playwright-report/
+# End-to-end run directory: generated Caddyfile, seeded credentials, storage states, server log
+test/e2e/.run/
+# Machine-wide lock of the end-to-end runs (test/e2e/scripts/lock.mjs)
+test/e2e/.run.lock*
 
 # Go fuzzing cache stays local; committed regression inputs live in testdata/fuzz
 /fuzz/

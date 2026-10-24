@@ -67,11 +67,18 @@ export type InviteFailure =
   | { kind: 'invalid'; fields: readonly string[] }
   | { kind: 'session' }
   | { kind: 'not-allowed' }
+  | { kind: 'refused' }
   | { kind: 'rate-limited'; retryAfterSeconds: number | undefined }
   | { kind: 'maintenance' }
   | { kind: 'error' };
 
-/** Classifies the error of an invitation request. */
+/**
+ * Classifies the error of an invitation request. A 403 invitation-not-allowed means the
+ * depositor is not internal (not-allowed). Any other 403 (deposit-not-allowed) is deliberately
+ * generic: the inviter or the invited address is blocklisted, or the inviter no longer meets the
+ * network rule (refused); the message shown must reveal neither the blocklist nor blame the
+ * inviter.
+ */
 export function inviteFailure(err: unknown): InviteFailure {
   if (!(err instanceof ApiProblem)) {
     return { kind: 'error' };
@@ -82,7 +89,10 @@ export function inviteFailure(err: unknown): InviteFailure {
     case 401:
       return { kind: 'session' };
     case 403:
-      return err.code === 'csrf-invalid' ? { kind: 'session' } : { kind: 'not-allowed' };
+      if (err.code === 'csrf-invalid') {
+        return { kind: 'session' };
+      }
+      return err.code === 'invitation-not-allowed' ? { kind: 'not-allowed' } : { kind: 'refused' };
     case 429:
       return { kind: 'rate-limited', retryAfterSeconds: err.retryAfterSeconds };
     case 503:

@@ -153,7 +153,8 @@ func newTokenAuth(tokens APITokens, failures TokenFailures, events *SecurityEven
 //     valid token of a locked-out IP passes, see APITokenLockout);
 //   - a valid token used from outside its allowed ranges: 403
 //     ip-not-allowed and a deposit_refused event (reason ip);
-//   - a store failure: 500 internal-error.
+//   - a store failure: 500 internal-error, logged at Error level (Debug
+//     when the client went away, see middleware.ClientGone).
 //
 // The token itself is never logged. Any other request passes untouched:
 // without a Bearer header, the deposit session path applies.
@@ -203,7 +204,11 @@ func (a *tokenAuth) middleware(next http.Handler) http.Handler {
 			writeProblem(w, r, problem.New(problem.CodeIPNotAllowed))
 			return
 		default:
-			a.logger.ErrorContext(ctx, "api token lookup failed",
+			level := slog.LevelError
+			if middleware.ClientGone(ctx, err) {
+				level = slog.LevelDebug // the client went away
+			}
+			a.logger.Log(ctx, level, "api token lookup failed",
 				slog.String("request_id", middleware.RequestID(ctx)),
 				slog.String("error", err.Error()))
 			writeProblem(w, r, problem.New(problem.CodeInternalError))

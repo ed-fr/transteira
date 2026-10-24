@@ -87,7 +87,9 @@
     <h1 tabindex="-1">{t('deposit.maintenance.title')}</h1>
     <p>{t('deposit.maintenance.text')}</p>
     {#if flow.maintenanceMessage}
-      <p class="tt-break deposit-maintenance">{flow.maintenanceMessage}</p>
+      <p class="tt-break deposit-maintenance" lang={flow.maintenanceMessageLanguage}>
+        {flow.maintenanceMessage}
+      </p>
     {/if}
   {:else if flow.step === 'error'}
     <h1 tabindex="-1">{t('deposit.error.title')}</h1>

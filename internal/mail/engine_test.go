@@ -380,6 +380,11 @@ func TestPreviewAndVariables(t *testing.T) {
 			if err != nil || m.Subject == "" || !strings.Contains(m.HTML, want) || m.Language != lang {
 				t.Errorf("%s/%s preview: %v %+v", name, lang, err, m)
 			}
+			// The administration CSP blocks inline styles and cid:
+			// images: the preview has none, the rendered mail keeps them.
+			if strings.Contains(m.HTML, "style") || strings.Contains(m.HTML, "<img") {
+				t.Errorf("%s/%s preview keeps inline styles: %s", name, lang, m.HTML)
+			}
 		}
 		vars, err := Variables(name)
 		if err != nil {
@@ -394,6 +399,13 @@ func TestPreviewAndVariables(t *testing.T) {
 	m, err := Preview("verification-code", "fr", &TemplateSource{Subject: "S {{code}}", HTML: "<p>{{code}}</p>", Text: "{{code}}"})
 	if err != nil || m.Subject != "S 123456" || m.Text != "123456\n" {
 		t.Errorf("custom preview: %v %+v", err, m)
+	}
+	styled := &TemplateSource{Subject: "S", HTML: `<p style="color:#123456">{{code}}</p>`, Text: "{{code}}"}
+	if m, err := Preview("verification-code", "fr", styled); err != nil || strings.Contains(m.HTML, "style") || !strings.Contains(m.HTML, "<p>123456</p>") {
+		t.Errorf("styled preview: %v %s", err, m.HTML)
+	}
+	if m, err := RenderOverride(TemplateVerificationCode, "fr", keyDefs[TemplateVerificationCode].sample, styled); err != nil || !strings.Contains(m.HTML, `style="color:#123456;"`) {
+		t.Errorf("styled render: %v %s", err, m.HTML)
 	}
 	if _, err := Preview("nope", "fr", nil); !errors.Is(err, ErrUnknownTemplate) {
 		t.Errorf("unknown: %v", err)

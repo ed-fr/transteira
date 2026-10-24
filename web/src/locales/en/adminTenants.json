@@ -428,7 +428,7 @@
       "subject": "Subject: {subject}",
       "html": "HTML version",
       "text": "Text version",
-      "note": "The inline styles of the templates, default or customized, are not applied in this preview, and links are disabled. The email received will show them normally.",
+      "note": "This preview shows the structure and content of the email without its styles, with images replaced by their description and links disabled. The email received shows them normally.",
       "linkDisabled": "Link disabled in the preview"
     },
     "reset": {

@@ -92,9 +92,10 @@ type globalDiskJSON struct {
 
 // publicMaintenanceJSON is the maintenance part of the PublicTenant schema.
 type publicMaintenanceJSON struct {
-	Language           string  `json:"language"`
-	Maintenance        bool    `json:"maintenance"`
-	MaintenanceMessage *string `json:"maintenanceMessage"`
+	Language                   string  `json:"language"`
+	Maintenance                bool    `json:"maintenance"`
+	MaintenanceMessage         *string `json:"maintenanceMessage"`
+	MaintenanceMessageLanguage *string `json:"maintenanceMessageLanguage"`
 }
 
 // maintenance sends getMaintenance and expects 200.

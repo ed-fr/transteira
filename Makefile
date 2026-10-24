@@ -42,13 +42,17 @@ LDFLAGS := -s -w \
 
 .PHONY: help check web-install web-gen web-check web-build fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
 	test test-sqlite test-pg test-clamav test-env-up test-env-down cover env-example env-example-check build hooks \
-	e2e bigfile clean
+	e2e e2e-run e2e-install e2e-browser e2e-lint screenshots screenshots-run screenshots-check bigfile clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
-# `test` covers SQLite and PostgreSQL. e2e and bigfile join this list when the web and upload layers arrive.
-check: web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check env-example-check test cover ## Run every quality gate (must be green before each commit)
+# `test` and `e2e` cover SQLite and PostgreSQL; `cover` gates the Go coverage of `test` right after it.
+# The fast e2e checks (lint, screenshot manifest) run with the other static checks; the browser
+# suite runs last. bigfile (20 GB through Caddy) joins this list when its pipeline arrives.
+CHECK_GATES := web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check \
+	env-example-check e2e-lint screenshots-check test cover e2e
+check: $(CHECK_GATES) ## Run every quality gate (must be green before each commit)
 	@echo "make check: ALL GREEN"
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
@@ -143,8 +147,8 @@ test-sqlite: ## Quick loop: tests without PostgreSQL (not part of check)
 test-env-up: ## Start the test PostgreSQL and Mailpit and wait until healthy
 	$(TEST_COMPOSE) up -d --wait postgres mailpit
 
-test-env-down: ## Stop the test PostgreSQL and drop its volumes
-	$(TEST_COMPOSE) down -v
+test-env-down: ## Stop the test environment (PostgreSQL, Mailpit, e2e Caddy) and drop its volumes
+	$(TEST_COMPOSE) --profile e2e down -v
 
 cover: ## Enforce coverage thresholds (CLAUDE.md section 24.3)
 	$(GO) run ./tools/covercheck -profile $(COVERPROFILE) -config tools/covercheck/thresholds.json
@@ -168,8 +172,67 @@ hooks: ## Install the local git hooks (gitleaks on pre-push)
 	git config core.hooksPath scripts/hooks
 	@echo "git hooks installed (core.hooksPath=scripts/hooks)"
 
-e2e: ## Playwright end-to-end tests (not available yet)
-	@echo "e2e: NOT AVAILABLE YET (web interface arrives in a later step)"
+# End-to-end tests (test/e2e, Playwright + Chromium through Caddy; see test/README.md).
+# Same npm policy as web/: lockfile install with --ignore-scripts, stamp in node_modules.
+E2E_STAMP := test/e2e/node_modules/.install-stamp
+# Set to 0 to never download the browser (offline; Chromium must already be in the cache).
+E2E_BROWSER_INSTALL ?= 1
+# Database engines run by `make e2e`, in order.
+E2E_DBS  ?= sqlite postgres
+# Extra arguments for `playwright test`, e.g. E2E_ARGS="specs/smoke.spec.ts --headed".
+E2E_ARGS ?=
+
+e2e-install: $(E2E_STAMP) ## Install the e2e dependencies from the lockfile (npm ci, only when it changed)
+
+$(E2E_STAMP): test/e2e/package-lock.json test/e2e/package.json
+	cd test/e2e && npm ci --ignore-scripts --no-audit --no-fund
+	touch $(E2E_STAMP)
+
+e2e-browser: e2e-install ## Install Playwright's Chromium unless it is already cached (E2E_BROWSER_INSTALL=0 skips)
+	@cd test/e2e && if node scripts/browser-installed.mjs; then \
+		echo "e2e-browser: Chromium already installed"; \
+	elif [ "$(E2E_BROWSER_INSTALL)" = "0" ]; then \
+		echo "e2e-browser: Chromium missing and E2E_BROWSER_INSTALL=0"; exit 1; \
+	else \
+		npx playwright install chromium; \
+	fi
+
+e2e-lint: e2e-install ## e2e quality gates: prettier, eslint, tsc, npm audit
+	cd test/e2e && npm run --silent format:check
+	cd test/e2e && npm run --silent lint
+	cd test/e2e && npm run --silent typecheck
+ifeq ($(NPM_AUDIT),0)
+	@echo "e2e-lint: npm audit SKIPPED (NPM_AUDIT=0)"
+else
+	cd test/e2e && npm audit --audit-level=high
+endif
+
+# Only one e2e run at a time on the machine (shared .run/, Caddy on port 443, e2e database):
+# with-lock.mjs takes the run lock (test/e2e/.run.lock) before the build and keeps it for both
+# engines; a second run waits. The *-run targets do the work under that lock.
+E2E_WITH_LOCK := node test/e2e/scripts/with-lock.mjs $(MAKE) --no-print-directory
+
+e2e: e2e-browser test-env-up ## Playwright end-to-end tests, on SQLite then PostgreSQL (E2E_DBS, E2E_ARGS)
+	@$(E2E_WITH_LOCK) e2e-run
+
+e2e-run: build
+	@for db in $(E2E_DBS); do \
+		echo "=== e2e on $$db"; \
+		start=$$(date +%s); \
+		( cd test/e2e && E2E_DB=$$db npx playwright test $(E2E_ARGS) ) || exit 1; \
+		echo "=== e2e on $$db passed in $$(( $$(date +%s) - start )) s"; \
+	done
+
+screenshots: e2e-browser test-env-up ## Regenerate docs/user/screenshots (fr, en) and its manifest (SQLite, under the e2e lock)
+	@$(E2E_WITH_LOCK) screenshots-run
+
+screenshots-run: build
+	@start=$$(date +%s); \
+	( cd test/e2e && SCREENSHOTS=1 E2E_DB=sqlite npx playwright test $(E2E_ARGS) ) || exit 1; \
+	echo "=== screenshots captured in $$(( $$(date +%s) - start )) s"
+
+screenshots-check: ## Check docs/user/screenshots against its manifest (both languages, no orphan)
+	node --test test/e2e/scripts/check-screenshots.mjs
 
 bigfile: ## 20 GB upload test through Caddy (not available yet)
 	@echo "bigfile: NOT AVAILABLE YET (upload pipeline arrives in a later step)"

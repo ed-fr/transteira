@@ -1,7 +1,8 @@
 <script lang="ts">
   // Invitation of an external person, /invite (CLAUDE.md section 9). Reserved to internal
   // depositors: GET /deposit-sessions/current must give a session with canInvite; otherwise the
-  // page explains how to get one. POST /invitations (20 per hour per inviter: 429).
+  // page explains how to get one. POST /invitations (20 per hour per inviter: 429; 403
+  // deposit-not-allowed, deliberately generic, gives a neutral message in the form).
   import { onDestroy, onMount } from 'svelte';
   import { api } from '../../shared/api/api';
   import type { components } from '../../shared/api/schema';
@@ -121,6 +122,11 @@
         case 'not-allowed':
           view = { kind: 'not-allowed' };
           break;
+        case 'refused':
+          // Generic on purpose (blocklist or network rule): keep the form to fix the address.
+          formError = t('invitation.invite.refused');
+          emailInput?.focus();
+          break;
         case 'rate-limited':
           formError = t('invitation.invite.rateLimited');
           limit.start(failure.retryAfterSeconds ?? 60);
@@ -138,7 +144,7 @@
 </script>
 
 {#if tenant.maintenance}
-  <Maintenance message={tenant.maintenanceMessage} />
+  <Maintenance message={tenant.maintenanceMessage} language={tenant.maintenanceMessageLanguage} />
 {:else if view.kind === 'loading'}
   <h1 tabindex="-1">{t('invitation.invite.title')}</h1>
   <Spinner showLabel />

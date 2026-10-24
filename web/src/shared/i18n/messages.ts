@@ -102,7 +102,8 @@ export function formatBytesIn(locale: string, n: number): string {
   return new Intl.NumberFormat(locale, {
     style: 'unit',
     unit: BYTE_UNITS[unit],
-    unitDisplay: 'short',
+    // Plain bytes use the long form: the short one is "23 byte" in English (no plural).
+    unitDisplay: unit === 0 ? 'long' : 'short',
     maximumFractionDigits: unit === 0 || value >= 100 ? 0 : 1,
   }).format(value);
 }

@@ -54,9 +54,10 @@ type MaintenanceMode interface {
 	// Active reports whether the maintenance mode is in effect.
 	Active() bool
 	// Message returns the maintenance message for the negotiated language
-	// lang on a tenant whose default language is tenantDefault, "" when
-	// the mode is off or no message is set.
-	Message(lang, tenantDefault string) string
+	// lang on a tenant whose default language is tenantDefault, with the
+	// language it is written in (which may be a fallback); two empty
+	// strings when the mode is off or no message is set.
+	Message(lang, tenantDefault string) (msg, msgLang string)
 }
 
 // WithMaintenance reports the maintenance mode and its message in the
@@ -94,7 +95,9 @@ func publicError(err error) error {
 // GetPublicTenant returns the public configuration of the current tenant:
 // name, negotiated language, branding, limits, maintenance mode with its
 // message in the negotiated language (else the tenant default, English or
-// any language set) and the legal documents it has written.
+// any language set) together with the language it is written in, so that
+// the client can mark it up (RGAA 8.7), and the legal documents it has
+// written.
 func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantRequestObject) (gen.GetPublicTenantResponseObject, error) {
 	t, svc, err := s.publicTenant(ctx)
 	if err != nil {
@@ -111,8 +114,9 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	}
 	if s.maintenance != nil && s.maintenance.Active() {
 		body.Maintenance = true
-		if msg := s.maintenance.Message(lang, t.DefaultLanguage); msg != "" {
-			body.MaintenanceMessage = &msg
+		if msg, msgLang := s.maintenance.Message(lang, t.DefaultLanguage); msg != "" {
+			ml := gen.Language(msgLang)
+			body.MaintenanceMessage, body.MaintenanceMessageLanguage = &msg, &ml
 		}
 	}
 	for _, l := range i18n.Supported() {

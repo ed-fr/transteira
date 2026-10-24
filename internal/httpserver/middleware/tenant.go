@@ -77,11 +77,7 @@ func tenantMiddleware(resolver TenantResolver, events SecurityEvents, unknownLim
 				if err == nil {
 					err = errNoTenant
 				}
-				level := slog.LevelError
-				if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
-					level = slog.LevelDebug // the client went away
-				}
-				logger.Log(ctx, level, "tenant resolution failed",
+				logger.Log(ctx, failureLevel(ctx, err), "tenant resolution failed",
 					slog.String("request_id", requestIDOf(w, r)),
 					slog.String("error", err.Error()),
 				)

@@ -79,6 +79,8 @@ describe('inviteFailure', () => {
     expect(inviteFailure(problem(401))).toEqual({ kind: 'session' });
     expect(inviteFailure(problem(403, { code: 'csrf-invalid' }))).toEqual({ kind: 'session' });
     expect(inviteFailure(problem(403, { code: 'invitation-not-allowed' }))).toEqual({ kind: 'not-allowed' });
+    expect(inviteFailure(problem(403, { code: 'deposit-not-allowed' }))).toEqual({ kind: 'refused' });
+    expect(inviteFailure(problem(403))).toEqual({ kind: 'refused' });
     expect(inviteFailure(problem(429, { retryAfterSeconds: 30 }))).toEqual({
       kind: 'rate-limited',
       retryAfterSeconds: 30,

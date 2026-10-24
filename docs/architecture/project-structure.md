@@ -229,7 +229,16 @@ transteira/
 │   │   └── recover_test.go          # Clés restées sous une clé retirée : refus au démarrage, -recover-from
 │   ├── contract/                    # Validation de chaque requête / réponse contre openapi.yaml (kin-openapi)
 │   ├── isolation/                   # Cloisonnement : chaque opération de la spécification est rejouée depuis un autre tenant
-│   ├── e2e/                         # Playwright (navigateur réel) + génération des captures pour docs/user
+│   ├── e2e/                         # Playwright (Chromium réel à travers Caddy) + captures pour docs/user (test/README.md)
+│   │   ├── package.json             # Projet Node séparé, versions figées (@playwright/test 1.55.1, axe-core 4.10.3)
+│   │   ├── playwright.config.ts     # Projets chromium, system-serial (après les autres), screenshots (SCREENSHOTS=1)
+│   │   ├── global-setup.ts          # Verrou d'exécution, faux clamd, serveur, Caddy, amorçage par l'API, sessions
+│   │   ├── global-teardown.ts       # Nettoyage de secours, libération du verrou
+│   │   ├── support/                 # Garde-fous (fixtures.ts : CSP, console, origines, 5xx, axe, stockage), API,
+│   │   │                            # Mailpit, TOTP, Caddy, faux clamd, données, i18n.ts, screenshots.ts (catalogue)
+│   │   ├── specs/                   # Scénarios public-*, admin-*, isolation, i18n, smoke ; screenshots.spec.ts
+│   │   └── scripts/                 # lock.mjs + with-lock.mjs (une exécution à la fois), check-screenshots.mjs,
+│   │                                # browser-installed.mjs
 │   ├── bigfile/                     # Test de 20 Go à travers Caddy, coupure et reprise, mémoire stable (tag de build)
 │   ├── fixtures/                    # Données de test ; la signature EICAR est générée à l'exécution
 │   └── docker-compose.test.yml      # Mailpit, ClamAV, PostgreSQL, Caddy, domaines *.localhost
@@ -256,7 +265,9 @@ transteira/
 │   │   ├── embed.go                 # Source de l'aide intégrée
 │   │   ├── fr/                      # deposant.md, destinataire.md, admin-delegue.md, super-admin.md
 │   │   ├── en/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md
-│   │   └── screenshots/             # Générées par Playwright (ne pas modifier à la main)
+│   │   └── screenshots/             # Générées par make screenshots (ne pas modifier à la main) : fr/ et en/
+│   │                                # (<nom>.png, 1280 × 800), manifest.json (nom, écran, profil, chemin),
+│   │                                # vérifiés par make screenshots-check
 │   ├── install/                     # Docker, reverse proxy, SMTP (dont relais vers Microsoft 365), première installation
 │   ├── operations/                  # admin.md (administration, jetons d'API), tenants.md, antivirus.md,
 │   │                                # backup.md, master-key.md (clé maître, rotation, y compris depuis
@@ -281,7 +292,7 @@ transteira/
 │   └── agents/                      # test-engineer, security-reviewer, code-reviewer
 │
 ├── Dockerfile                       # Multi-étapes : web (node) → go build → image scratch
-├── Makefile                         # make check, make test, make lint, make e2e, make bigfile, make generate…
+├── Makefile                         # make check, make test, make lint, make e2e, make screenshots, make bigfile, make generate…
 ├── .golangci.yml
 ├── .spectral.yaml                   # Lint OpenAPI : chaque opération décrite et accompagnée d'un exemple
 ├── .gitleaks.toml
@@ -318,6 +329,7 @@ transteira/
 ### 3.4 Tests sur les deux moteurs (§17, §24)
 
 - `make test` lance chaque suite deux fois (`TT_DB_DRIVER=sqlite` puis `postgres`). PostgreSQL est fourni par `test/docker-compose.test.yml`.
+- `make e2e` (dans `make check`) lance la suite Playwright avec `E2E_DB=sqlite` puis `E2E_DB=postgres` (base dédiée `transteira_e2e`).
 
 ### 3.5 Interface web (§4, §13, §16.2)
 

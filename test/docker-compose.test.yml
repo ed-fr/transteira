@@ -59,3 +59,24 @@ services:
       timeout: 3s
       retries: 30
       start_period: 2s
+
+  # End-to-end tests only (profile "e2e", started by test/e2e/support/caddy.ts): the reference
+  # reverse proxy in front of the server under test, which runs on the host. The Caddyfile is
+  # generated at each run with the server's port into test/e2e/.run/caddy (gitignored); the
+  # three *.localhost hosts get certificates from Caddy's internal CA (the browser ignores
+  # HTTPS errors). Port 443 is bound to loopback only.
+  caddy:
+    image: caddy:2.11.7-alpine
+    profiles: ["e2e"]
+    command: ["caddy", "run", "--config", "/etc/caddy-e2e/Caddyfile", "--adapter", "caddyfile"]
+    ports:
+      - "127.0.0.1:${E2E_HTTPS_PORT:-443}:443"
+    # Linux has no host.docker.internal by default (Docker Desktop provides it).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./e2e/.run/caddy:/etc/caddy-e2e:ro
+    # Certificates and the internal CA are thrown away with the container.
+    tmpfs:
+      - /data
+      - /config

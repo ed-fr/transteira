@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -79,4 +80,24 @@ func orDiscard(l *slog.Logger) *slog.Logger {
 		return slog.New(slog.DiscardHandler)
 	}
 	return l
+}
+
+// ClientGone reports whether err is the request context's own error
+// (context.Canceled, or context.DeadlineExceeded for a context carrying a
+// deadline) after that context ended: the client canceled the request or
+// went away while it was served. Such a failure is not a server fault and
+// is logged at Debug level only. The request deadlines of TransTeira are
+// connection deadlines, which never end the request context.
+func ClientGone(ctx context.Context, err error) bool {
+	return ctx.Err() != nil && errors.Is(err, ctx.Err())
+}
+
+// failureLevel returns the level at which a failure err of the request
+// whose context is ctx is logged: Debug when the client went away
+// ([ClientGone]), Error otherwise.
+func failureLevel(ctx context.Context, err error) slog.Level {
+	if ClientGone(ctx, err) {
+		return slog.LevelDebug
+	}
+	return slog.LevelError
 }

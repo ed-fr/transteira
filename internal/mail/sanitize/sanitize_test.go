@@ -350,3 +350,29 @@ func FuzzSanitizeHTML(f *testing.F) {
 		}
 	})
 }
+
+func TestForPreview(t *testing.T) {
+	doc := "<!DOCTYPE html>\n<html lang=\"en\"><head><style>p{color:red}</style><title>T</title></head>" +
+		"<body style=\"margin:0\"><div role=\"main\" STYLE=\"max-width:560px\">" +
+		"<p style=\"color:#1a1a1a\" title=\"a &#34;q&#34;\">style=&#34;x&#34; &lt;b&gt;</p>" +
+		"<style>h1{}</style><p>Scan:<br><img src=\"cid:qr\" alt=\" QR &lt;code&gt; \" style=\"width:9px\"></p>" +
+		"<p>A<img src=\"cid:x\">B<img src=\"cid:y\" alt=\" \"></p><!-- c --></div></body></html>"
+	got := ForPreview(doc)
+	for _, bad := range []string{"style=\"", "<style", "STYLE", "color:", "<img", "cid:"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("ForPreview kept %q: %s", bad, got)
+		}
+	}
+	for _, keep := range []string{
+		"<!DOCTYPE html>", `<html lang="en">`, "<title>T</title>", `<div role="main">`,
+		`<p title="a &#34;q&#34;">style=&#34;x&#34; &lt;b&gt;</p>`, "<p>Scan:<br/>[QR &lt;code&gt;]</p>",
+		"<p>AB</p>",
+	} {
+		if !strings.Contains(got, keep) {
+			t.Errorf("ForPreview lost %q: %s", keep, got)
+		}
+	}
+	if again := ForPreview(got); again != got {
+		t.Errorf("ForPreview not stable:\n%s\n%s", got, again)
+	}
+}

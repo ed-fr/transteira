@@ -70,7 +70,8 @@ type cookieSpec struct {
 // and the session and its raw token are stored in the request context (see
 // [SessionFrom] and [SessionToken]). A missing or invalid cookie gets a 401
 // unauthenticated Problem; a resolver failure gets a 500 internal-error
-// Problem, logged on logger (nil discards). Other requests pass untouched.
+// Problem, logged on logger (nil discards) at Error level, or at Debug level
+// when the client went away ([ClientGone]). Other requests pass untouched.
 //
 // It runs as a per-operation middleware of the API router, after tenant
 // resolution and before the body is read.
@@ -84,7 +85,8 @@ func DepositSession(resolver SessionResolver, required func(*http.Request) bool,
 // [AdminSessionFrom] and [AdminSessionToken]). A missing cookie gets a 401
 // unauthenticated Problem; a cookie that resolves to no session also gets
 // it, with a Set-Cookie header expiring the cookie. A resolver failure gets
-// a 500 internal-error Problem, logged on logger (nil discards).
+// a 500 internal-error Problem, logged on logger (nil discards) at Error
+// level, or at Debug level when the client went away ([ClientGone]).
 //
 // The resolver decides which sessions are valid; the login state of the
 // session (authenticated, or an intermediate step) is enforced by the
@@ -110,7 +112,7 @@ func cookieSession(spec cookieSpec, resolver SessionResolver, required func(*htt
 			}
 			session, ok, err := resolver.ResolveSession(r.Context(), c.Value)
 			if err != nil {
-				logger.ErrorContext(r.Context(), spec.what+" session lookup failed",
+				logger.Log(r.Context(), failureLevel(r.Context(), err), spec.what+" session lookup failed",
 					slog.String("request_id", requestIDOf(w, r)),
 					slog.String("error", err.Error()))
 				writeProblem(w, r, problem.CodeInternalError)

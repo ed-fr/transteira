@@ -225,6 +225,11 @@ export class DepositFlow {
   retryAt = $state<number | undefined>(undefined);
   /** Maintenance message (plain text), when the tenant has one. */
   maintenanceMessage = $state<string | undefined>(undefined);
+  /**
+   * Language the maintenance message is written in (lang attribute, RGAA 8.7); undefined when
+   * unknown or without message. It may differ from the UI language (server fallback).
+   */
+  maintenanceMessageLanguage = $state<string | undefined>(undefined);
   /** The invitation can no longer be used. */
   invitationGone = $state(false);
   /** Deposit form values. */
@@ -355,7 +360,7 @@ export class DepositFlow {
     this.#reset();
     this.step = 'loading';
     if (this.tenant.maintenance) {
-      this.#maintenance(this.tenant.maintenanceMessage);
+      this.#maintenance(this.tenant.maintenanceMessage, this.tenant.maintenanceMessageLanguage);
       return;
     }
     let session: DepositSession | undefined;
@@ -692,9 +697,40 @@ export class DepositFlow {
     );
   }
 
-  #maintenance(message: string | undefined): void {
+  #maintenance(message: string | undefined, language: string | undefined): void {
     this.maintenanceMessage = message === undefined || message === '' ? undefined : message;
+    this.maintenanceMessageLanguage = this.maintenanceMessage === undefined ? undefined : language;
     this.step = 'maintenance';
+  }
+
+  /**
+   * Switches to maintenance on a 503 maintenance problem. The problem detail does not say which
+   * language the message is written in: it is taken from the tenant description when that one
+   * holds the same message, else from a fresh GET /tenant (same negotiation as the problem).
+   */
+  #maintenanceProblem(detail: string | undefined): void {
+    const known = detail !== undefined && detail === this.tenant.maintenanceMessage;
+    this.#maintenance(detail, known ? this.tenant.maintenanceMessageLanguage : undefined);
+    if (this.maintenanceMessage !== undefined && this.maintenanceMessageLanguage === undefined) {
+      void this.#refreshMaintenanceLanguage(this.maintenanceMessage);
+    }
+  }
+
+  /** Reads the language of the maintenance message from GET /tenant; failures are ignored. */
+  async #refreshMaintenanceLanguage(message: string): Promise<void> {
+    let fresh: PublicTenant | undefined;
+    try {
+      fresh = (await this.#deps.api.get('/tenant')).data;
+    } catch {
+      return;
+    }
+    if (
+      fresh?.maintenanceMessage === message &&
+      this.step === 'maintenance' &&
+      this.maintenanceMessage === message
+    ) {
+      this.maintenanceMessageLanguage = fresh.maintenanceMessageLanguage;
+    }
   }
 
   async #afterSession(session: DepositSession): Promise<void> {
@@ -748,7 +784,7 @@ export class DepositFlow {
   /** Handles the errors common to every request. Returns true when handled. */
   #commonError(err: unknown): boolean {
     if (isProblem(err, 'maintenance')) {
-      this.#maintenance(err.problem?.detail);
+      this.#maintenanceProblem(err.problem?.detail);
       return true;
     }
     if (isProblem(err, 'rate-limited')) {

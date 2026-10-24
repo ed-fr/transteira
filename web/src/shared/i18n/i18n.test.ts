@@ -152,15 +152,18 @@ describe('createI18n', () => {
 
   it('formats bytes with binary multiples', async () => {
     const inst = createI18n({ loaders });
-    expect(inst.formatBytes(0)).toBe('0 byte');
+    expect(inst.formatBytes(0)).toBe('0 bytes');
     await inst.setLocale('en');
-    expect(inst.formatBytes(-5)).toBe('0 byte');
-    expect(inst.formatBytes(512)).toBe('512 byte');
+    expect(inst.formatBytes(-5)).toBe('0 bytes');
+    expect(inst.formatBytes(512)).toBe('512 bytes');
     expect(inst.formatBytes(1536)).toBe('1.5 kB');
     expect(inst.formatBytes(20 * 1024 ** 3)).toBe('20 GB');
     expect(inst.formatBytes(150 * 1024 ** 2)).toBe('150 MB');
     expect(inst.formatBytes(2 * 1024 ** 6)).toBe('2,048 PB');
     await inst.setLocale('fr');
+    // French separates the number and the unit with a no-break space.
+    expect(inst.formatBytes(1).replace(/\s/gu, ' ')).toBe('1 octet');
+    expect(inst.formatBytes(23).replace(/\s/gu, ' ')).toBe('23 octets');
     expect(inst.formatBytes(20 * 1024 ** 3)).toBe('20 Go');
   });
 
