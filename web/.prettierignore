@@ -5,3 +5,4 @@ package-lock.json
 src/shared/api/schema.ts
 apidocs/
 *.go
+src/help/generated/

@@ -5008,7 +5008,7 @@ components:
       type: string
       minLength: 12
       maxLength: 1024
-      description: At least 12 characters; checked against a list of common passwords.
+      description: 12 to 1024 characters (Unicode code points); no other rule is applied.
     SetupRequest:
       type: object
       required: [username, email, password]

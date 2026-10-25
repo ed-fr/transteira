@@ -20,7 +20,7 @@
     "name": "Nom",
     "size": "Taille",
     "sha256": "Empreinte SHA-256",
-    "action": "Téléchargement",
+    "action": "Lien de téléchargement",
     "download": "Télécharger",
     "downloadName": "{name}",
     "copySha": "Copier l’empreinte SHA-256 de {name}",

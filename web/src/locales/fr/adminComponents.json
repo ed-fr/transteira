@@ -16,11 +16,11 @@
   },
   "password": {
     "show": "Afficher {label}",
-    "confirmLabel": "Confirmation du mot de passe",
+    "confirmLabel": "Confirmez le mot de passe",
     "mismatch": "Les deux mots de passe ne correspondent pas."
   },
   "secret": {
-    "set": "Une valeur est enregistrée. Elle n'est plus jamais affichée.",
+    "set": "Une valeur est enregistrée. Elle n’est plus jamais affichée.",
     "notSet": "Aucune valeur enregistrée.",
     "keep": "Conserver la valeur enregistrée",
     "replace": "Remplacer la valeur",
@@ -70,7 +70,7 @@
       "one": "La ligne {lines} répète une valeur précédente et sera ignorée.",
       "other": "Les lignes {lines} répètent des valeurs précédentes et seront ignorées."
     },
-    "tooMany": "Trop d'entrées : {max} au maximum sont autorisées.",
+    "tooMany": "Trop d’entrées : {max} au maximum sont autorisées.",
     "replaced": "Ligne {line} remplacée par {value}."
   },
   "filter": {

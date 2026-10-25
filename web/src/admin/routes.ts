@@ -104,7 +104,7 @@ export const routes: readonly AdminRoute[] = [
     component: TenantCreate,
     titleKey: 'adminTenants.create.title',
     access: 'super',
-    helpTopic: 'tenants',
+    helpTopic: 'tenant-create',
   },
   {
     pattern: '/tenants/:id/general',

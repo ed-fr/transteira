@@ -28,8 +28,8 @@
     "diskError": "L’occupation du disque n’a pas pu être chargée.",
     "overviewLink": "Ouvrir la vue d’ensemble du système",
     "maintenanceTitle": "Mode maintenance",
-    "maintenanceOn": "Activé",
-    "maintenanceOff": "Désactivé",
+    "maintenanceOn": "Actif",
+    "maintenanceOff": "Inactif",
     "maintenanceUnknown": "L’état n’a pas pu être lu. Ouvrez l’écran de maintenance pour le consulter.",
     "maintenanceLink": "Gérer le mode maintenance"
   }

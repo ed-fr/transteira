@@ -8,6 +8,7 @@ export { default as Dialog } from './Dialog.svelte';
 export { default as FileDrop } from './FileDrop.svelte';
 export { default as FileList } from './FileList.svelte';
 export { default as Footer } from './Footer.svelte';
+export { default as HelpIcon } from './HelpIcon.svelte';
 export { default as HelpLink } from './HelpLink.svelte';
 export { default as LanguageSwitch } from './LanguageSwitch.svelte';
 export { default as LegalContent } from './LegalContent.svelte';

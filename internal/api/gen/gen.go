@@ -1118,7 +1118,7 @@ func (e AppendUploadChunkParamsTusResumable) Valid() bool {
 type ActivationRequest struct {
 	ActivationToken string `json:"activationToken"`
 
-	// Password At least 12 characters; checked against a list of common passwords.
+	// Password 12 to 1024 characters (Unicode code points); no other rule is applied.
 	Password AdminPassword `json:"password"`
 }
 
@@ -1184,7 +1184,7 @@ type AdminMe struct {
 	Username    Username    `json:"username"`
 }
 
-// AdminPassword At least 12 characters; checked against a list of common passwords.
+// AdminPassword 12 to 1024 characters (Unicode code points); no other rule is applied.
 type AdminPassword = string
 
 // AdminReason defines model for AdminReason.
@@ -1964,7 +1964,7 @@ type PageCursor = string
 type PasswordChange struct {
 	CurrentPassword string `json:"currentPassword"`
 
-	// NewPassword At least 12 characters; checked against a list of common passwords.
+	// NewPassword 12 to 1024 characters (Unicode code points); no other rule is applied.
 	NewPassword AdminPassword `json:"newPassword"`
 }
 
@@ -2194,7 +2194,7 @@ type SetupRequest struct {
 	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email Email `json:"email"`
 
-	// Password At least 12 characters; checked against a list of common passwords.
+	// Password 12 to 1024 characters (Unicode code points); no other rule is applied.
 	Password   AdminPassword `json:"password"`
 	SetupToken *string       `json:"setupToken,omitempty"`
 	Username   Username      `json:"username"`

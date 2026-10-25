@@ -3,6 +3,7 @@
   // /legal/legal-notice), help link and language switch. Pass it to PageLayout's footer snippet.
   import type { Snippet } from 'svelte';
   import { t } from '../i18n/i18n.svelte';
+  import type { Router } from '../router/router.svelte';
   import HelpLink from './HelpLink.svelte';
   import LanguageSwitch from './LanguageSwitch.svelte';
 
@@ -19,6 +20,8 @@
     helpTopic?: string | null;
     /** Path prefix of the help link: "" (public, default) or "/admin". */
     helpBase?: string;
+    /** Router of the application: the help link is then an in-app navigation. */
+    nav?: Pick<Router, 'link'> | undefined;
     /** Extra content (e.g. version). */
     children?: Snippet;
     class?: string;
@@ -31,6 +34,7 @@
     onlanguagechange,
     helpTopic,
     helpBase = '',
+    nav,
     children,
     class: className = '',
   }: Props = $props();
@@ -46,7 +50,7 @@
       </nav>
     {/if}
     {#if helpTopic !== null}
-      <HelpLink topic={helpTopic ?? undefined} base={helpBase} />
+      <HelpLink topic={helpTopic ?? undefined} base={helpBase} {nav} />
     {/if}
     {#if onlanguagechange}
       <LanguageSwitch {languages} current={currentLanguage} onchange={onlanguagechange} />

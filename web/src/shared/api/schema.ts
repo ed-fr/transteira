@@ -2405,7 +2405,7 @@ export interface components {
             setupRequired: boolean;
         };
         Username: string;
-        /** @description At least 12 characters; checked against a list of common passwords. */
+        /** @description 12 to 1024 characters (Unicode code points); no other rule is applied. */
         AdminPassword: string;
         SetupRequest: {
             username: components["schemas"]["Username"];

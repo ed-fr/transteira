@@ -1,16 +1,19 @@
 <script lang="ts">
-  // Integrated help (CLAUDE.md section 4.2): placeholder until the help is generated from the
-  // user guides (step 17). The requested topic is shown as text.
+  // Integrated help of the public application (CLAUDE.md section 4.2): the depositor and
+  // recipient guides (src/help/HelpScreen.svelte).
+  import HelpScreen from '../../help/HelpScreen.svelte';
+  import { PUBLIC_GUIDES } from '../../help/help';
+  import { loadPublicGuides } from '../../help/publicGuides';
   import { t } from '../../shared/i18n/i18n.svelte';
   import type { ScreenProps } from './types';
 
   let { params, nav }: ScreenProps = $props();
-  const topic = $derived(params['topic']);
 </script>
 
-<h1 tabindex="-1">{t('common.help.title')}</h1>
-<p>{t('common.help.comingSoon')}</p>
-{#if topic}
-  <p class="tt-text-muted tt-break">{t('common.help.topic', { topic })}</p>
-{/if}
-<p><a href={nav.href('/')} use:nav.link>{t('common.backHome')}</a></p>
+<HelpScreen
+  load={loadPublicGuides}
+  topic={params['topic']}
+  guides={PUBLIC_GUIDES}
+  {nav}
+  homeLabel={t('common.backHome')}
+/>

@@ -1,15 +1,16 @@
 <script lang="ts">
-  // Integrated help of the administration: placeholder until step 17.
+  // Integrated help of the administration (CLAUDE.md section 4.2): the delegated-admin guide, and
+  // the super-admin guide for a super admin or a visitor not signed in (first-run setup, sign-in,
+  // activation), never for a signed-in delegated admin (src/help/HelpScreen.svelte).
+  import HelpScreen from '../../help/HelpScreen.svelte';
+  import { loadAdminGuides } from '../../help/adminGuides';
+  import { adminGuides } from '../../help/help';
   import { t } from '../../shared/i18n/i18n.svelte';
+  import { adminSession } from '../api';
   import type { AdminScreenProps } from './types';
 
   let { params, nav }: AdminScreenProps = $props();
-  const topic = $derived(params['topic']);
+  const guides = $derived(adminGuides(adminSession.me?.role));
 </script>
 
-<h1 tabindex="-1">{t('common.help.title')}</h1>
-<p>{t('common.help.comingSoon')}</p>
-{#if topic}
-  <p class="tt-text-muted tt-break">{t('common.help.topic', { topic })}</p>
-{/if}
-<p><a href={nav.href('/')} use:nav.link>{t('admin.backHome')}</a></p>
+<HelpScreen load={loadAdminGuides} topic={params['topic']} {guides} {nav} homeLabel={t('admin.backHome')} />

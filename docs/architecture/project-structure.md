@@ -9,7 +9,7 @@
 - **Tout le code applicatif est dans `internal/`** : rien n'est importable par des tiers, ce qui laisse l'API Go interne libre d'évoluer. Le futur client en ligne de commande (V2) vivra dans `cmd/transteira-cli` et consommera l'API HTTP, pas les packages internes.
 - **Des packages par domaine** (transfer, invitation, download…), pas par couche technique. Chaque domaine expose un service et dépend d'interfaces de stockage. Ces packages indépendants peuvent être développés en parallèle, chacun par un sous-agent.
 - **API first** : `api/openapi.yaml` est la source de vérité. Les types et l'interface serveur sont **générés** (`oapi-codegen`, mode *strict server*) dans `internal/api/gen`. Les handlers implémentent cette interface, si bien qu'un écart avec la spécification ne compile pas.
-- **Ressources embarquées** (`go:embed`) : spécification OpenAPI, interface web compilée, documentation interactive de l'API, aide utilisateur, traductions, modèles de mails, migrations. Comme `go:embed` ne peut pas remonter dans l'arborescence, chaque dossier embarqué contient un petit fichier `embed.go`.
+- **Ressources embarquées** (`go:embed`) : spécification OpenAPI, interface web compilée, documentation interactive de l'API, aide utilisateur (générée dans le build de l'interface web, captures comprises), traductions, modèles de mails, migrations. Comme `go:embed` ne peut pas remonter dans l'arborescence, chaque dossier embarqué contient un petit fichier `embed.go`.
 - **Tests à côté du code** (`*_test.go`, y compris les `Fuzz*`). Les tests qui traversent plusieurs packages (intégration, contrat, cloisonnement, bout en bout, gros fichier) sont dans `test/`.
 
 ## 2. Arborescence
@@ -193,7 +193,20 @@ transteira/
 │   │   │       └── system/          # Système (super admin) : vue d'ensemble et disque (overview.ts), maintenance,
 │   │   │                            # paramètres système (settings.ts), journal d'audit global (globalAudit.ts),
 │   │   │                            # rotation de la clé maître (masterKey.ts), relecture périodique (poller.ts)
-│   │   ├── help/                    # Réservé à l'aide intégrée (générée depuis docs/user, étape 19)
+│   │   ├── help/                    # Aide intégrée, générée depuis docs/user (étape 20, web/README.md)
+│   │   │   ├── build.ts             # Conversion des guides : sous-ensemble Markdown, contrôles (erreurs fichier:ligne),
+│   │   │   │                        # modules générés ; fonctions pures testées (build.test.ts)
+│   │   │   ├── types.ts             # Modèle de données (HelpGuideSet, HelpGuide, HelpSection, blocs typés)
+│   │   │   ├── load.ts              # createHelpLoader : chargement à la demande, repli sur l'anglais, cache
+│   │   │   ├── publicGuides.ts      # Chargeur des guides publics (*-public.ts uniquement)
+│   │   │   ├── adminGuides.ts       # Chargeur des guides d'administration (*-admin.ts uniquement)
+│   │   │   ├── help.ts              # Guides proposés, résolution /help/<sujet>, sommaire, titre (help.test.ts)
+│   │   │   ├── title.svelte.ts      # Titre de la page d'aide, lu par les deux applications
+│   │   │   ├── HelpScreen.svelte    # Écran /help et /help/<sujet> des deux applications
+│   │   │   ├── HelpGuide.svelte     # Guide avec sommaire ; HelpBlocks.svelte et HelpInline.svelte : rendu
+│   │   │   │                        # des blocs typés, sans {@html}
+│   │   │   ├── guides.test.ts       # Vrais guides : sans erreur, sujets des routes couverts dans les deux langues
+│   │   │   └── generated/           # <lang>-<app>.ts produits par scripts/build-help.mjs (non versionnés)
 │   │   ├── shared/
 │   │   │   ├── api/                 # schema.ts (généré depuis api/openapi.yaml, versionné), client typé,
 │   │   │   │                        # lecture des Problem Details, jeton CSRF en mémoire
@@ -205,7 +218,8 @@ transteira/
 │   │   │   ├── validation/          # Contrôles côté client partagés par les deux applications (isEmail)
 │   │   │   └── components/          # Composants accessibles (RGAA) partagés par les deux applications, dont
 │   │   │                            # LegalContent (mentions légales filtrées par le serveur, première exception
-│   │   │                            # {@html}, page publique et aperçu côté admin)
+│   │   │                            # {@html}, page publique et aperçu côté admin), HelpLink (lien d'aide du pied de
+│   │   │                            # page) et HelpIcon (icône d'aide contextuelle à côté du titre d'un écran)
 │   │   ├── styles/                  # tokens.css (variables de thème, clair en V1, sombre prêt pour la V1.1),
 │   │   │                            # base.css, layout.css, utilities.css
 │   │   └── locales/                 # <langue>/<zone>.json (fr, en), montés sous le nom de la zone
@@ -213,9 +227,10 @@ transteira/
 │   │                                # adminComponents, adminTenants, adminAccounts, adminHome, adminOps,
 │   │                                # opsTransfers, opsInvitations, opsBlocklist, opsTokens, opsAudit,
 │   │                                # opsStats, opsPrivacy, adminSystem, sysStats, sysMaintenance, sysSettings,
-│   │                                # sysAudit, sysMasterKey
+│   │                                # sysAudit, sysMasterKey ; aide intégrée (deux applications) : help
 │   ├── static/                      # Copiés tels quels à la racine de dist/ : favicon.svg, robots.txt (Disallow: /)
-│   ├── scripts/                     # gen-types.mjs (types de l'API, --check), check-dist.mjs (conformité du build
+│   ├── scripts/                     # gen-types.mjs (types de l'API, --check), build-help.mjs (aide intégrée depuis
+│   │                                # docs/user, avant dev, check, test et build), check-dist.mjs (conformité du build
 │   │                                # à la CSP), keep-dist.mjs (recrée dist/.gitkeep)
 │   ├── dev/Caddyfile                # Boucle de développement : *.localhost en HTTPS (écoute sur la boucle locale seulement), /api vers Go, reste vers Vite
 │   ├── apidocs/                     # Documentation interactive /api/docs : Scalar vendorisé (version épinglée,
@@ -262,9 +277,10 @@ transteira/
 ├── docs/
 │   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md
 │   ├── user/
-│   │   ├── embed.go                 # Source de l'aide intégrée
-│   │   ├── fr/                      # deposant.md, destinataire.md, admin-delegue.md, super-admin.md
+│   │   ├── README.md                # Index des guides (une ligne par guide, en anglais et en français)
+│   │   ├── fr/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md (en français)
 │   │   ├── en/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md
+│   │   │                            # Source unique de l'aide intégrée (web/scripts/build-help.mjs)
 │   │   └── screenshots/             # Générées par make screenshots (ne pas modifier à la main) : fr/ et en/
 │   │                                # (<nom>.png, 1280 × 800), manifest.json (nom, écran, profil, chemin),
 │   │                                # vérifiés par make screenshots-check

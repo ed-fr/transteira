@@ -12,7 +12,15 @@
   // The tenant sub-navigation is rendered by App.svelte.
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, RadioGroup, Spinner, TextField, announce } from '../../../shared/components';
+  import {
+    Alert,
+    Button,
+    HelpIcon,
+    RadioGroup,
+    Spinner,
+    TextField,
+    announce,
+  } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -272,7 +280,10 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminTenants.smtp.title')}</h1>
+<div class="tt-title-row">
+  <h1 tabindex="-1">{t('adminTenants.smtp.title')}</h1>
+  <HelpIcon topic="tenant-smtp" title={t('adminTenants.smtp.title')} {nav} />
+</div>
 
 {#if loading}
   <p><Spinner showLabel /></p>

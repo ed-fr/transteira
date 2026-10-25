@@ -10,15 +10,16 @@
   },
   "packageManager": "npm@11.17.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/build-help.mjs && vite",
     "gen": "node scripts/gen-types.mjs",
     "gen:check": "node scripts/gen-types.mjs --check",
-    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "help:gen": "node scripts/build-help.mjs",
+    "check": "node scripts/build-help.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run --coverage",
-    "build": "vite build && node scripts/keep-dist.mjs && node scripts/check-dist.mjs"
+    "test": "node scripts/build-help.mjs && vitest run --coverage",
+    "build": "node scripts/build-help.mjs && vite build && node scripts/keep-dist.mjs && node scripts/check-dist.mjs"
   },
   "dependencies": {
     "svelte": "5.57.2"

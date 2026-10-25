@@ -9,7 +9,14 @@ import svelteConfig from './svelte.config.js';
 // scripts/check-dist.mjs checks the same properties on the built output.
 export default tseslint.config(
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/', 'apidocs/', 'src/shared/api/schema.ts'],
+    ignores: [
+      'dist/',
+      'node_modules/',
+      'coverage/',
+      'apidocs/',
+      'src/shared/api/schema.ts',
+      'src/help/generated/',
+    ],
   },
   ...tseslint.configs.recommended,
   ...svelte.configs['flat/recommended'],

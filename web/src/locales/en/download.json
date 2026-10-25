@@ -20,7 +20,7 @@
     "name": "Name",
     "size": "Size",
     "sha256": "SHA-256 fingerprint",
-    "action": "Download",
+    "action": "Download link",
     "download": "Download",
     "downloadName": "{name}",
     "copySha": "Copy the SHA-256 fingerprint of {name}",

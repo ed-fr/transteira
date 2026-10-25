@@ -19,9 +19,12 @@ export default defineConfig({
         'src/shared/{api,router,i18n,upload,safe,theme,validation}/**/*.ts',
         'src/public/**/*.ts',
         'src/admin/**/*.ts',
+        'src/help/**/*.ts',
       ],
       exclude: [
         'src/shared/api/schema.ts',
+        'src/help/generated/**',
+        'src/help/types.ts',
         'src/public/main.ts',
         'src/admin/main.ts',
         '**/*.d.ts',

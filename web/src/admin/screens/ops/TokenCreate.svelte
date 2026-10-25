@@ -11,7 +11,7 @@
   // The tenant sub-navigation is rendered by App.svelte.
   import { onDestroy } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, TextField } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -100,7 +100,10 @@
   });
 </script>
 
-<h1 tabindex="-1">{t('adminOps.tokens.createTitle')}</h1>
+<div class="tt-title-row">
+  <h1 tabindex="-1">{t('adminOps.tokens.createTitle')}</h1>
+  <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.createTitle')} {nav} />
+</div>
 <p>{t('adminOps.tokens.intro')}</p>
 
 <FormSection

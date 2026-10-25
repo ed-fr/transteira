@@ -26,6 +26,7 @@
     Button,
     Checkbox,
     Dialog,
+    HelpIcon,
     ProgressBar,
     Spinner,
     TextField,
@@ -72,7 +73,7 @@
   } from './masterKey';
   import { browserPollerDeps, createPoller } from './poller';
 
-  let { params: _params, nav: _nav }: AdminScreenProps = $props();
+  let { params: _params, nav }: AdminScreenProps = $props();
 
   const uid = $props.id();
   const codeId = `${uid}-code`;
@@ -351,7 +352,10 @@
   });
 </script>
 
-<h1 tabindex="-1">{t('adminSystem.masterKey.title')}</h1>
+<div class="tt-title-row">
+  <h1 tabindex="-1">{t('adminSystem.masterKey.title')}</h1>
+  <HelpIcon topic="system-master-key" title={t('adminSystem.masterKey.title')} {nav} />
+</div>
 <p>{t('adminSystem.masterKey.intro')}</p>
 
 {#if pageMessage !== undefined}

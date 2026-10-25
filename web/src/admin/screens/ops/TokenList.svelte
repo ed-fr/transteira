@@ -11,7 +11,7 @@
   // The tenant sub-navigation is rendered by App.svelte.
   import { tick, untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, announce } from '../../../shared/components';
+  import { Alert, Button, HelpIcon, announce } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
@@ -184,7 +184,10 @@
   {/if}
 {/snippet}
 
-<h1 tabindex="-1" bind:this={heading}>{t('adminOps.tokens.title')}</h1>
+<div class="tt-title-row">
+  <h1 tabindex="-1" bind:this={heading}>{t('adminOps.tokens.title')}</h1>
+  <HelpIcon topic="tenant-tokens" title={t('adminOps.tokens.title')} {nav} />
+</div>
 <p>{t('adminOps.tokens.intro')}</p>
 <p>
   {t('opsTokens.list.docsIntro')}

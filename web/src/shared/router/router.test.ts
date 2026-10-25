@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   compilePattern,
   createRouter,
+  isRouterEntry,
   matchRoutes,
   normalizeBase,
+  ROUTER_ENTRY,
   stripBase,
   type LinkClick,
   type LinkNode,
@@ -29,8 +31,15 @@ function fakeEnv(url = '/') {
   const env = {
     location: { pathname: '/', search: '', hash: '' },
     history: {
-      pushState: vi.fn((_s: unknown, _u: string, next?: string | URL | null) => setUrl(String(next))),
-      replaceState: vi.fn((_s: unknown, _u: string, next?: string | URL | null) => setUrl(String(next))),
+      state: null as unknown,
+      pushState: vi.fn((s: unknown, _u: string, next?: string | URL | null) => {
+        env.history.state = s;
+        setUrl(String(next));
+      }),
+      replaceState: vi.fn((s: unknown, _u: string, next?: string | URL | null) => {
+        env.history.state = s;
+        setUrl(String(next));
+      }),
     },
     addEventListener: vi.fn((_t: 'popstate', l: () => void) => listeners.add(l)),
     removeEventListener: vi.fn((_t: 'popstate', l: () => void) => listeners.delete(l)),
@@ -157,7 +166,7 @@ describe('createRouter', () => {
     const announce = vi.fn();
     const router = createRouter({ routes, notFound, env, t, afterRender, announce });
     await router.navigate('/legal/legal-notice');
-    expect(env.history.pushState).toHaveBeenCalledWith(null, '', '/legal/legal-notice');
+    expect(env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/legal/legal-notice');
     expect(router.current.route).toBe(legal);
     expect(router.current.params).toEqual({ document: 'legal-notice' });
     expect(env.document.title).toBe('[legal.title]');
@@ -165,6 +174,22 @@ describe('createRouter', () => {
     expect(env.document.querySelector).toHaveBeenCalledWith('h1[tabindex="-1"]');
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(announce).toHaveBeenCalledWith('[common.navigation.pageLoaded|[legal.title]]');
+  });
+
+  it('keeps a router entry a router entry when it is replaced', async () => {
+    const { env } = fakeEnv('/');
+    const router = createRouter({ routes, notFound, env, t, afterRender });
+    await router.navigate('/d/a');
+    expect(isRouterEntry(env.history.state)).toBe(true);
+    await router.navigate('/d/b', { replace: true });
+    expect(env.history.replaceState).toHaveBeenLastCalledWith(ROUTER_ENTRY, '', '/d/b');
+    await router.navigate('/d/b');
+    expect(env.history.replaceState).toHaveBeenLastCalledWith(ROUTER_ENTRY, '', '/d/b');
+    // The first entry of the session (not added by the router) stays a plain entry.
+    const first = fakeEnv('/');
+    const other = createRouter({ routes, notFound, env: first.env, t, afterRender });
+    await other.navigate('/d/c', { replace: true });
+    expect(first.env.history.replaceState).toHaveBeenLastCalledWith(null, '', '/d/c');
   });
 
   it('replaces history on request or for the same URL', async () => {
@@ -176,7 +201,7 @@ describe('createRouter', () => {
     expect(env.history.replaceState).toHaveBeenCalledTimes(2);
     expect(env.history.pushState).not.toHaveBeenCalled();
     await router.navigate('d/b?q=1#h');
-    expect(env.history.pushState).toHaveBeenCalledWith(null, '', '/d/b?q=1#h');
+    expect(env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/d/b?q=1#h');
     expect(router.current.search).toBe('?q=1');
     expect(router.current.hash).toBe('#h');
   });
@@ -252,7 +277,7 @@ describe('createRouter', () => {
     fake.pop('/legal/legal-notice');
     expect(guard).toHaveBeenCalledWith('/legal/legal-notice');
     expect(router.current.route).toBe(download);
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/d/tok?x=1#h');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/d/tok?x=1#h');
     expect(fake.env.location.pathname).toBe('/d/tok');
   });
 
@@ -285,7 +310,7 @@ describe('createRouter', () => {
     expect(router.href('/tenants/1')).toBe('/admin/tenants/1');
     expect(router.href('tenants/1')).toBe('/admin/tenants/1');
     await router.navigate('/tenants/t1');
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/admin/tenants/t1');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/admin/tenants/t1');
     expect(router.current.params).toEqual({ id: 't1' });
     expect(router.current.path).toBe('/tenants/t1');
     router.start();
@@ -336,7 +361,7 @@ describe('createRouter', () => {
     router.start();
     expect(fake.env.addEventListener).toHaveBeenCalled();
     await router.navigate('/');
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/');
     expect(fake.env.scrollTo).toHaveBeenCalledWith(0, 0);
     expect(typeof fake.env.document.title).toBe('string');
   });
@@ -355,7 +380,7 @@ describe('link action', () => {
     const action = router.link(link.node);
     const event = link.click();
     expect(event.preventDefault).toHaveBeenCalled();
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/d/abc?x=1#y');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/d/abc?x=1#y');
     action.destroy();
     expect(link.attached).toBe(false);
   });
@@ -365,7 +390,7 @@ describe('link action', () => {
     const link = fakeLink({ href: 'https://transfer.entity-a.example.com/legal/legal-notice' });
     router.link(link.node);
     expect(link.click().preventDefault).toHaveBeenCalled();
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/legal/legal-notice');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/legal/legal-notice');
   });
 
   it('strips the base path of admin links and ignores links outside it', () => {
@@ -373,7 +398,7 @@ describe('link action', () => {
     const inside = fakeLink({ href: '/admin/tenants/1' });
     router.link(inside.node);
     expect(inside.click().preventDefault).toHaveBeenCalled();
-    expect(fake.env.history.pushState).toHaveBeenCalledWith(null, '', '/admin/tenants/1');
+    expect(fake.env.history.pushState).toHaveBeenCalledWith(ROUTER_ENTRY, '', '/admin/tenants/1');
     const outside = fakeLink({ href: '/api/docs' });
     router.link(outside.node);
     expect(outside.click().preventDefault).not.toHaveBeenCalled();
@@ -410,5 +435,15 @@ describe('link action', () => {
       router.link(link.node);
       expect(link.click().preventDefault).toHaveBeenCalled();
     }
+  });
+});
+
+describe('isRouterEntry', () => {
+  it('recognises the history entries added by the router', () => {
+    expect(isRouterEntry(ROUTER_ENTRY)).toBe(true);
+    expect(isRouterEntry(structuredClone(ROUTER_ENTRY))).toBe(true);
+    expect(isRouterEntry(null)).toBe(false);
+    expect(isRouterEntry({ tt: 'other' })).toBe(false);
+    expect(isRouterEntry('router')).toBe(false);
   });
 });

@@ -1,0 +1,105 @@
+# Recevoir des fichiers
+
+Quelqu’un vous a envoyé des fichiers avec TransTeira. Vous avez reçu un mail contenant un lien de téléchargement, ainsi qu’un QR code qui ouvre le même lien sur un téléphone ou une tablette. Vous n’avez besoin ni de compte ni de logiciel : un navigateur web suffit. Les fichiers restent disponibles jusqu’à la date indiquée dans le mail et sur la page, puis ils sont supprimés automatiquement.
+
+<!-- topic: download -->
+## Télécharger les fichiers
+
+La page de téléchargement présente les fichiers que l’expéditeur a mis à votre disposition.
+
+Ouvrez le lien du mail, ou scannez le QR code avec l’appareil photo de votre téléphone. La page **Télécharger les fichiers** s’ouvre et affiche :
+
+- **Envoyé par** : l’adresse mail de la personne qui vous a envoyé les fichiers ;
+- **Disponible jusqu’au** : la date et l’heure après lesquelles les fichiers sont supprimés ;
+- **Total** : le nombre de fichiers et leur taille totale ;
+- **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un.
+
+![La page de téléchargement : expéditeur, date d’expiration, total, message de l’expéditeur, bouton pour télécharger tous les fichiers en archive ZIP et liste des fichiers avec leur taille, leur empreinte SHA-256 et un bouton Télécharger](../screenshots/fr/download.png)
+
+La page est disponible en français et en anglais : utilisez le menu **Langue** en bas de la page pour en changer. Le lien **Aide**, également en bas de la page, ouvre ce guide.
+
+<!-- topic: download-password -->
+### Transfert protégé
+
+L’expéditeur a pu protéger le transfert par un mot de passe, pour que seules les personnes qui le connaissent puissent récupérer les fichiers.
+
+Dans ce cas, la page affiche **Mot de passe requis** à la place de la liste des fichiers. L’expéditeur vous transmet le mot de passe par un autre canal que le mail, par exemple par téléphone ou par SMS : il n’est jamais écrit dans le mail lui-même. Si vous ne l’avez pas reçu, demandez-le à l’expéditeur.
+
+![La page Mot de passe requis : expéditeur, date d’expiration, champ Mot de passe et bouton Déverrouiller](../screenshots/fr/download-password.png)
+
+1. Saisissez le mot de passe dans le champ **Mot de passe**.
+2. Cliquez sur **Déverrouiller**.
+3. La liste des fichiers s’affiche.
+
+Si le mot de passe est faux, la page affiche **Le mot de passe est incorrect.**, généralement suivi du nombre d’essais restants. Après 3 mots de passe erronés, le transfert est bloqué pendant 15 minutes : la page affiche **Trop de mots de passe erronés : le transfert est bloqué pour un moment.** avec un compte à rebours. À la fin du compte à rebours, le champ redevient disponible et vous pouvez réessayer.
+
+Une fois le transfert déverrouillé, les fichiers restent accessibles pendant environ une heure dans ce navigateur. Ensuite, la page redemande le mot de passe : **Votre accès aux fichiers a expiré : saisissez de nouveau le mot de passe.** C’est normal ; saisissez simplement le mot de passe une nouvelle fois.
+
+<!-- topic: download-files -->
+### Un fichier ou tout à la fois
+
+Vous pouvez télécharger les fichiers un par un, ou tous ensemble dans une seule archive.
+
+- Pour télécharger un fichier, cliquez sur **Télécharger** sur sa ligne.
+- Pour tout télécharger en une fois, cliquez sur **Télécharger tous les fichiers (ZIP)**.
+
+L’archive ZIP n’est pas compressée : sa taille est proche de la taille totale des fichiers. Elle est construite pendant le téléchargement, si bien que celui-ci commence immédiatement, même pour de très gros transferts. Une fois l’archive sur votre ordinateur, ouvrez-la ou extrayez-la comme d’habitude.
+
+Les fichiers sont toujours enregistrés sur votre ordinateur : ils ne s’ouvrent jamais directement dans le navigateur. Votre navigateur affiche la progression dans sa liste de téléchargements.
+
+Pour les gros fichiers, privilégiez une connexion stable (câble ou bon réseau Wi-Fi) et gardez la page ouverte et l’ordinateur allumé jusqu’à la fin du téléchargement. Si un téléchargement s’arrête, relancez-le depuis la page tant que le transfert est disponible.
+
+> **À savoir** Si la page affiche **Ce transfert est supprimé après son premier téléchargement complet.**, le transfert disparaît peu après avoir été téléchargé une fois en entier. Pour être sûr de récupérer tous les fichiers, téléchargez-les en une fois avec **Télécharger tous les fichiers (ZIP)**.
+
+Si vous travaillez dans l’organisation et êtes connecté depuis son réseau, vous pouvez aussi envoyer des fichiers vous-même : voir [Envoyer des fichiers](topic:deposit).
+
+<!-- topic: download-integrity -->
+## Vérifier qu’un fichier est intact (SHA-256)
+
+L’empreinte SHA-256 permet de vérifier que le fichier présent sur votre ordinateur est exactement celui que l’expéditeur a déposé, sans manque ni modification.
+
+Une empreinte est une longue suite de lettres et de chiffres calculée à partir du contenu d’un fichier. Deux fichiers identiques ont toujours la même empreinte ; si un seul octet diffère, l’empreinte est complètement différente.
+
+La liste des fichiers affiche chaque empreinte dans la colonne **Empreinte SHA-256**, avec un bouton **Copier** à côté. Les mêmes empreintes figurent aussi dans le mail que vous avez reçu.
+
+Pour vérifier un fichier, calculez son empreinte sur votre ordinateur, puis comparez-la avec celle de la page ou du mail :
+
+- Windows, dans l’invite de commandes : `certutil -hashfile fichier SHA256`
+- Windows, dans PowerShell : `Get-FileHash fichier -Algorithm SHA256`
+- macOS, dans le Terminal : `shasum -a 256 fichier`
+- Linux, dans un terminal : `sha256sum fichier`
+
+Remplacez `fichier` par le nom du fichier téléchargé, avec son dossier si nécessaire (par exemple, un fichier de votre dossier Téléchargements). Astuce : dans la plupart des terminaux, vous pouvez faire glisser le fichier sur la fenêtre pour insérer son chemin complet.
+
+Les majuscules et les minuscules n’ont pas d’importance : l’invite de commandes affiche l’empreinte en minuscules et PowerShell en majuscules, et les deux sont correctes. Seule compte la suite de lettres et de chiffres, qui doit être identique.
+
+Si les empreintes diffèrent, le fichier a été abîmé pendant le téléchargement : téléchargez-le de nouveau. Si elles diffèrent encore, contactez l’expéditeur.
+
+> **À savoir** Seuls les fichiers pris un par un ont une empreinte. L’archive ZIP elle-même n’en a pas : extrayez-la d’abord, puis vérifiez les fichiers qu’elle contient.
+
+<!-- topic: download-not-scanned -->
+## Fichiers non analysés par l’antivirus
+
+Chaque fichier est analysé par un antivirus avant d’être mis à disposition. Un fichier dans lequel une menace est détectée est supprimé et ne vous parvient jamais.
+
+Certains fichiers ne peuvent toutefois pas être analysés. Dans ce cas, la page affiche l’avertissement **Certains fichiers n’ont pas pu être analysés par l’antivirus. Ne les ouvrez que si vous faites confiance à l’expéditeur.**, et le fichier concerné porte l’une de ces mentions :
+
+- **Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.** Le fichier dépasse la taille que l’antivirus peut contrôler.
+- **Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe.** L’antivirus ne peut pas examiner le contenu d’un fichier ou d’une archive chiffrés.
+
+Ces fichiers sont tout de même transmis, car ils peuvent être parfaitement légitimes. Avant d’en ouvrir un :
+
+- assurez-vous de connaître l’expéditeur et d’attendre ces fichiers ;
+- en cas de doute, demandez à l’expéditeur par un autre moyen (téléphone, mail séparé) s’il les a bien envoyés ;
+- analysez le fichier avec votre propre antivirus avant de l’ouvrir.
+
+<!-- topic: download-problems -->
+## Le lien ne fonctionne pas
+
+Cette section explique les messages que vous pouvez voir à la place des fichiers, et ce qu’il faut faire.
+
+- **Transfert introuvable** : le lien est incomplet ou a été modifié. Copiez le lien en entier depuis le mail, ou cliquez directement dessus dans le mail.
+- **Transfert plus disponible** : le transfert a expiré, a été supprimé par un administrateur, ou a été supprimé après son premier téléchargement. Demandez à l’expéditeur de renvoyer les fichiers.
+- La page affiche **Maintenance en cours** : seuls les nouveaux transferts sont suspendus. Les téléchargements restent disponibles, vous pouvez donc continuer normalement.
+
+Pour répondre à l’expéditeur, répondez-lui par mail : TransTeira ne transmet pas les réponses.

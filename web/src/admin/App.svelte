@@ -16,6 +16,7 @@
   // The flash message of the anonymous state (session expired, signed out) is read from the
   // session by the sign-in screen.
   import { onMount, untrack } from 'svelte';
+  import { pageTitleOf } from '../help/title.svelte';
   import { problemMessage } from '../shared/api/problem';
   import { Button, Footer, Spinner, announce } from '../shared/components';
   import { i18n, locale, supportedLanguages, t } from '../shared/i18n/i18n.svelte';
@@ -44,8 +45,10 @@
   }
 
   function documentTitle(m: RouteMatch<AdminScreenComponent>): string {
-    const key = decide(m).kind === 'notFound' ? notFoundRoute.titleKey : m.route.titleKey;
-    const page = t(key);
+    const page =
+      decide(m).kind === 'notFound'
+        ? t(notFoundRoute.titleKey)
+        : pageTitleOf(isHelpRoute(m.route), t(m.route.titleKey));
     const site = t('admin.appName');
     return page === site ? page : `${page} – ${site}`;
   }
@@ -173,6 +176,7 @@
         onlanguagechange={(lang) => void changeLanguage(i18n, lang, storage)}
         {helpTopic}
         helpBase={ADMIN_BASE}
+        nav={router}
       />
     {/snippet}
   </AdminLayout>

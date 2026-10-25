@@ -41,8 +41,6 @@
     "action": "Go to the sending page"
   },
   "help": {
-    "title": "Help",
-    "comingSoon": "The integrated help is coming in a next version.",
-    "topic": "Requested topic: {topic}"
+    "title": "Help"
   }
 }

@@ -3,6 +3,7 @@
   // frame (logo, background, footer with legal links, help and language switch, maintenance
   // banner) and the screen of the current route.
   import { onMount } from 'svelte';
+  import { pageTitleOf } from '../help/title.svelte';
   import { api } from '../shared/api/api';
   import { problemMessage } from '../shared/api/problem';
   import { Alert, Footer, PageLayout, Spinner, announce } from '../shared/components';
@@ -39,7 +40,8 @@
   const router = createRouter({
     routes,
     notFound: notFoundRoute,
-    title: (match) => documentTitle(t(match.route.titleKey), tenant?.name),
+    title: (match) =>
+      documentTitle(pageTitleOf(isHelpRoute(match.route), t(match.route.titleKey)), tenant?.name),
     announce: (message) => announce(message),
   });
 
@@ -96,10 +98,11 @@
     return () => router.stop();
   });
 
-  // Keeps the document title in sync with the language and the tenant name.
+  // Keeps the document title in sync with the language, the tenant name and the help page.
   $effect(() => {
     if (locale.current !== '') {
-      document.title = documentTitle(t(router.current.route.titleKey), tenant?.name);
+      const route = router.current.route;
+      document.title = documentTitle(pageTitleOf(isHelpRoute(route), t(route.titleKey)), tenant?.name);
     }
   });
 
@@ -141,6 +144,7 @@
         currentLanguage={locale.current}
         onlanguagechange={(lang) => void onLanguage(lang)}
         helpTopic={isHelpRoute(match.route) ? null : match.route.helpTopic}
+        nav={router}
       >
         {#snippet legal()}
           {#each current.legalDocuments as document (document)}

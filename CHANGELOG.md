@@ -460,6 +460,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
   (read with `docker network inspect bridge`, where `host.docker.internal` points), never on
   every interface, and trusts only that address and the subnet of the compose network of Caddy
   instead of the whole `172.16.0.0/12`; Windows and macOS keep loopback.
+- User guides in `docs/user/`, one per profile in English and in French
+  (`{en,fr}/{depositor,recipient,delegated-admin,super-admin}.md`), illustrated with the
+  generated screenshots, and an index `docs/user/README.md`; the README links them and shows
+  screenshots.
+- Integrated help built from these guides (`web/scripts/build-help.mjs`, `npm run help:gen`, run
+  before `dev`, `check`, `test` and `build`): a strict Markdown subset (headings, paragraphs,
+  one-level lists, notes, screenshots, internal links, topic markers) converted into typed data
+  modules per language and application (`web/src/help/generated/`, git-ignored), any other
+  construct, missing screenshot, broken link, duplicate topic or topic missing in one language
+  failing with `file:line` errors. `/help` and `/help/<topic>` in both applications show the
+  guides of the application (the super-admin guide never for a signed-in delegated admin), with a
+  table of contents, focus on the section of the topic, the page title "Section – Guide", reload
+  at the same topic on a language change and "back to the previous screen". Guides are
+  lazy-loaded per application and language, screenshots are served fingerprinted under
+  `/assets/`, and the help is rendered from structured data, without `{@html}` (threat model
+  T-91, v0.21). A test checks that every help topic of both route tables opens a section in both
+  languages, in a guide the user of the screen can read.
+- Contextual help icons (`HelpIcon`, "?" next to the screen title, accessible name "Help: <screen
+  title>") on the API token list and creation, tenant network, tenant SMTP and master key
+  screens.
 
 ### Changed
 - `make check` now runs `e2e-lint` (Prettier, ESLint, `tsc` and `npm audit` of `test/e2e`,
@@ -531,8 +551,41 @@ and the project follows [Semantic Versioning](https://semver.org/).
   and API calls. The asset limit is checked before tenant resolution, so asset requests with
   random `Host` headers cannot force unthrottled tenant lookups. Entry pages, the API, the
   documentation and the help stay under the global limit (threat model T-171, v0.20).
+- The router marks the history entries it adds (`ROUTER_ENTRY`, `isRouterEntry(history.state)`),
+  so that the help offers "back to the previous screen" only when the previous entry belongs to
+  the application; a replaced entry (redirect, same URL) keeps that mark.
+- The help topic of the tenant creation screen is `tenant-create` instead of `tenants`.
+- The footer help link navigates inside the application (router `nav` passed to `Footer` and
+  `HelpLink` by both applications) instead of reloading the page.
+- The OpenAPI description of `AdminPassword` states the only rule applied, the length (12 to 1024
+  Unicode code points), and the password rule texts of the administration no longer mention a
+  list of common passwords.
+- The maintenance texts are aligned between the deposit page, the maintenance page and the
+  maintenance banner (new transfers and invitations suspended, downloads still available).
+- Interface wording: the file table of the download page has a "Download link" column ("Lien
+  de téléchargement"), the maintenance state of the statistics reads "Actif" / "Inactif" in
+  French, the French password confirmation label reads "Confirmez le mot de passe", and the
+  French locales use typographic apostrophes (’) throughout.
+- Integrated help, after review: the unknown-topic message repeats the requested topic only when
+  it is a well-formed topic of at most 64 characters (generic message otherwise); guides
+  containing control characters, Unicode line or paragraph separators or bidirectional formatting
+  characters are refused with `file:line` errors; the generated modules are written from the
+  structure (no text substitution, image sources as import identifiers) and give each screenshot
+  its real size read from the PNG header; section ids stay unique like on GitHub (`foo`, `foo-1`,
+  `foo-1-1`); syntax that GitHub reads differently is handled or refused (`__bold__`, tables
+  without outer pipes, list items continued or separated after a blank line, an empty `>` line in
+  a note, closing hashes of headings); a topic link from the delegated-admin guide to the
+  super-admin guide is refused; the help icons of the screens are checked against the route
+  topics and the guides; the dev server serves the screenshots and regenerates the help when a
+  guide changes.
 
 ### Fixed
+- Integrated help: inline errors inside a multi-line paragraph, list item or note point to their
+  own line; a missing guide is reported once and a missing or invalid screenshots manifest gives a
+  `file:line` error instead of a stack trace; a failed reload while a guide is shown displays the
+  error with its retry button; modified or middle clicks on section links and on the table of
+  contents keep the browser behaviour (new tab); the pending focus move is cancelled when the help
+  screen goes away.
 - A request canceled by the client (a browser leaving a page) during the deposit or admin
   session lookup, the API token lookup or the tenant resolution is logged at debug level
   instead of `ERROR` (`middleware.ClientGone`); real failures keep the `ERROR` level.

@@ -1,0 +1,20 @@
+{
+  "index": {
+    "intro": "Choose the guide that matches what you want to do. Each screen also has a help link at the bottom of the page, which opens the matching section directly.",
+    "guides": "Guides"
+  },
+  "guides": {
+    "depositor": "Send files, invite an external person and follow your transfers.",
+    "recipient": "Download the files sent to you and check their integrity.",
+    "delegatedAdmin": "Configure and operate the entities you administer.",
+    "superAdmin": "Set up the service, create entities and administrators, manage the system."
+  },
+  "toc": "Contents",
+  "back": "Back to the previous screen",
+  "indexLink": "All guides",
+  "unknownTopic": "No help page matches “{topic}”. Choose a guide below.",
+  "unknownTopicGeneric": "No help page matches the requested address. Choose a guide below.",
+  "loading": "Loading the help…",
+  "error": "The help could not be loaded.",
+  "icon": "Help: {title}"
+}

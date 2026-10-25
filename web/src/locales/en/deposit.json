@@ -3,7 +3,7 @@
   "newTransfer": "New transfer",
   "maintenance": {
     "title": "Service under maintenance",
-    "text": "The service is under maintenance: new transfers are temporarily unavailable. Please try again later."
+    "text": "The service is under maintenance: new transfers and invitations are suspended for a while. Downloads remain available."
   },
   "error": {
     "title": "The page could not be loaded",

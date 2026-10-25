@@ -14,8 +14,8 @@
     "other": "Nouvelle tentative dans {count} secondes."
   },
   "paused": {
-    "user": "L'envoi est en pause. Reprenez-le quand vous le souhaitez : il continue là où il s'est arrêté.",
-    "failures": "La connexion échoue de façon répétée, l'envoi est donc en pause. Vérifiez votre connexion réseau, puis reprenez : l'envoi continue là où il s'est arrêté."
+    "user": "L’envoi est en pause. Reprenez-le quand vous le souhaitez : il continue là où il s’est arrêté.",
+    "failures": "La connexion échoue de façon répétée, l’envoi est donc en pause. Vérifiez votre connexion réseau, puis reprenez : l’envoi continue là où il s’est arrêté."
   },
   "actions": {
     "pause": "Mettre en pause",
@@ -27,42 +27,42 @@
   "fileProgress": "{name} : {uploaded} sur {size}",
   "fileDone": "{name} : envoyé",
   "totalProgress": "{uploaded} sur {total} envoyés ({percent} %)",
-  "leaveWarning": "Des fichiers sont en cours d'envoi. Quitter cette page interrompt l'envoi.",
+  "leaveWarning": "Des fichiers sont en cours d’envoi. Quitter cette page interrompt l’envoi.",
   "announce": {
     "progress": "{percent} % envoyés.",
     "fileDone": "Fichier {name} envoyé.",
     "pausedUser": "Envoi en pause.",
     "pausedFailures": "Problèmes de connexion : envoi en pause.",
-    "completed": "Tous les fichiers sont envoyés. L'analyse antivirus commence.",
+    "completed": "Tous les fichiers sont envoyés. L’analyse antivirus commence.",
     "cancelled": "Envoi annulé.",
-    "error": "L'envoi s'est arrêté à cause d'une erreur."
+    "error": "L’envoi s’est arrêté à cause d’une erreur."
   },
   "error": {
     "unauthenticated": "Votre session a expiré. Identifiez-vous à nouveau, puis sélectionnez les mêmes fichiers pour reprendre.",
-    "forbidden": "L'envoi de ces fichiers n'est plus autorisé. Commencez un nouveau transfert ou contactez votre administrateur.",
-    "upload-gone": "Cet envoi a expiré ou n'existe plus. Commencez un nouveau transfert.",
+    "forbidden": "L’envoi de ces fichiers n’est plus autorisé. Commencez un nouveau transfert ou contactez votre administrateur.",
+    "upload-gone": "Cet envoi a expiré ou n’existe plus. Commencez un nouveau transfert.",
     "payload-too-large": "Un fichier dépasse la taille déclarée ou autorisée. Commencez un nouveau transfert.",
-    "insufficient-storage": "Le serveur manque d'espace de stockage. Réessayez plus tard ou contactez votre administrateur.",
+    "insufficient-storage": "Le serveur manque d’espace de stockage. Réessayez plus tard ou contactez votre administrateur.",
     "protocol-error": "Le serveur a donné une réponse inattendue. Rechargez la page et réessayez.",
     "file-missing": "Un fichier à envoyer est manquant. Sélectionnez à nouveau les mêmes fichiers."
   },
   "finalize": {
-    "scanning": "L'antivirus analyse les fichiers. Vous pouvez fermer cette page : vous serez prévenu par mail quand le transfert sera prêt.",
-    "incomplete": "Certains fichiers n'ont pas été entièrement reçus. L'envoi reprend.",
-    "blocked": "Votre organisation n'autorise pas ces fichiers, le transfert a été refusé :",
+    "scanning": "L’antivirus analyse les fichiers. Vous pouvez fermer cette page : vous serez prévenu par mail quand le transfert sera prêt.",
+    "incomplete": "Certains fichiers n’ont pas été entièrement reçus. L’envoi reprend.",
+    "blocked": "Votre organisation n’autorise pas ces fichiers, le transfert a été refusé :",
     "available": "Le transfert est prêt : les destinataires ont été prévenus.",
-    "rejected": "Aucun fichier n'a pu être remis : le transfert a été refusé après l'analyse antivirus.",
+    "rejected": "Aucun fichier n’a pu être remis : le transfert a été refusé après l’analyse antivirus.",
     "error": {
-      "checksum-mismatch": "Un fichier a été altéré pendant l'envoi. Commencez un nouveau transfert.",
+      "checksum-mismatch": "Un fichier a été altéré pendant l’envoi. Commencez un nouveau transfert.",
       "state-conflict": "Ce transfert ne peut plus être finalisé. Commencez un nouveau transfert.",
       "transfer-gone": "Ce transfert a expiré ou a été supprimé.",
       "network": "Le serveur est injoignable. Vérifiez votre connexion et réessayez.",
-      "other": "Le transfert n'a pas pu être finalisé. Réessayez plus tard."
+      "other": "Le transfert n’a pas pu être finalisé. Réessayez plus tard."
     }
   },
   "resume": {
-    "title": "Reprendre l'envoi interrompu",
-    "text": "Un envoi a été interrompu. Sélectionnez à nouveau les mêmes fichiers pour continuer là où il s'est arrêté.",
+    "title": "Reprendre l’envoi interrompu",
+    "text": "Un envoi a été interrompu. Sélectionnez à nouveau les mêmes fichiers pour continuer là où il s’est arrêté.",
     "missing": "Ces fichiers manquent encore : {names}",
     "discard": "Commencer plutôt un nouveau transfert"
   }

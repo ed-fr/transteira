@@ -9,7 +9,7 @@
   // - the lists then show the values saved by the server, which normalises them again.
   // The tenant sub-navigation is rendered by App.svelte.
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Spinner } from '../../../shared/components';
+  import { Alert, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -115,7 +115,10 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('adminTenants.network.title')}</h1>
+<div class="tt-title-row">
+  <h1 tabindex="-1">{t('adminTenants.network.title')}</h1>
+  <HelpIcon topic="tenant-network" title={t('adminTenants.network.title')} {nav} />
+</div>
 
 {#if loading}
   <p><Spinner showLabel /></p>

@@ -1,0 +1,20 @@
+{
+  "index": {
+    "intro": "Choisissez le guide qui correspond à ce que vous voulez faire. Chaque écran propose aussi un lien d’aide en bas de page, qui ouvre directement la section correspondante.",
+    "guides": "Guides"
+  },
+  "guides": {
+    "depositor": "Envoyer des fichiers, inviter une personne externe et suivre ses envois.",
+    "recipient": "Télécharger les fichiers reçus et vérifier leur intégrité.",
+    "delegatedAdmin": "Configurer et exploiter les entités que vous administrez.",
+    "superAdmin": "Installer le service, créer les entités et les administrateurs, gérer le système."
+  },
+  "toc": "Sommaire",
+  "back": "Retour à l’écran précédent",
+  "indexLink": "Tous les guides",
+  "unknownTopic": "Aucune page d’aide ne correspond à « {topic} ». Choisissez un guide ci-dessous.",
+  "unknownTopicGeneric": "Aucune page d’aide ne correspond à l’adresse demandée. Choisissez un guide ci-dessous.",
+  "loading": "Chargement de l’aide…",
+  "error": "L’aide n’a pas pu être chargée.",
+  "icon": "Aide : {title}"
+}

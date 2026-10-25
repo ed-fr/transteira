@@ -3,7 +3,7 @@
   "newTransfer": "Nouveau transfert",
   "maintenance": {
     "title": "Service en maintenance",
-    "text": "Le service est en maintenance : les nouveaux transferts sont momentanément impossibles. Veuillez réessayer plus tard."
+    "text": "Le service est en maintenance : les nouveaux transferts et les invitations sont suspendus pour un moment. Les téléchargements restent disponibles."
   },
   "error": {
     "title": "La page n’a pas pu être chargée",

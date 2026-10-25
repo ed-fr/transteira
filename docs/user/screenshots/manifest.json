@@ -163,8 +163,8 @@
   },
   {
     "name": "admin-tenants",
-    "screen": "admin /admin/tenants",
-    "profile": "super-admin",
+    "screen": "admin /admin/tenants (delegated admin of two entities)",
+    "profile": "delegated-admin",
     "path": "{lang}/admin-tenants.png"
   },
   {

@@ -32,7 +32,7 @@ describe('admin routes', () => {
     ['/admin/activate', '/activate', 'any', 'activation'],
     ['/admin/account', '/account', 'auth', 'account'],
     ['/admin/tenants', '/tenants', 'auth', 'tenants'],
-    ['/admin/tenants/new', '/tenants/new', 'super', 'tenants'],
+    ['/admin/tenants/new', '/tenants/new', 'super', 'tenant-create'],
     ['/admin/tenants/ten_1/general', '/tenants/:id/general', 'auth', 'tenant-general'],
     ['/admin/tenants/ten_1/branding', '/tenants/:id/branding', 'auth', 'tenant-branding'],
     ['/admin/tenants/ten_1/network', '/tenants/:id/network', 'auth', 'tenant-network'],

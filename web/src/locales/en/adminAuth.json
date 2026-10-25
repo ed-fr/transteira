@@ -1,10 +1,10 @@
 {
   "password": {
-    "rules": "At least 12 characters. Passwords that are too common are refused. A passphrase is easy to remember and hard to guess.",
+    "rules": "At least 12 characters. A passphrase is easy to remember and hard to guess.",
     "confirm": "Confirm the password",
     "mismatch": "The two passwords do not match.",
     "tooShort": "The password must be at least 12 characters long.",
-    "rejected": "This password is not accepted: it is too short or too common. Choose another one."
+    "rejected": "This password is not accepted: it must be 12 to 1024 characters long. Choose another one."
   },
   "stepTimeout": "This step must be completed within 5 minutes. If you reload the page, you will have to start again from the beginning.",
   "setup": {

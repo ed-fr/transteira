@@ -1,10 +1,10 @@
 {
   "password": {
-    "rules": "Au moins 12 caractères. Les mots de passe trop courants sont refusés. Une phrase de passe est facile à retenir et difficile à deviner.",
+    "rules": "Au moins 12 caractères. Une phrase de passe est facile à retenir et difficile à deviner.",
     "confirm": "Confirmez le mot de passe",
     "mismatch": "Les deux mots de passe ne sont pas identiques.",
     "tooShort": "Le mot de passe doit comporter au moins 12 caractères.",
-    "rejected": "Ce mot de passe n’est pas accepté : il est trop court ou trop courant. Choisissez-en un autre."
+    "rejected": "Ce mot de passe n’est pas accepté : il doit comporter de 12 à 1024 caractères. Choisissez-en un autre."
   },
   "stepTimeout": "Cette étape doit être terminée dans les 5 minutes. Si vous rechargez la page, vous devrez recommencer depuis le début.",
   "setup": {

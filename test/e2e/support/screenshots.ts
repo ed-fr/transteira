@@ -86,9 +86,13 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     screen: 'admin /admin/account (two-factor enrollment)',
     profile: 'delegated-admin',
   },
+  {
+    name: 'admin-tenants',
+    screen: 'admin /admin/tenants (delegated admin of two entities)',
+    profile: 'delegated-admin',
+  },
   // Super admin.
   { name: 'admin-home-super', screen: 'admin /admin/', profile: 'super-admin' },
-  { name: 'admin-tenants', screen: 'admin /admin/tenants', profile: 'super-admin' },
   { name: 'admin-tenant-create', screen: 'admin /admin/tenants/new', profile: 'super-admin' },
   { name: 'admin-admins', screen: 'admin /admin/admins', profile: 'super-admin' },
   { name: 'admin-admin-create', screen: 'admin /admin/admins/new', profile: 'super-admin' },

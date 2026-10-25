@@ -18,6 +18,18 @@
 import { tick } from 'svelte';
 import { t as translate } from '../i18n/i18n.svelte';
 
+/**
+ * State of the history entries added by the router (pushState). An entry carrying it was created
+ * by an in-app navigation, so the previous entry belongs to the same application: the help uses
+ * it to offer "back to the previous screen" (isRouterEntry(history.state)).
+ */
+export const ROUTER_ENTRY: Readonly<{ tt: 'router' }> = Object.freeze({ tt: 'router' });
+
+/** Reports whether a history state (history.state) is one of ROUTER_ENTRY. */
+export function isRouterEntry(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && (state as { tt?: unknown }).tt === 'router';
+}
+
 /** One entry of the route table. */
 export interface Route<C = unknown> {
   /** Path pattern, for example "/", "/d/:token", "/legal/:document". */
@@ -46,7 +58,8 @@ export interface RouteMatch<C = unknown> {
 /** Browser dependencies of the router. */
 export interface RouterEnv {
   location: { readonly pathname: string; readonly search: string; readonly hash: string };
-  history: Pick<History, 'pushState' | 'replaceState'>;
+  /** state: the state of the current entry (history.state), kept by a replacing navigation. */
+  history: Pick<History, 'pushState' | 'replaceState'> & { readonly state?: unknown };
   addEventListener(type: 'popstate', listener: () => void): void;
   removeEventListener(type: 'popstate', listener: () => void): void;
   document?: {
@@ -270,7 +283,7 @@ export function createRouter<C>(options: RouterOptions<C>): Router<C> {
     const next = resolve(env.location.pathname, env.location.search, env.location.hash);
     if (!allowed(next.path + next.search + next.hash)) {
       // The browser already shows the new URL: put the current one back.
-      env.history.pushState(null, '', href(current.path) + current.search + current.hash);
+      env.history.pushState(ROUTER_ENTRY, '', href(current.path) + current.search + current.hash);
       return;
     }
     current = next;
@@ -293,9 +306,10 @@ export function createRouter<C>(options: RouterOptions<C>): Router<C> {
       parts.search === env.location.search &&
       parts.hash === env.location.hash;
     if (navOptions.replace === true || same) {
-      env.history.replaceState(null, '', url);
+      // A replaced entry keeps its origin: one added by the router stays a router entry.
+      env.history.replaceState(isRouterEntry(env.history.state) ? ROUTER_ENTRY : null, '', url);
     } else {
-      env.history.pushState(null, '', url);
+      env.history.pushState(ROUTER_ENTRY, '', url);
     }
     current = resolve(parts.pathname, parts.search, parts.hash);
     await afterNavigation();

@@ -10,6 +10,7 @@
 // every run (identifiers, SHA-256 fingerprints, token prefixes, dates and times, TOTP secrets)
 // are masked.
 import type { BrowserContext, Locator, Page } from '@playwright/test';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { request } from '../support/api';
@@ -54,7 +55,12 @@ interface ScreenshotData {
   invitation: Record<Lang, string>;
   /** Activation page path of a pending delegated admin. */
   activation: string;
+  /** Password of the activated delegated admin of entities A and B (list of entities). */
+  multiDelegatePassword: string;
 }
+
+/** Delegated admin of both entities: the list of entities is only shown with several. */
+const MULTI_DELEGATE = 'morgan';
 
 const DATA_FILE = path.join(RUN_DIR, 'screenshots-data.json');
 
@@ -194,12 +200,36 @@ async function createData(): Promise<ScreenshotData> {
     [201],
   );
 
+  // A delegated admin of entities A and B, activated through the API (no second factor): a
+  // delegated admin with a single entity goes straight to its settings instead of the list.
+  const multi = await api.ok<{ activationUrl: string }>(
+    'POST',
+    '/admin/admins',
+    {
+      username: MULTI_DELEGATE,
+      email: 'morgan@example.com',
+      role: 'delegated_admin',
+      tenantIds: [a, s.tenants.b.id],
+      requireTotp: false,
+    },
+    [201],
+  );
+  const multiDelegatePassword = `screenshots-${crypto.randomBytes(12).toString('base64url')}`;
+  const activated = await request(s.serverPort, 'POST', '/api/v1/admin/activation', {
+    body: { activationToken: new URL(multi.activationUrl).hash.slice(1), password: multiDelegatePassword },
+    headers: { Origin: ORIGINS.admin, 'Sec-Fetch-Site': 'same-origin' },
+  });
+  if (activated.status < 200 || activated.status >= 300) {
+    throw new Error(`activation -> ${activated.status} ${activated.text.slice(0, 300)}`);
+  }
+
   return {
     download,
     transferId,
     downloadPassword: downloadPath(protectedTransfer.downloadUrl!),
     invitation,
     activation: pathOf(created.activationUrl),
+    multiDelegatePassword,
   };
 }
 
@@ -397,6 +427,11 @@ test.describe('depositor', () => {
         .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
         .setInputFiles(files.map((f) => ({ name: f.name, mimeType: f.mimeType, buffer: f.buffer })));
       for (const f of files) await expect(page.getByText(f.name).first()).toBeVisible();
+      // The selected files are at the bottom of the form: scroll down to the send button, so that
+      // the capture (one viewport, 1280 x 800) shows the file list with the options above it.
+      await page
+        .getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true })
+        .evaluate((el) => el.scrollIntoView({ block: 'end' }));
       await shoot(page, lang, 'deposit-form');
 
       await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
@@ -504,6 +539,26 @@ test.describe('delegated admin', () => {
     }
   });
 
+  test('list of entities', async ({ newContext }) => {
+    for (const lang of LANGS) {
+      // Signed in as the delegated admin of both entities (its own context, not the shared one).
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.admin}/admin/login`);
+      await heading(page, lang, 'adminAuth.login.title');
+      await page.getByLabel(startsWith(msg(lang, 'adminAuth.login.username.label'))).fill(MULTI_DELEGATE);
+      await page
+        .getByLabel(startsWith(msg(lang, 'adminAuth.login.password.label')))
+        .fill(data.multiDelegatePassword);
+      await page.getByRole('button', { name: msg(lang, 'adminAuth.login.submit'), exact: true }).click();
+      await heading(page, lang, 'admin.home.title');
+      await page.goto(`${ORIGINS.admin}/admin/tenants`);
+      await heading(page, lang, 'adminTenants.list.title');
+      // The view of a delegated admin: no creation link, no Administrators or System menu.
+      await expect(page.getByRole('link', { name: msg(lang, 'adminTenants.list.create') })).toHaveCount(0);
+      await shoot(page, lang, 'admin-tenants');
+    }
+  });
+
   test('personal data search', async ({ newContext, state }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang, STORAGE_DELEGATE);
@@ -565,7 +620,6 @@ test.describe('delegated admin', () => {
 test.describe('super admin', () => {
   const screens: [string, string, string][] = [
     ['admin-home-super', '/admin/', 'admin.home.title'],
-    ['admin-tenants', '/admin/tenants', 'adminTenants.list.title'],
     ['admin-tenant-create', '/admin/tenants/new', 'adminTenants.create.title'],
     ['admin-admins', '/admin/admins', 'adminAccounts.list.title'],
     ['admin-admin-create', '/admin/admins/new', 'adminAccounts.form.createTitle'],

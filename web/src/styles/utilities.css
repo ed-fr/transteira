@@ -80,6 +80,19 @@
   display: none !important;
 }
 
+/* Page heading followed by a contextual help icon (HelpIcon). */
+.tt-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--tt-space-2) var(--tt-space-4);
+  margin-bottom: var(--tt-space-4);
+}
+
+.tt-title-row > h1 {
+  margin-bottom: 0;
+}
+
 /* Definition lists used for recaps (sender, expiry, total size...). */
 .tt-dl {
   display: grid;
