@@ -1,3 +1,5 @@
+# Build context of the Dockerfile: only what the web and Go builds need. Secrets, databases,
+# uploaded files, backups and logs never enter the context.
 .git
 .claude
 .env
@@ -5,19 +7,34 @@
 secrets/
 *.key
 *.pem
+*.p12
+master.key*
+*master_key*
+gitleaks-report*
 bin/
 dist/
+*.exe
 coverage.out
+coverage.html
+.gencheck.*
+*.test
+*.prof
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
+data/
+var/
 backups/
 logs/
 *.log
 web/node_modules/
 web/dist/
 web/coverage/
+web/src/help/generated/
 test/
 docs/*
 !docs/user/
 integrations/
+deploy/

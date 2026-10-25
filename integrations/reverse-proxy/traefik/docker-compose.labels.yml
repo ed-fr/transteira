@@ -1,0 +1,53 @@
+# Alternative to dynamic/transteira.yml: the same routers declared by labels
+# on the TransTeira container (docker provider). Apply it on top of the
+# TransTeira compose file, and remove dynamic/transteira.yml from Traefik:
+#
+#   docker compose -f deploy/docker-compose.yml \
+#     -f integrations/reverse-proxy/traefik/docker-compose.labels.yml up -d
+#
+# Every rule lists the admin host and every tenant FQDN: add a tenant to the
+# four rules.
+
+services:
+  transteira:
+    labels:
+      - "traefik.enable=true"
+      # The real name of the shared Docker network (PROXY_NETWORK in deploy/.env).
+      - "traefik.docker.network=proxy"
+      - "traefik.http.services.transteira.loadbalancer.server.port=8080"
+      - "traefik.http.services.transteira.loadbalancer.passhostheader=true"
+
+      - "traefik.http.middlewares.transteira-hsts.headers.stsseconds=31536000"
+      - "traefik.http.middlewares.transteira-hsts.headers.stsincludesubdomains=false"
+      - "traefik.http.middlewares.transteira-compress.compress.encodings=zstd,gzip"
+      - "traefik.http.middlewares.transteira-compress.compress.includedcontenttypes=text/html,text/css,text/javascript,application/javascript,application/json,application/problem+json,image/svg+xml"
+
+      - "traefik.http.routers.transteira.rule=Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)"
+      - "traefik.http.routers.transteira.priority=10"
+      - "traefik.http.routers.transteira.entrypoints=websecure"
+      - "traefik.http.routers.transteira.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.transteira.service=transteira"
+      - "traefik.http.routers.transteira.middlewares=transteira-hsts,transteira-compress"
+
+      - "traefik.http.routers.transteira-uploads.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && PathPrefix(`/api/v1/uploads`)"
+      - "traefik.http.routers.transteira-uploads.priority=100"
+      - "traefik.http.routers.transteira-uploads.entrypoints=websecure"
+      - "traefik.http.routers.transteira-uploads.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.transteira-uploads.service=transteira"
+      - "traefik.http.routers.transteira-uploads.middlewares=transteira-hsts"
+
+      - "traefik.http.routers.transteira-downloads.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && PathPrefix(`/api/v1/downloads/`)"
+      - "traefik.http.routers.transteira-downloads.priority=100"
+      - "traefik.http.routers.transteira-downloads.entrypoints=websecure"
+      - "traefik.http.routers.transteira-downloads.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.transteira-downloads.service=transteira"
+      - "traefik.http.routers.transteira-downloads.middlewares=transteira-hsts"
+      - "traefik.http.routers.transteira-downloads.observability.accesslogs=false"
+
+      - "traefik.http.routers.transteira-tokens.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`))"
+      - "traefik.http.routers.transteira-tokens.priority=100"
+      - "traefik.http.routers.transteira-tokens.entrypoints=websecure"
+      - "traefik.http.routers.transteira-tokens.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.transteira-tokens.service=transteira"
+      - "traefik.http.routers.transteira-tokens.middlewares=transteira-hsts,transteira-compress"
+      - "traefik.http.routers.transteira-tokens.observability.accesslogs=false"

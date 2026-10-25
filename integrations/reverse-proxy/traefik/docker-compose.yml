@@ -1,0 +1,50 @@
+# Shared reverse proxy (Traefik), in its own compose project, distinct from the
+# TransTeira one (deploy/docker-compose.yml). Both join the external Docker
+# network "proxy", created once with a fixed subnet (see ../README.md):
+#
+#   docker network create --subnet 172.30.0.0/24 proxy
+#
+# Traefik gets a fixed address on it, 172.30.0.10, which is the value of
+# TT_TRUSTED_PROXIES in the TransTeira .env.
+
+name: reverse-proxy
+
+services:
+  traefik:
+    # Pinned by digest (threat model T-118): update tag and digest together.
+    image: traefik:v3.7.16@sha256:c8a121e4bb1347e8fd52657fab12f2cb70b68f8a018895e2068f92c9e519b9c2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - letsencrypt:/letsencrypt # ACME account and certificates: keep it
+      # Only for the docker provider (labels). Read-only, but access to the
+      # Docker API is still powerful (it amounts to root on the host): the
+      # file provider is recommended; remove this line, and the docker
+      # provider from traefik.yml, when only the file provider is used.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      proxy:
+        ipv4_address: 172.30.0.10
+    # Hardening: read-only root file system (Traefik only writes acme.json in
+    # the letsencrypt volume), no capability but binding ports 80 and 443, no
+    # privilege escalation.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  letsencrypt:
+
+networks:
+  proxy:
+    external: true

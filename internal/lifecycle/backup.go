@@ -27,6 +27,10 @@ const (
 	// account: they hold the wrapped keys of the files.
 	backupDirMode  = 0o700
 	backupFileMode = 0o600
+	// manualMarker follows the time stamp in the name of a copy written by
+	// [Sweeper.BackupNow]: such a name does not match backupName, so the
+	// rotation never deletes it.
+	manualMarker = "-manual"
 )
 
 var (
@@ -36,14 +40,21 @@ var (
 	sqliteDriver = config.DriverSQLite
 	// backupName matches the name of a finished copy.
 	backupName = regexp.MustCompile(`^transteira-\d{8}T\d{6}Z\.db$`)
-	// backupTemp matches the name of a copy being written, or of a journal
-	// file its check may have left (even once the copy itself is gone).
-	backupTemp = regexp.MustCompile(`^\.transteira-\d{8}T\d{6}Z\.db\.tmp(-wal|-shm|-journal)?$`)
+	// backupTemp matches the name of a copy being written (nightly or
+	// manual), or of a journal file its check may have left (even once the
+	// copy itself is gone).
+	backupTemp = regexp.MustCompile(`^\.transteira-\d{8}T\d{6}Z(-manual)?\.db\.tmp(-wal|-shm|-journal)?$`)
 	// errBackupDirSymlink reports a backup directory that is a symbolic
 	// link.
 	errBackupDirSymlink = errors.New("is a symbolic link")
 	// errBackupDirNotDir reports a backup path that is not a directory.
 	errBackupDirNotDir = errors.New("is not a directory")
+	// errBackupOutRelative reports a relative output path of
+	// [Sweeper.BackupNow].
+	errBackupOutRelative = errors.New("the output path must be absolute")
+	// errBackupOutUnsafe reports an output path holding "?" or "#", which
+	// the SQLite driver would read as DSN parameters.
+	errBackupOutUnsafe = errors.New(`the output path must not contain "?" or "#"`)
 )
 
 // backupFS is the file system of TaskBackup; the tests replace its
@@ -158,6 +169,85 @@ func (s *Sweeper) backup(ctx context.Context) error {
 	return s.rotate(dir, filepath.Base(final))
 }
 
+// BackupNow writes an immediate copy of a SQLite database, outside the
+// schedule (the "transteira backup" command, before an upgrade for
+// example), and returns its path. The copy is made, checked and flushed
+// like the nightly one (see TaskBackup).
+//
+// With out empty, the copy goes to Options.BackupDir (prepared like the
+// nightly copy) as transteira-YYYYMMDDTHHMMSSZ-manual.db: the "-manual"
+// marker keeps it out of the rotation, so it is never deleted
+// automatically (remove it by hand once it is no longer needed); the
+// temporary file of an interrupted manual copy is swept by the next
+// nightly rotation. It returns ErrBackupDisabled when Options.BackupDir is empty.
+//
+// With out set, the copy is written exactly at out, an absolute path
+// without "?" or "#" whose directory exists; an existing file is never
+// overwritten (the error wraps fs.ErrExist). On failure the partial copy
+// is removed and the returned path is empty.
+//
+// It returns store.ErrBackupUnsupported with PostgreSQL. It waits for a
+// task of the sweeper in progress in this process; a copy taken by another
+// process sharing the database is consistent too: VACUUM INTO reads a
+// single snapshot of the WAL database.
+func (s *Sweeper) BackupNow(ctx context.Context, out string) (string, error) {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	if !s.repo.backupSupported() {
+		return "", fmt.Errorf("lifecycle: backup: %w", store.ErrBackupUnsupported)
+	}
+	if out != "" {
+		if err := s.backupTo(ctx, out); err != nil {
+			return "", err
+		}
+		return out, nil
+	}
+	if s.backupDir == "" {
+		return "", ErrBackupDisabled
+	}
+	dir := s.backupDir
+	if err := s.prepareBackupDir(ctx, dir); err != nil {
+		return "", err
+	}
+	stamp := s.now().UTC().Format(backupStamp) + manualMarker
+	tmp := filepath.Join(dir, ".transteira-"+stamp+".db.tmp")
+	final := filepath.Join(dir, "transteira-"+stamp+".db")
+	if err := s.writeCopy(ctx, tmp, final); err != nil {
+		s.removeTemp(tmp)
+		return "", fmt.Errorf("lifecycle: backup: %w", err)
+	}
+	if err := s.fs.syncDir(dir); err != nil {
+		return "", fmt.Errorf("lifecycle: backup: sync the directory: %w", err)
+	}
+	s.logger.InfoContext(ctx, "lifecycle: manual database copy written", slog.String("file", filepath.Base(final)))
+	return final, nil
+}
+
+// backupTo writes the checked copy directly at out, created empty with
+// mode backupFileMode and never over an existing file, then flushes its
+// directory. On failure the copy is removed: it was created by this call.
+func (s *Sweeper) backupTo(ctx context.Context, out string) error {
+	switch {
+	case !filepath.IsAbs(out):
+		return fmt.Errorf("lifecycle: backup: %w", errBackupOutRelative)
+	case strings.ContainsAny(out, "?#"):
+		return fmt.Errorf("lifecycle: backup: %w", errBackupOutUnsafe)
+	}
+	if err := s.fs.createEmpty(out); err != nil {
+		return fmt.Errorf("lifecycle: backup: create the copy: %w", err)
+	}
+	err := s.fillCopy(ctx, out)
+	if err == nil {
+		err = s.fs.syncDir(filepath.Dir(out))
+	}
+	if err != nil {
+		s.removeTemp(out)
+		return fmt.Errorf("lifecycle: backup: %w", err)
+	}
+	s.logger.InfoContext(ctx, "lifecycle: manual database copy written", slog.String("file", filepath.Base(out)))
+	return nil
+}
+
 // prepareBackupDir checks the backup directory dir on every run: it is
 // created with mode 0700 when missing; a symbolic link, or anything but a
 // directory, is refused; on Unix, a directory accessible to its group or
@@ -193,20 +283,30 @@ func (s *Sweeper) writeCopy(ctx context.Context, tmp, final string) error {
 	if err := s.fs.createEmpty(tmp); err != nil {
 		return fmt.Errorf("create the copy: %w", err)
 	}
-	if err := s.repo.backup(ctx, tmp); err != nil {
+	if err := s.fillCopy(ctx, tmp); err != nil {
 		return err
-	}
-	if err := s.fs.chmod(tmp, backupFileMode); err != nil {
-		return fmt.Errorf("restrict the copy: %w", err)
-	}
-	if err := s.fs.checkCopy(ctx, tmp); err != nil {
-		return fmt.Errorf("check the copy: %w", err)
-	}
-	if err := s.fs.syncFile(tmp); err != nil {
-		return fmt.Errorf("sync the copy: %w", err)
 	}
 	if err := s.fs.rename(tmp, final); err != nil {
 		return fmt.Errorf("rename the copy: %w", err)
+	}
+	return nil
+}
+
+// fillCopy writes the database into the empty file path with VACUUM INTO,
+// restricts it to mode backupFileMode, checks it with PRAGMA quick_check
+// and flushes it to stable storage.
+func (s *Sweeper) fillCopy(ctx context.Context, path string) error {
+	if err := s.repo.backup(ctx, path); err != nil {
+		return err
+	}
+	if err := s.fs.chmod(path, backupFileMode); err != nil {
+		return fmt.Errorf("restrict the copy: %w", err)
+	}
+	if err := s.fs.checkCopy(ctx, path); err != nil {
+		return fmt.Errorf("check the copy: %w", err)
+	}
+	if err := s.fs.syncFile(path); err != nil {
+		return fmt.Errorf("sync the copy: %w", err)
 	}
 	return nil
 }

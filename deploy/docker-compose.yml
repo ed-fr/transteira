@@ -1,0 +1,256 @@
+# TransTeira - production compose file (SQLite, the default engine).
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#   (PostgreSQL: add -f deploy/docker-compose.postgres.yml, see that file)
+#
+# Quick start: deploy/README.md. Variables: deploy/.env.example (deployment)
+# and the root .env.example (every TT_* variable).
+#
+# Layout (CLAUDE.md section 18.1):
+#   - the reverse proxy lives in its own compose file (integrations/reverse-proxy/)
+#     and reaches TransTeira through the external network "proxy";
+#   - no port is published on the host;
+#   - clamd sits on the "internal" network, shared only with TransTeira, with no
+#     Internet access; signature updates run in a separate container
+#     (clamav-update) that is the only one on the "clamav_egress" network;
+#   - "internal" (and "db" in the PostgreSQL overlay) have fixed subnets
+#     (INTERNAL_SUBNET, DB_SUBNET), listed in TT_SMTP_DENY_NETWORKS so that the
+#     SMTP server of a tenant can never point at clamd, PostgreSQL or the proxy.
+#
+# Volumes have fixed names (not prefixed by the compose project), because other
+# tools rely on them: fail2ban and CrowdSec read
+# /var/lib/docker/volumes/transteira_logs/_data/security.log.
+
+name: transteira
+
+services:
+  transteira:
+    # Build it from the repository with `make docker` (tag transteira:<version>),
+    # or point TRANSTEIRA_IMAGE to a published image. Pin a version in
+    # production, never "latest".
+    image: ${TRANSTEIRA_IMAGE:-transteira:local}
+    # To build directly from this repository instead, uncomment:
+    # build:
+    #   context: ..
+    #   dockerfile: Dockerfile
+    container_name: transteira
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    # Container paths of the image (Dockerfile). They override .env on
+    # purpose: they must match the volumes below. The SQLite database keeps
+    # the image default, /var/lib/transteira/db/transteira.db: leave TT_DB_DSN
+    # unset in .env (the PostgreSQL overlay sets TT_DB_DSN_FILE).
+    environment:
+      TT_DATA_DIR: /data
+      TT_BACKUP_DIR: /backups
+      TT_LOG_DIR: /logs
+      TT_LISTEN_ADDR: ":8080"
+      TT_CLAMAV_ADDR: clamav:3310
+      # The key is read from the Docker secret below, never from a variable
+      # holding the key itself (docs/operations/master-key.md).
+      TT_MASTER_KEY_FILE: /run/secrets/transteira_master_key
+      # Soft memory target for the Go runtime, below mem_limit.
+      GOMEMLIMIT: 768MiB
+      # One scan at a time: clamd spools each stream (up to
+      # TT_CLAMAV_MAX_SCAN_BYTES) in its memory-backed spool, sized for a
+      # single stream (see the clamav service). Raise it only together with
+      # the size of that tmpfs and the clamav mem_limit.
+      TT_SCAN_WORKERS: ${TT_SCAN_WORKERS:-1}
+    secrets:
+      - transteira_master_key
+    networks:
+      - proxy
+      - internal
+    # No "ports:": the reverse proxy reaches transteira:8080 over "proxy".
+    volumes:
+      - transteira_data:/data
+      - transteira_db:/var/lib/transteira/db
+      - transteira_backups:/backups
+      - transteira_logs:/logs
+    depends_on:
+      clamav:
+        condition: service_healthy
+    # Hardening (threat model T-119): non-root user from the image (10001),
+    # read-only root file system, no capability, no privilege escalation.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Uploads and downloads are streamed (nothing is held in memory): 1 GiB
+    # leaves ample room for concurrent transfers, ZIP streaming and SQLite.
+    mem_limit: 1g
+    pids_limit: 256
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Above the worst-case graceful shutdown of TransTeira (9 s, see
+    # ShutdownTimeout in internal/app/app.go), with a margin for a master key
+    # rotation batch to stop.
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # clamd: scans every deposited file (CLAUDE.md section 11). Runs clamd
+  # directly (not the image's /init, which needs root) as the clamav user.
+  clamav:
+    image: clamav/clamav:1.4.6@sha256:3bba6dd5ac6663d55b80f86a3126e146612d93b593cc2617188d13f637d91260
+    container_name: transteira-clamav
+    restart: unless-stopped
+    user: "100:101"
+    entrypoint: ["/sbin/tini", "--"]
+    command: ["clamd", "--foreground", "--config-file=/etc/clamav/clamd.conf"]
+    networks:
+      - internal
+    volumes:
+      - ./clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - clamav_db:/var/lib/clamav:ro
+    depends_on:
+      clamav-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "[ \"$$(echo PING | nc -w 5 127.0.0.1 3310)\" = PONG ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Loading the official signatures takes one to two minutes.
+      start_period: 5m
+      start_interval: 5s
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      # clamd spool (TemporaryDirectory in clamd.conf): clamd writes every
+      # INSTREAM there, decrypted, before scanning it. Memory-backed on
+      # purpose (threat model T-44): the plaintext never reaches a disk, a
+      # volume or a VM backup, and it vanishes when the container stops.
+      # Sized for ONE stream of TT_CLAMAV_MAX_SCAN_BYTES (2 GiB = 2048m) plus
+      # 256m for the files clamd extracts from it; hence TT_SCAN_WORKERS=1.
+      # If you raise TT_CLAMAV_MAX_SCAN_BYTES or TT_SCAN_WORKERS, raise this
+      # size and mem_limit with them (docs/operations/antivirus.md).
+      - /var/tmp/clamav:size=2304m,mode=0700,uid=100,gid=101
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # The tmpfs pages count in the memory of the container: about 1 to 1.5 GiB
+    # for the signatures (ConcurrentDatabaseReload no), up to 2.25 GiB of
+    # spool, and the working memory of the scan in progress. Measured: 950 MiB
+    # after start, 3.34 GiB at peak for a 2047 MiB stream.
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 128
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # freshclam: keeps the signatures of clamav_db up to date (threat model
+  # T-46). The only ClamAV container with Internet access, and it never talks
+  # to clamd or TransTeira (no shared network): a file that compromised clamd
+  # could not leave through it.
+  clamav-update:
+    image: clamav/clamav:1.4.6@sha256:3bba6dd5ac6663d55b80f86a3126e146612d93b593cc2617188d13f637d91260
+    container_name: transteira-clamav-update
+    restart: unless-stopped
+    user: "100:101"
+    entrypoint: ["/sbin/tini", "--"]
+    # 12 checks a day (every two hours), the maximum ClamAV asks clients to use.
+    command: ["freshclam", "--daemon", "--foreground", "--stdout", "--checks=12", "--config-file=/etc/clamav/freshclam.conf"]
+    networks:
+      - clamav_egress
+    # The image's health check probes clamd, which does not run here.
+    healthcheck:
+      disable: true
+    volumes:
+      - ./clamav/freshclam.conf:/etc/clamav/freshclam.conf:ro
+      - clamav_db:/var/lib/clamav
+    depends_on:
+      clamav-init:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # freshclam loads the new signatures once to test them before installing
+    # them: about 1 GiB at peak.
+    mem_limit: 1536m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot, at every start: gives the clamav user the signature volume
+  # (Docker creates it owned by root). The only ClamAV container running as
+  # root, without network and with two capabilities. -h: a symbolic link in
+  # the volume is changed itself, never followed.
+  clamav-init:
+    image: clamav/clamav:1.4.6@sha256:3bba6dd5ac6663d55b80f86a3126e146612d93b593cc2617188d13f637d91260
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - chown -Rh 100:101 /var/lib/clamav
+    network_mode: none
+    volumes:
+      - clamav_db:/var/lib/clamav
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      # Traverses the directories freshclam creates with mode 0700.
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  # Shared with the reverse proxy; created once on the host:
+  #   docker network create --subnet 172.30.0.0/24 proxy
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}
+  # TransTeira <-> clamd. No Internet access, not visible from the reverse
+  # proxy. Fixed subnet (INTERNAL_SUBNET in .env, default 172.31.10.0/24), so
+  # that TT_SMTP_DENY_NETWORKS can list it: pick a subnet that overlaps
+  # neither your LAN, nor another Docker network, nor a tenant's internal range.
+  internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${INTERNAL_SUBNET:-172.31.10.0/24}
+  # Internet access for signature updates only (clamav-update).
+  clamav_egress: {}
+
+volumes:
+  transteira_data:
+    name: transteira_data
+  transteira_db:
+    name: transteira_db
+  transteira_backups:
+    name: transteira_backups
+  transteira_logs:
+    name: transteira_logs
+  clamav_db:
+    name: transteira_clamav_db
+
+secrets:
+  # Outside every volume (docs/operations/master-key.md): a file on the host,
+  # readable by UID 10001 (the container user), mode 0400 or 0600. Keep a copy
+  # in a password vault outside the VM.
+  transteira_master_key:
+    file: ${MASTER_KEY_FILE:-./secrets/master_key}

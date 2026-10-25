@@ -8,14 +8,20 @@ network, never on the network shared with the reverse proxy.
 - Variables: `TT_CLAMAV_ADDR`, `TT_CLAMAV_MAX_SCAN_BYTES`, `TT_CLAMAV_TIMEOUT`,
   `TT_SCAN_WORKERS` (see `.env.example`).
 - Packages: `internal/antivirus` (clamd client), `internal/scan` (worker).
+- Deployment: services `clamav`, `clamav-update` and `clamav-init` of
+  [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml), configured
+  by [`deploy/clamav/clamd.conf`](../../deploy/clamav/clamd.conf) and
+  [`deploy/clamav/freshclam.conf`](../../deploy/clamav/freshclam.conf).
 - Threat model: T-41 to T-46, decision P10.
 
 ## What happens after a deposit
 
 1. The sender finalizes the transfer; it becomes `scanning`.
 2. A scan worker decrypts each stored file on the fly and streams it to clamd.
-   The plaintext never touches the disk, and what is scanned is exactly what
-   will be served.
+   TransTeira never writes the plaintext to disk, and what is scanned is
+   exactly what will be served. clamd itself spools each stream before
+   scanning it: in the provided deployment, that spool is in memory (see
+   [The clamd spool](#the-clamd-spool)).
 3. Each file gets a final status:
 
 | Status | Meaning | Downloadable |
@@ -57,9 +63,13 @@ health check and the logs so that an outage never lasts that long.
 ## Size limits
 
 ClamAV limits how much data it accepts and scans. Align its configuration
-(`clamd.conf`, or the environment of the official image) with
-`TT_CLAMAV_MAX_SCAN_BYTES` (default 2 GiB, at most 4 GiB minus one byte, the
-protocol limit):
+with `TT_CLAMAV_MAX_SCAN_BYTES` (default 2 GiB, at most 4 GiB minus one byte,
+the protocol limit). The provided
+[`deploy/clamav/clamd.conf`](../../deploy/clamav/clamd.conf) already applies
+every value below for the default 2 GiB (`2048M`, `MaxScanTime 480000`,
+`MaxThreads 10`); if you change `TT_CLAMAV_MAX_SCAN_BYTES`, change the three
+size limits of that file too. `make deploy-config-check` has `clamconf` parse
+the file and checks its limits and mandatory alerts.
 
 | clamd setting | Recommended value |
 |---|---|
@@ -82,12 +92,64 @@ as not (fully) scanned instead.
 
 Files above the limit are not sent to clamd at all. If clamd's own limit is
 lower, clamd answers "size limit exceeded" and the file is classified
-`not_scanned_too_large` as well. Give the ClamAV container enough memory
-(about 2 to 3 GiB with the official signatures) and CPU limits.
+`not_scanned_too_large` as well. Give the ClamAV container enough memory and
+CPU: the compose file sets 4 GiB and 2 CPUs for clamd (signatures plus the
+in-memory spool, see below).
 
 Keep `TT_SCAN_WORKERS` at or below clamd's `MaxThreads` (default 10):
 scans queued inside clamd may otherwise time out and count as failed
-attempts.
+attempts. The provided deployment sets it to **1**, because of the spool.
+
+## The clamd spool
+
+With `INSTREAM`, clamd first writes the whole stream it receives to its
+`TemporaryDirectory` (`/var/tmp/clamav`), then scans that file, and writes
+there too the files it extracts from archives. The stream is the
+**decrypted** file: on a disk or a Docker volume, the plaintext of every
+scanned file would reach the VM backups, and could survive a crash of
+clamd (threat model T-44).
+
+The production compose file therefore mounts the spool as a **tmpfs**
+(memory), never as a volume:
+
+```yaml
+tmpfs:
+  - /var/tmp/clamav:size=2304m,mode=0700,uid=100,gid=101
+```
+
+- **Sizing: one stream at a time.** 2304 MiB is one stream of
+  `TT_CLAMAV_MAX_SCAN_BYTES` (2 GiB, `StreamMaxLength 2048M`) plus 256 MiB
+  for the files clamd extracts from it. Hence `TT_SCAN_WORKERS=1` in
+  `deploy/.env.example` (and as the compose default): with two scans at once,
+  the second one could fill the tmpfs. A scan that fills it fails (clamd
+  cannot write its temporary file): the attempt counts against the file,
+  which is withheld (`scan_error`) after 3 attempts, never served unscanned.
+  Files are scanned one after the other; a large deposit delays the next
+  ones, which stay `scanning` meanwhile.
+- **Memory.** tmpfs pages count in the memory of the container (cgroup):
+  about 1 to 1.5 GiB of signatures, up to 2.25 GiB of spool and the working
+  memory of the scan in progress. The compose file sets `mem_limit: 4g` for
+  clamd. Measured with ClamAV 1.4.6 and the official signatures: about
+  950 MiB after loading, 3.34 GiB at peak while scanning a 2047 MiB stream
+  (no out-of-memory kill), which leaves about 650 MiB for the files
+  extracted from archives and for the growth of the signatures. If clamd is
+  killed for lack of memory (`docker inspect` shows `OOMKilled`), the file
+  being scanned loses an attempt (fail-closed, see below): raise
+  `mem_limit`.
+- **Nothing on disk, nothing left behind.** The tmpfs is emptied at every
+  start of the container, so no clean-up is needed after a crash.
+- **Swap.** The kernel may write tmpfs pages to swap under memory pressure.
+  Run the VM without swap, or with an encrypted swap
+  ([Docker installation, prerequisites](../install/docker.md#1-prerequisites)).
+- **More parallel scans or a larger limit.** Raise the tmpfs size to
+  `TT_SCAN_WORKERS` x `TT_CLAMAV_MAX_SCAN_BYTES` + 256 MiB, and `mem_limit`
+  by the same amount, together with `TT_SCAN_WORKERS` or
+  `TT_CLAMAV_MAX_SCAN_BYTES` (and the three size limits of `clamd.conf`).
+
+`make deploy-config-check` refuses a rendering where the spool is not a
+tmpfs with a size and mode `0700`, where a volume is mounted on it, or where
+`TT_SCAN_WORKERS` is not 1; `make deploy-smoke` checks the mount in the
+running container.
 
 `TT_CLAMAV_TIMEOUT` (default 10 min) caps the whole scan of one file,
 including the time clamd spends after the last byte; a write that stalls for
@@ -108,6 +170,15 @@ ClamAV container. Run it on a network shared only with the application (not
 with PostgreSQL), as a non-root user, with a read-only root file system apart
 from its signature volume, and with CPU and memory limits.
 
+The production compose file does exactly that: clamd runs as the `clamav`
+user (UID 100) on the `internal` network (no Internet access, shared only with
+TransTeira; PostgreSQL is on its own `db` network), with a read-only root file
+system, its signature volume mounted **read-only**, its spool in a tmpfs,
+no capability and `no-new-privileges`. A one-shot `clamav-init` container,
+running as root without network and with the `CHOWN` and `DAC_READ_SEARCH`
+capabilities only, gives the signature volume to the `clamav` user at each
+start (`chown -Rh`: symbolic links are never followed).
+
 ## Lost notifications
 
 The mails are queued just after the transfer becomes available. If
@@ -117,9 +188,26 @@ the transfer as available, and an administrator can resend the notification
 
 ## Signatures
 
-Keep `freshclam` running in the ClamAV container (the official image does it
-by default) so that signatures stay current (T-46). A container that cannot
-update its signatures keeps scanning with the old ones; monitor its logs.
+Signatures must stay current (T-46). The official image runs `freshclam` and
+clamd in the same container, which would give clamd Internet access. The
+production compose file splits them instead:
+
+- **`clamav-update`** runs `freshclam` alone (12 checks a day, the maximum
+  ClamAV asks clients to use, configured by
+  [`deploy/clamav/freshclam.conf`](../../deploy/clamav/freshclam.conf)). It is
+  the only ClamAV container on the `clamav_egress` network, with Internet
+  access, and it shares no network with clamd or TransTeira: a file that
+  compromised clamd could not be sent out through it.
+- **`clamav`** (clamd) reads the shared `transteira_clamav_db` volume
+  read-only and reloads new signatures every 10 minutes (`SelfCheck 600`),
+  without a second engine in memory (`ConcurrentDatabaseReload no`: scans wait
+  a few seconds during a reload).
+
+A container that cannot update its signatures keeps scanning with the old
+ones: watch the logs of `clamav-update`
+(`docker compose -f deploy/docker-compose.yml logs clamav-update`). At each
+start, clamd needs one to two minutes to load the signatures; TransTeira
+starts once clamd is healthy.
 
 ## Testing with a real ClamAV
 

@@ -6,7 +6,7 @@ the addresses that attack the service. The format below is **stable**: it is
 covered by reference ("golden") tests, and any incompatible change would be a
 breaking change of TransTeira.
 
-- File: `security.log` in `TT_LOG_DIR` (default `/var/log/transteira`).
+- File: `security.log` in `TT_LOG_DIR` (default `/var/log/transteira`; `/logs` in the Docker image, on the `transteira_logs` volume).
 - Opened in append mode, created with mode `0640`; TransTeira creates `TT_LOG_DIR` (mode `0750`) when it is missing. On Unix, an existing file with wider permissions (for example `0644` left by an older deployment or a rotation tool) is tightened to at most `0640` when it is opened (best effort: a failure leaves the file as it is). Reopened on `SIGHUP` on Unix only.
 - One line per event, UTF-8, terminated by `\n`.
 - Retention: 12 months (CLAUDE.md section 20), handled by log rotation.
@@ -200,13 +200,16 @@ keep that field order if you write your own rules.
 
 Mount `TT_LOG_DIR` as a dedicated Docker volume (or bind mount) so that the
 log survives container updates and can be read from the host or from a
-CrowdSec container:
+CrowdSec container. The production compose file
+([`deploy/docker-compose.yml`](../../deploy/docker-compose.yml)) already
+does it: the image sets `TT_LOG_DIR=/logs` and mounts the volume with a fixed
+name there:
 
 ```yaml
 services:
   transteira:
     volumes:
-      - transteira_logs:/var/log/transteira
+      - transteira_logs:/logs
 volumes:
   transteira_logs:
     name: transteira_logs
@@ -214,7 +217,8 @@ volumes:
 
 On the host, the file is then at
 `/var/lib/docker/volumes/transteira_logs/_data/security.log`. With a bind
-mount, the directory must be writable by the container user. The log
+mount, the directory must be writable by the container user (UID and GID
+`10001` in the image). The log
 contains IP addresses and possibly e-mail addresses (personal data): keep
 the directory readable only by root and the tools that need it.
 
@@ -233,7 +237,9 @@ application log on **stdout** (`docker logs transteira`).
 
 The usual cause is a new file that the container user cannot open. The
 `create` directive must therefore give the file to **the UID and GID the
-container runs as**, not to `root` (unless the container runs as root).
+container runs as**, not to `root`. The image always runs as the fixed user
+`transteira`, **UID 10001 and GID 10001** (see the [`Dockerfile`](../../Dockerfile));
+the IDs are numeric on the host, where no such user needs to exist.
 Use `logrotate` on the host, with a `postrotate` that signals the container
 (12 months of weekly files):
 
@@ -245,16 +251,20 @@ Use `logrotate` on the host, with a `postrotate` that signals the container
     delaycompress
     missingok
     notifempty
-    # UID and GID the TransTeira container runs as (docker exec transteira id)
-    create 0640 <container-uid> <container-gid>
+    # UID and GID of the TransTeira image (user transteira)
+    create 0640 10001 10001
     postrotate
         docker kill --signal=HUP transteira >/dev/null 2>&1 || true
     endscript
 }
 ```
 
-Replace `<container-uid>` and `<container-gid>` with the numeric IDs
-printed by `docker exec transteira id`, and adapt the container name.
+Adapt the container name if you changed `container_name` in the compose
+file. If you run the image with another user (`user:` in the compose file),
+use that UID and GID instead. The image has no shell, so `docker exec
+transteira id` does not work: read the user with
+`docker inspect --format '{{.Config.User}}' transteira` (`10001:10001`
+unless overridden).
 
 Alternative: **`copytruncate`** (and no `create` nor `postrotate`).
 logrotate copies the file and truncates it in place, so TransTeira keeps

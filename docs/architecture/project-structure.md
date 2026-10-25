@@ -258,18 +258,26 @@ transteira/
 │   ├── fixtures/                    # Données de test ; la signature EICAR est générée à l'exécution
 │   └── docker-compose.test.yml      # Mailpit, ClamAV, PostgreSQL, Caddy, domaines *.localhost
 │
-├── deploy/
-│   ├── docker-compose.yml           # Application + ClamAV, réseau interne + réseau externe « proxy »
-│   ├── docker-compose.postgres.yml  # Surcharge ajoutant PostgreSQL
-│   └── clamav/
-│       └── clamd.conf               # Limites MaxFileSize / MaxScanSize / StreamMaxLength relevées
+├── deploy/                          # Compose de production (guide : docs/install/docker.md)
+│   ├── README.md                    # Démarrage rapide et schéma des réseaux
+│   ├── docker-compose.yml           # SQLite : transteira (durci, aucun port publié), clamav (clamd, réseau
+│   │                                # interne), clamav-update (freshclam, seul sur le réseau clamav_egress),
+│   │                                # clamav-init (droits des volumes) ; réseau externe « proxy »
+│   ├── docker-compose.postgres.yml  # Surcharge : postgres, migrate (migrations avec le rôle propriétaire),
+│   │                                # db-backup (pg_dump nocturne), réseau « db »
+│   ├── .env.example                 # Réglages du déploiement (liste complète : .env.example à la racine)
+│   ├── init-secrets.sh              # Clé maître et secrets PostgreSQL, valeurs aléatoires, bons propriétaires
+│   ├── clamav/
+│   │   ├── clamd.conf               # Limites MaxFileSize / MaxScanSize / StreamMaxLength relevées
+│   │   └── freshclam.conf           # Mises à jour des signatures
+│   └── postgres/initdb/             # Base, rôles propriétaire, applicatif et de sauvegarde ; superutilisateur refusé en TCP
 │
 ├── integrations/
-│   ├── reverse-proxy/
-│   │   ├── caddy/                   # Configuration de référence (prévue : encode, caviardage de /d/ et /i/, § 3.5)
-│   │   ├── nginx/
-│   │   ├── traefik/
-│   │   └── apache/
+│   ├── reverse-proxy/               # README (exigences communes, réseau proxy, TT_TRUSTED_PROXIES), check.sh
+│   │   ├── caddy/                   # Configuration de référence : Caddyfile, compose du proxy mutualisé
+│   │   ├── nginx/                   # transteira.conf
+│   │   ├── traefik/                 # Configuration statique, fichier dynamique ou labels
+│   │   └── apache/                  # transteira.conf
 │   ├── fail2ban/                    # filter.d, jail.d, action sur la chaîne DOCKER-USER
 │   └── crowdsec/                    # Parser, scénario, mention du bouncer Caddy
 │                                    # (V1.1 : grafana/, zabbix/)
@@ -284,11 +292,13 @@ transteira/
 │   │   └── screenshots/             # Générées par make screenshots (ne pas modifier à la main) : fr/ et en/
 │   │                                # (<nom>.png, 1280 × 800), manifest.json (nom, écran, profil, chemin),
 │   │                                # vérifiés par make screenshots-check
-│   ├── install/                     # Docker, reverse proxy, SMTP (dont relais vers Microsoft 365), première installation
+│   ├── install/                     # docker.md (installation pas à pas, premier lancement), reverse-proxy.md,
+│   │                                # smtp.md (dont relais vers Microsoft 365), postgresql.md
 │   ├── operations/                  # admin.md (administration, jetons d'API), tenants.md, antivirus.md,
-│   │                                # backup.md, master-key.md (clé maître, rotation, y compris depuis
-│   │                                # l'administration), security-log.md ; maintenance, réglages système,
-│   │                                # alerte disque et SMTP système dans admin.md
+│   │                                # backup.md, upgrade.md (mise à jour, retour arrière), master-key.md
+│   │                                # (clé maître, rotation, y compris depuis l'administration),
+│   │                                # security-log.md ; maintenance, réglages système, alerte disque et
+│   │                                # SMTP système dans admin.md
 │   ├── security/
 │   │   └── threat-model.md          # Modèle de menaces STRIDE
 │   └── architecture/
@@ -300,14 +310,17 @@ transteira/
 │   └── genstubs/                    # Génère internal/api/stubs depuis l'interface du serveur
 │
 ├── scripts/
-│   ├── hooks/pre-push               # gitleaks avant chaque envoi vers GitHub
-│   └── install-hooks.sh / .ps1
+│   ├── hooks/pre-push               # gitleaks avant chaque envoi vers GitHub (installé par make hooks)
+│   ├── docker-check.sh              # make docker-check : l'image démarre, non root, healthcheck et version
+│   └── deploy-config-check.sh       # make deploy-config-check : compose de production, durcissement, clamd.conf
 │
 ├── .claude/
 │   ├── settings.json                # Commandes pré-autorisées
 │   └── agents/                      # test-engineer, security-reviewer, code-reviewer
 │
-├── Dockerfile                       # Multi-étapes : web (node) → go build → image scratch
+├── Dockerfile                       # Multi-étapes : web (node) → go build → image scratch (utilisateur
+│                                    # 10001:10001, volumes /data, /var/lib/transteira/db, /backups, /logs,
+│                                    # HEALTHCHECK transteira healthcheck) ; construit par make docker
 ├── Makefile                         # make check, make test, make lint, make e2e, make screenshots, make bigfile, make generate…
 ├── .golangci.yml
 ├── .spectral.yaml                   # Lint OpenAPI : chaque opération décrite et accompagnée d'un exemple
@@ -371,7 +384,7 @@ Les deux applications sont construites par `make web-build` dans `web/dist`, emb
 - **Repli** : un binaire construit sans `make web-build` (seul `dist/.gitkeep` présent) répond `503` avec une page statique bilingue, sans script ni style, et journalise un avertissement au démarrage ; `make build` refuse de produire un binaire sans l'interface.
 - **Aucune compression par l'application** : elle est confiée au reverse proxy.
 
-**Prévu pour les configurations de reverse proxy** (`integrations/reverse-proxy/`, à venir) :
+**Mis en œuvre par les configurations de reverse proxy** (`integrations/reverse-proxy/`, vérifiées par `make proxy-configs-check`) :
 
 - **compression** des fichiers de l'interface par le proxy (Caddy : directive `encode zstd gzip`, limitée aux types textuels (HTML, JavaScript, CSS, SVG, JSON) : les envois tus, les fichiers téléchargés et les archives ne sont ni compressés ni mis en tampon) ;
 - **caviardage des jetons dans les journaux d'accès** : les chemins `/d/{jeton}` et `/i/{jeton}` (et `/api/v1/downloads/{jeton}/…`, `/api/v1/invitations/{jeton}`) ne doivent pas apparaître en clair dans les journaux du proxy (Caddy : filtre `log` → `format filter` sur `request.uri`, par exemple avec `regexp`, ou exclusion de ces chemins ; équivalents Nginx, Traefik et Apache) (T-161).

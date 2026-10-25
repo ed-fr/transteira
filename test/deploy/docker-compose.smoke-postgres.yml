@@ -1,0 +1,12 @@
+# Deployment smoke test, PostgreSQL run: overrides the fixed names of
+# deploy/docker-compose.postgres.yml, like docker-compose.smoke.yml does for the base file.
+
+services:
+  postgres:
+    container_name: ${SMOKE_PROJECT:?}-postgres
+  db-backup:
+    container_name: ${SMOKE_PROJECT:?}-db-backup
+
+volumes:
+  transteira_pg:
+    name: ${SMOKE_PROJECT:?}_pg

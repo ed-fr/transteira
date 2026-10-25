@@ -66,7 +66,7 @@ services:
   # three *.localhost hosts get certificates from Caddy's internal CA (the browser ignores
   # HTTPS errors). Port 443 is bound to loopback only.
   caddy:
-    image: caddy:2.11.7-alpine
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: ["e2e"]
     command: ["caddy", "run", "--config", "/etc/caddy-e2e/Caddyfile", "--adapter", "caddyfile"]
     ports:

@@ -1,0 +1,32 @@
+# Deployment smoke test (scripts/deploy-smoke.sh): overrides deploy/docker-compose.yml so that
+# the production stack runs under its own names and never touches a real installation on the
+# same host. The production file gives fixed names to the containers (transteira,
+# transteira-clamav...) and to the volumes (transteira_data...): they are all remapped here under
+# SMOKE_PROJECT. The compose project name itself comes from `docker compose -p`. The fixed subnets
+# of the internal and db networks come from INTERNAL_SUBNET and DB_SUBNET, exported by the script.
+#
+# The signature volume is external: the script creates it once (SMOKE_CLAMAV_DB_VOLUME) and
+# keeps it between runs as a cache of the public ClamAV signatures (it holds nothing else), so
+# that freshclam does not download them again at every run. Everything else is deleted by
+# `docker compose down -v`.
+
+services:
+  transteira:
+    container_name: ${SMOKE_PROJECT:?}-transteira
+  clamav:
+    container_name: ${SMOKE_PROJECT:?}-clamav
+  clamav-update:
+    container_name: ${SMOKE_PROJECT:?}-clamav-update
+
+volumes:
+  transteira_data:
+    name: ${SMOKE_PROJECT:?}_data
+  transteira_db:
+    name: ${SMOKE_PROJECT:?}_db
+  transteira_backups:
+    name: ${SMOKE_PROJECT:?}_backups
+  transteira_logs:
+    name: ${SMOKE_PROJECT:?}_logs
+  clamav_db:
+    name: ${SMOKE_CLAMAV_DB_VOLUME:?}
+    external: true

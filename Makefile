@@ -49,9 +49,87 @@ help: ## Show available targets
 
 # `test` and `e2e` cover SQLite and PostgreSQL; `cover` gates the Go coverage of `test` right after it.
 # The fast e2e checks (lint, screenshot manifest) run with the other static checks; the browser
-# suite runs last. bigfile (20 GB through Caddy) joins this list when its pipeline arrives.
+# suite runs after the Go tests. The Docker gates (docker-check, proxy-configs-check,
+# deploy-config-check) are appended to this list in their own sections below, so they run after
+# `e2e`, in that order. bigfile (20 GB through Caddy) joins this list when its pipeline arrives.
 CHECK_GATES := web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check \
 	env-example-check e2e-lint screenshots-check test cover e2e
+
+# --- Docker image ---
+# The container image (Dockerfile, scratch, UID 10001). `docker` builds it with the same VERSION,
+# COMMIT and DATE as `build`; `docker-check` builds it and smoke-tests it (scripts/docker-check.sh
+# lists the checks). docker-check joins `make check`, defined here before the check rule so that
+# its prerequisites see it; it is skipped with a message when Docker is unavailable, or with
+# DOCKER_CHECK=0.
+DOCKER       ?= docker
+DOCKER_IMAGE ?= transteira
+DOCKER_CHECK ?= 1
+# Docker tags do not accept "+": 0.0.0-dev+abc1234 is tagged 0.0.0-dev-abc1234 (the version
+# label and the binary keep the exact SemVer).
+DOCKER_TAG   := $(subst +,-,$(VERSION))
+CHECK_GATES  += docker-check
+
+.PHONY: docker docker-check
+
+docker: ## Build the container image transteira:<version> and transteira:local
+	$(DOCKER) build \
+		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg DATE='$(DATE)' \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):local .
+	@echo "docker: built $(DOCKER_IMAGE):$(DOCKER_TAG) ($$($(DOCKER) history --human=false --format '{{.Size}}' $(DOCKER_IMAGE):local | awk '{s+=$$1} END {printf "%.1f MiB uncompressed", s/1048576}'))"
+
+docker-check: ## Build the image and smoke-test it (DOCKER_CHECK=0 skips; skipped without Docker)
+	@if [ "$(DOCKER_CHECK)" = "0" ]; then \
+		echo "docker-check: SKIPPED (DOCKER_CHECK=0)"; \
+	elif ! $(DOCKER) info >/dev/null 2>&1; then \
+		echo "docker-check: SKIPPED (Docker is not available: '$(DOCKER) info' failed)"; \
+	else \
+		$(MAKE) --no-print-directory docker VERSION='$(VERSION)' COMMIT='$(COMMIT)' DATE='$(DATE)' && \
+		DOCKER='$(DOCKER)' bash scripts/docker-check.sh $(DOCKER_IMAGE):local '$(VERSION)'; \
+	fi
+# --- end of Docker image ---
+
+# --- Reverse proxy configs ---
+# Validates integrations/reverse-proxy with the real proxies in Docker (pinned images): caddy
+# validate + fmt, nginx -t, httpd -t, Traefik started with the file provider then the labels
+# (integrations/reverse-proxy/check.sh lists the checks). Joins `make check`; skipped with a
+# message when Docker is unavailable.
+CHECK_GATES += proxy-configs-check
+
+.PHONY: proxy-configs-check
+
+proxy-configs-check: ## Validate the Caddy, Nginx, Apache and Traefik configurations in Docker
+	@DOCKER='$(DOCKER)' bash integrations/reverse-proxy/check.sh
+# --- end of Reverse proxy configs ---
+
+# --- Deployment ---
+# Validates deploy/ without starting anything and without real secrets: docker compose config for
+# the SQLite file and the PostgreSQL overlay, hardening invariants (no port, read-only, no
+# capability), and clamconf on deploy/clamav/clamd.conf (scripts/deploy-config-check.sh lists the
+# checks). Joins `make check`; skipped with a message when Docker is unavailable.
+CHECK_GATES += deploy-config-check
+
+.PHONY: deploy-config-check
+
+deploy-config-check: ## Validate the production compose files and clamd.conf (skipped without Docker)
+	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+		echo "deploy-config-check: SKIPPED (Docker is not available: '$(DOCKER) info' failed)"; \
+	else \
+		DOCKER='$(DOCKER)' bash scripts/deploy-config-check.sh; \
+	fi
+
+# End-to-end smoke test of the production files: builds the image, starts deploy/ (SQLite, then
+# the PostgreSQL overlay) with the real ClamAV behind the reference Caddy, then deposits, scans
+# (EICAR), downloads and backs up through HTTPS (scripts/deploy-smoke.sh lists the checks).
+# Deliberately NOT in CHECK_GATES: it needs Internet access (ClamAV signatures) and takes several
+# minutes. Run before committing a change to Dockerfile, deploy/ or integrations/reverse-proxy/.
+DEPLOY_SMOKE_DB ?= both
+
+.PHONY: deploy-smoke
+
+deploy-smoke: docker ## End-to-end test of deploy/ behind Caddy with real ClamAV (DEPLOY_SMOKE_DB=sqlite|postgres|both; needs Internet)
+	DOCKER='$(DOCKER)' TRANSTEIRA_IMAGE=$(DOCKER_IMAGE):local bash scripts/deploy-smoke.sh $(DEPLOY_SMOKE_DB)
+# --- end of Deployment ---
+
 check: $(CHECK_GATES) ## Run every quality gate (must be green before each commit)
 	@echo "make check: ALL GREEN"
 

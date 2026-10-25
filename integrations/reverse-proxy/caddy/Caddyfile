@@ -1,0 +1,109 @@
+# TransTeira behind Caddy - reference configuration.
+#
+# Shared reverse proxy: this Caddyfile may serve other sites as well. Each
+# TransTeira host name (the admin host and one FQDN per tenant) is listed in
+# the site block at the bottom; Caddy obtains and renews a certificate for each
+# of them automatically (ACME HTTP-01 / TLS-ALPN-01, ports 80 and 443).
+#
+# Read README.md before use. Replace every example.com name and the ACME
+# contact address.
+{
+	# ACME account contact (expiry notices). Use a real mailbox.
+	email acme-contact@example.com
+
+	servers {
+		timeouts {
+			# Only the request headers have a deadline. read_body and write are
+			# deadlines on the WHOLE request body / response: any value would cut
+			# uploads and downloads of 20 GB, so they stay disabled (0).
+			# TransTeira applies its own idle timeouts per route.
+			read_header 30s
+			read_body 0
+			write 0
+			# Keep-alive between two requests on a client connection.
+			idle 5m
+		}
+	}
+
+	# Caddy's own logs (errors included) may carry the request URI and headers:
+	# redact the capability tokens and drop the request headers there too
+	# (threat model T-161, T-172).
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^/(d|i|api/v1/downloads|api/v1/invitations)/[^/?#]+" "/$1/REDACTED"
+				request>headers delete
+			}
+		}
+	}
+}
+
+# TransTeira proxy settings shared by every TransTeira host.
+(transteira) {
+	# HSTS (CLAUDE.md section 16.2: handled by the reverse proxy). No
+	# includeSubDomains by default: see README.md before adding it.
+	header Strict-Transport-Security "max-age=31536000"
+
+	# Compression of the web interface and of the JSON API only. Uploads (tus),
+	# downloaded files (byte ranges) and ZIP archives are never compressed:
+	# they are excluded by path, and the content types are restricted anyway.
+	@compressible not path /api/v1/uploads /api/v1/uploads/* /api/v1/downloads/*
+	encode @compressible zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type application/problem+json*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	# Access log with the capability tokens of /d/{token}, /i/{token},
+	# /api/v1/downloads/{token}/... and /api/v1/invitations/{token} masked
+	# (T-161), and without any request header (T-172): Caddy redacts only
+	# Cookie and Authorization by itself, while Referer (capability links),
+	# Upload-Metadata (file names, the sender's message) and X-Csrf-Token
+	# would otherwise be written in clear.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^/(d|i|api/v1/downloads|api/v1/invitations)/[^/?#]+" "/$1/REDACTED"
+				request>headers delete
+			}
+		}
+	}
+
+	reverse_proxy transteira:8080 {
+		# Real client IP. With no trusted_proxies option (Caddy is the edge),
+		# Caddy discards any X-Forwarded-For sent by the client and sets it to
+		# its TCP peer: that default must be kept. X-Real-IP is added on top.
+		# TransTeira trusts these headers only from TT_TRUSTED_PROXIES.
+		header_up X-Real-IP {remote_host}
+
+		# Response buffering off: flush every write to the client immediately
+		# (downloads, ZIP archives). Request bodies are streamed by default
+		# (no request_buffers): tus PATCH bodies reach TransTeira as they arrive.
+		flush_interval -1
+
+		transport http {
+			# No deadline on writing the request to TransTeira or reading its
+			# response: a 20 GB transfer can take hours.
+			read_timeout 0
+			write_timeout 0
+			# Idle upstream connections are closed before TransTeira closes them
+			# (its keep-alive timeout is 120 s), which avoids a race on reuse.
+			keepalive 90s
+		}
+	}
+}
+
+# The admin host and every tenant FQDN. Add a tenant by appending its FQDN.
+# TransTeira routes by the Host header, which Caddy passes through unchanged.
+admin.transfer.example.com, transfer.entity-a.example.com, transfer.entity-b.example.com {
+	import transteira
+}

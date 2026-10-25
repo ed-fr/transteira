@@ -245,3 +245,70 @@ Only one run at a time on the machine: see "One run at a time" above.
 `cover`, then `e2e` (both engines; `make check` does not modify versioned files, so it never
 regenerates the screenshots). Offline with Chromium cached: `make check E2E_BROWSER_INSTALL=0
 NPM_AUDIT=0`.
+
+## Deployment smoke test (`test/deploy`, `make deploy-smoke`)
+
+End-to-end test of the **production** files (`Dockerfile`, `deploy/`, the reference Caddy of
+`integrations/reverse-proxy/caddy/`), as an operator would deploy them, with the real ClamAV.
+It is **not** part of `make check`: it needs Internet access (ClamAV signature updates by the
+`clamav-update` service) and takes a few minutes. Run it before committing any change to the
+Dockerfile, `deploy/` or the Caddy configuration.
+
+| Command | Effect |
+|---|---|
+| `make deploy-smoke` | Build the image (`make docker`), then run the test on SQLite, then on the PostgreSQL overlay. |
+| `make deploy-smoke DEPLOY_SMOKE_DB=sqlite` | One engine only (`sqlite`, `postgres` or `both`). |
+| `bash scripts/deploy-smoke.sh [sqlite\|postgres\|both]` | Same, without rebuilding the image (`TRANSTEIRA_IMAGE`, default `transteira:local`). |
+
+Files: `scripts/deploy-smoke.sh` (orchestration, Docker checks), `test/deploy/smoke.mjs` (HTTPS
+checks, Node without dependencies), `test/deploy/docker-compose.smoke*.yml` (overrides).
+
+### What a run does, per engine
+
+1. Copies `deploy/` to a temporary folder, creates the secrets with `deploy/init-secrets.sh`
+   (`--postgres` for PostgreSQL) and a `.env` from `deploy/.env.example` (admin host
+   `admin.smoke.localhost`, `TT_TRUSTED_PROXIES` = the smoke proxy address). The setup token is
+   **not** set: the test reads the one TransTeira prints in its log, as documented for operators.
+2. Creates the network `transteira-smoke-proxy` (subnet `172.31.250.0/24`, distinct from the
+   `172.30.0.0/24` of a real installation) and starts the reference Caddy compose file with
+   `test/deploy/docker-compose.smoke-caddy.yml`: Caddy at `172.31.250.10`, HTTPS published on
+   `127.0.0.1:<free port>` only. Its Caddyfile is generated from the reference one with exactly
+   two changes: the site addresses become `admin.smoke.localhost, transfer.smoke.localhost`, and
+   that site gets `tls internal` (Caddy's internal CA instead of ACME). Every other directive
+   (timeouts, buffering, compression, log redaction, HSTS, `X-Real-IP`) is used as is.
+3. Starts `deploy/docker-compose.yml` (+ `docker-compose.postgres.yml`) under the compose project
+   `transteira-smoke-<engine>`; `test/deploy/docker-compose.smoke.yml` (and
+   `docker-compose.smoke-postgres.yml`) rename every fixed container and volume name of the
+   production files, so that a real installation on the same host (`transteira`,
+   `transteira_data`...) is never touched. Waits until `transteira` is healthy.
+4. Docker checks: processes as UID 10001 (clamd 100, freshclam 100, PostgreSQL 70), read-only root
+   file system, all capabilities dropped, `no-new-privileges`, no published port on any service,
+   clamd on the internal network only, freshclam alone on the egress network and its first update
+   check completed, PostgreSQL on the internal `db` network only.
+5. HTTPS through Caddy, with the certificate checked against Caddy's root CA (`smoke.mjs`):
+   `/healthz` 200 (database, real clamd), version, first-run setup and TOTP confirmation, tenant
+   `transfer.smoke.localhost`, public page with CSP, HSTS and `nosniff`; a deposit with an invalid
+   API token is refused and logged in the security log with the real client IP (never the proxy
+   address); an API token restricted to that IP deposits, with tus, a random file and an EICAR
+   file built at runtime: the real clamd marks EICAR infected (`file.infected` audited with the
+   client IP), the recipient view lists the clean file only, the file and the ZIP archive download
+   with the original SHA-256, and the data volume holds no plaintext fragment nor original name.
+6. `transteira version`; `transteira backup`: with SQLite a copy that passes `PRAGMA quick_check`
+   and holds the tenant; with PostgreSQL a refusal that points to `db-backup`, the one-shot
+   `migrate` container exited 0, and an on-demand `pg_dump` in `db-backup` holds the tenant.
+7. Always removes the containers, networks, volumes and secrets of the run (also on failure,
+   after printing the last logs), and fails if a volume of a real installation (`transteira_*`)
+   appeared.
+
+The signature volume `transteira-smoke-clamav-db` is kept between runs as a cache of the public
+ClamAV signatures (on the first run Docker seeds it from the signatures shipped in the image and
+freshclam updates it). `DEPLOY_SMOKE_KEEP_SIGNATURES=0` deletes it at the end.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DEPLOY_SMOKE_DB` | `both` | Make only: engines to test. |
+| `TRANSTEIRA_IMAGE` | `transteira:local` | Image under test (script only; the make target builds and uses `transteira:local`). |
+| `DEPLOY_SMOKE_SUBNET` / `DEPLOY_SMOKE_PROXY_IP` | `172.31.250.0/24` / `172.31.250.10` | Smoke proxy network, if the default subnet is taken on the host. |
+| `DEPLOY_SMOKE_CLAMAV_DB_VOLUME` | `transteira-smoke-clamav-db` | Signature cache volume. |
+| `DEPLOY_SMOKE_KEEP_SIGNATURES` | `1` | `0`: delete the signature cache at the end. |
+| `DEPLOY_SMOKE_TIMEOUT` | `900` | Seconds to wait for a healthy stack. |

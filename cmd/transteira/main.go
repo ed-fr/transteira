@@ -10,13 +10,16 @@
 //	admin              Local recovery of the administrator accounts: "admin list"
 //	                   prints the accounts, "admin reset-totp <username>" removes
 //	                   the TOTP enrollment of an account and revokes its sessions.
-//	backup             Write a consistent copy of the database to the backup volume.
+//	backup             Write a consistent copy of the SQLite database to the backup
+//	                   volume now (or to -out <file>); explains the dumps with
+//	                   PostgreSQL.
 //	healthcheck        Probe the running server (Docker HEALTHCHECK without a shell).
 //	version            Print the build version (--json for machine-readable output).
 //	help               Show the usage summary.
 //
-// Exit codes are 0 (success), 1 (runtime error), 2 (usage error) and
-// 3 (subcommand not implemented yet).
+// Exit codes are 0 (success), 1 (runtime error) and 2 (usage error, or a
+// command that does not apply to the configuration, such as backup with
+// PostgreSQL).
 package main
 
 import (
@@ -37,10 +40,9 @@ const (
 	exitOK = 0
 	// exitError means the command failed at runtime.
 	exitError = 1
-	// exitUsage means the command line was invalid.
+	// exitUsage means the command line was invalid, or that the command
+	// does not apply to the configuration.
 	exitUsage = 2
-	// exitNotImplemented means the subcommand is declared but not available yet.
-	exitNotImplemented = 3
 )
 
 // commandFunc runs a subcommand with its own arguments and returns an exit code.
@@ -63,7 +65,7 @@ func commands() []command {
 		{"migrate", "Apply the database schema migrations (--status to only print them)", runMigrate},
 		{"rotate-master-key", "Re-wrap the stored keys with the new master key of TT_MASTER_KEY_NEW_FILE (resumable)", runRotateMasterKey},
 		{"admin", "Administrator accounts: list, reset-totp <username> (local recovery, no secret printed)", runAdmin},
-		{"backup", "Write a consistent copy of the database to the backup volume", notImplemented("backup")},
+		{"backup", "Write a checked copy of the SQLite database to TT_BACKUP_DIR now (--out <file> to choose the file)", runBackup},
 		{"healthcheck", "Probe the running server and exit non-zero when unhealthy (--url to override)", runHealthcheck},
 		{"version", "Print the build version (--json for JSON output)", runVersion},
 		{"help", "Show this help", runHelp},
@@ -157,17 +159,4 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 		return exitError
 	}
 	return exitOK
-}
-
-// notImplemented returns a placeholder for a declared subcommand that reports
-// it is not available yet. Its flags are still parsed so that -h works.
-func notImplemented(name string) commandFunc {
-	return func(args []string, _, stderr io.Writer) int {
-		fs := newFlagSet(name, stderr)
-		if code, ok := parseFlags(fs, args, stderr); !ok {
-			return code
-		}
-		_, _ = fmt.Fprintf(stderr, "%s: not implemented yet\n", name)
-		return exitNotImplemented
-	}
 }

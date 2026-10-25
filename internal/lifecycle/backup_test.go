@@ -82,6 +82,9 @@ func TestBackup(t *testing.T) {
 		".transteira-20260102T000000Z.db.tmp", ".transteira-20260102T000000Z.db.tmp-wal",
 		// Journal files whose temporary copy is already gone.
 		".transteira-20260103T000000Z.db.tmp-shm", ".transteira-20260104T000000Z.db.tmp-journal",
+		// An interrupted manual copy and its journal.
+		".transteira-20260105T000000Z-manual.db.tmp", ".transteira-20260105T000000Z-manual.db.tmp-wal",
+		".transteira-20260106T000000Z-manual.db.tmp-journal",
 		"notes.txt", "transteira-latest.db",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o600); err != nil {
@@ -380,5 +383,161 @@ func TestQuickCheckFailures(t *testing.T) {
 	defer func() { sqliteDriver = saved }()
 	if err := quickCheck(context.Background(), filepath.Join(t.TempDir(), "copy.db")); err == nil {
 		t.Fatal("quickCheck with an unknown driver succeeded")
+	}
+}
+
+// TestBackupNow: a manual copy goes to the backup directory with the
+// "-manual" marker and survives the rotation of the nightly copies.
+func TestBackupNow(t *testing.T) {
+	ev, dir := backupEnv(t, 1)
+	ev.available(ev.a, 1, false)
+	ctx := context.Background()
+	path, err := ev.s.BackupNow(ctx, "")
+	if err != nil {
+		t.Fatalf("BackupNow: %v", err)
+	}
+	manual := "transteira-" + ev.clock.Now().UTC().Format(backupStamp) + "-manual.db"
+	if path != filepath.Join(dir, manual) {
+		t.Fatalf("BackupNow = %q, want %s in %s", path, manual, dir)
+	}
+	if err := quickCheck(ctx, path); err != nil {
+		t.Fatalf("quick_check of the manual copy: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != backupFileMode {
+			t.Fatalf("mode of the manual copy = %v, %v", fi.Mode().Perm(), err)
+		}
+	}
+	if ev.logs.count("manual database copy written file="+manual) != 1 {
+		t.Fatalf("logs:\n%s", ev.logs.all())
+	}
+	// Two nightly copies with TT_BACKUP_KEEP=1: the manual copy is kept.
+	for range 2 {
+		ev.clock.set(ev.clock.Now().Add(24 * time.Hour))
+		ev.runTask(TaskBackup)
+	}
+	nightly := "transteira-" + ev.clock.Now().UTC().Format(backupStamp) + ".db"
+	if got := names(t, dir); !slices.Equal(got, []string{manual, nightly}) {
+		t.Fatalf("after rotation = %v, want %s and %s", got, manual, nightly)
+	}
+}
+
+// TestBackupNowOut: a copy written at an explicit path, never over an
+// existing file.
+func TestBackupNowOut(t *testing.T) {
+	ev, dir := backupEnv(t, 1)
+	ctx := context.Background()
+	out := filepath.Join(t.TempDir(), "before-upgrade.db")
+	path, err := ev.s.BackupNow(ctx, out)
+	if err != nil || path != out {
+		t.Fatalf("BackupNow(out) = %q, %v", path, err)
+	}
+	if err := quickCheck(ctx, out); err != nil {
+		t.Fatalf("quick_check of the copy: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(out); err != nil || fi.Mode().Perm() != backupFileMode {
+			t.Fatalf("mode of the copy = %v, %v", fi.Mode().Perm(), err)
+		}
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the backup directory was touched: %v", err)
+	}
+	before, _ := os.ReadFile(out)
+	if p, err := ev.s.BackupNow(ctx, out); !errors.Is(err, fs.ErrExist) || p != "" {
+		t.Fatalf("BackupNow over an existing file = %q, %v, want \"\", fs.ErrExist", p, err)
+	}
+	if after, _ := os.ReadFile(out); !slices.Equal(before, after) {
+		t.Fatal("the existing file was modified")
+	}
+	for _, bad := range []struct {
+		out  string
+		want error
+	}{
+		{"relative.db", errBackupOutRelative},
+		{filepath.Join(t.TempDir(), "a?b.db"), errBackupOutUnsafe},
+		{filepath.Join(t.TempDir(), "a#b.db"), errBackupOutUnsafe},
+	} {
+		if _, err := ev.s.BackupNow(ctx, bad.out); !errors.Is(err, bad.want) {
+			t.Fatalf("BackupNow(%q) = %v, want %v", bad.out, err, bad.want)
+		}
+	}
+}
+
+func TestBackupNowFailures(t *testing.T) {
+	t.Run("unsupported", func(t *testing.T) {
+		ev, _ := backupEnv(t, 1)
+		ev.f.set("backupUnsupported", 1, nil)
+		if _, err := ev.s.BackupNow(context.Background(), ""); !errors.Is(err, store.ErrBackupUnsupported) {
+			t.Fatalf("BackupNow = %v, want ErrBackupUnsupported", err)
+		}
+	})
+	t.Run("disabled", func(t *testing.T) {
+		ev := newEnv(t, storetest.SQLite(t))
+		ev.s = ev.newSweeper(Options{})
+		if _, err := ev.s.BackupNow(context.Background(), ""); !errors.Is(err, ErrBackupDisabled) {
+			t.Fatalf("BackupNow = %v, want ErrBackupDisabled", err)
+		}
+	})
+	dirCases := []struct {
+		name string
+		set  func(ev *env, fsys *backupFS)
+		// kept tells that the copy was written despite the error.
+		kept bool
+	}{
+		{"lstat", func(_ *env, f *backupFS) {
+			f.lstat = func(string) (fs.FileInfo, error) { return nil, errFault }
+		}, false},
+		{"vacuum", func(ev *env, _ *backupFS) { ev.f.set("backup", 1, nil) }, false},
+		{"sync dir", func(_ *env, f *backupFS) {
+			f.syncDir = func(string) error { return errFault }
+		}, true},
+	}
+	for _, c := range dirCases {
+		t.Run("dir "+c.name, func(t *testing.T) {
+			ev, dir := backupEnv(t, 1)
+			c.set(ev, &ev.s.fs)
+			if _, err := ev.s.BackupNow(context.Background(), ""); !errors.Is(err, errFault) {
+				t.Fatalf("BackupNow = %v", err)
+			}
+			got, _ := os.ReadDir(dir)
+			if kept := len(got) == 1 && strings.HasSuffix(got[0].Name(), "-manual.db"); kept != c.kept || (!c.kept && len(got) != 0) {
+				t.Fatalf("backup directory after the failure: %v", got)
+			}
+		})
+	}
+	outCases := []struct {
+		name string
+		set  func(ev *env, fsys *backupFS)
+	}{
+		{"create", func(_ *env, f *backupFS) {
+			f.createEmpty = func(string) error { return errFault }
+		}},
+		{"vacuum", func(ev *env, _ *backupFS) { ev.f.set("backup", 1, nil) }},
+		{"chmod", func(_ *env, f *backupFS) {
+			f.chmod = func(string, fs.FileMode) error { return errFault }
+		}},
+		{"check", func(_ *env, f *backupFS) {
+			f.checkCopy = func(context.Context, string) error { return errFault }
+		}},
+		{"sync", func(_ *env, f *backupFS) {
+			f.syncFile = func(string) error { return errFault }
+		}},
+		{"sync dir", func(_ *env, f *backupFS) {
+			f.syncDir = func(string) error { return errFault }
+		}},
+	}
+	for _, c := range outCases {
+		t.Run("out "+c.name, func(t *testing.T) {
+			ev, _ := backupEnv(t, 1)
+			c.set(ev, &ev.s.fs)
+			outDir := t.TempDir()
+			if _, err := ev.s.BackupNow(context.Background(), filepath.Join(outDir, "copy.db")); !errors.Is(err, errFault) {
+				t.Fatalf("BackupNow = %v", err)
+			}
+			if got := names(t, outDir); len(got) != 0 {
+				t.Fatalf("output directory after the failure: %v", got)
+			}
+		})
 	}
 }

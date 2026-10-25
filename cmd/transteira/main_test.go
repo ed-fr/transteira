@@ -41,9 +41,9 @@ func TestRun(t *testing.T) {
 		{name: "rotate-master-key extra arg", args: []string{"rotate-master-key", "extra"}, wantCode: exitUsage, noStdout: true},
 		{name: "rotate-master-key abandon and recover", args: []string{"rotate-master-key", "-abandon", "-recover-from", "/x"}, wantCode: exitUsage, wantStderr: []string{"cannot be combined"}, noStdout: true},
 		{name: "rotate-master-key bad batch", args: []string{"rotate-master-key", "-batch-size", "0"}, wantCode: exitUsage, wantStderr: []string{"must be positive"}, noStdout: true},
-		{name: "backup", args: []string{"backup"}, wantCode: exitNotImplemented, wantStderr: []string{"backup: not implemented yet"}, noStdout: true},
-		{name: "not implemented help", args: []string{"backup", "-h"}, wantCode: exitOK, noStdout: true},
-		{name: "not implemented bad flag", args: []string{"backup", "-x"}, wantCode: exitUsage, noStdout: true},
+		{name: "backup help", args: []string{"backup", "-h"}, wantCode: exitOK, wantStderr: []string{"-out"}, noStdout: true},
+		{name: "backup bad flag", args: []string{"backup", "-x"}, wantCode: exitUsage, noStdout: true},
+		{name: "backup extra arg", args: []string{"backup", "extra"}, wantCode: exitUsage, wantStderr: []string{`unexpected argument "extra"`}, noStdout: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

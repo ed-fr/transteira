@@ -1,0 +1,70 @@
+# TransTeira behind Traefik v3 - static configuration (/etc/traefik/traefik.yml).
+#
+# Read README.md before use. Replace the ACME contact address.
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      # Headers whose name aliases another one (X_Real_Ip for X-Real-Ip) are
+      # dropped, so that no client can spoof a header set by Traefik.
+      aliasHeadersStrategy: delete
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    transport:
+      # CRITICAL for big files. Since Traefik v3 readTimeout defaults to 60s:
+      # it is a deadline on reading the WHOLE request, which would cut every
+      # tus upload longer than a minute. readTimeout and writeTimeout are
+      # disabled (0); TransTeira applies its own idle timeouts per route.
+      # idleTimeout only applies to a keep-alive connection between requests.
+      respondingTimeouts:
+        readTimeout: 0
+        writeTimeout: 0
+        idleTimeout: 180s
+    # No forwardedHeaders.trustedIPs: Traefik is the edge, so it discards the
+    # X-Forwarded-* and X-Real-Ip headers sent by clients and sets them from
+    # the TCP peer. Keep it that way.
+    http:
+      aliasHeadersStrategy: delete
+      tls:
+        certResolver: letsencrypt
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: acme-contact@example.com
+      storage: /letsencrypt/acme.json
+      caServer: https://acme-v02.api.letsencrypt.org/directory
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  # Routers declared by container labels (docker-compose.labels.yml).
+  # Only containers with traefik.enable=true are exposed.
+  docker:
+    exposedByDefault: false
+    # The real name of the Docker network shared with TransTeira (PROXY_NETWORK
+    # in deploy/.env, "proxy" by default), not the key of a compose file.
+    network: proxy
+  # Routers declared in files (dynamic/transteira.yml).
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO
+
+# Access log. The routers that carry capability tokens in their path disable
+# it (observability.accessLogs: false, threat model T-161): Traefik cannot
+# rewrite a logged path. Request headers are never logged.
+accessLog:
+  format: json
+  fields:
+    headers:
+      defaultMode: drop

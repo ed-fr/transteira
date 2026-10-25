@@ -6,7 +6,7 @@ enabled  = true
 filter   = transteira
 
 # Host path of the security log: the logs volume of the TransTeira container
-# (TT_LOG_DIR, /var/log/transteira inside the container). Adjust to your
+# (TT_LOG_DIR, /logs inside the container). Adjust to your
 # volume or bind mount; `docker volume inspect <name>` gives the host path.
 logpath  = /var/lib/docker/volumes/transteira_logs/_data/security.log
 backend  = auto

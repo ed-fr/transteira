@@ -1,0 +1,85 @@
+# TransTeira behind Traefik v3 - dynamic configuration (file provider,
+# /etc/traefik/dynamic/transteira.yml). Use either this file or the labels of
+# docker-compose.labels.yml, not both.
+#
+# Every rule lists the admin host and every tenant FQDN: add a tenant to the
+# four rules. Traefik obtains one certificate per Host() name automatically.
+
+http:
+  routers:
+    # Everything that is not matched by a more specific router below.
+    transteira:
+      rule: "Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)"
+      priority: 10
+      entryPoints: [websecure]
+      service: transteira
+      middlewares: [transteira-hsts, transteira-compress]
+      tls:
+        certResolver: letsencrypt
+
+    # tus uploads: never compressed.
+    transteira-uploads:
+      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && PathPrefix(`/api/v1/uploads`)"
+      priority: 100
+      entryPoints: [websecure]
+      service: transteira
+      middlewares: [transteira-hsts]
+      tls:
+        certResolver: letsencrypt
+
+    # Downloads (byte ranges, ZIP archives): never compressed, and not in the
+    # access log because the path carries the download token (T-161).
+    transteira-downloads:
+      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && PathPrefix(`/api/v1/downloads/`)"
+      priority: 100
+      entryPoints: [websecure]
+      service: transteira
+      middlewares: [transteira-hsts]
+      observability:
+        accessLogs: false
+      tls:
+        certResolver: letsencrypt
+
+    # Pages and API calls whose path carries a capability token: not in the
+    # access log (T-161).
+    transteira-tokens:
+      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`))"
+      priority: 100
+      entryPoints: [websecure]
+      service: transteira
+      middlewares: [transteira-hsts, transteira-compress]
+      observability:
+        accessLogs: false
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    # HSTS (CLAUDE.md section 16.2). No includeSubDomains by default: see
+    # README.md.
+    transteira-hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: false
+
+    # Compression of the web interface and of the JSON API only. Never add the
+    # "buffering" middleware to a TransTeira router: it would hold whole
+    # uploads in memory or on disk.
+    transteira-compress:
+      compress:
+        encodings: [zstd, gzip]
+        includedContentTypes:
+          - text/html
+          - text/css
+          - text/javascript
+          - application/javascript
+          - application/json
+          - application/problem+json
+          - image/svg+xml
+
+  services:
+    transteira:
+      loadBalancer:
+        # Host header passed through unchanged (tenant resolution).
+        passHostHeader: true
+        servers:
+          - url: "http://transteira:8080"

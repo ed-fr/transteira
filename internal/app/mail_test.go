@@ -143,14 +143,16 @@ func TestCloseStages(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
 	slow, quick, later := &slowCloser{}, &quickCloser{}, &budgetCloser{}
-	const first, second = 50 * time.Millisecond, time.Second
+	// The second budget is long so that waiting for it by mistake is told apart
+	// from a slow, loaded machine: the bound below is far under it.
+	const first, second = 50 * time.Millisecond, time.Minute
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // the signal context is already done at shutdown
 	start := time.Now()
 	closeStages(ctx, slog.New(slog.NewTextHandler(&logs, nil)),
 		closeStage{timeout: first, closers: []closer{slow, quick}},
 		closeStage{timeout: second, closers: []closer{later}})
-	if d := time.Since(start); d < first || d > 20*first {
+	if d := time.Since(start); d < first || d > second/2 {
 		t.Errorf("closeStages took %s, want about %s", d, first)
 	}
 	// The later stage runs once the first one is over, with its own budget:

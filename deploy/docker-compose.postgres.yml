@@ -1,0 +1,244 @@
+# TransTeira - PostgreSQL overlay, applied on top of docker-compose.yml:
+#
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.postgres.yml up -d
+#
+# (or set COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml in
+# deploy/.env and run plain `docker compose` from deploy/).
+#
+# What it adds (docs/install/postgresql.md, docs/operations/backup.md):
+#   - postgres: the database server, on the "db" network only (never on the
+#     network shared with ClamAV, docs/operations/antivirus.md);
+#   - migrate: a one-shot container that applies the migrations with the owner
+#     role, so that the long-running server never holds the owner credentials;
+#   - db-backup: the nightly pg_dump (the TransTeira image has no shell and no
+#     PostgreSQL client), written to the transteira_backups volume, with the
+#     read-only role transteira_backup (never the owner role);
+#   - transteira: switched to PostgreSQL with the runtime role.
+#
+# Secrets (files on the host, outside every volume; `deploy/init-secrets.sh
+# --postgres` creates them with random passwords and the right owners):
+#   pg_superuser_password  postgres superuser          readable by UID 70
+#   pg_owner_password      transteira_owner            readable by UID 70
+#   pg_app_password        transteira_app              readable by UID 70
+#   pg_backup_password     transteira_backup           readable by UID 70
+#   db_dsn                 postgres://transteira_app:<app password>@postgres:5432/transteira?sslmode=disable
+#                                                      readable by UID 10001
+#   db_migrate_dsn         postgres://transteira_owner:<owner password>@postgres:5432/transteira?sslmode=disable
+#                                                      readable by UID 10001
+#   pgpass                 postgres:5432:transteira:transteira_backup:<backup password>
+#                                                      owned by UID 10001, mode 0400
+# The passwords are only read at the first start (empty data volume): to
+# change one later, use ALTER ROLE and update the matching files.
+#
+# The superuser postgres can only connect over the local Unix socket (peer
+# authentication, `docker exec -u postgres transteira-postgres psql`): an
+# init script rejects it over TCP (postgres/initdb/20-transteira-hba.sh).
+
+x-transteira-db: &transteira-db
+  TT_DB_DRIVER: postgres
+  # Cleared in case .env sets it: TT_DB_DSN_FILE is used (they are mutually
+  # exclusive), so the password never appears in the environment.
+  TT_DB_DSN: ""
+  TT_DB_DSN_FILE: /run/secrets/transteira_db_dsn
+
+services:
+  postgres:
+    # Same version as the test environment (test/docker-compose.test.yml).
+    image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    container_name: transteira-postgres
+    restart: unless-stopped
+    # The postgres user of the image: no root step, no capability needed.
+    user: "70:70"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=peer"
+    secrets:
+      - pg_superuser_password
+      - pg_owner_password
+      - pg_app_password
+      - pg_backup_password
+    networks:
+      - db
+    volumes:
+      - transteira_pg:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP on purpose: the temporary server of the first start only listens
+      # on the Unix socket, so the check turns healthy once the init scripts
+      # are done.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "transteira"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=1m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    shm_size: 256m
+    mem_limit: 1g
+    pids_limit: 256
+    # PostgreSQL needs time for a clean shutdown (checkpoint).
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # One-shot: applies the pending migrations with the owner role, then exits.
+  # It runs at every `up`; transteira starts only once it has succeeded.
+  migrate:
+    image: ${TRANSTEIRA_IMAGE:-transteira:local}
+    restart: "no"
+    command: ["migrate"]
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      <<: *transteira-db
+      TT_DB_MIGRATE_DSN: ""
+      TT_DB_MIGRATE_DSN_FILE: /run/secrets/transteira_migrate_dsn
+      # Same paths as the transteira service: the configuration is checked as
+      # a whole, even if migrate does not use them.
+      TT_DATA_DIR: /data
+      TT_BACKUP_DIR: /backups
+      TT_LOG_DIR: /logs
+      TT_MASTER_KEY_FILE: /run/secrets/transteira_master_key
+    secrets:
+      - transteira_master_key
+      - transteira_db_dsn
+      - transteira_migrate_dsn
+    networks:
+      - db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+  transteira:
+    environment:
+      <<: *transteira-db
+    secrets:
+      - transteira_db_dsn
+    networks:
+      - db
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Nightly pg_dump (docs/operations/backup.md), at TT_BACKUP_TIME (UTC),
+  # keeping TT_BACKUP_KEEP dumps, in the transteira_backups volume. Runs as the
+  # TransTeira user (10001), which owns that volume, and connects with the
+  # transteira_backup role: LOGIN, NOBYPASSRLS, SELECT only (default
+  # privileges set by postgres/initdb), so a compromise of this container
+  # can read the database but never change it or its schema.
+  db-backup:
+    image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    container_name: transteira-db-backup
+    restart: unless-stopped
+    user: "10001:10001"
+    networks:
+      - db
+    volumes:
+      - transteira_backups:/backups
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: transteira
+      PGUSER: transteira_backup
+      # A private copy of the pgpass secret, made at start in the tmpfs: libpq
+      # ignores a password file readable by group or others, whatever the
+      # permissions of the host file (Docker Desktop shows them world-readable).
+      PGPASSFILE: /tmp/pgpass
+      # Every table forces row-level security: the system scope lets the dump
+      # read the rows of every tenant (the policies apply to every role).
+      PGOPTIONS: "-c app.system_scope=on"
+      BACKUP_TIME: ${TT_BACKUP_TIME:-02:30}
+      KEEP: ${TT_BACKUP_KEEP:-7}
+    secrets:
+      - pgpass
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        cp /run/secrets/pgpass /tmp/pgpass
+        echo "db-backup: nightly pg_dump at $${BACKUP_TIME} UTC, keeping $${KEEP} dumps"
+        while true; do
+          sleep $$(( ( $$(date -u -d "$${BACKUP_TIME}" +%s) - $$(date -u +%s) + 86400 ) % 86400 ))
+          f=/backups/transteira-$$(date -u +%Y%m%dT%H%M%SZ).dump
+          if pg_dump --enable-row-security --format=custom --file="$$f.tmp"; then
+            mv "$$f.tmp" "$$f"
+            echo "db-backup: wrote $$f"
+          else
+            rm -f "$$f.tmp"
+            echo "db-backup: ERROR: pg_dump failed" >&2
+          fi
+          ls -1t /backups/transteira-*.dump 2>/dev/null | tail -n +$$((KEEP + 1)) | xargs -r rm -f
+          sleep 60
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Started after transteira, so that the backup volume is first mounted
+      # (and owned) by the TransTeira image.
+      transteira:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # TransTeira, migrate, db-backup <-> PostgreSQL. No Internet access, not
+  # shared with ClamAV nor with the reverse proxy. Fixed subnet (DB_SUBNET in
+  # .env, default 172.31.11.0/24), listed in TT_SMTP_DENY_NETWORKS.
+  db:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${DB_SUBNET:-172.31.11.0/24}
+
+volumes:
+  transteira_pg:
+    name: transteira_pg
+
+secrets:
+  pg_superuser_password:
+    file: ${SECRETS_DIR:-./secrets}/pg_superuser_password
+  pg_owner_password:
+    file: ${SECRETS_DIR:-./secrets}/pg_owner_password
+  pg_app_password:
+    file: ${SECRETS_DIR:-./secrets}/pg_app_password
+  pg_backup_password:
+    file: ${SECRETS_DIR:-./secrets}/pg_backup_password
+  transteira_db_dsn:
+    file: ${SECRETS_DIR:-./secrets}/db_dsn
+  transteira_migrate_dsn:
+    file: ${SECRETS_DIR:-./secrets}/db_migrate_dsn
+  pgpass:
+    file: ${SECRETS_DIR:-./secrets}/pgpass

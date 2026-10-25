@@ -1,0 +1,41 @@
+# Shared reverse proxy (Caddy), in its own compose project, distinct from the
+# TransTeira one (deploy/docker-compose.yml). Both join the external Docker
+# network "proxy", created once with a fixed subnet (see ../README.md):
+#
+#   docker network create --subnet 172.30.0.0/24 proxy
+#
+# Caddy gets a fixed address on it, 172.30.0.10, which is the value of
+# TT_TRUSTED_PROXIES in the TransTeira .env.
+
+name: reverse-proxy
+
+services:
+  caddy:
+    # Pinned by digest (threat model T-118): update tag and digest together.
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates and ACME account: keep it
+      - caddy_config:/config
+    networks:
+      proxy:
+        ipv4_address: 172.30.0.10
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  proxy:
+    external: true

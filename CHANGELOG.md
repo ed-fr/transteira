@@ -480,6 +480,87 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Contextual help icons (`HelpIcon`, "?" next to the screen title, accessible name "Help: <screen
   title>") on the API token list and creation, tenant network, tenant SMTP and master key
   screens.
+- `transteira backup`: immediate, checked copy of a SQLite database, safe while the server runs.
+  By default it goes to `TT_BACKUP_DIR` as `transteira-<timestamp>-manual.db`, with the mechanism
+  of the nightly copy (`VACUUM INTO` into a `0600` temporary file, `quick_check`, fsync, atomic
+  rename); the nightly rotation never deletes these copies, but it sweeps the temporary files of
+  an interrupted manual copy. With `--out <file>` the copy is written directly into that file,
+  created empty with mode `0600` and never overwritten. The path and size are printed. With PostgreSQL it points to the `db-backup` container and exits with `2`.
+  Documented in `docs/operations/backup.md` (manual copy before an upgrade).
+- Container image (`Dockerfile`): three stages (web interface and integrated help, static Go
+  binary with the same ldflags as `make build` and the embedded time zone database, final
+  `scratch` image holding only the binary, the CA certificates and a minimal root file system);
+  base images pinned by digest; runs as the unprivileged user `transteira` (UID/GID 10001) with a
+  read-only root file system, the volumes `/data`, `/var/lib/transteira/db`, `/backups` and
+  `/logs` owned by that user, and a `HEALTHCHECK` through `transteira healthcheck`. The build
+  context excludes secrets, databases, uploaded files, backups and logs (`.dockerignore`).
+  `make docker` builds `transteira:<version>` and `transteira:local`; `make docker-check` (in
+  `make check`, skipped without Docker or with `DOCKER_CHECK=0`) builds the image and
+  smoke-tests it (`scripts/docker-check.sh`: version, image user, start with the production
+  hardening, processes as UID 10001, health check reaching `/healthz`, database and security log
+  written in their volumes).
+- Production compose files (`deploy/`): `docker-compose.yml` with SQLite (default), clamd and a
+  separate `clamav-update` container running freshclam (`deploy/clamav/clamd.conf`,
+  `deploy/clamav/freshclam.conf`), and the `docker-compose.postgres.yml` overlay (PostgreSQL on
+  its own `db` network, one-shot `migrate` container holding the owner DSN, nightly `pg_dump` by
+  `db-backup`, roles created by `deploy/postgres/initdb/`). Hardening (threat model T-119,
+  decision P24): no published port, every service read-only, without capabilities and with
+  `no-new-privileges`, memory and process limits, images pinned by digest; clamd on the
+  `internal` network without Internet access, freshclam alone on the `clamav_egress` network and
+  sharing only the signature volume, mounted read-only in clamd; the one-shot `clamav-init`
+  (root, no network, `CHOWN` and `DAC_READ_SEARCH` only) gives that volume to the `clamav` user
+  with `chown -Rh`; the master key, the DSNs and the PostgreSQL passwords as Docker secret files
+  outside every volume. The clamd spool (`TemporaryDirectory`, where clamd writes each decrypted
+  stream) is a 2304 MiB tmpfs, never a volume, so the plaintext never reaches a disk or a backup
+  (T-44); it holds one stream, hence `TT_SCAN_WORKERS=1` and a clamd `mem_limit` of 4 GiB. The
+  `internal` and `db` networks have fixed subnets (`INTERNAL_SUBNET`, `DB_SUBNET`), listed with
+  the proxy subnet in the `TT_SMTP_DENY_NETWORKS` of `deploy/.env.example`, so that the SMTP
+  server of a tenant can reach neither clamd, PostgreSQL nor the proxy (T-90). `db-backup`
+  connects with the read-only role `transteira_backup` (`SELECT` only, through default
+  privileges, `NOBYPASSRLS`), and the `postgres` superuser is rejected over TCP by `pg_hba.conf`
+  (local socket only). Fixed volume names (`transteira_logs` for fail2ban and CrowdSec).
+  `deploy/init-secrets.sh [--postgres]` creates the secret files with random values, mode `0400`
+  and the owner of the reading container (10001 or 70), never overwriting an existing file,
+  refusing symbolic links and, as root, a directory not owned by root; `deploy/.env.example` and
+  `deploy/README.md`. Requires Docker Engine 25 and Compose 2.24 or later.
+- Reverse proxy configurations (`integrations/reverse-proxy/`): Caddy (reference, with its own
+  compose file), Nginx, Traefik (file provider or container labels) and Apache, each with a
+  README: TLS for every FQDN, unknown host names refused, `Host` preserved, no buffering, no
+  request size limit, long timeouts, `X-Forwarded-For` / `X-Real-IP` overwritten with the real
+  client address, HSTS without `includeSubDomains` by default, compression of text only, and
+  capability tokens masked in the access logs (left out of the Traefik access log), with their
+  limits documented; Caddy drops every request header from its logs (`Referer`,
+  `Upload-Metadata`, `X-Csrf-Token`...). The proxy gets a fixed address on the `proxy` network
+  (fixed subnet), which is the exact value of `TT_TRUSTED_PROXIES`. Proxy images pinned by
+  digest; the Traefik container runs read-only with `NET_BIND_SERVICE` only, and the file
+  provider is recommended over the Docker socket; the Nginx and Apache READMEs describe one
+  certificate per tenant as an option. `make proxy-configs-check` (in `make check`, skipped
+  without Docker) validates the four configurations with the real proxies in Docker (Traefik
+  with the hardening of its compose file).
+- `make deploy-config-check` (in `make check`, skipped without Docker): `docker compose config`
+  of both compose combinations with dummy secrets, hardening invariants of every service,
+  `clamconf` on the ClamAV configuration (size limits equal to `TT_CLAMAV_MAX_SCAN_BYTES`,
+  mandatory alerts, spool directory), clamd spool on a tmpfs with no volume and
+  `TT_SCAN_WORKERS=1`, fixed subnets listed in `TT_SMTP_DENY_NETWORKS`, `db-backup` on the backup
+  role, syntax of the shell scripts (`scripts/deploy-config-check.sh`).
+- `make deploy-smoke` (outside `make check`: needs Internet access and several minutes): starts
+  the production files in an isolated compose project behind the reference Caddy, on SQLite then
+  PostgreSQL (`DEPLOY_SMOKE_DB`), with the real ClamAV; checks the hardening and runs setup,
+  TOTP, tenant, real client IP in the security log, token deposit with tus, EICAR detection,
+  download with SHA-256, encryption at rest and database copies (with PostgreSQL: dump by the
+  read-only backup role, its writes refused, superuser refused over TCP), then removes everything
+  it created (`scripts/deploy-smoke.sh`, `test/deploy/`).
+- Installation guides: `docs/install/docker.md` (step by step, first run, checks, PostgreSQL
+  variant), `docs/install/reverse-proxy.md` (choosing a proxy, `TT_TRUSTED_PROXIES`, unknown host
+  names, adding a tenant), `docs/install/smtp.md` (per-tenant servers, unauthenticated relay on
+  the Docker network and shared relay sender restriction, Microsoft 365 through Graph,
+  SPF/DKIM/DMARC, system SMTP); operation guide `docs/operations/upgrade.md` (maintenance mode,
+  database copy, upgrade, rollback).
+- Threat model v0.22 (step 21): T-119 and P24 implemented; T-06, T-08, T-44 (plaintext in the
+  clamd spool, now a tmpfs), T-45, T-46, T-90 (stack subnets denied to tenant SMTP), T-116,
+  T-118, T-122 and T-161 completed; new T-172 (tokens in the reverse proxy logs), T-173 (fixed
+  address of the trusted proxy), T-174 (unknown hosts refused at the proxy), T-175 (HSTS),
+  T-176 (shared unauthenticated SMTP relay), T-177 (manual database copies).
 
 ### Changed
 - `make check` now runs `e2e-lint` (Prettier, ESLint, `tsc` and `npm audit` of `test/e2e`,
@@ -578,6 +659,17 @@ and the project follows [Semantic Versioning](https://semver.org/).
   super-admin guide is refused; the help icons of the screens are checked against the route
   topics and the guides; the dev server serves the screenshots and regenerates the help when a
   guide changes.
+- README: new "Installation (Docker + reverse proxy)" and "Configuration" sections (essential
+  variables), and links to the installation and operation guides, which replace the "will be
+  published with the first release" note.
+- Documentation aligned with the container image: the security log is in `/logs` on the
+  `transteira_logs` volume, and the image runs as UID/GID 10001 (logrotate `create 0640 10001
+  10001`, fail2ban `logpath`, bind mount permissions); the antivirus guide describes the
+  provided clamd and freshclam containers; the backup guide covers the manual copy and the
+  `db-backup` container; the project structure lists `deploy/`, the `Dockerfile` and the
+  deployment scripts.
+- `transteira` exit codes: `3` (not implemented) is gone; `2` also means a command that does not
+  apply to the configuration (`backup` with PostgreSQL).
 
 ### Fixed
 - Integrated help: inline errors inside a multi-line paragraph, list item or note point to their

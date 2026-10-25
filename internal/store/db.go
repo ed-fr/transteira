@@ -253,7 +253,7 @@ func (db *DB) Close() error {
 // secure_delete reach the database file and the WAL, which still holds
 // frames written before the deletion, is emptied. Call it after
 // cryptographic erasures (deleted wrapped keys, deleted tenants); the
-// cleanup job of a later step will also run it periodically. It
+// cleanup task (internal/lifecycle) runs it after each of its erasures. It
 // returns ErrScrubBusy, which is not fatal, when active readers prevented a
 // complete checkpoint. With PostgreSQL it does nothing: dead tuples remain
 // until VACUUM (threat model T-109).

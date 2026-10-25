@@ -18,7 +18,7 @@ The log format and the event catalogue are specified in
 ## Installation
 
 1. Make the security log readable from the host: mount the TransTeira logs
-   volume (`TT_LOG_DIR`, `/var/log/transteira` in the container) as a named
+   volume (`TT_LOG_DIR`, `/logs` in the Docker image) as a named
    volume or a bind mount, and set `logpath` in `transteira.local` to the
    host path of `security.log`.
 2. Copy the two files, then check the filter against the real log:
