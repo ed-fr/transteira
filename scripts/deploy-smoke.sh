@@ -12,8 +12,8 @@
 #   2. creates a smoke proxy network with its own subnet (172.31.250.0/24, never the 172.30.0.0/24
 #      of a real installation) and starts the reference Caddy compose file
 #      (integrations/reverse-proxy/caddy/docker-compose.yml + test/deploy/docker-compose.smoke-caddy.yml)
-#      with a Caddyfile generated from the reference one (see smoke_caddyfile), HTTPS published on
-#      127.0.0.1:<free port> only;
+#      with a Caddyfile generated from the reference one (see stack_caddyfile in
+#      scripts/lib/stack.sh), HTTPS published on 127.0.0.1:<free port> only;
 #   3. starts deploy/docker-compose.yml (+ docker-compose.postgres.yml) with the real ClamAV, under
 #      the compose project transteira-smoke-<engine>, every fixed container and volume name
 #      remapped by test/deploy/docker-compose.smoke*.yml; waits until transteira is healthy;
@@ -38,6 +38,8 @@
 # DEPLOY_SMOKE_TIMEOUT (seconds to wait for a healthy stack, default 900), DEPLOY_SMOKE_INTERNAL_SUBNET
 # and DEPLOY_SMOKE_DB_SUBNET (the fixed subnets of the internal and db networks, by default
 # 172.31.251.0/24 and 172.31.252.0/24, never those of a real installation).
+#
+# Steps 1 to 3 and 7 live in scripts/lib/stack.sh, shared with scripts/bigfile.sh.
 set -euo pipefail
 
 docker=${DOCKER:-docker}
@@ -52,8 +54,10 @@ sqlite | postgres) ;;
 	;;
 esac
 
-# Git Bash on Windows: keep container paths (/transteira, /backups...) untouched.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+STACK_TAG=deploy-smoke
+STACK_PREFIX=transteira-smoke-
+# shellcheck source=scripts/lib/stack.sh
+. "$root/scripts/lib/stack.sh"
 
 image=${TRANSTEIRA_IMAGE:-transteira:local}
 subnet=${DEPLOY_SMOKE_SUBNET:-172.31.250.0/24}
@@ -68,67 +72,15 @@ timeout=${DEPLOY_SMOKE_TIMEOUT:-900}
 admin_host=admin.smoke.localhost
 tenant_host=transfer.smoke.localhost
 
-log() { echo "deploy-smoke: $*"; }
-fail() {
-	echo "deploy-smoke: FAIL: $*" >&2
-	exit 1
-}
-# Paths handed to Docker and Node (Windows programs under Git Bash) must be native.
-native() {
-	if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi
-}
-
 "$docker" info >/dev/null 2>&1 || fail "Docker is not available ('$docker info' failed)"
 "$docker" image inspect "$image" >/dev/null 2>&1 || fail "image $image not found: run 'make docker' first"
 
 # Volumes of a real installation present before the run: none may appear because of it.
-real_volumes() { "$docker" volume ls -q | grep -E '^transteira_' | sort || true; }
-volumes_before=$(real_volumes)
+volumes_before=$(stack_real_volumes)
 
-# Current run state, used by the cleanup trap.
-project=""
-work=""
-stack=()
-proxy=()
-
-# purge_project NAME removes whatever is left of the compose project NAME (containers, volumes
-# and networks carrying its compose label), without its compose files. Only smoke projects are
-# ever passed here.
-purge_project() {
-	case "$1" in transteira-smoke-*) ;; *) fail "refusing to purge project $1" ;; esac
-	local f="label=com.docker.compose.project=$1"
-	"$docker" ps -aq --filter "$f" | xargs -r "$docker" rm -f -v >/dev/null 2>&1 || true
-	"$docker" volume ls -q --filter "$f" | xargs -r "$docker" volume rm >/dev/null 2>&1 || true
-	"$docker" network ls -q --filter "$f" | xargs -r "$docker" network rm >/dev/null 2>&1 || true
-}
-
-# cleanup [STATUS] tears the current engine run down; with a non-zero STATUS it first prints the
-# last logs of the stack.
-cleanup() {
-	local rc=${1:-0}
-	set +e
-	if [ -n "$project" ]; then
-		if [ "$rc" != 0 ] && [ ${#stack[@]} -gt 0 ]; then
-			echo "deploy-smoke: --- last logs of $project ---" >&2
-			"${stack[@]}" logs --no-color --tail 60 >&2 2>&1
-			"${stack[@]}" ps -a >&2 2>&1
-		fi
-		[ ${#stack[@]} -gt 0 ] && "${stack[@]}" down -v --remove-orphans -t 10 >/dev/null 2>&1
-		[ ${#proxy[@]} -gt 0 ] && "${proxy[@]}" down -v --remove-orphans -t 5 >/dev/null 2>&1
-		purge_project "$project"
-		purge_project "$project-proxy"
-	fi
-	"$docker" network rm "$network" >/dev/null 2>&1
-	[ -n "$work" ] && rm -rf "$work"
-	project=""
-	work=""
-	stack=()
-	proxy=()
-	set -e
-}
 final_cleanup() {
 	local rc=$?
-	cleanup "$rc"
+	stack_cleanup "$rc"
 	if [ "$keep_signatures" = 0 ]; then
 		"$docker" volume rm "$clamav_db" >/dev/null 2>&1 || true
 	fi
@@ -136,39 +88,6 @@ final_cleanup() {
 }
 trap final_cleanup EXIT
 trap 'exit 130' INT TERM
-
-# smoke_caddyfile OUT writes the Caddyfile of the smoke proxy, derived from the reference
-# integrations/reverse-proxy/caddy/Caddyfile with exactly two changes:
-#   - the site addresses become the smoke admin and tenant hosts (*.localhost);
-#   - that site block gets `tls internal`: certificates from Caddy's internal CA instead of ACME
-#     (no public DNS name, no port 80 reachable from the Internet).
-# Every other directive (timeouts, buffering, compression, logs, headers) is used as is.
-smoke_caddyfile() {
-	local ref="$root/integrations/reverse-proxy/caddy/Caddyfile"
-	awk -v hosts="$admin_host, $tenant_host" '
-		/^admin\.transfer\.example\.com, .*\{$/ { print hosts " {"; print "\ttls internal"; done = 1; next }
-		{ print }
-		END { if (!done) exit 3 }
-	' "$ref" >"$1" || fail "the site line of $ref was not found (update smoke_caddyfile)"
-}
-
-free_port() {
-	node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
-}
-
-# wait_healthy CONTAINER TIMEOUT
-wait_healthy() {
-	local c=$1 deadline=$((SECONDS + $2)) state
-	while :; do
-		state=$("$docker" inspect --format '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$c" 2>/dev/null || echo missing)
-		case "$state" in
-		*/healthy) return 0 ;;
-		exited/* | dead/* | missing) fail "$c is $state" ;;
-		esac
-		[ "$SECONDS" -lt "$deadline" ] || fail "$c not healthy after $2 s (state $state)"
-		sleep 2
-	done
-}
 
 # sorted_words WORD... prints the words sorted (C locale), on one line.
 sorted_words() { printf '%s\n' "$@" | grep -v '^$' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//'; }
@@ -194,70 +113,16 @@ assert_uid() {
 }
 
 run_engine() {
-	local engine=$1 t0=$SECONDS t
-	project=transteira-smoke-$engine
-	# Leftovers of an interrupted run (killed before its trap ran).
-	purge_project "$project"
-	purge_project "$project-proxy"
-	"$docker" network rm "$network" >/dev/null 2>&1 || true
-	work=$(mktemp -d)
-	local deploy="$work/deploy"
-	log "=== $engine: project $project, work dir $work ==="
-
+	local engine=$1 t0=$SECONDS
 	# 1. Deployment folder, secrets, .env, as an operator would.
-	mkdir -p "$deploy"
-	cp -R "$root/deploy/." "$deploy/"
-	rm -rf "$deploy/secrets" "$deploy/.env"
-	local pg_flag=()
-	[ "$engine" = postgres ] && pg_flag=(--postgres)
-	sh "$deploy/init-secrets.sh" "${pg_flag[@]}" "$deploy/secrets" 2>/dev/null | sed 's/^/deploy-smoke:   /'
-	if [ "$(uname -s)" = Linux ] && [ "$(id -u)" != 0 ]; then
-		# Not root: init-secrets.sh could not give the files to UID 10001 / 70. Throwaway values:
-		# make them readable by the containers instead.
-		chmod 0755 "$deploy/secrets"
-		chmod 0444 "$deploy/secrets"/*
-	fi
-	sed -e "s|^TRANSTEIRA_IMAGE=.*|TRANSTEIRA_IMAGE=$image|" \
-		-e "s|^PROXY_NETWORK=.*|PROXY_NETWORK=$network|" \
-		-e "s|^TT_ADMIN_HOSTS=.*|TT_ADMIN_HOSTS=$admin_host|" \
-		-e "s|^TT_TRUSTED_PROXIES=.*|TT_TRUSTED_PROXIES=$proxy_ip|" \
-		"$root/deploy/.env.example" >"$deploy/.env"
-	for v in "TRANSTEIRA_IMAGE=$image" "PROXY_NETWORK=$network" "TT_ADMIN_HOSTS=$admin_host" "TT_TRUSTED_PROXIES=$proxy_ip"; do
-		grep -qx "$v" "$deploy/.env" || fail "deploy/.env.example: could not set $v (variable missing?)"
-	done
-
-	export SMOKE_PROJECT=$project SMOKE_CLAMAV_DB_VOLUME=$clamav_db SMOKE_PROXY_NETWORK=$network SMOKE_PROXY_IP=$proxy_ip
-	SMOKE_HTTPS_PORT=$(free_port)
-	export SMOKE_HTTPS_PORT
-	smoke_caddyfile "$work/Caddyfile"
-	export SMOKE_CADDYFILE
-	SMOKE_CADDYFILE=$(native "$work/Caddyfile")
-
-	stack=("$docker" compose -p "$project" --project-directory "$(native "$deploy")" -f "$(native "$deploy/docker-compose.yml")")
-	[ "$engine" = postgres ] && stack+=(-f "$(native "$deploy/docker-compose.postgres.yml")")
-	stack+=(-f "$(native "$root/test/deploy/docker-compose.smoke.yml")")
-	[ "$engine" = postgres ] && stack+=(-f "$(native "$root/test/deploy/docker-compose.smoke-postgres.yml")")
-	proxy=("$docker" compose -p "$project-proxy" -f "$(native "$root/integrations/reverse-proxy/caddy/docker-compose.yml")"
-		-f "$(native "$root/test/deploy/docker-compose.smoke-caddy.yml")")
+	stack_prepare "$engine"
 
 	# 2. Proxy network and Caddy.
-	"$docker" network create --subnet "$subnet" "$network" >/dev/null ||
-		fail "cannot create network $network with subnet $subnet (set DEPLOY_SMOKE_SUBNET and DEPLOY_SMOKE_PROXY_IP)"
-	"${proxy[@]}" up -d --quiet-pull 2>&1 | sed 's/^/deploy-smoke:   /'
-	local ca="$work/caddy-root.crt" deadline=$((SECONDS + 60))
-	until "${proxy[@]}" exec -T caddy cat /data/caddy/pki/authorities/local/root.crt >"$ca" 2>/dev/null && [ -s "$ca" ]; do
-		[ "$SECONDS" -lt "$deadline" ] || fail "Caddy did not create its internal CA within 60 s"
-		sleep 1
-	done
-	log "Caddy up on https://127.0.0.1:$SMOKE_HTTPS_PORT ($proxy_ip on $network, internal CA)"
+	stack_up_proxy "DEPLOY_SMOKE_SUBNET and DEPLOY_SMOKE_PROXY_IP"
 
 	# 3. The stack. The signature volume is a cache kept between runs (see the header).
-	"$docker" volume inspect "$clamav_db" >/dev/null 2>&1 || "$docker" volume create "$clamav_db" >/dev/null
-	t=$SECONDS
-	"${stack[@]}" up -d --quiet-pull 2>&1 | sed 's/^/deploy-smoke:   /'
+	stack_up "$timeout"
 	local tt=$project-transteira clam=$project-clamav
-	wait_healthy "$tt" "$timeout"
-	log "stack healthy in $((SECONDS - t)) s"
 
 	# 4. Hardening.
 	assert_hardened "$tt"
@@ -308,7 +173,7 @@ run_engine() {
 	assert_hardened "$upd"
 	assert_uid "$upd" 100
 	[ "$(container_networks "$upd")" = "${project}_clamav_egress" ] || fail "clamav-update is not on ${project}_clamav_egress only"
-	deadline=$((SECONDS + 600))
+	local deadline=$((SECONDS + 600))
 	while :; do
 		[ "$("$docker" inspect --format '{{.State.Running}} {{.RestartCount}}' "$upd")" = "true 0" ] ||
 			fail "clamav-update stopped or restarted: $("$docker" logs --tail 20 "$upd" 2>&1)"
@@ -388,7 +253,7 @@ run_engine() {
 		log "postgres: superuser rejected over TCP (pg_hba), accepted on the local socket (peer)"
 	fi
 
-	cleanup
+	stack_cleanup
 	log "=== $engine: OK in $((SECONDS - t0)) s ==="
 }
 
@@ -397,7 +262,7 @@ for engine in $engines; do
 	run_engine "$engine"
 done
 
-volumes_after=$(real_volumes)
+volumes_after=$(stack_real_volumes)
 [ "$volumes_before" = "$volumes_after" ] ||
 	fail "volumes of a real installation changed during the run: before [$volumes_before], after [$volumes_after]"
 log "ALL OK ($engines) in $((SECONDS - total)) s"

@@ -372,7 +372,9 @@ func Variables() []Var {
 		{
 			Name: EnvDepositSessionTTL, Group: "Uploads", Default: DefaultDepositSessionTTL,
 			Description: "Lifetime of a deposit session after e-mail verification " +
-				"(Go duration, between 15m and 24h).",
+				"(Go duration, between 15m and 24h). It is not extended by activity and " +
+				"every upload request needs a live session: at 4h, a 20 GB transfer needs " +
+				"about 11 Mbit/s of upload bandwidth; raise it for slow links.",
 		},
 		{
 			Name: EnvDeleteAfterDownloadGrace, Group: "Uploads",

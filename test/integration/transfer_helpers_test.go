@@ -9,9 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -26,6 +24,7 @@ import (
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/test/internal/seeded"
 )
 
 // Helpers of the transfer and tus upload tests (CLAUDE.md sections 8, 16.1
@@ -597,34 +596,23 @@ func (c *depositor) waitUnlocked(t *testing.T, trfID string) {
 	})
 }
 
-// seededStream is a deterministic pseudo-random byte stream (ChaCha8 with
-// a fixed seed): the tests generate their contents on the fly and never
-// hold large files in memory.
-func seededStream(seed byte) io.Reader {
-	var s [32]byte
-	s[0] = seed
-	s[31] = 0x5a
-	return rand.NewChaCha8(s)
+// seededStream is a deterministic pseudo-random stream of size bytes
+// (test/internal/seeded): the tests generate their contents on the fly and
+// never hold large files in memory.
+func seededStream(seed byte, size int64) io.Reader {
+	return seeded.Stream(uint64(seed), size)
 }
 
 // seededBytes returns the first n bytes of seededStream(seed).
 func seededBytes(t *testing.T, seed byte, n int) []byte {
 	t.Helper()
-	b := make([]byte, n)
-	if _, err := io.ReadFull(seededStream(seed), b); err != nil {
-		t.Fatal(err)
-	}
-	return b
+	return seeded.Bytes(uint64(seed), n)
 }
 
 // seededRange returns a reader of the bytes [from, to) of seededStream.
 func seededRange(t *testing.T, seed byte, from, to int64) io.Reader {
 	t.Helper()
-	r := seededStream(seed)
-	if _, err := io.CopyN(io.Discard, r, from); err != nil {
-		t.Fatal(err)
-	}
-	return io.LimitReader(r, to-from)
+	return seeded.Range(uint64(seed), from, to-from)
 }
 
 // sha256Hex returns the hexadecimal SHA-256 of b.
@@ -700,28 +688,11 @@ func readRawResponse(t *testing.T, conn net.Conn) response {
 	return response{status: resp.StatusCode, header: resp.Header, body: b}
 }
 
-// hashingReader computes the SHA-256 and the size of what is read through
-// it.
-type hashingReader struct {
-	r io.Reader
-	h hash.Hash
-	n int64
+// newHashingReader returns a reader computing the SHA-256 and the size of
+// what is read through it (test/internal/seeded).
+func newHashingReader(r io.Reader) *seeded.HashingReader {
+	return seeded.NewHashingReader(r)
 }
-
-func newHashingReader(r io.Reader) *hashingReader {
-	return &hashingReader{r: r, h: sha256.New()}
-}
-
-// Read implements io.Reader.
-func (h *hashingReader) Read(p []byte) (int, error) {
-	n, err := h.r.Read(p)
-	h.h.Write(p[:n])
-	h.n += int64(n)
-	return n, err
-}
-
-// sum returns the hexadecimal SHA-256 of the bytes read so far.
-func (h *hashingReader) sum() string { return hex.EncodeToString(h.h.Sum(nil)) }
 
 // errorLines returns the error and warning lines of the application log,
 // to explain an unexpected status.

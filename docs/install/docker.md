@@ -205,6 +205,7 @@ The essential variables:
 | `INTERNAL_SUBNET`, `DB_SUBNET`, `TT_SMTP_DENY_NETWORKS` | Fixed subnets of the `internal` (clamd) and `db` (PostgreSQL) networks, `172.31.10.0/24` and `172.31.11.0/24` by default, and the networks the SMTP server of a tenant may never reach: the default list plus these two subnets and the `proxy` subnet. Change the subnets if they overlap your LAN or another Docker network, and the list with them ([SMTP](smtp.md#unauthenticated-relay-on-the-internal-docker-network)). |
 | `TT_SCAN_WORKERS` | `1`: one file scanned at a time, because the clamd spool (in memory) holds one stream ([Antivirus](../operations/antivirus.md#the-clamd-spool)). |
 | `TT_SETUP_TOKEN` | Optional: the setup token of the first super admin (see below). |
+| `TT_DEPOSIT_SESSION_TTL` | Optional, `4h` by default (15 min to 24 h): lifetime of a depositor's session from the email verification, **not extended by activity**. Every upload request needs a live session, so an upload still running when it ends stops with "session expired". At 4 h, a 20 GB transfer needs about 11 Mbit/s of upload bandwidth; for slow links (remote sites, external guests), raise it, for example to `12h`. |
 
 The SMTP servers of the tenants are not set here: each tenant has its own,
 configured in the administration ([SMTP](smtp.md)).

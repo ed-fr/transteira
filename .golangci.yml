@@ -3,6 +3,9 @@ version: "2"
 run:
   timeout: 5m
   tests: true
+  # test/bigfile builds its scenario only with this tag (make bigfile): lint it too.
+  build-tags:
+    - bigfile
 
 linters:
   default: standard

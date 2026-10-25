@@ -116,8 +116,8 @@ func TestUploadInterruptedPatch(t *testing.T) {
 		if _, err := io.Copy(io.Discard, hw); err != nil {
 			t.Fatal(err)
 		}
-		if got.Files[0].Sha256 != hw.sum() {
-			t.Errorf("sha256 = %s, want %s", got.Files[0].Sha256, hw.sum())
+		if got.Files[0].Sha256 != hw.Hex() {
+			t.Errorf("sha256 = %s, want %s", got.Files[0].Sha256, hw.Hex())
 		}
 	})
 }

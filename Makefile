@@ -51,7 +51,7 @@ help: ## Show available targets
 # The fast e2e checks (lint, screenshot manifest) run with the other static checks; the browser
 # suite runs after the Go tests. The Docker gates (docker-check, proxy-configs-check,
 # deploy-config-check) are appended to this list in their own sections below, so they run after
-# `e2e`, in that order. bigfile (20 GB through Caddy) joins this list when its pipeline arrives.
+# `e2e`, in that order; bigfile (20 GB through Caddy) is appended last.
 CHECK_GATES := web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check \
 	env-example-check e2e-lint screenshots-check test cover e2e
 
@@ -130,8 +130,46 @@ deploy-smoke: docker ## End-to-end test of deploy/ behind Caddy with real ClamAV
 	DOCKER='$(DOCKER)' TRANSTEIRA_IMAGE=$(DOCKER_IMAGE):local bash scripts/deploy-smoke.sh $(DEPLOY_SMOKE_DB)
 # --- end of Deployment ---
 
+# --- 20 GB test ---
+# CLAUDE.md section 24.2: a 20 GiB file generated on the fly, uploaded with tus through the
+# reference Caddy to the production stack (real ClamAV), the connection cut and resumed during the
+# upload and the download, the SHA-256 compared, the server memory sampled and checked (peak and
+# trend). Both engines, one after the other, each stack torn down with its volumes before the
+# next. scripts/bigfile.sh lists the steps; test/README.md, section "20 GB test", the
+# prerequisites (Docker disk of 60 to 80 GB, 7 GiB of memory) and the variables. The LAST gate of
+# `make check`: BIGFILE=0 skips it, never before a release.
+BIGFILE         ?= 1
+BIGFILE_BYTES   ?= 21474836480
+BIGFILE_DBS     ?= both
+BIGFILE_KEEP    ?= 0
+BIGFILE_MAX_MEM ?= 256MiB
+CHECK_GATES     += bigfile
+
+.PHONY: bigfile-clean
+
+bigfile: ## 20 GB upload/download test through Caddy, cut and resumed (BIGFILE=0 skips; BIGFILE_BYTES, BIGFILE_DBS, BIGFILE_KEEP)
+	@if [ "$(BIGFILE)" = "0" ]; then \
+		echo "bigfile: SKIPPED (BIGFILE=0): never skip the 20 GB test before a release"; \
+	else \
+		$(MAKE) --no-print-directory docker VERSION='$(VERSION)' COMMIT='$(COMMIT)' DATE='$(DATE)' && \
+		DOCKER='$(DOCKER)' TRANSTEIRA_IMAGE=$(DOCKER_IMAGE):local BIGFILE_BYTES='$(BIGFILE_BYTES)' \
+		BIGFILE_DBS='$(BIGFILE_DBS)' BIGFILE_KEEP='$(BIGFILE_KEEP)' BIGFILE_MAX_MEM='$(BIGFILE_MAX_MEM)' \
+		BIGFILE_CHUNK='$(BIGFILE_CHUNK)' BIGFILE_CUT_AT='$(BIGFILE_CUT_AT)' BIGFILE_DL_CUT_AT='$(BIGFILE_DL_CUT_AT)' \
+		BIGFILE_SEED='$(BIGFILE_SEED)' BIGFILE_SCAN_TIMEOUT='$(BIGFILE_SCAN_TIMEOUT)' \
+		BIGFILE_CLAMAV_MAX_SCAN_BYTES='$(BIGFILE_CLAMAV_MAX_SCAN_BYTES)' BIGFILE_MIN_FREE='$(BIGFILE_MIN_FREE)' \
+		BIGFILE_MAX_CLOCK_OFFSET='$(BIGFILE_MAX_CLOCK_OFFSET)' bash scripts/bigfile.sh; \
+	fi
+
+bigfile-clean: ## Remove what a failed BIGFILE_KEEP=1 run of the 20 GB test left (transteira-bigfile-* only)
+	@DOCKER='$(DOCKER)' bash scripts/bigfile.sh clean
+# --- end of 20 GB test ---
+
 check: $(CHECK_GATES) ## Run every quality gate (must be green before each commit)
-	@echo "make check: ALL GREEN"
+	@if [ "$(BIGFILE)" = "0" ]; then \
+		echo "make check: ALL GREEN (bigfile SKIPPED: BIGFILE=0, never before a release)"; \
+	else \
+		echo "make check: ALL GREEN"; \
+	fi
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
 # no dependency install script is ever executed.
@@ -168,8 +206,9 @@ fmt: ## Format Go code (gofumpt + goimports)
 fmt-check: ## Fail if Go code is not formatted
 	$(GO) tool golangci-lint fmt --diff ./...
 
-vet: ## go vet
+vet: ## go vet (and the 20 GB test client, built with the bigfile tag)
 	$(GO) vet ./...
+	$(GO) vet -tags bigfile ./test/bigfile/...
 
 lint: ## golangci-lint
 	$(GO) tool golangci-lint run ./...
@@ -311,9 +350,6 @@ screenshots-run: build
 
 screenshots-check: ## Check docs/user/screenshots against its manifest (both languages, no orphan)
 	node --test test/e2e/scripts/check-screenshots.mjs
-
-bigfile: ## 20 GB upload test through Caddy (not available yet)
-	@echo "bigfile: NOT AVAILABLE YET (upload pipeline arrives in a later step)"
 
 clean: ## Remove build and coverage artefacts (web/dist keeps its committed .gitkeep)
 	rm -rf $(BIN_DIR) $(COVERPROFILE) web/coverage

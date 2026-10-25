@@ -70,7 +70,7 @@ func TestDownloadMemoryStability(t *testing.T) {
 			Recipients: []string{uniqueEmail(t, "rcpt", "example.net")}, ExpiryDays: 1,
 			Files: []fileDecl{{Name: "big.bin", Size: size}},
 		})
-		gen := newHashingReader(io.LimitReader(seededStream(70), size))
+		gen := newHashingReader(seededStream(70, size))
 		start := time.Now()
 		resp, err := alice.tryTus(http.MethodPatch, tr.Files[0].UploadURL, func(h http.Header) {
 			h.Set(hdrUploadOffset, "0")
@@ -79,7 +79,7 @@ func TestDownloadMemoryStability(t *testing.T) {
 			t.Fatalf("PATCH of %d bytes: %v, status %d", size, err, resp.status)
 		}
 		t.Logf("%s: uploaded %d MiB in %s", e.Name, size>>20, time.Since(start).Round(time.Millisecond))
-		want := gen.sum()
+		want := gen.Hex()
 		alice.mustFinalize(t, tr.ID)
 		got := alice.waitStatus(t, tr.ID, "available", waitTimeout)
 		if f := got.Files[0]; f.ScanStatus != "not_scanned_too_large" || f.Sha256 != want {

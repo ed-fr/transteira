@@ -109,7 +109,7 @@ func TestUploadMemoryStability(t *testing.T) {
 		tr := alice.mustCreate(t, oneFile("big.bin", size))
 		url := tr.Files[0].UploadURL
 
-		gen := newHashingReader(seededStream(60))
+		gen := newHashingReader(seededStream(60, size))
 		first := size / 2
 		base := heapBaseline()
 		sampler := sampleHeap()
@@ -132,15 +132,15 @@ func TestUploadMemoryStability(t *testing.T) {
 		if growth > heapGrowthBound {
 			t.Errorf("HeapInuse grew by %d MiB during the upload, want at most %d MiB", growth>>20, heapGrowthBound>>20)
 		}
-		if gen.n != size {
-			t.Fatalf("generated %d bytes, want %d", gen.n, size)
+		if gen.N() != size {
+			t.Fatalf("generated %d bytes, want %d", gen.N(), size)
 		}
 
 		if resp := alice.finalize(t, tr.ID); resp.status != http.StatusAccepted {
 			t.Fatalf("finalize: %d %s", resp.status, resp.body)
 		}
-		if got := alice.mustGet(t, tr.ID).Files[0].Sha256; got != gen.sum() {
-			t.Errorf("sha256 reported by the server = %s, want %s", got, gen.sum())
+		if got := alice.mustGet(t, tr.ID).Files[0].Sha256; got != gen.Hex() {
+			t.Errorf("sha256 reported by the server = %s, want %s", got, gen.Hex())
 		}
 		start = time.Now()
 		plain := newHashingReader(d.openFile(t, d.fileRow(t, tr.ID, tr.Files[0].ID)))
@@ -148,8 +148,8 @@ func TestUploadMemoryStability(t *testing.T) {
 			t.Fatalf("decrypt: %v", err)
 		}
 		t.Logf("%s: decrypted from disk in %s", e.Name, time.Since(start).Round(time.Millisecond))
-		if plain.n != size || plain.sum() != gen.sum() {
-			t.Errorf("decrypted file: %d bytes, sha256 %s; want %d bytes, %s", plain.n, plain.sum(), size, gen.sum())
+		if plain.N() != size || plain.Hex() != gen.Hex() {
+			t.Errorf("decrypted file: %d bytes, sha256 %s; want %d bytes, %s", plain.N(), plain.Hex(), size, gen.Hex())
 		}
 	})
 }

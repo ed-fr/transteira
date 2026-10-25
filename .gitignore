@@ -61,3 +61,5 @@ Thumbs.db
 /transteira
 /transteira.exe
 *.exe
+# 20 GB test output: memory samples and client reports (scripts/bigfile.sh)
+test/bigfile/out/

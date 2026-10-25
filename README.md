@@ -137,6 +137,8 @@ Operation:
 - [Upgrade](docs/operations/upgrade.md): maintenance mode, database copy, rollback
 - [Backup and restore](docs/operations/backup.md)
 - [Antivirus](docs/operations/antivirus.md) (ClamAV limits, signature updates)
+- [Big file trial](docs/operations/bigfile-trial.md): acceptance test with very big files
+  behind the reverse proxy, in a real browser
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec)
 - [Administration](docs/operations/admin.md) (accounts, tenant operations, API tokens, audit
   log, GDPR, statistics, maintenance mode, disk alert, system SMTP) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
@@ -150,7 +152,8 @@ Bash.
 ```sh
 make hooks         # install the pre-push secret scan (gitleaks)
 make check         # every quality gate: web checks and build, format, vet, lint, govulncheck,
-                   # OpenAPI lint, tests, coverage
+                   # OpenAPI lint, tests, coverage, end-to-end tests, then the 20 GB test
+make bigfile       # 20 GB upload and download through Caddy, cut and resumed (both engines)
 make build         # build the web interface, then the binary that embeds it (bin/)
 make web-install   # install the web dependencies from the lockfile (npm ci --ignore-scripts)
 make web-check     # web gates: generated types, svelte-check, eslint, prettier, vitest, npm audit
@@ -161,6 +164,17 @@ make help          # all targets
 
 `make check` includes `npm audit`, which needs the npm registry; offline, `make check NPM_AUDIT=0`
 skips that single step explicitly.
+
+The last gate of `make check` is the automated 20 GB test (`make bigfile`, CLAUDE.md section
+24.2): a 20 GiB file generated on the fly is uploaded with tus through the real Caddy to the
+production stack, the connection is cut and resumed during the upload and the download, and every
+SHA-256 and the memory of the server are checked, on SQLite then PostgreSQL. It needs Docker
+Desktop with **60 to 80 GB of disk** and at least 7 GiB of memory, and takes **about 30 minutes**.
+`make check BIGFILE=0` skips it (never before a release); `make bigfile BIGFILE_BYTES=1073741824
+BIGFILE_DBS=sqlite` is a quick 1 GiB run. See [test/README.md](test/README.md#20-gb-test-testbigfile-make-bigfile).
+Before the V1 is declared done, an operator also runs the human
+[big file trial](docs/operations/bigfile-trial.md) in a real browser behind the production
+reverse proxy.
 
 The web interface (Svelte 5 and Vite, two static applications: public pages on every entity host,
 administration on the admin host) is described in [web/README.md](web/README.md), including the
