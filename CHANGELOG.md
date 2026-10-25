@@ -584,6 +584,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
   Docker Desktop disk space.
 - Threat model v0.23 (step 22): column G of the test matrix (20 GB test) and its guard paragraph,
   examples of T-21 to T-27, T-28 to T-34, T-47 to T-57 and T-123 to T-128 completed.
+- French translations of the Docker installation guide (`docs/install/fr/docker.md`) and of the
+  SMTP guide (`docs/install/fr/smtp.md`), linked from the English versions, which remain the
+  reference, and from the README.
+- README: "How it works" section with an architecture diagram and the life of a transfer
+  (Mermaid, rendered by GitHub), and a gallery of six generated screenshots.
 
 ### Changed
 - `make check` now runs `e2e-lint` (Prettier, ESLint, `tsc` and `npm audit` of `test/e2e`,

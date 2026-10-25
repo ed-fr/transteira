@@ -40,16 +40,96 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
   pseudonymised), technical cookies only.
 
+## How it works
+
+### Architecture
+
+One TransTeira container serves every entity: it reads the `Host` header to find the entity
+(`transfer.entity-a.example.com`, `transfer.entity-b.example.com`...) and applies its branding,
+language, SMTP server, IP ranges, email domains and quotas. Unknown host names are rejected.
+
+```mermaid
+flowchart LR
+    users["Senders and recipients<br/>(browser)"]
+    admins["Administrators<br/>(browser, TOTP mandatory for the super admin)"]
+    scripts["Scripts<br/>(API token, tus)"]
+
+    subgraph host["Docker host"]
+        secret["Master key file<br/>Docker secret, outside the volumes"]
+        proxy["Reverse proxy<br/>Caddy, Nginx, Traefik or Apache<br/>own compose project, TLS per FQDN"]
+        subgraph app["TransTeira compose project"]
+            tt["transteira<br/>single Go binary, scratch image<br/>no published port"]
+            clamd["clamd<br/>no Internet access"]
+            fresh["freshclam<br/>signature updates"]
+            db[("SQLite or PostgreSQL<br/>metadata and wrapped file keys<br/>row-level security with PostgreSQL")]
+            data[("Data volume<br/>one folder per entity<br/>encrypted files, random names")]
+        end
+    end
+
+    smtp["SMTP server of each entity<br/>(relay or authenticated)"]
+    vault["Password vault<br/>(offline copy of the master key)"]
+
+    users -- HTTPS --> proxy
+    admins -- HTTPS --> proxy
+    scripts -- HTTPS --> proxy
+    proxy -- "network proxy" --> tt
+    tt -- "network internal" --> clamd
+    tt --> db
+    tt --> data
+    fresh -. "signatures volume" .-> clamd
+    tt -- "mails" --> smtp
+    secret -. "read at start" .-> tt
+    vault -. "copy for restore" .-> secret
+```
+
+The reverse proxy is shared with other services and forwards the real client IP, trusted only
+from the proxies declared in `TT_TRUSTED_PROXIES`. Each file is encrypted with its own key, itself
+encrypted by the master key (envelope encryption): rotating the master key never rewrites the
+files, and deleting a transfer destroys its keys (crypto-erase). Copies in existing backups
+become unreadable once the master key has been rotated and the old key destroyed after the backup
+retention period ([details](docs/operations/master-key.md#crypto-erase)).
+
+### Life of a transfer
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor S as Sender
+    participant T as TransTeira
+    participant C as ClamAV
+    actor R as Recipient
+
+    S->>T: Email address (internal IP range and domain, or invitation)
+    T-->>S: 6-digit code by mail (first use of the address only)
+    S->>T: Code, then recipients, message, expiry (1, 7 or 30 days), optional password
+    loop Each file, in resumable tus chunks
+        S->>T: Upload (after a network cut, resumes at the last byte received)
+        Note over T: Streamed to disk: AES-256-GCM per block<br/>and SHA-256 computed on the way
+    end
+    T->>C: Antivirus scan of each file up to 2 GB (configurable)
+    Note over T,C: Infected file: deleted, sender alerted<br/>Larger file: delivered, marked not analysed
+    T-->>R: Notification: link, QR code, SHA-256 fingerprints
+    T-->>S: Confirmation
+    R->>T: Download page (password if set: 3 tries, then 15 min lock)
+    T-->>R: Each file or a ZIP archive, decrypted on the fly, never stored in clear
+    T-->>S: Receipt at the first download
+    Note over T: At expiry, after the first download if chosen,<br/>or on deletion: files and keys erased
+```
+
 ## Screenshots
 
-![New transfer form of an entity: a recipient, a message, the availability of 7 days selected and the optional password](docs/user/screenshots/en/deposit-form.png)
-
-![Download page of a transfer: sender, message, download of all files as a ZIP archive, and for each file its size, SHA-256 fingerprint and antivirus status](docs/user/screenshots/en/download.png)
-
-![Statistics of an entity in the administration: key figures of the period and storage used against the quota](docs/user/screenshots/en/admin-stats.png)
+| | |
+|---|---|
+| ![Identification of the sender: the 6-digit verification code sent by email is entered on the page](docs/user/screenshots/en/deposit-code.png) | ![New transfer form of an entity: a recipient, a message, the availability of 7 days selected and the optional password](docs/user/screenshots/en/deposit-form.png) |
+| **Email verification** by one-time code, no account | **New transfer**: recipients, message, expiry, password |
+| ![Transfer sent: the recipients have been notified, and each file is listed with its antivirus status and SHA-256 fingerprint](docs/user/screenshots/en/deposit-sent.png) | ![Download page of a transfer: sender, message, download of all files as a ZIP archive, and for each file its size, SHA-256 fingerprint and antivirus status](docs/user/screenshots/en/download.png) |
+| **Transfer sent**, with antivirus status and fingerprints | **Download page**: each file or a ZIP archive |
+| ![Branding of an entity in the administration: primary and accent colours with their contrast ratio checked against the accessibility levels](docs/user/screenshots/en/admin-tenant-branding.png) | ![Statistics of an entity in the administration: key figures of the period and storage used against the quota](docs/user/screenshots/en/admin-stats.png) |
+| **Branding per entity**, with contrast checks | **Statistics** and storage quota |
 
 The screenshots are generated by the end-to-end tests (`make screenshots`), in English and in
-French, so that they always match the interface.
+French (the [user guides](docs/user/README.md) show all of them), so that they always match the
+interface.
 
 ## Installation (Docker + reverse proxy)
 
@@ -124,10 +204,11 @@ Every variable, with its default and its limits, is documented in [`.env.example
 Installation:
 
 - [Docker installation](docs/install/docker.md): step-by-step guide, first run, checks
+  ([en français](docs/install/fr/docker.md))
 - [Reverse proxy](docs/install/reverse-proxy.md): choosing a proxy, common requirements,
   `TT_TRUSTED_PROXIES`; configurations in [integrations/reverse-proxy/](integrations/reverse-proxy/README.md)
 - [SMTP](docs/install/smtp.md): per-entity servers, internal relay, Microsoft 365 through Graph,
-  SPF/DKIM/DMARC, system SMTP
+  SPF/DKIM/DMARC, system SMTP ([en français](docs/install/fr/smtp.md))
 - [PostgreSQL roles](docs/install/postgresql.md)
 
 Operation:

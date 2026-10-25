@@ -1,5 +1,7 @@
 # Installing TransTeira with Docker
 
+> Version française : [fr/docker.md](fr/docker.md).
+
 This guide installs TransTeira on a VM running Docker, behind a reverse proxy
 shared with other services (CLAUDE.md section 18). It uses the production
 compose files of [`deploy/`](../../deploy/README.md), with SQLite by default;
@@ -291,7 +293,7 @@ For each tenant:
    docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
    ```
 
-3. its SMTP settings work (**Test** button) and its sending domain has SPF,
+3. its SMTP settings work (**Send a test email** button) and its sending domain has SPF,
    DKIM and DMARC ([SMTP](smtp.md)).
 
 References: [Tenants](../operations/tenants.md) (every setting and who can

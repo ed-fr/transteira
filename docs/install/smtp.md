@@ -1,5 +1,7 @@
 # SMTP
 
+> Version française : [fr/smtp.md](fr/smtp.md).
+
 TransTeira sends two kinds of mail:
 
 - **tenant mails** (verification codes, transfer notifications, confirmations,
