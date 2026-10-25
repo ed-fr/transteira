@@ -1,0 +1,14 @@
+Hello,
+
+The antivirus has not been responding since October 13, 2027 at 09:45 UTC. Transfers of the entity Entity A & Co waiting for analysis: 4.
+
+Deposits are still accepted, but they stay in analysis: no file is delivered without having been scanned. The waiting transfers are analyzed and delivered to their recipients automatically as soon as the antivirus answers again; their validity starts at that moment.
+
+Contact the operator of the instance if the situation persists. If senders ask why their recipients have not received anything yet, you can tell them that the delivery is delayed.
+
+Administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

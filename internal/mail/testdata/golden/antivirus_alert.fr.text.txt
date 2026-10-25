@@ -1,0 +1,16 @@
+Bonjour,
+
+L'antivirus de TransTeira (clamd) ne répond plus depuis le 13 octobre 2027 à 09:45 UTC.
+
+Transferts en attente d'analyse : 12 ; entités concernées : 3.
+
+Les dépôts restent acceptés, mais ils demeurent en cours d'analyse : aucun fichier n'est remis sans avoir été analysé. Les transferts en attente seront analysés et remis automatiquement dès que l'antivirus répondra de nouveau.
+
+Vérifiez que le conteneur clamd est démarré et en bonne santé (ses journaux, sa mémoire, le téléchargement de ses signatures) et que TransTeira peut le joindre ; la procédure est décrite dans la documentation d'exploitation (docs/operations/antivirus.md). Cette alerte n'est envoyée qu'une fois par panne, et au plus une fois par heure.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par TransTeira. Merci de ne pas y répondre.

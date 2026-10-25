@@ -677,6 +677,9 @@ var systemAllowlist = map[string]string{
 	`UPDATE key_rotations SET status = ?, completed_at = ?, error = ? WHERE id = ? AND status = 'running'`:                                        reasonKeyRotation,
 	// Antivirus worker start-up sweep (identifiers only).
 	`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`: reasonAntivirusSweep,
+	// Antivirus alert: transfers waiting per tenant (identifiers and counts
+	// only).
+	`SELECT tenant_id, COUNT(*) FROM transfers WHERE status = 'scanning' GROUP BY tenant_id ORDER BY tenant_id`: reasonAntivirusAlert,
 	// Deletion after the first download (identifiers only).
 	`SELECT tenant_id, id, delete_after FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? ` +
 		`AND status = 'available' AND (delete_after, tenant_id, id) > (?, ?, ?) ` +
@@ -765,6 +768,8 @@ var systemAllowlist = map[string]string{
 	`UPDATE system_settings SET disk_alert_level = ?, disk_alert_changed_at = ? WHERE id = 1 AND disk_alert_level = ?`: reasonSystemSettings,
 	`UPDATE system_settings SET disk_alert_mailed_at = ? WHERE id = 1 AND ` +
 		`(disk_alert_mailed_at IS NULL OR disk_alert_mailed_at <= ? OR disk_alert_mailed_at > ?)`: reasonSystemSettings,
+	`UPDATE system_settings SET antivirus_alert_mailed_at = ? WHERE id = 1 AND ` +
+		`(antivirus_alert_mailed_at IS NULL OR antivirus_alert_mailed_at <= ? OR antivirus_alert_mailed_at > ?)`: reasonSystemSettings,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

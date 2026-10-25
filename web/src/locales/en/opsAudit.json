@@ -158,6 +158,10 @@
       "alert_raised": "Disk space alert raised",
       "alert_cleared": "Disk space alert cleared"
     },
+    "antivirus": {
+      "alert_raised": "Antivirus alert raised",
+      "alert_cleared": "Antivirus alert cleared"
+    },
     "setup": {
       "completed": "Initial setup completed"
     }

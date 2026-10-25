@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/diskalert"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -76,6 +77,19 @@ func TestNewSystemMail(t *testing.T) {
 	if edited.DataDir != "/data" || edited.AdminLink != "https://"+adminHost+"/admin" || edited.Interval != time.Second ||
 		edited.Mailer == nil || edited.SMTP != on.settings {
 		t.Fatalf("options %+v", edited)
+	}
+
+	// The antivirus alert gets the same link and system channel; without
+	// system mail, no system mailer.
+	cfg := &config.Config{AdminHosts: []string{adminHost}}
+	av := antivirusAlertOptions(cfg, &runOptions{
+		avAlertOpts: func(o *avalert.Options) { o.Grace = time.Second },
+	}, on, avalert.Options{Pinger: nil})
+	if av.AdminLink != "https://"+adminHost+"/admin" || av.Grace != time.Second || av.SystemMailer == nil || av.SMTP != on.settings {
+		t.Fatalf("antivirus alert options %+v", av)
+	}
+	if av := antivirusAlertOptions(cfg, &runOptions{}, off, avalert.Options{}); av.SystemMailer != nil || av.Grace != 0 {
+		t.Fatalf("antivirus alert options without system mail %+v", av)
 	}
 }
 

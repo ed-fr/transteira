@@ -32,6 +32,10 @@ type labels struct {
 	adviceWithheld        string
 	deletionScheduled     string // %s: date and time
 	deletionOnce          string
+	operatorsMailed       string
+	operatorsNotMailed    string
+	waitingSummary        string // %d: transfers, %d: entities
+	waitingUnknown        string
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -73,6 +77,10 @@ var allLabels = map[string]*labels{
 		adviceWithheld:        "To share a withheld file, send it again in a new transfer.",
 		deletionScheduled:     "As you requested, the transfer is deleted after its first download: it will be permanently erased on %s.",
 		deletionOnce:          "This notice is sent only once: later downloads are not notified.",
+		operatorsMailed:       "The operators of the instance have been alerted.",
+		operatorsNotMailed:    "Contact the operator of the instance if the situation persists.",
+		waitingSummary:        "Transfers waiting for analysis: %d; entities concerned: %d.",
+		waitingUnknown:        "The number of transfers waiting could not be determined.",
 	},
 	i18n.French: {
 		colon:                 " :",
@@ -101,6 +109,10 @@ var allLabels = map[string]*labels{
 		adviceWithheld:        "Pour partager un fichier retenu, envoyez-le de nouveau dans un autre transfert.",
 		deletionScheduled:     "Comme vous l'avez demandé, le transfert est supprimé après son premier téléchargement : il sera définitivement effacé le %s.",
 		deletionOnce:          "Cet avis n'est envoyé qu'une fois : les téléchargements suivants ne sont pas signalés.",
+		operatorsMailed:       "Les exploitants de l'instance ont été alertés.",
+		operatorsNotMailed:    "Contactez l'exploitant de l'instance si la situation persiste.",
+		waitingSummary:        "Transferts en attente d'analyse : %d ; entités concernées : %d.", //nolint:misspell // French text
+		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.",   //nolint:misspell // French text
 	},
 }
 

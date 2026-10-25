@@ -10,7 +10,7 @@ import (
 )
 
 // reasonSystemSettings is the reason of the system settings queries.
-const reasonSystemSettings = "instance settings: maintenance, disk alert"
+const reasonSystemSettings = "instance settings: maintenance, disk and antivirus alerts"
 
 // Bounds of the disk alert threshold, in basis points (1/100 of a
 // percent): 0.50 to 0.99, 0.85 by default (spec 19).
@@ -62,6 +62,12 @@ var (
 	qSystemSettingsClaimMail = systemQuery(
 		`UPDATE system_settings SET disk_alert_mailed_at = ? WHERE id = 1 AND `+
 			`(disk_alert_mailed_at IS NULL OR disk_alert_mailed_at <= ? OR disk_alert_mailed_at > ?)`,
+		reasonSystemSettings)
+	// qSystemSettingsClaimAntivirusMail takes the antivirus alert mail slot
+	// on the same terms.
+	qSystemSettingsClaimAntivirusMail = systemQuery(
+		`UPDATE system_settings SET antivirus_alert_mailed_at = ? WHERE id = 1 AND `+
+			`(antivirus_alert_mailed_at IS NULL OR antivirus_alert_mailed_at <= ? OR antivirus_alert_mailed_at > ?)`,
 		reasonSystemSettings)
 )
 
@@ -291,13 +297,30 @@ func (r *SystemSettings) CompareAndSetDiskLevel(ctx context.Context, oldLevel, n
 // admin toggles the threshold. It returns ErrInvalid for a negative
 // minInterval.
 func (r *SystemSettings) ClaimDiskAlertMail(ctx context.Context, now time.Time, minInterval time.Duration) (bool, error) {
+	return r.claimMail(ctx, qSystemSettingsClaimMail, "disk", now, minInterval)
+}
+
+// ClaimAntivirusAlertMail records now (the store's clock when zero) as the
+// last mail of the antivirus alert, on the terms of
+// [SystemSettings.ClaimDiskAlertMail]: the caller mails the alert only when
+// it reports true, so that the alert mails stay minInterval apart whatever
+// the number of outages, across restarts. It returns ErrInvalid for a
+// negative minInterval.
+func (r *SystemSettings) ClaimAntivirusAlertMail(ctx context.Context, now time.Time, minInterval time.Duration) (bool, error) {
+	return r.claimMail(ctx, qSystemSettingsClaimAntivirusMail, "antivirus", now, minInterval)
+}
+
+// claimMail runs the conditional update q taking the mail slot of the
+// alert named what at now, unless the previous mail is less than
+// minInterval older and not dated after now.
+func (r *SystemSettings) claimMail(ctx context.Context, q SystemQuery, what string, now time.Time, minInterval time.Duration) (bool, error) {
 	if minInterval < 0 {
-		return false, invalid("negative disk alert mail interval")
+		return false, invalid("negative %s alert mail interval", what)
 	}
 	now = r.db.orNow(now)
 	won := false
 	err := r.db.systemScope(reasonSystemSettings).Tx(ctx, func(tx *SystemTx) error {
-		res, err := tx.Exec(ctx, qSystemSettingsClaimMail, toMillis(now), toMillis(now.Add(-minInterval)), toMillis(now))
+		res, err := tx.Exec(ctx, q, toMillis(now), toMillis(now.Add(-minInterval)), toMillis(now))
 		if err != nil {
 			return err
 		}
@@ -306,7 +329,7 @@ func (r *SystemSettings) ClaimDiskAlertMail(ctx context.Context, now time.Time, 
 		return err
 	})
 	if err != nil {
-		return false, wrap("claim disk alert mail", err)
+		return false, wrap("claim "+what+" alert mail", err)
 	}
 	return won, nil
 }

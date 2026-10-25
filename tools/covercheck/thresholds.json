@@ -16,6 +16,7 @@
     "internal/api/apiutil": 100,
     "internal/apitoken": 100,
     "internal/audit": 100,
+    "internal/avalert": 100,
     "internal/branding": 100,
     "internal/crypto": 100,
     "internal/datasubject": 100,

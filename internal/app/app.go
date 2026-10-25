@@ -28,6 +28,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/public"
 	"github.com/ed-fr/transteira/internal/apitoken"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
@@ -141,6 +142,7 @@ type runOptions struct {
 	scanOptions     func(*scan.Options)
 	lifecycleOpts   func(*lifecycle.Options)
 	diskAlertOpts   func(*diskalert.Options)
+	avAlertOpts     func(*avalert.Options)
 	rotationOpts    func(*keyrotation.Options)
 	webUI           fs.FS
 }
@@ -175,6 +177,12 @@ func WithLifecycleOptions(edit func(*lifecycle.Options)) Option {
 // monitor before it is created (tests: a fake Measure, a short Interval).
 func WithDiskAlertOptions(edit func(*diskalert.Options)) Option {
 	return func(o *runOptions) { o.diskAlertOpts = edit }
+}
+
+// WithAntivirusAlertOptions lets edit change the options of the antivirus
+// alert monitor before it is created (tests: a short Grace).
+func WithAntivirusAlertOptions(edit func(*avalert.Options)) Option {
+	return func(o *runOptions) { o.avAlertOpts = edit }
 }
 
 // WithListener serves on l instead of listening on cfg.ListenAddr (tests).
@@ -357,9 +365,22 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// at creation (transfer) and at unlock (download), and of the admin
 	// passwords (login, setup, activation, change).
 	passwords := crypto.NewPasswordHasher(transfer.DefaultHashConcurrency)
+	// The quota alerts, the antivirus alerts of the tenants and the resent
+	// notifications are queued through one retrier, so that a full queue
+	// delays them instead of dropping them.
+	opsMails := mail.NewRetrier(mailQueue, mail.RetryOptions{Logger: logger})
+	// The antivirus alert follows the outages the worker reports (decision
+	// P10): the super admins by system mail, the administrators of the
+	// tenants with transfers waiting through the tenant queue.
+	avAlerts, err := avalert.New(db, auditLog, antivirusAlertOptions(cfg, &o, sysMail, avalert.Options{
+		Notifier: notifier, TenantMailer: opsMails, Pinger: clamd, Logger: logger,
+	}))
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	worker := scan.New(scan.Deps{
 		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
-		Audit: auditLog, Usage: usageCounts,
+		Audit: auditLog, Usage: usageCounts, Outage: avAlerts,
 	}, scanOptions(cfg, &o, logger))
 	downloads := download.New(download.Deps{
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
@@ -385,9 +406,6 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err := rotations.WarnInterrupted(ctx); err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	// The quota alerts and the resent notifications are queued through one
-	// retrier, so that a full queue delays them instead of dropping them.
-	opsMails := mail.NewRetrier(mailQueue, mail.RetryOptions{Logger: logger})
 	quotas, err := quota.New(db, notifier, opsMails, auditLog, quota.Options{
 		AdminLink: adminBaseURL(cfg) + "/admin", Logger: logger,
 	})
@@ -404,7 +422,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// the admin mails stops and the usage counters get their final flush,
 	// while the database is still open.
 	defer closeStages(ctx, logger,
-		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, rotations}},
+		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations}},
 		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
@@ -420,6 +438,11 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
+	}
+	// Started before the worker, so that the outage its start-up sweep may
+	// find is followed at once (a report made earlier is kept anyway).
+	if err := avAlerts.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the antivirus alert monitor: %w", err)
 	}
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)

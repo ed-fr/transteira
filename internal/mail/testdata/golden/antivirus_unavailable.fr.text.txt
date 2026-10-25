@@ -1,0 +1,14 @@
+Bonjour,
+
+L'antivirus ne répond plus depuis le 13 octobre 2027 à 09:45 UTC. Transferts de l'entité Entity A & Co en attente d'analyse : 4.
+
+Les dépôts restent acceptés, mais ils demeurent en cours d'analyse : aucun fichier n'est remis sans avoir été analysé. Les transferts en attente seront analysés et remis automatiquement à leurs destinataires dès que l'antivirus répondra de nouveau ; leur durée de validité commencera à ce moment.
+
+Contactez l'exploitant de l'instance si la situation persiste. Si des expéditeurs demandent pourquoi leurs destinataires n'ont encore rien reçu, vous pouvez leur indiquer que la remise est retardée.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

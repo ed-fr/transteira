@@ -276,8 +276,8 @@ func TestWriterRefusesPersonalDetails(t *testing.T) {
 	}
 }
 
-// TestSystemActions records the instance events of step 14 (settings,
-// maintenance, master key rotation, disk alert) as global events, in one
+// TestSystemActions records the instance events (settings, maintenance,
+// master key rotation, disk and antivirus alerts) as global events, in one
 // transaction with a change of the system settings.
 func TestSystemActions(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
@@ -305,6 +305,14 @@ func TestSystemActions(t *testing.T) {
 				Details: map[string]any{"usedPercent": 91, "thresholdPercent": 85},
 			},
 			{ActorKind: store.ActorSystem, Actor: "disk", Action: audit.ActionDiskAlertCleared, ObjectKind: audit.ObjectSystem, ObjectID: "disk"},
+			{
+				ActorKind: store.ActorSystem, Actor: "antivirus", Action: audit.ActionAntivirusAlertRaised, ObjectKind: audit.ObjectSystem, ObjectID: "antivirus",
+				Details: map[string]any{"outageSeconds": 301, "waitingTransfers": 3, "tenants": 2},
+			},
+			{
+				ActorKind: store.ActorSystem, Actor: "antivirus", Action: audit.ActionAntivirusAlertCleared, ObjectKind: audit.ObjectSystem, ObjectID: "antivirus",
+				Details: map[string]any{"outageSeconds": 420},
+			},
 		}
 		_, err := db.SystemSettings().UpdateTx(ctx, func(tx *store.SystemTx, s *store.SystemSettingsRow) error {
 			s.MaintenanceEnabled = true

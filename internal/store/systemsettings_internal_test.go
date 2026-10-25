@@ -41,6 +41,14 @@ func TestSystemSettingsDriverFaults(t *testing.T) {
 			_, err := repo.ClaimDiskAlertMail(ctx, time.Time{}, time.Hour)
 			return err
 		}},
+		{"claim antivirus mail exec", faultExec, "SET antivirus_alert_mailed_at", func() error {
+			_, err := repo.ClaimAntivirusAlertMail(ctx, time.Time{}, time.Hour)
+			return err
+		}},
+		{"claim antivirus mail rows", faultRows, "SET antivirus_alert_mailed_at", func() error {
+			_, err := repo.ClaimAntivirusAlertMail(ctx, time.Time{}, time.Hour)
+			return err
+		}},
 	} {
 		plan.reset()
 		plan.add(c.op, c.match, 0)
@@ -84,5 +92,8 @@ func TestSystemSettingsDriverFaults(t *testing.T) {
 	}
 	if won, err := repo.ClaimDiskAlertMail(ctx, time.Time{}, time.Hour); err != nil || won {
 		t.Errorf("ClaimDiskAlertMail(no row) = %v, %v; want false", won, err)
+	}
+	if won, err := repo.ClaimAntivirusAlertMail(ctx, time.Time{}, time.Hour); err != nil || won {
+		t.Errorf("ClaimAntivirusAlertMail(no row) = %v, %v; want false", won, err)
 	}
 }

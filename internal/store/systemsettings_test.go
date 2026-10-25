@@ -204,5 +204,22 @@ func TestSystemSettings(t *testing.T) {
 		}
 		_, err = repo.ClaimDiskAlertMail(ctx, msNow, -time.Second)
 		wantErr(t, "ClaimDiskAlertMail(negative interval)", err, store.ErrInvalid)
+
+		// The antivirus alert has its own mail slot, on the same terms,
+		// independent of the disk alert's.
+		avClaim := func(now time.Time, want bool) {
+			t.Helper()
+			if won, err := repo.ClaimAntivirusAlertMail(ctx, now, time.Hour); err != nil || won != want {
+				t.Errorf("ClaimAntivirusAlertMail(%v) = %v, %v; want %v", now, won, err, want)
+			}
+		}
+		avClaim(mailed, true)                      // never mailed, although the disk alert was
+		avClaim(mailed.Add(30*time.Minute), false) // too soon
+		avClaim(mailed.Add(-time.Minute), true)    // clock set back
+		avClaim(time.Time{}, true)                 // the store's clock, still before: set back again
+		avClaim(msNow.Add(time.Hour), true)        // exactly an hour later
+		claim(msNow.Add(time.Hour), true)          // the disk slot was not touched by the antivirus claims
+		_, err = repo.ClaimAntivirusAlertMail(ctx, msNow, -time.Second)
+		wantErr(t, "ClaimAntivirusAlertMail(negative interval)", err, store.ErrInvalid)
 	})
 }

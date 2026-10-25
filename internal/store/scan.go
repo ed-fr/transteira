@@ -14,6 +14,10 @@ import (
 // transfers waiting for the antivirus across tenants.
 const reasonAntivirusSweep = "antivirus sweep"
 
+// reasonAntivirusAlert is the reason of the system query counting the
+// transfers waiting for the antivirus per tenant, for the antivirus alert.
+const reasonAntivirusAlert = "antivirus alert"
+
 // MaxScanSignatureBytes bounds the name of a detected signature, in bytes.
 const MaxScanSignatureBytes = 200
 
@@ -40,6 +44,12 @@ var (
 	qTransferScanningSweep = systemQuery(
 		`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`,
 		reasonAntivirusSweep)
+	// qTransferScanningCounts counts the transfers waiting for the
+	// antivirus per tenant, for the antivirus alert: identifiers and counts
+	// only.
+	qTransferScanningCounts = systemQuery(
+		`SELECT tenant_id, COUNT(*) FROM transfers WHERE status = 'scanning' GROUP BY tenant_id ORDER BY tenant_id`,
+		reasonAntivirusAlert)
 
 	qFileSetScanning = tenantQuery(
 		`UPDATE transfer_files SET scan_status = 'scanning'
@@ -161,6 +171,40 @@ func (r *Transfers) ScanningSweep(ctx context.Context) ([]TenantTransfer, error)
 	})
 	if err != nil {
 		return nil, wrap("sweep scanning transfers", err)
+	}
+	return out, nil
+}
+
+// TenantScanning is the number of transfers of a tenant waiting for the
+// antivirus, as returned by [Transfers.ScanningCounts].
+type TenantScanning struct {
+	// TenantID is the tenant.
+	TenantID tenant.ID
+	// Transfers is its number of transfers in the scanning status (at
+	// least 1).
+	Transfers int
+}
+
+// ScanningCounts returns, for every tenant with transfers waiting for the
+// antivirus (status scanning), the number of those transfers, ordered by
+// tenant ID. It is a system query returning identifiers and counts only,
+// for the antivirus alert: the caller reads each tenant in its own scope.
+func (r *Transfers) ScanningCounts(ctx context.Context) ([]TenantScanning, error) {
+	var out []TenantScanning
+	err := r.db.systemScope(reasonAntivirusAlert).ReadTx(ctx, func(tx *SystemTx) error {
+		rows, err := tx.Query(ctx, qTransferScanningCounts)
+		if err != nil {
+			return err
+		}
+		out, err = collect(rows, func(r *sql.Rows) (TenantScanning, error) {
+			var c TenantScanning
+			err := r.Scan(&c.TenantID, &c.Transfers)
+			return c, err
+		})
+		return err
+	})
+	if err != nil {
+		return nil, wrap("count scanning transfers", err)
 	}
 	return out, nil
 }

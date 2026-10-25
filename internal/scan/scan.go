@@ -39,7 +39,9 @@
 // file stays scanning and the transfer is retried after a delay that starts
 // at Options.RetryMin and doubles up to Options.RetryMax, shared by every
 // transfer during the incident; one warning is logged when the incident
-// starts and one line when clamd answers again. When clamd drops the
+// starts and one line when clamd answers again. Deps.Outage, when set, is
+// told of every failure and of the recovery, so that package avalert
+// alerts the administrators when the outage lasts. When clamd drops the
 // connection in the middle of an exchange, the failure always counts
 // against the file, so that a content crashing clamd reaches scan_error
 // instead of stalling every analysis (a real clamd restart costs the file in
@@ -199,12 +201,25 @@ type UsageCounter interface {
 	VirusDetected(tid tenant.ID, at time.Time)
 }
 
+// OutageObserver is told when clamd cannot be reached and when it answers
+// again, for the antivirus alert (decision P10). Its methods are called
+// with the worker lock held: they must not block nor call the worker.
+// *avalert.Monitor implements it.
+type OutageObserver interface {
+	// ClamdDown reports a failure to reach clamd: every one, not only the
+	// first of an outage, so that the observer can start a new outage
+	// after closing one itself.
+	ClamdDown()
+	// ClamdUp reports its end: clamd answered again.
+	ClamdUp()
+}
+
 // SystemActor is the actor (store.ActorSystem) of the audit events the
 // worker records.
 const SystemActor = "antivirus"
 
 // Deps are the components the worker relies on. Every field is required,
-// except Audit and Usage.
+// except Audit, Usage and Outage.
 type Deps struct {
 	// DB stores the transfers.
 	DB *store.DB
@@ -225,6 +240,9 @@ type Deps struct {
 	Audit AuditWriter
 	// Usage counts the virus detections; nil counts nothing.
 	Usage UsageCounter
+	// Outage is told when clamd becomes unreachable and answers again;
+	// nil tells nobody.
+	Outage OutageObserver
 }
 
 // Options tunes a [Worker]. Zero values select the defaults.
@@ -294,6 +312,7 @@ type Worker struct {
 	notifier Notifier
 	audit    AuditWriter
 	usage    UsageCounter
+	observer OutageObserver
 	mails    *mail.Retrier
 	opts     Options
 	logger   *slog.Logger
@@ -358,7 +377,7 @@ func New(deps Deps, opts Options) *Worker {
 	w := &Worker{
 		repo: storeRepo{db: deps.DB, vault: deps.Vault}, vault: deps.Vault, files: deps.Files,
 		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier,
-		audit: deps.Audit, usage: deps.Usage,
+		audit: deps.Audit, usage: deps.Usage, observer: deps.Outage,
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
 		}),
@@ -706,7 +725,8 @@ func (w *Worker) retryTransfer(k key) time.Duration {
 // delay doubles each time a probe fails. The first failure of an incident
 // logs one warning, naming culprit (the tenant, transfer and file IDs of a
 // content that dropped the connection) when given, so that the operator can
-// find a file crashing clamd.
+// find a file crashing clamd. Every failure, not only the first, is
+// reported to the outage observer.
 func (w *Worker) clamdDown(ctx context.Context, culprit ...slog.Attr) time.Duration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -723,10 +743,14 @@ func (w *Worker) clamdDown(ctx context.Context, culprit ...slog.Attr) time.Durat
 		w.outageDelay = min(2*w.outageDelay, w.opts.RetryMax)
 		w.nextProbe = now.Add(w.outageDelay)
 	}
+	if w.observer != nil {
+		w.observer.ClamdDown()
+	}
 	return max(w.nextProbe.Sub(now), time.Millisecond)
 }
 
-// clamdUp ends a clamd outage, logging it once.
+// clamdUp ends a clamd outage, logging it once and telling the outage
+// observer.
 func (w *Worker) clamdUp(ctx context.Context) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -735,6 +759,9 @@ func (w *Worker) clamdUp(ctx context.Context) {
 	}
 	w.outage = false
 	w.logger.LogAttrs(ctx, slog.LevelInfo, "antivirus available again")
+	if w.observer != nil {
+		w.observer.ClamdUp()
+	}
 }
 
 // sweepOnce queues the transfers still scanning and reports whether the

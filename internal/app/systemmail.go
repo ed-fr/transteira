@@ -6,18 +6,19 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/diskalert"
 	"github.com/ed-fr/transteira/internal/mail"
 )
 
 // systemQueueSize bounds the system mail queue: it only carries the disk
-// alert, one mail per super admin and the alert address.
+// and antivirus alerts, one mail per super admin and the alert address.
 const systemQueueSize = 100
 
-// systemMail is the mail channel of the instance mails (disk alert),
-// separate from the tenant mail queue: its own queue, circuit breaker and
-// drain, and its own SMTP sender.
+// systemMail is the mail channel of the instance mails (disk and antivirus
+// alerts), separate from the tenant mail queue: its own queue, circuit
+// breaker and drain, and its own SMTP sender.
 //
 // The sender is deliberately not guarded by TT_SMTP_DENY_NETWORKS: the
 // system SMTP server is installation configuration (TT_SYSTEM_SMTP_*), set
@@ -63,8 +64,8 @@ func newSystemMail(cfg *config.Config, logger *slog.Logger) (*systemMail, error)
 	}, nil
 }
 
-// mailer returns the mailer of the disk alert, nil when system mail is
-// disabled.
+// mailer returns the mailer of the disk and antivirus alerts, nil when
+// system mail is disabled.
 func (s *systemMail) mailer() diskalert.Mailer {
 	if s.retrier == nil {
 		return nil
@@ -103,6 +104,17 @@ func diskAlertOptions(cfg *config.Config, o *runOptions, sys *systemMail, logger
 	}
 	if o.diskAlertOpts != nil {
 		o.diskAlertOpts(&opts)
+	}
+	return opts
+}
+
+// antivirusAlertOptions completes opts, the options of the antivirus alert
+// monitor, with the administration link and the system mail channel, then
+// lets WithAntivirusAlertOptions edit them when given.
+func antivirusAlertOptions(cfg *config.Config, o *runOptions, sys *systemMail, opts avalert.Options) avalert.Options {
+	opts.AdminLink, opts.SystemMailer, opts.SMTP = adminBaseURL(cfg)+"/admin", sys.mailer(), sys.settings
+	if o.avAlertOpts != nil {
+		o.avAlertOpts(&opts)
 	}
 	return opts
 }

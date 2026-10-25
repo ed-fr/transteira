@@ -48,6 +48,19 @@ const (
 	// template key for it, so no entity can customize it; data:
 	// [DiskAlertData].
 	TemplateDiskAlert = "disk_alert"
+	// TemplateAntivirusAlert warns the super administrators, and the
+	// optional alert address of the system settings, that clamd has stayed
+	// unreachable beyond the grace period of the antivirus alert (decision
+	// P10, threat model T-42). Like [TemplateDiskAlert], it is an instance
+	// mail sent through the system SMTP server, never a tenant template;
+	// data: [AntivirusAlertData].
+	TemplateAntivirusAlert = "antivirus_alert"
+	// TemplateAntivirusUnavailable tells the delegated administrators of an
+	// entity (else the super administrators) that the antivirus has stopped
+	// responding while transfers of the entity wait for analysis (tenant
+	// template key "antivirus-unavailable"); data:
+	// [AntivirusUnavailableData].
+	TemplateAntivirusUnavailable = "antivirus_unavailable"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -241,6 +254,48 @@ type DiskAlertData struct {
 	// ThresholdPercent is the alert threshold, in percent (50 to 99),
 	// shown with at most two decimals.
 	ThresholdPercent float64
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
+}
+
+// AntivirusAlertData is the data of [TemplateAntivirusAlert]. It holds no
+// secret and no personal data: counts only, no entity, file or address.
+type AntivirusAlertData struct {
+	// Since is when clamd was first found unreachable, formatted with
+	// [FormatDateTime].
+	Since time.Time
+	// WaitingTransfers is the number of transfers waiting for analysis,
+	// across entities.
+	WaitingTransfers int
+	// Tenants is the number of entities with transfers waiting.
+	Tenants int
+	// CountUnknown is set when the transfers waiting could not be counted:
+	// the mail says so instead of showing WaitingTransfers and Tenants.
+	CountUnknown bool
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
+}
+
+// AntivirusUnavailableData is the data of [TemplateAntivirusUnavailable].
+// It holds no secret and no personal data.
+type AntivirusUnavailableData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// Since is when clamd was first found unreachable, formatted with
+	// [FormatDateTime].
+	Since time.Time
+	// WaitingTransfers is the number of transfers of the entity waiting
+	// for analysis.
+	WaitingTransfers int
+	// OperatorsMailed tells whether the super administrators were mailed
+	// the instance alert too (system SMTP server configured and recipients
+	// reached): the mail says so, or asks to contact the operator of the
+	// instance.
+	OperatorsMailed bool
 	// AdminLink is the absolute URL of the administration console, built
 	// from the configured admin host, never from a request Host. It carries
 	// no token.

@@ -346,7 +346,7 @@
       "invitation": "Sent to the external person invited to deposit.",
       "quota-warning": "Sent to the delegated administrators at 80% of the quota.",
       "quota-reached": "Sent to the delegated administrators when the quota is reached.",
-      "antivirus-unavailable": "Sent when the antivirus stops responding."
+      "antivirus-unavailable": "Sent to the administrators of the entity when the antivirus has not responded for several minutes while transfers are waiting for analysis."
     },
     "editor": {
       "title": "{template} ({language})",

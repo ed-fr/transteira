@@ -346,7 +346,7 @@
       "invitation": "Envoyé à la personne externe invitée à déposer.",
       "quota-warning": "Envoyé aux administrateurs délégués à 80 % du quota.",
       "quota-reached": "Envoyé aux administrateurs délégués lorsque le quota est atteint.",
-      "antivirus-unavailable": "Envoyé lorsque l’antivirus ne répond plus."
+      "antivirus-unavailable": "Envoyé aux administrateurs de l’entité lorsque l’antivirus ne répond plus depuis plusieurs minutes alors que des transferts attendent leur analyse."
     },
     "editor": {
       "title": "{template} ({language})",

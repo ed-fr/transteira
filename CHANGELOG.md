@@ -589,6 +589,20 @@ and the project follows [Semantic Versioning](https://semver.org/).
   reference, and from the README.
 - README: "How it works" section with an architecture diagram and the life of a transfer
   (Mermaid, rendered by GitHub), and a gallery of six generated screenshots.
+- Antivirus outage alert (threat model P10, T-42), `internal/avalert`: when clamd stays
+  unreachable while transfers wait for analysis, after a 5-minute grace period (so a restart or a
+  signature reload alerts nobody), confirmed by a PING (at most 3 postponements while the worker
+  keeps failing), a system mail to the super admins and the alert address, and the tenant
+  template `antivirus-unavailable`, now sent, to the delegated admins (else the super admins) of
+  each entity with transfers waiting; one mail per outage and at most one per hour, persisted
+  (migration 0013, `system_settings.antivirus_alert_mailed_at`), retried while the outage lasts
+  when held back by the hourly interval; the alert clears when clamd answers again, or when no
+  transfer waits any more and clamd answers a PING; audit actions `antivirus.alert_raised` and
+  `antivirus.alert_cleared`.
+- Default read and write deadline (30 s) set as soon as a request arrives, before tenant
+  resolution, rate limiting and routing (threat model T-123): requests refused early (421, 429,
+  404, 405) can no longer be held open; the matched operation's deadline replaces it and the
+  streaming routes still clear it.
 
 ### Changed
 - `make check` now runs `e2e-lint` (Prettier, ESLint, `tsc` and `npm audit` of `test/e2e`,
@@ -706,6 +720,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - README: the Development section mentions `make bigfile` and its prerequisites.
 
 ### Fixed
+- `docker-check` no longer fails at random on "no SQLite database": `grep -q` closed the pipe
+  while `docker cp` was still writing, and `pipefail` turned that write error into a failure.
 - Integrated help: inline errors inside a multi-line paragraph, list item or note point to their
   own line; a missing guide is reported once and a missing or invalid screenshots manifest gives a
   `file:line` error instead of a stack trace; a failed reload while a guide is shown displays the

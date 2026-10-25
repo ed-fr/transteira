@@ -53,6 +53,50 @@ message when clamd answers again. Transfers still `scanning` when TransTeira
 stops are resumed at the next start. `/healthz` reports `clamav: unavailable`
 meanwhile, so your monitoring (for example Uptime Kuma) can alert you.
 
+TransTeira also alerts the administrators itself when the outage lasts
+(antivirus alert). The outage is detected by the antivirus worker while it
+analyses deposits: when no deposit is waiting, only `/healthz` shows that
+clamd is down.
+
+- an outage shorter than **5 minutes** (a clamd restart, a signature
+  reload) alerts nobody: it is only logged (`antivirus outage ended before
+  the alert`). Before raising the alert, TransTeira pings clamd once more
+  and counts the transfers waiting: if clamd answers, the alert is
+  postponed by another 5 minutes, the worker confirming the recovery at its
+  next retry; after 3 postponements while the worker still fails (clamd
+  answering PING but not the analyses), it is raised anyway. If no transfer
+  waits any more, the outage is closed without alert (the next failure
+  starts a new one);
+- beyond, the alert is **raised**: a warning in the application log, the
+  audit event `antivirus.alert_raised` (system actor `antivirus`, details
+  `outageSeconds`, `waitingTransfers` and `tenants`) and, if the
+  [system SMTP server](admin.md#system-smtp-server) is configured, the
+  `antivirus_alert` mail to every super admin that can sign in and to the
+  alert address of the system settings (counts only: no entity, file or
+  address). The delegated admins of each entity with transfers waiting
+  (else the super admins) also receive the entity's `antivirus-unavailable`
+  template, customizable by the entity, through the SMTP settings of the
+  entity;
+- it is sent **once per outage**, and the alert mails are **at least one
+  hour apart** whatever the number of outages: an outage within the hour of
+  the last mail is logged and audited at once, but mailed only once the
+  hour has passed, if it still lasts and transfers still wait (log line
+  `antivirus alert not mailed yet: an alert mail was sent less than an hour
+  ago`; the mail slot is tried again every 5 minutes). The time of the last
+  mail is stored in the database, so a restart keeps the interval;
+- the entity mail says whether the super admins were alerted too, or, when
+  the system SMTP server is not configured, asks to contact the operator of
+  the instance;
+- when clamd answers again, the alert **clears**: audit event
+  `antivirus.alert_cleared` (details `outageSeconds`), no mail. It also
+  clears when no transfer waits any more and clamd answers a PING (checked
+  every 5 minutes while the alert is raised).
+
+The outage itself is followed in memory: after a restart, the grace period
+starts again from the first failure seen by the new process when it resumes
+the waiting transfers (a raised alert of the previous process then has no
+matching `antivirus.alert_cleared`).
+
 The validity of a transfer (1, 7 or 30 days) starts when it becomes
 available, so an outage never shortens it. A transfer still `scanning`
 30 days after its finalization is abandoned by the cleanup task: its keys

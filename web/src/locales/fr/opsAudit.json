@@ -158,6 +158,10 @@
       "alert_raised": "Alerte d’espace disque déclenchée",
       "alert_cleared": "Alerte d’espace disque levée"
     },
+    "antivirus": {
+      "alert_raised": "Alerte antivirus déclenchée",
+      "alert_cleared": "Alerte antivirus levée"
+    },
     "setup": {
       "completed": "Initialisation terminée"
     }

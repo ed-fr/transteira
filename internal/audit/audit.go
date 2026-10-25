@@ -127,8 +127,8 @@ const (
 )
 
 // Actions of the instance: settings, maintenance mode, master key
-// rotation and disk alert. They are global events (no tenant), each listed
-// in the AuditAction enumeration of the specification.
+// rotation, disk and antivirus alerts. They are global events (no tenant),
+// each listed in the AuditAction enumeration of the specification.
 const (
 	// ActionConfigUpdated: the super admin changed the instance settings
 	// (details carry the names of the changed fields only, never their
@@ -157,6 +157,13 @@ const (
 	// ActionDiskAlertCleared: the disk usage fell 5 points below the alert
 	// threshold.
 	ActionDiskAlertCleared Action = "disk.alert_cleared"
+	// ActionAntivirusAlertRaised: clamd stayed unreachable beyond the grace
+	// period of the antivirus alert (recorded even when no mail can be
+	// sent).
+	ActionAntivirusAlertRaised Action = "antivirus.alert_raised"
+	// ActionAntivirusAlertCleared: clamd answered again after a raised
+	// antivirus alert.
+	ActionAntivirusAlertCleared Action = "antivirus.alert_cleared"
 )
 
 // Object kinds.

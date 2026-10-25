@@ -109,6 +109,8 @@ export const AUDIT_ACTION_GROUPS = [
       'config.updated',
       'disk.alert_raised',
       'disk.alert_cleared',
+      'antivirus.alert_raised',
+      'antivirus.alert_cleared',
       'master_key.rotation_started',
       'master_key.rotation_completed',
       'master_key.rotation_failed',

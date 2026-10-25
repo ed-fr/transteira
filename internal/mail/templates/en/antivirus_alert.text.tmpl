@@ -1,0 +1,16 @@
+Hello,
+
+The antivirus of TransTeira (clamd) has not been responding since {{outage_since}}.
+
+{{waiting_summary}}
+
+Deposits are still accepted, but they stay in analysis: no file is delivered without having been scanned. The waiting transfers are analyzed and delivered automatically as soon as the antivirus answers again.
+
+Check that the clamd container is running and healthy (its logs, its memory, the download of its signatures) and that TransTeira can reach it; the procedure is described in the operations documentation (docs/operations/antivirus.md). This alert is sent once per outage, and at most once an hour.
+
+Administration:
+
+{{admin_link}}
+
+-- 
+This message was sent automatically by TransTeira. Please do not reply to it.

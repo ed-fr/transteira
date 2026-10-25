@@ -54,6 +54,8 @@ const (
 	AuditActionAdminTotpEnrolled          AuditAction = "admin.totp_enrolled"
 	AuditActionAdminTotpResetLocal        AuditAction = "admin.totp_reset_local"
 	AuditActionAdminUpdated               AuditAction = "admin.updated"
+	AuditActionAntivirusAlertCleared      AuditAction = "antivirus.alert_cleared"
+	AuditActionAntivirusAlertRaised       AuditAction = "antivirus.alert_raised"
 	AuditActionApiTokenCreated            AuditAction = "api_token.created"
 	AuditActionApiTokenRevoked            AuditAction = "api_token.revoked"
 	AuditActionApiTokenUpdated            AuditAction = "api_token.updated"
@@ -130,6 +132,10 @@ func (e AuditAction) Valid() bool {
 	case AuditActionAdminTotpResetLocal:
 		return true
 	case AuditActionAdminUpdated:
+		return true
+	case AuditActionAntivirusAlertCleared:
+		return true
+	case AuditActionAntivirusAlertRaised:
 		return true
 	case AuditActionApiTokenCreated:
 		return true
@@ -1439,7 +1445,10 @@ type ApiTokenUpdate = json.RawMessage
 // `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
 // the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
 // (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-// mail can be sent.
+// mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+// details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
+// (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+// `system`, without tenant, and are recorded even when no mail can be sent.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -1461,7 +1470,10 @@ type AuditEvent struct {
 	// `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
 	// the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
 	// (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-	// mail can be sent.
+	// mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+	// details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
+	// (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+	// `system`, without tenant, and are recorded even when no mail can be sent.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id   string              `json:"id"`
@@ -1661,7 +1673,9 @@ type EmailTemplate struct {
 	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
 	// available; `first-download` tells the sender, only once, that the transfer has been
 	// downloaded in full for the first time, and when it will be erased if it is deleted after
-	// its first download.
+	// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
+	// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
+	// while transfers of the entity wait for analysis, once per outage.
 	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
@@ -1685,7 +1699,9 @@ type EmailTemplate struct {
 // `transfer-confirmation` go to the recipients and to the sender once a transfer is
 // available; `first-download` tells the sender, only once, that the transfer has been
 // downloaded in full for the first time, and when it will be erased if it is deleted after
-// its first download.
+// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
+// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
+// while transfers of the entity wait for analysis, once per outage.
 // Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type EmailTemplateKey string
@@ -1701,7 +1717,9 @@ type EmailTemplateSummary struct {
 	// `transfer-confirmation` go to the recipients and to the sender once a transfer is
 	// available; `first-download` tells the sender, only once, that the transfer has been
 	// downloaded in full for the first time, and when it will be erased if it is deleted after
-	// its first download.
+	// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
+	// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
+	// while transfers of the entity wait for analysis, once per outage.
 	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 	// `recipient-verification-code`.
 	Key EmailTemplateKey `json:"key"`
@@ -2525,7 +2543,9 @@ type RecognitionCookie = string
 // `transfer-confirmation` go to the recipients and to the sender once a transfer is
 // available; `first-download` tells the sender, only once, that the transfer has been
 // downloaded in full for the first time, and when it will be erased if it is deleted after
-// its first download.
+// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
+// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
+// while transfers of the entity wait for analysis, once per outage.
 // Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
 // `recipient-verification-code`.
 type TemplateKey = EmailTemplateKey

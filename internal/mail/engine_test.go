@@ -369,10 +369,10 @@ func TestRenderFor(t *testing.T) {
 
 func TestPreviewAndVariables(t *testing.T) {
 	for _, name := range TemplateNames() {
-		// The disk alert is an instance mail: it names the service, not
-		// an entity.
+		// The disk and antivirus alerts are instance mails: they name the
+		// service, not an entity.
 		want := sampleTenant
-		if name == TemplateDiskAlert {
+		if name == TemplateDiskAlert || name == TemplateAntivirusAlert {
 			want = "TransTeira"
 		}
 		for _, lang := range i18n.Supported() {

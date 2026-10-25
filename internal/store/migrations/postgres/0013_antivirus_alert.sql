@@ -1,0 +1,13 @@
+-- 0013_antivirus_alert (PostgreSQL): persisted state of the antivirus alert
+-- (decision P10, threat model T-42): when clamd stays unreachable, the super
+-- admins and the delegated admins of the entities with transfers waiting
+-- for analysis are alerted. Keep in sync with
+-- migrations/sqlite/0013_antivirus_alert.sql. Timestamps are Unix
+-- milliseconds (UTC).
+--
+-- antivirus_alert_mailed_at is the last time the antivirus alert was
+-- mailed: the alert mails are at least an hour apart, whatever the number
+-- of outages and across restarts (taken by a conditional update, like
+-- disk_alert_mailed_at). NULL: never mailed. The row-level security policy
+-- of system_settings (0012) already covers the new column.
+ALTER TABLE system_settings ADD COLUMN antivirus_alert_mailed_at BIGINT;

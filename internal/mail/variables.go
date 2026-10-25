@@ -219,7 +219,38 @@ var keyDefs = map[string]keyDef{
 			AdminLink: "https://admin.transfer.example.com/admin",
 		},
 	},
+	TemplateAntivirusAlert: {
+		vars: []varSpec{
+			outageSinceVar,
+			{"waiting_summary", VarText, false, "Number of transfers waiting for analysis and of entities concerned, or that they could not be counted."},
+			adminLinkVar,
+		},
+		values: antivirusAlertValues,
+		sample: AntivirusAlertData{
+			Since: sampleTime, WaitingTransfers: 7, Tenants: 2, AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
+	TemplateAntivirusUnavailable: {
+		vars: []varSpec{
+			tenantVar,
+			outageSinceVar,
+			{"waiting_transfers", VarText, false, "Number of transfers of the entity waiting for analysis."},
+			{"operators_notice", VarText, false, "Whether the operators of the instance were alerted, or to contact the operator of the instance."},
+			adminLinkVar,
+		},
+		values: antivirusUnavailableValues,
+		sample: AntivirusUnavailableData{
+			TenantName: sampleTenant, Since: sampleTime, WaitingTransfers: 3, OperatorsMailed: true,
+			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
 }
+
+// Variables of the antivirus alerts.
+var (
+	outageSinceVar = varSpec{"outage_since", VarText, true, "Date and time when the antivirus was first found unreachable."}
+	adminLinkVar   = varSpec{"admin_link", VarURL, false, "Link to the administration console."}
+)
 
 // Thresholds of the quota alerts, in percent of the quota (CLAUDE.md
 // section 8.5), shown by the quota alert mails. Package quota raises the
@@ -467,6 +498,44 @@ func diskAlertValues(_ *labels, lang string, data any) (map[string]value, bool) 
 		"threshold_percent": textValue(formatDecimalPercent(lang, d.ThresholdPercent)),
 		"used_size":         textValue(FormatSize(lang, d.UsedBytes)),
 		"total_size":        textValue(FormatSize(lang, d.TotalBytes)),
+		"admin_link":        urlValue(d.AdminLink),
+	}, true
+}
+
+// antivirusAlertValues returns the variables of the antivirus_alert
+// template from an AntivirusAlertData.
+func antivirusAlertValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(AntivirusAlertData)
+	if !ok {
+		return nil, false
+	}
+	summary := l.waitingUnknown
+	if !d.CountUnknown {
+		summary = fmt.Sprintf(l.waitingSummary, d.WaitingTransfers, d.Tenants)
+	}
+	return map[string]value{
+		"outage_since":    textValue(FormatDateTime(lang, d.Since)),
+		"waiting_summary": textValue(summary),
+		"admin_link":      urlValue(d.AdminLink),
+	}, true
+}
+
+// antivirusUnavailableValues returns the variables of the
+// antivirus_unavailable template from an AntivirusUnavailableData.
+func antivirusUnavailableValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(AntivirusUnavailableData)
+	if !ok {
+		return nil, false
+	}
+	notice := l.operatorsNotMailed
+	if d.OperatorsMailed {
+		notice = l.operatorsMailed
+	}
+	return map[string]value{
+		"operators_notice":  textValue(notice),
+		"tenant_name":       textValue(d.TenantName),
+		"outage_since":      textValue(FormatDateTime(lang, d.Since)),
+		"waiting_transfers": textValue(strconv.Itoa(d.WaitingTransfers)),
 		"admin_link":        urlValue(d.AdminLink),
 	}, true
 }

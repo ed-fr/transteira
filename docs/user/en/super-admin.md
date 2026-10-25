@@ -169,7 +169,7 @@ The system settings hold the disk usage alert of the whole instance.
 ![System settings with the alert threshold and the additional alert address](../screenshots/en/admin-system-settings.png)
 
 - **Alert threshold (% of the data disk)**: a percentage from 50 to 99, 85 by default. The alert is raised when disk usage reaches the threshold and clears once it falls 5 points below.
-- **Additional alert address**: optional, it receives the disk alert in addition to the super administrators. This address is not verified: type it a second time in **Alert address again** and check it carefully. Leave the field empty to remove it.
+- **Additional alert address**: optional, it receives the disk alert and the antivirus alert in addition to the super administrators. This address is not verified: type it a second time in **Alert address again** and check it carefully. Leave the field empty to remove it.
 
 Click **Save**. The alert mails go through the system SMTP server of the instance, configured by environment variables, never through the SMTP settings of an entity. Without it, no alert mail is sent.
 
@@ -180,7 +180,7 @@ The global audit log gathers the audit events of every entity and of the instanc
 
 ![Global audit log with the Entity filter and the Entity column](../screenshots/en/admin-system-audit.png)
 
-With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts and master key rotations. With an entity selected, only the events of that entity are shown. Events are kept 12 months.
+With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts, antivirus alerts and master key rotations. With an entity selected, only the events of that entity are shown. Events are kept 12 months.
 
 <!-- topic: system-master-key -->
 ### Master key
@@ -217,6 +217,6 @@ A few habits keep the instance safe and recoverable.
 - Keep two super administrators, each with their own authenticator.
 - Store your recovery codes in the password vault, not next to your phone.
 - Keep a copy of the master key in the password vault outside the VM, with its identifier, and update it at each rotation.
-- Configure the system SMTP server so that you receive the disk alert, and watch the health check with your monitoring tool.
+- Configure the system SMTP server so that you receive the disk alert and the antivirus alert (sent when the antivirus has not answered for 5 minutes: deposits then stay in analysis), and watch the health check with your monitoring tool.
 - When an entity is left without a delegated administrator, review its SMTP settings: its quota alerts are then sent to you through them.
 - Check that the backups described in `docs/operations/backup.md` run, and rotate the master key at least once per backup retention period.

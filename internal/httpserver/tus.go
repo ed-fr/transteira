@@ -153,8 +153,10 @@ func (w *tusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 // that read deadline at once, or the idle timeout when shorter for a tus
 // operation (HEAD, DELETE); deadlineMiddleware sets the policy deadline
 // again, with the write deadline, when the operation runs. Streaming routes without
-// deadline get none here: a read deadline would make net/http cancel a
-// long download when its background read times out.
+// deadline keep here the default deadline set on every request (New), so
+// that an early rejection is still bounded; deadlineMiddleware clears it
+// before the operation runs, since a read deadline would make net/http
+// cancel a long download when its background read times out.
 //
 // It wraps the API router itself, not a per-operation middleware, because
 // the generated code binds the parameters before the middlewares run: the

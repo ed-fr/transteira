@@ -90,7 +90,9 @@ for _ in $(seq 1 60); do
 		"$docker" logs "$container" >&2 || true
 		fail "the server exited during startup"
 	fi
-	if "$docker" logs "$container" 2>&1 | grep -q 'HTTP server listening'; then
+	# grep without -q reads the whole stream: an early exit would close the pipe on a writer
+	# still running and fail the pipeline under pipefail.
+	if "$docker" logs "$container" 2>&1 | grep 'HTTP server listening' >/dev/null; then
 		listening=1
 		break
 	fi
@@ -116,10 +118,10 @@ else
 	fail "healthcheck did not reach /healthz: $out"
 fi
 
-# 7. Files written in the volumes.
-"$docker" cp "$container:/var/lib/transteira/db" - | tar -t | grep -q 'transteira\.db$' ||
+# 7. Files written in the volumes (grep without -q, see step 4: docker cp must not get EPIPE).
+"$docker" cp "$container:/var/lib/transteira/db" - | tar -t | grep 'transteira\.db$' >/dev/null ||
 	fail "no SQLite database in /var/lib/transteira/db"
-"$docker" cp "$container:/logs" - | tar -t | grep -q '\.log$' ||
+"$docker" cp "$container:/logs" - | tar -t | grep '\.log$' >/dev/null ||
 	fail "no security log in /logs"
 echo "docker-check: database and security log written in their volumes"
 

@@ -955,8 +955,9 @@ visible there, in the audit log and in the application log: configure it.
 
 ## System SMTP server
 
-The disk alert concerns the whole instance, so it is not sent through the
-SMTP server of a tenant: it uses a **system SMTP server** configured by
+The disk alert and the antivirus alert (see [Antivirus](antivirus.md#when-clamd-is-unavailable-fail-closed))
+concern the whole instance, so they are not sent through the SMTP server of
+a tenant: they use a **system SMTP server** configured by
 environment variables (see `.env.example` for every rule):
 
 | Variable | Role |
@@ -1042,7 +1043,7 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Blocklist | `blocklist.updated` (`op`, `kind`, `entryId`, and the value for a domain or a fingerprint) |
 | API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token; actor: the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; object: the token) |
 | Data subject rights | `data_subject.searched`, `data_subject.erased` (counts only; object: the pseudonym) |
-| Instance (no tenant) | `maintenance.enabled`, `maintenance.disabled` (message languages only), `config.updated` (system settings: names of the changed fields only), `disk.alert_raised`, `disk.alert_cleared` (system actor `disk`), `master_key.rotation_started`, `master_key.rotation_completed`, `master_key.rotation_failed` (see [Master key](master-key.md#audit)) |
+| Instance (no tenant) | `maintenance.enabled`, `maintenance.disabled` (message languages only), `config.updated` (system settings: names of the changed fields only), `disk.alert_raised`, `disk.alert_cleared` (system actor `disk`), `antivirus.alert_raised`, `antivirus.alert_cleared` (system actor `antivirus`, see [Antivirus](antivirus.md#when-clamd-is-unavailable-fail-closed)), `master_key.rotation_started`, `master_key.rotation_completed`, `master_key.rotation_failed` (see [Master key](master-key.md#audit)) |
 
 The list is extensible: later versions add actions. A filter on an action
 of the right form that does not exist yet simply returns nothing.

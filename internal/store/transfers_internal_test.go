@@ -148,6 +148,14 @@ func TestTransferDriverFaults(t *testing.T) {
 		}
 		return func() error { _, err := f.db.Transfers().ScanningSweep(ctx); return err }
 	}
+	// counts finalizes the fixture's transfer, then counts the scanning
+	// transfers per tenant.
+	counts := func(f *transferFixture) func() error {
+		if err := setStatus(f, TransferUploading, TransferScanning)(); err != nil {
+			panic(err)
+		}
+		return func() error { _, err := f.db.Transfers().ScanningCounts(ctx); return err }
+	}
 
 	steps := []struct {
 		name, op, match string
@@ -203,6 +211,8 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"shrink transfer", faultExec, "SET total_bytes = total_bytes", func(_ *testing.T, f *transferFixture) func() error { return eraseFile(f) }},
 		{"sweep", faultQuery, "WHERE status = 'scanning' ORDER BY", func(_ *testing.T, f *transferFixture) func() error { return sweep(f) }},
 		{"sweep scan", faultScanNil, "WHERE status = 'scanning' ORDER BY", func(_ *testing.T, f *transferFixture) func() error { return sweep(f) }},
+		{"scanning counts", faultQuery, "WHERE status = 'scanning' GROUP BY", func(_ *testing.T, f *transferFixture) func() error { return counts(f) }},
+		{"scanning counts scan", faultScanNil, "WHERE status = 'scanning' GROUP BY", func(_ *testing.T, f *transferFixture) func() error { return counts(f) }},
 	}
 	for _, s := range steps {
 		t.Run(s.name, func(t *testing.T) {

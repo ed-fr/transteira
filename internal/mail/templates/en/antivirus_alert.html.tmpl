@@ -1,0 +1,10 @@
+<h1 style="font-size:20px;margin:0 0 16px;">TransTeira</h1>
+<p>Hello,</p>
+<p>The antivirus of TransTeira (clamd) has not been responding since <strong>{{outage_since}}</strong>.</p>
+<p>{{waiting_summary}}</p>
+<p>Deposits are still accepted, but they stay in analysis: no file is delivered without having been scanned. The waiting transfers are analyzed and delivered automatically as soon as the antivirus answers again.</p>
+<p>Check that the clamd container is running and healthy (its logs, its memory, the download of its signatures) and that TransTeira can reach it; the procedure is described in the operations documentation (docs/operations/antivirus.md). This alert is sent once per outage, and at most once an hour.</p>
+<p><a href="{{admin_link}}" style="padding:12px 20px;background-color:#1a1a1a;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:4px;">Open the administration</a></p>
+<p>If the button does not work, copy this address into your browser:<br><span style="word-break:break-all;">{{admin_link}}</span></p>
+<hr style="border:0;border-top:1px solid #767676;margin:24px 0 16px;">
+<p style="font-size:14px;color:#4a4a4a;">This message was sent automatically by TransTeira. Please do not reply to it.</p>

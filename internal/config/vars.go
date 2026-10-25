@@ -284,10 +284,10 @@ func Variables() []Var {
 		{
 			Name: EnvSystemSMTPHost, Group: "Mail",
 			Description: "Host name or IP address of the SMTP server of the instance mails (the disk " +
-				"alert sent to the super admins), distinct from the SMTP servers of the entities, " +
-				"which are set in the administration. Empty (default): system mail is disabled and " +
-				"the disk alert is only shown in the administration, the audit log and the " +
-				"application log; " + EnvSystemSMTPPort + ", " + EnvSystemSMTPFrom + ", " +
+				"and antivirus alerts sent to the super admins), distinct from the SMTP servers of " +
+				"the entities, which are set in the administration. Empty (default): system mail is " +
+				"disabled and these alerts are only shown in the administration, the audit log and " +
+				"the application log; " + EnvSystemSMTPPort + ", " + EnvSystemSMTPFrom + ", " +
 				EnvSystemSMTPUsername + " and " + EnvSystemSMTPPasswordFile + " are then refused. As an installation setting it may be a relay on " +
 				"loopback or on the internal Docker network: " + EnvSMTPDenyNetworks + " does not apply.",
 		},

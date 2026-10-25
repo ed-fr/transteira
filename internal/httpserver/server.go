@@ -8,13 +8,17 @@
 //
 //  1. panic recovery;
 //  2. request identifier;
-//  3. real client IP (trusted proxies only);
-//  4. security headers;
-//  5. rate limit per client IP: the asset limit for the build files of
+//  3. default read and write deadlines (RequestDeadline), so that a request
+//     refused before its operation is chosen (421, 429, 404, 405) cannot be
+//     read slowly forever; the matched operation replaces them, and the
+//     streaming routes clear them;
+//  4. real client IP (trusted proxies only);
+//  5. security headers;
+//  6. rate limit per client IP: the asset limit for the build files of
 //     the web interface (GET and HEAD under /assets/, any Host), the
 //     global limit for every other request;
-//  6. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
-//  7. routing by the raw Host header (never X-Forwarded-Host):
+//  7. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
+//  8. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
 //     tenant resolution: it serves /api/v1/admin/* and /api/v1/version,
 //     and the interactive API documentation (/api/docs) to an
@@ -32,7 +36,7 @@
 //     webUI.tenantHandler): a 404 Problem under /api, a 405 Problem for a
 //     method other than GET and HEAD, the build files, and the public
 //     application (200 on its routes, 404 elsewhere);
-//  8. per-operation middlewares of the API router, before any body is read,
+//  9. per-operation middlewares of the API router, before any body is read,
 //     all driven by the route policy table [routePolicies]: read and write
 //     deadlines (except streaming routes), maintenance mode (deposit
 //     operations get 503), API token of the operations accepting one when
@@ -109,7 +113,8 @@ const (
 // WriteTimeout, which would cut tus uploads and file downloads of several
 // gigabytes; every other API operation gets these deadlines, set when the
 // operation is matched, so that a slow client cannot hold a connection
-// indefinitely.
+// indefinitely. Before that, every request gets RequestDeadline as soon as
+// it is received, which the operation then replaces.
 const (
 	// RequestDeadline bounds reading the request body and writing the
 	// response of an ordinary (JSON) API operation.
@@ -352,6 +357,15 @@ type options struct {
 	unknownHostLimiter middleware.Limiter
 	adminAuthLimiter   middleware.Limiter
 	tokenFailures      TokenFailures
+	// defaultDeadline is the read and write deadline set on every request
+	// before tenant resolution, rate limiting and routing.
+	defaultDeadline time.Duration
+}
+
+// withDefaultDeadline replaces the default deadline of the requests
+// (RequestDeadline), for tests.
+func withDefaultDeadline(d time.Duration) Option {
+	return func(o *options) { o.defaultDeadline = d }
 }
 
 // WithGlobalLimiter replaces the global per-IP limiter (GlobalRate and
@@ -398,6 +412,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		unknownHostLimiter: ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
 		adminAuthLimiter:   ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
 		tokenFailures:      newTokenFailures(),
+		defaultDeadline:    RequestDeadline,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -530,6 +545,17 @@ func New(deps Deps, opts ...Option) http.Handler {
 	return middleware.Chain(dispatch,
 		middleware.Recover(logger),
 		middleware.AssignRequestID,
+		// Default deadlines (threat T-123), set before tenant resolution,
+		// rate limiting and routing: a request refused before its
+		// operation is chosen (421, 429, 404, 405) leaves its body unread,
+		// and net/http drains up to 256 KiB of it after the handler, under
+		// this read deadline. They also replace the deadlines a previous
+		// request left on a keep-alive connection. The matched operation
+		// then sets its own (deadlineMiddleware, idleBodyHandler,
+		// idleWriteMiddleware, fixedDeadline), and the streaming routes
+		// clear them, so that this default never cuts an upload or a
+		// download.
+		fixedDeadline(o.defaultDeadline, logger),
 		middleware.RealIP(trusted),
 		middleware.SecurityHeaders(),
 		// Every request is charged to exactly one of the two limiters:
@@ -603,9 +629,10 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 // deadlineMiddleware sets the read and write deadlines of the matched
-// operation (see routePolicies) on the connection. Streaming routes get
-// none: their deadlines are cleared, since net/http does not reset a
-// deadline that an earlier request on a keep-alive connection set. A
+// operation (see routePolicies) on the connection, replacing the default
+// deadlines set on every request by New. Streaming routes get none: their
+// deadlines are cleared (the default, and any deadline that net/http left
+// from an earlier request on a keep-alive connection). A
 // writer that does not support deadlines (http.ErrNotSupported, as in
 // tests) is accepted silently; any other failure is logged at debug level
 // and the request proceeds.

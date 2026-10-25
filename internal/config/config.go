@@ -222,8 +222,9 @@ type Config struct {
 	// SMTPDenyNetworks lists the networks a tenant SMTP server may never
 	// resolve to (SSRF protection), checked at connection time.
 	SMTPDenyNetworks []netip.Prefix
-	// SystemSMTP is the SMTP server of the instance mails (disk alert to
-	// the super admins), distinct from the SMTP servers of the tenants.
+	// SystemSMTP is the SMTP server of the instance mails (disk and
+	// antivirus alerts to the super admins), distinct from the SMTP servers
+	// of the tenants.
 	// It is disabled when its Host is empty.
 	SystemSMTP SystemSMTP
 

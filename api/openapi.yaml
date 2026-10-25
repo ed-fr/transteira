@@ -5366,7 +5366,9 @@ components:
         `transfer-confirmation` go to the recipients and to the sender once a transfer is
         available; `first-download` tells the sender, only once, that the transfer has been
         downloaded in full for the first time, and when it will be erased if it is deleted after
-        its first download.
+        its first download; `antivirus-unavailable` goes to the delegated admins of an entity
+        (else the super admins) when the antivirus has stayed unreachable beyond the grace period
+        while transfers of the entity wait for analysis, once per outage.
         Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
         `recipient-verification-code`.
       enum:
@@ -5617,7 +5619,10 @@ components:
         `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
         the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
         (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-        mail can be sent.
+        mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+        details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
+        (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+        `system`, without tenant, and are recorded even when no mail can be sent.
       enum:
         - transfer.created
         - transfer.finalized
@@ -5675,6 +5680,8 @@ components:
         - master_key.rotation_failed
         - disk.alert_raised
         - disk.alert_cleared
+        - antivirus.alert_raised
+        - antivirus.alert_cleared
         - setup.completed
     AuditEvent:
       type: object

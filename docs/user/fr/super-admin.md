@@ -169,7 +169,7 @@ Les paramètres du système portent l’alerte d’occupation du disque de toute
 ![Paramètres du système avec le seuil d’alerte et l’adresse d’alerte supplémentaire](../screenshots/fr/admin-system-settings.png)
 
 - **Seuil d’alerte (% du disque de données)** : un pourcentage de 50 à 99, 85 par défaut. L’alerte se lève quand l’occupation du disque atteint le seuil et retombe quand elle redescend 5 points en dessous.
-- **Adresse d’alerte supplémentaire** : facultative, elle reçoit l’alerte disque en plus des super administrateurs. Cette adresse n’est pas vérifiée : saisissez-la une seconde fois dans **Adresse d’alerte, de nouveau** et contrôlez-la soigneusement. Laissez le champ vide pour la retirer.
+- **Adresse d’alerte supplémentaire** : facultative, elle reçoit l’alerte disque et l’alerte antivirus en plus des super administrateurs. Cette adresse n’est pas vérifiée : saisissez-la une seconde fois dans **Adresse d’alerte, de nouveau** et contrôlez-la soigneusement. Laissez le champ vide pour la retirer.
 
 Cliquez sur **Enregistrer**. Les mails d’alerte partent par le serveur SMTP système de l’instance, configuré par variables d’environnement, jamais par la messagerie d’une entité. Sans lui, aucun mail d’alerte n’est envoyé.
 
@@ -180,7 +180,7 @@ Le journal d’audit global regroupe les événements d’audit de toutes les en
 
 ![Journal d’audit global avec le filtre Entité et la colonne Entité](../screenshots/fr/admin-system-audit.png)
 
-Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque et rotations de la clé maître. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les événements sont conservés 12 mois.
+Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque, alertes antivirus et rotations de la clé maître. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les événements sont conservés 12 mois.
 
 <!-- topic: system-master-key -->
 ### Clé maître
@@ -217,6 +217,6 @@ Quelques habitudes gardent l’instance sûre et restaurable.
 - Gardez deux super administrateurs, chacun avec sa propre application d’authentification.
 - Rangez vos codes de secours dans le coffre de mots de passe, pas à côté de votre téléphone.
 - Conservez une copie de la clé maître dans le coffre de mots de passe hors de la VM, avec son identifiant, et mettez-la à jour à chaque rotation.
-- Configurez le serveur SMTP système pour recevoir l’alerte disque, et surveillez le health check avec votre outil de supervision.
+- Configurez le serveur SMTP système pour recevoir l’alerte disque et l’alerte antivirus (envoyée quand l’antivirus ne répond plus depuis 5 minutes : les dépôts restent alors en analyse), et surveillez le health check avec votre outil de supervision.
 - Lorsqu’une entité se retrouve sans administrateur délégué, contrôlez sa messagerie : ses alertes de quota vous sont alors envoyées par elle.
 - Vérifiez que les sauvegardes décrites dans `docs/operations/backup.md` fonctionnent, et faites une rotation de la clé maître au moins une fois par durée de conservation des sauvegardes.

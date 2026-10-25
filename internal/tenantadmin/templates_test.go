@@ -45,10 +45,15 @@ func TestTemplates(t *testing.T) {
 			if s.Key == diskAlertKey || s.Key == mail.TemplateDiskAlert {
 				t.Fatal("the instance disk alert template is listed as a tenant template")
 			}
+			// Nor is the instance antivirus alert.
+			if s.Key == "antivirus-alert" || s.Key == mail.TemplateAntivirusAlert {
+				t.Fatal("the instance antivirus alert template is listed as a tenant template")
+			}
 			listed[s.Key] = true
 		}
-		if !listed[store.EmailTemplateQuotaWarning] || !listed[store.EmailTemplateQuotaReached] {
-			t.Fatalf("quota alert templates not listed: %v", listed)
+		if !listed[store.EmailTemplateQuotaWarning] || !listed[store.EmailTemplateQuotaReached] ||
+			!listed[store.EmailTemplateAntivirusUnavailable] {
+			t.Fatalf("admin alert templates not listed: %v", listed)
 		}
 
 		tpl, err := ev.svc.GetTemplate(ctx, ev.adminA, ev.a.ID, keyCode, "fr")
@@ -143,6 +148,8 @@ func TestTemplates(t *testing.T) {
 			{diskAlertKey, "en"},
 			{diskAlertKey, "fr"},
 			{mail.TemplateDiskAlert, "en"},
+			{"antivirus-alert", "en"},
+			{mail.TemplateAntivirusAlert, "fr"},
 			{"verification_code", "en"},
 			{keyCode, "de"},
 		} {

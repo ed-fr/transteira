@@ -78,6 +78,12 @@ func goldenData() map[string]any {
 		TemplateDiskAlert: DiskAlertData{
 			UsedBytes: 4000 << 30 / 100 * 91, TotalBytes: 4000 << 30, ThresholdPercent: 87.5, AdminLink: goldenAdminLink,
 		},
+		TemplateAntivirusAlert: AntivirusAlertData{
+			Since: goldenOutage, WaitingTransfers: 12, Tenants: 3, AdminLink: goldenAdminLink,
+		},
+		TemplateAntivirusUnavailable: AntivirusUnavailableData{
+			TenantName: "Entity A & Co", Since: goldenOutage, WaitingTransfers: 4, AdminLink: goldenAdminLink,
+		},
 	}
 }
 
@@ -92,6 +98,9 @@ const (
 
 var goldenExpiry = time.Date(2027, time.October, 20, 8, 30, 0, 0, time.UTC)
 
+// goldenOutage is the start of the clamd outage of the antivirus alerts.
+var goldenOutage = time.Date(2027, time.October, 13, 9, 45, 0, 0, time.UTC)
+
 // goldenFiles returns the files of the transfer golden tests: a hostile
 // name, then a file too large or complex to be scanned and an encrypted
 // archive.
@@ -105,7 +114,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "disk_alert,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -247,6 +256,71 @@ func TestTemplatesDiskAlert(t *testing.T) {
 	// "disk-alert", the API spelling, names the same built-in template.
 	if v, err := Variables("disk-alert"); err != nil || len(v) != 5 || v[0].Name != "usage_percent" || !v[0].Required {
 		t.Errorf("Variables(disk-alert) = %+v, %v", v, err)
+	}
+}
+
+func TestTemplatesAntivirusAlerts(t *testing.T) {
+	sys := goldenData()[TemplateAntivirusAlert].(AntivirusAlertData)
+	vals, ok := keyDefs[TemplateAntivirusAlert].values(labelsFor("en"), "en", sys)
+	if !ok || vals["outage_since"].text != "October 13, 2027 at 09:45 UTC" ||
+		vals["waiting_summary"].text != "Transfers waiting for analysis: 12; entities concerned: 3." ||
+		vals["admin_link"].text != goldenAdminLink {
+		t.Errorf("antivirus alert values: %+v", vals)
+	}
+	// Counts that could not be read are never shown as zero.
+	unknown := sys
+	unknown.CountUnknown = true
+	for lang, want := range map[string]string{
+		"en": "The number of transfers waiting could not be determined.",
+		"fr": "Le nombre de transferts en attente n'a pas pu être déterminé.", //nolint:misspell // French text
+	} {
+		m, err := Render(TemplateAntivirusAlert, lang, unknown)
+		if err != nil || !strings.Contains(m.Text, want) || strings.Contains(m.Text, "12") {
+			t.Errorf("%s unknown count: %v\n%s", lang, err, m.Text)
+		}
+	}
+	if _, ok := keyDefs[TemplateAntivirusAlert].values(labelsFor("en"), "en", DiskAlertData{}); ok {
+		t.Error("antivirus alert values accepted another data type")
+	}
+	ten := goldenData()[TemplateAntivirusUnavailable].(AntivirusUnavailableData)
+	vals, ok = keyDefs[TemplateAntivirusUnavailable].values(labelsFor("fr"), "fr", ten)
+	if !ok || vals["outage_since"].text != "13 octobre 2027 à 09:45 UTC" || vals["waiting_transfers"].text != "4" ||
+		vals["tenant_name"].text != "Entity A & Co" {
+		t.Errorf("antivirus unavailable values: %+v", vals)
+	}
+	// The tenant mail says whether the operators were alerted.
+	for mailed, want := range map[bool]string{true: "have been alerted", false: "Contact the operator of the instance"} {
+		d := ten
+		d.OperatorsMailed = mailed
+		m, err := Render(TemplateAntivirusUnavailable, "en", d)
+		if err != nil || !strings.Contains(m.Text, want) || !strings.Contains(m.HTML, want) {
+			t.Errorf("operators mailed %v: %v\n%s", mailed, err, m.Text)
+		}
+	}
+	if _, ok := keyDefs[TemplateAntivirusUnavailable].values(labelsFor("en"), "en", sys); ok {
+		t.Error("antivirus unavailable values accepted another data type")
+	}
+	for _, lang := range i18n.Supported() {
+		// The system mail names the service, never an entity; the console
+		// link is the only link, and the operations guide is named.
+		m, err := Render(TemplateAntivirusAlert, lang, sys)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Subject, "TransTeira") ||
+			!strings.Contains(m.Text, goldenAdminLink) || !strings.Contains(m.Text, "docs/operations/antivirus.md") {
+			t.Errorf("%s antivirus alert: %v %s", lang, err, m.Subject)
+		}
+		m, err = Render(TemplateAntivirusUnavailable, lang, ten)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Subject, "Entity A & Co") ||
+			!strings.Contains(m.Text, goldenAdminLink) {
+			t.Errorf("%s antivirus unavailable: %v %s", lang, err, m.Subject)
+		}
+	}
+	// The tenant template answers to its API key; the system one has none
+	// in the store, but package mail accepts both spellings.
+	if v, err := Variables("antivirus-unavailable"); err != nil || len(v) != 5 || v[0].Name != "tenant_name" || !v[1].Required {
+		t.Errorf("Variables(antivirus-unavailable) = %+v, %v", v, err)
+	}
+	if v, err := Variables("antivirus-alert"); err != nil || len(v) != 3 || v[0].Name != "outage_since" {
+		t.Errorf("Variables(antivirus-alert) = %+v, %v", v, err)
 	}
 }
 

@@ -338,6 +338,37 @@ func TestTransfersScanningSweep(t *testing.T) {
 	})
 }
 
+func TestTransfersScanningCounts(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		transfers := db.Transfers()
+		if got, err := transfers.ScanningCounts(ctx); err != nil || len(got) != 0 {
+			t.Fatalf("ScanningCounts(empty) = %+v, %v", got, err)
+		}
+		a := newTenant(t, db, "transfer.entity-a.example.com")
+		b := newTenant(t, db, "transfer.entity-b.example.com")
+		newTenant(t, db, "transfer.entity-c.example.com") // nothing waiting
+		scanningTransfer(t, db, a.ID, fixedNow, 1)
+		scanningTransfer(t, db, a.ID, fixedNow.Add(time.Hour), 2)
+		scanningTransfer(t, db, b.ID, fixedNow, 1)
+		done := scanningTransfer(t, db, b.ID, fixedNow, 1)
+		markAvailable(t, db, b.ID, done.ID)
+		mustTransfer(t, db, b.ID, newTransfer()) // uploading
+
+		got, err := transfers.ScanningCounts(ctx)
+		want := []store.TenantScanning{{TenantID: a.ID, Transfers: 2}, {TenantID: b.ID, Transfers: 1}}
+		if a.ID > b.ID {
+			want[0], want[1] = want[1], want[0]
+		}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("ScanningCounts = %+v, %v; want %+v", got, err, want)
+		}
+	})
+}
+
 func TestScanStatusDeliverable(t *testing.T) {
 	t.Parallel()
 	for s, want := range map[store.ScanStatus]bool{

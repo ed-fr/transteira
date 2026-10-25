@@ -69,15 +69,40 @@ func (n *Notifier) QuotaAlert(ctx context.Context, t *tenant.Tenant, data mail.Q
 	if name == "" {
 		return nil, fmt.Errorf("%w: quota level %d", ErrInvalidAlert, level)
 	}
-	if err := checkLink(data.AdminLink); err != nil {
+	if data.TenantName == "" {
+		data.TenantName = t.Name
+	}
+	return n.adminAlert(ctx, t, name, data.AdminLink, data, recipients)
+}
+
+// AntivirusUnavailable builds the antivirus_unavailable mail of every
+// recipient (tenant template key "antivirus-unavailable", decision P10):
+// one job per recipient, in its language else the tenant default, rendered
+// with the customized template of the tenant when there is one and sent
+// through the SMTP settings of the tenant. Duplicate recipients (ignoring
+// case) get a single mail. An empty data.TenantName is filled with the
+// tenant name.
+//
+// It returns ErrInvalidAlert for an invalid recipient list, ErrInvalidLink
+// when data.AdminLink is not an absolute http or https URL, and ErrNoSMTP
+// when the tenant has no SMTP settings.
+func (n *Notifier) AntivirusUnavailable(ctx context.Context, t *tenant.Tenant, data mail.AntivirusUnavailableData, recipients []Contact) ([]mail.Job, error) {
+	if data.TenantName == "" {
+		data.TenantName = t.Name
+	}
+	return n.adminAlert(ctx, t, mail.TemplateAntivirusUnavailable, data.AdminLink, data, recipients)
+}
+
+// adminAlert builds the mails of template name, rendered with data, to the
+// administrators recipients of tenant t; adminLink is the console link of
+// data, checked first.
+func (n *Notifier) adminAlert(ctx context.Context, t *tenant.Tenant, name, adminLink string, data any, recipients []Contact) ([]mail.Job, error) {
+	if err := checkLink(adminLink); err != nil {
 		return nil, err
 	}
 	contacts, err := normalizeContacts(recipients)
 	if err != nil {
 		return nil, err
-	}
-	if data.TenantName == "" {
-		data.TenantName = t.Name
 	}
 	settings, err := n.settings(ctx, t)
 	if err != nil {
