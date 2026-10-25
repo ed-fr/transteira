@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: TransTeira API
-  version: 1.0.0-draft.1
+  version: 1.0.0
   summary: Multi-tenant, self-hosted large file transfer.
   description: |
     TransTeira is a self-hosted, multi-tenant file transfer service (WeTransfer-like)

@@ -21,8 +21,18 @@ remain anonymous.
 
 ## Supported versions
 
-TransTeira has not been released yet. Once released, security fixes will be provided for the
-latest minor version.
+| Version | Supported |
+|---|---|
+| 1.0.x | Yes |
+| < 1.0 (development builds `0.0.0-dev`) | No |
+
+Security fixes are provided for the latest minor version only, as patch releases (1.0.1,
+1.0.2...): when 1.1.0 is released, 1.0.x stops receiving fixes. Always run the latest patch
+release of the supported version.
+
+Only the provided deployment (`deploy/`, `integrations/`) is supported. The third-party images it
+pins by digest (ClamAV, PostgreSQL, reverse proxies) receive security fixes only when you update
+them (see the [threat model](docs/security/threat-model.md), T-118).
 
 ## Scope
 

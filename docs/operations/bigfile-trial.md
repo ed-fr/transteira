@@ -284,6 +284,16 @@ The trial **passes** when, for every transfer: the automatic resume and the relo
 where the upload stopped, every SHA-256 is identical, the server is never restarted, the log has
 no `ERROR` and the server's memory stays bounded.
 
+**Trial record.** The V1 acceptance trial was run and validated by the operator on 2026-10-25,
+before version 1.0.0: build `0.0.0-dev+267b890`, SQLite, reference Caddy (`tls internal`) on a
+Docker Desktop workstation, files of several GB uploaded from a browser with a network cut and an
+automatic resume, then downloaded, every SHA-256 matching. Docker Desktop hides the client IP
+(every client appears as the gateway of the proxy network), so the real client IP item of the grid
+remains to be checked on the production host. The changes made after that build (antivirus
+outage alert, default deadline before routing, which the streaming routes clear) are covered by
+`make check` on the release commit, including the automated 20 GB test and
+`TestDefaultDeadlineSparesStreaming`.
+
 ## 8. What to send back
 
 Send to the developer:

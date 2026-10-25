@@ -6,6 +6,42 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-26
+
+First stable version: the V1 scope of the specification (CLAUDE.md section 2), validated by
+`make check` (unit, integration, contract, tenant isolation, fuzzing, end-to-end on SQLite and
+PostgreSQL, automated 20 GB test through the production stack) and by a real trial run by the
+operator on 2026-10-25 (`docs/operations/bigfile-trial.md`): files of several GB uploaded from a
+browser through the reference Caddy, with a network cut and an automatic resume, then downloaded,
+every SHA-256 matching. The trial ran on build `267b890`; the later changes (antivirus outage
+alert, default deadline before routing) are covered by `make check` on the release commit,
+including the automated 20 GB test. The real client IP behind the production proxy remains to be
+checked on the production host (Docker Desktop hides it).
+
+- **Multi-tenant** instance: entity resolved from the `Host` header, data filtered at the data
+  layer, PostgreSQL row-level security, one storage folder per entity.
+- **Deposit and download**: email verification by one-time code, internal users (IP ranges and
+  email domains), invitations for external users, blocklist, resumable tus uploads up to 20 GB,
+  password-protected transfers, delete after first download, single-file downloads with byte
+  ranges (resumable) and ZIP archives streamed on the fly (not resumable: an interrupted ZIP
+  download starts again), SHA-256 fingerprints.
+- **Security**: AES-256-GCM chunked encryption at rest with per-file keys wrapped by the master
+  key, resumable master key rotation, crypto-erase (copies in backups only once the master key
+  has been rotated and the old key destroyed after the backup retention period, see
+  `docs/operations/master-key.md`), ClamAV scanning (fail-closed, with an outage alert),
+  argon2id passwords and TOTP (mandatory for the super admin), rate limits, strict security
+  headers and CSP, security log for fail2ban and CrowdSec, STRIDE threat model 1.0.
+- **Administration and API**: super admin and delegated admins, per-entity branding, SMTP, IP
+  ranges, domains, limits, quotas, email templates and legal texts, transfers, invitations,
+  audit log, statistics, GDPR search and erasure, maintenance mode, disk space alert; REST API
+  `/api/v1` (OpenAPI 3.1, interactive documentation embedded) with per-entity API tokens.
+- **Operations**: single binary in a `scratch` image, hardened Docker deployment with ClamAV and
+  optional PostgreSQL, reverse proxy configurations (Caddy, Nginx, Traefik, Apache), nightly
+  database copies, user guides in French and English with integrated help and generated
+  screenshots.
+
+The detailed list of the changes made during the development of the V1 follows.
+
 ### Added
 - OpenAPI 3.1 specification of the V1 API (`api/openapi.yaml`).
 - Project layout proposal (`docs/architecture/project-structure.md`).
@@ -744,3 +780,6 @@ and the project follows [Semantic Versioning](https://semver.org/).
   form stays and shows a neutral message ("This invitation cannot be sent. Check the address or
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
+
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ed-fr/transteira/releases/tag/v1.0.0

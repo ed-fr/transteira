@@ -1,15 +1,15 @@
 # TransTeira
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.0.0--dev-lightgrey.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: under development.** The first version (V1) is being built. Nothing is ready for
-> production yet.
+> **Status: stable.** Version 1.0.0 delivers the V1 scope (the core); see [Versions](#versions)
+> for what comes next.
 
-## Highlights (V1 scope)
+## Highlights (version 1.0)
 
 - **Multi-tenant**: one instance serves several entities, each with its own domain name,
   branding, language, SMTP server, internal IP ranges and email domains, quotas and strictly
@@ -263,6 +263,23 @@ local development loop with Caddy and the Vite dev server. A binary built withou
 interface (plain `go build`) still runs and answers its pages with a "service unavailable" page.
 
 There is no CI: `make check` must be green before every commit.
+
+## Versions
+
+TransTeira follows [Semantic Versioning](https://semver.org/): no incompatible change to the API
+(`/api/v1`), the configuration or the data without a new major version. The running version is
+returned by `/api/v1/version` and `/healthz` and printed by `transteira version`; the
+[changelog](CHANGELOG.md) summarises each release.
+
+| Scope | Content |
+|---|---|
+| **V1, the core** (1.0, current) | Everything listed above. |
+| V1.1, operations (planned) | Abuse detection, Prometheus metrics and JSON status, Grafana and Zabbix, syslog, webhooks, expiry reminder, maximum number of downloads, "My transfers", recipient verification and tracking, folder upload, deposit from outside for verified internal users, reply to a transfer, confidentiality levels, recipient restrictions, dark mode, per-entity documentation and its PDF export. |
+| V2, enterprise (planned) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
+
+The API reserves the paths and fields of these later scopes, so they are planned as minor
+versions (1.x): a new major version is released only for an incompatible change. A release is
+the commit tagged `vX.Y.Z`; `make build` and `make docker` take the version from that tag.
 
 ## Security
 
