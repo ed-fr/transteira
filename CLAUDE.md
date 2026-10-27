@@ -23,7 +23,7 @@ TransTeira est un outil de transfert de fichiers de type WeTransfer / SwissTrans
 | Version | Périmètre |
 |---|---|
 | **V1, le cœur** | Tout le présent cahier des charges hors éléments marqués [V1.1] et [V2], y compris : journal de sécurité pour fail2ban et CrowdSec, configurations de reverse proxys (Caddy, Nginx, Traefik, Apache), configuration par variables d'environnement, mode maintenance, empreinte SHA-256 des fichiers, rotation de la clé maître, effacement cryptographique, guides utilisateur et aide intégrée avec captures automatiques, modèle de menaces. |
-| **V1.1, l'exploitation** | Détection des abus (seuils et alertes), métriques Prometheus, endpoint d'état JSON, tableau de bord Grafana et template Zabbix, export syslog, alertes par webhook, rappel d'expiration, nombre maximal de téléchargements, « Mes envois », vérification du destinataire par code, suivi par destinataire, envoi de dossiers par glisser-déposer, dépôt depuis l'extérieur pour les internes déjà vérifiés, réponse au transfert, niveaux de confidentialité, restriction des destinataires, mode sombre, documentation utilisateur personnalisée par entité et export PDF. |
+| **V1.1, l'exploitation** | Détection des abus (seuils et alertes), métriques Prometheus, endpoint d'état JSON, tableau de bord Grafana et template Zabbix, export syslog, alertes par webhook, rappel d'expiration, nombre maximal de téléchargements, « Mes envois », vérification du destinataire par code, suivi par destinataire, envoi de dossiers par glisser-déposer, dépôt depuis l'extérieur pour les internes déjà vérifiés, réponse au transfert, niveaux de confidentialité, restriction des destinataires, mode sombre, documentation utilisateur personnalisée par entité et export PDF, désactivation de l'antivirus (instance ou entité) et moteurs antivirus interchangeables (clamd, ICAP, API HTTP). |
 | **V2, l'entreprise** | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise en PDF, export / import de configuration d'entité, lien de dépôt permanent, image Docker signée avec SBOM, kit de conformité, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option. |
 | **V2.1, le partage de secrets** | Module de partage de secrets à usage unique, chiffrés dans le navigateur (section 22.1). |
 
@@ -260,6 +260,27 @@ Sans créer de compte, l'expéditeur peut demander par mail un **lien d'accès t
 - **Virus détecté** : le fichier est **supprimé** et l'expéditeur reçoit une **alerte**. Pas de quarantaine.
 - **Fichier trop gros pour être analysé** (au-delà des limites de ClamAV, de l'ordre de 2 Go au mieux) : le fichier est **accepté**, l'**expéditeur est prévenu**, et le **destinataire est informé** sur la page de téléchargement qu'il n'a pas pu être analysé en raison de sa taille.
 - Les limites de taille de ClamAV (`MaxFileSize`, `MaxScanSize`, `StreamMaxLength`) sont relevées au maximum raisonnable et configurables.
+
+### 11.1 [V1.1] Désactivation et autres moteurs
+
+- **Désactivation de l'analyse** :
+  - pour **toute l'instance**, par variable d'environnement (aucun conteneur ClamAV n'est alors nécessaire) ;
+  - **par entité**, par le super admin.
+- Fichiers non analysés pour cette raison :
+  - ils sont marqués **« non analysé : antivirus désactivé »** ;
+  - l'expéditeur et la page de téléchargement l'indiquent clairement ;
+  - le health check ne vérifie plus l'antivirus ;
+  - la désactivation et la réactivation sont tracées dans les journaux d'audit.
+- **Moteurs antivirus interchangeables**, choisis par variable d'environnement :
+  - **clamd** (local ou distant), le moteur par défaut ;
+  - **ICAP** (RFC 3507), pour les solutions d'entreprise ;
+  - **API HTTP générique** : envoi du fichier en flux, verdict lu selon des règles configurables (code HTTP, champ JSON).
+- Mêmes règles pour tous les moteurs :
+  - analyse en streaming ;
+  - limite de taille ;
+  - virus détecté : fichier supprimé ;
+  - alerte en cas d'indisponibilité ;
+  - délai d'attente.
 
 ---
 
@@ -546,7 +567,10 @@ Pour chacun, les réglages critiques sont expliqués :
 ### 24.4 Exécution en local uniquement
 
 - **Aucune intégration continue sur GitHub** (pas de GitHub Actions).
-- L'ensemble des contrôles s'exécute **en local**, lancé par **une seule commande** (ex. `make check`) : tests (tous types, y compris le test 20 Go), `go vet`, linter, **`govulncheck`**, **linter de la spécification OpenAPI** (ex. Spectral, vérifiant notamment que chaque endpoint est décrit et accompagné d'un exemple), mesure de couverture.
+- L'ensemble des contrôles s'exécute **en local**, lancé par **une seule commande** (ex. `make check`) : tests (tous types), `go vet`, linter, **`govulncheck`**, **linter de la spécification OpenAPI** (ex. Spectral, vérifiant notamment que chaque endpoint est décrit et accompagné d'un exemple), mesure de couverture. La commande affiche la **durée de chaque contrôle**.
+- **Test de 20 Go** :
+  - dans `make check`, il n'est exécuté **que si la chaîne des gros fichiers a changé** depuis son dernier passage au vert (dépôt tus, téléchargement, chiffrement, stockage, ZIP, antivirus, serveur HTTP, image, déploiement, Caddy de référence, le test lui-même) ;
+  - **`make check-full`** l'exécute toujours, et elle est **obligatoire avant chaque version**.
 - **Analyse des secrets** (ex. gitleaks) exécutée automatiquement **avant chaque envoi vers GitHub** via un hook git local (pre-push).
 
 ---

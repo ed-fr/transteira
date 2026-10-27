@@ -498,6 +498,70 @@ use to ban the client IP.
 - **What to do:** provide the new master key (Docker secret or mounted file, see
   `docs/operations/master-key.md`), restart the container, then start the rotation again.
 
+### recipient-domain-refused
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 1.1.
+- **Meaning:** at least one recipient is refused by the recipient domain rules of the entity (a denied domain, or a domain outside a non-empty allow list). Each refused recipient is named in `errors` (`/recipients/<index>`).
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** remove or replace the refused recipients.
+
+### confidentiality-rule-violated
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 1.1.
+- **Meaning:** the transfer breaks a rule of its confidentiality level; each entry of `errors` names the field and the rule (`required`, `not-allowed` with `allowed`, `internal-only`, `max-exceeded`).
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** adjust the transfer to the rules of the level (password, recipient verification, duration, recipients), or choose another level.
+
+### abuse-threshold-blocked
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 1.1.
+- **Meaning:** the abuse detection of the entity is set to block and the transfer would exceed a daily limit of the sender (volume, number of transfers, recipients per transfer) or an external quota. The administrators are alerted.
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** try again the next day (UTC), or ask the administrators of the entity.
+
+### recipient-verification-required
+
+- **HTTP status:** 401 Unauthorized
+- **Since:** 1.1.
+- **Meaning:** the per-recipient link requires the recipient to prove their address with a code on this browser first (or a reply is attempted without that proof).
+- **Typical endpoints:** `GET /downloads/{linkToken}/files/{fileId}`, `GET /downloads/{linkToken}/archive`, `POST /downloads/{linkToken}/unlock`, `POST /downloads/{linkToken}/reply`.
+- **What to do:** call `POST /downloads/{linkToken}/verification`, then confirm the code received by mail with `POST /downloads/{linkToken}/verification/confirm`.
+
+### max-downloads-reached
+
+- **HTTP status:** 410 Gone
+- **Since:** 1.1.
+- **Meaning:** the transfer reached the maximum number of downloads chosen by its sender; it is deleted after a short grace period.
+- **Typical endpoints:** `GET /downloads/{linkToken}/files/{fileId}`, `GET /downloads/{linkToken}/archive`.
+- **What to do:** ask the sender for a new transfer.
+
+### reply-not-allowed
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 1.1.
+- **Meaning:** replying to this transfer is not possible: the entity does not allow replies, or the link is a shared link created before version 1.1.
+- **Typical endpoints:** `POST /downloads/{linkToken}/reply`.
+- **What to do:** contact the sender by another means.
+
+### access-link-invalid
+
+- **HTTP status:** 410 Gone
+- **Since:** 1.1.
+- **Meaning:** the "My transfers" access link is unknown, expired (15 minutes) or already used.
+- **Typical endpoints:** `POST /me/sessions`.
+- **What to do:** request a new link with `POST /me/access-links`.
+
+### extension-limit-reached
+
+- **HTTP status:** 409 Conflict
+- **Since:** 1.1.
+- **Meaning:** extending the transfer would keep it available more than 90 days after its creation; `extendableTo` of the transfer tells the latest expiry possible.
+- **Typical endpoints:** `POST /me/transfers/{transferId}/extension`.
+- **What to do:** choose a shorter duration, or send the files again in a new transfer.
+
 ### internal-error
 
 - **HTTP status:** 500 Internal Server Error

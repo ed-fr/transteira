@@ -17,7 +17,9 @@
 //  6. rate limit per client IP: the asset limit for the build files of
 //     the web interface (GET and HEAD under /assets/, any Host), the
 //     global limit for every other request;
-//  7. routes outside any tenant: exactly /healthz and /api/openapi.yaml;
+//  7. routes outside any tenant: exactly /healthz, /api/openapi.yaml,
+//     /metrics and /status (the last two answer a 404 Problem until they
+//     are implemented, as when TT_METRICS_TOKEN is unset);
 //  8. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
 //     tenant resolution: it serves /api/v1/admin/* and /api/v1/version,
@@ -140,6 +142,12 @@ const (
 	SpecPath = "/api/openapi.yaml"
 	// HealthPath is the path of the health check (outside any tenant).
 	HealthPath = "/healthz"
+	// MetricsPath is the path of the Prometheus metrics (outside any
+	// tenant, since API 1.1).
+	MetricsPath = "/metrics"
+	// StatusPath is the path of the JSON instance status (outside any
+	// tenant, since API 1.1).
+	StatusPath = "/status"
 	// ScopeGlobal is the rate-limit scope of the global per-IP limiter.
 	ScopeGlobal = "global"
 	// ScopeAssets is the rate-limit scope of the per-IP limiter of the
@@ -496,7 +504,9 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// Routes outside any tenant. They are matched on the exact path, before
 	// tenant resolution: the health check must answer for probes that do
 	// not send a tenant FQDN (Docker, Uptime Kuma), and the OpenAPI document
-	// is identical for every tenant. Nothing else is served without a known
+	// is identical for every tenant. MetricsPath and StatusPath are routed
+	// here too but have no handler yet: they answer the 404 Problem of the
+	// fallback whatever the Host. Nothing else is served without a known
 	// Host.
 	freeMux := http.NewServeMux()
 	freeMux.Handle(HealthPath, health.Handler(deps.Health, maintenance.Active))
@@ -587,7 +597,7 @@ func isAssetRequest(r *http.Request) bool {
 // isTenantFree reports whether p is one of the paths served without a
 // tenant (exact match, no cleaning).
 func isTenantFree(p string) bool {
-	return p == HealthPath || p == SpecPath
+	return p == HealthPath || p == SpecPath || p == MetricsPath || p == StatusPath
 }
 
 // rejectUncleanAPIPaths answers a 404 not-found Problem for a path that is

@@ -81,6 +81,30 @@ const (
 	CodeSetupTokenInvalid Code = "setup-token-invalid"
 	// CodeNewMasterKeyMissing means no new master key is configured for rotation.
 	CodeNewMasterKeyMissing Code = "new-master-key-missing"
+	// CodeRecipientDomainRefused means a recipient is refused by the tenant's
+	// recipient domain rules (since 1.1).
+	CodeRecipientDomainRefused Code = "recipient-domain-refused"
+	// CodeConfidentialityRuleViolated means the transfer breaks a rule of its
+	// confidentiality level (since 1.1).
+	CodeConfidentialityRuleViolated Code = "confidentiality-rule-violated"
+	// CodeAbuseThresholdBlocked means an abuse detection threshold set to block
+	// is exceeded (since 1.1).
+	CodeAbuseThresholdBlocked Code = "abuse-threshold-blocked"
+	// CodeRecipientVerificationRequired means the recipient of a per-recipient
+	// link must prove their address by code first (since 1.1).
+	CodeRecipientVerificationRequired Code = "recipient-verification-required"
+	// CodeMaxDownloadsReached means the transfer reached its maximum number of
+	// downloads (since 1.1).
+	CodeMaxDownloadsReached Code = "max-downloads-reached"
+	// CodeReplyNotAllowed means replying to the transfer is not possible
+	// (since 1.1).
+	CodeReplyNotAllowed Code = "reply-not-allowed"
+	// CodeAccessLinkInvalid means a "My transfers" access link is unknown,
+	// expired or already used (since 1.1).
+	CodeAccessLinkInvalid Code = "access-link-invalid"
+	// CodeExtensionLimitReached means extending the transfer would take its
+	// total lifetime beyond 90 days from its creation (since 1.1).
+	CodeExtensionLimitReached Code = "extension-limit-reached"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -99,41 +123,49 @@ type Definition struct {
 
 // catalog maps every known Code to its default definition.
 var catalog = map[Code]Definition{
-	CodeValidationFailed:        {http.StatusBadRequest, "Invalid request"},
-	CodeUnauthenticated:         {http.StatusUnauthorized, "Authentication required"},
-	CodeInvalidCredentials:      {http.StatusUnauthorized, "Invalid credentials"},
-	CodeForbidden:               {http.StatusForbidden, "Forbidden"},
-	CodeCSRFInvalid:             {http.StatusForbidden, "Invalid CSRF token"},
-	CodeDepositNotAllowed:       {http.StatusForbidden, "Deposit not allowed"},
-	CodeIPNotAllowed:            {http.StatusForbidden, "Address not allowed for this token"},
-	CodeBlockedFile:             {http.StatusForbidden, "File refused"},
-	CodeInvitationNotAllowed:    {http.StatusForbidden, "Invitations are reserved to internal users"},
-	CodeInvitationGone:          {http.StatusGone, "Invitation no longer valid"},
-	CodeVerificationCodeInvalid: {http.StatusUnprocessableEntity, "Invalid verification code"},
-	CodeVerificationExhausted:   {http.StatusGone, "Verification code invalidated"},
-	CodeNotFound:                {http.StatusNotFound, "Not found"},
-	CodeMethodNotAllowed:        {http.StatusMethodNotAllowed, "Method not allowed"},
-	CodeTransferGone:            {http.StatusGone, "Transfer no longer available"},
-	CodeDownloadLocked:          {http.StatusUnauthorized, "Password required"},
-	CodeTransferPasswordInvalid: {http.StatusUnauthorized, "Wrong password"},
-	CodeTransferLocked:          {http.StatusTooManyRequests, "Too many attempts"},
-	CodeStateConflict:           {http.StatusConflict, "Operation not allowed in the current state"},
-	CodeAlreadyExists:           {http.StatusConflict, "Already exists"},
-	CodeUploadIncomplete:        {http.StatusConflict, "Upload incomplete"},
-	CodeChecksumMismatch:        {http.StatusConflict, "Checksum mismatch"},
-	CodeTransferTooLarge:        {http.StatusRequestEntityTooLarge, "Transfer too large"},
-	CodePayloadTooLarge:         {http.StatusRequestEntityTooLarge, "Payload too large"},
-	CodeRangeNotSatisfiable:     {http.StatusRequestedRangeNotSatisfiable, "Range not satisfiable"},
-	CodeUnsupportedMediaType:    {http.StatusUnsupportedMediaType, "Unsupported media type"},
-	CodeQuotaExceeded:           {http.StatusInsufficientStorage, "Storage quota reached"},
-	CodeRateLimited:             {http.StatusTooManyRequests, "Too many requests"},
-	CodeMaintenance:             {http.StatusServiceUnavailable, "Maintenance in progress"},
-	CodeMailUnavailable:         {http.StatusServiceUnavailable, "Email cannot be sent"},
-	CodeUnknownTenant:           {http.StatusMisdirectedRequest, "Unknown host"},
-	CodeSetupAlreadyDone:        {http.StatusConflict, "Setup already completed"},
-	CodeSetupTokenInvalid:       {http.StatusForbidden, "Invalid setup token"},
-	CodeNewMasterKeyMissing:     {http.StatusConflict, "New master key not configured"},
-	CodeInternalError:           {http.StatusInternalServerError, "Internal error"},
+	CodeValidationFailed:              {http.StatusBadRequest, "Invalid request"},
+	CodeUnauthenticated:               {http.StatusUnauthorized, "Authentication required"},
+	CodeInvalidCredentials:            {http.StatusUnauthorized, "Invalid credentials"},
+	CodeForbidden:                     {http.StatusForbidden, "Forbidden"},
+	CodeCSRFInvalid:                   {http.StatusForbidden, "Invalid CSRF token"},
+	CodeDepositNotAllowed:             {http.StatusForbidden, "Deposit not allowed"},
+	CodeIPNotAllowed:                  {http.StatusForbidden, "Address not allowed for this token"},
+	CodeBlockedFile:                   {http.StatusForbidden, "File refused"},
+	CodeInvitationNotAllowed:          {http.StatusForbidden, "Invitations are reserved to internal users"},
+	CodeInvitationGone:                {http.StatusGone, "Invitation no longer valid"},
+	CodeVerificationCodeInvalid:       {http.StatusUnprocessableEntity, "Invalid verification code"},
+	CodeVerificationExhausted:         {http.StatusGone, "Verification code invalidated"},
+	CodeNotFound:                      {http.StatusNotFound, "Not found"},
+	CodeMethodNotAllowed:              {http.StatusMethodNotAllowed, "Method not allowed"},
+	CodeTransferGone:                  {http.StatusGone, "Transfer no longer available"},
+	CodeDownloadLocked:                {http.StatusUnauthorized, "Password required"},
+	CodeTransferPasswordInvalid:       {http.StatusUnauthorized, "Wrong password"},
+	CodeTransferLocked:                {http.StatusTooManyRequests, "Too many attempts"},
+	CodeStateConflict:                 {http.StatusConflict, "Operation not allowed in the current state"},
+	CodeAlreadyExists:                 {http.StatusConflict, "Already exists"},
+	CodeUploadIncomplete:              {http.StatusConflict, "Upload incomplete"},
+	CodeChecksumMismatch:              {http.StatusConflict, "Checksum mismatch"},
+	CodeTransferTooLarge:              {http.StatusRequestEntityTooLarge, "Transfer too large"},
+	CodePayloadTooLarge:               {http.StatusRequestEntityTooLarge, "Payload too large"},
+	CodeRangeNotSatisfiable:           {http.StatusRequestedRangeNotSatisfiable, "Range not satisfiable"},
+	CodeUnsupportedMediaType:          {http.StatusUnsupportedMediaType, "Unsupported media type"},
+	CodeQuotaExceeded:                 {http.StatusInsufficientStorage, "Storage quota reached"},
+	CodeRateLimited:                   {http.StatusTooManyRequests, "Too many requests"},
+	CodeMaintenance:                   {http.StatusServiceUnavailable, "Maintenance in progress"},
+	CodeMailUnavailable:               {http.StatusServiceUnavailable, "Email cannot be sent"},
+	CodeUnknownTenant:                 {http.StatusMisdirectedRequest, "Unknown host"},
+	CodeSetupAlreadyDone:              {http.StatusConflict, "Setup already completed"},
+	CodeSetupTokenInvalid:             {http.StatusForbidden, "Invalid setup token"},
+	CodeNewMasterKeyMissing:           {http.StatusConflict, "New master key not configured"},
+	CodeRecipientDomainRefused:        {http.StatusForbidden, "Recipient not allowed"},
+	CodeConfidentialityRuleViolated:   {http.StatusUnprocessableEntity, "Confidentiality rule not met"},
+	CodeAbuseThresholdBlocked:         {http.StatusForbidden, "Sending limit reached"},
+	CodeRecipientVerificationRequired: {http.StatusUnauthorized, "Recipient verification required"},
+	CodeMaxDownloadsReached:           {http.StatusGone, "Download limit reached"},
+	CodeReplyNotAllowed:               {http.StatusForbidden, "Reply not allowed"},
+	CodeAccessLinkInvalid:             {http.StatusGone, "Access link no longer valid"},
+	CodeExtensionLimitReached:         {http.StatusConflict, "Extension limit reached"},
+	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 
 // Lookup returns the default definition of code and whether code is known.

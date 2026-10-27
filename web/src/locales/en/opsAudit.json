@@ -66,6 +66,7 @@
     "invitations": "Invitations and addresses",
     "antivirus": "Antivirus",
     "quotas": "Quotas",
+    "abuse": "Abuse",
     "blocklist": "Blocklist",
     "tokens": "API tokens",
     "privacy": "Personal data",
@@ -80,7 +81,11 @@
       "downloaded": "Download started",
       "expired": "Transfer expired",
       "deleted": "Transfer deleted",
-      "notification_resent": "Notification resent"
+      "notification_resent": "Notification resent",
+      "extended": "Transfer extended",
+      "reminder_sent": "Expiry reminder sent",
+      "reply_created": "Reply to a transfer started",
+      "recipient_refused": "Recipient refused by the domain rules"
     },
     "file": {
       "infected": "Virus detected",
@@ -133,7 +138,12 @@
       "smtp_tested": "SMTP test sent",
       "template_updated": "Email template updated",
       "template_reset": "Email template reset",
-      "legal_updated": "Legal texts updated"
+      "legal_updated": "Legal texts updated",
+      "confidentiality_updated": "Confidentiality levels updated",
+      "recipient_rules_updated": "Recipient domain rules updated",
+      "abuse_settings_updated": "Abuse thresholds updated",
+      "antivirus_disabled": "Antivirus disabled for the entity",
+      "antivirus_enabled": "Antivirus enabled for the entity"
     },
     "config": {
       "updated": "System settings updated"
@@ -160,10 +170,31 @@
     },
     "antivirus": {
       "alert_raised": "Antivirus alert raised",
-      "alert_cleared": "Antivirus alert cleared"
+      "alert_cleared": "Antivirus alert cleared",
+      "scans_released": "Files released unscanned (antivirus disabled)"
     },
     "setup": {
       "completed": "Initial setup completed"
+    },
+    "recipient": {
+      "verified": "Recipient verified"
+    },
+    "my_transfers": {
+      "link_requested": "\"My transfers\" link sent",
+      "signed_in": "\"My transfers\" opened"
+    },
+    "abuse": {
+      "threshold_exceeded": "Abuse threshold exceeded",
+      "unusual_activity": "Unusual activity detected",
+      "reported": "Abuse reported",
+      "report_closed": "Abuse report closed",
+      "report_reopened": "Abuse report reopened"
+    },
+    "webhook": {
+      "created": "Webhook created",
+      "updated": "Webhook updated",
+      "deleted": "Webhook deleted",
+      "tested": "Webhook tested"
     }
   }
 }

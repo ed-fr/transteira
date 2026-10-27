@@ -25,6 +25,7 @@ export type AuditGroupId =
   | 'invitations'
   | 'antivirus'
   | 'quotas'
+  | 'abuse'
   | 'blocklist'
   | 'tokens'
   | 'privacy'
@@ -49,14 +50,36 @@ export const AUDIT_ACTION_GROUPS = [
       'transfer.notification_resent',
       'transfer.expired',
       'transfer.deleted',
+      'transfer.extended',
+      'transfer.reminder_sent',
+      'transfer.reply_created',
+      'transfer.recipient_refused',
     ],
   },
   {
     id: 'invitations',
-    actions: ['invitation.created', 'invitation.used', 'invitation.revoked', 'address.verified'],
+    actions: [
+      'invitation.created',
+      'invitation.used',
+      'invitation.revoked',
+      'address.verified',
+      'recipient.verified',
+      'my_transfers.link_requested',
+      'my_transfers.signed_in',
+    ],
   },
   { id: 'antivirus', actions: ['file.infected', 'file.not_scanned'] },
   { id: 'quotas', actions: ['quota.warning', 'quota.reached'] },
+  {
+    id: 'abuse',
+    actions: [
+      'abuse.threshold_exceeded',
+      'abuse.unusual_activity',
+      'abuse.reported',
+      'abuse.report_closed',
+      'abuse.report_reopened',
+    ],
+  },
   { id: 'blocklist', actions: ['blocklist.updated'] },
   {
     id: 'tokens',
@@ -77,6 +100,15 @@ export const AUDIT_ACTION_GROUPS = [
       'tenant.template_updated',
       'tenant.template_reset',
       'tenant.legal_updated',
+      'tenant.confidentiality_updated',
+      'tenant.recipient_rules_updated',
+      'tenant.abuse_settings_updated',
+      'tenant.antivirus_disabled',
+      'tenant.antivirus_enabled',
+      'webhook.created',
+      'webhook.updated',
+      'webhook.deleted',
+      'webhook.tested',
       'tenant.deletion_started',
       'tenant.deleted',
     ],
@@ -111,6 +143,7 @@ export const AUDIT_ACTION_GROUPS = [
       'disk.alert_cleared',
       'antivirus.alert_raised',
       'antivirus.alert_cleared',
+      'antivirus.scans_released',
       'master_key.rotation_started',
       'master_key.rotation_completed',
       'master_key.rotation_failed',

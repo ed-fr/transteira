@@ -19,6 +19,54 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AbuseReportCategory.
+const (
+	IllegalContent AbuseReportCategory = "illegal_content"
+	Malware        AbuseReportCategory = "malware"
+	Other          AbuseReportCategory = "other"
+	Phishing       AbuseReportCategory = "phishing"
+	Spam           AbuseReportCategory = "spam"
+	UnknownSender  AbuseReportCategory = "unknown_sender"
+)
+
+// Valid indicates whether the value is a known member of the AbuseReportCategory enum.
+func (e AbuseReportCategory) Valid() bool {
+	switch e {
+	case IllegalContent:
+		return true
+	case Malware:
+		return true
+	case Other:
+		return true
+	case Phishing:
+		return true
+	case Spam:
+		return true
+	case UnknownSender:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AbuseReportStatus.
+const (
+	Closed AbuseReportStatus = "closed"
+	Open   AbuseReportStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the AbuseReportStatus enum.
+func (e AbuseReportStatus) Valid() bool {
+	switch e {
+	case Closed:
+		return true
+	case Open:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AdminRole.
 const (
 	DelegatedAdmin AdminRole = "delegated_admin"
@@ -37,72 +85,128 @@ func (e AdminRole) Valid() bool {
 	}
 }
 
+// Defines values for AntivirusEngine.
+const (
+	AntivirusEngineClamd AntivirusEngine = "clamd"
+	AntivirusEngineHttp  AntivirusEngine = "http"
+	AntivirusEngineIcap  AntivirusEngine = "icap"
+	AntivirusEngineNone  AntivirusEngine = "none"
+)
+
+// Valid indicates whether the value is a known member of the AntivirusEngine enum.
+func (e AntivirusEngine) Valid() bool {
+	switch e {
+	case AntivirusEngineClamd:
+		return true
+	case AntivirusEngineHttp:
+		return true
+	case AntivirusEngineIcap:
+		return true
+	case AntivirusEngineNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditAction.
 const (
-	AuditActionAddressVerified            AuditAction = "address.verified"
-	AuditActionAdminActivated             AuditAction = "admin.activated"
-	AuditActionAdminCreated               AuditAction = "admin.created"
-	AuditActionAdminCredentialsReset      AuditAction = "admin.credentials_reset"
-	AuditActionAdminDeleted               AuditAction = "admin.deleted"
-	AuditActionAdminLogin                 AuditAction = "admin.login"
-	AuditActionAdminLoginFailed           AuditAction = "admin.login_failed"
-	AuditActionAdminLogout                AuditAction = "admin.logout"
-	AuditActionAdminPasswordChanged       AuditAction = "admin.password_changed"
-	AuditActionAdminPasswordResetLocal    AuditAction = "admin.password_reset_local"
-	AuditActionAdminRecoveryCodeUsed      AuditAction = "admin.recovery_code_used"
-	AuditActionAdminTotpDisabled          AuditAction = "admin.totp_disabled"
-	AuditActionAdminTotpEnrolled          AuditAction = "admin.totp_enrolled"
-	AuditActionAdminTotpResetLocal        AuditAction = "admin.totp_reset_local"
-	AuditActionAdminUpdated               AuditAction = "admin.updated"
-	AuditActionAntivirusAlertCleared      AuditAction = "antivirus.alert_cleared"
-	AuditActionAntivirusAlertRaised       AuditAction = "antivirus.alert_raised"
-	AuditActionApiTokenCreated            AuditAction = "api_token.created"
-	AuditActionApiTokenRevoked            AuditAction = "api_token.revoked"
-	AuditActionApiTokenUpdated            AuditAction = "api_token.updated"
-	AuditActionApiTokenUsed               AuditAction = "api_token.used"
-	AuditActionBlocklistUpdated           AuditAction = "blocklist.updated"
-	AuditActionConfigUpdated              AuditAction = "config.updated"
-	AuditActionDataSubjectErased          AuditAction = "data_subject.erased"
-	AuditActionDataSubjectSearched        AuditAction = "data_subject.searched"
-	AuditActionDiskAlertCleared           AuditAction = "disk.alert_cleared"
-	AuditActionDiskAlertRaised            AuditAction = "disk.alert_raised"
-	AuditActionFileInfected               AuditAction = "file.infected"
-	AuditActionFileNotScanned             AuditAction = "file.not_scanned"
-	AuditActionInvitationCreated          AuditAction = "invitation.created"
-	AuditActionInvitationRevoked          AuditAction = "invitation.revoked"
-	AuditActionInvitationUsed             AuditAction = "invitation.used"
-	AuditActionMaintenanceDisabled        AuditAction = "maintenance.disabled"
-	AuditActionMaintenanceEnabled         AuditAction = "maintenance.enabled"
-	AuditActionMasterKeyRotationCompleted AuditAction = "master_key.rotation_completed"
-	AuditActionMasterKeyRotationFailed    AuditAction = "master_key.rotation_failed"
-	AuditActionMasterKeyRotationStarted   AuditAction = "master_key.rotation_started"
-	AuditActionQuotaReached               AuditAction = "quota.reached"
-	AuditActionQuotaWarning               AuditAction = "quota.warning"
-	AuditActionSetupCompleted             AuditAction = "setup.completed"
-	AuditActionTenantAssetDeleted         AuditAction = "tenant.asset_deleted"
-	AuditActionTenantAssetUploaded        AuditAction = "tenant.asset_uploaded"
-	AuditActionTenantBrandingUpdated      AuditAction = "tenant.branding_updated"
-	AuditActionTenantCreated              AuditAction = "tenant.created"
-	AuditActionTenantDeleted              AuditAction = "tenant.deleted"
-	AuditActionTenantDeletionStarted      AuditAction = "tenant.deletion_started"
-	AuditActionTenantLegalUpdated         AuditAction = "tenant.legal_updated"
-	AuditActionTenantNetworkUpdated       AuditAction = "tenant.network_updated"
-	AuditActionTenantSmtpTested           AuditAction = "tenant.smtp_tested"
-	AuditActionTenantSmtpUpdated          AuditAction = "tenant.smtp_updated"
-	AuditActionTenantTemplateReset        AuditAction = "tenant.template_reset"
-	AuditActionTenantTemplateUpdated      AuditAction = "tenant.template_updated"
-	AuditActionTenantUpdated              AuditAction = "tenant.updated"
-	AuditActionTransferCreated            AuditAction = "transfer.created"
-	AuditActionTransferDeleted            AuditAction = "transfer.deleted"
-	AuditActionTransferDownloaded         AuditAction = "transfer.downloaded"
-	AuditActionTransferExpired            AuditAction = "transfer.expired"
-	AuditActionTransferFinalized          AuditAction = "transfer.finalized"
-	AuditActionTransferNotificationResent AuditAction = "transfer.notification_resent"
+	AuditActionAbuseReportClosed            AuditAction = "abuse.report_closed"
+	AuditActionAbuseReportReopened          AuditAction = "abuse.report_reopened"
+	AuditActionAbuseReported                AuditAction = "abuse.reported"
+	AuditActionAbuseThresholdExceeded       AuditAction = "abuse.threshold_exceeded"
+	AuditActionAbuseUnusualActivity         AuditAction = "abuse.unusual_activity"
+	AuditActionAddressVerified              AuditAction = "address.verified"
+	AuditActionAdminActivated               AuditAction = "admin.activated"
+	AuditActionAdminCreated                 AuditAction = "admin.created"
+	AuditActionAdminCredentialsReset        AuditAction = "admin.credentials_reset"
+	AuditActionAdminDeleted                 AuditAction = "admin.deleted"
+	AuditActionAdminLogin                   AuditAction = "admin.login"
+	AuditActionAdminLoginFailed             AuditAction = "admin.login_failed"
+	AuditActionAdminLogout                  AuditAction = "admin.logout"
+	AuditActionAdminPasswordChanged         AuditAction = "admin.password_changed"
+	AuditActionAdminPasswordResetLocal      AuditAction = "admin.password_reset_local"
+	AuditActionAdminRecoveryCodeUsed        AuditAction = "admin.recovery_code_used"
+	AuditActionAdminTotpDisabled            AuditAction = "admin.totp_disabled"
+	AuditActionAdminTotpEnrolled            AuditAction = "admin.totp_enrolled"
+	AuditActionAdminTotpResetLocal          AuditAction = "admin.totp_reset_local"
+	AuditActionAdminUpdated                 AuditAction = "admin.updated"
+	AuditActionAntivirusAlertCleared        AuditAction = "antivirus.alert_cleared"
+	AuditActionAntivirusAlertRaised         AuditAction = "antivirus.alert_raised"
+	AuditActionAntivirusScansReleased       AuditAction = "antivirus.scans_released"
+	AuditActionApiTokenCreated              AuditAction = "api_token.created"
+	AuditActionApiTokenRevoked              AuditAction = "api_token.revoked"
+	AuditActionApiTokenUpdated              AuditAction = "api_token.updated"
+	AuditActionApiTokenUsed                 AuditAction = "api_token.used"
+	AuditActionBlocklistUpdated             AuditAction = "blocklist.updated"
+	AuditActionConfigUpdated                AuditAction = "config.updated"
+	AuditActionDataSubjectErased            AuditAction = "data_subject.erased"
+	AuditActionDataSubjectSearched          AuditAction = "data_subject.searched"
+	AuditActionDiskAlertCleared             AuditAction = "disk.alert_cleared"
+	AuditActionDiskAlertRaised              AuditAction = "disk.alert_raised"
+	AuditActionFileInfected                 AuditAction = "file.infected"
+	AuditActionFileNotScanned               AuditAction = "file.not_scanned"
+	AuditActionInvitationCreated            AuditAction = "invitation.created"
+	AuditActionInvitationRevoked            AuditAction = "invitation.revoked"
+	AuditActionInvitationUsed               AuditAction = "invitation.used"
+	AuditActionMaintenanceDisabled          AuditAction = "maintenance.disabled"
+	AuditActionMaintenanceEnabled           AuditAction = "maintenance.enabled"
+	AuditActionMasterKeyRotationCompleted   AuditAction = "master_key.rotation_completed"
+	AuditActionMasterKeyRotationFailed      AuditAction = "master_key.rotation_failed"
+	AuditActionMasterKeyRotationStarted     AuditAction = "master_key.rotation_started"
+	AuditActionMyTransfersLinkRequested     AuditAction = "my_transfers.link_requested"
+	AuditActionMyTransfersSignedIn          AuditAction = "my_transfers.signed_in"
+	AuditActionQuotaReached                 AuditAction = "quota.reached"
+	AuditActionQuotaWarning                 AuditAction = "quota.warning"
+	AuditActionRecipientVerified            AuditAction = "recipient.verified"
+	AuditActionSetupCompleted               AuditAction = "setup.completed"
+	AuditActionTenantAbuseSettingsUpdated   AuditAction = "tenant.abuse_settings_updated"
+	AuditActionTenantAntivirusDisabled      AuditAction = "tenant.antivirus_disabled"
+	AuditActionTenantAntivirusEnabled       AuditAction = "tenant.antivirus_enabled"
+	AuditActionTenantAssetDeleted           AuditAction = "tenant.asset_deleted"
+	AuditActionTenantAssetUploaded          AuditAction = "tenant.asset_uploaded"
+	AuditActionTenantBrandingUpdated        AuditAction = "tenant.branding_updated"
+	AuditActionTenantConfidentialityUpdated AuditAction = "tenant.confidentiality_updated"
+	AuditActionTenantCreated                AuditAction = "tenant.created"
+	AuditActionTenantDeleted                AuditAction = "tenant.deleted"
+	AuditActionTenantDeletionStarted        AuditAction = "tenant.deletion_started"
+	AuditActionTenantLegalUpdated           AuditAction = "tenant.legal_updated"
+	AuditActionTenantNetworkUpdated         AuditAction = "tenant.network_updated"
+	AuditActionTenantRecipientRulesUpdated  AuditAction = "tenant.recipient_rules_updated"
+	AuditActionTenantSmtpTested             AuditAction = "tenant.smtp_tested"
+	AuditActionTenantSmtpUpdated            AuditAction = "tenant.smtp_updated"
+	AuditActionTenantTemplateReset          AuditAction = "tenant.template_reset"
+	AuditActionTenantTemplateUpdated        AuditAction = "tenant.template_updated"
+	AuditActionTenantUpdated                AuditAction = "tenant.updated"
+	AuditActionTransferCreated              AuditAction = "transfer.created"
+	AuditActionTransferDeleted              AuditAction = "transfer.deleted"
+	AuditActionTransferDownloaded           AuditAction = "transfer.downloaded"
+	AuditActionTransferExpired              AuditAction = "transfer.expired"
+	AuditActionTransferExtended             AuditAction = "transfer.extended"
+	AuditActionTransferFinalized            AuditAction = "transfer.finalized"
+	AuditActionTransferNotificationResent   AuditAction = "transfer.notification_resent"
+	AuditActionTransferRecipientRefused     AuditAction = "transfer.recipient_refused"
+	AuditActionTransferReminderSent         AuditAction = "transfer.reminder_sent"
+	AuditActionTransferReplyCreated         AuditAction = "transfer.reply_created"
+	AuditActionWebhookCreated               AuditAction = "webhook.created"
+	AuditActionWebhookDeleted               AuditAction = "webhook.deleted"
+	AuditActionWebhookTested                AuditAction = "webhook.tested"
+	AuditActionWebhookUpdated               AuditAction = "webhook.updated"
 )
 
 // Valid indicates whether the value is a known member of the AuditAction enum.
 func (e AuditAction) Valid() bool {
 	switch e {
+	case AuditActionAbuseReportClosed:
+		return true
+	case AuditActionAbuseReportReopened:
+		return true
+	case AuditActionAbuseReported:
+		return true
+	case AuditActionAbuseThresholdExceeded:
+		return true
+	case AuditActionAbuseUnusualActivity:
+		return true
 	case AuditActionAddressVerified:
 		return true
 	case AuditActionAdminActivated:
@@ -136,6 +240,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionAntivirusAlertCleared:
 		return true
 	case AuditActionAntivirusAlertRaised:
+		return true
+	case AuditActionAntivirusScansReleased:
 		return true
 	case AuditActionApiTokenCreated:
 		return true
@@ -177,17 +283,31 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionMasterKeyRotationStarted:
 		return true
+	case AuditActionMyTransfersLinkRequested:
+		return true
+	case AuditActionMyTransfersSignedIn:
+		return true
 	case AuditActionQuotaReached:
 		return true
 	case AuditActionQuotaWarning:
 		return true
+	case AuditActionRecipientVerified:
+		return true
 	case AuditActionSetupCompleted:
+		return true
+	case AuditActionTenantAbuseSettingsUpdated:
+		return true
+	case AuditActionTenantAntivirusDisabled:
+		return true
+	case AuditActionTenantAntivirusEnabled:
 		return true
 	case AuditActionTenantAssetDeleted:
 		return true
 	case AuditActionTenantAssetUploaded:
 		return true
 	case AuditActionTenantBrandingUpdated:
+		return true
+	case AuditActionTenantConfidentialityUpdated:
 		return true
 	case AuditActionTenantCreated:
 		return true
@@ -198,6 +318,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionTenantLegalUpdated:
 		return true
 	case AuditActionTenantNetworkUpdated:
+		return true
+	case AuditActionTenantRecipientRulesUpdated:
 		return true
 	case AuditActionTenantSmtpTested:
 		return true
@@ -217,9 +339,25 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionTransferExpired:
 		return true
+	case AuditActionTransferExtended:
+		return true
 	case AuditActionTransferFinalized:
 		return true
 	case AuditActionTransferNotificationResent:
+		return true
+	case AuditActionTransferRecipientRefused:
+		return true
+	case AuditActionTransferReminderSent:
+		return true
+	case AuditActionTransferReplyCreated:
+		return true
+	case AuditActionWebhookCreated:
+		return true
+	case AuditActionWebhookDeleted:
+		return true
+	case AuditActionWebhookTested:
+		return true
+	case AuditActionWebhookUpdated:
 		return true
 	default:
 		return false
@@ -315,7 +453,9 @@ func (e ContrastResultLevel) Valid() bool {
 
 // Defines values for ContrastResultPair.
 const (
+	AccentOnDark   ContrastResultPair = "accent-on-dark"
 	AccentOnLight  ContrastResultPair = "accent-on-light"
+	PrimaryOnDark  ContrastResultPair = "primary-on-dark"
 	PrimaryOnLight ContrastResultPair = "primary-on-light"
 	TextOnPrimary  ContrastResultPair = "text-on-primary"
 )
@@ -323,7 +463,11 @@ const (
 // Valid indicates whether the value is a known member of the ContrastResultPair enum.
 func (e ContrastResultPair) Valid() bool {
 	switch e {
+	case AccentOnDark:
+		return true
 	case AccentOnLight:
+		return true
+	case PrimaryOnDark:
 		return true
 	case PrimaryOnLight:
 		return true
@@ -336,8 +480,10 @@ func (e ContrastResultPair) Valid() bool {
 
 // Defines values for DepositorKind.
 const (
-	DepositorKindExternal DepositorKind = "external"
-	DepositorKindInternal DepositorKind = "internal"
+	DepositorKindExternal       DepositorKind = "external"
+	DepositorKindInternal       DepositorKind = "internal"
+	DepositorKindInternalRemote DepositorKind = "internal_remote"
+	DepositorKindReply          DepositorKind = "reply"
 )
 
 // Valid indicates whether the value is a known member of the DepositorKind enum.
@@ -346,6 +492,10 @@ func (e DepositorKind) Valid() bool {
 	case DepositorKindExternal:
 		return true
 	case DepositorKindInternal:
+		return true
+	case DepositorKindInternalRemote:
+		return true
+	case DepositorKindReply:
 		return true
 	default:
 		return false
@@ -378,22 +528,33 @@ func (e DnsRecordCheckStatus) Valid() bool {
 
 // Defines values for EmailTemplateKey.
 const (
-	EmailTemplateKeyAntivirusUnavailable EmailTemplateKey = "antivirus-unavailable"
-	EmailTemplateKeyFileNotScanned       EmailTemplateKey = "file-not-scanned"
-	EmailTemplateKeyFileProblems         EmailTemplateKey = "file-problems"
-	EmailTemplateKeyFirstDownload        EmailTemplateKey = "first-download"
-	EmailTemplateKeyInvitation           EmailTemplateKey = "invitation"
-	EmailTemplateKeyQuotaReached         EmailTemplateKey = "quota-reached"
-	EmailTemplateKeyQuotaWarning         EmailTemplateKey = "quota-warning"
-	EmailTemplateKeyTransferConfirmation EmailTemplateKey = "transfer-confirmation"
-	EmailTemplateKeyTransferNotification EmailTemplateKey = "transfer-notification"
-	EmailTemplateKeyVerificationCode     EmailTemplateKey = "verification-code"
+	EmailTemplateKeyAbuseAlert                EmailTemplateKey = "abuse-alert"
+	EmailTemplateKeyAbuseReport               EmailTemplateKey = "abuse-report"
+	EmailTemplateKeyAntivirusUnavailable      EmailTemplateKey = "antivirus-unavailable"
+	EmailTemplateKeyExpiryReminder            EmailTemplateKey = "expiry-reminder"
+	EmailTemplateKeyFileNotScanned            EmailTemplateKey = "file-not-scanned"
+	EmailTemplateKeyFileProblems              EmailTemplateKey = "file-problems"
+	EmailTemplateKeyFirstDownload             EmailTemplateKey = "first-download"
+	EmailTemplateKeyInvitation                EmailTemplateKey = "invitation"
+	EmailTemplateKeyMyTransfersLink           EmailTemplateKey = "my-transfers-link"
+	EmailTemplateKeyQuotaReached              EmailTemplateKey = "quota-reached"
+	EmailTemplateKeyQuotaWarning              EmailTemplateKey = "quota-warning"
+	EmailTemplateKeyRecipientVerificationCode EmailTemplateKey = "recipient-verification-code"
+	EmailTemplateKeyTransferConfirmation      EmailTemplateKey = "transfer-confirmation"
+	EmailTemplateKeyTransferNotification      EmailTemplateKey = "transfer-notification"
+	EmailTemplateKeyVerificationCode          EmailTemplateKey = "verification-code"
 )
 
 // Valid indicates whether the value is a known member of the EmailTemplateKey enum.
 func (e EmailTemplateKey) Valid() bool {
 	switch e {
+	case EmailTemplateKeyAbuseAlert:
+		return true
+	case EmailTemplateKeyAbuseReport:
+		return true
 	case EmailTemplateKeyAntivirusUnavailable:
+		return true
+	case EmailTemplateKeyExpiryReminder:
 		return true
 	case EmailTemplateKeyFileNotScanned:
 		return true
@@ -403,9 +564,13 @@ func (e EmailTemplateKey) Valid() bool {
 		return true
 	case EmailTemplateKeyInvitation:
 		return true
+	case EmailTemplateKeyMyTransfersLink:
+		return true
 	case EmailTemplateKeyQuotaReached:
 		return true
 	case EmailTemplateKeyQuotaWarning:
+		return true
+	case EmailTemplateKeyRecipientVerificationCode:
 		return true
 	case EmailTemplateKeyTransferConfirmation:
 		return true
@@ -472,6 +637,24 @@ func (e HealthStatus) Valid() bool {
 	case HealthStatusDegraded:
 		return true
 	case HealthStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InstanceStatusStatus.
+const (
+	InstanceStatusStatusDegraded InstanceStatusStatus = "degraded"
+	InstanceStatusStatusOk       InstanceStatusStatus = "ok"
+)
+
+// Valid indicates whether the value is a known member of the InstanceStatusStatus enum.
+func (e InstanceStatusStatus) Valid() bool {
+	switch e {
+	case InstanceStatusStatusDegraded:
+		return true
+	case InstanceStatusStatusOk:
 		return true
 	default:
 		return false
@@ -630,57 +813,73 @@ func (e MaintenanceSource) Valid() bool {
 
 // Defines values for ProblemCode.
 const (
-	ProblemCodeAlreadyExists           ProblemCode = "already-exists"
-	ProblemCodeBlockedFile             ProblemCode = "blocked-file"
-	ProblemCodeChecksumMismatch        ProblemCode = "checksum-mismatch"
-	ProblemCodeCsrfInvalid             ProblemCode = "csrf-invalid"
-	ProblemCodeDepositNotAllowed       ProblemCode = "deposit-not-allowed"
-	ProblemCodeDownloadLocked          ProblemCode = "download-locked"
-	ProblemCodeForbidden               ProblemCode = "forbidden"
-	ProblemCodeInternalError           ProblemCode = "internal-error"
-	ProblemCodeInvalidCredentials      ProblemCode = "invalid-credentials"
-	ProblemCodeInvitationGone          ProblemCode = "invitation-gone"
-	ProblemCodeInvitationNotAllowed    ProblemCode = "invitation-not-allowed"
-	ProblemCodeIpNotAllowed            ProblemCode = "ip-not-allowed"
-	ProblemCodeMailUnavailable         ProblemCode = "mail-unavailable"
-	ProblemCodeMaintenance             ProblemCode = "maintenance"
-	ProblemCodeMethodNotAllowed        ProblemCode = "method-not-allowed"
-	ProblemCodeNewMasterKeyMissing     ProblemCode = "new-master-key-missing"
-	ProblemCodeNotFound                ProblemCode = "not-found"
-	ProblemCodePayloadTooLarge         ProblemCode = "payload-too-large"
-	ProblemCodeQuotaExceeded           ProblemCode = "quota-exceeded"
-	ProblemCodeRangeNotSatisfiable     ProblemCode = "range-not-satisfiable"
-	ProblemCodeRateLimited             ProblemCode = "rate-limited"
-	ProblemCodeSetupAlreadyDone        ProblemCode = "setup-already-done"
-	ProblemCodeSetupTokenInvalid       ProblemCode = "setup-token-invalid"
-	ProblemCodeStateConflict           ProblemCode = "state-conflict"
-	ProblemCodeTransferGone            ProblemCode = "transfer-gone"
-	ProblemCodeTransferLocked          ProblemCode = "transfer-locked"
-	ProblemCodeTransferPasswordInvalid ProblemCode = "transfer-password-invalid"
-	ProblemCodeTransferTooLarge        ProblemCode = "transfer-too-large"
-	ProblemCodeUnauthenticated         ProblemCode = "unauthenticated"
-	ProblemCodeUnknownTenant           ProblemCode = "unknown-tenant"
-	ProblemCodeUnsupportedMediaType    ProblemCode = "unsupported-media-type"
-	ProblemCodeUploadIncomplete        ProblemCode = "upload-incomplete"
-	ProblemCodeValidationFailed        ProblemCode = "validation-failed"
-	ProblemCodeVerificationCodeInvalid ProblemCode = "verification-code-invalid"
-	ProblemCodeVerificationExhausted   ProblemCode = "verification-exhausted"
+	ProblemCodeAbuseThresholdBlocked         ProblemCode = "abuse-threshold-blocked"
+	ProblemCodeAccessLinkInvalid             ProblemCode = "access-link-invalid"
+	ProblemCodeAlreadyExists                 ProblemCode = "already-exists"
+	ProblemCodeBlockedFile                   ProblemCode = "blocked-file"
+	ProblemCodeChecksumMismatch              ProblemCode = "checksum-mismatch"
+	ProblemCodeConfidentialityRuleViolated   ProblemCode = "confidentiality-rule-violated"
+	ProblemCodeCsrfInvalid                   ProblemCode = "csrf-invalid"
+	ProblemCodeDepositNotAllowed             ProblemCode = "deposit-not-allowed"
+	ProblemCodeDownloadLocked                ProblemCode = "download-locked"
+	ProblemCodeExtensionLimitReached         ProblemCode = "extension-limit-reached"
+	ProblemCodeForbidden                     ProblemCode = "forbidden"
+	ProblemCodeInternalError                 ProblemCode = "internal-error"
+	ProblemCodeInvalidCredentials            ProblemCode = "invalid-credentials"
+	ProblemCodeInvitationGone                ProblemCode = "invitation-gone"
+	ProblemCodeInvitationNotAllowed          ProblemCode = "invitation-not-allowed"
+	ProblemCodeIpNotAllowed                  ProblemCode = "ip-not-allowed"
+	ProblemCodeMailUnavailable               ProblemCode = "mail-unavailable"
+	ProblemCodeMaintenance                   ProblemCode = "maintenance"
+	ProblemCodeMaxDownloadsReached           ProblemCode = "max-downloads-reached"
+	ProblemCodeMethodNotAllowed              ProblemCode = "method-not-allowed"
+	ProblemCodeNewMasterKeyMissing           ProblemCode = "new-master-key-missing"
+	ProblemCodeNotFound                      ProblemCode = "not-found"
+	ProblemCodePayloadTooLarge               ProblemCode = "payload-too-large"
+	ProblemCodeQuotaExceeded                 ProblemCode = "quota-exceeded"
+	ProblemCodeRangeNotSatisfiable           ProblemCode = "range-not-satisfiable"
+	ProblemCodeRateLimited                   ProblemCode = "rate-limited"
+	ProblemCodeRecipientDomainRefused        ProblemCode = "recipient-domain-refused"
+	ProblemCodeRecipientVerificationRequired ProblemCode = "recipient-verification-required"
+	ProblemCodeReplyNotAllowed               ProblemCode = "reply-not-allowed"
+	ProblemCodeSetupAlreadyDone              ProblemCode = "setup-already-done"
+	ProblemCodeSetupTokenInvalid             ProblemCode = "setup-token-invalid"
+	ProblemCodeStateConflict                 ProblemCode = "state-conflict"
+	ProblemCodeTransferGone                  ProblemCode = "transfer-gone"
+	ProblemCodeTransferLocked                ProblemCode = "transfer-locked"
+	ProblemCodeTransferPasswordInvalid       ProblemCode = "transfer-password-invalid"
+	ProblemCodeTransferTooLarge              ProblemCode = "transfer-too-large"
+	ProblemCodeUnauthenticated               ProblemCode = "unauthenticated"
+	ProblemCodeUnknownTenant                 ProblemCode = "unknown-tenant"
+	ProblemCodeUnsupportedMediaType          ProblemCode = "unsupported-media-type"
+	ProblemCodeUploadIncomplete              ProblemCode = "upload-incomplete"
+	ProblemCodeValidationFailed              ProblemCode = "validation-failed"
+	ProblemCodeVerificationCodeInvalid       ProblemCode = "verification-code-invalid"
+	ProblemCodeVerificationExhausted         ProblemCode = "verification-exhausted"
 )
 
 // Valid indicates whether the value is a known member of the ProblemCode enum.
 func (e ProblemCode) Valid() bool {
 	switch e {
+	case ProblemCodeAbuseThresholdBlocked:
+		return true
+	case ProblemCodeAccessLinkInvalid:
+		return true
 	case ProblemCodeAlreadyExists:
 		return true
 	case ProblemCodeBlockedFile:
 		return true
 	case ProblemCodeChecksumMismatch:
 		return true
+	case ProblemCodeConfidentialityRuleViolated:
+		return true
 	case ProblemCodeCsrfInvalid:
 		return true
 	case ProblemCodeDepositNotAllowed:
 		return true
 	case ProblemCodeDownloadLocked:
+		return true
+	case ProblemCodeExtensionLimitReached:
 		return true
 	case ProblemCodeForbidden:
 		return true
@@ -698,6 +897,8 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodeMaintenance:
 		return true
+	case ProblemCodeMaxDownloadsReached:
+		return true
 	case ProblemCodeMethodNotAllowed:
 		return true
 	case ProblemCodeNewMasterKeyMissing:
@@ -711,6 +912,12 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeRangeNotSatisfiable:
 		return true
 	case ProblemCodeRateLimited:
+		return true
+	case ProblemCodeRecipientDomainRefused:
+		return true
+	case ProblemCodeRecipientVerificationRequired:
+		return true
+	case ProblemCodeReplyNotAllowed:
 		return true
 	case ProblemCodeSetupAlreadyDone:
 		return true
@@ -763,10 +970,29 @@ func (e PublicTenantLegalDocuments) Valid() bool {
 	}
 }
 
+// Defines values for RecipientVerificationStartPurpose.
+const (
+	RecipientVerificationStartPurposeDownload RecipientVerificationStartPurpose = "download"
+	RecipientVerificationStartPurposeReply    RecipientVerificationStartPurpose = "reply"
+)
+
+// Valid indicates whether the value is a known member of the RecipientVerificationStartPurpose enum.
+func (e RecipientVerificationStartPurpose) Valid() bool {
+	switch e {
+	case RecipientVerificationStartPurposeDownload:
+		return true
+	case RecipientVerificationStartPurposeReply:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScanStatus.
 const (
 	ScanStatusClean               ScanStatus = "clean"
 	ScanStatusInfected            ScanStatus = "infected"
+	ScanStatusNotScannedDisabled  ScanStatus = "not_scanned_disabled"
 	ScanStatusNotScannedEncrypted ScanStatus = "not_scanned_encrypted"
 	ScanStatusNotScannedTooLarge  ScanStatus = "not_scanned_too_large"
 	ScanStatusPending             ScanStatus = "pending"
@@ -780,6 +1006,8 @@ func (e ScanStatus) Valid() bool {
 	case ScanStatusClean:
 		return true
 	case ScanStatusInfected:
+		return true
+	case ScanStatusNotScannedDisabled:
 		return true
 	case ScanStatusNotScannedEncrypted:
 		return true
@@ -877,6 +1105,24 @@ func (e TenantStatus) Valid() bool {
 	}
 }
 
+// Defines values for TenantFeaturesAntivirus.
+const (
+	Disabled TenantFeaturesAntivirus = "disabled"
+	Enabled  TenantFeaturesAntivirus = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the TenantFeaturesAntivirus enum.
+func (e TenantFeaturesAntivirus) Valid() bool {
+	switch e {
+	case Disabled:
+		return true
+	case Enabled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TenantStatsPeriod.
 const (
 	TenantStatsPeriodN12m TenantStatsPeriod = "12m"
@@ -900,9 +1146,11 @@ func (e TenantStatsPeriod) Valid() bool {
 
 // Defines values for TransferOrigin.
 const (
-	TransferOriginApi      TransferOrigin = "api"
-	TransferOriginExternal TransferOrigin = "external"
-	TransferOriginInternal TransferOrigin = "internal"
+	TransferOriginApi            TransferOrigin = "api"
+	TransferOriginExternal       TransferOrigin = "external"
+	TransferOriginInternal       TransferOrigin = "internal"
+	TransferOriginInternalRemote TransferOrigin = "internal_remote"
+	TransferOriginReply          TransferOrigin = "reply"
 )
 
 // Valid indicates whether the value is a known member of the TransferOrigin enum.
@@ -913,6 +1161,10 @@ func (e TransferOrigin) Valid() bool {
 	case TransferOriginExternal:
 		return true
 	case TransferOriginInternal:
+		return true
+	case TransferOriginInternalRemote:
+		return true
+	case TransferOriginReply:
 		return true
 	default:
 		return false
@@ -958,6 +1210,135 @@ const (
 func (e VersionInfoApiVersion) Valid() bool {
 	switch e {
 	case V1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookErrorCategory.
+const (
+	WebhookErrorCategoryConnect        WebhookErrorCategory = "connect"
+	WebhookErrorCategoryDns            WebhookErrorCategory = "dns"
+	WebhookErrorCategoryHttpStatus     WebhookErrorCategory = "http_status"
+	WebhookErrorCategoryRefusedNetwork WebhookErrorCategory = "refused_network"
+	WebhookErrorCategoryTimeout        WebhookErrorCategory = "timeout"
+	WebhookErrorCategoryTls            WebhookErrorCategory = "tls"
+)
+
+// Valid indicates whether the value is a known member of the WebhookErrorCategory enum.
+func (e WebhookErrorCategory) Valid() bool {
+	switch e {
+	case WebhookErrorCategoryConnect:
+		return true
+	case WebhookErrorCategoryDns:
+		return true
+	case WebhookErrorCategoryHttpStatus:
+		return true
+	case WebhookErrorCategoryRefusedNetwork:
+		return true
+	case WebhookErrorCategoryTimeout:
+		return true
+	case WebhookErrorCategoryTls:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookEventSeverity.
+const (
+	WebhookEventSeverityCritical WebhookEventSeverity = "critical"
+	WebhookEventSeverityInfo     WebhookEventSeverity = "info"
+	WebhookEventSeverityWarning  WebhookEventSeverity = "warning"
+)
+
+// Valid indicates whether the value is a known member of the WebhookEventSeverity enum.
+func (e WebhookEventSeverity) Valid() bool {
+	switch e {
+	case WebhookEventSeverityCritical:
+		return true
+	case WebhookEventSeverityInfo:
+		return true
+	case WebhookEventSeverityWarning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookEventType.
+const (
+	WebhookEventTypeAbuseReported              WebhookEventType = "abuse.reported"
+	WebhookEventTypeAbuseThresholdExceeded     WebhookEventType = "abuse.threshold_exceeded"
+	WebhookEventTypeAbuseUnusualActivity       WebhookEventType = "abuse.unusual_activity"
+	WebhookEventTypeAntivirusAlertCleared      WebhookEventType = "antivirus.alert_cleared"
+	WebhookEventTypeAntivirusAlertRaised       WebhookEventType = "antivirus.alert_raised"
+	WebhookEventTypeDiskAlertCleared           WebhookEventType = "disk.alert_cleared"
+	WebhookEventTypeDiskAlertRaised            WebhookEventType = "disk.alert_raised"
+	WebhookEventTypeMaintenanceDisabled        WebhookEventType = "maintenance.disabled"
+	WebhookEventTypeMaintenanceEnabled         WebhookEventType = "maintenance.enabled"
+	WebhookEventTypeMasterKeyRotationCompleted WebhookEventType = "master_key.rotation_completed"
+	WebhookEventTypeMasterKeyRotationFailed    WebhookEventType = "master_key.rotation_failed"
+	WebhookEventTypeQuotaReached               WebhookEventType = "quota.reached"
+	WebhookEventTypeQuotaWarning               WebhookEventType = "quota.warning"
+	WebhookEventTypeVirusDetected              WebhookEventType = "virus.detected"
+	WebhookEventTypeWebhookTest                WebhookEventType = "webhook.test"
+)
+
+// Valid indicates whether the value is a known member of the WebhookEventType enum.
+func (e WebhookEventType) Valid() bool {
+	switch e {
+	case WebhookEventTypeAbuseReported:
+		return true
+	case WebhookEventTypeAbuseThresholdExceeded:
+		return true
+	case WebhookEventTypeAbuseUnusualActivity:
+		return true
+	case WebhookEventTypeAntivirusAlertCleared:
+		return true
+	case WebhookEventTypeAntivirusAlertRaised:
+		return true
+	case WebhookEventTypeDiskAlertCleared:
+		return true
+	case WebhookEventTypeDiskAlertRaised:
+		return true
+	case WebhookEventTypeMaintenanceDisabled:
+		return true
+	case WebhookEventTypeMaintenanceEnabled:
+		return true
+	case WebhookEventTypeMasterKeyRotationCompleted:
+		return true
+	case WebhookEventTypeMasterKeyRotationFailed:
+		return true
+	case WebhookEventTypeQuotaReached:
+		return true
+	case WebhookEventTypeQuotaWarning:
+		return true
+	case WebhookEventTypeVirusDetected:
+		return true
+	case WebhookEventTypeWebhookTest:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookKind.
+const (
+	Generic WebhookKind = "generic"
+	Slack   WebhookKind = "slack"
+	Teams   WebhookKind = "teams"
+)
+
+// Valid indicates whether the value is a known member of the WebhookKind enum.
+func (e WebhookKind) Valid() bool {
+	switch e {
+	case Generic:
+		return true
+	case Slack:
+		return true
+	case Teams:
 		return true
 	default:
 		return false
@@ -1120,6 +1501,107 @@ func (e AppendUploadChunkParamsTusResumable) Valid() bool {
 	}
 }
 
+// AbuseReport defines model for AbuseReport.
+type AbuseReport struct {
+	Category AbuseReportCategory `json:"category"`
+	ClosedAt *time.Time          `json:"closedAt,omitempty"`
+
+	// ClosedBy Username of the admin who closed the report.
+	ClosedBy *string `json:"closedBy,omitempty"`
+	Id       string  `json:"id"`
+
+	// Message Plain text, to be rendered as text (never HTML).
+	Message *string `json:"message,omitempty"`
+	Note    *string `json:"note,omitempty"`
+
+	// RecipientIndex Position (1-based) of the recipient whose link was used, as an unverified hint; null for a shared link (transfers created before 1.1).
+	RecipientIndex *int      `json:"recipientIndex,omitempty"`
+	ReportedAt     time.Time `json:"reportedAt"`
+
+	// ReportedBy Address of the reporter, only when a valid recipient verification of the link proved it (`reporterVerified`); null otherwise, or the pseudonym after a GDPR erasure.
+	ReportedBy *string `json:"reportedBy,omitempty"`
+
+	// ReporterVerified The reporter proved being the recipient of the link (`__Host-tt_rv`).
+	ReporterVerified bool `json:"reporterVerified"`
+
+	// SenderEmail Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure.
+	SenderEmail string            `json:"senderEmail"`
+	Status      AbuseReportStatus `json:"status"`
+
+	// TransferId Reported transfer (it may have expired or been deleted since).
+	TransferId string `json:"transferId"`
+}
+
+// AbuseReportCategory defines model for AbuseReportCategory.
+type AbuseReportCategory string
+
+// AbuseReportCreate defines model for AbuseReportCreate.
+type AbuseReportCreate struct {
+	Category AbuseReportCategory `json:"category"`
+
+	// Message Plain text; control, invisible and bidirectional characters are removed.
+	Message *string `json:"message,omitempty"`
+}
+
+// AbuseReportList defines model for AbuseReportList.
+type AbuseReportList struct {
+	Items []AbuseReport `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; absent on the last page.
+	NextCursor *PageCursor `json:"nextCursor,omitempty"`
+}
+
+// AbuseReportStatus defines model for AbuseReportStatus.
+type AbuseReportStatus string
+
+// AbuseReportUpdate defines model for AbuseReportUpdate.
+type AbuseReportUpdate struct {
+	Note   *string           `json:"note,omitempty"`
+	Status AbuseReportStatus `json:"status"`
+}
+
+// AbuseThresholds Since 1.1. Abuse detection settings of a tenant. Every member is required; `null`
+// disables the corresponding rule. Daily counters are computed per day of `timeZone` from
+// the transfers of the tenant (no write per uploaded chunk); deposits from outside
+// (`internal_remote`) count like internal ones.
+type AbuseThresholds struct {
+	// BlockOnExceed Refuse a transfer exceeding a per-sender limit or an external quota (`403 abuse-threshold-blocked`) instead of only alerting.
+	BlockOnExceed bool `json:"blockOnExceed"`
+
+	// ExternalMaxDailyBytes Volume an external address (invited or replying) may deposit per day.
+	ExternalMaxDailyBytes *int64 `json:"externalMaxDailyBytes"`
+
+	// ExternalMaxDailyDeposits Transfers an external address (invited or replying) may create per day.
+	ExternalMaxDailyDeposits *int `json:"externalMaxDailyDeposits"`
+
+	// LargeExternalTransferBytes Alert on a transfer at least this large with a recipient outside the internal domains. Alert only.
+	LargeExternalTransferBytes *int64 `json:"largeExternalTransferBytes"`
+
+	// MaxDailyBytesPerSender Volume sent per sender per day.
+	MaxDailyBytesPerSender *int64 `json:"maxDailyBytesPerSender"`
+
+	// MaxDailyTransfersPerSender Transfers per sender per day.
+	MaxDailyTransfersPerSender *int `json:"maxDailyTransfersPerSender"`
+
+	// MaxInvitationsPerInviter Invitations an internal user may issue per rolling hour.
+	MaxInvitationsPerInviter int `json:"maxInvitationsPerInviter"`
+
+	// MaxRecipientsPerTransfer Recipients of one transfer.
+	MaxRecipientsPerTransfer *int `json:"maxRecipientsPerTransfer"`
+
+	// OfficeHours Alert on transfers created outside office hours; null disables it. Alert only.
+	OfficeHours *OfficeHours `json:"officeHours"`
+
+	// TimeZone IANA time zone of the day boundary of the daily counters and of the office hours.
+	TimeZone string `json:"timeZone"`
+
+	// UnusualMinHistoryDays Days of activity a sender needs before the unusual volume rule applies to them.
+	UnusualMinHistoryDays int `json:"unusualMinHistoryDays"`
+
+	// UnusualVolumeFactor Alert when a sender's daily volume exceeds this factor times their average daily volume over the last 30 days (only with at least `unusualMinHistoryDays` days of history). Alert only, never blocks.
+	UnusualVolumeFactor *float32 `json:"unusualVolumeFactor"`
+}
+
 // ActivationRequest defines model for ActivationRequest.
 type ActivationRequest struct {
 	ActivationToken string `json:"activationToken"`
@@ -1204,9 +1686,12 @@ type AdminRole string
 
 // AdminTransfer defines model for AdminTransfer.
 type AdminTransfer struct {
-	ApiTokenId               *string   `json:"apiTokenId,omitempty"`
-	CreatedAt                time.Time `json:"createdAt"`
-	DeleteAfterFirstDownload bool      `json:"deleteAfterFirstDownload"`
+	ApiTokenId *string `json:"apiTokenId,omitempty"`
+
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	CreatedAt                time.Time                `json:"createdAt"`
+	DeleteAfterFirstDownload bool                     `json:"deleteAfterFirstDownload"`
 
 	// DownloadCount Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded).
 	DownloadCount     int        `json:"downloadCount"`
@@ -1216,10 +1701,19 @@ type AdminTransfer struct {
 	Id                string     `json:"id"`
 	InvitationId      *string    `json:"invitationId,omitempty"`
 
-	// Origin Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
+	// MaxDownloads Since 1.1. Null for no limit.
+	MaxDownloads *int `json:"maxDownloads,omitempty"`
+
+	// Origin Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
 	Origin            TransferOrigin `json:"origin"`
 	PasswordProtected bool           `json:"passwordProtected"`
-	Recipients        []Email        `json:"recipients"`
+
+	// RecipientVerification Since 1.1.
+	RecipientVerification *bool   `json:"recipientVerification,omitempty"`
+	Recipients            []Email `json:"recipients"`
+
+	// ReplyToTransferId Since 1.1. For a reply, the original transfer.
+	ReplyToTransferId *string `json:"replyToTransferId,omitempty"`
 
 	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	SenderEmail Email `json:"senderEmail"`
@@ -1232,9 +1726,12 @@ type AdminTransfer struct {
 
 // AdminTransferDetail defines model for AdminTransferDetail.
 type AdminTransferDetail struct {
-	ApiTokenId               *string   `json:"apiTokenId,omitempty"`
-	CreatedAt                time.Time `json:"createdAt"`
-	DeleteAfterFirstDownload bool      `json:"deleteAfterFirstDownload"`
+	ApiTokenId *string `json:"apiTokenId,omitempty"`
+
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	CreatedAt                time.Time                `json:"createdAt"`
+	DeleteAfterFirstDownload bool                     `json:"deleteAfterFirstDownload"`
 
 	// DownloadCount Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded).
 	DownloadCount int        `json:"downloadCount"`
@@ -1244,6 +1741,16 @@ type AdminTransferDetail struct {
 		Id        string  `json:"id"`
 		MediaType *string `json:"mediaType,omitempty"`
 		Name      string  `json:"name"`
+
+		// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+		// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+		// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+		// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+		// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+		// NFC normalisation and case-insensitively: two files with the same name in the same
+		// folder, or a file whose name equals a folder of the same level, are told apart by
+		// suffixing the file (`name (2).ext`) in the lists and in the archive.
+		Path *FilePath `json:"path,omitempty"`
 
 		// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
 		// back: the antivirus is fail-closed).
@@ -1255,6 +1762,9 @@ type AdminTransferDetail struct {
 		// `infected`: file erased, kept in the list for the sender's information only.
 		// `scan_error`: the file could not be analyzed after several attempts; it is withheld
 		// (fail-closed, never downloadable) and the sender is informed.
+		// `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
+		// (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
+		// `not_scanned_too_large`.
 		ScanStatus ScanStatus `json:"scanStatus"`
 		Sha256     *Sha256    `json:"sha256,omitempty"`
 		Size       ByteSize   `json:"size"`
@@ -1263,10 +1773,22 @@ type AdminTransferDetail struct {
 	Id                string     `json:"id"`
 	InvitationId      *string    `json:"invitationId,omitempty"`
 
-	// Origin Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
+	// MaxDownloads Since 1.1. Null for no limit.
+	MaxDownloads *int `json:"maxDownloads,omitempty"`
+
+	// Origin Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
 	Origin            TransferOrigin `json:"origin"`
 	PasswordProtected bool           `json:"passwordProtected"`
-	Recipients        []Email        `json:"recipients"`
+
+	// RecipientTracking Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links.
+	RecipientTracking *[]RecipientTracking `json:"recipientTracking,omitempty"`
+
+	// RecipientVerification Since 1.1.
+	RecipientVerification *bool   `json:"recipientVerification,omitempty"`
+	Recipients            []Email `json:"recipients"`
+
+	// ReplyToTransferId Since 1.1. For a reply, the original transfer.
+	ReplyToTransferId *string `json:"replyToTransferId,omitempty"`
 
 	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	SenderEmail Email `json:"senderEmail"`
@@ -1346,6 +1868,12 @@ type AllowedCidrs = []string
 // (the default) allows any address of the tenant's internal domains; in every case the
 // address must also belong to an internal domain and not be blocklisted.
 type AllowedSenders = []string
+
+// AntivirusEngine Since 1.1. Antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (environment only):
+// `clamd` (default, local or remote clamd), `icap` (RFC 3507 server), `http` (generic HTTP
+// scanning API), `none` (antivirus disabled for the whole instance: files are delivered
+// `not_scanned_disabled`).
+type AntivirusEngine string
 
 // ApiToken defines model for ApiToken.
 type ApiToken struct {
@@ -1449,6 +1977,19 @@ type ApiTokenUpdate = json.RawMessage
 // details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
 // (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
 // `system`, without tenant, and are recorded even when no mail can be sent.
+// Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
+// `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
+// extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
+// security log) names the refused domains; `antivirus.scans_released` (actor `system`,
+// without tenant) counts the files released as `not_scanned_disabled` at a start with
+// `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+// `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
+// recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
+// (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+// name the report; `webhook.*` never carry the URL (host only) nor the secret;
+// `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
+// admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
+// a link is actually sent.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -1474,6 +2015,19 @@ type AuditEvent struct {
 	// details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
 	// (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
 	// `system`, without tenant, and are recorded even when no mail can be sent.
+	// Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
+	// `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
+	// extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
+	// security log) names the refused domains; `antivirus.scans_released` (actor `system`,
+	// without tenant) counts the files released as `not_scanned_disabled` at a start with
+	// `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+	// `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
+	// recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
+	// (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+	// name the report; `webhook.*` never carry the URL (host only) nor the secret;
+	// `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
+	// admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
+	// a link is actually sent.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id   string              `json:"id"`
@@ -1554,11 +2108,59 @@ type ByteSize = int64
 // ComponentHealth defines model for ComponentHealth.
 type ComponentHealth string
 
+// ConfidentialityLevel Since 1.1. A confidentiality level of a tenant, as managed by its admins.
+type ConfidentialityLevel struct {
+	// Descriptions Optional description per supported language (plain text, at most 500 characters), shown in the deposit form and the help.
+	Descriptions *map[string]string `json:"descriptions,omitempty"`
+	IsDefault    bool               `json:"isDefault"`
+
+	// Key Since 1.1. Key of a confidentiality level, unique within the tenant.
+	Key ConfidentialityLevelKey `json:"key"`
+
+	// Labels Label per supported language (1 to 50 characters of plain text); every supported language is required.
+	Labels map[string]string `json:"labels"`
+
+	// Rules Since 1.1. Rules a confidentiality level imposes on a transfer, enforced by the server at creation.
+	Rules ConfidentialityRules `json:"rules"`
+}
+
+// ConfidentialityLevelKey Since 1.1. Key of a confidentiality level, unique within the tenant.
+type ConfidentialityLevelKey = string
+
+// ConfidentialityLevelList defines model for ConfidentialityLevelList.
+type ConfidentialityLevelList struct {
+	Items []ConfidentialityLevel `json:"items"`
+}
+
+// ConfidentialityLevelRef Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+type ConfidentialityLevelRef struct {
+	// Key Since 1.1. Key of a confidentiality level, unique within the tenant.
+	Key   ConfidentialityLevelKey `json:"key"`
+	Label string                  `json:"label"`
+
+	// Rules Since 1.1. Rules a confidentiality level imposes on a transfer, enforced by the server at creation.
+	Rules *ConfidentialityRules `json:"rules,omitempty"`
+}
+
+// ConfidentialityRules Since 1.1. Rules a confidentiality level imposes on a transfer, enforced by the server at creation.
+type ConfidentialityRules struct {
+	AllowedExpiryDays             []ExpiryDays `json:"allowedExpiryDays"`
+	ForceDeleteAfterFirstDownload bool         `json:"forceDeleteAfterFirstDownload"`
+
+	// InternalRecipientsOnly Recipients must belong to the tenant's internal domains (exact match).
+	InternalRecipientsOnly bool `json:"internalRecipientsOnly"`
+
+	// MaxDownloads Cap of `maxDownloads` (applied when the sender sets none or more); null for none.
+	MaxDownloads                 *int `json:"maxDownloads"`
+	RequirePassword              bool `json:"requirePassword"`
+	RequireRecipientVerification bool `json:"requireRecipientVerification"`
+}
+
 // ContrastResult defines model for ContrastResult.
 type ContrastResult struct {
 	Level ContrastResultLevel `json:"level"`
 
-	// Pair V1.1 adds `*-on-dark` pairs for the dark theme.
+	// Pair Since 1.1, the `*-on-dark` pairs check the colours on the dark theme background as well.
 	Pair  ContrastResultPair `json:"pair"`
 	Ratio float32            `json:"ratio"`
 }
@@ -1566,11 +2168,16 @@ type ContrastResult struct {
 // ContrastResultLevel defines model for ContrastResult.Level.
 type ContrastResultLevel string
 
-// ContrastResultPair V1.1 adds `*-on-dark` pairs for the dark theme.
+// ContrastResultPair Since 1.1, the `*-on-dark` pairs check the colours on the dark theme background as well.
 type ContrastResultPair string
 
 // DataSubjectEraseReport defines model for DataSubjectEraseReport.
 type DataSubjectEraseReport struct {
+	// AbuseReports Since 1.1. Abuse reports pseudonymised (made by the address, or about its transfers).
+	AbuseReports *int `json:"abuseReports,omitempty"`
+
+	// AccessLinks Since 1.1. "My transfers" access links and sessions deleted.
+	AccessLinks             *int `json:"accessLinks,omitempty"`
 	InvitationsDeleted      int  `json:"invitationsDeleted"`
 	LogEntriesPseudonymised int  `json:"logEntriesPseudonymised"`
 	RecipientEntriesRemoved int  `json:"recipientEntriesRemoved"`
@@ -1618,13 +2225,23 @@ type DepositSession struct {
 	} `json:"invitation,omitempty"`
 
 	// Kind `internal`: internal IP and domain. `external`: invited external.
-	// Reserved for V1.1: `internal_remote` (verified internal depositing from outside),
-	// `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
+	// Since 1.1: `internal_remote` (address of an internal domain already verified from the
+	// internal network, depositing from outside with a code each time), `reply` (recipient
+	// replying to a transfer). Reserved for V2: `drop_link`.
 	Kind   DepositorKind `json:"kind"`
 	Limits struct {
 		ExpiryDays       []ExpiryDays `json:"expiryDays"`
 		MaxTransferBytes ByteSize     `json:"maxTransferBytes"`
 	} `json:"limits"`
+
+	// Reply Since 1.1. Present for a `reply` session.
+	Reply *struct {
+		// Recipient The sender of the original transfer, single recipient of the reply.
+		Recipient Email `json:"recipient"`
+
+		// TransferExpiresAt Expiry of the original transfer; the session never outlives it.
+		TransferExpiresAt time.Time `json:"transferExpiresAt"`
+	} `json:"reply,omitempty"`
 }
 
 // DepositSessionStart defines model for DepositSessionStart.
@@ -1635,8 +2252,9 @@ type DepositSessionStart struct {
 }
 
 // DepositorKind `internal`: internal IP and domain. `external`: invited external.
-// Reserved for V1.1: `internal_remote` (verified internal depositing from outside),
-// `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
+// Since 1.1: `internal_remote` (address of an internal domain already verified from the
+// internal network, depositing from outside with a code each time), `reply` (recipient
+// replying to a transfer). Reserved for V2: `drop_link`.
 type DepositorKind string
 
 // DnsRecordCheck defines model for DnsRecordCheck.
@@ -1676,8 +2294,11 @@ type EmailTemplate struct {
 	// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
 	// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
 	// while transfers of the entity wait for analysis, once per outage.
-	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
-	// `recipient-verification-code`.
+	// Since 1.1: `expiry-reminder` (recipients who have not downloaded yet, the day before
+	// expiry, once per expiry date, skipped when less than 36 hours remained at availability), `abuse-alert` (delegated admins, abuse threshold or unusual activity),
+	// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
+	// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
+	// per-recipient link).
 	Key EmailTemplateKey `json:"key"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -1702,8 +2323,11 @@ type EmailTemplate struct {
 // its first download; `antivirus-unavailable` goes to the delegated admins of an entity
 // (else the super admins) when the antivirus has stayed unreachable beyond the grace period
 // while transfers of the entity wait for analysis, once per outage.
-// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
-// `recipient-verification-code`.
+// Since 1.1: `expiry-reminder` (recipients who have not downloaded yet, the day before
+// expiry, once per expiry date, skipped when less than 36 hours remained at availability), `abuse-alert` (delegated admins, abuse threshold or unusual activity),
+// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
+// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
+// per-recipient link).
 type EmailTemplateKey string
 
 // EmailTemplateSummary defines model for EmailTemplateSummary.
@@ -1720,8 +2344,11 @@ type EmailTemplateSummary struct {
 	// its first download; `antivirus-unavailable` goes to the delegated admins of an entity
 	// (else the super admins) when the antivirus has stayed unreachable beyond the grace period
 	// while transfers of the entity wait for analysis, once per outage.
-	// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
-	// `recipient-verification-code`.
+	// Since 1.1: `expiry-reminder` (recipients who have not downloaded yet, the day before
+	// expiry, once per expiry date, skipped when less than 36 hours remained at availability), `abuse-alert` (delegated admins, abuse threshold or unusual activity),
+	// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
+	// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
+	// per-recipient link).
 	Key EmailTemplateKey `json:"key"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -1747,9 +2374,29 @@ type FileDeclaration struct {
 	MediaType *string `json:"mediaType,omitempty"`
 
 	// Name Original file name (UTF-8). Stored in the database only; never used on disk. Control and bidirectional characters are rejected.
-	Name string   `json:"name"`
-	Size ByteSize `json:"size"`
+	Name string `json:"name"`
+
+	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+	// NFC normalisation and case-insensitively: two files with the same name in the same
+	// folder, or a file whose name equals a folder of the same level, are told apart by
+	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	Path *FilePath `json:"path,omitempty"`
+	Size ByteSize  `json:"size"`
 }
+
+// FilePath Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+// NFC normalisation and case-insensitively: two files with the same name in the same
+// folder, or a file whose name equals a folder of the same level, are told apart by
+// suffixing the file (`name (2).ext`) in the lists and in the archive.
+type FilePath = string
 
 // Fqdn defines model for Fqdn.
 type Fqdn = string
@@ -1804,6 +2451,59 @@ type HealthStatus string
 
 // HexColor defines model for HexColor.
 type HexColor = string
+
+// InstanceStatus Since 1.1. Answer of `/status`.
+type InstanceStatus struct {
+	Antivirus struct {
+		// AlertActive The antivirus outage alert is raised.
+		AlertActive bool `json:"alertActive"`
+
+		// Engine Since 1.1. Antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (environment only):
+		// `clamd` (default, local or remote clamd), `icap` (RFC 3507 server), `http` (generic HTTP
+		// scanning API), `none` (antivirus disabled for the whole instance: files are delivered
+		// `not_scanned_disabled`).
+		Engine *AntivirusEngine `json:"engine,omitempty"`
+
+		// QueuedFiles Files waiting for or under analysis.
+		QueuedFiles int `json:"queuedFiles"`
+	} `json:"antivirus"`
+	CheckedAt time.Time `json:"checkedAt"`
+	Checks    struct {
+		Antivirus ComponentHealth `json:"antivirus"`
+		Database  ComponentHealth `json:"database"`
+		Storage   ComponentHealth `json:"storage"`
+	} `json:"checks"`
+	Disk struct {
+		AlertActive    bool     `json:"alertActive"`
+		AlertThreshold float32  `json:"alertThreshold"`
+		TotalBytes     ByteSize `json:"totalBytes"`
+		UsedBytes      ByteSize `json:"usedBytes"`
+		UsedRatio      float32  `json:"usedRatio"`
+	} `json:"disk"`
+	Maintenance bool `json:"maintenance"`
+
+	// Status `degraded` when a component of `checks` is unavailable.
+	Status InstanceStatusStatus `json:"status"`
+
+	// Tenants One row per active tenant.
+	Tenants []struct {
+		// ActiveTransfers Transfers currently available.
+		ActiveTransfers   int      `json:"activeTransfers"`
+		Id                string   `json:"id"`
+		Name              string   `json:"name"`
+		StorageQuotaBytes ByteSize `json:"storageQuotaBytes"`
+		StorageUsedBytes  ByteSize `json:"storageUsedBytes"`
+		StorageUsedRatio  float32  `json:"storageUsedRatio"`
+
+		// TransfersLast24h Transfers made available during the last 24 hours.
+		TransfersLast24h int `json:"transfersLast24h"`
+	} `json:"tenants"`
+	UptimeSeconds *int64 `json:"uptimeSeconds,omitempty"`
+	Version       string `json:"version"`
+}
+
+// InstanceStatusStatus `degraded` when a component of `checks` is unavailable.
+type InstanceStatusStatus string
 
 // Invitation defines model for Invitation.
 type Invitation struct {
@@ -1969,10 +2669,148 @@ type MasterKeyStatus struct {
 	RestartRequired bool `json:"restartRequired"`
 }
 
+// MyTransfer defines model for MyTransfer.
+type MyTransfer struct {
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	CreatedAt            time.Time                `json:"createdAt"`
+
+	// DownloadedBy Recipients who downloaded at least one file (per-recipient links only; 0 otherwise).
+	DownloadedBy int `json:"downloadedBy"`
+
+	// ExpiresAt Absent while `scanning`.
+	ExpiresAt             *time.Time `json:"expiresAt,omitempty"`
+	ExpiryDays            ExpiryDays `json:"expiryDays"`
+	FileCount             int        `json:"fileCount"`
+	Id                    string     `json:"id"`
+	PasswordProtected     bool       `json:"passwordProtected"`
+	RecipientVerification bool       `json:"recipientVerification"`
+	Recipients            []Email    `json:"recipients"`
+
+	// Status `uploading` → `scanning` → `available` → `expired` | `deleted`.
+	// `rejected`: every file was infected or blocklisted.
+	Status     TransferStatus `json:"status"`
+	TotalBytes ByteSize       `json:"totalBytes"`
+}
+
+// MyTransferDetail defines model for MyTransferDetail.
+type MyTransferDetail struct {
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	CreatedAt                time.Time                `json:"createdAt"`
+	DeleteAfterFirstDownload bool                     `json:"deleteAfterFirstDownload"`
+
+	// DownloadCount Download starts, all recipients together.
+	DownloadCount int `json:"downloadCount"`
+
+	// DownloadedBy Recipients who downloaded at least one file (per-recipient links only; 0 otherwise).
+	DownloadedBy int `json:"downloadedBy"`
+
+	// ExpiresAt Absent while `scanning`.
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
+	ExpiryDays ExpiryDays `json:"expiryDays"`
+
+	// ExtendableTo Latest expiry `extendMyTransfer` could set now: now plus the longest duration allowed by the snapshotted level, but never more than 90 days after the creation; absent when the transfer cannot be extended.
+	ExtendableTo *time.Time `json:"extendableTo,omitempty"`
+
+	// ExtensionCount Number of extensions made.
+	ExtensionCount *int `json:"extensionCount,omitempty"`
+	FileCount      int  `json:"fileCount"`
+	Files          []struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+
+		// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+		// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+		// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+		// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+		// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+		// NFC normalisation and case-insensitively: two files with the same name in the same
+		// folder, or a file whose name equals a folder of the same level, are told apart by
+		// suffixing the file (`name (2).ext`) in the lists and in the archive.
+		Path *FilePath `json:"path,omitempty"`
+
+		// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
+		// back: the antivirus is fail-closed).
+		// `clean`: analyzed, no threat found.
+		// `not_scanned_too_large`: file above the ClamAV size limits, delivered unscanned and flagged
+		// (the sender is told and the download page says so).
+		// `not_scanned_encrypted`: encrypted archive whose content ClamAV cannot read, delivered
+		// unscanned and flagged like `not_scanned_too_large`.
+		// `infected`: file erased, kept in the list for the sender's information only.
+		// `scan_error`: the file could not be analyzed after several attempts; it is withheld
+		// (fail-closed, never downloadable) and the sender is informed.
+		// `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
+		// (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
+		// `not_scanned_too_large`.
+		ScanStatus ScanStatus `json:"scanStatus"`
+		Sha256     *Sha256    `json:"sha256,omitempty"`
+		Size       ByteSize   `json:"size"`
+	} `json:"files"`
+	Id                string  `json:"id"`
+	MaxDownloads      *int    `json:"maxDownloads"`
+	Message           *string `json:"message,omitempty"`
+	PasswordProtected bool    `json:"passwordProtected"`
+
+	// RecipientTracking One entry per recipient for a transfer with per-recipient links; empty for a transfer created before 1.1.
+	RecipientTracking     []RecipientTracking `json:"recipientTracking"`
+	RecipientVerification bool                `json:"recipientVerification"`
+	Recipients            []Email             `json:"recipients"`
+
+	// Status `uploading` → `scanning` → `available` → `expired` | `deleted`.
+	// `rejected`: every file was infected or blocklisted.
+	Status     TransferStatus `json:"status"`
+	TotalBytes ByteSize       `json:"totalBytes"`
+}
+
+// MyTransferList defines model for MyTransferList.
+type MyTransferList struct {
+	Items []MyTransfer `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; absent on the last page.
+	NextCursor *PageCursor `json:"nextCursor,omitempty"`
+}
+
+// MyTransfersLinkRequest defines model for MyTransfersLinkRequest.
+type MyTransfersLinkRequest struct {
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email Email `json:"email"`
+
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language *Language `json:"language,omitempty"`
+}
+
+// MyTransfersSession defines model for MyTransfersSession.
+type MyTransfersSession struct {
+	CsrfToken string `json:"csrfToken"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email     Email     `json:"email"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// MyTransfersSessionStart defines model for MyTransfersSessionStart.
+type MyTransfersSessionStart struct {
+	// Token Token from the fragment of the mailed access link.
+	Token string `json:"token"`
+}
+
 // NetworkRules defines model for NetworkRules.
 type NetworkRules struct {
 	InternalCidrs   []string `json:"internalCidrs"`
 	InternalDomains []string `json:"internalDomains"`
+}
+
+// OfficeHours Office hours of the tenant, in the `timeZone` of the thresholds; a transfer created outside them raises an unusual activity alert.
+type OfficeHours struct {
+	// End Local end time (HH:MM, `24:00` for the end of the day), after `start`.
+	End string `json:"end"`
+
+	// Start Local start time (HH:MM).
+	Start string `json:"start"`
+
+	// Weekdays Working days, ISO 8601 numbering (1 = Monday, 7 = Sunday).
+	Weekdays []int `json:"weekdays"`
 }
 
 // PageCursor Opaque cursor for the next page; absent on the last page.
@@ -2001,7 +2839,7 @@ type Problem struct {
 	// Detail Localised human-readable explanation.
 	Detail *string `json:"detail,omitempty"`
 
-	// Errors Field-level validation errors (`validation-failed` only).
+	// Errors Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met).
 	Errors *[]struct {
 		Allowed *[]interface{} `json:"allowed,omitempty"`
 		Code    string         `json:"code"`
@@ -2034,6 +2872,20 @@ type Problem struct {
 // ProblemCode Stable error code. See `docs/api/errors.md`.
 type ProblemCode string
 
+// PublicConfidentialityLevel Since 1.1. A confidentiality level as offered to senders, label in the response language.
+type PublicConfidentialityLevel struct {
+	// Description Description in the response language; absent when none is written.
+	Description *string `json:"description,omitempty"`
+	IsDefault   bool    `json:"isDefault"`
+
+	// Key Since 1.1. Key of a confidentiality level, unique within the tenant.
+	Key   ConfidentialityLevelKey `json:"key"`
+	Label string                  `json:"label"`
+
+	// Rules Since 1.1. Rules a confidentiality level imposes on a transfer, enforced by the server at creation.
+	Rules ConfidentialityRules `json:"rules"`
+}
+
 // PublicFile defines model for PublicFile.
 type PublicFile struct {
 	DownloadUrl string  `json:"downloadUrl"`
@@ -2041,7 +2893,17 @@ type PublicFile struct {
 	MediaType   *string `json:"mediaType,omitempty"`
 	Name        string  `json:"name"`
 
-	// ScanStatus `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` (delivered unscanned: the page must say so).
+	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+	// NFC normalisation and case-insensitively: two files with the same name in the same
+	// folder, or a file whose name equals a folder of the same level, are told apart by
+	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	Path *FilePath `json:"path,omitempty"`
+
+	// ScanStatus `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` / `not_scanned_disabled` (since 1.1; delivered unscanned: the page must say so).
 	ScanStatus ScanStatus `json:"scanStatus"`
 	Sha256     Sha256     `json:"sha256"`
 	Size       ByteSize   `json:"size"`
@@ -2078,6 +2940,12 @@ type PublicTenant struct {
 		PrimaryColor HexColor `json:"primaryColor"`
 	} `json:"branding"`
 
+	// ConfidentialityLevels Since 1.1. Confidentiality levels offered to the senders (1 to 10), in display order, labels and descriptions in the response language. With a single level, the deposit form hides the selector.
+	ConfidentialityLevels *[]PublicConfidentialityLevel `json:"confidentialityLevels,omitempty"`
+
+	// Features Since 1.1. Real rules of the tenant, for the deposit form and the built-in help.
+	Features *TenantFeatures `json:"features,omitempty"`
+
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language       Language                     `json:"language"`
 	LegalDocuments []PublicTenantLegalDocuments `json:"legalDocuments"`
@@ -2108,9 +2976,15 @@ type PublicTenantLegalDocuments string
 // PublicTransfer defines model for PublicTransfer.
 type PublicTransfer struct {
 	// ArchiveUrl URL of the ZIP archive of the listed files; absent while `locked`.
-	ArchiveUrl               *string   `json:"archiveUrl,omitempty"`
-	DeleteAfterFirstDownload *bool     `json:"deleteAfterFirstDownload,omitempty"`
-	ExpiresAt                time.Time `json:"expiresAt"`
+	ArchiveUrl *string `json:"archiveUrl,omitempty"`
+
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	DeleteAfterFirstDownload *bool                    `json:"deleteAfterFirstDownload,omitempty"`
+
+	// DownloadsRemaining Since 1.1. Download starts left before `maxDownloads` is reached; absent without limit or while `locked`.
+	DownloadsRemaining *int      `json:"downloadsRemaining,omitempty"`
+	ExpiresAt          time.Time `json:"expiresAt"`
 
 	// Files Absent while `locked`. Only the deliverable files: infected files and files withheld
 	// after an analysis error (`scan_error`) are never listed.
@@ -2123,12 +2997,76 @@ type PublicTransfer struct {
 	Message           *string `json:"message,omitempty"`
 	PasswordProtected bool    `json:"passwordProtected"`
 
+	// RecipientEmailMasked Since 1.1. Masked address of the recipient the link was issued for (`c***@customer.example.net`), present while the verification is awaited.
+	RecipientEmailMasked *string `json:"recipientEmailMasked,omitempty"`
+
+	// ReplyAllowed Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`.
+	ReplyAllowed *bool `json:"replyAllowed,omitempty"`
+
 	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	SenderEmail Email `json:"senderEmail"`
 
 	// TotalBytes Total size of the listed files; absent while `locked`.
 	TotalBytes *ByteSize `json:"totalBytes,omitempty"`
+
+	// VerificationRequired Since 1.1. The link is a per-recipient link whose recipient must prove their address by code.
+	VerificationRequired *bool `json:"verificationRequired,omitempty"`
+
+	// Verified Since 1.1. With `verificationRequired`: the recipient is verified on this browser. While false, `locked` is true and nothing but the verification can be done.
+	Verified *bool `json:"verified,omitempty"`
 }
+
+// RecipientRules Since 1.1. Recipient domain rules of a tenant. An entry matches the domain itself and all
+// its subdomains (`example.net` covers `mail.example.net`); matching is case-insensitive on
+// the punycode form. A recipient is refused when its domain matches a denied entry, or when
+// `allowedDomains` is not empty and its domain matches none of its entries; the deny list
+// wins over the allow list. Both lists empty: no restriction.
+type RecipientRules struct {
+	AllowedDomains []string `json:"allowedDomains"`
+	DeniedDomains  []string `json:"deniedDomains"`
+}
+
+// RecipientTracking Since 1.1. Downloads of one recipient through their own link.
+type RecipientTracking struct {
+	Downloads []struct {
+		// Count Download starts (resumed ranges excluded).
+		Count int `json:"count"`
+
+		// FileId Downloaded file; null for the ZIP archive.
+		FileId  *string   `json:"fileId,omitempty"`
+		FirstAt time.Time `json:"firstAt"`
+		LastAt  time.Time `json:"lastAt"`
+	} `json:"downloads"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email             Email      `json:"email"`
+	FirstDownloadedAt *time.Time `json:"firstDownloadedAt"`
+	LastDownloadedAt  *time.Time `json:"lastDownloadedAt"`
+
+	// VerifiedAt Last recipient verification by code; null when never verified.
+	VerifiedAt *time.Time `json:"verifiedAt"`
+}
+
+// RecipientVerificationChallenge defines model for RecipientVerificationChallenge.
+type RecipientVerificationChallenge struct {
+	AttemptsRemaining int `json:"attemptsRemaining"`
+
+	// EmailMasked Masked recipient address; the full address is never returned.
+	EmailMasked string    `json:"emailMasked"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+}
+
+// RecipientVerificationStart defines model for RecipientVerificationStart.
+type RecipientVerificationStart struct {
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language *Language `json:"language,omitempty"`
+
+	// Purpose `reply` asks for a code before replying, even when the transfer does not require recipient verification.
+	Purpose *RecipientVerificationStartPurpose `json:"purpose,omitempty"`
+}
+
+// RecipientVerificationStartPurpose `reply` asks for a code before replying, even when the transfer does not require recipient verification.
+type RecipientVerificationStartPurpose string
 
 // ResendRequest defines model for ResendRequest.
 type ResendRequest struct {
@@ -2146,6 +3084,9 @@ type ResendRequest struct {
 // `infected`: file erased, kept in the list for the sender's information only.
 // `scan_error`: the file could not be analyzed after several attempts; it is withheld
 // (fail-closed, never downloadable) and the sender is informed.
+// `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
+// (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
+// `not_scanned_too_large`.
 type ScanStatus string
 
 // SenderFile defines model for SenderFile.
@@ -2153,6 +3094,16 @@ type SenderFile struct {
 	Id        string  `json:"id"`
 	MediaType *string `json:"mediaType,omitempty"`
 	Name      string  `json:"name"`
+
+	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+	// NFC normalisation and case-insensitively: two files with the same name in the same
+	// folder, or a file whose name equals a folder of the same level, are told apart by
+	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	Path *FilePath `json:"path,omitempty"`
 
 	// ScanSignature Name of the signature ClamAV detected in an `infected` file; absent otherwise. Shown to
 	// the sender only, never to recipients. It comes from the antivirus: clients must escape
@@ -2169,6 +3120,9 @@ type SenderFile struct {
 	// `infected`: file erased, kept in the list for the sender's information only.
 	// `scan_error`: the file could not be analyzed after several attempts; it is withheld
 	// (fail-closed, never downloadable) and the sender is informed.
+	// `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
+	// (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
+	// `not_scanned_too_large`.
 	ScanStatus   ScanStatus `json:"scanStatus"`
 	Sha256       *Sha256    `json:"sha256,omitempty"`
 	Size         ByteSize   `json:"size"`
@@ -2180,22 +3134,42 @@ type SenderFile struct {
 
 // SenderTransfer defines model for SenderTransfer.
 type SenderTransfer struct {
-	CreatedAt                time.Time `json:"createdAt"`
-	DeleteAfterFirstDownload bool      `json:"deleteAfterFirstDownload"`
+	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
+	CreatedAt                time.Time                `json:"createdAt"`
+	DeleteAfterFirstDownload bool                     `json:"deleteAfterFirstDownload"`
 
-	// DownloadUrl Public download page (available once the transfer is `available`).
+	// DownloadUrl Public download page, once the transfer is `available`, for a transfer with a single
+	// shared link (created before 1.1). Since 1.1, absent for new transfers (the type is
+	// unchanged, so strict 1.0 clients keep working): each recipient
+	// has their own link, mailed to them only and never returned to the sender or to an API
+	// token; follow them with `recipientTracking`.
 	DownloadUrl *string `json:"downloadUrl,omitempty"`
 
 	// ExpiresAt Set when the transfer becomes `available`: the full chosen duration (`expiryDays`)
 	// starts then, so a delayed analysis does not shorten it.
-	ExpiresAt         *time.Time   `json:"expiresAt,omitempty"`
-	ExpiryDays        ExpiryDays   `json:"expiryDays"`
-	Files             []SenderFile `json:"files"`
-	FinalizedAt       *time.Time   `json:"finalizedAt,omitempty"`
-	Id                string       `json:"id"`
-	Message           *string      `json:"message,omitempty"`
-	PasswordProtected bool         `json:"passwordProtected"`
-	Recipients        []Email      `json:"recipients"`
+	ExpiresAt   *time.Time   `json:"expiresAt,omitempty"`
+	ExpiryDays  ExpiryDays   `json:"expiryDays"`
+	Files       []SenderFile `json:"files"`
+	FinalizedAt *time.Time   `json:"finalizedAt,omitempty"`
+	Id          string       `json:"id"`
+
+	// MaxDownloads Since 1.1. Maximum number of download starts; null for no limit.
+	MaxDownloads      *int    `json:"maxDownloads,omitempty"`
+	Message           *string `json:"message,omitempty"`
+	PasswordProtected bool    `json:"passwordProtected"`
+
+	// RecipientTracking Since 1.1, once the transfer is `available` and for a transfer with per-recipient
+	// links: the tracking status of each recipient (verification and download dates), never
+	// their link.
+	RecipientTracking *[]RecipientTracking `json:"recipientTracking,omitempty"`
+
+	// RecipientVerification Since 1.1. Recipients must prove their address by code before downloading.
+	RecipientVerification *bool   `json:"recipientVerification,omitempty"`
+	Recipients            []Email `json:"recipients"`
+
+	// ReplyToTransferId Since 1.1. For a reply, the original transfer.
+	ReplyToTransferId *string `json:"replyToTransferId,omitempty"`
 
 	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	SenderEmail Email `json:"senderEmail"`
@@ -2288,6 +3262,9 @@ type SystemSettings struct {
 	// AlertEmail Additional recipient of the disk alert (besides the super admins); `null` when none.
 	AlertEmail *string `json:"alertEmail"`
 
+	// AntivirusEngine Since 1.1. Read only: the antivirus engine selected by `TT_ANTIVIRUS_ENGINE`, configured by environment variables only.
+	AntivirusEngine *AntivirusEngine `json:"antivirusEngine,omitempty"`
+
 	// DiskAlertThreshold Disk usage ratio at or above which the disk alert is raised; it clears 5 points below.
 	DiskAlertThreshold float32 `json:"diskAlertThreshold"`
 }
@@ -2299,7 +3276,18 @@ type SystemSettingsUpdate = json.RawMessage
 
 // Tenant defines model for Tenant.
 type Tenant struct {
-	CreatedAt time.Time `json:"createdAt"`
+	// AllowRemoteInternalDeposit Since 1.1. Addresses of an internal domain already verified from the internal network may deposit from outside, with a code each time.
+	AllowRemoteInternalDeposit *bool `json:"allowRemoteInternalDeposit,omitempty"`
+
+	// AllowTransferReply Since 1.1. Recipients may send files back to the sender of a transfer (`startTransferReply`).
+	AllowTransferReply *bool `json:"allowTransferReply,omitempty"`
+
+	// AntivirusEffective Since 1.1. Read only: files of the tenant are really analysed (`antivirusEnabled` and an instance engine other than `none`).
+	AntivirusEffective *bool `json:"antivirusEffective,omitempty"`
+
+	// AntivirusEnabled Since 1.1. Antivirus analysis of the tenant's files; changed by the super admin only.
+	AntivirusEnabled *bool     `json:"antivirusEnabled,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
 
 	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
 	DefaultLanguage Language `json:"defaultLanguage"`
@@ -2318,6 +3306,9 @@ type Tenant struct {
 	StorageQuotaBytes ByteSize     `json:"storageQuotaBytes"`
 	StorageUsedBytes  ByteSize     `json:"storageUsedBytes"`
 	UpdatedAt         time.Time    `json:"updatedAt"`
+
+	// WebhookIncludeAddresses Since 1.1. The tenant webhooks receive the sender and recipient addresses concerned (`WebhookEvent.addresses`); off by default (minimal payloads).
+	WebhookIncludeAddresses *bool `json:"webhookIncludeAddresses,omitempty"`
 }
 
 // TenantStatus `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
@@ -2335,6 +3326,33 @@ type TenantCreate struct {
 	Name               string `json:"name"`
 	StorageQuotaBytes  int64  `json:"storageQuotaBytes"`
 }
+
+// TenantFeatures Since 1.1. Real rules of the tenant, for the deposit form and the built-in help.
+type TenantFeatures struct {
+	// Antivirus `disabled` when files of the tenant are not analysed (instance engine `none` or tenant flag off): the download page tells recipients so.
+	Antivirus TenantFeaturesAntivirus `json:"antivirus"`
+
+	// Folders Folders may be dropped and keep their tree.
+	Folders bool `json:"folders"`
+
+	// MaxDownloads The maximum number of downloads option is offered to senders.
+	MaxDownloads bool `json:"maxDownloads"`
+
+	// RecipientRestrictions Recipient domain rules apply (the domains themselves are not disclosed).
+	RecipientRestrictions bool `json:"recipientRestrictions"`
+
+	// RecipientVerification The recipient verification option is offered to senders.
+	RecipientVerification bool `json:"recipientVerification"`
+
+	// RemoteInternalDeposit Internal addresses already verified from the internal network may deposit from outside (code each time).
+	RemoteInternalDeposit bool `json:"remoteInternalDeposit"`
+
+	// TransferReply Recipients may send files back to the sender.
+	TransferReply bool `json:"transferReply"`
+}
+
+// TenantFeaturesAntivirus `disabled` when files of the tenant are not analysed (instance engine `none` or tenant flag off): the download page tells recipients so.
+type TenantFeaturesAntivirus string
 
 // TenantList defines model for TenantList.
 type TenantList struct {
@@ -2434,6 +3452,10 @@ type TotpReenrollment struct {
 
 // TransferCreate defines model for TransferCreate.
 type TransferCreate struct {
+	// ConfidentialityLevel Since 1.1. Key of one of the tenant's confidentiality levels; the tenant default level when omitted.
+	ConfidentialityLevel *ConfidentialityLevelKey `json:"confidentialityLevel,omitempty"`
+
+	// DeleteAfterFirstDownload Delete the transfer after its first complete download. Since 1.1, with per-recipient links: once every recipient has completed at least one download (bounded by the expiry).
 	DeleteAfterFirstDownload *bool             `json:"deleteAfterFirstDownload,omitempty"`
 	ExpiryDays               ExpiryDays        `json:"expiryDays"`
 	Files                    []FileDeclaration `json:"files"`
@@ -2441,11 +3463,17 @@ type TransferCreate struct {
 	// Language Supported UI language (ISO 639-1). New languages may be added.
 	Language *Language `json:"language,omitempty"`
 
+	// MaxDownloads Since 1.1. Maximum number of download starts of the transfer, all recipients together (resumed ranges excluded); absent or null for no limit. A level may impose a lower cap.
+	MaxDownloads *int `json:"maxDownloads,omitempty"`
+
 	// Message Plain text; never interpreted as HTML.
 	Message *string `json:"message,omitempty"`
 
 	// Password Optional; stored as an argon2id hash.
 	Password *string `json:"password,omitempty"`
+
+	// RecipientVerification Since 1.1. Every recipient must prove their address with a code before downloading; may be imposed by the confidentiality level.
+	RecipientVerification *bool `json:"recipientVerification,omitempty"`
 
 	// Recipients Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient).
 	Recipients *[]Email `json:"recipients,omitempty"`
@@ -2457,13 +3485,25 @@ type TransferCreate struct {
 	SenderEmail *Email `json:"senderEmail,omitempty"`
 }
 
-// TransferOrigin Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
+// TransferExtension defines model for TransferExtension.
+type TransferExtension struct {
+	// ExpiryDays The transfer then expires this many days from now.
+	ExpiryDays ExpiryDays `json:"expiryDays"`
+}
+
+// TransferOrigin Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
 type TransferOrigin string
 
 // TransferPassword defines model for TransferPassword.
 type TransferPassword struct {
 	// Password An empty or missing password gets `400` with the field code `required`.
 	Password string `json:"password"`
+}
+
+// TransferReplyStart Since 1.1. Body of `startTransferReply` (a JSON body is required for cross-site protection).
+type TransferReplyStart struct {
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language *Language `json:"language,omitempty"`
 }
 
 // TransferStatus `uploading` → `scanning` → `available` → `expired` | `deleted`.
@@ -2499,6 +3539,165 @@ type VersionInfo struct {
 
 // VersionInfoApiVersion defines model for VersionInfo.ApiVersion.
 type VersionInfoApiVersion string
+
+// Webhook Since 1.1. A webhook of a tenant or of the instance. Deliveries are made in the
+// background with a 10-second timeout, up to 5 attempts with exponential back-off, never
+// following redirects; after 5 consecutive failed deliveries a circuit breaker suspends the
+// webhook for 15 minutes (`circuitOpenUntil`). Pending deliveries are kept in memory only:
+// they are lost on a restart (the audit log and the alert mails are not affected).
+type Webhook struct {
+	// CircuitOpenUntil End of the suspension by the circuit breaker; null when deliveries are allowed.
+	CircuitOpenUntil *time.Time         `json:"circuitOpenUntil"`
+	CreatedAt        time.Time          `json:"createdAt"`
+	CreatedBy        string             `json:"createdBy"`
+	Enabled          bool               `json:"enabled"`
+	Events           []WebhookEventType `json:"events"`
+
+	// HasSecret A signing secret exists (`generic` kind).
+	HasSecret bool   `json:"hasSecret"`
+	Id        string `json:"id"`
+
+	// Kind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
+	Kind         WebhookKind      `json:"kind"`
+	LastDelivery *WebhookDelivery `json:"lastDelivery"`
+	Name         string           `json:"name"`
+	UpdatedAt    time.Time        `json:"updatedAt"`
+
+	// UrlHint Scheme and host of the URL only (the full URL is sealed and never returned).
+	UrlHint string `json:"urlHint"`
+}
+
+// WebhookCreate defines model for WebhookCreate.
+type WebhookCreate struct {
+	Enabled *bool              `json:"enabled,omitempty"`
+	Events  []WebhookEventType `json:"events"`
+
+	// Kind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
+	Kind WebhookKind `json:"kind"`
+	Name string      `json:"name"`
+	Url  string      `json:"url"`
+}
+
+// WebhookDelivery Outcome of the latest delivery attempt.
+type WebhookDelivery struct {
+	At         time.Time `json:"at"`
+	DurationMs int       `json:"durationMs"`
+
+	// ErrorCategory Since 1.1. Coarse cause of a failed delivery; no address, port, banner or body is ever reported: `dns` (name not resolved), `refused_network` (address denied by the network guard), `connect`, `tls`, `timeout`, `http_status` (non-2xx answer).
+	ErrorCategory *WebhookErrorCategory `json:"errorCategory,omitempty"`
+	HttpStatus    *int                  `json:"httpStatus,omitempty"`
+	Success       bool                  `json:"success"`
+}
+
+// WebhookErrorCategory Since 1.1. Coarse cause of a failed delivery; no address, port, banner or body is ever reported: `dns` (name not resolved), `refused_network` (address denied by the network guard), `connect`, `tls`, `timeout`, `http_status` (non-2xx answer).
+type WebhookErrorCategory string
+
+// WebhookEvent Since 1.1. JSON body POSTed to a `generic` webhook (`Content-Type: application/json`).
+// Headers: `X-TransTeira-Event` (the event type), `X-TransTeira-Delivery` (the event `id`,
+// identical across retries, for deduplication) and `X-TransTeira-Signature:
+// t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>" with the webhook secret>`. A
+// receiver checks the signature in constant time and rejects a `t` older than 5 minutes.
+//
+// The payload is minimal by default: event type, severity, time, tenant identifier and
+// name, counters and a link to the administration, **no e-mail address**. A tenant may
+// enable `webhookIncludeAddresses` to add the sender and recipient addresses concerned
+// (`addresses`). File names, contents, tokens, links and passwords are never sent. System
+// events carry no `tenant`.
+type WebhookEvent struct {
+	// Addresses Only when the tenant enables `webhookIncludeAddresses`: the addresses concerned.
+	Addresses *struct {
+		Recipients *[]Email `json:"recipients,omitempty"`
+
+		// Reporter A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+		Reporter *Email `json:"reporter,omitempty"`
+
+		// Sender A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+		Sender *Email `json:"sender,omitempty"`
+	} `json:"addresses,omitempty"`
+
+	// AdminUrl Page of the administration where the event can be examined.
+	AdminUrl *string `json:"adminUrl,omitempty"`
+
+	// Counts Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage.
+	Counts map[string]float32 `json:"counts"`
+
+	// Id Event identifier (`evt_` + ULID).
+	Id         string               `json:"id"`
+	OccurredAt time.Time            `json:"occurredAt"`
+	Severity   WebhookEventSeverity `json:"severity"`
+
+	// Tenant Tenant of a tenant event; absent for a system event.
+	Tenant *struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"tenant,omitempty"`
+
+	// Type Since 1.1. Event delivered to webhooks. Tenant events, for the tenant webhooks only:
+	// `virus.detected`, `abuse.threshold_exceeded`, `abuse.unusual_activity`, `abuse.reported`,
+	// `quota.warning`, `quota.reached`. System events, for the instance-wide webhooks only:
+	// `disk.alert_raised`, `disk.alert_cleared`, `antivirus.alert_raised`,
+	// `antivirus.alert_cleared`, `maintenance.enabled`, `maintenance.disabled`,
+	// `master_key.rotation_completed`, `master_key.rotation_failed`. `webhook.test` is only
+	// sent by the test operations and cannot be subscribed to.
+	Type WebhookEventType `json:"type"`
+}
+
+// WebhookEventSeverity defines model for WebhookEvent.Severity.
+type WebhookEventSeverity string
+
+// WebhookEventType Since 1.1. Event delivered to webhooks. Tenant events, for the tenant webhooks only:
+// `virus.detected`, `abuse.threshold_exceeded`, `abuse.unusual_activity`, `abuse.reported`,
+// `quota.warning`, `quota.reached`. System events, for the instance-wide webhooks only:
+// `disk.alert_raised`, `disk.alert_cleared`, `antivirus.alert_raised`,
+// `antivirus.alert_cleared`, `maintenance.enabled`, `maintenance.disabled`,
+// `master_key.rotation_completed`, `master_key.rotation_failed`. `webhook.test` is only
+// sent by the test operations and cannot be subscribed to.
+type WebhookEventType string
+
+// WebhookKind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
+type WebhookKind string
+
+// WebhookTestResult defines model for WebhookTestResult.
+type WebhookTestResult struct {
+	DurationMs int `json:"durationMs"`
+
+	// ErrorCategory Since 1.1. Coarse cause of a failed delivery; no address, port, banner or body is ever reported: `dns` (name not resolved), `refused_network` (address denied by the network guard), `connect`, `tls`, `timeout`, `http_status` (non-2xx answer).
+	ErrorCategory *WebhookErrorCategory `json:"errorCategory,omitempty"`
+	HttpStatus    *int                  `json:"httpStatus,omitempty"`
+	Success       bool                  `json:"success"`
+}
+
+// WebhookUpdate JSON Merge Patch of a webhook; `null` is refused on every member, an unknown member is refused.
+type WebhookUpdate = json.RawMessage
+
+// WebhookWithSecret Since 1.1. A webhook with its signing secret, present only in the answer of a creation of a `generic` webhook or of a secret rotation.
+type WebhookWithSecret struct {
+	// CircuitOpenUntil End of the suspension by the circuit breaker; null when deliveries are allowed.
+	CircuitOpenUntil *time.Time         `json:"circuitOpenUntil"`
+	CreatedAt        time.Time          `json:"createdAt"`
+	CreatedBy        string             `json:"createdBy"`
+	Enabled          bool               `json:"enabled"`
+	Events           []WebhookEventType `json:"events"`
+
+	// HasSecret A signing secret exists (`generic` kind).
+	HasSecret bool   `json:"hasSecret"`
+	Id        string `json:"id"`
+
+	// Kind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
+	Kind         WebhookKind      `json:"kind"`
+	LastDelivery *WebhookDelivery `json:"lastDelivery"`
+	Name         string           `json:"name"`
+
+	// Secret Signing secret (HMAC-SHA256 key), shown once.
+	Secret    *string   `json:"secret,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// UrlHint Scheme and host of the URL only (the full URL is sealed and never returned).
+	UrlHint string `json:"urlHint"`
+}
+
+// AbuseReportId defines model for AbuseReportId.
+type AbuseReportId = string
 
 // AcceptLanguage defines model for AcceptLanguage.
 type AcceptLanguage = string
@@ -2546,8 +3745,11 @@ type RecognitionCookie = string
 // its first download; `antivirus-unavailable` goes to the delegated admins of an entity
 // (else the super admins) when the antivirus has stayed unreachable beyond the grace period
 // while transfers of the entity wait for analysis, once per outage.
-// Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
-// `recipient-verification-code`.
+// Since 1.1: `expiry-reminder` (recipients who have not downloaded yet, the day before
+// expiry, once per expiry date, skipped when less than 36 hours remained at availability), `abuse-alert` (delegated admins, abuse threshold or unusual activity),
+// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
+// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
+// per-recipient link).
 type TemplateKey = EmailTemplateKey
 
 // TenantId defines model for TenantId.
@@ -2561,6 +3763,9 @@ type TusResumableHeader string
 
 // UploadId defines model for UploadId.
 type UploadId = string
+
+// WebhookId defines model for WebhookId.
+type WebhookId = string
 
 // AdminForbidden RFC 9457 Problem Details with TransTeira extension members.
 type AdminForbidden = Problem
@@ -2580,6 +3785,9 @@ type DepositForbidden = Problem
 // DepositUnauthenticated RFC 9457 Problem Details with TransTeira extension members.
 type DepositUnauthenticated = Problem
 
+// DownloadGone RFC 9457 Problem Details with TransTeira extension members.
+type DownloadGone = Problem
+
 // DownloadLocked RFC 9457 Problem Details with TransTeira extension members.
 type DownloadLocked = Problem
 
@@ -2597,6 +3805,9 @@ type InvitationGone = Problem
 
 // MaintenanceMode RFC 9457 Problem Details with TransTeira extension members.
 type MaintenanceMode = Problem
+
+// MetricsUnauthenticated RFC 9457 Problem Details with TransTeira extension members.
+type MetricsUnauthenticated = Problem
 
 // NotFound RFC 9457 Problem Details with TransTeira extension members.
 type NotFound = Problem
@@ -2689,6 +3900,18 @@ type ListTenantsParams struct {
 type DeleteTenantParams struct {
 	// Confirm Exact tenant name.
 	Confirm string `form:"confirm" json:"confirm"`
+}
+
+// ListAbuseReportsParams defines parameters for ListAbuseReports.
+type ListAbuseReportsParams struct {
+	// Status Filter by status.
+	Status *AbuseReportStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Limit Maximum number of items per page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque cursor returned as `nextCursor` by the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // ListTenantAuditEventsParams defines parameters for ListTenantAuditEvents.
@@ -2787,10 +4010,37 @@ type DownloadFileParams struct {
 	Range *string `json:"Range,omitempty"`
 }
 
+// StartTransferReplyParams defines parameters for StartTransferReply.
+type StartTransferReplyParams struct {
+	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+}
+
+// StartRecipientVerificationParams defines parameters for StartRecipientVerification.
+type StartRecipientVerificationParams struct {
+	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+}
+
 // CreateInvitationParams defines parameters for CreateInvitation.
 type CreateInvitationParams struct {
 	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
 	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+}
+
+// RequestMyTransfersLinkParams defines parameters for RequestMyTransfersLink.
+type RequestMyTransfersLinkParams struct {
+	// AcceptLanguage Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
+}
+
+// ListMyTransfersParams defines parameters for ListMyTransfers.
+type ListMyTransfersParams struct {
+	// Limit Maximum number of items per page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque cursor returned as `nextCursor` by the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetPublicTenantParams defines parameters for GetPublicTenant.
@@ -2903,11 +4153,23 @@ type StartMasterKeyRotationJSONRequestBody = StartMasterKeyRotationJSONBody
 // UpdateSystemSettingsApplicationMergePatchPlusJSONRequestBody defines body for UpdateSystemSettings for application/merge-patch+json ContentType.
 type UpdateSystemSettingsApplicationMergePatchPlusJSONRequestBody = SystemSettingsUpdate
 
+// CreateSystemWebhookJSONRequestBody defines body for CreateSystemWebhook for application/json ContentType.
+type CreateSystemWebhookJSONRequestBody = WebhookCreate
+
+// UpdateSystemWebhookApplicationMergePatchPlusJSONRequestBody defines body for UpdateSystemWebhook for application/merge-patch+json ContentType.
+type UpdateSystemWebhookApplicationMergePatchPlusJSONRequestBody = WebhookUpdate
+
 // CreateTenantJSONRequestBody defines body for CreateTenant for application/json ContentType.
 type CreateTenantJSONRequestBody = TenantCreate
 
 // UpdateTenantApplicationMergePatchPlusJSONRequestBody defines body for UpdateTenant for application/merge-patch+json ContentType.
 type UpdateTenantApplicationMergePatchPlusJSONRequestBody = TenantUpdate
+
+// UpdateAbuseReportApplicationMergePatchPlusJSONRequestBody defines body for UpdateAbuseReport for application/merge-patch+json ContentType.
+type UpdateAbuseReportApplicationMergePatchPlusJSONRequestBody = AbuseReportUpdate
+
+// UpdateAbuseThresholdsJSONRequestBody defines body for UpdateAbuseThresholds for application/json ContentType.
+type UpdateAbuseThresholdsJSONRequestBody = AbuseThresholds
 
 // CreateApiTokenJSONRequestBody defines body for CreateApiToken for application/json ContentType.
 type CreateApiTokenJSONRequestBody = ApiTokenCreate
@@ -2920,6 +4182,9 @@ type CreateBlocklistEntryJSONRequestBody = BlocklistEntryCreate
 
 // UpdateBrandingJSONRequestBody defines body for UpdateBranding for application/json ContentType.
 type UpdateBrandingJSONRequestBody = BrandingUpdate
+
+// UpdateConfidentialityLevelsJSONRequestBody defines body for UpdateConfidentialityLevels for application/json ContentType.
+type UpdateConfidentialityLevelsJSONRequestBody = ConfidentialityLevelList
 
 // EraseDataSubjectJSONRequestBody defines body for EraseDataSubject for application/json ContentType.
 type EraseDataSubjectJSONRequestBody = DataSubjectRequest
@@ -2939,6 +4204,9 @@ type UpdateLegalDocumentJSONRequestBody = LegalDocumentUpdate
 // UpdateNetworkRulesJSONRequestBody defines body for UpdateNetworkRules for application/json ContentType.
 type UpdateNetworkRulesJSONRequestBody = NetworkRules
 
+// UpdateRecipientRulesJSONRequestBody defines body for UpdateRecipientRules for application/json ContentType.
+type UpdateRecipientRulesJSONRequestBody = RecipientRules
+
 // UpdateSmtpSettingsJSONRequestBody defines body for UpdateSmtpSettings for application/json ContentType.
 type UpdateSmtpSettingsJSONRequestBody = SmtpSettingsUpdate
 
@@ -2951,20 +4219,50 @@ type DeleteTenantTransferJSONRequestBody = AdminReason
 // ResendTransferNotificationJSONRequestBody defines body for ResendTransferNotification for application/json ContentType.
 type ResendTransferNotificationJSONRequestBody = ResendRequest
 
+// CreateTenantWebhookJSONRequestBody defines body for CreateTenantWebhook for application/json ContentType.
+type CreateTenantWebhookJSONRequestBody = WebhookCreate
+
+// UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody defines body for UpdateTenantWebhook for application/merge-patch+json ContentType.
+type UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody = WebhookUpdate
+
 // StartDepositSessionJSONRequestBody defines body for StartDepositSession for application/json ContentType.
 type StartDepositSessionJSONRequestBody = DepositSessionStart
+
+// ReportAbuseJSONRequestBody defines body for ReportAbuse for application/json ContentType.
+type ReportAbuseJSONRequestBody = AbuseReportCreate
+
+// StartTransferReplyJSONRequestBody defines body for StartTransferReply for application/json ContentType.
+type StartTransferReplyJSONRequestBody = TransferReplyStart
 
 // UnlockDownloadJSONRequestBody defines body for UnlockDownload for application/json ContentType.
 type UnlockDownloadJSONRequestBody = TransferPassword
 
+// StartRecipientVerificationJSONRequestBody defines body for StartRecipientVerification for application/json ContentType.
+type StartRecipientVerificationJSONRequestBody = RecipientVerificationStart
+
+// ConfirmRecipientVerificationJSONRequestBody defines body for ConfirmRecipientVerification for application/json ContentType.
+type ConfirmRecipientVerificationJSONRequestBody = VerificationCode
+
 // CreateInvitationJSONRequestBody defines body for CreateInvitation for application/json ContentType.
 type CreateInvitationJSONRequestBody = InvitationCreate
+
+// RequestMyTransfersLinkJSONRequestBody defines body for RequestMyTransfersLink for application/json ContentType.
+type RequestMyTransfersLinkJSONRequestBody = MyTransfersLinkRequest
+
+// StartMyTransfersSessionJSONRequestBody defines body for StartMyTransfersSession for application/json ContentType.
+type StartMyTransfersSessionJSONRequestBody = MyTransfersSessionStart
+
+// ExtendMyTransferJSONRequestBody defines body for ExtendMyTransfer for application/json ContentType.
+type ExtendMyTransferJSONRequestBody = TransferExtension
 
 // CreateTransferJSONRequestBody defines body for CreateTransfer for application/json ContentType.
 type CreateTransferJSONRequestBody = TransferCreate
 
 // ConfirmVerificationChallengeJSONRequestBody defines body for ConfirmVerificationChallenge for application/json ContentType.
 type ConfirmVerificationChallengeJSONRequestBody = VerificationCode
+
+// ReceiveWebhookEventJSONRequestBody defines body for ReceiveWebhookEvent for application/json ContentType.
+type ReceiveWebhookEventJSONRequestBody = WebhookEvent
 
 // AsTotpCode0 returns the union data inside the TotpCode as a TotpCode0
 func (t TotpCode) AsTotpCode0() (TotpCode0, error) {
@@ -3156,6 +4454,24 @@ type ServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(w http.ResponseWriter, r *http.Request, params GetGlobalStatsParams)
+	// ListSystemWebhooks List the instance-wide webhooks (super admin)
+	// (GET /admin/system/webhooks)
+	ListSystemWebhooks(w http.ResponseWriter, r *http.Request)
+	// CreateSystemWebhook Create an instance-wide webhook (super admin)
+	// (POST /admin/system/webhooks)
+	CreateSystemWebhook(w http.ResponseWriter, r *http.Request)
+	// DeleteSystemWebhook Delete an instance-wide webhook (super admin)
+	// (DELETE /admin/system/webhooks/{webhookId})
+	DeleteSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId)
+	// GetSystemWebhook Get an instance-wide webhook (super admin)
+	// (GET /admin/system/webhooks/{webhookId})
+	GetSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId)
+	// UpdateSystemWebhook Update an instance-wide webhook (super admin)
+	// (PATCH /admin/system/webhooks/{webhookId})
+	UpdateSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId)
+	// TestSystemWebhook Send a test event to an instance-wide webhook (super admin)
+	// (POST /admin/system/webhooks/{webhookId}/test)
+	TestSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId)
 	// ListTenants List tenants visible to the admin
 	// (GET /admin/tenants)
 	ListTenants(w http.ResponseWriter, r *http.Request, params ListTenantsParams)
@@ -3171,6 +4487,21 @@ type ServerInterface interface {
 	// UpdateTenant Update tenant general settings
 	// (PATCH /admin/tenants/{tenantId})
 	UpdateTenant(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// ListAbuseReports List abuse reports
+	// (GET /admin/tenants/{tenantId}/abuse-reports)
+	ListAbuseReports(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListAbuseReportsParams)
+	// GetAbuseReport Get an abuse report
+	// (GET /admin/tenants/{tenantId}/abuse-reports/{reportId})
+	GetAbuseReport(w http.ResponseWriter, r *http.Request, tenantId TenantId, reportId AbuseReportId)
+	// UpdateAbuseReport Close or reopen an abuse report
+	// (PATCH /admin/tenants/{tenantId}/abuse-reports/{reportId})
+	UpdateAbuseReport(w http.ResponseWriter, r *http.Request, tenantId TenantId, reportId AbuseReportId)
+	// GetAbuseThresholds Abuse detection thresholds
+	// (GET /admin/tenants/{tenantId}/abuse-thresholds)
+	GetAbuseThresholds(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// UpdateAbuseThresholds Replace the abuse detection thresholds
+	// (PUT /admin/tenants/{tenantId}/abuse-thresholds)
+	UpdateAbuseThresholds(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// ListApiTokens List API tokens (never the secret)
 	// (GET /admin/tenants/{tenantId}/api-tokens)
 	ListApiTokens(w http.ResponseWriter, r *http.Request, tenantId TenantId)
@@ -3210,6 +4541,12 @@ type ServerInterface interface {
 	// UploadBrandingAsset Upload logo or background image
 	// (PUT /admin/tenants/{tenantId}/branding/{asset})
 	UploadBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string)
+	// GetConfidentialityLevels Confidentiality levels and their rules
+	// (GET /admin/tenants/{tenantId}/confidentiality-levels)
+	GetConfidentialityLevels(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// UpdateConfidentialityLevels Replace the confidentiality levels
+	// (PUT /admin/tenants/{tenantId}/confidentiality-levels)
+	UpdateConfidentialityLevels(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// EraseDataSubject GDPR - erase all data linked to an email address
 	// (POST /admin/tenants/{tenantId}/data-subjects/erase)
 	EraseDataSubject(w http.ResponseWriter, r *http.Request, tenantId TenantId)
@@ -3249,6 +4586,12 @@ type ServerInterface interface {
 	// UpdateNetworkRules Replace internal IP ranges and email domains
 	// (PUT /admin/tenants/{tenantId}/network)
 	UpdateNetworkRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// GetRecipientRules Allowed and denied recipient domains
+	// (GET /admin/tenants/{tenantId}/recipient-rules)
+	GetRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// UpdateRecipientRules Replace the allowed and denied recipient domains
+	// (PUT /admin/tenants/{tenantId}/recipient-rules)
+	UpdateRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// GetSmtpSettings SMTP settings
 	// (GET /admin/tenants/{tenantId}/smtp)
 	GetSmtpSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId)
@@ -3276,6 +4619,24 @@ type ServerInterface interface {
 	// ResendTransferNotification Resend the notification email to recipients
 	// (POST /admin/tenants/{tenantId}/transfers/{transferId}/resend)
 	ResendTransferNotification(w http.ResponseWriter, r *http.Request, tenantId TenantId, transferId TransferId)
+	// ListTenantWebhooks List the webhooks of the tenant
+	// (GET /admin/tenants/{tenantId}/webhooks)
+	ListTenantWebhooks(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// CreateTenantWebhook Create a webhook
+	// (POST /admin/tenants/{tenantId}/webhooks)
+	CreateTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// DeleteTenantWebhook Delete a webhook
+	// (DELETE /admin/tenants/{tenantId}/webhooks/{webhookId})
+	DeleteTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId)
+	// GetTenantWebhook Get a webhook
+	// (GET /admin/tenants/{tenantId}/webhooks/{webhookId})
+	GetTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId)
+	// UpdateTenantWebhook Update a webhook
+	// (PATCH /admin/tenants/{tenantId}/webhooks/{webhookId})
+	UpdateTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId)
+	// TestTenantWebhook Send a test event to a webhook
+	// (POST /admin/tenants/{tenantId}/webhooks/{webhookId}/test)
+	TestTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId)
 	// StartDepositSession Identify a depositor by email address
 	// (POST /deposit-sessions)
 	StartDepositSession(w http.ResponseWriter, r *http.Request, params StartDepositSessionParams)
@@ -3288,15 +4649,27 @@ type ServerInterface interface {
 	// GetDownload Download page content
 	// (GET /downloads/{linkToken})
 	GetDownload(w http.ResponseWriter, r *http.Request, linkToken LinkToken)
+	// ReportAbuse Report an abuse on a received transfer
+	// (POST /downloads/{linkToken}/abuse-reports)
+	ReportAbuse(w http.ResponseWriter, r *http.Request, linkToken LinkToken)
 	// DownloadArchive Download all files as a ZIP archive
 	// (GET /downloads/{linkToken}/archive)
 	DownloadArchive(w http.ResponseWriter, r *http.Request, linkToken LinkToken)
 	// DownloadFile Download one file
 	// (GET /downloads/{linkToken}/files/{fileId})
 	DownloadFile(w http.ResponseWriter, r *http.Request, linkToken LinkToken, fileId FileId, params DownloadFileParams)
+	// StartTransferReply Reply to a transfer by sending files back to its sender
+	// (POST /downloads/{linkToken}/reply)
+	StartTransferReply(w http.ResponseWriter, r *http.Request, linkToken LinkToken, params StartTransferReplyParams)
 	// UnlockDownload Unlock a password-protected transfer
 	// (POST /downloads/{linkToken}/unlock)
 	UnlockDownload(w http.ResponseWriter, r *http.Request, linkToken LinkToken)
+	// StartRecipientVerification Send a verification code to the recipient of a link
+	// (POST /downloads/{linkToken}/verification)
+	StartRecipientVerification(w http.ResponseWriter, r *http.Request, linkToken LinkToken, params StartRecipientVerificationParams)
+	// ConfirmRecipientVerification Submit the recipient verification code
+	// (POST /downloads/{linkToken}/verification/confirm)
+	ConfirmRecipientVerification(w http.ResponseWriter, r *http.Request, linkToken LinkToken)
 	// GetHealth Health check
 	// (GET /healthz)
 	GetHealth(w http.ResponseWriter, r *http.Request)
@@ -3306,9 +4679,39 @@ type ServerInterface interface {
 	// GetInvitation Check an invitation link
 	// (GET /invitations/{invitationToken})
 	GetInvitation(w http.ResponseWriter, r *http.Request, invitationToken InvitationToken)
+	// RequestMyTransfersLink Ask for a "My transfers" access link by mail
+	// (POST /me/access-links)
+	RequestMyTransfersLink(w http.ResponseWriter, r *http.Request, params RequestMyTransfersLinkParams)
+	// StartMyTransfersSession Open a "My transfers" session from an access link
+	// (POST /me/sessions)
+	StartMyTransfersSession(w http.ResponseWriter, r *http.Request)
+	// EndMyTransfersSession End the "My transfers" session
+	// (DELETE /me/sessions/current)
+	EndMyTransfersSession(w http.ResponseWriter, r *http.Request)
+	// GetCurrentMyTransfersSession Current "My transfers" session
+	// (GET /me/sessions/current)
+	GetCurrentMyTransfersSession(w http.ResponseWriter, r *http.Request)
+	// ListMyTransfers List my transfers in progress
+	// (GET /me/transfers)
+	ListMyTransfers(w http.ResponseWriter, r *http.Request, params ListMyTransfersParams)
+	// DeleteMyTransfer Delete one of my transfers before expiry
+	// (DELETE /me/transfers/{transferId})
+	DeleteMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId)
+	// GetMyTransfer Details of one of my transfers, with per-recipient tracking
+	// (GET /me/transfers/{transferId})
+	GetMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId)
+	// ExtendMyTransfer Extend the validity of one of my transfers
+	// (POST /me/transfers/{transferId}/extension)
+	ExtendMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId)
+	// GetMetrics Prometheus metrics
+	// (GET /metrics)
+	GetMetrics(w http.ResponseWriter, r *http.Request)
 	// GetOpenApiSpec Download the OpenAPI specification
 	// (GET /openapi.yaml)
 	GetOpenApiSpec(w http.ResponseWriter, r *http.Request)
+	// GetStatus Instance status (JSON)
+	// (GET /status)
+	GetStatus(w http.ResponseWriter, r *http.Request)
 	// GetPublicTenant Public configuration of the current tenant
 	// (GET /tenant)
 	GetPublicTenant(w http.ResponseWriter, r *http.Request, params GetPublicTenantParams)
@@ -3892,6 +5295,138 @@ func (siw *ServerInterfaceWrapper) GetGlobalStats(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListSystemWebhooks operation middleware
+func (siw *ServerInterfaceWrapper) ListSystemWebhooks(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSystemWebhooks(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSystemWebhook operation middleware
+func (siw *ServerInterfaceWrapper) CreateSystemWebhook(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSystemWebhook(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSystemWebhook operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSystemWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSystemWebhook(w, r, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSystemWebhook operation middleware
+func (siw *ServerInterfaceWrapper) GetSystemWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSystemWebhook(w, r, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSystemWebhook operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSystemWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSystemWebhook(w, r, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestSystemWebhook operation middleware
+func (siw *ServerInterfaceWrapper) TestSystemWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestSystemWebhook(w, r, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTenants operation middleware
 func (siw *ServerInterfaceWrapper) ListTenants(w http.ResponseWriter, r *http.Request) {
 
@@ -4037,6 +5572,196 @@ func (siw *ServerInterfaceWrapper) UpdateTenant(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateTenant(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAbuseReports operation middleware
+func (siw *ServerInterfaceWrapper) ListAbuseReports(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAbuseReportsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAbuseReports(w, r, tenantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAbuseReport operation middleware
+func (siw *ServerInterfaceWrapper) GetAbuseReport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "reportId" -------------
+	var reportId AbuseReportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "reportId", r.PathValue("reportId"), &reportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reportId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAbuseReport(w, r, tenantId, reportId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAbuseReport operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAbuseReport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "reportId" -------------
+	var reportId AbuseReportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "reportId", r.PathValue("reportId"), &reportId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reportId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAbuseReport(w, r, tenantId, reportId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAbuseThresholds operation middleware
+func (siw *ServerInterfaceWrapper) GetAbuseThresholds(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAbuseThresholds(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAbuseThresholds operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAbuseThresholds(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAbuseThresholds(w, r, tenantId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4561,6 +6286,58 @@ func (siw *ServerInterfaceWrapper) UploadBrandingAsset(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetConfidentialityLevels operation middleware
+func (siw *ServerInterfaceWrapper) GetConfidentialityLevels(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConfidentialityLevels(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateConfidentialityLevels operation middleware
+func (siw *ServerInterfaceWrapper) UpdateConfidentialityLevels(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateConfidentialityLevels(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // EraseDataSubject operation middleware
 func (siw *ServerInterfaceWrapper) EraseDataSubject(w http.ResponseWriter, r *http.Request) {
 
@@ -5058,6 +6835,58 @@ func (siw *ServerInterfaceWrapper) UpdateNetworkRules(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// GetRecipientRules operation middleware
+func (siw *ServerInterfaceWrapper) GetRecipientRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecipientRules(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRecipientRules operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRecipientRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRecipientRules(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSmtpSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetSmtpSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -5419,6 +7248,198 @@ func (siw *ServerInterfaceWrapper) ResendTransferNotification(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// ListTenantWebhooks operation middleware
+func (siw *ServerInterfaceWrapper) ListTenantWebhooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTenantWebhooks(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTenantWebhook operation middleware
+func (siw *ServerInterfaceWrapper) CreateTenantWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTenantWebhook(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTenantWebhook operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTenantWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTenantWebhook(w, r, tenantId, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTenantWebhook operation middleware
+func (siw *ServerInterfaceWrapper) GetTenantWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTenantWebhook(w, r, tenantId, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTenantWebhook operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTenantWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTenantWebhook(w, r, tenantId, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestTenantWebhook operation middleware
+func (siw *ServerInterfaceWrapper) TestTenantWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhookId" -------------
+	var webhookId WebhookId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhookId", r.PathValue("webhookId"), &webhookId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhookId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestTenantWebhook(w, r, tenantId, webhookId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StartDepositSession operation middleware
 func (siw *ServerInterfaceWrapper) StartDepositSession(w http.ResponseWriter, r *http.Request) {
 
@@ -5529,6 +7550,32 @@ func (siw *ServerInterfaceWrapper) GetDownload(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ReportAbuse operation middleware
+func (siw *ServerInterfaceWrapper) ReportAbuse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkToken" -------------
+	var linkToken LinkToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkToken", r.PathValue("linkToken"), &linkToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReportAbuse(w, r, linkToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DownloadArchive operation middleware
 func (siw *ServerInterfaceWrapper) DownloadArchive(w http.ResponseWriter, r *http.Request) {
 
@@ -5614,6 +7661,56 @@ func (siw *ServerInterfaceWrapper) DownloadFile(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// StartTransferReply operation middleware
+func (siw *ServerInterfaceWrapper) StartTransferReply(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkToken" -------------
+	var linkToken LinkToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkToken", r.PathValue("linkToken"), &linkToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkToken", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartTransferReplyParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Accept-Language" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Accept-Language")]; found {
+		var AcceptLanguage AcceptLanguage
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Accept-Language", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Accept-Language", valueList[0], &AcceptLanguage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Accept-Language", Err: err})
+			return
+		}
+
+		params.AcceptLanguage = &AcceptLanguage
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartTransferReply(w, r, linkToken, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnlockDownload operation middleware
 func (siw *ServerInterfaceWrapper) UnlockDownload(w http.ResponseWriter, r *http.Request) {
 
@@ -5631,6 +7728,82 @@ func (siw *ServerInterfaceWrapper) UnlockDownload(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UnlockDownload(w, r, linkToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartRecipientVerification operation middleware
+func (siw *ServerInterfaceWrapper) StartRecipientVerification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkToken" -------------
+	var linkToken LinkToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkToken", r.PathValue("linkToken"), &linkToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkToken", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartRecipientVerificationParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Accept-Language" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Accept-Language")]; found {
+		var AcceptLanguage AcceptLanguage
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Accept-Language", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Accept-Language", valueList[0], &AcceptLanguage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Accept-Language", Err: err})
+			return
+		}
+
+		params.AcceptLanguage = &AcceptLanguage
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartRecipientVerification(w, r, linkToken, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmRecipientVerification operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmRecipientVerification(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "linkToken" -------------
+	var linkToken LinkToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "linkToken", r.PathValue("linkToken"), &linkToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "linkToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmRecipientVerification(w, r, linkToken)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5721,11 +7894,246 @@ func (siw *ServerInterfaceWrapper) GetInvitation(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// RequestMyTransfersLink operation middleware
+func (siw *ServerInterfaceWrapper) RequestMyTransfersLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RequestMyTransfersLinkParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "Accept-Language" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Accept-Language")]; found {
+		var AcceptLanguage AcceptLanguage
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Accept-Language", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Accept-Language", valueList[0], &AcceptLanguage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Accept-Language", Err: err})
+			return
+		}
+
+		params.AcceptLanguage = &AcceptLanguage
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestMyTransfersLink(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartMyTransfersSession operation middleware
+func (siw *ServerInterfaceWrapper) StartMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartMyTransfersSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndMyTransfersSession operation middleware
+func (siw *ServerInterfaceWrapper) EndMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndMyTransfersSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentMyTransfersSession operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentMyTransfersSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMyTransfers operation middleware
+func (siw *ServerInterfaceWrapper) ListMyTransfers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMyTransfersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMyTransfers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMyTransfer operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMyTransfer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transferId" -------------
+	var transferId TransferId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transferId", r.PathValue("transferId"), &transferId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transferId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMyTransfer(w, r, transferId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMyTransfer operation middleware
+func (siw *ServerInterfaceWrapper) GetMyTransfer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transferId" -------------
+	var transferId TransferId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transferId", r.PathValue("transferId"), &transferId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transferId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMyTransfer(w, r, transferId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExtendMyTransfer operation middleware
+func (siw *ServerInterfaceWrapper) ExtendMyTransfer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "transferId" -------------
+	var transferId TransferId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "transferId", r.PathValue("transferId"), &transferId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "transferId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExtendMyTransfer(w, r, transferId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMetrics operation middleware
+func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetOpenApiSpec operation middleware
 func (siw *ServerInterfaceWrapper) GetOpenApiSpec(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOpenApiSpec(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6373,6 +8781,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.GetHealth)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/metrics", wrapper.GetMetrics)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openapi.yaml", wrapper.GetOpenApiSpec)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tenant", wrapper.GetPublicTenant)
@@ -6396,6 +8806,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/unlock", wrapper.UnlockDownload)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}/files/{fileId}", wrapper.DownloadFile)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}/archive", wrapper.DownloadArchive)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/verification", wrapper.StartRecipientVerification)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/verification/confirm", wrapper.ConfirmRecipientVerification)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/abuse-reports", wrapper.ReportAbuse)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/reply", wrapper.StartTransferReply)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/access-links", wrapper.RequestMyTransfersLink)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/sessions", wrapper.StartMyTransfersSession)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions/current", wrapper.EndMyTransfersSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/sessions/current", wrapper.GetCurrentMyTransfersSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/transfers", wrapper.ListMyTransfers)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/transfers/{transferId}", wrapper.DeleteMyTransfer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/transfers/{transferId}", wrapper.GetMyTransfer)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/transfers/{transferId}/extension", wrapper.ExtendMyTransfer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/setup", wrapper.GetSetupStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/setup", wrapper.CreateSuperAdmin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/auth/login", wrapper.AdminLogin)
@@ -6429,6 +8851,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/email-templates/{templateKey}/{language}/preview", wrapper.PreviewEmailTemplate)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/legal/{document}/{language}", wrapper.GetLegalDocumentAdmin)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/legal/{document}/{language}", wrapper.UpdateLegalDocument)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/confidentiality-levels", wrapper.GetConfidentialityLevels)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/confidentiality-levels", wrapper.UpdateConfidentialityLevels)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/recipient-rules", wrapper.GetRecipientRules)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/recipient-rules", wrapper.UpdateRecipientRules)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/abuse-thresholds", wrapper.GetAbuseThresholds)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/abuse-thresholds", wrapper.UpdateAbuseThresholds)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks", wrapper.ListTenantWebhooks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks", wrapper.CreateTenantWebhook)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}", wrapper.DeleteTenantWebhook)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}", wrapper.GetTenantWebhook)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}", wrapper.UpdateTenantWebhook)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/webhooks/{webhookId}/test", wrapper.TestTenantWebhook)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers", wrapper.ListTenantTransfers)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers/{transferId}", wrapper.DeleteTenantTransfer)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers/{transferId}", wrapper.GetTenantTransfer)
@@ -6446,6 +8880,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/stats", wrapper.GetTenantStats)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/data-subjects/search", wrapper.SearchDataSubject)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/data-subjects/erase", wrapper.EraseDataSubject)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/abuse-reports", wrapper.ListAbuseReports)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/abuse-reports/{reportId}", wrapper.GetAbuseReport)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/tenants/{tenantId}/abuse-reports/{reportId}", wrapper.UpdateAbuseReport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/admins", wrapper.ListAdmins)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/admins", wrapper.CreateAdmin)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/admins/{adminId}", wrapper.DeleteAdmin)
@@ -6462,8 +8899,49 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/master-key/rotations", wrapper.StartMasterKeyRotation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/master-key/rotations/{rotationId}", wrapper.GetMasterKeyRotation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/audit-events", wrapper.ListGlobalAuditEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/webhooks", wrapper.ListSystemWebhooks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/webhooks", wrapper.CreateSystemWebhook)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}", wrapper.DeleteSystemWebhook)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}", wrapper.GetSystemWebhook)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}", wrapper.UpdateSystemWebhook)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}/test", wrapper.TestSystemWebhook)
 
 	return m
+}
+
+// WebhookReceiverInterface represents handlers for receiving inbound
+// webhook requests. Each webhook becomes a Handle*Webhook
+// method that the implementation fills in. The caller mounts the per-
+// webhook http.Handler returned by {Op}WebhookHandler at
+// whatever URL path they advertise to senders.
+type WebhookReceiverInterface interface {
+	// Event delivered to a generic webhook
+	// HandleReceiveWebhookEventWebhook handles the POST webhook for transteiraEvent.
+	HandleReceiveWebhookEventWebhook(w http.ResponseWriter, r *http.Request)
+}
+
+// WebhookReceiverMiddlewareFunc wraps an http.Handler with cross-
+// cutting behavior (signature verification, logging, rate limiting, ...).
+type WebhookReceiverMiddlewareFunc func(http.Handler) http.Handler
+
+// ReceiveWebhookEventWebhookHandler returns the http.Handler for the transteiraEvent webhook.
+// Mount this at the URL path advertised to webhook senders. errHandler
+// may be nil; if so, parameter-binding errors return 400 with the error
+// message. Middlewares are applied in the order provided -- the last
+// argument becomes the outermost wrapper.
+func ReceiveWebhookEventWebhookHandler(si WebhookReceiverInterface, errHandler func(w http.ResponseWriter, r *http.Request, err error), middlewares ...WebhookReceiverMiddlewareFunc) http.Handler {
+	if errHandler == nil {
+		errHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		si.HandleReceiveWebhookEventWebhook(w, r)
+	})
+	for _, mw := range middlewares {
+		h = mw(h)
+	}
+	return h
 }
 
 type AdminForbiddenApplicationProblemPlusJSONResponse Problem
@@ -6485,6 +8963,8 @@ type DepositUnauthenticatedApplicationProblemPlusJSONResponse struct {
 	Headers DepositUnauthenticatedResponseHeaders
 }
 
+type DownloadGoneApplicationProblemPlusJSONResponse Problem
+
 type DownloadLockedApplicationProblemPlusJSONResponse Problem
 
 type ForbiddenApplicationProblemPlusJSONResponse Problem
@@ -6502,6 +8982,15 @@ type MaintenanceModeApplicationProblemPlusJSONResponse struct {
 	Body Problem
 
 	Headers MaintenanceModeResponseHeaders
+}
+
+type MetricsUnauthenticatedResponseHeaders struct {
+	WWWAuthenticate *string
+}
+type MetricsUnauthenticatedApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers MetricsUnauthenticatedResponseHeaders
 }
 
 type NotFoundApplicationProblemPlusJSONResponse Problem
@@ -8971,6 +11460,551 @@ func (response GetGlobalStats500ApplicationProblemPlusJSONResponse) VisitGetGlob
 	return err
 }
 
+type ListSystemWebhooksRequestObject struct {
+}
+
+type ListSystemWebhooksResponseObject interface {
+	VisitListSystemWebhooksResponse(w http.ResponseWriter) error
+}
+
+type ListSystemWebhooks200JSONResponse []Webhook
+
+func (response ListSystemWebhooks200JSONResponse) VisitListSystemWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSystemWebhooks401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListSystemWebhooks401ApplicationProblemPlusJSONResponse) VisitListSystemWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSystemWebhooks403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListSystemWebhooks403ApplicationProblemPlusJSONResponse) VisitListSystemWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSystemWebhooks500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListSystemWebhooks500ApplicationProblemPlusJSONResponse) VisitListSystemWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhookRequestObject struct {
+	Body *CreateSystemWebhookJSONRequestBody
+}
+
+type CreateSystemWebhookResponseObject interface {
+	VisitCreateSystemWebhookResponse(w http.ResponseWriter) error
+}
+
+type CreateSystemWebhook201JSONResponse WebhookWithSecret
+
+func (response CreateSystemWebhook201JSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhook400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook400ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook401ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhook403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook403ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhook409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook409ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSystemWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook500ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSystemWebhookRequestObject struct {
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type DeleteSystemWebhookResponseObject interface {
+	VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error
+}
+
+type DeleteSystemWebhook204Response struct {
+}
+
+func (response DeleteSystemWebhook204Response) VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSystemWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteSystemWebhook401ApplicationProblemPlusJSONResponse) VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSystemWebhook403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteSystemWebhook403ApplicationProblemPlusJSONResponse) VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSystemWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteSystemWebhook404ApplicationProblemPlusJSONResponse) VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSystemWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteSystemWebhook500ApplicationProblemPlusJSONResponse) VisitDeleteSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemWebhookRequestObject struct {
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type GetSystemWebhookResponseObject interface {
+	VisitGetSystemWebhookResponse(w http.ResponseWriter) error
+}
+
+type GetSystemWebhook200JSONResponse Webhook
+
+func (response GetSystemWebhook200JSONResponse) VisitGetSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemWebhook401ApplicationProblemPlusJSONResponse) VisitGetSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemWebhook403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemWebhook403ApplicationProblemPlusJSONResponse) VisitGetSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemWebhook404ApplicationProblemPlusJSONResponse) VisitGetSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemWebhook500ApplicationProblemPlusJSONResponse) VisitGetSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhookRequestObject struct {
+	WebhookId WebhookId `json:"webhookId"`
+	Body      *UpdateSystemWebhookApplicationMergePatchPlusJSONRequestBody
+}
+
+type UpdateSystemWebhookResponseObject interface {
+	VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error
+}
+
+type UpdateSystemWebhook200JSONResponse WebhookWithSecret
+
+func (response UpdateSystemWebhook200JSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook400ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook401ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook403ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook404ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook500ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhookRequestObject struct {
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type TestSystemWebhookResponseObject interface {
+	VisitTestSystemWebhookResponse(w http.ResponseWriter) error
+}
+
+type TestSystemWebhook200JSONResponse WebhookTestResult
+
+func (response TestSystemWebhook200JSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response TestSystemWebhook401ApplicationProblemPlusJSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhook403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response TestSystemWebhook403ApplicationProblemPlusJSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response TestSystemWebhook404ApplicationProblemPlusJSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response TestSystemWebhook429ApplicationProblemPlusJSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestSystemWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response TestSystemWebhook500ApplicationProblemPlusJSONResponse) VisitTestSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantsRequestObject struct {
 	Params ListTenantsParams
 }
@@ -9418,6 +12452,441 @@ type UpdateTenant500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateTenant500ApplicationProblemPlusJSONResponse) VisitUpdateTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAbuseReportsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Params   ListAbuseReportsParams
+}
+
+type ListAbuseReportsResponseObject interface {
+	VisitListAbuseReportsResponse(w http.ResponseWriter) error
+}
+
+type ListAbuseReports200JSONResponse AbuseReportList
+
+func (response ListAbuseReports200JSONResponse) VisitListAbuseReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAbuseReports400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListAbuseReports400ApplicationProblemPlusJSONResponse) VisitListAbuseReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAbuseReports401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListAbuseReports401ApplicationProblemPlusJSONResponse) VisitListAbuseReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAbuseReports404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListAbuseReports404ApplicationProblemPlusJSONResponse) VisitListAbuseReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAbuseReports500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListAbuseReports500ApplicationProblemPlusJSONResponse) VisitListAbuseReportsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseReportRequestObject struct {
+	TenantId TenantId      `json:"tenantId"`
+	ReportId AbuseReportId `json:"reportId"`
+}
+
+type GetAbuseReportResponseObject interface {
+	VisitGetAbuseReportResponse(w http.ResponseWriter) error
+}
+
+type GetAbuseReport200JSONResponse AbuseReport
+
+func (response GetAbuseReport200JSONResponse) VisitGetAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseReport401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseReport401ApplicationProblemPlusJSONResponse) VisitGetAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseReport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseReport404ApplicationProblemPlusJSONResponse) VisitGetAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseReport500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseReport500ApplicationProblemPlusJSONResponse) VisitGetAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReportRequestObject struct {
+	TenantId TenantId      `json:"tenantId"`
+	ReportId AbuseReportId `json:"reportId"`
+	Body     *UpdateAbuseReportApplicationMergePatchPlusJSONRequestBody
+}
+
+type UpdateAbuseReportResponseObject interface {
+	VisitUpdateAbuseReportResponse(w http.ResponseWriter) error
+}
+
+type UpdateAbuseReport200JSONResponse AbuseReport
+
+func (response UpdateAbuseReport200JSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReport400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseReport400ApplicationProblemPlusJSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReport401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseReport401ApplicationProblemPlusJSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReport403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseReport403ApplicationProblemPlusJSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReport404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseReport404ApplicationProblemPlusJSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseReport500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseReport500ApplicationProblemPlusJSONResponse) VisitUpdateAbuseReportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseThresholdsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type GetAbuseThresholdsResponseObject interface {
+	VisitGetAbuseThresholdsResponse(w http.ResponseWriter) error
+}
+
+type GetAbuseThresholds200JSONResponse AbuseThresholds
+
+func (response GetAbuseThresholds200JSONResponse) VisitGetAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseThresholds401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseThresholds401ApplicationProblemPlusJSONResponse) VisitGetAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseThresholds404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseThresholds404ApplicationProblemPlusJSONResponse) VisitGetAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAbuseThresholds500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetAbuseThresholds500ApplicationProblemPlusJSONResponse) VisitGetAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholdsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *UpdateAbuseThresholdsJSONRequestBody
+}
+
+type UpdateAbuseThresholdsResponseObject interface {
+	VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error
+}
+
+type UpdateAbuseThresholds200JSONResponse AbuseThresholds
+
+func (response UpdateAbuseThresholds200JSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholds400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseThresholds400ApplicationProblemPlusJSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholds401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseThresholds401ApplicationProblemPlusJSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholds403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseThresholds403ApplicationProblemPlusJSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholds404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseThresholds404ApplicationProblemPlusJSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAbuseThresholds500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateAbuseThresholds500ApplicationProblemPlusJSONResponse) VisitUpdateAbuseThresholdsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -10685,6 +14154,179 @@ func (response UploadBrandingAsset500ApplicationProblemPlusJSONResponse) VisitUp
 	return err
 }
 
+type GetConfidentialityLevelsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type GetConfidentialityLevelsResponseObject interface {
+	VisitGetConfidentialityLevelsResponse(w http.ResponseWriter) error
+}
+
+type GetConfidentialityLevels200JSONResponse ConfidentialityLevelList
+
+func (response GetConfidentialityLevels200JSONResponse) VisitGetConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConfidentialityLevels401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetConfidentialityLevels401ApplicationProblemPlusJSONResponse) VisitGetConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConfidentialityLevels404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetConfidentialityLevels404ApplicationProblemPlusJSONResponse) VisitGetConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetConfidentialityLevels500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetConfidentialityLevels500ApplicationProblemPlusJSONResponse) VisitGetConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevelsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *UpdateConfidentialityLevelsJSONRequestBody
+}
+
+type UpdateConfidentialityLevelsResponseObject interface {
+	VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error
+}
+
+type UpdateConfidentialityLevels200JSONResponse ConfidentialityLevelList
+
+func (response UpdateConfidentialityLevels200JSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels400ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels401ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels403ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels404ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels500ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EraseDataSubjectRequestObject struct {
 	TenantId TenantId `json:"tenantId"`
 	Body     *EraseDataSubjectJSONRequestBody
@@ -11867,6 +15509,179 @@ func (response UpdateNetworkRules500ApplicationProblemPlusJSONResponse) VisitUpd
 	return err
 }
 
+type GetRecipientRulesRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type GetRecipientRulesResponseObject interface {
+	VisitGetRecipientRulesResponse(w http.ResponseWriter) error
+}
+
+type GetRecipientRules200JSONResponse RecipientRules
+
+func (response GetRecipientRules200JSONResponse) VisitGetRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecipientRules401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecipientRules401ApplicationProblemPlusJSONResponse) VisitGetRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecipientRules404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecipientRules404ApplicationProblemPlusJSONResponse) VisitGetRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRecipientRules500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetRecipientRules500ApplicationProblemPlusJSONResponse) VisitGetRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRulesRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *UpdateRecipientRulesJSONRequestBody
+}
+
+type UpdateRecipientRulesResponseObject interface {
+	VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error
+}
+
+type UpdateRecipientRules200JSONResponse RecipientRules
+
+func (response UpdateRecipientRules200JSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRules400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRecipientRules400ApplicationProblemPlusJSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRules401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRecipientRules401ApplicationProblemPlusJSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRules403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRecipientRules403ApplicationProblemPlusJSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRules404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRecipientRules404ApplicationProblemPlusJSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRecipientRules500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRecipientRules500ApplicationProblemPlusJSONResponse) VisitUpdateRecipientRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSmtpSettingsRequestObject struct {
 	TenantId TenantId `json:"tenantId"`
 }
@@ -12763,6 +16578,557 @@ func (response ResendTransferNotification503ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
+type ListTenantWebhooksRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type ListTenantWebhooksResponseObject interface {
+	VisitListTenantWebhooksResponse(w http.ResponseWriter) error
+}
+
+type ListTenantWebhooks200JSONResponse []Webhook
+
+func (response ListTenantWebhooks200JSONResponse) VisitListTenantWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantWebhooks401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantWebhooks401ApplicationProblemPlusJSONResponse) VisitListTenantWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantWebhooks404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantWebhooks404ApplicationProblemPlusJSONResponse) VisitListTenantWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantWebhooks500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantWebhooks500ApplicationProblemPlusJSONResponse) VisitListTenantWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhookRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *CreateTenantWebhookJSONRequestBody
+}
+
+type CreateTenantWebhookResponseObject interface {
+	VisitCreateTenantWebhookResponse(w http.ResponseWriter) error
+}
+
+type CreateTenantWebhook201JSONResponse WebhookWithSecret
+
+func (response CreateTenantWebhook201JSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook400ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook401ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook403ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook404ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook409ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenantWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook500ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantWebhookRequestObject struct {
+	TenantId  TenantId  `json:"tenantId"`
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type DeleteTenantWebhookResponseObject interface {
+	VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error
+}
+
+type DeleteTenantWebhook204Response struct {
+}
+
+func (response DeleteTenantWebhook204Response) VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteTenantWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantWebhook401ApplicationProblemPlusJSONResponse) VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantWebhook403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantWebhook403ApplicationProblemPlusJSONResponse) VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantWebhook404ApplicationProblemPlusJSONResponse) VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantWebhook500ApplicationProblemPlusJSONResponse) VisitDeleteTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantWebhookRequestObject struct {
+	TenantId  TenantId  `json:"tenantId"`
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type GetTenantWebhookResponseObject interface {
+	VisitGetTenantWebhookResponse(w http.ResponseWriter) error
+}
+
+type GetTenantWebhook200JSONResponse Webhook
+
+func (response GetTenantWebhook200JSONResponse) VisitGetTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantWebhook401ApplicationProblemPlusJSONResponse) VisitGetTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantWebhook404ApplicationProblemPlusJSONResponse) VisitGetTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantWebhook500ApplicationProblemPlusJSONResponse) VisitGetTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhookRequestObject struct {
+	TenantId  TenantId  `json:"tenantId"`
+	WebhookId WebhookId `json:"webhookId"`
+	Body      *UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody
+}
+
+type UpdateTenantWebhookResponseObject interface {
+	VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error
+}
+
+type UpdateTenantWebhook200JSONResponse WebhookWithSecret
+
+func (response UpdateTenantWebhook200JSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook400ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook401ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook403ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook404ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook500ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhookRequestObject struct {
+	TenantId  TenantId  `json:"tenantId"`
+	WebhookId WebhookId `json:"webhookId"`
+}
+
+type TestTenantWebhookResponseObject interface {
+	VisitTestTenantWebhookResponse(w http.ResponseWriter) error
+}
+
+type TestTenantWebhook200JSONResponse WebhookTestResult
+
+func (response TestTenantWebhook200JSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhook401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response TestTenantWebhook401ApplicationProblemPlusJSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhook403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response TestTenantWebhook403ApplicationProblemPlusJSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhook404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response TestTenantWebhook404ApplicationProblemPlusJSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response TestTenantWebhook429ApplicationProblemPlusJSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestTenantWebhook500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response TestTenantWebhook500ApplicationProblemPlusJSONResponse) VisitTestTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StartDepositSessionRequestObject struct {
 	Params StartDepositSessionParams
 	Body   *StartDepositSessionJSONRequestBody
@@ -13170,6 +17536,138 @@ func (response GetDownload500ApplicationProblemPlusJSONResponse) VisitGetDownloa
 	return err
 }
 
+type ReportAbuseRequestObject struct {
+	LinkToken LinkToken `json:"linkToken"`
+	Body      *ReportAbuseJSONRequestBody
+}
+
+type ReportAbuseResponseObject interface {
+	VisitReportAbuseResponse(w http.ResponseWriter) error
+}
+
+type ReportAbuse202Response struct {
+}
+
+func (response ReportAbuse202Response) VisitReportAbuseResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type ReportAbuse400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse400ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse403ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse404ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse410ApplicationProblemPlusJSONResponse struct {
+	TransferGoneApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse410ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse421ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse429ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse500ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DownloadArchiveRequestObject struct {
 	LinkToken LinkToken `json:"linkToken"`
 }
@@ -13255,7 +17753,7 @@ func (response DownloadArchive404ApplicationProblemPlusJSONResponse) VisitDownlo
 }
 
 type DownloadArchive410ApplicationProblemPlusJSONResponse struct {
-	TransferGoneApplicationProblemPlusJSONResponse
+	DownloadGoneApplicationProblemPlusJSONResponse
 }
 
 func (response DownloadArchive410ApplicationProblemPlusJSONResponse) VisitDownloadArchiveResponse(w http.ResponseWriter) error {
@@ -13472,7 +17970,7 @@ func (response DownloadFile404ApplicationProblemPlusJSONResponse) VisitDownloadF
 }
 
 type DownloadFile410ApplicationProblemPlusJSONResponse struct {
-	TransferGoneApplicationProblemPlusJSONResponse
+	DownloadGoneApplicationProblemPlusJSONResponse
 }
 
 func (response DownloadFile410ApplicationProblemPlusJSONResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
@@ -13558,6 +18056,186 @@ func (response DownloadFile500ApplicationProblemPlusJSONResponse) VisitDownloadF
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReplyRequestObject struct {
+	LinkToken LinkToken `json:"linkToken"`
+	Params    StartTransferReplyParams
+	Body      *StartTransferReplyJSONRequestBody
+}
+
+type StartTransferReplyResponseObject interface {
+	VisitStartTransferReplyResponse(w http.ResponseWriter) error
+}
+
+type StartTransferReply201ResponseHeaders struct {
+	SetCookie *string
+}
+
+type StartTransferReply201JSONResponse struct {
+	Body    DepositSession
+	Headers StartTransferReply201ResponseHeaders
+}
+
+func (response StartTransferReply201JSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply400ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply401ApplicationProblemPlusJSONResponse Problem
+
+func (response StartTransferReply401ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply403ApplicationProblemPlusJSONResponse Problem
+
+func (response StartTransferReply403ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply404ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply410ApplicationProblemPlusJSONResponse struct {
+	TransferGoneApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply410ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply421ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply429ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply500ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartTransferReply503ApplicationProblemPlusJSONResponse struct {
+	MaintenanceModeApplicationProblemPlusJSONResponse
+}
+
+func (response StartTransferReply503ApplicationProblemPlusJSONResponse) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -13710,6 +18388,349 @@ type UnlockDownload500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UnlockDownload500ApplicationProblemPlusJSONResponse) VisitUnlockDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerificationRequestObject struct {
+	LinkToken LinkToken `json:"linkToken"`
+	Params    StartRecipientVerificationParams
+	Body      *StartRecipientVerificationJSONRequestBody
+}
+
+type StartRecipientVerificationResponseObject interface {
+	VisitStartRecipientVerificationResponse(w http.ResponseWriter) error
+}
+
+type StartRecipientVerification202JSONResponse RecipientVerificationChallenge
+
+func (response StartRecipientVerification202JSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification204Response struct {
+}
+
+func (response StartRecipientVerification204Response) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type StartRecipientVerification400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification400ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification403ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification404ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification409ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification410ApplicationProblemPlusJSONResponse struct {
+	TransferGoneApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification410ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification421ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification429ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response StartRecipientVerification500ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartRecipientVerification503ApplicationProblemPlusJSONResponse Problem
+
+func (response StartRecipientVerification503ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerificationRequestObject struct {
+	LinkToken LinkToken `json:"linkToken"`
+	Body      *ConfirmRecipientVerificationJSONRequestBody
+}
+
+type ConfirmRecipientVerificationResponseObject interface {
+	VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error
+}
+
+type ConfirmRecipientVerification204ResponseHeaders struct {
+	SetCookie *string
+}
+
+type ConfirmRecipientVerification204Response struct {
+	Headers ConfirmRecipientVerification204ResponseHeaders
+}
+
+func (response ConfirmRecipientVerification204Response) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(204)
+	return nil
+}
+
+type ConfirmRecipientVerification400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification400ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification403ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification404ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification409ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmRecipientVerification409ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification410ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmRecipientVerification410ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification421ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification422ApplicationProblemPlusJSONResponse Problem
+
+func (response ConfirmRecipientVerification422ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification429ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmRecipientVerification500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification500ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -14018,6 +19039,904 @@ func (response GetInvitation500ApplicationProblemPlusJSONResponse) VisitGetInvit
 	return err
 }
 
+type RequestMyTransfersLinkRequestObject struct {
+	Params RequestMyTransfersLinkParams
+	Body   *RequestMyTransfersLinkJSONRequestBody
+}
+
+type RequestMyTransfersLinkResponseObject interface {
+	VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error
+}
+
+type RequestMyTransfersLink202Response struct {
+}
+
+func (response RequestMyTransfersLink202Response) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type RequestMyTransfersLink400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response RequestMyTransfersLink400ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestMyTransfersLink403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response RequestMyTransfersLink403ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestMyTransfersLink421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response RequestMyTransfersLink421ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestMyTransfersLink429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response RequestMyTransfersLink429ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestMyTransfersLink500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response RequestMyTransfersLink500ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestMyTransfersLink503ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestMyTransfersLink503ApplicationProblemPlusJSONResponse) VisitRequestMyTransfersLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSessionRequestObject struct {
+	Body *StartMyTransfersSessionJSONRequestBody
+}
+
+type StartMyTransfersSessionResponseObject interface {
+	VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error
+}
+
+type StartMyTransfersSession201ResponseHeaders struct {
+	SetCookie *string
+}
+
+type StartMyTransfersSession201JSONResponse struct {
+	Body    MyTransfersSession
+	Headers StartMyTransfersSession201ResponseHeaders
+}
+
+func (response StartMyTransfersSession201JSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession400ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession403ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession410ApplicationProblemPlusJSONResponse Problem
+
+func (response StartMyTransfersSession410ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession421ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession429ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartMyTransfersSession500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession500ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndMyTransfersSessionRequestObject struct {
+}
+
+type EndMyTransfersSessionResponseObject interface {
+	VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error
+}
+
+type EndMyTransfersSession204ResponseHeaders struct {
+	SetCookie *string
+}
+
+type EndMyTransfersSession204Response struct {
+	Headers EndMyTransfersSession204ResponseHeaders
+}
+
+func (response EndMyTransfersSession204Response) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+	if response.Headers.SetCookie != nil {
+		w.Header().Set("Set-Cookie", fmt.Sprint(*response.Headers.SetCookie))
+	}
+	w.WriteHeader(204)
+	return nil
+}
+
+type EndMyTransfersSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response EndMyTransfersSession401ApplicationProblemPlusJSONResponse) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndMyTransfersSession403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response EndMyTransfersSession403ApplicationProblemPlusJSONResponse) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndMyTransfersSession421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response EndMyTransfersSession421ApplicationProblemPlusJSONResponse) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type EndMyTransfersSession500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response EndMyTransfersSession500ApplicationProblemPlusJSONResponse) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentMyTransfersSessionRequestObject struct {
+}
+
+type GetCurrentMyTransfersSessionResponseObject interface {
+	VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error
+}
+
+type GetCurrentMyTransfersSession200JSONResponse MyTransfersSession
+
+func (response GetCurrentMyTransfersSession200JSONResponse) VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentMyTransfersSession401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetCurrentMyTransfersSession401ApplicationProblemPlusJSONResponse) VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentMyTransfersSession421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response GetCurrentMyTransfersSession421ApplicationProblemPlusJSONResponse) VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentMyTransfersSession500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetCurrentMyTransfersSession500ApplicationProblemPlusJSONResponse) VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfersRequestObject struct {
+	Params ListMyTransfersParams
+}
+
+type ListMyTransfersResponseObject interface {
+	VisitListMyTransfersResponse(w http.ResponseWriter) error
+}
+
+type ListMyTransfers200JSONResponse MyTransferList
+
+func (response ListMyTransfers200JSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfers400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyTransfers400ApplicationProblemPlusJSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfers401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyTransfers401ApplicationProblemPlusJSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfers421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyTransfers421ApplicationProblemPlusJSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfers500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyTransfers500ApplicationProblemPlusJSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyTransferRequestObject struct {
+	TransferId TransferId `json:"transferId"`
+}
+
+type DeleteMyTransferResponseObject interface {
+	VisitDeleteMyTransferResponse(w http.ResponseWriter) error
+}
+
+type DeleteMyTransfer204Response struct {
+}
+
+func (response DeleteMyTransfer204Response) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMyTransfer401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer401ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyTransfer403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer403ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyTransfer404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer404ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyTransfer421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer421ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMyTransfer500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer500ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransferRequestObject struct {
+	TransferId TransferId `json:"transferId"`
+}
+
+type GetMyTransferResponseObject interface {
+	VisitGetMyTransferResponse(w http.ResponseWriter) error
+}
+
+type GetMyTransfer200JSONResponse MyTransferDetail
+
+func (response GetMyTransfer200JSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransfer401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransfer401ApplicationProblemPlusJSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransfer404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransfer404ApplicationProblemPlusJSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransfer421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransfer421ApplicationProblemPlusJSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransfer500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransfer500ApplicationProblemPlusJSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransferRequestObject struct {
+	TransferId TransferId `json:"transferId"`
+	Body       *ExtendMyTransferJSONRequestBody
+}
+
+type ExtendMyTransferResponseObject interface {
+	VisitExtendMyTransferResponse(w http.ResponseWriter) error
+}
+
+type ExtendMyTransfer200JSONResponse MyTransferDetail
+
+func (response ExtendMyTransfer200JSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer400ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer401ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer403ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer404ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer409ApplicationProblemPlusJSONResponse Problem
+
+func (response ExtendMyTransfer409ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer421ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer500ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMetricsRequestObject struct {
+}
+
+type GetMetricsResponseObject interface {
+	VisitGetMetricsResponse(w http.ResponseWriter) error
+}
+
+type GetMetrics200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetMetrics200TextResponse struct {
+	Body    string
+	Headers GetMetrics200ResponseHeaders
+}
+
+func (response GetMetrics200TextResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/plain")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+
+	_, err := w.Write([]byte(fmt.Sprint(response.Body)))
+	return err
+}
+
+type GetMetrics401ApplicationProblemPlusJSONResponse struct {
+	MetricsUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMetrics401ApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMetrics404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetMetrics404ApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMetrics429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMetrics429ApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMetrics500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetMetrics500ApplicationProblemPlusJSONResponse) VisitGetMetricsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetOpenApiSpecRequestObject struct {
 }
 
@@ -14069,6 +19988,107 @@ type GetOpenApiSpec500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetOpenApiSpec500ApplicationProblemPlusJSONResponse) VisitGetOpenApiSpecResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatusRequestObject struct {
+}
+
+type GetStatusResponseObject interface {
+	VisitGetStatusResponse(w http.ResponseWriter) error
+}
+
+type GetStatus200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetStatus200JSONResponse struct {
+	Body    InstanceStatus
+	Headers GetStatus200ResponseHeaders
+}
+
+func (response GetStatus200JSONResponse) VisitGetStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatus401ApplicationProblemPlusJSONResponse struct {
+	MetricsUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStatus401ApplicationProblemPlusJSONResponse) VisitGetStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatus404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetStatus404ApplicationProblemPlusJSONResponse) VisitGetStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatus429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetStatus429ApplicationProblemPlusJSONResponse) VisitGetStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetStatus500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetStatus500ApplicationProblemPlusJSONResponse) VisitGetStatusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -14494,6 +20514,20 @@ func (response CreateTransfer421ApplicationProblemPlusJSONResponse) VisitCreateT
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTransfer422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateTransfer422ApplicationProblemPlusJSONResponse) VisitCreateTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -15676,6 +21710,24 @@ type StrictServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(ctx context.Context, request GetGlobalStatsRequestObject) (GetGlobalStatsResponseObject, error)
+	// ListSystemWebhooks List the instance-wide webhooks (super admin)
+	// (GET /admin/system/webhooks)
+	ListSystemWebhooks(ctx context.Context, request ListSystemWebhooksRequestObject) (ListSystemWebhooksResponseObject, error)
+	// CreateSystemWebhook Create an instance-wide webhook (super admin)
+	// (POST /admin/system/webhooks)
+	CreateSystemWebhook(ctx context.Context, request CreateSystemWebhookRequestObject) (CreateSystemWebhookResponseObject, error)
+	// DeleteSystemWebhook Delete an instance-wide webhook (super admin)
+	// (DELETE /admin/system/webhooks/{webhookId})
+	DeleteSystemWebhook(ctx context.Context, request DeleteSystemWebhookRequestObject) (DeleteSystemWebhookResponseObject, error)
+	// GetSystemWebhook Get an instance-wide webhook (super admin)
+	// (GET /admin/system/webhooks/{webhookId})
+	GetSystemWebhook(ctx context.Context, request GetSystemWebhookRequestObject) (GetSystemWebhookResponseObject, error)
+	// UpdateSystemWebhook Update an instance-wide webhook (super admin)
+	// (PATCH /admin/system/webhooks/{webhookId})
+	UpdateSystemWebhook(ctx context.Context, request UpdateSystemWebhookRequestObject) (UpdateSystemWebhookResponseObject, error)
+	// TestSystemWebhook Send a test event to an instance-wide webhook (super admin)
+	// (POST /admin/system/webhooks/{webhookId}/test)
+	TestSystemWebhook(ctx context.Context, request TestSystemWebhookRequestObject) (TestSystemWebhookResponseObject, error)
 	// ListTenants List tenants visible to the admin
 	// (GET /admin/tenants)
 	ListTenants(ctx context.Context, request ListTenantsRequestObject) (ListTenantsResponseObject, error)
@@ -15691,6 +21743,21 @@ type StrictServerInterface interface {
 	// UpdateTenant Update tenant general settings
 	// (PATCH /admin/tenants/{tenantId})
 	UpdateTenant(ctx context.Context, request UpdateTenantRequestObject) (UpdateTenantResponseObject, error)
+	// ListAbuseReports List abuse reports
+	// (GET /admin/tenants/{tenantId}/abuse-reports)
+	ListAbuseReports(ctx context.Context, request ListAbuseReportsRequestObject) (ListAbuseReportsResponseObject, error)
+	// GetAbuseReport Get an abuse report
+	// (GET /admin/tenants/{tenantId}/abuse-reports/{reportId})
+	GetAbuseReport(ctx context.Context, request GetAbuseReportRequestObject) (GetAbuseReportResponseObject, error)
+	// UpdateAbuseReport Close or reopen an abuse report
+	// (PATCH /admin/tenants/{tenantId}/abuse-reports/{reportId})
+	UpdateAbuseReport(ctx context.Context, request UpdateAbuseReportRequestObject) (UpdateAbuseReportResponseObject, error)
+	// GetAbuseThresholds Abuse detection thresholds
+	// (GET /admin/tenants/{tenantId}/abuse-thresholds)
+	GetAbuseThresholds(ctx context.Context, request GetAbuseThresholdsRequestObject) (GetAbuseThresholdsResponseObject, error)
+	// UpdateAbuseThresholds Replace the abuse detection thresholds
+	// (PUT /admin/tenants/{tenantId}/abuse-thresholds)
+	UpdateAbuseThresholds(ctx context.Context, request UpdateAbuseThresholdsRequestObject) (UpdateAbuseThresholdsResponseObject, error)
 	// ListApiTokens List API tokens (never the secret)
 	// (GET /admin/tenants/{tenantId}/api-tokens)
 	ListApiTokens(ctx context.Context, request ListApiTokensRequestObject) (ListApiTokensResponseObject, error)
@@ -15730,6 +21797,12 @@ type StrictServerInterface interface {
 	// UploadBrandingAsset Upload logo or background image
 	// (PUT /admin/tenants/{tenantId}/branding/{asset})
 	UploadBrandingAsset(ctx context.Context, request UploadBrandingAssetRequestObject) (UploadBrandingAssetResponseObject, error)
+	// GetConfidentialityLevels Confidentiality levels and their rules
+	// (GET /admin/tenants/{tenantId}/confidentiality-levels)
+	GetConfidentialityLevels(ctx context.Context, request GetConfidentialityLevelsRequestObject) (GetConfidentialityLevelsResponseObject, error)
+	// UpdateConfidentialityLevels Replace the confidentiality levels
+	// (PUT /admin/tenants/{tenantId}/confidentiality-levels)
+	UpdateConfidentialityLevels(ctx context.Context, request UpdateConfidentialityLevelsRequestObject) (UpdateConfidentialityLevelsResponseObject, error)
 	// EraseDataSubject GDPR - erase all data linked to an email address
 	// (POST /admin/tenants/{tenantId}/data-subjects/erase)
 	EraseDataSubject(ctx context.Context, request EraseDataSubjectRequestObject) (EraseDataSubjectResponseObject, error)
@@ -15769,6 +21842,12 @@ type StrictServerInterface interface {
 	// UpdateNetworkRules Replace internal IP ranges and email domains
 	// (PUT /admin/tenants/{tenantId}/network)
 	UpdateNetworkRules(ctx context.Context, request UpdateNetworkRulesRequestObject) (UpdateNetworkRulesResponseObject, error)
+	// GetRecipientRules Allowed and denied recipient domains
+	// (GET /admin/tenants/{tenantId}/recipient-rules)
+	GetRecipientRules(ctx context.Context, request GetRecipientRulesRequestObject) (GetRecipientRulesResponseObject, error)
+	// UpdateRecipientRules Replace the allowed and denied recipient domains
+	// (PUT /admin/tenants/{tenantId}/recipient-rules)
+	UpdateRecipientRules(ctx context.Context, request UpdateRecipientRulesRequestObject) (UpdateRecipientRulesResponseObject, error)
 	// GetSmtpSettings SMTP settings
 	// (GET /admin/tenants/{tenantId}/smtp)
 	GetSmtpSettings(ctx context.Context, request GetSmtpSettingsRequestObject) (GetSmtpSettingsResponseObject, error)
@@ -15796,6 +21875,24 @@ type StrictServerInterface interface {
 	// ResendTransferNotification Resend the notification email to recipients
 	// (POST /admin/tenants/{tenantId}/transfers/{transferId}/resend)
 	ResendTransferNotification(ctx context.Context, request ResendTransferNotificationRequestObject) (ResendTransferNotificationResponseObject, error)
+	// ListTenantWebhooks List the webhooks of the tenant
+	// (GET /admin/tenants/{tenantId}/webhooks)
+	ListTenantWebhooks(ctx context.Context, request ListTenantWebhooksRequestObject) (ListTenantWebhooksResponseObject, error)
+	// CreateTenantWebhook Create a webhook
+	// (POST /admin/tenants/{tenantId}/webhooks)
+	CreateTenantWebhook(ctx context.Context, request CreateTenantWebhookRequestObject) (CreateTenantWebhookResponseObject, error)
+	// DeleteTenantWebhook Delete a webhook
+	// (DELETE /admin/tenants/{tenantId}/webhooks/{webhookId})
+	DeleteTenantWebhook(ctx context.Context, request DeleteTenantWebhookRequestObject) (DeleteTenantWebhookResponseObject, error)
+	// GetTenantWebhook Get a webhook
+	// (GET /admin/tenants/{tenantId}/webhooks/{webhookId})
+	GetTenantWebhook(ctx context.Context, request GetTenantWebhookRequestObject) (GetTenantWebhookResponseObject, error)
+	// UpdateTenantWebhook Update a webhook
+	// (PATCH /admin/tenants/{tenantId}/webhooks/{webhookId})
+	UpdateTenantWebhook(ctx context.Context, request UpdateTenantWebhookRequestObject) (UpdateTenantWebhookResponseObject, error)
+	// TestTenantWebhook Send a test event to a webhook
+	// (POST /admin/tenants/{tenantId}/webhooks/{webhookId}/test)
+	TestTenantWebhook(ctx context.Context, request TestTenantWebhookRequestObject) (TestTenantWebhookResponseObject, error)
 	// StartDepositSession Identify a depositor by email address
 	// (POST /deposit-sessions)
 	StartDepositSession(ctx context.Context, request StartDepositSessionRequestObject) (StartDepositSessionResponseObject, error)
@@ -15808,15 +21905,27 @@ type StrictServerInterface interface {
 	// GetDownload Download page content
 	// (GET /downloads/{linkToken})
 	GetDownload(ctx context.Context, request GetDownloadRequestObject) (GetDownloadResponseObject, error)
+	// ReportAbuse Report an abuse on a received transfer
+	// (POST /downloads/{linkToken}/abuse-reports)
+	ReportAbuse(ctx context.Context, request ReportAbuseRequestObject) (ReportAbuseResponseObject, error)
 	// DownloadArchive Download all files as a ZIP archive
 	// (GET /downloads/{linkToken}/archive)
 	DownloadArchive(ctx context.Context, request DownloadArchiveRequestObject) (DownloadArchiveResponseObject, error)
 	// DownloadFile Download one file
 	// (GET /downloads/{linkToken}/files/{fileId})
 	DownloadFile(ctx context.Context, request DownloadFileRequestObject) (DownloadFileResponseObject, error)
+	// StartTransferReply Reply to a transfer by sending files back to its sender
+	// (POST /downloads/{linkToken}/reply)
+	StartTransferReply(ctx context.Context, request StartTransferReplyRequestObject) (StartTransferReplyResponseObject, error)
 	// UnlockDownload Unlock a password-protected transfer
 	// (POST /downloads/{linkToken}/unlock)
 	UnlockDownload(ctx context.Context, request UnlockDownloadRequestObject) (UnlockDownloadResponseObject, error)
+	// StartRecipientVerification Send a verification code to the recipient of a link
+	// (POST /downloads/{linkToken}/verification)
+	StartRecipientVerification(ctx context.Context, request StartRecipientVerificationRequestObject) (StartRecipientVerificationResponseObject, error)
+	// ConfirmRecipientVerification Submit the recipient verification code
+	// (POST /downloads/{linkToken}/verification/confirm)
+	ConfirmRecipientVerification(ctx context.Context, request ConfirmRecipientVerificationRequestObject) (ConfirmRecipientVerificationResponseObject, error)
 	// GetHealth Health check
 	// (GET /healthz)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -15826,9 +21935,39 @@ type StrictServerInterface interface {
 	// GetInvitation Check an invitation link
 	// (GET /invitations/{invitationToken})
 	GetInvitation(ctx context.Context, request GetInvitationRequestObject) (GetInvitationResponseObject, error)
+	// RequestMyTransfersLink Ask for a "My transfers" access link by mail
+	// (POST /me/access-links)
+	RequestMyTransfersLink(ctx context.Context, request RequestMyTransfersLinkRequestObject) (RequestMyTransfersLinkResponseObject, error)
+	// StartMyTransfersSession Open a "My transfers" session from an access link
+	// (POST /me/sessions)
+	StartMyTransfersSession(ctx context.Context, request StartMyTransfersSessionRequestObject) (StartMyTransfersSessionResponseObject, error)
+	// EndMyTransfersSession End the "My transfers" session
+	// (DELETE /me/sessions/current)
+	EndMyTransfersSession(ctx context.Context, request EndMyTransfersSessionRequestObject) (EndMyTransfersSessionResponseObject, error)
+	// GetCurrentMyTransfersSession Current "My transfers" session
+	// (GET /me/sessions/current)
+	GetCurrentMyTransfersSession(ctx context.Context, request GetCurrentMyTransfersSessionRequestObject) (GetCurrentMyTransfersSessionResponseObject, error)
+	// ListMyTransfers List my transfers in progress
+	// (GET /me/transfers)
+	ListMyTransfers(ctx context.Context, request ListMyTransfersRequestObject) (ListMyTransfersResponseObject, error)
+	// DeleteMyTransfer Delete one of my transfers before expiry
+	// (DELETE /me/transfers/{transferId})
+	DeleteMyTransfer(ctx context.Context, request DeleteMyTransferRequestObject) (DeleteMyTransferResponseObject, error)
+	// GetMyTransfer Details of one of my transfers, with per-recipient tracking
+	// (GET /me/transfers/{transferId})
+	GetMyTransfer(ctx context.Context, request GetMyTransferRequestObject) (GetMyTransferResponseObject, error)
+	// ExtendMyTransfer Extend the validity of one of my transfers
+	// (POST /me/transfers/{transferId}/extension)
+	ExtendMyTransfer(ctx context.Context, request ExtendMyTransferRequestObject) (ExtendMyTransferResponseObject, error)
+	// GetMetrics Prometheus metrics
+	// (GET /metrics)
+	GetMetrics(ctx context.Context, request GetMetricsRequestObject) (GetMetricsResponseObject, error)
 	// GetOpenApiSpec Download the OpenAPI specification
 	// (GET /openapi.yaml)
 	GetOpenApiSpec(ctx context.Context, request GetOpenApiSpecRequestObject) (GetOpenApiSpecResponseObject, error)
+	// GetStatus Instance status (JSON)
+	// (GET /status)
+	GetStatus(ctx context.Context, request GetStatusRequestObject) (GetStatusResponseObject, error)
 	// GetPublicTenant Public configuration of the current tenant
 	// (GET /tenant)
 	GetPublicTenant(ctx context.Context, request GetPublicTenantRequestObject) (GetPublicTenantResponseObject, error)
@@ -16643,6 +22782,172 @@ func (sh *strictHandler) GetGlobalStats(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// ListSystemWebhooks operation middleware
+func (sh *strictHandler) ListSystemWebhooks(w http.ResponseWriter, r *http.Request) {
+	var request ListSystemWebhooksRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSystemWebhooks(ctx, request.(ListSystemWebhooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSystemWebhooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSystemWebhooksResponseObject); ok {
+		if err := validResponse.VisitListSystemWebhooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSystemWebhook operation middleware
+func (sh *strictHandler) CreateSystemWebhook(w http.ResponseWriter, r *http.Request) {
+	var request CreateSystemWebhookRequestObject
+
+	var body CreateSystemWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSystemWebhook(ctx, request.(CreateSystemWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSystemWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSystemWebhookResponseObject); ok {
+		if err := validResponse.VisitCreateSystemWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSystemWebhook operation middleware
+func (sh *strictHandler) DeleteSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId) {
+	var request DeleteSystemWebhookRequestObject
+
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSystemWebhook(ctx, request.(DeleteSystemWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSystemWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSystemWebhookResponseObject); ok {
+		if err := validResponse.VisitDeleteSystemWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSystemWebhook operation middleware
+func (sh *strictHandler) GetSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId) {
+	var request GetSystemWebhookRequestObject
+
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSystemWebhook(ctx, request.(GetSystemWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSystemWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSystemWebhookResponseObject); ok {
+		if err := validResponse.VisitGetSystemWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSystemWebhook operation middleware
+func (sh *strictHandler) UpdateSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId) {
+	var request UpdateSystemWebhookRequestObject
+
+	request.WebhookId = webhookId
+
+	var body UpdateSystemWebhookApplicationMergePatchPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSystemWebhook(ctx, request.(UpdateSystemWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSystemWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSystemWebhookResponseObject); ok {
+		if err := validResponse.VisitUpdateSystemWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestSystemWebhook operation middleware
+func (sh *strictHandler) TestSystemWebhook(w http.ResponseWriter, r *http.Request, webhookId WebhookId) {
+	var request TestSystemWebhookRequestObject
+
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestSystemWebhook(ctx, request.(TestSystemWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestSystemWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestSystemWebhookResponseObject); ok {
+		if err := validResponse.VisitTestSystemWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListTenants operation middleware
 func (sh *strictHandler) ListTenants(w http.ResponseWriter, r *http.Request, params ListTenantsParams) {
 	var request ListTenantsRequestObject
@@ -16779,6 +23084,153 @@ func (sh *strictHandler) UpdateTenant(w http.ResponseWriter, r *http.Request, te
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateTenantResponseObject); ok {
 		if err := validResponse.VisitUpdateTenantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAbuseReports operation middleware
+func (sh *strictHandler) ListAbuseReports(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListAbuseReportsParams) {
+	var request ListAbuseReportsRequestObject
+
+	request.TenantId = tenantId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAbuseReports(ctx, request.(ListAbuseReportsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAbuseReports")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAbuseReportsResponseObject); ok {
+		if err := validResponse.VisitListAbuseReportsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAbuseReport operation middleware
+func (sh *strictHandler) GetAbuseReport(w http.ResponseWriter, r *http.Request, tenantId TenantId, reportId AbuseReportId) {
+	var request GetAbuseReportRequestObject
+
+	request.TenantId = tenantId
+	request.ReportId = reportId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAbuseReport(ctx, request.(GetAbuseReportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAbuseReport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAbuseReportResponseObject); ok {
+		if err := validResponse.VisitGetAbuseReportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAbuseReport operation middleware
+func (sh *strictHandler) UpdateAbuseReport(w http.ResponseWriter, r *http.Request, tenantId TenantId, reportId AbuseReportId) {
+	var request UpdateAbuseReportRequestObject
+
+	request.TenantId = tenantId
+	request.ReportId = reportId
+
+	var body UpdateAbuseReportApplicationMergePatchPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAbuseReport(ctx, request.(UpdateAbuseReportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAbuseReport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAbuseReportResponseObject); ok {
+		if err := validResponse.VisitUpdateAbuseReportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAbuseThresholds operation middleware
+func (sh *strictHandler) GetAbuseThresholds(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request GetAbuseThresholdsRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAbuseThresholds(ctx, request.(GetAbuseThresholdsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAbuseThresholds")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAbuseThresholdsResponseObject); ok {
+		if err := validResponse.VisitGetAbuseThresholdsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAbuseThresholds operation middleware
+func (sh *strictHandler) UpdateAbuseThresholds(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request UpdateAbuseThresholdsRequestObject
+
+	request.TenantId = tenantId
+
+	var body UpdateAbuseThresholdsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAbuseThresholds(ctx, request.(UpdateAbuseThresholdsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAbuseThresholds")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAbuseThresholdsResponseObject); ok {
+		if err := validResponse.VisitUpdateAbuseThresholdsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17156,6 +23608,65 @@ func (sh *strictHandler) UploadBrandingAsset(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UploadBrandingAssetResponseObject); ok {
 		if err := validResponse.VisitUploadBrandingAssetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConfidentialityLevels operation middleware
+func (sh *strictHandler) GetConfidentialityLevels(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request GetConfidentialityLevelsRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConfidentialityLevels(ctx, request.(GetConfidentialityLevelsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConfidentialityLevels")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConfidentialityLevelsResponseObject); ok {
+		if err := validResponse.VisitGetConfidentialityLevelsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateConfidentialityLevels operation middleware
+func (sh *strictHandler) UpdateConfidentialityLevels(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request UpdateConfidentialityLevelsRequestObject
+
+	request.TenantId = tenantId
+
+	var body UpdateConfidentialityLevelsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateConfidentialityLevels(ctx, request.(UpdateConfidentialityLevelsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateConfidentialityLevels")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateConfidentialityLevelsResponseObject); ok {
+		if err := validResponse.VisitUpdateConfidentialityLevelsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -17560,6 +24071,65 @@ func (sh *strictHandler) UpdateNetworkRules(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// GetRecipientRules operation middleware
+func (sh *strictHandler) GetRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request GetRecipientRulesRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRecipientRules(ctx, request.(GetRecipientRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRecipientRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRecipientRulesResponseObject); ok {
+		if err := validResponse.VisitGetRecipientRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateRecipientRules operation middleware
+func (sh *strictHandler) UpdateRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request UpdateRecipientRulesRequestObject
+
+	request.TenantId = tenantId
+
+	var body UpdateRecipientRulesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateRecipientRules(ctx, request.(UpdateRecipientRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateRecipientRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateRecipientRulesResponseObject); ok {
+		if err := validResponse.VisitUpdateRecipientRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetSmtpSettings operation middleware
 func (sh *strictHandler) GetSmtpSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
 	var request GetSmtpSettingsRequestObject
@@ -17834,6 +24404,180 @@ func (sh *strictHandler) ResendTransferNotification(w http.ResponseWriter, r *ht
 	}
 }
 
+// ListTenantWebhooks operation middleware
+func (sh *strictHandler) ListTenantWebhooks(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request ListTenantWebhooksRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTenantWebhooks(ctx, request.(ListTenantWebhooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTenantWebhooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTenantWebhooksResponseObject); ok {
+		if err := validResponse.VisitListTenantWebhooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateTenantWebhook operation middleware
+func (sh *strictHandler) CreateTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request CreateTenantWebhookRequestObject
+
+	request.TenantId = tenantId
+
+	var body CreateTenantWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateTenantWebhook(ctx, request.(CreateTenantWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateTenantWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateTenantWebhookResponseObject); ok {
+		if err := validResponse.VisitCreateTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteTenantWebhook operation middleware
+func (sh *strictHandler) DeleteTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId) {
+	var request DeleteTenantWebhookRequestObject
+
+	request.TenantId = tenantId
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteTenantWebhook(ctx, request.(DeleteTenantWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteTenantWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteTenantWebhookResponseObject); ok {
+		if err := validResponse.VisitDeleteTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTenantWebhook operation middleware
+func (sh *strictHandler) GetTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId) {
+	var request GetTenantWebhookRequestObject
+
+	request.TenantId = tenantId
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTenantWebhook(ctx, request.(GetTenantWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTenantWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTenantWebhookResponseObject); ok {
+		if err := validResponse.VisitGetTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateTenantWebhook operation middleware
+func (sh *strictHandler) UpdateTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId) {
+	var request UpdateTenantWebhookRequestObject
+
+	request.TenantId = tenantId
+	request.WebhookId = webhookId
+
+	var body UpdateTenantWebhookApplicationMergePatchPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateTenantWebhook(ctx, request.(UpdateTenantWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateTenantWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateTenantWebhookResponseObject); ok {
+		if err := validResponse.VisitUpdateTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestTenantWebhook operation middleware
+func (sh *strictHandler) TestTenantWebhook(w http.ResponseWriter, r *http.Request, tenantId TenantId, webhookId WebhookId) {
+	var request TestTenantWebhookRequestObject
+
+	request.TenantId = tenantId
+	request.WebhookId = webhookId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestTenantWebhook(ctx, request.(TestTenantWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestTenantWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestTenantWebhookResponseObject); ok {
+		if err := validResponse.VisitTestTenantWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // StartDepositSession operation middleware
 func (sh *strictHandler) StartDepositSession(w http.ResponseWriter, r *http.Request, params StartDepositSessionParams) {
 	var request StartDepositSessionRequestObject
@@ -17941,6 +24685,39 @@ func (sh *strictHandler) GetDownload(w http.ResponseWriter, r *http.Request, lin
 	}
 }
 
+// ReportAbuse operation middleware
+func (sh *strictHandler) ReportAbuse(w http.ResponseWriter, r *http.Request, linkToken LinkToken) {
+	var request ReportAbuseRequestObject
+
+	request.LinkToken = linkToken
+
+	var body ReportAbuseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReportAbuse(ctx, request.(ReportAbuseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReportAbuse")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReportAbuseResponseObject); ok {
+		if err := validResponse.VisitReportAbuseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DownloadArchive operation middleware
 func (sh *strictHandler) DownloadArchive(w http.ResponseWriter, r *http.Request, linkToken LinkToken) {
 	var request DownloadArchiveRequestObject
@@ -17995,6 +24772,40 @@ func (sh *strictHandler) DownloadFile(w http.ResponseWriter, r *http.Request, li
 	}
 }
 
+// StartTransferReply operation middleware
+func (sh *strictHandler) StartTransferReply(w http.ResponseWriter, r *http.Request, linkToken LinkToken, params StartTransferReplyParams) {
+	var request StartTransferReplyRequestObject
+
+	request.LinkToken = linkToken
+	request.Params = params
+
+	var body StartTransferReplyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartTransferReply(ctx, request.(StartTransferReplyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartTransferReply")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartTransferReplyResponseObject); ok {
+		if err := validResponse.VisitStartTransferReplyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnlockDownload operation middleware
 func (sh *strictHandler) UnlockDownload(w http.ResponseWriter, r *http.Request, linkToken LinkToken) {
 	var request UnlockDownloadRequestObject
@@ -18021,6 +24832,73 @@ func (sh *strictHandler) UnlockDownload(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UnlockDownloadResponseObject); ok {
 		if err := validResponse.VisitUnlockDownloadResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartRecipientVerification operation middleware
+func (sh *strictHandler) StartRecipientVerification(w http.ResponseWriter, r *http.Request, linkToken LinkToken, params StartRecipientVerificationParams) {
+	var request StartRecipientVerificationRequestObject
+
+	request.LinkToken = linkToken
+	request.Params = params
+
+	var body StartRecipientVerificationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartRecipientVerification(ctx, request.(StartRecipientVerificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartRecipientVerification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartRecipientVerificationResponseObject); ok {
+		if err := validResponse.VisitStartRecipientVerificationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmRecipientVerification operation middleware
+func (sh *strictHandler) ConfirmRecipientVerification(w http.ResponseWriter, r *http.Request, linkToken LinkToken) {
+	var request ConfirmRecipientVerificationRequestObject
+
+	request.LinkToken = linkToken
+
+	var body ConfirmRecipientVerificationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmRecipientVerification(ctx, request.(ConfirmRecipientVerificationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmRecipientVerification")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmRecipientVerificationResponseObject); ok {
+		if err := validResponse.VisitConfirmRecipientVerificationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -18111,6 +24989,253 @@ func (sh *strictHandler) GetInvitation(w http.ResponseWriter, r *http.Request, i
 	}
 }
 
+// RequestMyTransfersLink operation middleware
+func (sh *strictHandler) RequestMyTransfersLink(w http.ResponseWriter, r *http.Request, params RequestMyTransfersLinkParams) {
+	var request RequestMyTransfersLinkRequestObject
+
+	request.Params = params
+
+	var body RequestMyTransfersLinkJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestMyTransfersLink(ctx, request.(RequestMyTransfersLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestMyTransfersLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestMyTransfersLinkResponseObject); ok {
+		if err := validResponse.VisitRequestMyTransfersLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartMyTransfersSession operation middleware
+func (sh *strictHandler) StartMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+	var request StartMyTransfersSessionRequestObject
+
+	var body StartMyTransfersSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartMyTransfersSession(ctx, request.(StartMyTransfersSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartMyTransfersSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartMyTransfersSessionResponseObject); ok {
+		if err := validResponse.VisitStartMyTransfersSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndMyTransfersSession operation middleware
+func (sh *strictHandler) EndMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+	var request EndMyTransfersSessionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndMyTransfersSession(ctx, request.(EndMyTransfersSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndMyTransfersSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndMyTransfersSessionResponseObject); ok {
+		if err := validResponse.VisitEndMyTransfersSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCurrentMyTransfersSession operation middleware
+func (sh *strictHandler) GetCurrentMyTransfersSession(w http.ResponseWriter, r *http.Request) {
+	var request GetCurrentMyTransfersSessionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCurrentMyTransfersSession(ctx, request.(GetCurrentMyTransfersSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCurrentMyTransfersSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCurrentMyTransfersSessionResponseObject); ok {
+		if err := validResponse.VisitGetCurrentMyTransfersSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMyTransfers operation middleware
+func (sh *strictHandler) ListMyTransfers(w http.ResponseWriter, r *http.Request, params ListMyTransfersParams) {
+	var request ListMyTransfersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMyTransfers(ctx, request.(ListMyTransfersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMyTransfers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMyTransfersResponseObject); ok {
+		if err := validResponse.VisitListMyTransfersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMyTransfer operation middleware
+func (sh *strictHandler) DeleteMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId) {
+	var request DeleteMyTransferRequestObject
+
+	request.TransferId = transferId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMyTransfer(ctx, request.(DeleteMyTransferRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMyTransfer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMyTransferResponseObject); ok {
+		if err := validResponse.VisitDeleteMyTransferResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMyTransfer operation middleware
+func (sh *strictHandler) GetMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId) {
+	var request GetMyTransferRequestObject
+
+	request.TransferId = transferId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMyTransfer(ctx, request.(GetMyTransferRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMyTransfer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMyTransferResponseObject); ok {
+		if err := validResponse.VisitGetMyTransferResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ExtendMyTransfer operation middleware
+func (sh *strictHandler) ExtendMyTransfer(w http.ResponseWriter, r *http.Request, transferId TransferId) {
+	var request ExtendMyTransferRequestObject
+
+	request.TransferId = transferId
+
+	var body ExtendMyTransferJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ExtendMyTransfer(ctx, request.(ExtendMyTransferRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExtendMyTransfer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ExtendMyTransferResponseObject); ok {
+		if err := validResponse.VisitExtendMyTransferResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMetrics operation middleware
+func (sh *strictHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	var request GetMetricsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMetrics(ctx, request.(GetMetricsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMetrics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMetricsResponseObject); ok {
+		if err := validResponse.VisitGetMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetOpenApiSpec operation middleware
 func (sh *strictHandler) GetOpenApiSpec(w http.ResponseWriter, r *http.Request) {
 	var request GetOpenApiSpecRequestObject
@@ -18128,6 +25253,30 @@ func (sh *strictHandler) GetOpenApiSpec(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetOpenApiSpecResponseObject); ok {
 		if err := validResponse.VisitGetOpenApiSpecResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetStatus operation middleware
+func (sh *strictHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
+	var request GetStatusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetStatus(ctx, request.(GetStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStatusResponseObject); ok {
+		if err := validResponse.VisitGetStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

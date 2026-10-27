@@ -63,3 +63,6 @@ Thumbs.db
 *.exe
 # 20 GB test output: memory samples and client reports (scripts/bigfile.sh)
 test/bigfile/out/
+
+# Local tool state (last green 20 GB test fingerprint, scripts/bigfile-auto.sh)
+.cache/

@@ -15,8 +15,73 @@ export interface paths {
          *     maintenance mode. Does not require a known tenant host, so that it can be probed
          *     directly on the container (Uptime Kuma, Docker healthcheck). Never exposes secrets
          *     or tenant data.
+         *
+         *     Since 1.1, with `TT_ANTIVIRUS_ENGINE=none` (antivirus disabled for the whole instance, no
+         *     antivirus container needed) the antivirus is not probed and `checks.antivirus` is `ok`.
+         *     The engine name is never disclosed here (unauthenticated): see `/status` and the system
+         *     settings.
          */
         get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prometheus metrics
+         * @description Since 1.1. Instance metrics in the Prometheus text exposition format (version 0.0.4):
+         *     transfers and volumes per tenant, quota usage, antivirus detections and scan queue,
+         *     download streams, errors, disk usage, webhook deliveries. Served outside any tenant, like
+         *     `/healthz`, whatever the `Host` (a tenant FQDN, the admin host or the container address),
+         *     and still answered in maintenance mode. Metrics carry the tenant identifier as a label
+         *     (`tenant="ten_..."`), never an e-mail address, a file name or a token.
+         *
+         *     Protection: the endpoint only exists when `TT_METRICS_TOKEN` is set (`404 not-found`
+         *     otherwise, as for an unknown path). When `TT_METRICS_ALLOWED_IPS` (CIDR list) is set, a
+         *     client whose real IP (read through the trusted proxies only) is outside it also gets
+         *     `404`, before any token check. The request must then carry
+         *     `Authorization: Bearer <TT_METRICS_TOKEN>`: a missing header is `401 unauthenticated`, a
+         *     wrong token `401 invalid-credentials`, compared in constant time and written to the
+         *     security log (`metrics_token_invalid`). Repeated invalid tokens from one IP get
+         *     `429 rate-limited`.
+         */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance status (JSON)
+         * @description Since 1.1. A JSON summary of the instance state, for monitoring tools that do not read the
+         *     Prometheus format (Observium, scripts): component health as in `/healthz`, maintenance,
+         *     disk usage and alert, antivirus queue and outage alert, and per tenant the storage usage
+         *     and transfer counters. Served outside any tenant and protected exactly like `/metrics`
+         *     (same token, same optional IP allowlist, `404` when `TT_METRICS_TOKEN` is unset). Tenants
+         *     are named by identifier and name only, never with an e-mail address. The answer is `200`
+         *     even when a component is unhealthy: read `status`.
+         */
+        get: operations["getStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -76,6 +141,14 @@ export interface paths {
          * Public configuration of the current tenant
          * @description Branding, language and limits needed by the public interface. The response language
          *     follows `Accept-Language` when available, otherwise the tenant default language.
+         *
+         *     Since 1.1 it also carries the real rules of the tenant, used by the deposit form and by
+         *     the built-in help (per-entity user documentation and its print-friendly version):
+         *     `features` (deposit from outside for verified internal addresses, reply to a transfer,
+         *     recipient verification, maximum number of downloads, folders, recipient domain
+         *     restrictions, antivirus state) and `confidentialityLevels` with their localised labels
+         *     and rules. Nothing secret is exposed: neither the internal IP ranges, the internal or
+         *     restricted domains, nor the abuse thresholds.
          */
         get: operations["getPublicTenant"];
         put?: never;
@@ -160,6 +233,14 @@ export interface paths {
          *       address) and any missing, foreign or invalid recognition cookie, a 6-digit code is sent
          *       through the tenant SMTP server and a verification challenge is returned (`202`). The
          *       code is valid 15 minutes and allows 2 wrong attempts.
+         *
+         *     Since 1.1, when the tenant allows it (`allowRemoteInternalDeposit`), an address of an
+         *     internal domain whose client IP is **outside** the tenant ranges may still deposit
+         *     without invitation, provided the address was already verified once from the internal
+         *     network: a code is then required on **every** deposit (the recognition cookie is neither
+         *     honoured nor set), and the session kind is `internal_remote`. Such deposits are flagged in
+         *     the audit log and counted by the abuse detection. Any other address outside the ranges
+         *     gets the same generic `403 deposit-not-allowed`.
          *
          *     Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
          *     Refused deposits are written to the security log.
@@ -264,6 +345,42 @@ export interface paths {
          *     external one, and `TT_MAX_OPEN_TRANSFERS` per API token; transfers whose uploads have
          *     expired do not count. Beyond it the creation gets `429 rate-limited` with `Retry-After`;
          *     finalizing or cancelling a transfer frees a slot.
+         *
+         *     Since 1.1:
+         *     - each recipient gets their own download link, mailed to them only and never returned
+         *       to the sender or the token (see "Per-recipient download links"); `downloadUrl` stays
+         *       absent. `recipientVerification` makes every recipient prove their address by code
+         *       first;
+         *     - `maxDownloads` (1 to 1000) caps the number of download starts of the transfer, all
+         *       recipients together (resumed ranges are not counted); once reached, the transfer is
+         *       deleted after the same grace period as `deleteAfterFirstDownload`, and new downloads
+         *       get `410 max-downloads-reached`;
+         *     - with per-recipient links, `deleteAfterFirstDownload` deletes the transfer once every
+         *       recipient has completed at least one download (bounded by the expiry);
+         *     - `confidentialityLevel` picks one of the tenant levels (the default level when
+         *       omitted): its rules are enforced here (`422 confidentiality-rule-violated`, each entry
+         *       of `errors` naming the field and the rule: `required` for a missing password or
+         *       recipient verification, `not-allowed` with `allowed` for a duration, `internal-only`
+         *       for a recipient outside the internal domains, `max-exceeded` for `maxDownloads`), and
+         *       a forced `deleteAfterFirstDownload` or `maxDownloads` cap is applied. The rules applied
+         *       are **snapshotted** on the transfer: later changes of the level never affect it, and
+         *       its extensions are checked against the snapshot. An unknown level key is
+         *       `400 validation-failed`;
+         *     - the recipient domain rules of the tenant apply: a recipient in a denied domain, or
+         *       outside a non-empty allow list, gets `403 recipient-domain-refused`, each refused
+         *       recipient named in `errors` (`/recipients/<index>`), recorded in the audit log only
+         *       (`transfer.recipient_refused`; a policy refusal, never written to the security log);
+         *     - with the abuse detection set to block, a creation exceeding a per-sender daily limit
+         *       (volume, number of transfers, recipients per transfer) or, for an external depositor or
+         *       a reply, the external quotas gets `403 abuse-threshold-blocked`; without blocking, the
+         *       transfer is created and the admins are alerted;
+         *     - a file may carry a relative folder `path` (folders dropped in the browser), kept in the
+         *       file lists and in the ZIP archive;
+         *     - a session of kind `reply` addresses the transfer to the original sender (its
+         *       `recipients` are ignored) and sets `replyToTransferId`; the original transfer must
+         *       still be available, here and again at finalization (`410 transfer-gone`);
+         *     - the expiry reminder is mailed the day before expiry to the recipients who have not
+         *       downloaded yet, unless the remaining lifetime at availability is under 36 hours.
          */
         post: operations["createTransfer"];
         delete?: never;
@@ -303,7 +420,7 @@ export interface paths {
          * @description Deletes the transfer, its uploads and files, with crypto-erase of the file keys.
          *     In V1 a sender may only cancel a transfer that is still `uploading` (`409 state-conflict`
          *     otherwise, and while one of its uploads is in progress); deleting a finalized transfer is
-         *     reserved to admins (and to the V1.1 "My transfers" feature). The same rule applies to an
+         *     reserved to admins and, since 1.1, to the sender through "My transfers" (`deleteMyTransfer`). The same rule applies to an
          *     API token, which may only cancel the transfers it created (`404` for any other).
          */
         delete: operations["cancelTransfer"];
@@ -339,13 +456,21 @@ export interface paths {
          *     `not_scanned_too_large` (above the ClamAV size limits) or `not_scanned_encrypted` (an
          *     encrypted archive ClamAV cannot read), both delivered unscanned and flagged (the sender is
          *     told and the download page says so), or `scan_error` (could not be analyzed after several
-         *     attempts: withheld, never downloadable). Infected files are **erased** (their key is
+         *     attempts: withheld, never downloadable). Since 1.1, when the antivirus is disabled
+         *     (`TT_ANTIVIRUS_ENGINE=none`, or `antivirusEnabled: false` for the tenant) at the time of
+         *     the finalization, files get `not_scanned_disabled` at once: delivered unscanned and
+         *     flagged like `not_scanned_too_large`. The status is decided at finalization: files
+         *     already waiting for the engine when a tenant disables its antivirus keep waiting, and
+         *     re-enabling it never rescans past files. When the instance starts with
+         *     `TT_ANTIVIRUS_ENGINE=none`, files still waiting for a scan are released as
+         *     `not_scanned_disabled` (audited `antivirus.scans_released`). Infected files are **erased** (their key is
          *     destroyed, then their content), and the sender is alerted; their entries stay in the file
          *     list for the sender's information.
          *
          *     When at least one file can be delivered, the transfer becomes `available`: the recipients
          *     receive the link, a QR code (inline CID) and the SHA-256 fingerprints, the sender a
-         *     confirmation, and `downloadUrl` appears in the sender's view; `expiresAt` is set then, so
+         *     confirmation, and, for a transfer created before 1.1 (single shared link), `downloadUrl`
+         *     appears in the sender's view; `expiresAt` is set then, so
          *     the chosen duration runs from the availability, not from the finalization. When no file
          *     can be delivered (every file infected or in `scan_error`), the transfer ends `rejected`,
          *     the sender is alerted and no recipient is notified.
@@ -439,7 +564,8 @@ export interface paths {
          *     database and in the audit log.
          *
          *     Rate limit: 20 invitations per hour per inviting address (`429 rate-limited` with
-         *     `Retry-After`). Control and invisible characters (bidirectional overrides, zero-width
+         *     `Retry-After`); since 1.1 the number is the tenant's `maxInvitationsPerInviter` (abuse
+         *     thresholds, 20 by default). Control and invisible characters (bidirectional overrides, zero-width
          *     characters...) are removed from `message` before it is stored and mailed.
          */
         post: operations["createInvitation"];
@@ -493,6 +619,14 @@ export interface paths {
          *     signatures are exposed. A known link whose transfer is no longer available (expired,
          *     deleted after its first download, rejected) gets `410`; an unknown link, or one of another
          *     entity, `404`.
+         *
+         *     Since 1.1 the token may be a per-recipient link. When its transfer requires recipient
+         *     verification and the recipient has not proved their address on this browser (no valid
+         *     `__Host-tt_rv` cookie for this link), only `senderEmail`, `expiresAt`,
+         *     `passwordProtected`, `locked: true`, `verificationRequired: true`, `verified: false` and
+         *     `recipientEmailMasked` are returned; the password, if any, is asked after the
+         *     verification. The answer also tells whether the recipient may reply (`replyAllowed`),
+         *     the confidentiality level and the downloads left (`downloadsRemaining`).
          */
         get: operations["getDownload"];
         put?: never;
@@ -533,6 +667,10 @@ export interface paths {
          *     without a CORS preflight, which is never approved), and an `Origin` header other than
          *     `https://<entity host>` or a `Sec-Fetch-Site` other than `same-origin` gets
          *     `403 csrf-invalid`.
+         *
+         *     Since 1.1, on a per-recipient link whose transfer requires recipient verification, the
+         *     recipient must be verified first: otherwise `401 recipient-verification-required`, and
+         *     no password attempt is counted.
          */
         post: operations["unlockDownload"];
         delete?: never;
@@ -579,9 +717,18 @@ export interface paths {
          *     The transfer counts as downloaded once every byte of every file has been served at least
          *     once (the union of served ranges is tracked on disk, never per chunk in the database), or
          *     once the archive has been streamed to its end. This triggers the acknowledgement email to
-         *     the sender. With `deleteAfterFirstDownload`, the transfer is then deleted (with crypto-erase)
+         *     the sender. Since 1.1, with per-recipient links, this is tracked per recipient: the
+         *     acknowledgement names the recipient, and `deleteAfterFirstDownload` deletes the transfer
+         *     once every recipient has completed at least one download. With `deleteAfterFirstDownload`, the transfer is then deleted (with crypto-erase)
          *     after a grace period (`TT_DELETE_AFTER_DOWNLOAD_GRACE`, 15 minutes by default) so that an
          *     interrupted final range can still be resumed.
+         *
+         *     Since 1.1: on a per-recipient link the download is recorded for that recipient (per-file
+         *     tracking, first-download receipt naming the recipient); a transfer requiring recipient
+         *     verification answers `401 recipient-verification-required` until the recipient is
+         *     verified on this browser; once `maxDownloads` download starts are reached, a new start
+         *     gets `410 max-downloads-reached` while a resumed range of a download already started is
+         *     still served during the grace period.
          */
         get: operations["downloadFile"];
         put?: never;
@@ -616,11 +763,370 @@ export interface paths {
          *     `Cache-Control: no-store`). An archive streamed to its end counts as a complete download.
          *     The stream is cut when the client stops reading for `TT_DOWNLOAD_IDLE_TIMEOUT`, and
          *     simultaneous streams are capped as for `downloadFile` (2 per client per transfer, 4 per
-         *     transfer, 8 per client per tenant; `429` with `Retry-After`).
+         *     transfer, 8 per client per tenant; `429` with `Retry-After`). Since 1.1, files keep their
+         *     folder `path` inside the archive (duplicate names resolved per folder), and the
+         *     per-recipient tracking, recipient verification and `maxDownloads` rules of
+         *     `downloadFile` apply (the archive counts as one download start).
          */
         get: operations["downloadArchive"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/downloads/{linkToken}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a verification code to the recipient of a link
+         * @description Since 1.1. For a per-recipient link whose transfer requires recipient verification (and
+         *     before any reply, see `startTransferReply`), sends a 6-digit code to the address the
+         *     link was issued for, through the tenant SMTP server (template
+         *     `recipient-verification-code`). The address is never taken from the request and never
+         *     revealed: the answer only carries a masked form (`c***@customer.example.net`).
+         *
+         *     Same rules as the sender codes: valid 15 minutes, 2 wrong attempts, then a new code must
+         *     be requested. Recipient codes have their own budget, separate from the deposit codes: at
+         *     most 5 codes per hour per recipient address and link; the budget of 20 codes per hour per
+         *     client IP is shared with every other code (`429 rate-limited`, written to the security
+         *     log). Requesting a new code
+         *     invalidates the previous one. A link whose recipient is already verified on this browser
+         *     (valid `__Host-tt_rv` cookie) answers `204` without sending anything. A link that does
+         *     not need any verification (a link created before 1.1, or a transfer without the option
+         *     when no reply is wanted) gets `409 state-conflict`.
+         *
+         *     The operation needs no session but is protected from cross-site use, like
+         *     `unlockDownload`: the body must be JSON, and an `Origin` other than
+         *     `https://<entity host>` or a `Sec-Fetch-Site` other than `same-origin` gets
+         *     `403 csrf-invalid`.
+         */
+        post: operations["startRecipientVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/downloads/{linkToken}/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the recipient verification code
+         * @description Since 1.1. Validates the code sent by `startRecipientVerification`. On success the
+         *     recipient link is marked verified (`recipient.verified` in the audit log) and the
+         *     technical cookie `__Host-tt_rv` is set (or extended with this link). The cookie is
+         *     stateless and MAC-signed with a key derived from the master key, like `__Host-tt_dl`:
+         *     each entry binds the link identifier, the tenant identifier and an expiry 1 hour ahead,
+         *     so no server-side record is needed. It opens the download page, the files, the archive and the reply of this
+         *     link on this browser only. A link forwarded to someone else therefore stays useless
+         *     without access to the recipient mailbox.
+         *
+         *     After 2 wrong codes the code is invalidated (`410 verification-exhausted`) and a new one
+         *     must be requested. Every wrong code is written to the security log
+         *     (`verification_code_invalid`, purpose `recipient`). Protected from cross-site use like
+         *     `startRecipientVerification` (`403 csrf-invalid`).
+         */
+        post: operations["confirmRecipientVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/downloads/{linkToken}/abuse-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report an abuse on a received transfer
+         * @description Since 1.1. The "Report an abuse" button of the download page. Records a report for the
+         *     delegated admins of the tenant (`abuse.reported` in the audit log), who are alerted by
+         *     mail (template `abuse-report`) and by the tenant webhooks (event `abuse.reported`). The
+         *     report names the transfer; the sender is never told. The reporter address is recorded
+         *     only when a valid `__Host-tt_rv` entry for this link proves it (`reporterVerified`);
+         *     otherwise the report only says it came through the link of recipient number n
+         *     (`recipientIndex`), unverified. `message` is plain text (at most 1000 characters):
+         *     control, invisible and bidirectional characters are removed and it is never interpreted
+         *     as HTML.
+         *
+         *     Works on any known link of an available transfer, password protected or not, without
+         *     unlocking or verification. Rate limited: 3 reports per link per day (keyed on the link)
+         *     and 5 per client IP per hour (`429 rate-limited`, written to the security log).
+         *     Protected from cross-site use like `unlockDownload` (JSON body, `Origin` and
+         *     `Sec-Fetch-Site` checks, `403 csrf-invalid`).
+         */
+        post: operations["reportAbuse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/downloads/{linkToken}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply to a transfer by sending files back to its sender
+         * @description Since 1.1. Opens a deposit session of kind `reply` for the recipient of a per-recipient
+         *     link, whose single recipient is the original sender: the recipient then creates a
+         *     transfer with `POST /transfers` (its `recipients` are ignored) and uploads with tus as any
+         *     depositor. Requirements, checked in this order:
+         *
+         *     1. the tenant allows replies (`allowTransferReply`), otherwise `403 reply-not-allowed`;
+         *        a link created before 1.1 (shared by every recipient) cannot be replied to, and a
+         *        reply transfer is never replied to (no reply to a reply);
+         *     2. the recipient proved their address on this browser (`__Host-tt_rv`, see
+         *        `startRecipientVerification` with purpose `reply`), whatever the transfer options:
+         *        otherwise `401 recipient-verification-required`;
+         *     3. the recipient address and its domain are not blocklisted
+         *        (`403 deposit-not-allowed`, reason in the security log);
+         *     4. the original transfer is still available (`410 transfer-gone`).
+         *
+         *     The session lives at most as long as the original transfer, and the reply transfer is
+         *     subject to the external depositor rules: the external quotas and the abuse thresholds of
+         *     the tenant, the per-transfer limit, the storage quota, the blocklist and the antivirus.
+         *     Its `replyToTransferId` names the original transfer, whose availability is checked again
+         *     when the reply transfer is created and when it is finalized (`410 transfer-gone`); it is
+         *     audited as `transfer.reply_created` when created. Protected from cross-site use like
+         *     `unlockDownload` (`403 csrf-invalid`). Refused during maintenance (`503 maintenance`).
+         */
+        post: operations["startTransferReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/access-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask for a "My transfers" access link by mail
+         * @description Since 1.1. Always answers `202`, whatever the address, so that neither the answer nor its
+         *     timing tells whether an address is known (no enumeration): the request path does the same
+         *     work for every address (validation, rate limits, enqueueing) and answers; the lookup of
+         *     the address, the creation of the link, the audit and the mail are done afterwards by an
+         *     asynchronous worker. Only when the address is verified for this tenant (it entered a code
+         *     at least once and was used within 12 months) and not blocklisted, the worker mails a
+         *     one-time access link (template `my-transfers-link`): `https://<entity host>/me#mta_...`,
+         *     the token in the fragment so that it never reaches a server log. The token is valid 15
+         *     minutes, single use, and stored hashed; requesting a new link does not revoke the
+         *     previous one before its expiry. Audited as `my_transfers.link_requested` only when a
+         *     link is sent.
+         *
+         *     Rate limits, applied identically whether the address is known or not: 5 requests per hour
+         *     per address (keyed by an HMAC of the normalised address; beyond, requests are silently
+         *     dropped, still `202`) and 20 per hour per client IP (`429 rate-limited`, written to the
+         *     security log). Protected from cross-site use like `unlockDownload` (JSON body, `Origin`
+         *     and `Sec-Fetch-Site` checks, `403 csrf-invalid`).
+         */
+        post: operations["requestMyTransfersLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a "My transfers" session from an access link
+         * @description Since 1.1. Exchanges the token of a mailed access link for a "My transfers" session:
+         *     cookie `__Host-tt_me`, valid 1 hour (absolute), bound to the tenant and the address, with
+         *     its CSRF token. The token is consumed. An unknown, expired or already used token, or one
+         *     of another tenant, gets the same `410 access-link-invalid`, written to the security log
+         *     (`access_link_invalid`); repeated failures from one IP get `429 rate-limited`. Audited as
+         *     `my_transfers.signed_in`. Protected from cross-site use (`Origin` and `Sec-Fetch-Site`
+         *     checks, `403 csrf-invalid`).
+         */
+        post: operations["startMyTransfersSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current "My transfers" session
+         * @description Since 1.1. Returns the address, expiry and CSRF token of the current "My transfers" session; used by the web interface after a page reload.
+         */
+        get: operations["getCurrentMyTransfersSession"];
+        put?: never;
+        post?: never;
+        /**
+         * End the "My transfers" session
+         * @description Since 1.1. Revokes the "My transfers" session server side and clears its cookie.
+         */
+        delete: operations["endMyTransfersSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List my transfers in progress
+         * @description Since 1.1. Lists, most recent first, the transfers of this tenant sent by the session
+         *     address with a deposit session (internal, from outside, through an invitation or as a
+         *     reply) that are still in progress: `scanning` or `available`. Transfers created with an
+         *     API token belong to the token and are never listed. A malformed `cursor` is
+         *     `400 validation-failed`.
+         */
+        get: operations["listMyTransfers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/transfers/{transferId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Details of one of my transfers, with per-recipient tracking
+         * @description Since 1.1. Returns a transfer of the session address (same scope as `listMyTransfers`,
+         *     `404` for any other, including a transfer of the same address in another tenant), with
+         *     its files and, for a transfer with per-recipient links, which files each recipient
+         *     downloaded and when. Download links are never returned.
+         */
+        get: operations["getMyTransfer"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete one of my transfers before expiry
+         * @description Since 1.1. Deletes a transfer of the session address with crypto-erase (file keys
+         *     destroyed, then the files), exactly like an admin deletion: its links answer
+         *     `410 transfer-gone`, the space is freed from the quota, a transfer still being scanned is
+         *     withdrawn and never made available. Audited as `transfer.deleted` with the sender as
+         *     actor. A transfer already ended is a no-op answered `204`.
+         */
+        delete: operations["deleteMyTransfer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/transfers/{transferId}/extension": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extend the validity of one of my transfers
+         * @description Since 1.1. Sets the expiry of an `available` transfer of the session address to now plus
+         *     `expiryDays` (`409 state-conflict` in any other state). `expiryDays` must be one of the
+         *     durations allowed for the transfer: the tenant durations restricted by the rules of the
+         *     confidentiality level **snapshotted** on the transfer at its creation
+         *     (`400 validation-failed`, field code `not-allowed`, with `allowed`). The new expiry can
+         *     only move forward: a value that would shorten the current expiry is refused the same way.
+         *     A transfer may be extended any number of times, but its total lifetime never exceeds 90
+         *     days from its creation: an extension beyond gets `409 extension-limit-reached`
+         *     (`extendableTo` tells the latest expiry possible). A transfer whose maximum number of
+         *     downloads is reached, or that is due for deletion after its downloads, cannot be extended
+         *     (`409 state-conflict`). An extension re-arms the expiry reminder: one reminder per expiry
+         *     date, the day before the new expiry, to the recipients who have not downloaded yet (same
+         *     36-hour rule). Audited as `transfer.extended` with the old and new expiry and the number
+         *     of extensions.
+         */
+        post: operations["extendMyTransfer"];
         delete?: never;
         options?: never;
         head?: never;
@@ -910,10 +1416,18 @@ export interface paths {
          *     ceiling with it; lowering `maxTransferCeiling` below `maxTransferBytes` lowers the limit
          *     too; giving both with `maxTransferBytes` above `maxTransferCeiling` is `400`.
          *
-         *     A delegated admin may only change `defaultLanguage` and set `maxTransferBytes` at most to
-         *     `maxTransferCeiling` (the ceiling set by the super admin). Changing `name`, `fqdn`,
-         *     `storageQuotaBytes` or `maxTransferCeiling`, or setting `maxTransferBytes` above the
-         *     ceiling, is refused with `403 forbidden` and changes nothing.
+         *     A delegated admin may only change `defaultLanguage`, set `maxTransferBytes` at most to
+         *     `maxTransferCeiling` (the ceiling set by the super admin) and, since 1.1, switch
+         *     `allowRemoteInternalDeposit`, `allowTransferReply` and `webhookIncludeAddresses`. Changing `name`, `fqdn`,
+         *     `storageQuotaBytes`, `maxTransferCeiling` or `antivirusEnabled`, or setting
+         *     `maxTransferBytes` above the ceiling, is refused with `403 forbidden` and changes nothing.
+         *
+         *     Since 1.1, `antivirusEnabled` (super admin only) turns the antivirus analysis of the
+         *     tenant off or on again; it applies to files finalized afterwards (files already waiting
+         *     for the engine keep waiting, and re-enabling never rescans past files), and is audited
+         *     as `tenant.antivirus_disabled` or `tenant.antivirus_enabled`. `antivirusEffective` (read
+         *     only) tells whether files of the tenant are really analysed: false when the tenant flag
+         *     is off or the instance runs with `TT_ANTIVIRUS_ENGINE=none`.
          */
         patch: operations["updateTenant"];
         trace?: never;
@@ -1282,6 +1796,256 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/confidentiality-levels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Confidentiality levels and their rules
+         * @description Since 1.1. Returns the confidentiality levels offered to the senders of the tenant, in
+         *     display order, with their labels per language and the rules each one imposes. A new
+         *     tenant (and every tenant existing before 1.1) starts with three default levels:
+         *     `public`, `internal` (the default) and `confidential` (recipient verification and
+         *     password required, 1 or 7 days, internal recipients only). Readable by any admin attached
+         *     to the tenant.
+         */
+        get: operations["getConfidentialityLevels"];
+        /**
+         * Replace the confidentiality levels
+         * @description Since 1.1. Replaces the whole list (the array order is the display order): 1 to 10
+         *     levels with unique keys, exactly one of them the default (`400 validation-failed` naming
+         *     the member otherwise). With a single level, the deposit form hides the level selector.
+         *     Every level needs a label in each supported language (an optional description per
+         *     language is shown in the form and the help), and `allowedExpiryDays` must be a non-empty
+         *     subset of the tenant durations. The change applies to new transfers only: existing transfers keep the level
+         *     key, label and rules they were created with. Requires the right to change the tenant.
+         *     Audited as `tenant.confidentiality_updated` with the list of keys.
+         */
+        put: operations["updateConfidentialityLevels"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/recipient-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Allowed and denied recipient domains
+         * @description Since 1.1. Returns the recipient domain rules of the tenant (see `RecipientRules` for the matching). Both lists are empty by default: any recipient is allowed. Readable by any admin attached to the tenant.
+         */
+        get: operations["getRecipientRules"];
+        /**
+         * Replace the allowed and denied recipient domains
+         * @description Since 1.1. Replaces both lists. Domains are trimmed, normalised to lower-case punycode
+         *     without trailing dot and validated (`400 validation-failed` naming the entry, for example
+         *     `/deniedDomains/1`); duplicates within a list are refused. The rules apply to transfers
+         *     created afterwards (`POST /transfers` answers `403 recipient-domain-refused` naming the
+         *     refused recipients). Requires the right to change the tenant. Audited as
+         *     `tenant.recipient_rules_updated` with the domains.
+         */
+        put: operations["updateRecipientRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/abuse-thresholds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Abuse detection thresholds
+         * @description Since 1.1. Returns the abuse detection settings of the tenant (see `AbuseThresholds`):
+         *     per-sender daily limits, unusual behaviour detection, office hours, invitation limit and
+         *     external quotas. A `null` threshold disables its rule. Readable by any admin attached to
+         *     the tenant.
+         */
+        get: operations["getAbuseThresholds"];
+        /**
+         * Replace the abuse detection thresholds
+         * @description Since 1.1. Replaces every setting (absent nullable members are refused, so that a
+         *     forgotten field never silently disables a rule: send `null` to disable one). Counters are
+         *     computed per day of the thresholds' `timeZone` (UTC by default) from the transfers of the
+         *     tenant. A threshold exceeded raises an
+         *     alert to the delegated admins (mail `abuse-alert`, webhook event
+         *     `abuse.threshold_exceeded` or `abuse.unusual_activity`), at most once per sender, rule and
+         *     day; with `blockOnExceed`, a transfer creation that would exceed a per-sender limit or an
+         *     external quota is refused (`403 abuse-threshold-blocked`). Requires the right to change the
+         *     tenant. Audited as `tenant.abuse_settings_updated` with the changed field names.
+         */
+        put: operations["updateAbuseThresholds"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the webhooks of the tenant
+         * @description Since 1.1. Lists the webhooks of the tenant with their subscribed events and last delivery status. The URL is never returned in full (it often embeds a secret): only `urlHint` (scheme and host). Readable by any admin attached to the tenant.
+         */
+        get: operations["listTenantWebhooks"];
+        put?: never;
+        /**
+         * Create a webhook
+         * @description Since 1.1. Creates a webhook receiving the selected events of the tenant (see
+         *     `WebhookEventType`; the system events such as `disk.alert_raised` are reserved to the
+         *     instance-wide webhooks). Payloads are minimal (`WebhookEvent`): no e-mail address unless
+         *     the tenant enables `webhookIncludeAddresses`.
+         *
+         *     Network guard: the URL must be `https:`, at most 2048 characters, without user
+         *     information. Its host is resolved again at every connection and the address checked
+         *     before connecting (no DNS rebinding); denied by default: loopback, unspecified,
+         *     link-local, cloud metadata (`169.254.169.254`, `fd00:ec2::254`), private RFC 1918
+         *     ranges, CGNAT `100.64.0.0/10`, unique local `fc00::/7`, IPv4-mapped and -compatible
+         *     IPv6, multicast, broadcast and the container's own networks, plus
+         *     `TT_WEBHOOK_DENY_NETWORKS`. Only `TT_WEBHOOK_ALLOW_NETWORKS` (CIDRs) opens denied ranges
+         *     (for an internal receiver), and plain `http:` is accepted only towards
+         *     `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`. Redirects are never followed. A URL that resolves to a
+         *     denied address now is refused at once (`400 validation-failed`, field code
+         *     `url-not-allowed`). The URL is sealed with the master key and never returned in full.
+         *
+         *     For the `generic` kind, the server generates a signing secret, returned **once** in
+         *     `secret` and sealed in the database: every delivery carries
+         *     `X-TransTeira-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<body>">` (see
+         *     `WebhookEvent`). `teams` and `slack` receive a formatted message instead and have no
+         *     secret. At most 20 webhooks per tenant (`409 state-conflict`). Requires the right to
+         *     change the tenant. Audited as `webhook.created` (kind, events and URL host only).
+         */
+        post: operations["createTenantWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/webhooks/{webhookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a webhook
+         * @description Since 1.1. Returns one webhook of the tenant (never its URL in full nor its secret). A webhook of another tenant answers `404`, like an unknown one.
+         */
+        get: operations["getTenantWebhook"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook
+         * @description Since 1.1. Deletes a webhook, destroying the key material of its sealed URL and secret first; deliveries in progress are abandoned. Requires the right to change the tenant. Audited as `webhook.deleted`.
+         */
+        delete: operations["deleteTenantWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a webhook
+         * @description Since 1.1. JSON Merge Patch (RFC 7396) of a webhook: an absent member is left unchanged,
+         *     `null` is refused, an unknown member is refused (`400 validation-failed`). A new `url`
+         *     follows the rules of `createTenantWebhook`. `rotateSecret: true` (generic kind only)
+         *     replaces the signing secret, returned once in `secret`; the previous key material is
+         *     destroyed at once. Re-enabling a webhook closes its circuit breaker. Requires the right to change
+         *     the tenant. Audited as `webhook.updated` (names of the changed fields only).
+         */
+        patch: operations["updateTenantWebhook"];
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/webhooks/{webhookId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test event to a webhook
+         * @description Since 1.1. Delivers a `webhook.test` event synchronously (one attempt, no retry, same
+         *     timeout and network guard as real deliveries, even while the circuit breaker is open)
+         *     and reports the outcome with a coarse `errorCategory` only (`dns`, `refused_network`,
+         *     `connect`, `tls`, `timeout`, `http_status`): no address, port, banner or response body is
+         *     ever returned. Limited to 10 tests per hour per administrator and tenant (`429`).
+         *     Requires the right to change the tenant. Audited as `webhook.tested`.
+         */
+        post: operations["testTenantWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/transfers": {
         parameters: {
             query?: never;
@@ -1382,7 +2146,8 @@ export interface paths {
          *     state-conflict`). Every listed recipient must be an original recipient of the transfer
          *     (otherwise `400 validation-failed`); without a list, the notification goes to all of them.
          *
-         *     The mail carries the existing download link: the link is never returned to the admin nor
+         *     The mail carries the existing download link (since 1.1, each recipient's own link for a
+         *     transfer with per-recipient links): the link is never returned to the admin nor
          *     written to any log, and the download token is never rotated, so links already received
          *     keep working. At most 5 resends per hour per transfer (`429 rate-limited`). When no SMTP
          *     server is configured for the tenant, nothing is queued (`503 mail-unavailable`). Audited
@@ -1710,6 +2475,10 @@ export interface paths {
          *     - invitations of which the address is the invitee: deleted; invitations it issued:
          *       revoked, the issuer being replaced by the pseudonym;
          *     - verification codes, deposit sessions and the verified address record: deleted;
+         *     - since 1.1, "My transfers" access links and sessions of the address: deleted; recipient
+         *       links and download tracking of the address: deleted with its recipient entries; abuse
+         *       reports it made, and those about its transfers: the address is replaced by the
+         *       pseudonym;
          *     - audit log: the address is replaced by the pseudonym wherever it is the actor.
          *
          *     The pseudonym has the form `erased-<16 hex>`: the first 16 hexadecimal characters of an
@@ -1735,6 +2504,72 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/abuse-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List abuse reports
+         * @description Since 1.1. Lists the abuse reports made from the download pages of the tenant, most recent first, optionally filtered by status. Only the reports of this tenant are returned. Readable by any admin attached to the tenant. A malformed `cursor` is `400 validation-failed`.
+         */
+        get: operations["listAbuseReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/abuse-reports/{reportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Abuse report identifier.
+                 * @example abr_01JABCR3S4T5V6W7X8Y9Z0A1B2
+                 */
+                reportId: components["parameters"]["AbuseReportId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get an abuse report
+         * @description Since 1.1. Returns one abuse report of the tenant; a report of another tenant answers `404`, like an unknown one. Readable by any admin attached to the tenant.
+         */
+        get: operations["getAbuseReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Close or reopen an abuse report
+         * @description Since 1.1. Sets the status of a report (`closed` with an optional note, or `open` again).
+         *     The note is plain text; its e-mail addresses are kept (the report already names the
+         *     parties) but control and bidirectional characters are removed. Closing a report does not
+         *     act on the transfer: delete it or blocklist the sender with the dedicated operations.
+         *     Setting the current status again is a no-op. Requires the right to change the tenant.
+         *     Audited as `abuse.report_closed` when closed and `abuse.report_reopened` when reopened.
+         */
+        patch: operations["updateAbuseReport"];
         trace?: never;
     };
     "/admin/admins": {
@@ -1883,7 +2718,7 @@ export interface paths {
         };
         /**
          * Instance settings editable at runtime (super admin)
-         * @description Returns the instance settings that can be changed at runtime: the disk alert threshold and the optional address that receives the disk alert in addition to the super admins (`null` when none). Reserved to the super admin.
+         * @description Returns the instance settings that can be changed at runtime: the disk alert threshold and the optional address that receives the disk alert in addition to the super admins (`null` when none). Since 1.1 it also reports, read only, the antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (`antivirusEngine`): the engine is configured by environment variables only and cannot be changed through the API. Reserved to the super admin.
          */
         get: operations["getSystemSettings"];
         put?: never;
@@ -2069,8 +2904,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/system/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the instance-wide webhooks (super admin)
+         * @description Since 1.1. Lists the instance-wide webhooks, which receive the system events only (disk alerts, antivirus outage, maintenance, master key rotation), never the events of a tenant. Same representation as the tenant webhooks. Reserved to the super admin: `403 forbidden` for any other admin.
+         */
+        get: operations["listSystemWebhooks"];
+        put?: never;
+        /**
+         * Create an instance-wide webhook (super admin)
+         * @description Since 1.1. Same rules as `createTenantWebhook` (network guard, sealed URL, generic secret shown once), with the system event types only (a tenant event is refused with `400 validation-failed` on `/events/<index>`); at most 20 instance-wide webhooks. Reserved to the super admin, checked before the body. Audited as `webhook.created`, without tenant.
+         */
+        post: operations["createSystemWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/system/webhooks/{webhookId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get an instance-wide webhook (super admin)
+         * @description Since 1.1. Returns one instance-wide webhook; a tenant webhook identifier answers `404`. Reserved to the super admin.
+         */
+        get: operations["getSystemWebhook"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an instance-wide webhook (super admin)
+         * @description Since 1.1. Deletes an instance-wide webhook, destroying the key material of its sealed URL and secret first. Reserved to the super admin. Audited as `webhook.deleted`, without tenant.
+         */
+        delete: operations["deleteSystemWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Update an instance-wide webhook (super admin)
+         * @description Since 1.1. Same semantics as `updateTenantWebhook`. Reserved to the super admin, checked before the body. Audited as `webhook.updated`, without tenant.
+         */
+        patch: operations["updateSystemWebhook"];
+        trace?: never;
+    };
+    "/admin/system/webhooks/{webhookId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test event to an instance-wide webhook (super admin)
+         * @description Since 1.1. Same as `testTenantWebhook` for an instance-wide webhook (10 tests per hour per administrator, `429`). Reserved to the super admin. Audited as `webhook.tested`, without tenant.
+         */
+        post: operations["testSystemWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
-export type webhooks = Record<string, never>;
+export interface webhooks {
+    transteiraEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Event delivered to a generic webhook
+         * @description Since 1.1. Request TransTeira sends to the URL of a `generic` webhook (tenant or
+         *     instance-wide) for each subscribed event; `teams` and `slack` webhooks receive a formatted
+         *     message instead. The receiver answers any `2xx` status within 10 seconds to acknowledge;
+         *     any other answer, or none, is retried up to 5 times with exponential back-off. See
+         *     `WebhookEvent` for the headers and the signature.
+         */
+        post: operations["receiveWebhookEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
 export interface components {
     schemas: {
         /** @description RFC 9457 Problem Details with TransTeira extension members. */
@@ -2088,7 +3032,7 @@ export interface components {
             /** @description Request identifier (also in the `X-Request-Id` header and in logs). */
             instance?: string;
             code: components["schemas"]["ProblemCode"];
-            /** @description Field-level validation errors (`validation-failed` only). */
+            /** @description Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met). */
             errors?: {
                 field: string;
                 code: string;
@@ -2110,7 +3054,7 @@ export interface components {
          * @description Stable error code. See `docs/api/errors.md`.
          * @enum {string}
          */
-        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "internal-error";
+        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "internal-error";
         /**
          * @description Supported UI language (ISO 639-1). New languages may be added.
          * @enum {string}
@@ -2185,6 +3129,9 @@ export interface components {
              */
             maintenanceMessageLanguage?: components["schemas"]["Language"];
             legalDocuments: ("legal-notice" | "privacy-policy")[];
+            features?: components["schemas"]["TenantFeatures"];
+            /** @description Since 1.1. Confidentiality levels offered to the senders (1 to 10), in display order, labels and descriptions in the response language. With a single level, the deposit form hides the selector. */
+            confidentialityLevels?: components["schemas"]["PublicConfidentialityLevel"][];
         };
         LegalDocument: {
             /** @enum {string} */
@@ -2215,11 +3162,12 @@ export interface components {
         };
         /**
          * @description `internal`: internal IP and domain. `external`: invited external.
-         *     Reserved for V1.1: `internal_remote` (verified internal depositing from outside),
-         *     `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
+         *     Since 1.1: `internal_remote` (address of an internal domain already verified from the
+         *     internal network, depositing from outside with a code each time), `reply` (recipient
+         *     replying to a transfer). Reserved for V2: `drop_link`.
          * @enum {string}
          */
-        DepositorKind: "internal" | "external";
+        DepositorKind: "internal" | "external" | "internal_remote" | "reply";
         DepositSession: {
             email: components["schemas"]["Email"];
             kind: components["schemas"]["DepositorKind"];
@@ -2236,6 +3184,16 @@ export interface components {
                 invitedBy: components["schemas"]["Email"];
                 /** Format: date-time */
                 expiresAt: string;
+            };
+            /** @description Since 1.1. Present for a `reply` session. */
+            reply?: {
+                /** @description The sender of the original transfer, single recipient of the reply. */
+                recipient: components["schemas"]["Email"];
+                /**
+                 * Format: date-time
+                 * @description Expiry of the original transfer; the session never outlives it.
+                 */
+                transferExpiresAt: string;
             };
         };
         /** @enum {integer} */
@@ -2257,9 +3215,12 @@ export interface components {
          *     `infected`: file erased, kept in the list for the sender's information only.
          *     `scan_error`: the file could not be analyzed after several attempts; it is withheld
          *     (fail-closed, never downloadable) and the sender is informed.
+         *     `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
+         *     (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
+         *     `not_scanned_too_large`.
          * @enum {string}
          */
-        ScanStatus: "pending" | "scanning" | "clean" | "infected" | "not_scanned_too_large" | "not_scanned_encrypted" | "scan_error";
+        ScanStatus: "pending" | "scanning" | "clean" | "infected" | "not_scanned_too_large" | "not_scanned_encrypted" | "scan_error" | "not_scanned_disabled";
         FileDeclaration: {
             /** @description Original file name (UTF-8). Stored in the database only; never used on disk. Control and bidirectional characters are rejected. */
             name: string;
@@ -2267,7 +3228,20 @@ export interface components {
             /** @description Informational only; downloads are always served as `application/octet-stream`. */
             mediaType?: string;
             expectedSha256?: components["schemas"]["Sha256"];
+            path?: components["schemas"]["FilePath"];
         };
+        /**
+         * @description Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
+         *     browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
+         *     segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
+         *     or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
+         *     lists and used as the folder inside the ZIP archive. Names are compared after Unicode
+         *     NFC normalisation and case-insensitively: two files with the same name in the same
+         *     folder, or a file whose name equals a folder of the same level, are told apart by
+         *     suffixing the file (`name (2).ext`) in the lists and in the archive.
+         * @example plans/2026/site-a
+         */
+        FilePath: string;
         TransferCreate: {
             /**
              * @description Mandatory with an API token, forbidden with a deposit session (`400
@@ -2283,10 +3257,22 @@ export interface components {
             expiryDays: components["schemas"]["ExpiryDays"];
             /** @description Optional; stored as an argon2id hash. */
             password?: string;
-            /** @default false */
+            /**
+             * @description Delete the transfer after its first complete download. Since 1.1, with per-recipient links: once every recipient has completed at least one download (bounded by the expiry).
+             * @default false
+             */
             deleteAfterFirstDownload?: boolean;
             language?: components["schemas"]["Language"];
             files: components["schemas"]["FileDeclaration"][];
+            /**
+             * @description Since 1.1. Every recipient must prove their address with a code before downloading; may be imposed by the confidentiality level.
+             * @default false
+             */
+            recipientVerification?: boolean;
+            /** @description Since 1.1. Maximum number of download starts of the transfer, all recipients together (resumed ranges excluded); absent or null for no limit. A level may impose a lower cap. */
+            maxDownloads?: number | null;
+            /** @description Since 1.1. Key of one of the tenant's confidentiality levels; the tenant default level when omitted. */
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelKey"];
         };
         SenderFile: {
             id: string;
@@ -2305,6 +3291,7 @@ export interface components {
             /** @description tus upload URL (only while the transfer is `uploading`). */
             uploadUrl?: string;
             uploadOffset?: components["schemas"]["ByteSize"];
+            path?: components["schemas"]["FilePath"];
         };
         SenderTransfer: {
             id: string;
@@ -2330,10 +3317,27 @@ export interface components {
             finalizedAt?: string;
             /**
              * Format: uri
-             * @description Public download page (available once the transfer is `available`).
+             * @description Public download page, once the transfer is `available`, for a transfer with a single
+             *     shared link (created before 1.1). Since 1.1, absent for new transfers (the type is
+             *     unchanged, so strict 1.0 clients keep working): each recipient
+             *     has their own link, mailed to them only and never returned to the sender or to an API
+             *     token; follow them with `recipientTracking`.
              */
             downloadUrl?: string;
             files: components["schemas"]["SenderFile"][];
+            /** @description Since 1.1. Recipients must prove their address by code before downloading. */
+            recipientVerification?: boolean;
+            /** @description Since 1.1. Maximum number of download starts; null for no limit. */
+            maxDownloads?: number | null;
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
+            /** @description Since 1.1. For a reply, the original transfer. */
+            replyToTransferId?: string;
+            /**
+             * @description Since 1.1, once the transfer is `available` and for a transfer with per-recipient
+             *     links: the tracking status of each recipient (verification and download dates), never
+             *     their link.
+             */
+            recipientTracking?: components["schemas"]["RecipientTracking"][];
         };
         /** @enum {string} */
         InvitationStatus: "pending" | "used" | "expired" | "revoked";
@@ -2377,9 +3381,10 @@ export interface components {
             size: components["schemas"]["ByteSize"];
             mediaType?: string;
             sha256: components["schemas"]["Sha256"];
-            /** @description `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` (delivered unscanned: the page must say so). */
+            /** @description `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` / `not_scanned_disabled` (since 1.1; delivered unscanned: the page must say so). */
             scanStatus: components["schemas"]["ScanStatus"];
             downloadUrl: string;
+            path?: components["schemas"]["FilePath"];
         };
         PublicTransfer: {
             senderEmail: components["schemas"]["Email"];
@@ -2400,6 +3405,20 @@ export interface components {
              *     after an analysis error (`scan_error`) are never listed.
              */
             files?: components["schemas"]["PublicFile"][];
+            /** @description Since 1.1. The link is a per-recipient link whose recipient must prove their address by code. */
+            verificationRequired?: boolean;
+            /** @description Since 1.1. With `verificationRequired`: the recipient is verified on this browser. While false, `locked` is true and nothing but the verification can be done. */
+            verified?: boolean;
+            /**
+             * @description Since 1.1. Masked address of the recipient the link was issued for (`c***@customer.example.net`), present while the verification is awaited.
+             * @example c***@customer.example.net
+             */
+            recipientEmailMasked?: string;
+            /** @description Since 1.1. Download starts left before `maxDownloads` is reached; absent without limit or while `locked`. */
+            downloadsRemaining?: number;
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
+            /** @description Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`. */
+            replyAllowed?: boolean;
         };
         SetupStatus: {
             setupRequired: boolean;
@@ -2562,6 +3581,28 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            /**
+             * @description Since 1.1. Addresses of an internal domain already verified from the internal network may deposit from outside, with a code each time.
+             * @default false
+             */
+            allowRemoteInternalDeposit?: boolean;
+            /**
+             * @description Since 1.1. Recipients may send files back to the sender of a transfer (`startTransferReply`).
+             * @default false
+             */
+            allowTransferReply?: boolean;
+            /**
+             * @description Since 1.1. Antivirus analysis of the tenant's files; changed by the super admin only.
+             * @default true
+             */
+            antivirusEnabled?: boolean;
+            /**
+             * @description Since 1.1. The tenant webhooks receive the sender and recipient addresses concerned (`WebhookEvent.addresses`); off by default (minimal payloads).
+             * @default false
+             */
+            webhookIncludeAddresses?: boolean;
+            /** @description Since 1.1. Read only: files of the tenant are really analysed (`antivirusEnabled` and an instance engine other than `none`). */
+            readonly antivirusEffective?: boolean;
         };
         TenantList: {
             items: components["schemas"]["Tenant"][];
@@ -2604,13 +3645,21 @@ export interface components {
              * @description Ceiling of `maxTransferBytes` (super admin only); lowering it below `maxTransferBytes` lowers the limit too.
              */
             maxTransferCeiling?: number;
+            /** @description Since 1.1. */
+            allowRemoteInternalDeposit?: boolean;
+            /** @description Since 1.1. */
+            allowTransferReply?: boolean;
+            /** @description Since 1.1. Super admin only. */
+            antivirusEnabled?: boolean;
+            /** @description Since 1.1. */
+            webhookIncludeAddresses?: boolean;
         };
         ContrastResult: {
             /**
-             * @description V1.1 adds `*-on-dark` pairs for the dark theme.
+             * @description Since 1.1, the `*-on-dark` pairs check the colours on the dark theme background as well.
              * @enum {string}
              */
-            pair: "primary-on-light" | "accent-on-light" | "text-on-primary";
+            pair: "primary-on-light" | "accent-on-light" | "text-on-primary" | "primary-on-dark" | "accent-on-dark";
             ratio: number;
             /** @enum {string} */
             level: "AAA" | "AA" | "fail";
@@ -2703,11 +3752,14 @@ export interface components {
          *     its first download; `antivirus-unavailable` goes to the delegated admins of an entity
          *     (else the super admins) when the antivirus has stayed unreachable beyond the grace period
          *     while transfers of the entity wait for analysis, once per outage.
-         *     Reserved for V1.1: `expiry-reminder`, `abuse-alert`, `my-transfers-link`,
-         *     `recipient-verification-code`.
+         *     Since 1.1: `expiry-reminder` (recipients who have not downloaded yet, the day before
+         *     expiry, once per expiry date, skipped when less than 36 hours remained at availability), `abuse-alert` (delegated admins, abuse threshold or unusual activity),
+         *     `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
+         *     (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
+         *     per-recipient link).
          * @enum {string}
          */
-        EmailTemplateKey: "verification-code" | "transfer-notification" | "transfer-confirmation" | "first-download" | "file-problems" | "file-not-scanned" | "invitation" | "quota-warning" | "quota-reached" | "antivirus-unavailable";
+        EmailTemplateKey: "verification-code" | "transfer-notification" | "transfer-confirmation" | "first-download" | "file-problems" | "file-not-scanned" | "invitation" | "quota-warning" | "quota-reached" | "antivirus-unavailable" | "expiry-reminder" | "abuse-alert" | "abuse-report" | "my-transfers-link" | "recipient-verification-code";
         EmailTemplateSummary: {
             key: components["schemas"]["EmailTemplateKey"];
             language: components["schemas"]["Language"];
@@ -2741,10 +3793,10 @@ export interface components {
             bodyText: string;
         };
         /**
-         * @description Reserved for V1.1 - `internal_remote`, `reply`; V2 - `drop_link`.
+         * @description Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
          * @enum {string}
          */
-        TransferOrigin: "internal" | "external" | "api";
+        TransferOrigin: "internal" | "external" | "api" | "internal_remote" | "reply";
         AdminTransfer: {
             id: string;
             status: components["schemas"]["TransferStatus"];
@@ -2765,6 +3817,13 @@ export interface components {
             firstDownloadedAt?: string | null;
             /** @description Number of download starts of a file or of the archive (HEAD requests and resumed ranges excluded). */
             downloadCount: number;
+            /** @description Since 1.1. */
+            recipientVerification?: boolean;
+            /** @description Since 1.1. Null for no limit. */
+            maxDownloads?: number | null;
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
+            /** @description Since 1.1. For a reply, the original transfer. */
+            replyToTransferId?: string;
         };
         AdminTransferDetail: components["schemas"]["AdminTransfer"] & {
             /** @description Client IP address of the sender when the transfer was created. Absent or null when unknown: transfers created before this field existed. */
@@ -2776,7 +3835,10 @@ export interface components {
                 mediaType?: string;
                 sha256?: components["schemas"]["Sha256"];
                 scanStatus: components["schemas"]["ScanStatus"];
+                path?: components["schemas"]["FilePath"];
             }[];
+            /** @description Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links. */
+            recipientTracking?: components["schemas"]["RecipientTracking"][];
         };
         AdminTransferList: {
             items: components["schemas"]["AdminTransfer"][];
@@ -2897,9 +3959,22 @@ export interface components {
          *     details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
          *     (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
          *     `system`, without tenant, and are recorded even when no mail can be sent.
+         *     Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
+         *     `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
+         *     extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
+         *     security log) names the refused domains; `antivirus.scans_released` (actor `system`,
+         *     without tenant) counts the files released as `not_scanned_disabled` at a start with
+         *     `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+         *     `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
+         *     recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
+         *     (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+         *     name the report; `webhook.*` never carry the URL (host only) nor the secret;
+         *     `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
+         *     admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
+         *     a link is actually sent.
          * @enum {string}
          */
-        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed";
+        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.scans_released" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in";
         AuditEvent: {
             id: string;
             /** Format: date-time */
@@ -2978,6 +4053,10 @@ export interface components {
             verifiedAddressDeleted: boolean;
             invitationsDeleted: number;
             logEntriesPseudonymised: number;
+            /** @description Since 1.1. Abuse reports pseudonymised (made by the address, or about its transfers). */
+            abuseReports?: number;
+            /** @description Since 1.1. "My transfers" access links and sessions deleted. */
+            accessLinks?: number;
         };
         GlobalStats: {
             /** @enum {string} */
@@ -3016,6 +4095,8 @@ export interface components {
              * @description Additional recipient of the disk alert (besides the super admins); `null` when none.
              */
             alertEmail: string | null;
+            /** @description Since 1.1. Read only: the antivirus engine selected by `TT_ANTIVIRUS_ENGINE`, configured by environment variables only. */
+            readonly antivirusEngine?: components["schemas"]["AntivirusEngine"];
         };
         /**
          * @description JSON Merge Patch of the instance settings. `alertEmail: null` removes the address;
@@ -3088,6 +4169,493 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
             error?: string;
+        };
+        /**
+         * @description Since 1.1. Antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (environment only):
+         *     `clamd` (default, local or remote clamd), `icap` (RFC 3507 server), `http` (generic HTTP
+         *     scanning API), `none` (antivirus disabled for the whole instance: files are delivered
+         *     `not_scanned_disabled`).
+         * @enum {string}
+         */
+        AntivirusEngine: "clamd" | "icap" | "http" | "none";
+        /** @description Since 1.1. Answer of `/status`. */
+        InstanceStatus: {
+            /**
+             * @description `degraded` when a component of `checks` is unavailable.
+             * @enum {string}
+             */
+            status: "ok" | "degraded";
+            version: string;
+            /** Format: date-time */
+            checkedAt: string;
+            /** Format: int64 */
+            uptimeSeconds?: number;
+            maintenance: boolean;
+            checks: {
+                database: components["schemas"]["ComponentHealth"];
+                antivirus: components["schemas"]["ComponentHealth"];
+                storage: components["schemas"]["ComponentHealth"];
+            };
+            disk: {
+                totalBytes: components["schemas"]["ByteSize"];
+                usedBytes: components["schemas"]["ByteSize"];
+                usedRatio: number;
+                alertThreshold: number;
+                alertActive: boolean;
+            };
+            antivirus: {
+                engine?: components["schemas"]["AntivirusEngine"];
+                /** @description Files waiting for or under analysis. */
+                queuedFiles: number;
+                /** @description The antivirus outage alert is raised. */
+                alertActive: boolean;
+            };
+            /** @description One row per active tenant. */
+            tenants: {
+                id: string;
+                name: string;
+                storageUsedBytes: components["schemas"]["ByteSize"];
+                storageQuotaBytes: components["schemas"]["ByteSize"];
+                storageUsedRatio: number;
+                /** @description Transfers currently available. */
+                activeTransfers: number;
+                /** @description Transfers made available during the last 24 hours. */
+                transfersLast24h: number;
+            }[];
+        };
+        /** @description Since 1.1. Real rules of the tenant, for the deposit form and the built-in help. */
+        TenantFeatures: {
+            /** @description Internal addresses already verified from the internal network may deposit from outside (code each time). */
+            remoteInternalDeposit: boolean;
+            /** @description Recipients may send files back to the sender. */
+            transferReply: boolean;
+            /** @description The recipient verification option is offered to senders. */
+            recipientVerification: boolean;
+            /** @description The maximum number of downloads option is offered to senders. */
+            maxDownloads: boolean;
+            /** @description Folders may be dropped and keep their tree. */
+            folders: boolean;
+            /** @description Recipient domain rules apply (the domains themselves are not disclosed). */
+            recipientRestrictions: boolean;
+            /**
+             * @description `disabled` when files of the tenant are not analysed (instance engine `none` or tenant flag off): the download page tells recipients so.
+             * @enum {string}
+             */
+            antivirus: "enabled" | "disabled";
+        };
+        /**
+         * @description Since 1.1. Key of a confidentiality level, unique within the tenant.
+         * @example confidential
+         */
+        ConfidentialityLevelKey: string;
+        /** @description Since 1.1. Rules a confidentiality level imposes on a transfer, enforced by the server at creation. */
+        ConfidentialityRules: {
+            requireRecipientVerification: boolean;
+            requirePassword: boolean;
+            allowedExpiryDays: components["schemas"]["ExpiryDays"][];
+            /** @description Recipients must belong to the tenant's internal domains (exact match). */
+            internalRecipientsOnly: boolean;
+            forceDeleteAfterFirstDownload: boolean;
+            /** @description Cap of `maxDownloads` (applied when the sender sets none or more); null for none. */
+            maxDownloads: number | null;
+        };
+        /** @description Since 1.1. A confidentiality level of a tenant, as managed by its admins. */
+        ConfidentialityLevel: {
+            key: components["schemas"]["ConfidentialityLevelKey"];
+            /** @description Label per supported language (1 to 50 characters of plain text); every supported language is required. */
+            labels: {
+                [key: string]: string;
+            };
+            /** @description Optional description per supported language (plain text, at most 500 characters), shown in the deposit form and the help. */
+            descriptions?: {
+                [key: string]: string;
+            };
+            isDefault: boolean;
+            rules: components["schemas"]["ConfidentialityRules"];
+        };
+        ConfidentialityLevelList: {
+            items: components["schemas"]["ConfidentialityLevel"][];
+        };
+        /** @description Since 1.1. A confidentiality level as offered to senders, label in the response language. */
+        PublicConfidentialityLevel: {
+            key: components["schemas"]["ConfidentialityLevelKey"];
+            label: string;
+            /** @description Description in the response language; absent when none is written. */
+            description?: string;
+            isDefault: boolean;
+            rules: components["schemas"]["ConfidentialityRules"];
+        };
+        /** @description Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none. */
+        ConfidentialityLevelRef: {
+            key: components["schemas"]["ConfidentialityLevelKey"];
+            label: string;
+            rules?: components["schemas"]["ConfidentialityRules"];
+        };
+        RecipientVerificationStart: {
+            /**
+             * @description `reply` asks for a code before replying, even when the transfer does not require recipient verification.
+             * @default download
+             * @enum {string}
+             */
+            purpose?: "download" | "reply";
+            language?: components["schemas"]["Language"];
+        };
+        RecipientVerificationChallenge: {
+            /** @description Masked recipient address; the full address is never returned. */
+            emailMasked: string;
+            /** Format: date-time */
+            expiresAt: string;
+            attemptsRemaining: number;
+        };
+        /** @description Since 1.1. Body of `startTransferReply` (a JSON body is required for cross-site protection). */
+        TransferReplyStart: {
+            language?: components["schemas"]["Language"];
+        };
+        /** @enum {string} */
+        AbuseReportCategory: "malware" | "phishing" | "illegal_content" | "spam" | "unknown_sender" | "other";
+        AbuseReportCreate: {
+            category: components["schemas"]["AbuseReportCategory"];
+            /** @description Plain text; control, invisible and bidirectional characters are removed. */
+            message?: string;
+        };
+        /** @description Since 1.1. Downloads of one recipient through their own link. */
+        RecipientTracking: {
+            email: components["schemas"]["Email"];
+            /**
+             * Format: date-time
+             * @description Last recipient verification by code; null when never verified.
+             */
+            verifiedAt: string | null;
+            /** Format: date-time */
+            firstDownloadedAt: string | null;
+            /** Format: date-time */
+            lastDownloadedAt: string | null;
+            downloads: {
+                /** @description Downloaded file; null for the ZIP archive. */
+                fileId?: string | null;
+                /** Format: date-time */
+                firstAt: string;
+                /** Format: date-time */
+                lastAt: string;
+                /** @description Download starts (resumed ranges excluded). */
+                count: number;
+            }[];
+        };
+        MyTransfersLinkRequest: {
+            email: components["schemas"]["Email"];
+            language?: components["schemas"]["Language"];
+        };
+        MyTransfersSessionStart: {
+            /** @description Token from the fragment of the mailed access link. */
+            token: string;
+        };
+        MyTransfersSession: {
+            email: components["schemas"]["Email"];
+            csrfToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        MyTransfer: {
+            id: string;
+            status: components["schemas"]["TransferStatus"];
+            recipients: components["schemas"]["Email"][];
+            fileCount: number;
+            totalBytes: components["schemas"]["ByteSize"];
+            expiryDays: components["schemas"]["ExpiryDays"];
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Absent while `scanning`.
+             */
+            expiresAt?: string;
+            passwordProtected: boolean;
+            recipientVerification: boolean;
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
+            /** @description Recipients who downloaded at least one file (per-recipient links only; 0 otherwise). */
+            downloadedBy: number;
+        };
+        MyTransferDetail: components["schemas"]["MyTransfer"] & {
+            message?: string;
+            deleteAfterFirstDownload: boolean;
+            maxDownloads: number | null;
+            /** @description Download starts, all recipients together. */
+            downloadCount: number;
+            /** @description Number of extensions made. */
+            extensionCount?: number;
+            /**
+             * Format: date-time
+             * @description Latest expiry `extendMyTransfer` could set now: now plus the longest duration allowed by the snapshotted level, but never more than 90 days after the creation; absent when the transfer cannot be extended.
+             */
+            extendableTo?: string;
+            files: {
+                id: string;
+                name: string;
+                path?: components["schemas"]["FilePath"];
+                size: components["schemas"]["ByteSize"];
+                sha256?: components["schemas"]["Sha256"];
+                scanStatus: components["schemas"]["ScanStatus"];
+            }[];
+            /** @description One entry per recipient for a transfer with per-recipient links; empty for a transfer created before 1.1. */
+            recipientTracking: components["schemas"]["RecipientTracking"][];
+        };
+        MyTransferList: {
+            items: components["schemas"]["MyTransfer"][];
+            nextCursor?: components["schemas"]["PageCursor"];
+        };
+        TransferExtension: {
+            /** @description The transfer then expires this many days from now. */
+            expiryDays: components["schemas"]["ExpiryDays"];
+        };
+        /**
+         * @description Since 1.1. Recipient domain rules of a tenant. An entry matches the domain itself and all
+         *     its subdomains (`example.net` covers `mail.example.net`); matching is case-insensitive on
+         *     the punycode form. A recipient is refused when its domain matches a denied entry, or when
+         *     `allowedDomains` is not empty and its domain matches none of its entries; the deny list
+         *     wins over the allow list. Both lists empty: no restriction.
+         */
+        RecipientRules: {
+            allowedDomains: string[];
+            deniedDomains: string[];
+        };
+        /** @description Office hours of the tenant, in the `timeZone` of the thresholds; a transfer created outside them raises an unusual activity alert. */
+        OfficeHours: {
+            /** @description Local start time (HH:MM). */
+            start: string;
+            /** @description Local end time (HH:MM, `24:00` for the end of the day), after `start`. */
+            end: string;
+            /** @description Working days, ISO 8601 numbering (1 = Monday, 7 = Sunday). */
+            weekdays: number[];
+        };
+        /**
+         * @description Since 1.1. Abuse detection settings of a tenant. Every member is required; `null`
+         *     disables the corresponding rule. Daily counters are computed per day of `timeZone` from
+         *     the transfers of the tenant (no write per uploaded chunk); deposits from outside
+         *     (`internal_remote`) count like internal ones.
+         */
+        AbuseThresholds: {
+            /**
+             * Format: int64
+             * @description Volume sent per sender per day.
+             */
+            maxDailyBytesPerSender: number | null;
+            /** @description Transfers per sender per day. */
+            maxDailyTransfersPerSender: number | null;
+            /** @description Recipients of one transfer. */
+            maxRecipientsPerTransfer: number | null;
+            /** @description Refuse a transfer exceeding a per-sender limit or an external quota (`403 abuse-threshold-blocked`) instead of only alerting. */
+            blockOnExceed: boolean;
+            /** @description Alert when a sender's daily volume exceeds this factor times their average daily volume over the last 30 days (only with at least `unusualMinHistoryDays` days of history). Alert only, never blocks. */
+            unusualVolumeFactor: number | null;
+            /**
+             * @description Days of activity a sender needs before the unusual volume rule applies to them.
+             * @default 7
+             */
+            unusualMinHistoryDays: number;
+            /**
+             * @description IANA time zone of the day boundary of the daily counters and of the office hours.
+             * @default UTC
+             */
+            timeZone: string;
+            /**
+             * Format: int64
+             * @description Alert on a transfer at least this large with a recipient outside the internal domains. Alert only.
+             */
+            largeExternalTransferBytes: number | null;
+            /** @description Alert on transfers created outside office hours; null disables it. Alert only. */
+            officeHours: components["schemas"]["OfficeHours"] | null;
+            /**
+             * @description Invitations an internal user may issue per rolling hour.
+             * @default 20
+             */
+            maxInvitationsPerInviter: number;
+            /**
+             * Format: int64
+             * @description Volume an external address (invited or replying) may deposit per day.
+             */
+            externalMaxDailyBytes: number | null;
+            /** @description Transfers an external address (invited or replying) may create per day. */
+            externalMaxDailyDeposits: number | null;
+        };
+        /** @enum {string} */
+        AbuseReportStatus: "open" | "closed";
+        AbuseReport: {
+            id: string;
+            /** @description Reported transfer (it may have expired or been deleted since). */
+            transferId: string;
+            /** @description Sender of the reported transfer, or the pseudonym `erased-<16 hex>` after a GDPR erasure. */
+            senderEmail: string;
+            /** @description Address of the reporter, only when a valid recipient verification of the link proved it (`reporterVerified`); null otherwise, or the pseudonym after a GDPR erasure. */
+            reportedBy?: string | null;
+            /** @description The reporter proved being the recipient of the link (`__Host-tt_rv`). */
+            reporterVerified: boolean;
+            /** @description Position (1-based) of the recipient whose link was used, as an unverified hint; null for a shared link (transfers created before 1.1). */
+            recipientIndex?: number | null;
+            category: components["schemas"]["AbuseReportCategory"];
+            /** @description Plain text, to be rendered as text (never HTML). */
+            message?: string;
+            status: components["schemas"]["AbuseReportStatus"];
+            /** Format: date-time */
+            reportedAt: string;
+            /** Format: date-time */
+            closedAt?: string;
+            /** @description Username of the admin who closed the report. */
+            closedBy?: string;
+            note?: string;
+        };
+        AbuseReportList: {
+            items: components["schemas"]["AbuseReport"][];
+            nextCursor?: components["schemas"]["PageCursor"];
+        };
+        AbuseReportUpdate: {
+            status: components["schemas"]["AbuseReportStatus"];
+            note?: string;
+        };
+        /**
+         * @description `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
+         * @enum {string}
+         */
+        WebhookKind: "teams" | "slack" | "generic";
+        /**
+         * @description Since 1.1. Event delivered to webhooks. Tenant events, for the tenant webhooks only:
+         *     `virus.detected`, `abuse.threshold_exceeded`, `abuse.unusual_activity`, `abuse.reported`,
+         *     `quota.warning`, `quota.reached`. System events, for the instance-wide webhooks only:
+         *     `disk.alert_raised`, `disk.alert_cleared`, `antivirus.alert_raised`,
+         *     `antivirus.alert_cleared`, `maintenance.enabled`, `maintenance.disabled`,
+         *     `master_key.rotation_completed`, `master_key.rotation_failed`. `webhook.test` is only
+         *     sent by the test operations and cannot be subscribed to.
+         * @enum {string}
+         */
+        WebhookEventType: "virus.detected" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "quota.warning" | "quota.reached" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_completed" | "master_key.rotation_failed" | "webhook.test";
+        /**
+         * @description Since 1.1. Coarse cause of a failed delivery; no address, port, banner or body is ever reported: `dns` (name not resolved), `refused_network` (address denied by the network guard), `connect`, `tls`, `timeout`, `http_status` (non-2xx answer).
+         * @enum {string}
+         */
+        WebhookErrorCategory: "dns" | "refused_network" | "connect" | "tls" | "timeout" | "http_status";
+        /** @description Outcome of the latest delivery attempt. */
+        WebhookDelivery: {
+            /** Format: date-time */
+            at: string;
+            success: boolean;
+            httpStatus?: number;
+            durationMs: number;
+            errorCategory?: components["schemas"]["WebhookErrorCategory"];
+        };
+        /**
+         * @description Since 1.1. A webhook of a tenant or of the instance. Deliveries are made in the
+         *     background with a 10-second timeout, up to 5 attempts with exponential back-off, never
+         *     following redirects; after 5 consecutive failed deliveries a circuit breaker suspends the
+         *     webhook for 15 minutes (`circuitOpenUntil`). Pending deliveries are kept in memory only:
+         *     they are lost on a restart (the audit log and the alert mails are not affected).
+         */
+        Webhook: {
+            id: string;
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+            /** @description Scheme and host of the URL only (the full URL is sealed and never returned). */
+            urlHint: string;
+            events: components["schemas"]["WebhookEventType"][];
+            enabled: boolean;
+            /** @description A signing secret exists (`generic` kind). */
+            hasSecret: boolean;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            lastDelivery: components["schemas"]["WebhookDelivery"] | null;
+            /**
+             * Format: date-time
+             * @description End of the suspension by the circuit breaker; null when deliveries are allowed.
+             */
+            circuitOpenUntil: string | null;
+        };
+        /** @description Since 1.1. A webhook with its signing secret, present only in the answer of a creation of a `generic` webhook or of a secret rotation. */
+        WebhookWithSecret: components["schemas"]["Webhook"] & {
+            /** @description Signing secret (HMAC-SHA256 key), shown once. */
+            secret?: string;
+        };
+        WebhookCreate: {
+            name: string;
+            kind: components["schemas"]["WebhookKind"];
+            /** Format: uri */
+            url: string;
+            events: components["schemas"]["WebhookEventType"][];
+            /** @default true */
+            enabled?: boolean;
+        };
+        /** @description JSON Merge Patch of a webhook; `null` is refused on every member, an unknown member is refused. */
+        WebhookUpdate: {
+            name?: string;
+            /** Format: uri */
+            url?: string;
+            events?: components["schemas"]["WebhookEventType"][];
+            enabled?: boolean;
+            /** @description `true` replaces the signing secret (`generic` kind only). */
+            rotateSecret?: boolean;
+        };
+        WebhookTestResult: {
+            success: boolean;
+            httpStatus?: number;
+            durationMs: number;
+            errorCategory?: components["schemas"]["WebhookErrorCategory"];
+        };
+        /**
+         * @description Since 1.1. JSON body POSTed to a `generic` webhook (`Content-Type: application/json`).
+         *     Headers: `X-TransTeira-Event` (the event type), `X-TransTeira-Delivery` (the event `id`,
+         *     identical across retries, for deduplication) and `X-TransTeira-Signature:
+         *     t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>" with the webhook secret>`. A
+         *     receiver checks the signature in constant time and rejects a `t` older than 5 minutes.
+         *
+         *     The payload is minimal by default: event type, severity, time, tenant identifier and
+         *     name, counters and a link to the administration, **no e-mail address**. A tenant may
+         *     enable `webhookIncludeAddresses` to add the sender and recipient addresses concerned
+         *     (`addresses`). File names, contents, tokens, links and passwords are never sent. System
+         *     events carry no `tenant`.
+         * @example {
+         *       "id": "evt_01JABCU7W8X9Y0Z1A2B3C4D5E6",
+         *       "type": "abuse.threshold_exceeded",
+         *       "severity": "warning",
+         *       "occurredAt": "2026-10-27T09:00:00Z",
+         *       "tenant": {
+         *         "id": "ten_01JAB00000000000000ENT1TYA",
+         *         "name": "Entity A"
+         *       },
+         *       "counts": {
+         *         "value": 118111600640,
+         *         "threshold": 107374182400
+         *       },
+         *       "adminUrl": "https://admin.transfer.example.com/admin/tenants/ten_01JAB00000000000000ENT1TYA/audit"
+         *     }
+         */
+        WebhookEvent: {
+            /** @description Event identifier (`evt_` + ULID). */
+            id: string;
+            type: components["schemas"]["WebhookEventType"];
+            /** @enum {string} */
+            severity: "info" | "warning" | "critical";
+            /** Format: date-time */
+            occurredAt: string;
+            /** @description Tenant of a tenant event; absent for a system event. */
+            tenant?: {
+                id: string;
+                name: string;
+            };
+            /** @description Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage. */
+            counts: {
+                [key: string]: number;
+            };
+            /**
+             * Format: uri
+             * @description Page of the administration where the event can be examined.
+             */
+            adminUrl?: string;
+            /** @description Only when the tenant enables `webhookIncludeAddresses`: the addresses concerned. */
+            addresses?: {
+                sender?: components["schemas"]["Email"];
+                recipients?: components["schemas"]["Email"][];
+                reporter?: components["schemas"]["Email"];
+            };
         };
     };
     responses: {
@@ -3324,20 +4892,47 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The transfer is password protected and not unlocked for this browser. */
+        /**
+         * @description The transfer is password protected and not unlocked for this browser (`download-locked`),
+         *     or, since 1.1, its per-recipient link requires a recipient verification not done on this
+         *     browser yet (`recipient-verification-required`).
+         */
         DownloadLocked: {
             headers: {
                 [name: string]: unknown;
             };
             content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Transfer expired or deleted (`transfer-gone`), or, since 1.1, its maximum number of
+         *     downloads is reached (`max-downloads-reached`; a resumed range of a download already
+         *     started is still served during the grace period).
+         */
+        DownloadGone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Since 1.1. `unauthenticated`: no `Authorization` header on `/metrics` or `/status`.
+         *     `invalid-credentials`: wrong monitoring token (written to the security log as
+         *     `metrics_token_invalid`).
+         */
+        MetricsUnauthenticated: {
+            headers: {
                 /**
-                 * @example {
-                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#download-locked",
-                 *       "title": "Password required",
-                 *       "status": 401,
-                 *       "code": "download-locked"
-                 *     }
+                 * @description `Bearer` (RFC 6750).
+                 * @example Bearer
                  */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -3673,6 +5268,16 @@ export interface components {
          * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
          */
         Cursor: string;
+        /**
+         * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+         * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+         */
+        WebhookId: string;
+        /**
+         * @description Since 1.1. Abuse report identifier.
+         * @example abr_01JABCR3S4T5V6W7X8Y9Z0A1B2
+         */
+        AbuseReportId: string;
     };
     requestBodies: never;
     headers: {
@@ -3751,6 +5356,21 @@ export interface components {
         ClearAdminCookie: string;
         /** @example __Host-tt_dl=dg_Vb4Nt9...; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict */
         SetDownloadGrantCookie: string;
+        /**
+         * @description Since 1.1. Sets (or extends with this link) the recipient verification cookie.
+         * @example __Host-tt_rv=rv_Kd2Lm7...; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict
+         */
+        SetRecipientVerificationCookie: string;
+        /**
+         * @description Since 1.1. Sets the "My transfers" session cookie (Max-Age = remaining session lifetime).
+         * @example __Host-tt_me=ms_Wq8Zx3...; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict
+         */
+        SetMyTransfersCookie: string;
+        /**
+         * @description Since 1.1. Expires the "My transfers" session cookie.
+         * @example __Host-tt_me=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
+         */
+        ClearMyTransfersCookie: string;
     };
     pathItems: never;
 }
@@ -3774,7 +5394,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "1.0.0",
+                     *       "version": "1.1.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -3797,7 +5417,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "degraded",
-                     *       "version": "1.0.0",
+                     *       "version": "1.1.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -3809,6 +5429,126 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metrics in the Prometheus text format (`Content-Type: text/plain; version=0.0.4; charset=utf-8`), never cached (`Cache-Control: no-store`). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example # HELP transteira_build_info Version of the running instance.
+                     *     # TYPE transteira_build_info gauge
+                     *     transteira_build_info{version="1.1.0",commit="3f9c2ab"} 1
+                     *     # HELP transteira_transfers_total Transfers made available, per tenant.
+                     *     # TYPE transteira_transfers_total counter
+                     *     transteira_transfers_total{tenant="ten_01JAB00000000000000ENT1TYA"} 412
+                     *     # HELP transteira_uploaded_bytes_total Bytes of the transfers made available, per tenant.
+                     *     # TYPE transteira_uploaded_bytes_total counter
+                     *     transteira_uploaded_bytes_total{tenant="ten_01JAB00000000000000ENT1TYA"} 1932735283200
+                     *     # HELP transteira_storage_used_bytes Storage used, per tenant.
+                     *     # TYPE transteira_storage_used_bytes gauge
+                     *     transteira_storage_used_bytes{tenant="ten_01JAB00000000000000ENT1TYA"} 274877906944
+                     *     # HELP transteira_storage_quota_bytes Storage quota, per tenant.
+                     *     # TYPE transteira_storage_quota_bytes gauge
+                     *     transteira_storage_quota_bytes{tenant="ten_01JAB00000000000000ENT1TYA"} 1099511627776
+                     *     # HELP transteira_antivirus_detections_total Files found infected, per tenant.
+                     *     # TYPE transteira_antivirus_detections_total counter
+                     *     transteira_antivirus_detections_total{tenant="ten_01JAB00000000000000ENT1TYA"} 1
+                     *     # HELP transteira_scan_queue_files Files waiting for or under analysis.
+                     *     # TYPE transteira_scan_queue_files gauge
+                     *     transteira_scan_queue_files 0
+                     *     # HELP transteira_antivirus_up Whether clamd answers (1) or not (0).
+                     *     # TYPE transteira_antivirus_up gauge
+                     *     transteira_antivirus_up 1
+                     *     # HELP transteira_disk_used_ratio Usage of the filesystem holding the data directory.
+                     *     # TYPE transteira_disk_used_ratio gauge
+                     *     transteira_disk_used_ratio 0.3
+                     *     # HELP transteira_http_requests_total HTTP requests, per status class.
+                     *     # TYPE transteira_http_requests_total counter
+                     *     transteira_http_requests_total{class="2xx"} 18342
+                     *     transteira_http_requests_total{class="5xx"} 2
+                     */
+                    "text/plain": string;
+                };
+            };
+            401: components["responses"]["MetricsUnauthenticated"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instance status, never cached (`Cache-Control: no-store`). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "status": "ok",
+                     *       "version": "1.1.0",
+                     *       "checkedAt": "2026-10-27T09:00:00Z",
+                     *       "uptimeSeconds": 864000,
+                     *       "maintenance": false,
+                     *       "checks": {
+                     *         "database": "ok",
+                     *         "antivirus": "ok",
+                     *         "storage": "ok"
+                     *       },
+                     *       "disk": {
+                     *         "totalBytes": 4398046511104,
+                     *         "usedBytes": 1319413953331,
+                     *         "usedRatio": 0.3,
+                     *         "alertThreshold": 0.85,
+                     *         "alertActive": false
+                     *       },
+                     *       "antivirus": {
+                     *         "engine": "clamd",
+                     *         "queuedFiles": 0,
+                     *         "alertActive": false
+                     *       },
+                     *       "tenants": [
+                     *         {
+                     *           "id": "ten_01JAB00000000000000ENT1TYA",
+                     *           "name": "Entity A",
+                     *           "storageUsedBytes": 274877906944,
+                     *           "storageQuotaBytes": 1099511627776,
+                     *           "storageUsedRatio": 0.25,
+                     *           "activeTransfers": 37,
+                     *           "transfersLast24h": 9
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["InstanceStatus"];
+                };
+            };
+            401: components["responses"]["MetricsUnauthenticated"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
         };
     };
     getOpenApiSpec: {
@@ -3855,7 +5595,7 @@ export interface operations {
                 content: {
                     /**
                      * @example {
-                     *       "version": "1.0.0",
+                     *       "version": "1.1.0",
                      *       "apiVersion": "v1",
                      *       "commit": "3f9c2ab"
                      *     }
@@ -4319,6 +6059,9 @@ export interface operations {
              *     not matching the token's `allowedSenders`),
              *     an API token is used from an IP outside its `allowedCidrs` (`ip-not-allowed`, written
              *     to the security log), or the CSRF check of a session request failed (`csrf-invalid`).
+             *     Since 1.1: a recipient is refused by the recipient domain rules
+             *     (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
+             *     (`abuse-threshold-blocked`).
              */
             403: {
                 headers: {
@@ -4331,6 +6074,41 @@ export interface operations {
             409: components["responses"]["StateConflict"];
             413: components["responses"]["TransferTooLarge"];
             421: components["responses"]["UnknownTenant"];
+            /** @description Since 1.1. The transfer breaks a rule of its confidentiality level; each entry of `errors` names the field and the rule. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#confidentiality-rule-violated",
+                     *       "title": "Confidentiality rule not met",
+                     *       "status": 422,
+                     *       "code": "confidentiality-rule-violated",
+                     *       "errors": [
+                     *         {
+                     *           "field": "/password",
+                     *           "code": "required"
+                     *         },
+                     *         {
+                     *           "field": "/expiryDays",
+                     *           "code": "not-allowed",
+                     *           "allowed": [
+                     *             1,
+                     *             7
+                     *           ]
+                     *         },
+                     *         {
+                     *           "field": "/recipients/0",
+                     *           "code": "internal-only"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["MaintenanceMode"];
@@ -4358,42 +6136,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "id": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
-                     *       "status": "available",
-                     *       "senderEmail": "alice@entity-a.example.com",
-                     *       "recipients": [
-                     *         "carol@customer.example.net"
-                     *       ],
-                     *       "expiryDays": 7,
-                     *       "expiresAt": "2026-10-26T16:20:00Z",
-                     *       "passwordProtected": true,
-                     *       "deleteAfterFirstDownload": false,
-                     *       "totalBytes": 12900630528,
-                     *       "createdAt": "2026-10-19T16:00:00Z",
-                     *       "finalizedAt": "2026-10-19T16:20:00Z",
-                     *       "downloadUrl": "https://transfer.entity-a.example.com/d/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf",
-                     *       "files": [
-                     *         {
-                     *           "id": "fil_01JABCD9F1A2B3C4D5E6F7G8H9",
-                     *           "name": "plans-v3.pdf",
-                     *           "size": 15728640,
-                     *           "mediaType": "application/pdf",
-                     *           "sha256": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
-                     *           "scanStatus": "clean"
-                     *         },
-                     *         {
-                     *           "id": "fil_01JABCDA0K112M3N4P5Q6R7S8T",
-                     *           "name": "site-survey.mp4",
-                     *           "size": 12884901888,
-                     *           "mediaType": "video/mp4",
-                     *           "sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
-                     *           "scanStatus": "not_scanned_too_large"
-                     *         }
-                     *       ]
-                     *     }
-                     */
                     "application/json": components["schemas"]["SenderTransfer"];
                 };
             };
@@ -4960,21 +6702,12 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["ValidationFailed"];
-            /** @description Wrong password. */
+            /** @description Wrong password (`transfer-password-invalid`), or, since 1.1, recipient not verified yet (`recipient-verification-required`). */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#transfer-password-invalid",
-                     *       "title": "Wrong password",
-                     *       "status": 401,
-                     *       "code": "transfer-password-invalid",
-                     *       "attemptsRemaining": 2
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
@@ -5068,7 +6801,7 @@ export interface operations {
             };
             401: components["responses"]["DownloadLocked"];
             404: components["responses"]["NotFound"];
-            410: components["responses"]["TransferGone"];
+            410: components["responses"]["DownloadGone"];
             /** @description The requested range is outside the file; `Content-Range` gives its size. */
             416: {
                 headers: {
@@ -5125,9 +6858,751 @@ export interface operations {
             };
             401: components["responses"]["DownloadLocked"];
             404: components["responses"]["NotFound"];
-            410: components["responses"]["TransferGone"];
+            410: components["responses"]["DownloadGone"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["TooManyStreams"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    startRecipientVerification: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+                 * @example fr-FR,fr;q=0.9,en;q=0.8
+                 */
+                "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+            };
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipientVerificationStart"];
+            };
+        };
+        responses: {
+            /** @description A code has been sent to the recipient address of the link. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "emailMasked": "c***@customer.example.net",
+                     *       "expiresAt": "2026-10-27T09:15:00Z",
+                     *       "attemptsRemaining": 2
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RecipientVerificationChallenge"];
+                };
+            };
+            /** @description The recipient is already verified on this browser; no code was sent. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            410: components["responses"]["TransferGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            /** @description The code cannot be sent (no SMTP server configured for the tenant, mail queue shut down). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable",
+                     *       "title": "Email cannot be sent",
+                     *       "status": 503,
+                     *       "code": "mail-unavailable"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    confirmRecipientVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "code": "482913"
+                 *     }
+                 */
+                "application/json": components["schemas"]["VerificationCode"];
+            };
+        };
+        responses: {
+            /** @description Code accepted; the recipient verification cookie is set. */
+            204: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetRecipientVerificationCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /** @description No code is pending for this link (never requested, already used or expired); request one first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict",
+                     *       "title": "Operation not allowed in the current state",
+                     *       "status": 409,
+                     *       "code": "state-conflict"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Code invalidated after too many wrong attempts (`verification-exhausted`), or transfer
+             *     no longer available (`transfer-gone`).
+             */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
+            /** @description Wrong code; at least one attempt remains. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#verification-code-invalid",
+                     *       "title": "Invalid verification code",
+                     *       "status": 422,
+                     *       "code": "verification-code-invalid",
+                     *       "attemptsRemaining": 1
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    reportAbuse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "category": "phishing",
+                 *       "message": "The archive contains a fake login page."
+                 *     }
+                 */
+                "application/json": components["schemas"]["AbuseReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Report recorded; the administrators of the entity are alerted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["TransferGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    startTransferReply: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+                 * @example fr-FR,fr;q=0.9,en;q=0.8
+                 */
+                "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+            };
+            path: {
+                /**
+                 * @description Unguessable download token (at least 128 bits of entropy). Unknown and foreign-tenant tokens give the same `404`.
+                 * @example dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf
+                 */
+                linkToken: components["parameters"]["LinkToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @example {} */
+                "application/json": components["schemas"]["TransferReplyStart"];
+            };
+        };
+        responses: {
+            /** @description Reply deposit session created. */
+            201: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetDepositCookies"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "email": "carol@customer.example.net",
+                     *       "kind": "reply",
+                     *       "csrfToken": "csrf_Rp4Lm8Zx1Vb6Kd3Q",
+                     *       "expiresAt": "2026-10-27T13:00:00Z",
+                     *       "limits": {
+                     *         "maxTransferBytes": 21474836480,
+                     *         "expiryDays": [
+                     *           1,
+                     *           7
+                     *         ]
+                     *       },
+                     *       "canInvite": false,
+                     *       "reply": {
+                     *         "recipient": "alice@entity-a.example.com",
+                     *         "transferExpiresAt": "2026-11-02T16:20:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DepositSession"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /** @description The recipient has not proved their address on this browser. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#recipient-verification-required",
+                     *       "title": "Recipient verification required",
+                     *       "status": 401,
+                     *       "code": "recipient-verification-required"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Replies are disabled for this entity or impossible on this link (`reply-not-allowed`),
+             *     the recipient address is blocklisted (`deposit-not-allowed`), or the request is
+             *     cross-site (`csrf-invalid`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["TransferGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MaintenanceMode"];
+        };
+    };
+    requestMyTransfersLink: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Preferred languages of the client (RFC 9110); falls back to the tenant default language.
+                 * @example fr-FR,fr;q=0.9,en;q=0.8
+                 */
+                "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "email": "alice@entity-a.example.com",
+                 *       "language": "en"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MyTransfersLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Request accepted. A link is mailed only if the address is verified for this entity; the answer is the same in every case. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            /** @description Mail cannot be sent for this entity at all (no SMTP server configured, mail queue shut down); the answer does not depend on the address. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable",
+                     *       "title": "Email cannot be sent",
+                     *       "status": 503,
+                     *       "code": "mail-unavailable"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    startMyTransfersSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "token": "mta_Hq7Lm2Zx9Vb4Kd1RTp6Yw3Nc8"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MyTransfersSessionStart"];
+            };
+        };
+        responses: {
+            /** @description Session opened. */
+            201: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetMyTransfersCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "email": "alice@entity-a.example.com",
+                     *       "csrfToken": "csrf_Me5Lm8Zx2Vb7Kd0Q",
+                     *       "expiresAt": "2026-10-27T10:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransfersSession"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            /** @description The access link is unknown, expired or already used. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#access-link-invalid",
+                     *       "title": "Access link no longer valid",
+                     *       "status": 410,
+                     *       "code": "access-link-invalid"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCurrentMyTransfersSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "email": "alice@entity-a.example.com",
+                     *       "csrfToken": "csrf_Me5Lm8Zx2Vb7Kd0Q",
+                     *       "expiresAt": "2026-10-27T10:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransfersSession"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    endMyTransfersSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session ended; cookie cleared. */
+            204: {
+                headers: {
+                    "Set-Cookie": components["headers"]["ClearMyTransfersCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMyTransfers: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transfers in progress (most recent first). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *           "status": "available",
+                     *           "recipients": [
+                     *             "carol@customer.example.net",
+                     *             "dave@customer.example.net"
+                     *           ],
+                     *           "fileCount": 2,
+                     *           "totalBytes": 12900630528,
+                     *           "expiryDays": 7,
+                     *           "createdAt": "2026-10-26T16:00:00Z",
+                     *           "expiresAt": "2026-11-02T16:20:00Z",
+                     *           "passwordProtected": true,
+                     *           "recipientVerification": true,
+                     *           "confidentialityLevel": {
+                     *             "key": "confidential",
+                     *             "label": "Confidential"
+                     *           },
+                     *           "downloadedBy": 1
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransferList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMyTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transfer details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *       "status": "available",
+                     *       "recipients": [
+                     *         "carol@customer.example.net",
+                     *         "dave@customer.example.net"
+                     *       ],
+                     *       "fileCount": 2,
+                     *       "totalBytes": 12900630528,
+                     *       "expiryDays": 7,
+                     *       "createdAt": "2026-10-26T16:00:00Z",
+                     *       "expiresAt": "2026-11-02T16:20:00Z",
+                     *       "passwordProtected": true,
+                     *       "recipientVerification": true,
+                     *       "confidentialityLevel": {
+                     *         "key": "confidential",
+                     *         "label": "Confidential"
+                     *       },
+                     *       "downloadedBy": 1,
+                     *       "message": "Here are the plans discussed this morning.",
+                     *       "deleteAfterFirstDownload": false,
+                     *       "maxDownloads": null,
+                     *       "downloadCount": 2,
+                     *       "extendableTo": "2026-11-26T09:00:00Z",
+                     *       "files": [
+                     *         {
+                     *           "id": "fil_01JABCD9F1A2B3C4D5E6F7G8H9",
+                     *           "name": "plans-v3.pdf",
+                     *           "path": "plans",
+                     *           "size": 15728640,
+                     *           "sha256": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
+                     *           "scanStatus": "clean"
+                     *         },
+                     *         {
+                     *           "id": "fil_01JABCDA0K112M3N4P5Q6R7S8T",
+                     *           "name": "site-survey.mp4",
+                     *           "size": 12884901888,
+                     *           "sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+                     *           "scanStatus": "not_scanned_too_large"
+                     *         }
+                     *       ],
+                     *       "recipientTracking": [
+                     *         {
+                     *           "email": "carol@customer.example.net",
+                     *           "verifiedAt": "2026-10-26T17:01:00Z",
+                     *           "firstDownloadedAt": "2026-10-26T17:02:00Z",
+                     *           "lastDownloadedAt": "2026-10-26T17:30:00Z",
+                     *           "downloads": [
+                     *             {
+                     *               "fileId": "fil_01JABCD9F1A2B3C4D5E6F7G8H9",
+                     *               "firstAt": "2026-10-26T17:02:00Z",
+                     *               "lastAt": "2026-10-26T17:30:00Z",
+                     *               "count": 2
+                     *             }
+                     *           ]
+                     *         },
+                     *         {
+                     *           "email": "dave@customer.example.net",
+                     *           "verifiedAt": null,
+                     *           "firstDownloadedAt": null,
+                     *           "lastDownloadedAt": null,
+                     *           "downloads": []
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransferDetail"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteMyTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transfer deleted, or already ended (no-op). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    extendMyTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "expiryDays": 30
+                 *     }
+                 */
+                "application/json": components["schemas"]["TransferExtension"];
+            };
+        };
+        responses: {
+            /** @description Transfer with its new expiry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *       "status": "available",
+                     *       "recipients": [
+                     *         "carol@customer.example.net"
+                     *       ],
+                     *       "fileCount": 1,
+                     *       "totalBytes": 15728640,
+                     *       "expiryDays": 7,
+                     *       "createdAt": "2026-10-26T16:00:00Z",
+                     *       "expiresAt": "2026-11-26T09:00:00Z",
+                     *       "passwordProtected": false,
+                     *       "recipientVerification": false,
+                     *       "downloadedBy": 0,
+                     *       "deleteAfterFirstDownload": false,
+                     *       "maxDownloads": null,
+                     *       "downloadCount": 0,
+                     *       "extendableTo": "2026-11-26T09:00:00Z",
+                     *       "files": [
+                     *         {
+                     *           "id": "fil_01JABCD9F1A2B3C4D5E6F7G8H9",
+                     *           "name": "plans-v3.pdf",
+                     *           "size": 15728640,
+                     *           "sha256": "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b",
+                     *           "scanStatus": "clean"
+                     *         }
+                     *       ],
+                     *       "recipientTracking": [
+                     *         {
+                     *           "email": "carol@customer.example.net",
+                     *           "verifiedAt": null,
+                     *           "firstDownloadedAt": null,
+                     *           "lastDownloadedAt": null,
+                     *           "downloads": []
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransferDetail"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /** @description The transfer is not `available` or can no longer be extended (`state-conflict`), or the extension would take its total lifetime beyond 90 days from its creation (`extension-limit-reached`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5738,12 +8213,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "defaultLanguage": "en",
-                 *       "maxTransferBytes": 5368709120
-                 *     }
-                 */
                 "application/merge-patch+json": components["schemas"]["TenantUpdate"];
             };
         };
@@ -6679,6 +9148,746 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["CsrfInvalid"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getConfidentialityLevels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Levels in display order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "key": "public",
+                     *           "labels": {
+                     *             "fr": "Public",
+                     *             "en": "Public"
+                     *           },
+                     *           "isDefault": false,
+                     *           "rules": {
+                     *             "requireRecipientVerification": false,
+                     *             "requirePassword": false,
+                     *             "allowedExpiryDays": [
+                     *               1,
+                     *               7,
+                     *               30
+                     *             ],
+                     *             "internalRecipientsOnly": false,
+                     *             "forceDeleteAfterFirstDownload": false,
+                     *             "maxDownloads": null
+                     *           }
+                     *         },
+                     *         {
+                     *           "key": "internal",
+                     *           "labels": {
+                     *             "fr": "Interne",
+                     *             "en": "Internal"
+                     *           },
+                     *           "isDefault": true,
+                     *           "rules": {
+                     *             "requireRecipientVerification": false,
+                     *             "requirePassword": false,
+                     *             "allowedExpiryDays": [
+                     *               1,
+                     *               7,
+                     *               30
+                     *             ],
+                     *             "internalRecipientsOnly": false,
+                     *             "forceDeleteAfterFirstDownload": false,
+                     *             "maxDownloads": null
+                     *           }
+                     *         },
+                     *         {
+                     *           "key": "confidential",
+                     *           "labels": {
+                     *             "fr": "Confidentiel",
+                     *             "en": "Confidential"
+                     *           },
+                     *           "descriptions": {
+                     *             "fr": "Réservé aux destinataires internes vérifiés.",
+                     *             "en": "Verified internal recipients only."
+                     *           },
+                     *           "isDefault": false,
+                     *           "rules": {
+                     *             "requireRecipientVerification": true,
+                     *             "requirePassword": true,
+                     *             "allowedExpiryDays": [
+                     *               1,
+                     *               7
+                     *             ],
+                     *             "internalRecipientsOnly": true,
+                     *             "forceDeleteAfterFirstDownload": false,
+                     *             "maxDownloads": null
+                     *           }
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ConfidentialityLevelList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateConfidentialityLevels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "items": [
+                 *         {
+                 *           "key": "internal",
+                 *           "labels": {
+                 *             "fr": "Interne",
+                 *             "en": "Internal"
+                 *           },
+                 *           "isDefault": true,
+                 *           "rules": {
+                 *             "requireRecipientVerification": false,
+                 *             "requirePassword": false,
+                 *             "allowedExpiryDays": [
+                 *               1,
+                 *               7,
+                 *               30
+                 *             ],
+                 *             "internalRecipientsOnly": false,
+                 *             "forceDeleteAfterFirstDownload": false,
+                 *             "maxDownloads": null
+                 *           }
+                 *         },
+                 *         {
+                 *           "key": "confidential",
+                 *           "labels": {
+                 *             "fr": "Confidentiel",
+                 *             "en": "Confidential"
+                 *           },
+                 *           "isDefault": false,
+                 *           "rules": {
+                 *             "requireRecipientVerification": true,
+                 *             "requirePassword": true,
+                 *             "allowedExpiryDays": [
+                 *               1
+                 *             ],
+                 *             "internalRecipientsOnly": true,
+                 *             "forceDeleteAfterFirstDownload": true,
+                 *             "maxDownloads": 3
+                 *           }
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["ConfidentialityLevelList"];
+            };
+        };
+        responses: {
+            /** @description Saved levels. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "key": "internal",
+                     *           "labels": {
+                     *             "fr": "Interne",
+                     *             "en": "Internal"
+                     *           },
+                     *           "isDefault": true,
+                     *           "rules": {
+                     *             "requireRecipientVerification": false,
+                     *             "requirePassword": false,
+                     *             "allowedExpiryDays": [
+                     *               1,
+                     *               7,
+                     *               30
+                     *             ],
+                     *             "internalRecipientsOnly": false,
+                     *             "forceDeleteAfterFirstDownload": false,
+                     *             "maxDownloads": null
+                     *           }
+                     *         },
+                     *         {
+                     *           "key": "confidential",
+                     *           "labels": {
+                     *             "fr": "Confidentiel",
+                     *             "en": "Confidential"
+                     *           },
+                     *           "isDefault": false,
+                     *           "rules": {
+                     *             "requireRecipientVerification": true,
+                     *             "requirePassword": true,
+                     *             "allowedExpiryDays": [
+                     *               1
+                     *             ],
+                     *             "internalRecipientsOnly": true,
+                     *             "forceDeleteAfterFirstDownload": true,
+                     *             "maxDownloads": 3
+                     *           }
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ConfidentialityLevelList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRecipientRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recipient domain rules. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "allowedDomains": [],
+                     *       "deniedDomains": [
+                     *         "mail.example.net",
+                     *         "webmail.example.org"
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RecipientRules"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateRecipientRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipientRules"];
+            };
+        };
+        responses: {
+            /** @description Saved rules (normalised). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "allowedDomains": [],
+                     *       "deniedDomains": [
+                     *         "mail.example.net",
+                     *         "webmail.example.org"
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["RecipientRules"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAbuseThresholds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Abuse detection settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "maxDailyBytesPerSender": 107374182400,
+                     *       "maxDailyTransfersPerSender": 50,
+                     *       "maxRecipientsPerTransfer": 50,
+                     *       "blockOnExceed": false,
+                     *       "unusualVolumeFactor": 5,
+                     *       "unusualMinHistoryDays": 7,
+                     *       "largeExternalTransferBytes": 10737418240,
+                     *       "timeZone": "Europe/Paris",
+                     *       "officeHours": {
+                     *         "start": "08:00",
+                     *         "end": "19:00",
+                     *         "weekdays": [
+                     *           1,
+                     *           2,
+                     *           3,
+                     *           4,
+                     *           5
+                     *         ]
+                     *       },
+                     *       "maxInvitationsPerInviter": 20,
+                     *       "externalMaxDailyBytes": 21474836480,
+                     *       "externalMaxDailyDeposits": 10
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AbuseThresholds"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateAbuseThresholds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "maxDailyBytesPerSender": 107374182400,
+                 *       "maxDailyTransfersPerSender": 50,
+                 *       "maxRecipientsPerTransfer": 50,
+                 *       "blockOnExceed": true,
+                 *       "unusualVolumeFactor": 2.5,
+                 *       "unusualMinHistoryDays": 14,
+                 *       "largeExternalTransferBytes": 10737418240,
+                 *       "timeZone": "UTC",
+                 *       "officeHours": null,
+                 *       "maxInvitationsPerInviter": 20,
+                 *       "externalMaxDailyBytes": 21474836480,
+                 *       "externalMaxDailyDeposits": 10
+                 *     }
+                 */
+                "application/json": components["schemas"]["AbuseThresholds"];
+            };
+        };
+        responses: {
+            /** @description Saved settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "maxDailyBytesPerSender": 107374182400,
+                     *       "maxDailyTransfersPerSender": 50,
+                     *       "maxRecipientsPerTransfer": 50,
+                     *       "blockOnExceed": true,
+                     *       "unusualVolumeFactor": 2.5,
+                     *       "unusualMinHistoryDays": 14,
+                     *       "largeExternalTransferBytes": 10737418240,
+                     *       "timeZone": "UTC",
+                     *       "officeHours": null,
+                     *       "maxInvitationsPerInviter": 20,
+                     *       "externalMaxDailyBytes": 21474836480,
+                     *       "externalMaxDailyDeposits": 10
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AbuseThresholds"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTenantWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhooks. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example [
+                     *       {
+                     *         "id": "whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0",
+                     *         "name": "Security team channel",
+                     *         "kind": "teams",
+                     *         "urlHint": "https://entity-a.webhook.example.com",
+                     *         "events": [
+                     *           "virus.detected",
+                     *           "abuse.threshold_exceeded",
+                     *           "abuse.unusual_activity",
+                     *           "abuse.reported"
+                     *         ],
+                     *         "enabled": true,
+                     *         "hasSecret": false,
+                     *         "createdBy": "admin.entity-a",
+                     *         "createdAt": "2026-10-20T08:00:00Z",
+                     *         "updatedAt": "2026-10-20T08:00:00Z",
+                     *         "lastDelivery": {
+                     *           "at": "2026-10-26T14:02:00Z",
+                     *           "success": true,
+                     *           "httpStatus": 200,
+                     *           "durationMs": 182
+                     *         },
+                     *         "circuitOpenUntil": null
+                     *       }
+                     *     ]
+                     */
+                    "application/json": components["schemas"]["Webhook"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createTenantWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookCreate"];
+            };
+        };
+        responses: {
+            /** @description Webhook created; for the `generic` kind, `secret` is shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCQ2S3T4V5W6X7Y8Z9A0B1",
+                     *       "name": "SIEM collector",
+                     *       "kind": "generic",
+                     *       "urlHint": "https://siem.example.com",
+                     *       "events": [
+                     *         "virus.detected",
+                     *         "abuse.reported",
+                     *         "quota.reached"
+                     *       ],
+                     *       "enabled": true,
+                     *       "hasSecret": true,
+                     *       "createdBy": "admin.entity-a",
+                     *       "createdAt": "2026-10-27T09:00:00Z",
+                     *       "updatedAt": "2026-10-27T09:00:00Z",
+                     *       "lastDelivery": null,
+                     *       "circuitOpenUntil": null,
+                     *       "secret": "whsec_EXAMPLE8fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5d"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTenantWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0",
+                     *       "name": "Security team channel",
+                     *       "kind": "teams",
+                     *       "urlHint": "https://entity-a.webhook.example.com",
+                     *       "events": [
+                     *         "virus.detected",
+                     *         "abuse.threshold_exceeded",
+                     *         "abuse.unusual_activity",
+                     *         "abuse.reported"
+                     *       ],
+                     *       "enabled": true,
+                     *       "hasSecret": false,
+                     *       "createdBy": "admin.entity-a",
+                     *       "createdAt": "2026-10-20T08:00:00Z",
+                     *       "updatedAt": "2026-10-20T08:00:00Z",
+                     *       "lastDelivery": {
+                     *         "at": "2026-10-26T14:02:00Z",
+                     *         "success": false,
+                     *         "httpStatus": 502,
+                     *         "durationMs": 10003,
+                     *         "errorCategory": "http_status"
+                     *       },
+                     *       "circuitOpenUntil": "2026-10-26T14:17:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTenantWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateTenantWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": false
+                 *     }
+                 */
+                "application/merge-patch+json": components["schemas"]["WebhookUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated webhook; `secret` only after a rotation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0",
+                     *       "name": "Security team channel",
+                     *       "kind": "teams",
+                     *       "urlHint": "https://entity-a.webhook.example.com",
+                     *       "events": [
+                     *         "virus.detected",
+                     *         "abuse.threshold_exceeded",
+                     *         "abuse.unusual_activity",
+                     *         "abuse.reported"
+                     *       ],
+                     *       "enabled": false,
+                     *       "hasSecret": false,
+                     *       "createdBy": "admin.entity-a",
+                     *       "createdAt": "2026-10-20T08:00:00Z",
+                     *       "updatedAt": "2026-10-27T09:05:00Z",
+                     *       "lastDelivery": {
+                     *         "at": "2026-10-26T14:02:00Z",
+                     *         "success": true,
+                     *         "httpStatus": 200,
+                     *         "durationMs": 182
+                     *       },
+                     *       "circuitOpenUntil": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    testTenantWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Outcome of the test delivery. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7692,6 +10901,184 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listAbuseReports: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Filter by status.
+                 * @example open
+                 */
+                status?: components["schemas"]["AbuseReportStatus"];
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Abuse reports (most recent first). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "abr_01JABCR3S4T5V6W7X8Y9Z0A1B2",
+                     *           "transferId": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *           "senderEmail": "alice@entity-a.example.com",
+                     *           "reportedBy": "carol@customer.example.net",
+                     *           "reporterVerified": true,
+                     *           "recipientIndex": 1,
+                     *           "category": "phishing",
+                     *           "message": "The archive contains a fake login page.",
+                     *           "status": "open",
+                     *           "reportedAt": "2026-10-27T08:40:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AbuseReportList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAbuseReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Abuse report identifier.
+                 * @example abr_01JABCR3S4T5V6W7X8Y9Z0A1B2
+                 */
+                reportId: components["parameters"]["AbuseReportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Abuse report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "abr_01JABCR3S4T5V6W7X8Y9Z0A1B2",
+                     *       "transferId": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *       "senderEmail": "alice@entity-a.example.com",
+                     *       "reportedBy": "carol@customer.example.net",
+                     *       "reporterVerified": true,
+                     *       "recipientIndex": 1,
+                     *       "category": "phishing",
+                     *       "message": "The archive contains a fake login page.",
+                     *       "status": "closed",
+                     *       "reportedAt": "2026-10-27T08:40:00Z",
+                     *       "closedAt": "2026-10-27T09:10:00Z",
+                     *       "closedBy": "admin.entity-a",
+                     *       "note": "Transfer deleted, sender address blocklisted."
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AbuseReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateAbuseReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 1.1. Abuse report identifier.
+                 * @example abr_01JABCR3S4T5V6W7X8Y9Z0A1B2
+                 */
+                reportId: components["parameters"]["AbuseReportId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "status": "closed",
+                 *       "note": "Transfer deleted, sender address blocklisted."
+                 *     }
+                 */
+                "application/merge-patch+json": components["schemas"]["AbuseReportUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "abr_01JABCR3S4T5V6W7X8Y9Z0A1B2",
+                     *       "transferId": "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+                     *       "senderEmail": "alice@entity-a.example.com",
+                     *       "reportedBy": "carol@customer.example.net",
+                     *       "reporterVerified": true,
+                     *       "recipientIndex": 1,
+                     *       "category": "phishing",
+                     *       "message": "The archive contains a fake login page.",
+                     *       "status": "closed",
+                     *       "reportedAt": "2026-10-27T08:40:00Z",
+                     *       "closedAt": "2026-10-27T09:10:00Z",
+                     *       "closedBy": "admin.entity-a",
+                     *       "note": "Transfer deleted, sender address blocklisted."
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AbuseReport"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listAdmins: {
         parameters: {
             query?: {
@@ -8108,7 +11495,8 @@ export interface operations {
                     /**
                      * @example {
                      *       "diskAlertThreshold": 0.85,
-                     *       "alertEmail": "it-admin@example.com"
+                     *       "alertEmail": "it-admin@example.com",
+                     *       "antivirusEngine": "clamd"
                      *     }
                      */
                     "application/json": components["schemas"]["SystemSettings"];
@@ -8147,7 +11535,8 @@ export interface operations {
                     /**
                      * @example {
                      *       "diskAlertThreshold": 0.9,
-                     *       "alertEmail": null
+                     *       "alertEmail": null,
+                     *       "antivirusEngine": "clamd"
                      *     }
                      */
                     "application/json": components["schemas"]["SystemSettings"];
@@ -8471,6 +11860,323 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listSystemWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Instance-wide webhooks. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example [
+                     *       {
+                     *         "id": "whk_01JABCS4T5V6W7X8Y9Z0A1B2C3",
+                     *         "name": "Operations channel",
+                     *         "kind": "slack",
+                     *         "urlHint": "https://hooks.example.com",
+                     *         "events": [
+                     *           "disk.alert_raised",
+                     *           "disk.alert_cleared",
+                     *           "antivirus.alert_raised",
+                     *           "antivirus.alert_cleared"
+                     *         ],
+                     *         "enabled": true,
+                     *         "hasSecret": false,
+                     *         "createdBy": "superadmin",
+                     *         "createdAt": "2026-10-20T08:00:00Z",
+                     *         "updatedAt": "2026-10-20T08:00:00Z",
+                     *         "lastDelivery": null,
+                     *         "circuitOpenUntil": null
+                     *       }
+                     *     ]
+                     */
+                    "application/json": components["schemas"]["Webhook"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createSystemWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "Operations channel",
+                 *       "kind": "slack",
+                 *       "url": "https://hooks.example.com/services/EXAMPLE",
+                 *       "events": [
+                 *         "disk.alert_raised",
+                 *         "disk.alert_cleared",
+                 *         "antivirus.alert_raised",
+                 *         "antivirus.alert_cleared"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["WebhookCreate"];
+            };
+        };
+        responses: {
+            /** @description Webhook created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCS4T5V6W7X8Y9Z0A1B2C3",
+                     *       "name": "Operations channel",
+                     *       "kind": "slack",
+                     *       "urlHint": "https://hooks.example.com",
+                     *       "events": [
+                     *         "disk.alert_raised",
+                     *         "disk.alert_cleared",
+                     *         "antivirus.alert_raised",
+                     *         "antivirus.alert_cleared"
+                     *       ],
+                     *       "enabled": true,
+                     *       "hasSecret": false,
+                     *       "createdBy": "superadmin",
+                     *       "createdAt": "2026-10-27T09:00:00Z",
+                     *       "updatedAt": "2026-10-27T09:00:00Z",
+                     *       "lastDelivery": null,
+                     *       "circuitOpenUntil": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["StateConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSystemWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCS4T5V6W7X8Y9Z0A1B2C3",
+                     *       "name": "Operations channel",
+                     *       "kind": "slack",
+                     *       "urlHint": "https://hooks.example.com",
+                     *       "events": [
+                     *         "disk.alert_raised",
+                     *         "disk.alert_cleared",
+                     *         "antivirus.alert_raised",
+                     *         "antivirus.alert_cleared"
+                     *       ],
+                     *       "enabled": true,
+                     *       "hasSecret": false,
+                     *       "createdBy": "superadmin",
+                     *       "createdAt": "2026-10-20T08:00:00Z",
+                     *       "updatedAt": "2026-10-20T08:00:00Z",
+                     *       "lastDelivery": null,
+                     *       "circuitOpenUntil": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteSystemWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateSystemWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "events": [
+                 *         "disk.alert_raised",
+                 *         "antivirus.alert_raised"
+                 *       ]
+                 *     }
+                 */
+                "application/merge-patch+json": components["schemas"]["WebhookUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated webhook; `secret` only after a rotation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "whk_01JABCS4T5V6W7X8Y9Z0A1B2C3",
+                     *       "name": "Operations channel",
+                     *       "kind": "slack",
+                     *       "urlHint": "https://hooks.example.com",
+                     *       "events": [
+                     *         "disk.alert_raised",
+                     *         "antivirus.alert_raised"
+                     *       ],
+                     *       "enabled": true,
+                     *       "hasSecret": false,
+                     *       "createdBy": "superadmin",
+                     *       "createdAt": "2026-10-20T08:00:00Z",
+                     *       "updatedAt": "2026-10-27T09:05:00Z",
+                     *       "lastDelivery": null,
+                     *       "circuitOpenUntil": null
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WebhookWithSecret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    testSystemWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 1.1. Webhook identifier. A webhook of another tenant, or an instance-wide webhook under a tenant path (and the reverse), answers `404`.
+                 * @example whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0
+                 */
+                webhookId: components["parameters"]["WebhookId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Outcome of the test delivery. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "httpStatus": 200,
+                     *       "durationMs": 240
+                     *     }
+                     */
+                    "application/json": components["schemas"]["WebhookTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    receiveWebhookEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookEvent"];
+            };
+        };
+        responses: {
+            /** @description Event acknowledged (any 2xx status is accepted). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Event refused by the receiver (for example a bad signature); the delivery counts as failed and is retried. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
 }
 type FlattenedDeepRequired<T> = {
     [K in keyof T]-?: FlattenedDeepRequired<T[K] extends unknown[] | undefined | null ? Extract<T[K], unknown[]>[number] : T[K]>;
@@ -8480,36 +12186,46 @@ type ReadonlyArray<T> = [
 ] extends [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
-export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "internal-error"];
+export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "internal-error"];
 export const languageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Language"]> = ["fr", "en"];
 export const healthStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Health"]["status"]> = ["ok", "degraded"];
 export const componentHealthValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComponentHealth"]> = ["ok", "unavailable"];
 export const versionInfoApiVersionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["VersionInfo"]["apiVersion"]> = ["v1"];
 export const publicTenantLegalDocumentsValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PublicTenant"]["legalDocuments"]> = ["legal-notice", "privacy-policy"];
 export const legalDocumentDocumentValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LegalDocument"]["document"]> = ["legal-notice", "privacy-policy"];
-export const depositorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DepositorKind"]> = ["internal", "external"];
+export const depositorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DepositorKind"]> = ["internal", "external", "internal_remote", "reply"];
 export const expiryDaysValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ExpiryDays"]> = [1, 7, 30];
 export const transferStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferStatus"]> = ["uploading", "scanning", "available", "rejected", "expired", "deleted"];
-export const scanStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ScanStatus"]> = ["pending", "scanning", "clean", "infected", "not_scanned_too_large", "not_scanned_encrypted", "scan_error"];
+export const scanStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ScanStatus"]> = ["pending", "scanning", "clean", "infected", "not_scanned_too_large", "not_scanned_encrypted", "scan_error", "not_scanned_disabled"];
 export const invitationStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InvitationStatus"]> = ["pending", "used", "expired", "revoked"];
 export const loginStateStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LoginState"]["status"]> = ["totp_required", "totp_enrollment_required", "password_change_required", "authenticated"];
 export const adminRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminRole"]> = ["super_admin", "delegated_admin"];
 export const tenantStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Tenant"]["status"]> = ["active", "deleting"];
-export const contrastResultPairValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ContrastResult"]["pair"]> = ["primary-on-light", "accent-on-light", "text-on-primary"];
+export const contrastResultPairValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ContrastResult"]["pair"]> = ["primary-on-light", "accent-on-light", "text-on-primary", "primary-on-dark", "accent-on-dark"];
 export const contrastResultLevelValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ContrastResult"]["level"]> = ["AAA", "AA", "fail"];
 export const smtpSecurityValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SmtpSecurity"]> = ["none", "starttls", "tls"];
 export const smtpTestResultStageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SmtpTestResult"]["stage"]> = ["settings", "connect", "tls", "greeting", "starttls", "auth", "envelope", "data", "done", "unknown"];
 export const dnsRecordCheckStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DnsRecordCheck"]["status"]> = ["ok", "warning", "missing", "error"];
 export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MailDnsCheck"]["dkim"]["status"]> = ["ok", "warning", "missing", "error"];
-export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable"];
-export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api"];
+export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code"];
+export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.scans_released", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in"];
 export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
 export const maintenanceSourceValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Maintenance"]["source"]> = ["none", "environment", "admin"];
 export const keyRotationStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["KeyRotation"]["status"]> = ["running", "completed", "failed"];
+export const antivirusEngineValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AntivirusEngine"]> = ["clamd", "icap", "http", "none"];
+export const instanceStatusStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstanceStatus"]["status"]> = ["ok", "degraded"];
+export const tenantFeaturesAntivirusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantFeatures"]["antivirus"]> = ["enabled", "disabled"];
+export const recipientVerificationStartPurposeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RecipientVerificationStart"]["purpose"]> = ["download", "reply"];
+export const abuseReportCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportCategory"]> = ["malware", "phishing", "illegal_content", "spam", "unknown_sender", "other"];
+export const abuseReportStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportStatus"]> = ["open", "closed"];
+export const webhookKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookKind"]> = ["teams", "slack", "generic"];
+export const webhookEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookEventType"]> = ["virus.detected", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "quota.warning", "quota.reached", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_completed", "master_key.rotation_failed", "webhook.test"];
+export const webhookErrorCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookErrorCategory"]> = ["dns", "refused_network", "connect", "tls", "timeout", "http_status"];
+export const webhookEventSeverityValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookEvent"]["severity"]> = ["info", "warning", "critical"];
 export const componentsParametersTusResumableHeaderValues: ReadonlyArray<FlattenedDeepRequired<components>["parameters"]["TusResumableHeader"]> = ["1.0.0"];
 export const componentsParametersLegalDocumentPathValues: ReadonlyArray<FlattenedDeepRequired<components>["parameters"]["LegalDocumentPath"]> = ["legal-notice", "privacy-policy"];
 export const componentsHeadersNoSniffValues: ReadonlyArray<FlattenedDeepRequired<components>["headers"]["NoSniff"]> = ["nosniff"];

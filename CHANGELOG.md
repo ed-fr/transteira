@@ -6,6 +6,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Version 1.1 design, validated: OpenAPI specification 1.1.0 (35 new operations, not implemented
+  yet), V1.1 data model (`docs/architecture/data-model-v1.1.md`) and threat model 1.1 (threats
+  T-178 to T-243, decisions P27 to P46). Specification section 11.1: antivirus disable (instance or
+  tenant) and interchangeable engines (clamd, ICAP, HTTP).
+- `make check-full`: `make check` with the 20 GB test forced, required before every release.
+- `make check` prints the duration of every gate.
+
+### Changed
+- `make check` runs the 20 GB test only when the big-file chain changed since its last green run
+  (CLAUDE.md section 24.4).
+
 ## [1.0.0] - 2026-10-26
 
 First stable version: the V1 scope of the specification (CLAUDE.md section 2), validated by

@@ -66,6 +66,7 @@
     "invitations": "Invitations et adresses",
     "antivirus": "Antivirus",
     "quotas": "Quotas",
+    "abuse": "Abus",
     "blocklist": "Liste de blocage",
     "tokens": "Jetons d’API",
     "privacy": "Données personnelles",
@@ -80,7 +81,11 @@
       "downloaded": "Téléchargement commencé",
       "expired": "Transfert expiré",
       "deleted": "Transfert supprimé",
-      "notification_resent": "Notification renvoyée"
+      "notification_resent": "Notification renvoyée",
+      "extended": "Transfert prolongé",
+      "reminder_sent": "Rappel d’expiration envoyé",
+      "reply_created": "Réponse à un transfert commencée",
+      "recipient_refused": "Destinataire refusé par les règles de domaines"
     },
     "file": {
       "infected": "Virus détecté",
@@ -133,7 +138,12 @@
       "smtp_tested": "Test SMTP envoyé",
       "template_updated": "Modèle de mail modifié",
       "template_reset": "Modèle de mail réinitialisé",
-      "legal_updated": "Textes légaux modifiés"
+      "legal_updated": "Textes légaux modifiés",
+      "confidentiality_updated": "Niveaux de confidentialité modifiés",
+      "recipient_rules_updated": "Règles des domaines destinataires modifiées",
+      "abuse_settings_updated": "Seuils d’abus modifiés",
+      "antivirus_disabled": "Antivirus désactivé pour l’entité",
+      "antivirus_enabled": "Antivirus activé pour l’entité"
     },
     "config": {
       "updated": "Paramètres système modifiés"
@@ -160,10 +170,31 @@
     },
     "antivirus": {
       "alert_raised": "Alerte antivirus déclenchée",
-      "alert_cleared": "Alerte antivirus levée"
+      "alert_cleared": "Alerte antivirus levée",
+      "scans_released": "Fichiers libérés sans analyse (antivirus désactivé)"
     },
     "setup": {
       "completed": "Initialisation terminée"
+    },
+    "recipient": {
+      "verified": "Destinataire vérifié"
+    },
+    "my_transfers": {
+      "link_requested": "Lien « Mes envois » envoyé",
+      "signed_in": "« Mes envois » ouvert"
+    },
+    "abuse": {
+      "threshold_exceeded": "Seuil d’abus dépassé",
+      "unusual_activity": "Activité inhabituelle détectée",
+      "reported": "Abus signalé",
+      "report_closed": "Signalement d’abus clos",
+      "report_reopened": "Signalement d’abus rouvert"
+    },
+    "webhook": {
+      "created": "Webhook créé",
+      "updated": "Webhook modifié",
+      "deleted": "Webhook supprimé",
+      "tested": "Webhook testé"
     }
   }
 }

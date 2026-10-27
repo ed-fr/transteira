@@ -40,7 +40,7 @@ LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Commit=$(COMMIT) \
 	-X $(MODULE)/internal/version.Date=$(DATE)
 
-.PHONY: help check web-install web-gen web-check web-build fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
+.PHONY: help check check-full web-install web-gen web-check web-build fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
 	test test-sqlite test-pg test-clamav test-env-up test-env-down cover env-example env-example-check build hooks \
 	e2e e2e-run e2e-install e2e-browser e2e-lint screenshots screenshots-run screenshots-check bigfile clean
 
@@ -137,15 +137,18 @@ deploy-smoke: docker ## End-to-end test of deploy/ behind Caddy with real ClamAV
 # trend). Both engines, one after the other, each stack torn down with its volumes before the
 # next. scripts/bigfile.sh lists the steps; test/README.md, section "20 GB test", the
 # prerequisites (Docker disk of 60 to 80 GB, 7 GiB of memory) and the variables. The LAST gate of
-# `make check`: BIGFILE=0 skips it, never before a release.
-BIGFILE         ?= 1
+# `make check`, through bigfile-auto (scripts/bigfile-auto.sh): with the default BIGFILE=auto it
+# runs only when the big-file chain changed since its last green run; `make check-full`
+# (BIGFILE=1) always runs it, before every release; BIGFILE=0 skips it. `make bigfile` alone
+# always runs it unless BIGFILE=0.
+BIGFILE         ?= auto
 BIGFILE_BYTES   ?= 21474836480
 BIGFILE_DBS     ?= both
 BIGFILE_KEEP    ?= 0
 BIGFILE_MAX_MEM ?= 256MiB
-CHECK_GATES     += bigfile
+CHECK_GATES     += bigfile-auto
 
-.PHONY: bigfile-clean
+.PHONY: bigfile-auto bigfile-clean
 
 bigfile: ## 20 GB upload/download test through Caddy, cut and resumed (BIGFILE=0 skips; BIGFILE_BYTES, BIGFILE_DBS, BIGFILE_KEEP)
 	@if [ "$(BIGFILE)" = "0" ]; then \
@@ -160,16 +163,34 @@ bigfile: ## 20 GB upload/download test through Caddy, cut and resumed (BIGFILE=0
 		BIGFILE_MAX_CLOCK_OFFSET='$(BIGFILE_MAX_CLOCK_OFFSET)' bash scripts/bigfile.sh; \
 	fi
 
+bigfile-auto: ## Run the 20 GB test when its chain changed since its last green run (BIGFILE=auto|1|0)
+	@BIGFILE='$(BIGFILE)' BIGFILE_BYTES='$(BIGFILE_BYTES)' BIGFILE_DBS='$(BIGFILE_DBS)' \
+		BIGFILE_MAX_MEM='$(BIGFILE_MAX_MEM)' BIGFILE_CHUNK='$(BIGFILE_CHUNK)' BIGFILE_CUT_AT='$(BIGFILE_CUT_AT)' \
+		BIGFILE_DL_CUT_AT='$(BIGFILE_DL_CUT_AT)' BIGFILE_SEED='$(BIGFILE_SEED)' \
+		BIGFILE_CLAMAV_MAX_SCAN_BYTES='$(BIGFILE_CLAMAV_MAX_SCAN_BYTES)' \
+		bash scripts/bigfile-auto.sh '$(MAKE)' --no-print-directory bigfile \
+		VERSION='$(VERSION)' COMMIT='$(COMMIT)' DATE='$(DATE)'
+
 bigfile-clean: ## Remove what a failed BIGFILE_KEEP=1 run of the 20 GB test left (transteira-bigfile-* only)
 	@DOCKER='$(DOCKER)' bash scripts/bigfile.sh clean
 # --- end of 20 GB test ---
 
-check: $(CHECK_GATES) ## Run every quality gate (must be green before each commit)
+# The gates run in turn through scripts/check.sh, each in its own make invocation, which stops at
+# the first failure (`make -k` does not apply) and prints the duration of every gate. VERSION,
+# COMMIT and DATE are computed once here and passed down, so every gate builds the same version.
+check: ## Run every quality gate (must be green before each commit; 20 GB test when its chain changed)
+	@rm -f .cache/bigfile.last
+	@MAKE='$(MAKE)' bash scripts/check.sh VERSION='$(VERSION)' COMMIT='$(COMMIT)' DATE='$(DATE)' -- $(CHECK_GATES)
 	@if [ "$(BIGFILE)" = "0" ]; then \
 		echo "make check: ALL GREEN (bigfile SKIPPED: BIGFILE=0, never before a release)"; \
+	elif [ "$$(cat .cache/bigfile.last 2>/dev/null)" = "skipped" ]; then \
+		echo "make check: ALL GREEN (bigfile skipped: chain unchanged since its last green run; make check-full forces it)"; \
 	else \
 		echo "make check: ALL GREEN"; \
 	fi
+
+check-full: ## make check with the 20 GB test forced (before every release)
+	@$(MAKE) --no-print-directory check BIGFILE=1
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
 # no dependency install script is ever executed.

@@ -377,7 +377,7 @@ to the antivirus. It answers `202` at once with the status `scanning`.
 
 ```bash
 curl -sS https://transfer.entity-a.example.com/api/v1/transfers/trf_01JABCD8E3W5Q2Z7K9M4N6P0RS \
-  -H @auth-header.txt | jq '{status, downloadUrl, files: [.files[] | {name, scanStatus, sha256}]}'
+  -H @auth-header.txt | jq '{status, expiresAt, files: [.files[] | {name, scanStatus, sha256}], recipients: [.recipientTracking[]? | {email, firstDownloadedAt}]}'
 ```
 
 Poll every 10 to 30 seconds:
@@ -385,12 +385,19 @@ Poll every 10 to 30 seconds:
 | `status` | Meaning |
 |---|---|
 | `scanning` | The antivirus is running. It is fail-closed: while ClamAV is unavailable the transfer waits, it is never released unscanned. |
-| `available` | The recipients have received the link, the QR code and the SHA-256 fingerprints; `downloadUrl` and `expiresAt` are set. |
+| `available` | The recipients have received their link, the QR code and the SHA-256 fingerprints; `expiresAt` is set. |
 | `rejected` | No file could be delivered (every file infected or in `scan_error`); nobody is notified. |
 
 Per file, `scanStatus` is `clean`, `infected` (erased, the sender is alerted),
 `not_scanned_too_large` or `not_scanned_encrypted` (delivered with a warning on the download
-page), or `scan_error` (withheld).
+page), or `scan_error` (withheld). Since 1.1, `not_scanned_disabled` marks files delivered
+unscanned because the antivirus is disabled for the instance or the entity.
+
+Since version 1.1, each recipient gets **their own** download link, mailed to them only: the
+link is never returned to the sender nor to an API token, and `downloadUrl` is absent for
+transfers created from 1.1 on (it is still set for transfers created before 1.1). A script
+can no longer forward the link itself; it follows the recipients with `recipientTracking`
+(verification and download dates per recipient).
 
 A token reads, finalizes and cancels only the transfers **it** created: any other transfer,
 including one created by another token of the same tenant, answers `404`. To abandon an
@@ -557,7 +564,7 @@ done
 rm -f "$TT_STATE_FILE"
 jq -r '.files[] | "\(.scanStatus)\t\(.sha256 // "-")\t\(.name)"' "$work/body"
 if [[ $state == available ]]; then
-  log "available until $(jq -r .expiresAt "$work/body"): $(jq -r .downloadUrl "$work/body")"
+  log "available until $(jq -r .expiresAt "$work/body"), link mailed to each recipient"
 else
   log "rejected: no file could be delivered"; exit 2
 fi
@@ -787,7 +794,7 @@ while ($true) {
 Remove-Item -LiteralPath $StateFile
 $transfer.files | Format-Table name, scanStatus, sha256 -AutoSize | Out-Host
 if ($transfer.status -eq 'available') {
-    Write-Log "available until $($transfer.expiresAt): $($transfer.downloadUrl)"
+    Write-Log "available until $($transfer.expiresAt), link mailed to each recipient"
 } else {
     Write-Log 'rejected: no file could be delivered'; exit 2
 }

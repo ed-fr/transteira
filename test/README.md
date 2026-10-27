@@ -322,13 +322,16 @@ is deposited with an API token through tus and the **real reference Caddy** in D
 and resumed from the offset the server reports; the file is then downloaded in full, and once more
 with a cut and a `Range` resume; every SHA-256 (expected, computed by the server, downloaded,
 resumed) must match, and the memory of the server must stay bounded and flat. It is the **last
-gate of `make check`**, on SQLite then PostgreSQL.
+gate of `make check`**, on SQLite then PostgreSQL, when the big-file chain changed since its last
+green run (`scripts/bigfile-auto.sh` lists the paths and keeps the fingerprint of that run in the
+git-ignored `.cache/bigfile.stamp`); `make check-full` always runs it, before every release.
 
 | Command | Effect |
 |---|---|
 | `make bigfile` | Build the image (`make docker`), then run the test on both engines (20 GiB each). |
 | `make bigfile BIGFILE_BYTES=1073741824 BIGFILE_DBS=sqlite` | Quick run: 1 GiB, one engine (about 3 minutes). |
-| `make check BIGFILE=0` | Skip it (prints a reminder). **Never skip it before a release.** |
+| `make check-full` | `make check` with the test forced (`BIGFILE=1`). **Required before every release.** |
+| `make check BIGFILE=0` | Skip it even if its chain changed (prints a reminder). **Never before a release.** |
 | `make bigfile-clean` | Remove what a failed `BIGFILE_KEEP=1` run left (`transteira-bigfile-*` only). |
 
 Files: `scripts/bigfile.sh` (orchestration, preflight, sampler, cleanup), `scripts/lib/stack.sh`
@@ -460,7 +463,7 @@ the script prints how to inspect it (logs, `docker stats`, the CA and URL) and h
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BIGFILE` | `1` | `0` skips the test (never before a release). |
+| `BIGFILE` | `auto` | `auto`: in `make check`, run only when the big-file chain (the module packages the server and the test client depend on, test files aside, plus image, deployment, reference Caddy, scripts, Makefile) or the `BIGFILE_*` settings changed since the last green run of `make check`; `1`: always (`make check-full`); `0`: skip (never before a release). A plain `make bigfile` always runs and does not record its result. |
 | `BIGFILE_BYTES` | `21474836480` | File size (1 MiB to 20 GiB, the largest transfer a tenant may allow). |
 | `BIGFILE_DBS` | `both` | `sqlite`, `postgres` or `both` (in that order). |
 | `BIGFILE_KEEP` | `0` | `1`: keep a failed stack for diagnosis. |

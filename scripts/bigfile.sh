@@ -3,7 +3,8 @@
 # default, the largest transfer a tenant may allow) uploaded with tus through the real reference
 # Caddy in Docker to the PRODUCTION stack (deploy/, real ClamAV), with a connection cut in the
 # middle of the upload and of the download, both resumed, the SHA-256 compared end to end, and the
-# memory of the server sampled during the whole run. Last gate of `make check`.
+# memory of the server sampled during the whole run. Last gate of `make check` when the big-file
+# chain changed (scripts/bigfile-auto.sh), always run by `make check-full`.
 #
 #   scripts/bigfile.sh            run the test (engines from BIGFILE_DBS)
 #   scripts/bigfile.sh clean      remove every leftover transteira-bigfile-* project and network
