@@ -55,6 +55,9 @@ type repo interface {
 type storeRepo struct {
 	db    *store.DB
 	vault Vault
+	// writer records the audit events; nil means a writer of its own over
+	// db.
+	writer *audit.Writer
 }
 
 func (r storeRepo) dueDeletions(ctx context.Context, now time.Time, page store.SweepPage) ([]store.TenantTransfer, error) {
@@ -193,7 +196,7 @@ func (r storeRepo) deleteTenant(ctx context.Context, tid tenant.ID) error {
 
 // audit records ev in the audit log, in its own transaction.
 func (r storeRepo) audit(ctx context.Context, ev audit.Event) error {
-	return audit.New(r.db).Record(ctx, ev)
+	return audit.OrNew(r.writer, r.db).Record(ctx, ev)
 }
 
 // backupSupported reports whether TransTeira copies the database itself

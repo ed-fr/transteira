@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
@@ -263,8 +264,10 @@ type env struct {
 	fault    *faultRepo
 	auditor  *faultAuditor
 	logs     *syncBuffer
-	m        *Monitor
-	n        int
+	// published receives the events of the monitors.
+	published *events.Recorder
+	m         *Monitor
+	n         int
 	// clock is the time of the monitors, in Unix milliseconds.
 	clock atomic.Int64
 }
@@ -295,7 +298,7 @@ func newEnv(t *testing.T, e storetest.Engine, withMail bool) *env {
 	t.Helper()
 	ev := &env{
 		t: t, db: openDB(t, e), system: &fakeMailer{}, tenants: &fakeMailer{}, notifier: &fakeNotifier{},
-		pinger: &fakePinger{err: errBoom}, logs: &syncBuffer{},
+		pinger: &fakePinger{err: errBoom}, logs: &syncBuffer{}, published: &events.Recorder{},
 	}
 	ev.fault = &faultRepo{repo: storeRepo{db: ev.db}}
 	ev.auditor = &faultAuditor{Auditor: audit.New(ev.db)}
@@ -309,7 +312,7 @@ func (ev *env) monitor(withMail bool) *Monitor {
 	ev.t.Helper()
 	opts := Options{
 		AdminLink: adminLink, Notifier: ev.notifier, TenantMailer: ev.tenants, Pinger: ev.pinger, Grace: grace,
-		Now: ev.now, Logger: slog.New(slog.NewTextHandler(ev.logs, nil)),
+		Now: ev.now, Logger: slog.New(slog.NewTextHandler(ev.logs, nil)), Events: ev.published,
 	}
 	if withMail {
 		opts.SystemMailer, opts.SMTP = ev.system, smtp

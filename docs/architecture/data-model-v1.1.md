@@ -18,7 +18,7 @@ All V1 conventions still apply. New rules are marked **new**.
 | Crypto-erase | The key is destroyed first, then the row is deleted. Any table referencing `wrapped_keys` follows the `transfer_files` / `download_token_key_id` rule: the store refuses to delete the row while its key exists. `Tenants.Delete` keeps refusing while any wrapped key of the tenant remains (`ErrKeysRemain`). |
 | No per-chunk writes | No new table is written per tus chunk or per byte range. Download tracking writes once per **download start**, as V1 `download_count` does. Abuse counters are **computed from `transfers`**. There is no counter table. |
 | Retention (spec 20) | Every new table has a purge rule, run by the single lifecycle task (§6). Personal data is never kept longer than the V1 equivalent: 12 months for logs and reports, the transfer row's lifetime for per-transfer data. |
-| CHECK changes | PostgreSQL: `DROP CONSTRAINT` / `ADD CONSTRAINT`. SQLite: a table rebuild, as in 0005. **New:** some of the rebuilt tables are *referenced* by other tables. For those, the rebuild must not fire `ON DELETE` actions (§2.1). |
+| CHECK changes | PostgreSQL: `DROP CONSTRAINT` / `ADD CONSTRAINT`. SQLite: a table rebuild, as in 0005. **New:** some of the rebuilt tables are *referenced* by other tables. For those, the rebuild must not fire `ON DELETE` actions: SQLite migrations run with foreign keys disabled (§2.1). |
 | Parity | Each migration exists for both engines with the same tables, columns and constraints. The migration tests run on both engines and pin the resulting schema. |
 | Stateless proofs | The recipient verification cookie `__Host-tt_rv` is MAC-signed like `__Host-tt_dl`, and each entry binds link id, tenant id and expiry (D10). It has **no table**. |
 | Names | Problem codes are kebab-case, for example `max-downloads-reached` (D18). Enum values stored in the database are identical to the OpenAPI values. |
@@ -28,7 +28,7 @@ All V1 conventions still apply. New rules are marked **new**.
 | # | Name | Content |
 |---|---|---|
 | 0014 | `transfer_options` | Rebuilds `transfers` (SQLite) and adds new transfer columns: wider `sender_kind` with the invitation and reply constraints, link mode, max downloads, recipient verification, confidentiality snapshot, reply source, reminder and extension marks. Rebuilds `transfer_files` (adds `path` and the `not_scanned_disabled` scan status). Adds three tenant flags, including `antivirus_enabled`. |
-| 0015 | `recipient_links` | `recipient_links`, `recipient_downloads`, `verification_challenges.purpose` and `recipient_link_id`. Rebuilds `deposit_sessions` (new kinds and reply columns). |
+| 0015 | `recipient_links` | `recipient_links`, `recipient_downloads`, `verification_challenges.purpose` and `recipient_link_id`. Rebuilds `deposit_sessions` (new kinds and reply columns) and, on SQLite, `verification_challenges` (composite FK to the link). |
 | 0016 | `confidentiality` | `confidentiality_levels` (with seed data) and `recipient_domain_rules`. |
 | 0017 | `abuse` | `tenant_abuse_settings` (with seed data), `abuse_alerts`, `abuse_reports`. |
 | 0018 | `webhooks` | `webhooks`, `system_webhooks`, the tenant flag `webhook_include_addresses`. Widens the `system_secrets.purpose` check (SQLite rebuild). |
@@ -39,28 +39,34 @@ The grouping departs from the initial sketch for one reason. Every transfer-leve
 
 ### 2.1 SQLite: rebuilding a table that other tables reference
 
-Migrations run inside a transaction with `foreign_keys(1)`, and `PRAGMA foreign_keys` cannot be changed inside a transaction. The V1 rebuild pattern (copy, `DROP`, `RENAME`) is safe only for tables that no other table references (`transfer_files` in 0005). Dropping a *parent* table runs an implicit `DELETE FROM`. That delete would **cascade** to `transfer_recipients` and `transfer_files` for `transfers`, and would fail on `admins` for `system_secrets`.
+The V1 rebuild pattern (copy, `DROP`, `RENAME`) is safe only for tables that no other table references (`transfer_files` in 0005). With foreign keys enforced, dropping a *parent* table runs an implicit `DELETE FROM`. That delete would **cascade** to `transfer_recipients` and `transfer_files` for `transfers`, and would fail on `admins` for `system_secrets`.
 
-Technique (accepted, D26), used for `transfers` (0014) and `system_secrets` (0018):
+**Deviation from the first draft (D26).** The draft renamed the old table away under `PRAGMA legacy_alter_table = ON` before dropping it. That does not work: SQLite still rewrites the `REFERENCES` clauses of the other tables when a table is renamed while `foreign_keys` is on, whatever `legacy_alter_table` says (documented in the ALTER TABLE compatibility table, and verified with the bundled SQLite 3.53). The children would follow the old table, and dropping it would delete them all. `PRAGMA foreign_keys` cannot be changed inside a transaction, so the migration file alone cannot fix it.
+
+Technique used instead: SQLite's documented procedure for schema changes, applied by the migrator to every SQLite migration (`internal/store/migrate.go`):
+
+1. On one reserved connection of the write pool, run `PRAGMA foreign_keys = OFF` **before** `BEGIN`.
+2. In the migration transaction, check that the connection reads `foreign_keys = 0` (a connection reopened by the pool would enforce them again), then run the migration body.
+3. Before recording the migration, count the rows of `pragma_foreign_key_check`: any violation aborts and rolls back the migration.
+4. After the transaction, **whether it committed or not**, run `PRAGMA foreign_keys = ON`. If that fails, the connection is discarded instead of going back to the pool (a new connection gets the DSN default, foreign keys on). Pooled connections never keep foreign keys off.
+
+The rebuild itself is then the plain pattern:
 
 ```sql
-PRAGMA legacy_alter_table = ON;      -- RENAME no longer rewrites FK clauses of other tables
 CREATE TABLE transfers_0014 (...);   -- new definition
 INSERT INTO transfers_0014 (...) SELECT ... FROM transfers;
-ALTER TABLE transfers RENAME TO transfers_old;   -- children still say REFERENCES transfers
-ALTER TABLE transfers_0014 RENAME TO transfers;  -- children now resolve to the new table
-DROP TABLE transfers_old;            -- no table references it any more: no cascade
--- recreate every index of the table (index names are global, the old ones were dropped)
-PRAGMA legacy_alter_table = OFF;
+DROP TABLE transfers;                -- foreign keys off: no implicit delete, no cascade
+ALTER TABLE transfers_0014 RENAME TO transfers;  -- the children's "REFERENCES transfers" resolves to it
+-- recreate every index (and trigger) of the table: they were dropped with it
 ```
 
 Requirements and checks:
-- The migrator (`migrate.go`) must run `PRAGMA legacy_alter_table = OFF` on the connection after every SQLite migration, **whether it succeeded or failed**. Pooled connections must never keep the flag. This is a small code change that comes with 0014.
-- A migration test runs `PRAGMA foreign_key_check` and `PRAGMA integrity_check` after 0014 and 0018 on a populated V1 database. It also checks that the row counts of `transfer_recipients`, `transfer_files` and `admins` are unchanged.
-- No trigger or view references `transfers` or `system_secrets`. The `wrapped_keys` / `system_secrets` triggers live *on* `system_secrets`, so they are dropped with the old table and recreated after the rename.
+- The migration tests run `PRAGMA foreign_key_check` and `PRAGMA integrity_check` after 0014 to 0020 on a populated V1 database. They check that the row counts of every V1 table (including `transfer_recipients`, `transfer_files`, `admins` and `admin_sessions`) are unchanged, that a deleted transfer still cascades to its children, and that a secret used by an admin still cannot be deleted. A fault-injection test makes a migration fail after its body ran and checks that the data is intact and that the writer connection enforces foreign keys again; other tests cover every failure step of the migrator.
+- A live test compares the named indexes of both engines, so that a rebuild cannot lose one silently.
+- No trigger or view references `transfers` or `system_secrets`. The `system_secrets` retired-key triggers live *on* `system_secrets`, so they are dropped with the old table and recreated after the rename.
 - Indexes to recreate on `transfers` (state after 0013): `transfers_idempotency_idx`, `transfers_token_idempotency_idx`, `transfers_status_idx`, `transfers_sender_status_idx`, `transfers_invitation_idx`, `transfers_download_token_idx`, `transfers_download_token_global_idx`, `transfers_download_token_key_idx`, `transfers_scanning_idx`, `transfers_delete_after_idx`, `transfers_ended_idx`, `transfers_expiry_idx`, `transfers_rejected_idx`, `transfers_uploading_idx`, `transfers_tenant_created_idx`, `transfers_token_status_idx`. The new ones (§2.2) are created in the same migration.
 
-`deposit_sessions` (0015) and `tenant_email_templates` (0020) are not referenced by any table. They use the plain 0005 pattern.
+`deposit_sessions` (0015) and `tenant_email_templates` (0020) are not referenced by any table. They use the same plain pattern.
 
 ### 2.2 Migration 0014 `transfer_options`
 
@@ -99,6 +105,7 @@ CHECK (sender_kind IN ('internal', 'internal_remote') OR api_token_id IS NULL),
 CHECK (recipient_verification = 0 OR link_mode = 'per_recipient'),
 CHECK ((confidentiality_level IS NULL) = (confidentiality_label IS NULL)),
 CHECK ((confidentiality_level IS NULL) = (rule_expiry_days_mask IS NULL)),          -- same for every rule_* flag
+CHECK (confidentiality_level IS NOT NULL OR rule_max_downloads_cap IS NULL),        -- the cap may be NULL with a level
 CHECK ((extension_count = 0) = (extended_at IS NULL)),
 CHECK (extension_count = 0 OR expires_at <= created_at + 7776000000),               -- 90-day lifetime cap (D3)
 CHECK (status <> 'available' OR (available_at IS NOT NULL
@@ -108,7 +115,7 @@ CHECK (delete_after IS NULL OR (first_downloaded_at IS NOT NULL AND delete_after
        OR (max_downloads IS NOT NULL AND download_count >= max_downloads))       -- replaces transfers_delete_after_check
 ```
 
-- **Backfill:** `link_mode = 'shared'` for every existing row. V1 transfers keep their single `dl_` link, still served, and get no reminder (§5). New transfers default to `'per_recipient'` and never get a transfer-level token. Their recipient links are never shown to the sender or to API tokens (D1). All other new columns stay NULL or 0, which matches V1 behaviour (no level, unlimited downloads).
+- **Backfill:** `link_mode = 'shared'` for every existing row. Until the per-recipient links ship, the V1 store insert writes `link_mode = 'shared'` explicitly, so that the V1 code path (a transfer-level token at availability) keeps satisfying the checks. V1 transfers keep their single `dl_` link, still served, and get no reminder (§5). New transfers default to `'per_recipient'` and never get a transfer-level token. Their recipient links are never shown to the sender or to API tokens (D1). All other new columns stay NULL or 0, which matches V1 behaviour (no level, unlimited downloads).
 - **Rule snapshot (D11):** the `rule_*` columns copy the level's rules at creation. Validation at creation, extensions and later checks read the snapshot, never the current level. In the API they are exposed as one `ConfidentialityRules` object. The `rule_*` columns are kept separate rather than stored as JSON, so that the database can check them.
 - **Extensions (D3):** the number of extensions is unlimited. Each extension sets `expires_at = now + days`, where `days` must be in `rule_expiry_days_mask` (or 1, 7 or 30 without a level). The total lifetime is capped at 90 days after `created_at`: the service rejects anything beyond with the problem code `extension-limit-reached` (409), and the CHECK above backs it. In the same transaction, an extension increments `extension_count`, sets `extended_at` and **re-arms the reminder**: `expiry_reminder_at` and every `recipient_links.reminder_sent_at` are reset to NULL, which gives one reminder per expiry date. The exception is a new remaining lifetime under 36 h: `expiry_reminder_at` is then set to now, which marks the reminder as skipped (D16).
 - `reply_to_transfer_id` has **no foreign key**. A reply can outlive the source row, which is purged 30 days after it ends. `SET NULL` is impossible on a composite key with a NOT NULL `tenant_id`, and `NO ACTION` would block the purge. The store checks, when the reply session opens, that the source belongs to the same tenant and is available. After that the value is informational.
@@ -143,8 +150,8 @@ ALTER TABLE transfers
     ADD  CONSTRAINT transfers_api_token_kind_check CHECK (sender_kind IN ('internal', 'internal_remote') OR api_token_id IS NULL),
     ADD  CONSTRAINT transfers_recipient_verification_check CHECK (NOT recipient_verification OR link_mode = 'per_recipient'),
     ADD  CONSTRAINT transfers_confidentiality_check CHECK ((confidentiality_level IS NULL) = (confidentiality_label IS NULL)),
-    ADD  CONSTRAINT transfers_link_mode_check CHECK (link_mode = 'shared' OR download_token_hash IS NULL),
-    ADD  CONSTRAINT transfers_rules_check CHECK ((confidentiality_level IS NULL) = (rule_expiry_days_mask IS NULL)),  -- one per rule_* column
+    ADD  CONSTRAINT transfers_link_token_check CHECK (link_mode = 'shared' OR download_token_hash IS NULL),
+    ADD  CONSTRAINT transfers_rules_check CHECK (...),   -- the rule_* equalities and the cap rule, ANDed
     ADD  CONSTRAINT transfers_extension_check CHECK ((extension_count = 0) = (extended_at IS NULL)),
     ADD  CONSTRAINT transfers_lifetime_check CHECK (extension_count = 0 OR expires_at <= created_at + 7776000000),
     DROP CONSTRAINT transfers_available_check,
@@ -155,6 +162,8 @@ ALTER TABLE transfers
          OR (first_downloaded_at IS NOT NULL AND delete_after_first_download)
          OR (max_downloads IS NOT NULL AND download_count >= max_downloads));
 ```
+
+The token rule is named `transfers_link_token_check`, because the column check on `link_mode` is already auto-named `transfers_link_mode_check`. On both engines, the rule snapshot checks are one table check (`transfers_rules_check` on PostgreSQL).
 
 The invitation check `(sender_kind = 'external') = (invitation_id IS NOT NULL)` is semantically unchanged and is **kept as is** on PostgreSQL. It is auto-named (`transfers_check`), so nothing needs to drop it. If a reviewer prefers to rename it, a `DO` block can locate it by `pg_get_constraintdef` with `SELECT ... INTO STRICT`, which fails unless exactly one constraint matches. The migration test asserts the final set of constraints on both engines.
 
@@ -214,6 +223,7 @@ CREATE UNIQUE INDEX recipient_links_token_key_idx    ON recipient_links (token_k
 
 - The sealed copy (`token_key_id`) is used only to **re-mail** a link to its own recipient (admin resend). A link is never returned to the sender, to an admin or to an API token (D1).
 - The recipient address is **not duplicated**. It is read from `transfer_recipients`, and the composite FK guarantees the match. Removing a recipient (data-subject erasure) cascades to its link, once its token key has been destroyed.
+- **Crypto-erase guard:** `token_key_id` is `ON DELETE SET NULL`, so a cascade from `transfers` or `transfer_recipients` would drop the link row and orphan its key. The store therefore refuses both deletions while a link concerned still has `token_key_id IS NOT NULL` (`NOT EXISTS` guard in `qTransferDelete` and `qRecipientDelete`, reviewed queries): `Transfers.DeleteTx` and `Transfers.RemoveRecipientTx` return `ErrKeysRemain`. Every path that deletes a transfer or a recipient (lifecycle purge and erase, data-subject erasure, admin deletion) must destroy the link keys first, in the same transaction ([WrappedKeys.DeleteTx]); these paths come with the per-recipient feature.
 - Token format: the public route `/downloads/{linkToken}` is unchanged. A link token uses the same `dl_` format (256 bits), so its shape does not reveal whether it is a V1 link or a recipient link. Resolution in the tenant scope looks up `recipient_links` (`tenant_id, token_hash`) first, then `transfers.download_token_hash`.
 - `verified_at` is for display only (`RecipientTracking.verifiedAt`). The proof is the stateless `__Host-tt_rv` cookie (D10), so verification is required again in a new browser.
 - **Completion (D2):** `completed_at` is set once, by a conditional update, when every byte of every deliverable file, or the whole archive, has been served through this link. The served-range state is kept **on disk per link**, as V1 does per transfer, so the database is still written only at download start and at completion. In the same transaction:
@@ -239,21 +249,23 @@ CREATE TABLE recipient_downloads (
 
 There is one upsert per download start, in the transaction that increments `transfers.download_count` and the link counters, and one update at completion. `item` is used instead of a nullable `file_id`, so that the key stays a plain primary key usable by `ON CONFLICT` on both engines. The API maps `'archive'` to `fileId: null`. PostgreSQL uses `CHECK (item = 'archive' OR item LIKE 'fil\_%')`.
 
-**`verification_challenges`**: generalised (spec 10, brief §2). `ADD COLUMN` on both engines. The checks are column checks that reference other columns, as in 0005:
+**`verification_challenges`**: generalised (spec 10, brief §2). PostgreSQL uses `ADD COLUMN` and named table constraints; SQLite rebuilds the table (nothing references it) to get the composite FK, and recreates `verification_challenges_email_idx`, `_ip_idx` and `_created_idx`. New columns and rules:
 
 ```sql
 purpose TEXT NOT NULL DEFAULT 'deposit'
         CHECK (purpose IN ('deposit', 'recipient')                       -- D21: no 'my_transfers', no 'reply'
                AND (purpose = 'deposit' OR invitation_id IS NULL)),
-recipient_link_id TEXT REFERENCES recipient_links (id) ON DELETE CASCADE
+recipient_link_id TEXT
         CHECK ((recipient_link_id IS NOT NULL) = (purpose = 'recipient')),
+FOREIGN KEY (tenant_id, recipient_link_id) REFERENCES recipient_links (tenant_id, id) ON DELETE CASCADE,
 recipient_intent  TEXT CHECK (recipient_intent IN ('download', 'reply')
         AND (recipient_intent IS NULL) = (purpose = 'deposit'))         -- RecipientVerificationStart.purpose
 CREATE INDEX verification_challenges_link_idx ON verification_challenges (tenant_id, recipient_link_id, created_at)
     WHERE recipient_link_id IS NOT NULL;
 ```
 
-- SQLite cannot add a composite FK, so the FK is single-column, as with `api_token_id` in 0011, and the store checks that the link is in the same tenant. PostgreSQL uses the same single-column FK for parity. A reply verification is a `recipient` challenge with `recipient_intent = 'reply'` (D21).
+- PostgreSQL expresses the two cross-column rules as named table constraints (`verification_challenges_invitation_purpose_check`, `_link_check` and `_intent_check`), with the same meaning.
+- The FK to the link is composite on both engines (`verification_challenges_recipient_link_fkey` on PostgreSQL), so a challenge can never point to a link of another tenant. A reply verification is a `recipient` challenge with `recipient_intent = 'reply'` (D21).
 - **Code budgets per purpose (D22):**
   - Deposit codes: 5 per hour per address, counted on `purpose = 'deposit'` through the existing `(tenant_id, email, created_at)` index plus a filter on `purpose`.
   - Recipient codes: their own budget of 5 per hour per (address, link), counted through `verification_challenges_link_idx`. A link fixes its address.
@@ -439,13 +451,13 @@ CREATE UNIQUE INDEX webhooks_url_key_idx ON webhooks (url_key_id);
 CREATE UNIQUE INDEX webhooks_secret_key_idx ON webhooks (secret_key_id);
 ```
 
-`system_webhooks` has the same columns **without `tenant_id`**. `url_secret_id` and `hmac_secret_id` reference `system_secrets (id) ON DELETE SET NULL`. On PostgreSQL the table gets the system-only policy (`USING/WITH CHECK (current_setting('app.system_scope', true) = 'on')`).
+`system_webhooks` has the same columns **without `tenant_id`**. `url_secret_id` and `hmac_secret_id` reference `system_secrets (id) ON DELETE SET NULL`. Indexes: `system_webhooks_created_idx (created_at, id)`, and the unique `system_webhooks_url_secret_idx` and `system_webhooks_hmac_secret_idx`. On PostgreSQL the table gets the system-only policy (`USING/WITH CHECK (current_setting('app.system_scope', true) = 'on')`).
 
 - **Event filters (D4):** a tenant webhook accepts tenant event types only. A system webhook accepts **instance event types only** (`disk.*`, `antivirus.*` and the other instance-level events) and never receives a tenant event. The store validates the JSON list against the type lists of `internal/events`. A SQL CHECK on JSON content is not portable.
 - **Payload privacy (D4):** a new tenant column in 0018, `webhook_include_addresses INTEGER NOT NULL DEFAULT 0 CHECK (... IN (0, 1))` (PostgreSQL: `BOOLEAN NOT NULL DEFAULT false`), maps to the API `webhookIncludeAddresses` and is set by the delegated admin. When it is off, payloads carry no e-mail address.
 - **Key material (D23):** deleting a webhook (tenant or system) destroys its sealed URL and secret first (`wrapped_keys` / `system_secrets` rows), then the row. The store refuses to delete a row whose keys still exist. Rotating the secret seals the new one and destroys the old key in the same transaction.
 
-- **`system_secrets.purpose`**: widened to `('admin-totp', 'webhook')`. SQLite rebuilds the table with the technique of §2.1, because `admins` references it, then recreates `system_secrets_key_id_idx` and the two retired-key triggers. PostgreSQL drops and re-adds `system_secrets_purpose_check`. The master key rotation already rewraps every `wrapped_keys` and `system_secrets` row, so it needs no change.
+- **`system_secrets.purpose`**: widened to `('admin-totp', 'webhook')`. SQLite rebuilds the table with foreign keys off (§2.1), because `admins` references it, then recreates `system_secrets_key_id_idx` and the two retired-key triggers. PostgreSQL drops and re-adds `system_secrets_purpose_check`. The master key rotation already rewraps every `wrapped_keys` and `system_secrets` row, so it needs no change.
 - Delivery state is updated once per delivery attempt and never per event fan-out. There is **no persistent outbox** in V1.1: the queue is in memory, bounded, with retries and backoff. Losing pending deliveries on restart is an accepted residual risk, since audit and mail are unaffected (D27).
 
 ### 2.7 Migration 0019 `my_transfers`
@@ -546,7 +558,7 @@ CREATE POLICY <t>_isolation ON <t>
                 OR current_setting('app.system_scope', true) = 'on');
 ```
 
-`system_webhooks` gets `system_webhooks_system` (system scope only), like `system_settings`. The policies already on `transfers`, `transfer_files`, `verification_challenges`, `deposit_sessions`, `tenants`, `system_secrets` and `tenant_email_templates` cover their new columns. The runtime-role grants are reapplied after every migration run, as in V1.
+`system_webhooks` gets `system_webhooks_system` (system scope only), like `system_settings`. Both are in the list of system tables checked by `DB.Verify` (`verifyRLS`), which refuses to start when one lacks RLS or a policy. The policies already on `transfers`, `transfer_files`, `verification_challenges`, `deposit_sessions`, `tenants`, `system_secrets` and `tenant_email_templates` cover their new columns. The runtime-role grants are reapplied after every migration run, as in V1.
 
 ## 4. Index summary
 
@@ -569,7 +581,7 @@ CREATE POLICY <t>_isolation ON <t>
 
 | Table | Rule |
 |---|---|
-| `recipient_links` | When the transfer ends (expired, deleted or rejected), the token keys are destroyed in the same erase sequence as `download_token_key_id`: keys first, then status. The rows go with the transfer row, 30 days after `ended_at`, through the cascade from `transfer_recipients`. |
+| `recipient_links` | When the transfer ends (expired, deleted or rejected), the token keys are destroyed in the same erase sequence as `download_token_key_id`: keys first, then status. The rows go with the transfer row, 30 days after `ended_at`, through the cascade from `transfer_recipients`; the store refuses that deletion while a link key remains (§2.3). |
 | `recipient_downloads` | Cascades with its link. |
 | `verification_challenges` | Existing rule, unchanged: deleted after use or expiry, kept at least 1 h for the rate limits. |
 | `deposit_sessions` | Existing rule. Reply sessions also cascade with the source transfer. |
@@ -593,7 +605,7 @@ CREATE POLICY <t>_isolation ON <t>
 | Data | Action |
 |---|---|
 | Transfers sent by X (including replies and `internal_remote` transfers) | Erased (V1 path). The erase now also destroys the `recipient_links.token_key_id` keys. |
-| X as a recipient of a transfer | Sole recipient: the transfer is erased (V1). Otherwise: destroy X's link token key, then delete the `transfer_recipients` row, which cascades to the link and its `recipient_downloads`. |
+| X as a recipient of a transfer | Sole recipient: the transfer is erased (V1). Otherwise: destroy X's link token key, then delete the `transfer_recipients` row, which cascades to the link and its `recipient_downloads` (`RemoveRecipientTx` returns `ErrKeysRemain` while the key exists). |
 | `verification_challenges` with email X (all purposes) | Deleted (existing `DeleteByEmailTx`, purpose-agnostic). |
 | `deposit_sessions` of X (all kinds) | Deleted (existing). |
 | `sender_access_links`, `sender_sessions` of X | Deleted (new `SenderAccess.DeleteByEmailTx`). |
@@ -646,7 +658,7 @@ The open questions of the first draft are settled by the review resolutions (`v1
 | Topic | Decision | Where |
 |---|---|---|
 | Sealed token per recipient link (one `wrapped_keys` row per link) | Kept, as in the brief | §2.3 |
-| SQLite rename technique for referenced tables | Accepted. The `migrate.go` change ships in step 2 (D26) | §2.1 |
+| SQLite rebuild of referenced tables | The `legacy_alter_table` rename technique cascades (SQLite rewrites the children's references while foreign keys are on). Replaced in step 2 by migrations run with foreign keys off, checked by `foreign_key_check`, re-enabled after every migration (D26, revised) | §2.1 |
 | Delete after the first download with per-recipient links | Deleted once **every** link has a completed download, bounded by expiry (D2) | §2.3 |
 | Extensions and reminders | Unlimited extensions, within the snapshotted level, at most 90 days of lifetime, re-arm the reminder (D3). Reminder skipped under 36 h at availability (D16) | §2.2, §5.1 |
 | Challenge purposes | `deposit` and `recipient` only, with `recipient_intent` for replies (D21). Separate code budgets (D22) | §2.3 |

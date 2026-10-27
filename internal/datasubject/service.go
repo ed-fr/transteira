@@ -55,6 +55,10 @@ type Options struct {
 	Logger *slog.Logger
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Summary counts the data of one tenant linked to an address (schema
@@ -135,7 +139,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo: newStoreRepo(db), eraser: opts.Eraser, holder: opts.Holder,
+		repo: newStoreRepo(db, opts.Audit), eraser: opts.Eraser, holder: opts.Holder,
 		logger: opts.Logger, now: opts.Now, sleep: sleepContext,
 	}
 	if s.holder == nil {

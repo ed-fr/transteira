@@ -31,6 +31,7 @@ const (
 	faultBegin   = "begin"         // BeginTx
 	faultCommit  = "commit"        // Commit
 	faultExec    = "exec"          // ExecContext; match against the SQL
+	faultExecRan = "exec-ran"      // ExecContext fails after running; match the SQL
 	faultQuery   = "query"         // QueryContext; match against the SQL
 	faultNext    = "next"          // Rows.Next; match against the SQL
 	faultScanNil = "scan-nil"      // Rows.Next returns NULL columns; match the SQL
@@ -140,6 +141,9 @@ func (c *faultConn) ExecContext(ctx context.Context, q string, args []driver.Nam
 	}
 	res, err := c.base.(driver.ExecerContext).ExecContext(ctx, q, args)
 	if err != nil {
+		return nil, err
+	}
+	if err := c.plan.check(faultExecRan, q); err != nil {
 		return nil, err
 	}
 	return &faultResult{base: res, plan: c.plan, q: q}, nil

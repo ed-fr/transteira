@@ -49,12 +49,13 @@ type storeRepo struct {
 	audit *audit.Writer
 }
 
-// auditWriter returns the audit writer of db, nil for a nil db.
-func auditWriter(db *store.DB) *audit.Writer {
+// auditWriter returns shared, or a writer of its own over db when shared
+// is nil; nil for a nil db.
+func auditWriter(db *store.DB, shared *audit.Writer) *audit.Writer {
 	if db == nil {
 		return nil
 	}
-	return audit.New(db)
+	return audit.OrNew(shared, db)
 }
 
 func (r storeRepo) byToken(ctx context.Context, tid tenant.ID, hash []byte) (store.TransferDetails, error) {

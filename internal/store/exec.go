@@ -47,11 +47,41 @@ func (s *Scoped) ReadTx(ctx context.Context, fn func(*ScopedTx) error) error {
 	return s.run(ctx, s.db.read, fn)
 }
 
-// run executes fn in a tenant-scoped transaction on pool.
+// run executes fn in a tenant-scoped transaction on pool, then the hooks
+// fn registered with [ScopedTx.AfterCommit] once it committed.
 func (s *Scoped) run(ctx context.Context, pool *sql.DB, fn func(*ScopedTx) error) error {
-	return s.db.runTx(ctx, pool, s.db.dialect.scopeTenant, []any{string(s.tid)}, func(tx *sql.Tx) error {
-		return fn(&ScopedTx{tx: tx, tid: s.tid, dialect: s.db.dialect})
+	var hooks commitHooks
+	err := s.db.runTx(ctx, pool, s.db.dialect.scopeTenant, []any{string(s.tid)}, func(tx *sql.Tx) error {
+		return fn(&ScopedTx{tx: tx, tid: s.tid, dialect: s.db.dialect, hooks: &hooks})
 	})
+	return hooks.after(err)
+}
+
+// commitHooks are the functions registered with AfterCommit during a
+// transaction.
+type commitHooks struct {
+	fns []func()
+}
+
+// add registers fn, ignoring a nil fn. On a nil h (a transaction built
+// without hooks, such as a migration transaction) fn is dropped: no
+// operation of those transactions registers hooks.
+func (h *commitHooks) add(fn func()) {
+	if h != nil && fn != nil {
+		h.fns = append(h.fns, fn)
+	}
+}
+
+// after runs the hooks in registration order when err, the result of the
+// transaction, is nil (it committed), and returns err.
+func (h *commitHooks) after(err error) error {
+	if err != nil {
+		return err
+	}
+	for _, fn := range h.fns {
+		fn()
+	}
+	return nil
 }
 
 // ScopedTx is a transaction bound to one tenant. It accepts only
@@ -62,6 +92,18 @@ type ScopedTx struct {
 	tx      *sql.Tx
 	tid     tenant.ID
 	dialect *dialect
+	hooks   *commitHooks
+}
+
+// AfterCommit registers fn to run once the transaction committed, after
+// the Tx or ReadTx call that runs it has released the transaction and
+// before it returns; fn never runs when the transaction is rolled back
+// (an error, a panic or a failed commit). The functions run in
+// registration order, in the goroutine of that call; they must not fail
+// the operation, which is already committed (publish an event, wake a
+// worker...). A nil fn is ignored.
+func (t *ScopedTx) AfterCommit(fn func()) {
+	t.hooks.add(fn)
 }
 
 // Tenant returns the tenant tx is bound to.
@@ -167,12 +209,15 @@ func (s *System) ReadTx(ctx context.Context, fn func(*SystemTx) error) error {
 	return s.run(ctx, s.db.read, fn)
 }
 
-// run executes fn in a system transaction on pool.
+// run executes fn in a system transaction on pool, then the hooks fn
+// registered with [SystemTx.AfterCommit] once it committed.
 func (s *System) run(ctx context.Context, pool *sql.DB, fn func(*SystemTx) error) error {
 	s.db.logger.InfoContext(ctx, "store: system scope", "reason", s.reason)
-	return s.db.runTx(ctx, pool, s.db.dialect.scopeSystem, nil, func(tx *sql.Tx) error {
-		return fn(&SystemTx{tx: tx, dialect: s.db.dialect})
+	var hooks commitHooks
+	err := s.db.runTx(ctx, pool, s.db.dialect.scopeSystem, nil, func(tx *sql.Tx) error {
+		return fn(&SystemTx{tx: tx, dialect: s.db.dialect, hooks: &hooks})
 	})
+	return hooks.after(err)
 }
 
 // SystemTx is a system transaction. It accepts only [SystemQuery]
@@ -181,6 +226,14 @@ func (s *System) run(ctx context.Context, pool *sql.DB, fn func(*SystemTx) error
 type SystemTx struct {
 	tx      *sql.Tx
 	dialect *dialect
+	hooks   *commitHooks
+}
+
+// AfterCommit registers fn to run once the transaction committed, with the
+// guarantees of [ScopedTx.AfterCommit].
+// On a migration transaction, which supports no hooks, fn is dropped.
+func (t *SystemTx) AfterCommit(fn func()) {
+	t.hooks.add(fn)
 }
 
 // prepare checks that q is a registered system query taking exactly

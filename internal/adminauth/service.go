@@ -168,6 +168,10 @@ type Options struct {
 	// and audit writes on refusals). Nil discards. It never receives a
 	// username, a password, a token, a secret or a code.
 	Logger *slog.Logger
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Service authenticates administrators and manages their accounts. It is
@@ -223,7 +227,7 @@ func New(db *store.DB, keys Keys, vault Vault, hasher PasswordHasher, seclog Sec
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
 	s := &Service{
-		repo: storeRepo{db: db, writer: audit.New(db)}, keys: keys, vault: vault, hasher: hasher,
+		repo: storeRepo{db: db, writer: audit.OrNew(opts.Audit, db)}, keys: keys, vault: vault, hasher: hasher,
 		seclog: seclog, logger: opts.Logger, idle: opts.IdleTimeout, maxAge: opts.MaxAge, stateTTL: opts.StateTTL,
 		setupToken: opts.SetupToken, baseURL: base, issuer: opts.Issuer, clock: opts.Now,
 		newToken: id.NewToken, newTOTPSecret: crypto.GenerateTOTPSecret, newRecovery: crypto.GenerateRecoveryCodes,

@@ -18,6 +18,7 @@ const (
 	reasonTenantResolve = "resolve the tenant serving an HTTP Host before any tenant is known"
 	reasonTenantResume  = "resume the interrupted tenant deletions (identifiers only)"
 	reasonTenantErase   = "tenant deletion: refuse while a wrapped key of the tenant remains (T-110)"
+	reasonTenantSeed    = "tenant creation: seed the default configuration rows of the new tenant"
 )
 
 // tenantColumns is the column list read by the tenant queries.
@@ -58,7 +59,56 @@ var (
 	qTenantDelete = systemQuery(
 		`DELETE FROM tenants WHERE id = ?`,
 		reasonTenantAdmin)
+	qTenantSeedLevel = systemQuery(
+		`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, is_default,
+			require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+		reasonTenantSeed)
+	qTenantSeedAbuse = systemQuery(
+		`INSERT INTO tenant_abuse_settings (tenant_id, updated_at) VALUES (?, 0)`,
+		reasonTenantSeed)
 )
+
+// seedLevel is a default confidentiality level of a tenant.
+type seedLevel struct {
+	key                   string
+	position              int
+	labels                string // JSON object by language
+	isDefault             bool
+	requireVerification   bool
+	requirePassword       bool
+	validityMask          int // 1 = 1 day, 2 = 7 days, 4 = 30 days
+	internalRecipientOnly bool
+}
+
+// defaultConfidentialityLevels are the levels every tenant starts with:
+// Tenants.Create seeds them, and migration 0016 seeded the same rows for
+// the tenants that existed before it (keep both in sync; a test compares
+// them). The default level is "internal" without any rule. The seeded rows
+// have updated_at 0 and no updater: they were never edited.
+var defaultConfidentialityLevels = []seedLevel{
+	{key: "public", position: 0, labels: `{"fr":"Public","en":"Public"}`, validityMask: 7},
+	{key: "internal", position: 1, labels: `{"fr":"Interne","en":"Internal"}`, isDefault: true, validityMask: 7},
+	{
+		key: "confidential", position: 2, labels: `{"fr":"Confidentiel","en":"Confidential"}`, //nolint:misspell // French label
+		requireVerification: true, requirePassword: true, validityMask: 3, internalRecipientOnly: true,
+	},
+}
+
+// seedTenant inserts the default configuration rows of the new tenant tid
+// inside tx: its confidentiality levels and its abuse settings (every
+// threshold disabled, the column defaults), as migrations 0016 and 0017 did
+// for the existing tenants.
+func seedTenant(ctx context.Context, tx *SystemTx, tid tenant.ID) error {
+	for _, l := range defaultConfidentialityLevels {
+		if _, err := tx.Exec(ctx, qTenantSeedLevel, string(tid), l.key, l.position, l.labels, l.isDefault,
+			l.requireVerification, l.requirePassword, l.validityMask, l.internalRecipientOnly); err != nil {
+			return err
+		}
+	}
+	_, err := tx.Exec(ctx, qTenantSeedAbuse, string(tid))
+	return err
+}
 
 // Tenants is the repository of tenants. Its operations are system-scoped:
 // it serves the super admin and the Host resolution. Callers must check the
@@ -92,10 +142,11 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	return &t, nil
 }
 
-// Create validates t, assigns it a new ID and timestamps, and stores it.
-// Unset settings take their defaults ([tenant.Tenant.WithDefaults]): the
-// ceiling is the transfer limit, the colors are the default ones and the
-// status is active. It returns the stored tenant, ErrInvalid for invalid
+// Create validates t, assigns it a new ID and timestamps, and stores it,
+// with its default configuration rows in the same transaction (the default
+// confidentiality levels and abuse settings). Unset settings take their
+// defaults ([tenant.Tenant.WithDefaults]): the ceiling is the transfer
+// limit, the colors are the default ones and the status is active. It returns the stored tenant, ErrInvalid for invalid
 // fields (including a preset ID, a status other than active, or a transfer
 // limit above the ceiling, the ceiling being at most
 // [tenant.MaxTransferLimit]) and ErrConflict when the FQDN is already used.
@@ -121,7 +172,10 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, toMillis(now), toMillis(now))
-		return err
+		if err != nil {
+			return err
+		}
+		return seedTenant(ctx, tx, c.ID)
 	})
 	if err != nil {
 		return nil, wrap("create tenant", err)

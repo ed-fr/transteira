@@ -14,6 +14,10 @@
 // attacker-controlled value can neither break the line nor forge an ip= token
 // that a ban filter would trust (threat T-99). The full specification lives
 // in docs/operations/security-log.md.
+//
+// Every line written is also published as an events.LogSecurity event on
+// the event bus given with [WithPublisher] (the syslog export subscribes to
+// it); the line itself never depends on it.
 package securitylog
 
 import (
@@ -30,6 +34,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/ed-fr/transteira/internal/events"
 )
 
 // EventType identifies a kind of security event. It is written as the
@@ -146,6 +152,12 @@ func WithClock(now func() time.Time) Option {
 	return func(l *Logger) { l.now = now }
 }
 
+// WithPublisher publishes every line written as an events.LogSecurity
+// event on p. A nil p publishes nothing (the default).
+func WithPublisher(p events.Publisher) Option {
+	return func(l *Logger) { l.publisher = events.OrDiscard(p) }
+}
+
 // WithErrorHandler sets a callback receiving the errors of reopenings
 // triggered by [Logger.HandleSIGHUP], which has no caller to return them to.
 func WithErrorHandler(fn func(error)) Option {
@@ -205,6 +217,8 @@ type Logger struct {
 	now    func() time.Time
 	onErr  func(error)
 	buf    bytes.Buffer
+	// publisher receives the lines written (events.Discard by default).
+	publisher events.Publisher
 }
 
 // Open opens (or creates, mode 0640) the log file at path in append mode.
@@ -228,7 +242,7 @@ func New(w io.Writer, opts ...Option) *Logger {
 }
 
 func newLogger(w io.Writer, opts []Option) *Logger {
-	l := &Logger{w: w, now: time.Now, onErr: func(error) {}}
+	l := &Logger{w: w, now: time.Now, onErr: func(error) {}, publisher: events.Discard}
 	for _, o := range opts {
 		o(l)
 	}
@@ -245,13 +259,37 @@ func (l *Logger) Log(ev Event) error {
 		return ErrClosed
 	}
 	l.buf.Reset()
-	if err := appendLine(&l.buf, l.now(), ev); err != nil {
+	now := l.now()
+	if err := appendLine(&l.buf, now, ev); err != nil {
 		return err
 	}
 	if _, err := l.w.Write(l.buf.Bytes()); err != nil {
 		return fmt.Errorf("securitylog: write: %w", err)
 	}
+	// Published under the mutex, so that the events keep the order of the
+	// lines; Publish never blocks.
+	l.publisher.Publish(record(now, ev, l.buf.Bytes()))
 	return nil
+}
+
+// record returns the events.LogSecurity event of ev, written at now as
+// line (its line feed included).
+func record(now time.Time, ev Event, line []byte) events.Event {
+	tenant := formatTenant(ev.Tenant)
+	if tenant == "-" {
+		tenant = ""
+	}
+	fields := make([]events.Field, len(ev.Fields))
+	for i, f := range ev.Fields {
+		fields[i] = events.Field{Key: f.Key, Value: truncate(f.Value, MaxValueLen)}
+	}
+	return events.Event{
+		Type: events.LogSecurity, Severity: events.SeverityInfo, OccurredAt: now,
+		Log: &events.LogRecord{
+			Stream: events.StreamSecurity, Time: now, Tenant: tenant, Action: string(ev.Type),
+			IP: ev.IP, Fields: fields, Line: string(line[:len(line)-1]),
+		},
+	}
 }
 
 // Reopen closes and reopens the log file at the same path, so that the

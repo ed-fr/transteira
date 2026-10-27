@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"encoding/hex"
 	"errors"
@@ -155,11 +156,10 @@ func (db *DB) applyMigrations(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	sys, _ := db.System(migrationScope) // constant, non-empty reason
 	applied := 0
 	for {
 		done := false
-		err := sys.Tx(ctx, func(tx *SystemTx) error {
+		err := db.migrationTx(ctx, func(tx *SystemTx) error {
 			if db.dialect.migrationLock != "" {
 				if _, err := tx.tx.ExecContext(ctx, db.dialect.migrationLock); err != nil {
 					return wrap("lock migrations", err)
@@ -180,8 +180,15 @@ func (db *DB) applyMigrations(ctx context.Context) (int, error) {
 				return nil
 			}
 			next := known[len(rows)]
+			name := fmt.Sprintf("migration %04d_%s", next.version, next.name)
+			if err := db.checkForeignKeysOff(ctx, tx); err != nil {
+				return err
+			}
 			if _, err := tx.tx.ExecContext(ctx, next.body); err != nil {
-				return wrap(fmt.Sprintf("apply migration %04d_%s", next.version, next.name), err)
+				return wrap("apply "+name, err)
+			}
+			if err := db.checkForeignKeys(ctx, tx, name); err != nil {
+				return err
 			}
 			if _, err := tx.Exec(ctx, qInsertMigration, next.version, next.name, next.checksum, toMillis(db.now())); err != nil {
 				return wrap("record migration", err)
@@ -196,6 +203,95 @@ func (db *DB) applyMigrations(ctx context.Context) (int, error) {
 		}
 		applied++
 	}
+}
+
+// errForeignKeys reports a migration run with foreign keys enforced, or
+// leaving foreign key violations behind.
+var errForeignKeys = errors.New("store: migration foreign key check failed")
+
+// migrationTx runs fn in a migration transaction on the write pool. When
+// the dialect disables foreign keys for migrations (SQLite), the
+// transaction runs on one reserved connection: enforcement is turned off
+// before the transaction starts and turned back on after it ends, whether
+// it committed or not. If it cannot be turned back on, the connection is
+// discarded rather than returned to the pool, so that no later transaction
+// ever runs without foreign keys. The SQLite dialect has no transaction
+// scope statement to run.
+func (db *DB) migrationTx(ctx context.Context, fn func(*SystemTx) error) (err error) {
+	if db.dialect.migrationFKOff == "" {
+		sys, _ := db.System(migrationScope) // constant, non-empty reason
+		return sys.Tx(ctx, fn)
+	}
+	db.logger.InfoContext(ctx, "store: system scope", "reason", migrationScope)
+	conn, err := db.write.Conn(ctx)
+	if err != nil {
+		return wrap("reserve the migration connection", err)
+	}
+	defer func() { _ = conn.Close() }()
+	// The restore is registered before the statement turning enforcement
+	// off: that statement may fail after taking effect, and the connection
+	// must not return to the pool with foreign keys off.
+	defer func() {
+		if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), db.dialect.migrationFKOn); rerr != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			err = errors.Join(err, wrap("restore foreign keys after migration", rerr))
+		}
+	}()
+	if _, err := conn.ExecContext(ctx, db.dialect.migrationFKOff); err != nil {
+		return wrap("disable foreign keys for migrations", err)
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap("begin transaction", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := fn(&SystemTx{tx: tx, dialect: db.dialect}); err != nil {
+		return err
+	}
+	committed = true
+	if err := tx.Commit(); err != nil {
+		return wrap("commit", err)
+	}
+	return nil
+}
+
+// checkForeignKeysOff verifies, inside a migration transaction, that the
+// connection does not enforce foreign keys when the dialect requires it
+// off: a connection reopened by the pool would enforce them again, and a
+// table rebuild would then cascade to its children.
+func (db *DB) checkForeignKeysOff(ctx context.Context, tx *SystemTx) error {
+	if db.dialect.migrationFKState == "" {
+		return nil
+	}
+	var on int
+	if err := tx.tx.QueryRowContext(ctx, db.dialect.migrationFKState).Scan(&on); err != nil {
+		return wrap("read the foreign key enforcement", err)
+	}
+	if on != 0 {
+		return fmt.Errorf("%w: foreign keys are enforced on the migration connection", errForeignKeys)
+	}
+	return nil
+}
+
+// checkForeignKeys verifies, before a migration commits, that it left no
+// foreign key violation behind (needed when foreign keys are off).
+func (db *DB) checkForeignKeys(ctx context.Context, tx *SystemTx, name string) error {
+	if db.dialect.migrationFKCheck == "" {
+		return nil
+	}
+	var violations int
+	if err := tx.tx.QueryRowContext(ctx, db.dialect.migrationFKCheck).Scan(&violations); err != nil {
+		return wrap("check the foreign keys", err)
+	}
+	if violations != 0 {
+		return fmt.Errorf("%w: %s leaves %d foreign key violation(s)", errForeignKeys, name, violations)
+	}
+	return nil
 }
 
 // checkApplied verifies the applied migrations against the known ones: they

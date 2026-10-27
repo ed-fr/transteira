@@ -62,6 +62,21 @@ type dialect struct {
 	// migrationsTableExists counts the schema_migrations tables visible to
 	// the connection (0 or 1) without creating anything.
 	migrationsTableExists string
+	// migrationFKOff, when set, disables the foreign key enforcement of the
+	// connection a migration runs on, before its transaction starts (the
+	// setting is a no-op inside a transaction). A migration may then
+	// rebuild a table that other tables reference (create, copy, drop,
+	// rename) without the drop cascading to, or failing on, the children
+	// (SQLite's documented procedure for schema changes). migrationFKState
+	// returns the connection's enforcement setting (it must read 0 inside
+	// the migration transaction), migrationFKCheck counts the foreign key
+	// violations (it must read 0 before the commit) and migrationFKOn
+	// restores the enforcement after the migration, whether it succeeded or
+	// failed.
+	migrationFKOff   string
+	migrationFKState string
+	migrationFKCheck string
+	migrationFKOn    string
 
 	// ownerMigrations is true when migrations run with a separate owner
 	// role, the runtime role holding DML rights only (PostgreSQL).
@@ -93,8 +108,8 @@ type dialect struct {
 	verifyTemp string
 	// verifyRLS lists the tenant-scoped tables of the current schema (with a
 	// tenant_id column), plus the tenants registry and the system tables
-	// (master keys, rotations, system secrets, administrator tables),
-	// lacking ENABLE and FORCE row-level security or a policy.
+	// (master keys, rotations, system secrets, administrator tables,
+	// instance settings and webhooks), lacking ENABLE and FORCE row-level security or a policy.
 	verifyRLS string
 }
 
@@ -106,6 +121,10 @@ var sqliteDialect = &dialect{
 	scrubDeleted:          `PRAGMA wal_checkpoint(TRUNCATE)`,
 	backup:                `VACUUM INTO ?`,
 	migrationsTableExists: `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`,
+	migrationFKOff:        `PRAGMA foreign_keys = OFF`,
+	migrationFKState:      `PRAGMA foreign_keys`,
+	migrationFKCheck:      `SELECT count(*) FROM pragma_foreign_key_check`,
+	migrationFKOn:         `PRAGMA foreign_keys = ON`,
 }
 
 // postgresDialect describes PostgreSQL. set_config(..., true) is local to
@@ -157,7 +176,8 @@ var postgresDialect = &dialect{
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
 		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
-		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures',
+		        'system_settings', 'system_webhooks') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		  AND NOT (c.relrowsecurity AND c.relforcerowsecurity
 		        AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid))

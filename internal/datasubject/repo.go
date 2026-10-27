@@ -51,9 +51,10 @@ type storeRepo struct {
 	writer *audit.Writer
 }
 
-// newStoreRepo returns the store implementation of repo.
-func newStoreRepo(db *store.DB) *storeRepo {
-	return &storeRepo{db: db, writer: audit.New(db)}
+// newStoreRepo returns the store implementation of repo, recording with
+// writer (a writer of its own when nil).
+func newStoreRepo(db *store.DB, writer *audit.Writer) *storeRepo {
+	return &storeRepo{db: db, writer: audit.OrNew(writer, db)}
 }
 
 func (r *storeRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {

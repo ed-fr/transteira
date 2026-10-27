@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -133,8 +134,10 @@ type env struct {
 	fault   *faultRepo
 	auditor *faultAuditor
 	logs    *syncBuffer
-	m       *Monitor
-	n       int
+	// published receives the events of the monitors.
+	published *events.Recorder
+	m         *Monitor
+	n         int
 	// clock is the time of the monitors, in Unix milliseconds.
 	clock atomic.Int64
 }
@@ -179,7 +182,10 @@ func openDB(t *testing.T, e storetest.Engine) *store.DB {
 
 func newEnv(t *testing.T, e storetest.Engine, withMail bool) *env {
 	t.Helper()
-	ev := &env{t: t, db: openDB(t, e), disk: &disk{total: 1000, free: 1000}, mailer: &fakeMailer{}, logs: &syncBuffer{}}
+	ev := &env{
+		t: t, db: openDB(t, e), disk: &disk{total: 1000, free: 1000}, mailer: &fakeMailer{}, logs: &syncBuffer{},
+		published: &events.Recorder{},
+	}
 	ev.fault = &faultRepo{repo: storeRepo{db: ev.db}}
 	ev.auditor = &faultAuditor{Auditor: audit.New(ev.db)}
 	ev.clock.Store(time.Now().UnixMilli())
@@ -192,7 +198,7 @@ func (ev *env) monitor(withMail bool) *Monitor {
 	ev.t.Helper()
 	opts := Options{
 		DataDir: ev.t.TempDir(), AdminLink: adminLink, Measure: ev.disk.measure, Now: ev.now,
-		Logger: slog.New(slog.NewTextHandler(ev.logs, nil)),
+		Logger: slog.New(slog.NewTextHandler(ev.logs, nil)), Events: ev.published,
 	}
 	if withMail {
 		opts.Mailer, opts.SMTP = ev.mailer, smtp

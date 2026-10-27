@@ -97,6 +97,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
@@ -210,6 +211,9 @@ type Options struct {
 	Now func() time.Time
 	// Logger receives the alerts and the failures (discarded when nil).
 	Logger *slog.Logger
+	// Events receives the antivirus.alert_raised and
+	// antivirus.alert_cleared events (nothing is published when nil).
+	Events events.Publisher
 }
 
 // phase is the phase of the current incident.
@@ -239,6 +243,7 @@ type Monitor struct {
 	grace        time.Duration
 	now          func() time.Time
 	logger       *slog.Logger
+	events       events.Publisher
 	// render renders a system mail template (mail.Render; a field for the
 	// tests).
 	render func(name, lang string, data any) (mail.Message, error)
@@ -307,7 +312,8 @@ func newMonitor(r repo, auditor Auditor, opts Options) (*Monitor, error) {
 	m := &Monitor{
 		repo: r, auditor: auditor, notifier: opts.Notifier, tenantMailer: opts.TenantMailer,
 		systemMailer: opts.SystemMailer, smtp: opts.SMTP, pinger: opts.Pinger, adminLink: opts.AdminLink,
-		grace: opts.Grace, now: opts.Now, logger: opts.Logger, render: mail.Render, wake: make(chan struct{}, 1),
+		grace: opts.Grace, now: opts.Now, logger: opts.Logger, events: events.OrDiscard(opts.Events),
+		render: mail.Render, wake: make(chan struct{}, 1),
 	}
 	if m.grace <= 0 {
 		m.grace = DefaultGrace
@@ -474,6 +480,8 @@ func (m *Monitor) end(ctx context.Context, at time.Time, why string) {
 		m.logger.InfoContext(ctx, "antivirus alert cleared: "+why,
 			slog.Time("outage_since", m.curSince), slog.Duration("outage", outage))
 		m.record(ctx, audit.ActionAntivirusAlertCleared, map[string]any{"outageSeconds": seconds(outage)})
+		m.publish(events.AntivirusAlertCleared, events.SeverityInfo,
+			map[string]float64{"outageSeconds": float64(seconds(outage))})
 	} else {
 		m.logger.InfoContext(ctx, "antivirus outage ended before the alert: "+why,
 			slog.Duration("outage", outage), slog.Duration("grace", m.grace))
@@ -507,6 +515,13 @@ func (m *Monitor) record(ctx context.Context, action audit.Action, details map[s
 	}
 }
 
+// publish publishes the system event t of severity sev with counts.
+func (m *Monitor) publish(t events.Type, sev events.Severity, counts map[string]float64) {
+	m.events.Publish(events.Event{
+		Type: t, Severity: sev, OccurredAt: m.now(), Counts: counts, AdminPath: events.AdminPathSystem,
+	})
+}
+
 // tenantBatch is the mails of the alert to the administrators of one
 // tenant.
 type tenantBatch struct {
@@ -521,12 +536,15 @@ func (m *Monitor) raise(ctx context.Context, now time.Time, waiting []store.Tena
 	outage := now.Sub(m.curSince)
 	attrs := []any{slog.Time("outage_since", m.curSince), slog.Duration("outage", outage)}
 	details := map[string]any{"outageSeconds": seconds(outage)}
+	counts := map[string]float64{"outageSeconds": float64(seconds(outage))}
 	if known {
 		attrs = append(attrs, slog.Int("waiting_transfers", total(waiting)), slog.Int("tenants", len(waiting)))
 		details["waitingTransfers"], details["tenants"] = total(waiting), len(waiting)
+		counts["waitingTransfers"] = float64(total(waiting))
 	}
 	m.logger.WarnContext(ctx, "antivirus alert: clamd has been unreachable beyond the grace period, deposits stay in analysis", attrs...)
 	m.record(ctx, audit.ActionAntivirusAlertRaised, details)
+	m.publish(events.AntivirusAlertRaised, events.SeverityCritical, counts)
 	if m.systemMailer == nil {
 		m.logger.WarnContext(ctx, "antivirus alert not mailed to the super admins: the system SMTP server (TT_SYSTEM_SMTP_HOST) is not configured")
 	}

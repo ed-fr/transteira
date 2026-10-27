@@ -11,6 +11,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
@@ -62,7 +63,7 @@ func (w *Worker) process(ctx context.Context, k key) time.Duration {
 		if final(f.ScanStatus) {
 			continue
 		}
-		switch outcome, retry := w.scanFile(ctx, k, f); outcome {
+		switch outcome, retry := w.scanFile(ctx, k, f, d.SenderEmail); outcome {
 		case fileRetry:
 			return retry
 		case fileStop:
@@ -93,9 +94,9 @@ func (w *Worker) failed(ctx context.Context, k key, op string, err error) time.D
 	return retry
 }
 
-// scanFile analyzes the file f of the transfer k and records its final
-// status.
-func (w *Worker) scanFile(ctx context.Context, k key, f store.TransferFile) (fileOutcome, time.Duration) {
+// scanFile analyzes the file f of the transfer k, sent by sender, and
+// records its final status.
+func (w *Worker) scanFile(ctx context.Context, k key, f store.TransferFile, sender string) (fileOutcome, time.Duration) {
 	if err := w.repo.setScanning(ctx, k.tid, f.ID); err != nil {
 		return w.dbFailure(ctx, k, "set file scanning", err)
 	}
@@ -109,7 +110,7 @@ func (w *Worker) scanFile(ctx context.Context, k key, f store.TransferFile) (fil
 	if err == nil {
 		status, signature, verr := w.verdict(ctx, res)
 		if verr == nil {
-			return w.record(wctx, k, f, status, signature)
+			return w.record(wctx, k, f, status, signature, sender)
 		}
 		err = verr
 	}
@@ -197,14 +198,15 @@ func (w *Worker) fileError(ctx context.Context, k key, f store.TransferFile, err
 	if n < w.opts.MaxFileErrors {
 		return fileRetry, retry()
 	}
-	return w.record(ctx, k, f, store.ScanError, "")
+	return w.record(ctx, k, f, store.ScanError, "", "")
 }
 
-// record writes the final status of the file f. A signature the store
+// record writes the final status of the file f, sent by sender ("" when
+// the status is not infected). A signature the store
 // refuses is dropped rather than losing the verdict. Any other refusal of a
 // malformed or conflicting result is not retried: it is logged and the
 // conclusion, which reloads the transfer, decides.
-func (w *Worker) record(ctx context.Context, k key, f store.TransferFile, status store.ScanStatus, signature string) (fileOutcome, time.Duration) {
+func (w *Worker) record(ctx context.Context, k key, f store.TransferFile, status store.ScanStatus, signature, sender string) (fileOutcome, time.Duration) {
 	err := w.repo.setResult(ctx, k.tid, f.ID, status, signature, w.now())
 	if errors.Is(err, store.ErrInvalid) && signature != "" {
 		w.log(ctx, slog.LevelWarn, "signature refused by the store, recorded without it", k, slog.String("file", f.ID))
@@ -218,7 +220,7 @@ func (w *Worker) record(ctx context.Context, k key, f store.TransferFile, status
 	}
 	w.forgetRefusals(f.ID)
 	w.log(ctx, slog.LevelInfo, "file analyzed", k, slog.String("file", f.ID), slog.String("status", string(status)))
-	w.recorded(ctx, k, f, status, signature)
+	w.recorded(ctx, k, f, status, signature, sender)
 	return fileDone, 0
 }
 
@@ -229,9 +231,11 @@ var notScannedReasons = map[store.ScanStatus]string{
 }
 
 // recorded follows the final status of the file f once committed: an
-// infected file counts a virus detection and records file.infected, a file
-// accepted without analysis records file.not_scanned.
-func (w *Worker) recorded(ctx context.Context, k key, f store.TransferFile, status store.ScanStatus, signature string) {
+// infected file counts a virus detection, records file.infected and
+// publishes virus.detected (with the address of sender; one event per
+// infected file, counts files = 1), a file accepted without analysis
+// records file.not_scanned.
+func (w *Worker) recorded(ctx context.Context, k key, f store.TransferFile, status store.ScanStatus, signature, sender string) {
 	ev := audit.Event{
 		ActorKind: store.ActorSystem, Actor: SystemActor, ObjectKind: audit.ObjectFile, ObjectID: f.ID,
 		Details: map[string]any{"transferId": k.id},
@@ -245,6 +249,11 @@ func (w *Worker) recorded(ctx context.Context, k key, f store.TransferFile, stat
 		if signature != "" {
 			ev.Details["signature"] = signature
 		}
+		w.events.Publish(events.Event{
+			Type: events.VirusDetected, Severity: events.SeverityCritical, OccurredAt: w.now(),
+			TenantID: string(k.tid), Counts: map[string]float64{"files": 1},
+			Addresses: &events.Addresses{Sender: sender}, AdminPath: events.AdminPathTenantAudit(string(k.tid)),
+		})
 	case ok:
 		ev.Action = audit.ActionFileNotScanned
 		ev.Details["reason"] = reason

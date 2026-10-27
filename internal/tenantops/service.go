@@ -85,6 +85,10 @@ type Options struct {
 	BusyRetries    int
 	BusyDelay      time.Duration
 	BusyRetryAfter time.Duration
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Service is the operation service of the tenants. It is safe for
@@ -112,7 +116,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo:     newStoreRepo(db, opts.Vault),
+		repo:     newStoreRepo(db, opts.Vault, opts.Audit),
 		eraser:   opts.Eraser,
 		notifier: opts.Notifier,
 		mailer:   opts.Mailer,

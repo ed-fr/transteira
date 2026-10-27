@@ -89,6 +89,10 @@ type Options struct {
 	// MaxTracked bounds the tokens remembered for that throttling; <= 0
 	// means DefaultMaxTracked.
 	MaxTracked int
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Service manages and authenticates the API tokens. It is safe for
@@ -114,7 +118,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 	if db == nil {
 		return nil, errMissingDB
 	}
-	return newService(&storeRepo{db: db, writer: audit.New(db)}, opts), nil
+	return newService(&storeRepo{db: db, writer: audit.OrNew(opts.Audit, db)}, opts), nil
 }
 
 // newService returns the service over r.

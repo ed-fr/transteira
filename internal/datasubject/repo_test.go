@@ -12,7 +12,7 @@ func TestStoreRepoEdges(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
 		ctx := context.Background()
-		r := newStoreRepo(ev.db)
+		r := newStoreRepo(ev.db, nil)
 		bad := tenant.ID("bad tenant")
 
 		if err := r.deleteDepositRows(ctx, bad, carol); err == nil {

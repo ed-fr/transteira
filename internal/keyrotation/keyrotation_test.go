@@ -12,6 +12,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/store"
@@ -42,6 +43,10 @@ func TestStartRotatesAndAudits(t *testing.T) {
 			started[0].details["to"] != ev.k2.ID() || started[0].details["total"] != float64(5) ||
 			started[0].details["resumed"] != false {
 			t.Errorf("started events = %+v", started)
+		}
+		if pub := ev.published.Events(); len(pub) != 1 || pub[0].Type != events.MasterKeyRotationCompleted ||
+			pub[0].Counts["totalKeys"] != 5 || pub[0].Counts["rewrappedKeys"] != 5 {
+			t.Errorf("published %+v", pub)
 		}
 		completed := ev.events(t, audit.ActionMasterKeyRotationCompleted)
 		if len(completed) != 1 || completed[0].ActorKind != store.ActorSystem || completed[0].Actor != SystemActor ||
@@ -379,6 +384,23 @@ func TestWorkerOutcomes(t *testing.T) {
 				case action == tt.wantAction && tt.wantReason != "" && got[0].details["reason"] != tt.wantReason:
 					t.Errorf("%s reason = %v", action, got[0].details["reason"])
 				}
+			}
+			// The event published follows the audit event.
+			published := ev.published.Events()
+			wantType, wantSeverity := map[audit.Action]events.Type{
+				audit.ActionMasterKeyRotationCompleted: events.MasterKeyRotationCompleted,
+				audit.ActionMasterKeyRotationFailed:    events.MasterKeyRotationFailed,
+			}[tt.wantAction], events.SeverityCritical
+			if tt.wantAction == audit.ActionMasterKeyRotationCompleted {
+				wantSeverity = events.SeverityInfo
+			}
+			switch {
+			case tt.wantAction == "" && len(published) != 0:
+				t.Errorf("published %+v", published)
+			case tt.wantAction != "" && (len(published) != 1 || published[0].Type != wantType ||
+				published[0].Severity != wantSeverity || published[0].AdminPath != events.AdminPathMasterKey ||
+				!published[0].OccurredAt.Equal(testNow) || published[0].TenantID != ""):
+				t.Errorf("published %+v", published)
 			}
 		})
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/masterkey"
@@ -453,8 +454,10 @@ type env struct {
 	logs    *logCapture
 	f       *faults
 	scanner *testScanner
-	w       *Worker
-	a, b, c *tenant.Tenant
+	// published receives the events of the worker.
+	published *events.Recorder
+	w         *Worker
+	a, b, c   *tenant.Tenant
 }
 
 // newEnv builds an env on engine e; opts tunes the worker (short backoffs by
@@ -483,6 +486,7 @@ func newEnv(t *testing.T, e storetest.Engine, opts Options) *env {
 	ev := &env{
 		t: t, db: db, vault: vault, files: files, uploads: upload.New(db, vault, files, upload.Options{}),
 		clamd: antivirustest.New(t), queue: &fakeQueue{}, logs: &logCapture{}, f: newFaults(),
+		published: &events.Recorder{},
 	}
 	ev.client = antivirus.NewClient(ev.clamd.Network(), ev.clamd.Addr(),
 		antivirus.WithScanTimeout(10*time.Second), antivirus.WithIdleTimeout(5*time.Second))
@@ -501,7 +505,7 @@ func newEnv(t *testing.T, e storetest.Engine, opts Options) *env {
 	ev.w = New(Deps{
 		DB: db, Vault: faultVault{inner: vault, f: ev.f}, Files: faultFiles{inner: files, f: ev.f},
 		Scanner: ev.scanner, Remover: faultRemover{inner: ev.uploads, f: ev.f},
-		Notifier: faultNotifier{inner: notifier, f: ev.f}, Mail: ev.queue,
+		Notifier: faultNotifier{inner: notifier, f: ev.f}, Mail: ev.queue, Events: ev.published,
 	}, opts)
 	ev.w.repo = faultRepo{inner: ev.w.repo, f: ev.f}
 	t.Cleanup(func() {

@@ -89,8 +89,10 @@ func assertRLSViolation(t *testing.T, what string, err error) {
 // TestRLSRoleCannotBypass verifies the premise of every RLS test: the
 // runtime role is neither superuser nor BYPASSRLS nor owner, and every
 // tenant-scoped table (any table with a tenant_id column, plus tenants)
-// has row-level security enabled, forced and at least one policy. New
-// tables are covered automatically.
+// and every system table (the list checked by DB.Verify, including
+// system_settings and system_webhooks) has row-level security enabled,
+// forced and at least one policy. New tenant tables are covered
+// automatically.
 func TestRLSRoleCannotBypass(t *testing.T) {
 	t.Parallel()
 	_, raw := pgFixture(t)
@@ -132,7 +134,9 @@ func TestRLSRoleCannotBypass(t *testing.T) {
 		FROM pg_class c
 		JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
-		  AND (c.relname = 'tenants' OR EXISTS (
+		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
+		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures',
+		        'system_settings', 'system_webhooks') OR EXISTS (
 		        SELECT 1 FROM pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		ORDER BY c.relname`)
@@ -176,6 +180,10 @@ func TestRLSOwnerCannotDisablePolicies(t *testing.T) {
 		"system_secrets", "admins", "admin_tenants", "admin_sessions", "admin_recovery_codes", "admin_activations",
 		"admin_login_failures", "audit_events", "tenant_email_templates", "tenant_legal_documents", "tenant_daily_stats",
 		"tenant_quota_alerts", "api_tokens", "system_settings",
+		// V1.1 (migrations 0014 to 0020).
+		"recipient_links", "recipient_downloads", "confidentiality_levels", "recipient_domain_rules",
+		"tenant_abuse_settings", "abuse_alerts", "abuse_reports", "webhooks", "system_webhooks",
+		"access_link_requests", "sender_access_links", "sender_sessions",
 	} {
 		stmts := []string{
 			`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`,

@@ -72,6 +72,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/store"
@@ -171,6 +172,9 @@ type Options struct {
 	Now func() time.Time
 	// Logger receives the failures (discarded when nil).
 	Logger *slog.Logger
+	// Events receives the quota.warning and quota.reached events (nothing
+	// is published when nil).
+	Events events.Publisher
 }
 
 // Monitor evaluates the quota alert level of the tenants and sends the
@@ -186,6 +190,7 @@ type Monitor struct {
 	maxPending    int
 	now           func() time.Time
 	logger        *slog.Logger
+	events        events.Publisher
 
 	// mu guards pending; wake (capacity 1) signals that it is not empty.
 	mu      sync.Mutex
@@ -221,6 +226,7 @@ func newMonitor(r repo, notifier Notifier, mailer Mailer, auditor Auditor, opts 
 	m := &Monitor{
 		repo: r, notifier: notifier, mailer: mailer, auditor: auditor, adminLink: opts.AdminLink,
 		sweepInterval: opts.SweepInterval, maxPending: opts.MaxPending, now: opts.Now, logger: opts.Logger,
+		events:  events.OrDiscard(opts.Events),
 		pending: map[tenant.ID]bool{}, wake: make(chan struct{}, 1),
 	}
 	if m.sweepInterval <= 0 {
@@ -367,9 +373,9 @@ func (m *Monitor) evaluate(ctx context.Context, t *tenant.Tenant, used int64, re
 // alert records the audit event of the level reached by t and mails its
 // administrators.
 func (m *Monitor) alert(ctx context.Context, t *tenant.Tenant, level notify.QuotaLevel, used int64) {
-	action := audit.ActionQuotaWarning
+	action, typ, sev, threshold := audit.ActionQuotaWarning, events.QuotaWarning, events.SeverityWarning, warnPercent
 	if level == notify.QuotaReached {
-		action = audit.ActionQuotaReached
+		action, typ, sev, threshold = audit.ActionQuotaReached, events.QuotaReached, events.SeverityCritical, fullPercent
 	}
 	quota := t.StorageQuotaBytes
 	ev := audit.Event{
@@ -380,6 +386,11 @@ func (m *Monitor) alert(ctx context.Context, t *tenant.Tenant, level notify.Quot
 	if err := m.auditor.RecordScoped(ctx, t.ID, ev); err != nil {
 		m.fail(ctx, t.ID, "record the audit event", err)
 	}
+	m.events.Publish(events.Event{
+		Type: typ, Severity: sev, OccurredAt: m.now(), TenantID: string(t.ID),
+		AdminPath: events.AdminPathTenantAudit(string(t.ID)),
+		Counts:    map[string]float64{"usedRatio": float64(used) / float64(quota), "threshold": float64(threshold) / 100},
+	})
 	contacts, err := m.contacts(ctx, t.ID)
 	if err != nil {
 		m.fail(ctx, t.ID, "list the administrators to notify", err)

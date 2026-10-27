@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -173,6 +174,10 @@ type Deps struct {
 	// Holder is the antivirus worker, held by [Sweeper.EraseTransfer]; nil
 	// when there is none (tests, tools): nothing is held.
 	Holder Holder
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Options tunes a [Sweeper]. Zero values select the defaults.
@@ -316,7 +321,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		holder = noHolder{}
 	}
 	s := &Sweeper{
-		repo:    storeRepo{db: deps.DB, vault: deps.Vault},
+		repo:    storeRepo{db: deps.DB, vault: deps.Vault, writer: deps.Audit},
 		remover: deps.Remover, files: deps.Files, holder: holder, fs: osFS(),
 		now: opts.Now, logger: opts.Logger,
 		endedRetention:       orDefault(opts.EndedRetention, EndedRetention),

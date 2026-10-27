@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"math"
 	"time"
 
@@ -20,6 +21,12 @@ const reasonUsedBytesAll = "quota sweep and global statistics: storage used by e
 // r.transfer_id = t.id); on PostgreSQL the transfer_recipients policy also
 // restricts it to the tenant of the scope.
 const reasonTransferAdminList = "administrator list of the transfers: filter on a recipient address of the same tenant and transfer"
+
+// reasonRecipientDeleteLinkKeys is the review of qRecipientDelete: the
+// tenant slot filters transfer_recipients, and the subquery reads the link
+// of the same tenant, transfer and recipient only; on PostgreSQL the
+// recipient_links policy also restricts it to the tenant.
+const reasonRecipientDeleteLinkKeys = "recipient removal: refuse while the link of the same tenant recipient keeps its sealed token"
 
 // Statements of the administrator view of the transfers.
 var (
@@ -46,8 +53,16 @@ var (
 		`SELECT id FROM transfers WHERE tenant_id = ? AND invitation_id = ? ORDER BY id`)
 	qRecipientTransferIDs = tenantQuery(
 		`SELECT transfer_id FROM transfer_recipients WHERE tenant_id = ? AND email = ? ORDER BY transfer_id`)
-	qRecipientDelete = tenantQuery(
-		`DELETE FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? AND email = ?`)
+	// qRecipientDelete only deletes a recipient whose link, if any, no
+	// longer keeps its sealed token (T-110): the cascade would otherwise
+	// drop the link row and leave its key behind.
+	qRecipientDelete = reviewedTenantQuery(
+		`DELETE FROM transfer_recipients AS r WHERE r.tenant_id = ? AND r.transfer_id = ? AND r.email = ?
+		AND NOT EXISTS (SELECT 1 FROM recipient_links l WHERE l.tenant_id = r.tenant_id
+			AND l.transfer_id = r.transfer_id AND l.position = r.position AND l.token_key_id IS NOT NULL)`,
+		reasonRecipientDeleteLinkKeys)
+	qRecipientCountEmail = tenantQuery(
+		`SELECT count(*) FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? AND email = ?`)
 	qRecipientCount = tenantQuery(
 		`SELECT count(*) FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ?`)
 	// qTransferUsedBytesAll is qTransferUsedBytes for every tenant at once.
@@ -216,9 +231,11 @@ func (r *Transfers) IDsByInvitation(ctx context.Context, tid tenant.ID, invID st
 // recipients of the transfer trfID of the tenant tx is bound to, inside tx
 // (GDPR erasure of a recipient of a transfer that has others). The other
 // recipients keep their positions. It returns ErrInvalid for a malformed
-// address and ErrNotFound when the address is not a recipient of the
-// transfer (or the transfer does not exist or belongs to another tenant).
-// After an error, the caller must abort the transaction.
+// address, ErrNotFound when the address is not a recipient of the
+// transfer (or the transfer does not exist or belongs to another tenant),
+// and ErrKeysRemain when the recipient link still keeps its sealed token,
+// which must be destroyed first in the same transaction
+// ([WrappedKeys.DeleteTx]). After an error, the caller must abort the transaction.
 func (r *Transfers) RemoveRecipientTx(ctx context.Context, tx *ScopedTx, trfID, email string) error {
 	email, err := NormalizeEmail(email)
 	if err != nil {
@@ -227,6 +244,15 @@ func (r *Transfers) RemoveRecipientTx(ctx context.Context, tx *ScopedTx, trfID, 
 	res, err := tx.Exec(ctx, qRecipientDelete, trfID, email)
 	if err == nil {
 		err = expectOne(res)
+	}
+	if errors.Is(err, ErrNotFound) {
+		var n int
+		if err = tx.QueryRow(ctx, qRecipientCountEmail, trfID, email).Scan(&n); err == nil {
+			err = ErrNotFound
+			if n > 0 {
+				err = ErrKeysRemain
+			}
+		}
 	}
 	if err != nil {
 		return wrap("remove recipient", err)

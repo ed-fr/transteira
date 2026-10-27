@@ -33,6 +33,7 @@ import (
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/store"
@@ -96,6 +97,10 @@ type Options struct {
 	// Logger receives the outcome of the background rotations; nil
 	// discards.
 	Logger *slog.Logger
+	// Events receives the master_key.rotation_completed and
+	// master_key.rotation_failed events of the background rotations; nil
+	// publishes nothing.
+	Events events.Publisher
 }
 
 // Rotation is a master key rotation, as the OpenAPI KeyRotation schema
@@ -168,6 +173,7 @@ type Service struct {
 	keys    *masterkey.Keyring
 	confirm Confirmer
 	audit   AuditRecorder
+	events  events.Publisher
 	logger  *slog.Logger
 	opts    masterkey.Options
 
@@ -198,8 +204,9 @@ func New(db *store.DB, keys *masterkey.Keyring, confirm Confirmer, rec AuditReco
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
-		db: db, keys: keys, confirm: confirm, audit: rec, logger: opts.Logger, opts: opts.Rotation,
-		ctx: ctx, cancel: cancel, start: masterkey.StartRotation, rotate: masterkey.Rotate,
+		db: db, keys: keys, confirm: confirm, audit: rec, events: events.OrDiscard(opts.Events), logger: opts.Logger,
+		opts: opts.Rotation,
+		ctx:  ctx, cancel: cancel, start: masterkey.StartRotation, rotate: masterkey.Rotate,
 	}
 }
 
@@ -384,6 +391,7 @@ func (s *Service) work(rot store.Rotation, done chan struct{}) {
 			s.logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(ev.Action)),
 				slog.String("rotation", final.ID), slog.String("error", rerr.Error()))
 		}
+		s.publish(final, err == nil)
 	}
 	switch {
 	case err == nil:
@@ -402,6 +410,19 @@ func (s *Service) work(rot store.Rotation, done chan struct{}) {
 		s.logger.ErrorContext(ctx, "master key rotation stopped: it stays running and can be resumed",
 			append(attrs, slog.String("error", err.Error()))...)
 	}
+}
+
+// publish publishes the outcome of rot: master_key.rotation_completed
+// when completed, master_key.rotation_failed otherwise.
+func (s *Service) publish(rot store.Rotation, completed bool) {
+	typ, sev := events.MasterKeyRotationFailed, events.SeverityCritical
+	if completed {
+		typ, sev = events.MasterKeyRotationCompleted, events.SeverityInfo
+	}
+	s.events.Publish(events.Event{
+		Type: typ, Severity: sev, OccurredAt: s.opts.Now(), AdminPath: events.AdminPathMasterKey,
+		Counts: map[string]float64{"totalKeys": float64(rot.TotalKeys), "rewrappedKeys": float64(rot.RewrappedKeys)},
+	})
 }
 
 // finishedElsewhere handles a rotation that stopped running under the

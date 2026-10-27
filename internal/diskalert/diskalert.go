@@ -65,6 +65,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/diskusage"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
@@ -155,6 +156,9 @@ type Options struct {
 	Now func() time.Time
 	// Logger receives the alerts and the failures (discarded when nil).
 	Logger *slog.Logger
+	// Events receives the disk.alert_raised and disk.alert_cleared events
+	// (nothing is published when nil).
+	Events events.Publisher
 }
 
 // Monitor evaluates the disk alert. Its [Monitor.Check] method never
@@ -170,6 +174,7 @@ type Monitor struct {
 	measure   func(path string) (total, free uint64, err error)
 	now       func() time.Time
 	logger    *slog.Logger
+	events    events.Publisher
 	// render renders a mail template (mail.Render; a field for the tests).
 	render func(name, lang string, data any) (mail.Message, error)
 
@@ -215,7 +220,7 @@ func newMonitor(r repo, auditor Auditor, opts Options) (*Monitor, error) {
 	m := &Monitor{
 		repo: r, auditor: auditor, mailer: opts.Mailer, smtp: opts.SMTP, dataDir: opts.DataDir,
 		adminLink: opts.AdminLink, interval: opts.Interval, measure: opts.Measure, now: opts.Now,
-		logger: opts.Logger, render: mail.Render, wake: make(chan struct{}, 1),
+		logger: opts.Logger, events: events.OrDiscard(opts.Events), render: mail.Render, wake: make(chan struct{}, 1),
 	}
 	if m.interval <= 0 {
 		m.interval = DefaultInterval
@@ -315,6 +320,7 @@ func (m *Monitor) Evaluate(ctx context.Context) {
 	m.logger.InfoContext(ctx, "disk alert cleared: the disk usage fell below the threshold",
 		slog.Float64("used_percent", f.usedPercent()), slog.Float64("threshold_percent", f.thresholdPercent()))
 	m.record(ctx, audit.ActionDiskAlertCleared, f)
+	m.publish(events.DiskAlertCleared, events.SeverityInfo, f)
 }
 
 // measured logs the measure failures once per change and reports whether
@@ -362,12 +368,22 @@ func (m *Monitor) record(ctx context.Context, action audit.Action, f figures) {
 	}
 }
 
+// publish publishes the system event t of severity sev with the figures
+// f: the used ratio and the threshold, both between 0 and 1.
+func (m *Monitor) publish(t events.Type, sev events.Severity, f figures) {
+	m.events.Publish(events.Event{
+		Type: t, Severity: sev, OccurredAt: m.now(), AdminPath: events.AdminPathSystem,
+		Counts: map[string]float64{"usedRatio": f.ratio, "threshold": float64(f.thresholdBP) / basisPoints},
+	})
+}
+
 // raise logs, records and mails a raised alert.
 func (m *Monitor) raise(ctx context.Context, f figures, row store.SystemSettingsRow) {
 	m.logger.WarnContext(ctx, "disk alert: the disk holding the data directory reached the alert threshold",
 		slog.Float64("used_percent", f.usedPercent()), slog.Float64("threshold_percent", f.thresholdPercent()),
 		slog.Uint64("used_bytes", f.used), slog.Uint64("total_bytes", f.total))
 	m.record(ctx, audit.ActionDiskAlertRaised, f)
+	m.publish(events.DiskAlertRaised, events.SeverityCritical, f)
 	if m.mailer == nil {
 		m.logger.WarnContext(ctx, "disk alert not mailed: the system SMTP server (TT_SYSTEM_SMTP_HOST) is not configured")
 		return

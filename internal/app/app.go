@@ -36,6 +36,7 @@ import (
 	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/diskalert"
 	"github.com/ed-fr/transteira/internal/download"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
 	"github.com/ed-fr/transteira/internal/id"
@@ -293,7 +294,25 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			return fmt.Errorf("app: create directory %s: %w", dir, err)
 		}
 	}
-	secLog, err := securitylog.Open(filepath.Join(cfg.LogDir, SecurityLogName),
+	// The event bus carries what the components decide (alerts, audit and
+	// security log lines) to the outputs that subscribe to it. It is
+	// closed in the second close stage, once the workers that publish have
+	// stopped; an event published later (a handler still draining) is
+	// dropped.
+	bus := events.New(events.Options{Logger: logger})
+	if err := bus.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the event bus: %w", err)
+	}
+	// Closes the bus when the start-up fails before closeStages is
+	// deferred; on a normal shutdown the second close stage has already
+	// closed it and this Close returns at once (it is idempotent), bounded
+	// anyway so that a stuck subscriber never blocks the exit.
+	defer func() {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), FinalCloseTimeout)
+		defer cancel()
+		_ = bus.Close(cctx)
+	}()
+	secLog, err := securitylog.Open(filepath.Join(cfg.LogDir, SecurityLogName), securitylog.WithPublisher(bus),
 		securitylog.WithErrorHandler(func(err error) {
 			logger.Error("security log reopen failed", slog.String("error", err.Error()))
 		}))
@@ -306,15 +325,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	stopSIGHUP := secLog.HandleSIGHUP(ctx)
 	defer stopSIGHUP()
 
-	// One writer records the audit events of the whole application: the
-	// maintenance mode, deposits, transfers, antivirus, quota and disk
-	// alerts, settings and key rotation.
-	auditLog := audit.New(db)
+	// One writer records the audit events of the whole application, and
+	// publishes them on the bus once committed: the maintenance mode,
+	// deposits, transfers, downloads, antivirus, quota and disk alerts,
+	// settings, key rotation, administrators, tenants, API tokens and
+	// data subject rights.
+	auditLog := audit.New(db, audit.WithPublisher(bus))
 
 	// The maintenance mode: TT_MAINTENANCE forces it, otherwise the choice
 	// stored by the super admin applies.
 	maint, err := maintenance.New(ctx, db.SystemSettings(), auditLog,
-		maintenance.Options{Forced: cfg.Maintenance, Start: processStart})
+		maintenance.Options{Forced: cfg.Maintenance, Start: processStart, Events: bus})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -373,25 +394,27 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// P10): the super admins by system mail, the administrators of the
 	// tenants with transfers waiting through the tenant queue.
 	avAlerts, err := avalert.New(db, auditLog, antivirusAlertOptions(cfg, &o, sysMail, avalert.Options{
-		Notifier: notifier, TenantMailer: opsMails, Pinger: clamd, Logger: logger,
+		Notifier: notifier, TenantMailer: opsMails, Pinger: clamd, Logger: logger, Events: bus,
 	}))
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
 	worker := scan.New(scan.Deps{
 		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
-		Audit: auditLog, Usage: usageCounts, Outage: avAlerts,
+		Audit: auditLog, Usage: usageCounts, Outage: avAlerts, Events: bus,
 	}, scanOptions(cfg, &o, logger))
 	downloads := download.New(download.Deps{
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
-		SecurityLog: secLog, Usage: usageCounts,
+		SecurityLog: secLog, Usage: usageCounts, Audit: auditLog,
 	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger})
 	// The sweeper holds the antivirus worker before erasing a transfer, so
 	// that a transfer deleted while it is scanned is never made available.
-	sweeper := lifecycle.New(lifecycle.Deps{DB: db, Vault: vault, Remover: uploads, Files: files, Holder: worker},
+	sweeper := lifecycle.New(lifecycle.Deps{
+		DB: db, Vault: vault, Remover: uploads, Files: files, Holder: worker, Audit: auditLog,
+	},
 		lifecycleOptions(cfg, &o, logger))
 	admins, err := newAdminService(ctx, cfg, db, adminDeps{
-		keys: keys, vault: vault, hasher: passwords, seclog: secLog,
+		keys: keys, vault: vault, hasher: passwords, seclog: secLog, audit: auditLog,
 	}, logger)
 	if err != nil {
 		return err
@@ -401,18 +424,25 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// closeStages, so it runs after it but before the database and the keys
 	// are closed: the worker re-wraps keys with the keyring, so the keys are
 	// never destroyed under it, even past the stage budget.
-	rotations := keyrotation.New(db, keys, admins, auditLog, rotationOptions(&o, logger))
+	// The outcome event of a rotation still stopping when waitRotation
+	// returns, after closeStages has closed the bus, is dropped (its audit
+	// event is still recorded).
+	rotationOpts := rotationOptions(&o, logger)
+	rotationOpts.Events = bus
+	rotations := keyrotation.New(db, keys, admins, auditLog, rotationOpts)
 	defer waitRotation(ctx, rotations, logger)
 	if err := rotations.WarnInterrupted(ctx); err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
 	quotas, err := quota.New(db, notifier, opsMails, auditLog, quota.Options{
-		AdminLink: adminBaseURL(cfg) + "/admin", Logger: logger,
+		AdminLink: adminBaseURL(cfg) + "/admin", Logger: logger, Events: bus,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	diskAlerts, err := diskalert.New(db, auditLog, diskAlertOptions(cfg, &o, sysMail, logger))
+	diskOpts := diskAlertOptions(cfg, &o, sysMail, logger)
+	diskOpts.Events = bus
+	diskAlerts, err := diskalert.New(db, auditLog, diskOpts)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -423,7 +453,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// while the database is still open.
 	defer closeStages(ctx, logger,
 		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations}},
-		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts}})
+		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, bus}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
 		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
@@ -434,7 +464,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	tenants, err := tenantadmin.New(db, tenantadmin.Options{
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
-		Logger: logger,
+		Logger: logger, Audit: auditLog,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -466,12 +496,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 	operations, err := tenantops.New(db, tenantops.Options{
-		Vault: vault, Eraser: sweeper, Notifier: notifier, Mailer: opsMails, Logger: logger,
+		Vault: vault, Eraser: sweeper, Notifier: notifier, Mailer: opsMails, Logger: logger, Audit: auditLog,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	subjects, err := datasubject.New(db, datasubject.Options{Eraser: sweeper, Holder: worker, Logger: logger})
+	subjects, err := datasubject.New(db, datasubject.Options{Eraser: sweeper, Holder: worker, Logger: logger, Audit: auditLog})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -484,7 +514,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 
 	// apiTokens authenticates the API tokens of the deposit operations
 	// (httpserver.Deps.APITokens) and serves their administration.
-	apiTokens, err := apitoken.New(db, apitoken.Options{Logger: logger})
+	apiTokens, err := apitoken.New(db, apitoken.Options{Logger: logger, Audit: auditLog})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -603,6 +633,7 @@ type adminDeps struct {
 	vault  adminauth.Vault
 	hasher adminauth.PasswordHasher
 	seclog adminauth.SecurityLog
+	audit  *audit.Writer
 }
 
 // newAdminService builds the administrator authentication service, with
@@ -641,7 +672,7 @@ func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d ad
 	}
 	svc, err := adminauth.New(db, d.keys, d.vault, d.hasher, d.seclog, adminauth.Options{
 		IdleTimeout: cfg.AdminSessionIdleTimeout, MaxAge: cfg.AdminSessionMaxAge,
-		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger,
+		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger, Audit: d.audit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)

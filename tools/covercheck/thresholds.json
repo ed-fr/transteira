@@ -24,6 +24,7 @@
     "internal/diskalert": 100,
     "internal/diskusage": 100,
     "internal/download": 100,
+    "internal/events": 100,
     "internal/filename": 100,
     "internal/httpserver": 100,
     "internal/httpserver/middleware": 100,

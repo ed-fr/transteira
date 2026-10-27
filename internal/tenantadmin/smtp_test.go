@@ -177,7 +177,7 @@ func TestSMTPSettingsValidation(t *testing.T) {
 func TestStoreRepoPutSMTPFaults(t *testing.T) {
 	ctx := context.Background()
 	ev := newEnv(t, storetest.SQLite(t))
-	r := newStoreRepo(ev.db, ev.vault)
+	r := newStoreRepo(ev.db, ev.vault, nil)
 	cfg := store.SMTPConfig{Host: "h", Port: 25, Security: store.SMTPSecuritySTARTTLS, Username: "u", FromAddress: "a@example.com"}
 	mustNoErr(t, "seed", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{password: []byte("pw")}))
 
@@ -203,7 +203,7 @@ func TestStoreRepoPutSMTPFaults(t *testing.T) {
 		return c, err
 	}
 	wantErr(t, "concurrent change", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{keep: true}), errPasswordRequired)
-	r = newStoreRepo(ev.db, ev.vault)
+	r = newStoreRepo(ev.db, ev.vault, nil)
 
 	if err := r.putSMTP(ctx, "bad", cfg, passwordUpdate{}); err == nil {
 		t.Error("malformed tenant accepted")
@@ -213,13 +213,13 @@ func TestStoreRepoPutSMTPFaults(t *testing.T) {
 	}
 	r.getSMTPTx = func(context.Context, *store.ScopedTx) (store.SMTPConfig, error) { return store.SMTPConfig{}, errBoom }
 	wantErr(t, "get", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{keep: true}), errBoom)
-	r = newStoreRepo(ev.db, ev.vault)
+	r = newStoreRepo(ev.db, ev.vault, nil)
 	r.sealTx = func(context.Context, *store.ScopedTx, []byte) (string, error) { return "", errBoom }
 	wantErr(t, "seal", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{password: []byte("x")}), errBoom)
-	r = newStoreRepo(ev.db, ev.vault)
+	r = newStoreRepo(ev.db, ev.vault, nil)
 	r.deleteKeyTx = func(context.Context, *store.ScopedTx, string) error { return errBoom }
 	wantErr(t, "delete old", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{password: []byte("x")}), errBoom)
-	r = newStoreRepo(ev.db, ev.vault)
+	r = newStoreRepo(ev.db, ev.vault, nil)
 	cfg.Host = "bad host"
 	wantErr(t, "put", r.putSMTP(ctx, ev.a.ID, cfg, passwordUpdate{}), store.ErrInvalid)
 	r.usedTx = func(context.Context, *store.ScopedTx) (int64, error) { return 0, errBoom }

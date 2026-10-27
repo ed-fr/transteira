@@ -123,6 +123,10 @@ type Options struct {
 	// administrator and tenant; <= 0 means the defaults.
 	SMTPTestLimit  int
 	SMTPTestWindow time.Duration
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Service is the tenant configuration service. It is safe for concurrent
@@ -156,7 +160,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo:       newStoreRepo(db, opts.Vault),
+		repo:       newStoreRepo(db, opts.Vault, opts.Audit),
 		assets:     opts.Assets,
 		eraser:     opts.Eraser,
 		mailer:     opts.Mailer,

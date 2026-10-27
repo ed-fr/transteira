@@ -120,7 +120,6 @@ func TestTenantConfigSchemaConstraints(t *testing.T) {
 		tpl := `INSERT INTO tenant_email_templates (tenant_id, template_key, language, subject, body_html, body_text, updated_at, updated_by) VALUES (` + tid + `, `
 		long := func(n int) string { return "'" + strings.Repeat("a", n) + "'" }
 		rejected["unknown template"] = tpl + `'welcome', 'fr', 's', '', '', 0, '')`
-		rejected["reserved v1.1 template"] = tpl + `'expiry-reminder', 'fr', 's', '', '', 0, '')`
 		rejected["template language"] = tpl + `'invitation', 'de', 's', '', '', 0, '')`
 		rejected["empty subject"] = tpl + `'invitation', 'fr', '', '', '', 0, '')`
 		rejected["long subject"] = tpl + `'invitation', 'fr', ` + long(256) + `, '', '', 0, '')`
@@ -149,6 +148,12 @@ func TestTenantConfigSchemaConstraints(t *testing.T) {
 			legal + `'privacy-policy', 'en', ` + long(100_000) + `, 0, '')`,
 			// Length counts characters, not bytes.
 			tpl + `'invitation', 'en', '` + strings.Repeat("é", 255) + `', '', '', 0, '')`,
+			// The V1.1 templates (0020).
+			tpl + `'expiry-reminder', 'fr', 's', '', '', 0, '')`,
+			tpl + `'abuse-alert', 'fr', 's', '', '', 0, '')`,
+			tpl + `'abuse-report', 'fr', 's', '', '', 0, '')`,
+			tpl + `'my-transfers-link', 'fr', 's', '', '', 0, '')`,
+			tpl + `'recipient-verification-code', 'fr', 's', '', '', 0, '')`,
 		}
 		for _, q := range accepted {
 			if _, err := rawSystemExec(ctx, db, q); err != nil {

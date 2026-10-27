@@ -6,6 +6,11 @@
 //
 // The log is append-only (threat T-102): this package offers no update and
 // no deletion; the 12-month purge belongs to the cleanup task.
+//
+// Every event written is also published as an events.LogAudit event on the
+// event bus given with [WithPublisher] (the syslog export subscribes to
+// it), once the transaction holding it committed: never for an operation
+// rolled back, nor for details refused by the checks.
 package audit
 
 import (
@@ -16,6 +21,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -238,13 +244,37 @@ type Event struct {
 
 // Writer records audit events. It is safe for concurrent use.
 type Writer struct {
-	db     *store.DB
-	events *store.AuditEvents
+	db        *store.DB
+	events    *store.AuditEvents
+	publisher events.Publisher
+}
+
+// Option configures a [Writer].
+type Option func(*Writer)
+
+// WithPublisher publishes every event written as an events.LogAudit event
+// on p, once committed. A nil p publishes nothing (the default).
+func WithPublisher(p events.Publisher) Option {
+	return func(w *Writer) { w.publisher = events.OrDiscard(p) }
 }
 
 // New returns a writer appending to the audit log of db.
-func New(db *store.DB) *Writer {
-	return &Writer{db: db, events: db.AuditEvents()}
+func New(db *store.DB, opts ...Option) *Writer {
+	w := &Writer{db: db, events: db.AuditEvents(), publisher: events.Discard}
+	for _, o := range opts {
+		o(w)
+	}
+	return w
+}
+
+// OrNew returns w, or a writer of its own over db (publishing nothing)
+// when w is nil: the services accept the shared writer of the application
+// as an option.
+func OrNew(w *Writer, db *store.DB) *Writer {
+	if w != nil {
+		return w
+	}
+	return New(db)
 }
 
 // Record appends ev in its own transaction.
@@ -253,9 +283,11 @@ func (w *Writer) Record(ctx context.Context, ev Event) error {
 	if err != nil {
 		return err
 	}
-	if _, err := w.events.Append(ctx, row); err != nil {
+	stored, err := w.events.Append(ctx, row)
+	if err != nil {
 		return fmt.Errorf("audit: record %s: %w", ev.Action, err)
 	}
+	w.publish(stored)
 	return nil
 }
 
@@ -266,9 +298,11 @@ func (w *Writer) RecordTx(ctx context.Context, tx *store.SystemTx, ev Event) err
 	if err != nil {
 		return err
 	}
-	if _, err := w.events.AppendTx(ctx, tx, row); err != nil {
+	stored, err := w.events.AppendTx(ctx, tx, row)
+	if err != nil {
 		return fmt.Errorf("audit: record %s: %w", ev.Action, err)
 	}
+	tx.AfterCommit(func() { w.publish(stored) })
 	return nil
 }
 
@@ -299,10 +333,25 @@ func (w *Writer) RecordScopedTx(ctx context.Context, tx *store.ScopedTx, ev Even
 	if err != nil {
 		return err
 	}
-	if _, err := w.events.AppendScopedTx(ctx, tx, row); err != nil {
+	stored, err := w.events.AppendScopedTx(ctx, tx, row)
+	if err != nil {
 		return fmt.Errorf("audit: record %s: %w", ev.Action, err)
 	}
+	tx.AfterCommit(func() { w.publish(stored) })
 	return nil
+}
+
+// publish publishes the committed audit event row as an events.LogAudit
+// event.
+func (w *Writer) publish(row store.AuditEvent) {
+	w.publisher.Publish(events.Event{
+		Type: events.LogAudit, Severity: events.SeverityInfo, OccurredAt: row.At, TenantID: string(row.TenantID),
+		Log: &events.LogRecord{
+			Stream: events.StreamAudit, Time: row.At, Tenant: string(row.TenantID), Action: row.Action,
+			ActorKind: string(row.ActorKind), Actor: row.Actor, IP: row.IP,
+			ObjectKind: row.ObjectKind, ObjectID: row.ObjectID, AuditID: row.ID, Details: row.Details,
+		},
+	})
 }
 
 // toStore checks ev and converts it to a store event. The store validates

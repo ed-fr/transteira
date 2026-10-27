@@ -72,6 +72,9 @@ const (
 	Audit Prefix = "aud"
 	// Request identifies an HTTP request (Problem Details "instance").
 	Request Prefix = "req"
+	// Event identifies an event of the internal event bus, as delivered to
+	// the webhooks (OpenAPI WebhookEvent "id").
+	Event Prefix = "evt"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

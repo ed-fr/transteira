@@ -124,6 +124,7 @@ import (
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -243,6 +244,9 @@ type Deps struct {
 	// Outage is told when clamd becomes unreachable and answers again;
 	// nil tells nobody.
 	Outage OutageObserver
+	// Events receives the virus.detected events, one per infected file
+	// (counts files = 1); nil publishes nothing.
+	Events events.Publisher
 }
 
 // Options tunes a [Worker]. Zero values select the defaults.
@@ -313,6 +317,7 @@ type Worker struct {
 	audit    AuditWriter
 	usage    UsageCounter
 	observer OutageObserver
+	events   events.Publisher
 	mails    *mail.Retrier
 	opts     Options
 	logger   *slog.Logger
@@ -377,7 +382,7 @@ func New(deps Deps, opts Options) *Worker {
 	w := &Worker{
 		repo: storeRepo{db: deps.DB, vault: deps.Vault}, vault: deps.Vault, files: deps.Files,
 		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier,
-		audit: deps.Audit, usage: deps.Usage, observer: deps.Outage,
+		audit: deps.Audit, usage: deps.Usage, observer: deps.Outage, events: events.OrDiscard(deps.Events),
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
 		}),

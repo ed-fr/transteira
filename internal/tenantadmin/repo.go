@@ -71,9 +71,10 @@ type storeRepo struct {
 	usedTx      func(ctx context.Context, tx *store.ScopedTx) (int64, error)
 }
 
-// newStoreRepo returns the store implementation of repo.
-func newStoreRepo(db *store.DB, vault Vault) *storeRepo {
-	r := &storeRepo{db: db, vault: vault, writer: audit.New(db)}
+// newStoreRepo returns the store implementation of repo, recording with
+// writer (a writer of its own when nil).
+func newStoreRepo(db *store.DB, vault Vault, writer *audit.Writer) *storeRepo {
+	r := &storeRepo{db: db, vault: vault, writer: audit.OrNew(writer, db)}
 	r.sealTx = func(ctx context.Context, tx *store.ScopedTx, password []byte) (string, error) {
 		return r.vault.SealTx(ctx, tx, crypto.PurposeSecret, password)
 	}

@@ -45,6 +45,11 @@ func TestScopedTxExposesNoRawSQL(t *testing.T) {
 		if m.Name == "Tenant" && m.Type.NumIn() == 1 {
 			continue
 		}
+		// AfterCommit only takes a func(): it registers a hook run after the
+		// commit, outside the transaction, and cannot run SQL either.
+		if m.Name == "AfterCommit" && m.Type.NumIn() == 2 && m.Type.In(1) == reflect.TypeFor[func()]() {
+			continue
+		}
 		takesQuery := false
 		for j := 1; j < m.Type.NumIn(); j++ {
 			in := m.Type.In(j)

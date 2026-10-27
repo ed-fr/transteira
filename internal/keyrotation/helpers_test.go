@@ -19,6 +19,7 @@ import (
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
@@ -130,9 +131,11 @@ type env struct {
 	confirm *fakeConfirm
 	audit   *faultAudit
 	logs    *syncBuffer
-	svc     *Service
-	secrets [][]byte
-	tid     tenant.ID
+	// published receives the events of the services built by newService.
+	published *events.Recorder
+	svc       *Service
+	secrets   [][]byte
+	tid       tenant.ID
 	// opts are the rotation options of the services built by newService.
 	opts masterkey.Options
 }
@@ -168,7 +171,7 @@ func newEnv(t *testing.T, e storetest.Engine, n int) *env {
 	}
 	ev := &env{
 		e: e, db: db, k1: newKey(t), k2: newKey(t), confirm: &fakeConfirm{},
-		audit: &faultAudit{w: audit.New(db)}, logs: &syncBuffer{},
+		audit: &faultAudit{w: audit.New(db)}, logs: &syncBuffer{}, published: &events.Recorder{},
 		opts: masterkey.Options{BatchSize: 2, Now: func() time.Time { return testNow }},
 	}
 	old := keyring(t, ev.k1, nil)
@@ -204,7 +207,7 @@ func newEnv(t *testing.T, e storetest.Engine, n int) *env {
 func (ev *env) newService(t *testing.T) *Service {
 	t.Helper()
 	svc := New(ev.db, ev.keys, ev.confirm, ev.audit, Options{
-		Rotation: ev.opts, Logger: slog.New(slog.NewTextHandler(ev.logs, nil)),
+		Rotation: ev.opts, Logger: slog.New(slog.NewTextHandler(ev.logs, nil)), Events: ev.published,
 	})
 	t.Cleanup(func() { _ = svc.Close(context.WithoutCancel(t.Context())) })
 	return svc

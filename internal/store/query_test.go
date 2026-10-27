@@ -432,7 +432,7 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at, sender_ip, api_token_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`created_at, sender_ip, api_token_id, link_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
@@ -460,7 +460,6 @@ var tenantAllowlist = map[string]int{
 	`UPDATE transfers SET status = 'scanning', finalized_at = ?, expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) ` +
 		`WHERE tenant_id = ? AND id = ? AND status = 'uploading'`: 2,
 	`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`:               1,
-	`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`:          0,
 	`INSERT INTO transfer_recipients (tenant_id, transfer_id, position, email) VALUES (?, ?, ?, ?)`:   0,
 	`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
 	// API tokens.
@@ -552,7 +551,7 @@ var tenantAllowlist = map[string]int{
 	`SELECT id FROM transfers WHERE tenant_id = ? AND sender_email = ? ORDER BY id`:                      0,
 	`SELECT id FROM transfers WHERE tenant_id = ? AND invitation_id = ? ORDER BY id`:                     0,
 	`SELECT transfer_id FROM transfer_recipients WHERE tenant_id = ? AND email = ? ORDER BY transfer_id`: 0,
-	`DELETE FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? AND email = ?`:              0,
+	`SELECT count(*) FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? AND email = ?`:     0,
 	`SELECT count(*) FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ?`:                   0,
 	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ?` + invitationListTail:         0,
 	`SELECT ` + invitationColumns + ` FROM invitations WHERE tenant_id = ? AND revoked_at IS NULL AND expires_at > ? ` +
@@ -597,6 +596,12 @@ var reviewedAllowlist = map[string]string{
 		`AND (? = '' OR t.sender_email = ? OR EXISTS (SELECT 1 FROM transfer_recipients r ` +
 		`WHERE r.tenant_id = t.tenant_id AND r.transfer_id = t.id AND r.email = ?)) ` +
 		`AND t.created_at > ? AND (t.created_at, t.id) < (?, ?) ORDER BY t.created_at DESC, t.id DESC LIMIT ?`: reasonTransferAdminList,
+	`DELETE FROM transfers AS t WHERE t.tenant_id = ? AND t.id = ? AND t.download_token_key_id IS NULL ` +
+		`AND NOT EXISTS (SELECT 1 FROM recipient_links l ` +
+		`WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`: reasonTransferDeleteLinkKeys,
+	`DELETE FROM transfer_recipients AS r WHERE r.tenant_id = ? AND r.transfer_id = ? AND r.email = ? ` +
+		`AND NOT EXISTS (SELECT 1 FROM recipient_links l WHERE l.tenant_id = r.tenant_id ` +
+		`AND l.transfer_id = r.transfer_id AND l.position = r.position AND l.token_key_id IS NOT NULL)`: reasonRecipientDeleteLinkKeys,
 	// Declared by the tests (above).
 	`SELECT r.value FROM tenant_network_rules r JOIN tenants t ON t.id = r.tenant_id WHERE r.tenant_id = ?`: "test only: exercises reviewedTenantQuery",
 }
@@ -657,6 +662,8 @@ var systemAllowlist = map[string]string{
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
 	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,
 	`SELECT count(*) FROM wrapped_keys WHERE tenant_id = ?`:        reasonTenantErase,
+	`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, is_default, require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`: reasonTenantSeed,
+	`INSERT INTO tenant_abuse_settings (tenant_id, updated_at) VALUES (?, 0)`: reasonTenantSeed,
 	// Master keys (startup check and rotation).
 	`SELECT key_id FROM wrapped_keys UNION SELECT key_id FROM system_secrets ORDER BY key_id`:                                                     reasonKeyCheck,
 	`SELECT (SELECT count(*) FROM wrapped_keys WHERE key_id = ?) + (SELECT count(*) FROM system_secrets WHERE key_id = ?)`:                        reasonKeyRotation,

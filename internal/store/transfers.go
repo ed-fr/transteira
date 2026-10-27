@@ -110,6 +110,12 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 // also restricts a tenant scope to its own row.
 const reasonTransferTenantActive = "transfer creation: refuse a tenant whose deletion started (same tenant row only)"
 
+// reasonTransferDeleteLinkKeys is the review of qTransferDelete: the tenant
+// slot filters transfers, and the subquery reads the recipient links of the
+// same tenant and transfer only (l.tenant_id = t.tenant_id); on PostgreSQL
+// the recipient_links policy also restricts it to the tenant.
+const reasonTransferDeleteLinkKeys = "transfer deletion: refuse while a recipient link of the same tenant and transfer keeps its sealed token"
+
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
 	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
@@ -118,11 +124,14 @@ const fileColumns = `id, transfer_id, position, name, size, media_type, expected
 // are single-table tenant queries: a transfer and its files are read with
 // separate statements of the same transaction.
 var (
+	// Every transfer still gets the single shared V1 link: the
+	// per-recipient links (link_mode 'per_recipient', the default of the
+	// column since 0014) come with their feature.
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at, sender_ip, api_token_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		created_at, sender_ip, api_token_id, link_mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -185,10 +194,15 @@ var (
 		WHERE tenant_id = ? AND id = ? AND status = 'uploading'`)
 	qTransferShrink = tenantQuery(
 		`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`)
-	// qTransferDelete only deletes a transfer whose sealed download token
-	// was destroyed first (T-110).
-	qTransferDelete = tenantQuery(
-		`DELETE FROM transfers WHERE tenant_id = ? AND id = ? AND download_token_key_id IS NULL`)
+	// qTransferDelete only deletes a transfer whose sealed download token,
+	// and the sealed token of each of its recipient links, were destroyed
+	// first (T-110): the cascade would otherwise drop the link rows and
+	// leave their keys behind (ON DELETE SET NULL).
+	qTransferDelete = reviewedTenantQuery(
+		`DELETE FROM transfers AS t WHERE t.tenant_id = ? AND t.id = ? AND t.download_token_key_id IS NULL
+		AND NOT EXISTS (SELECT 1 FROM recipient_links l
+			WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`,
+		reasonTransferDeleteLinkKeys)
 	// qTransferTenantActive counts the transfer just inserted when its
 	// tenant is still active: a creation that resolved the tenant before
 	// its deletion started finds 0 and is rolled back, so that no row (and
@@ -1096,8 +1110,9 @@ func (r *Transfers) FinalizeTx(ctx context.Context, tx *ScopedTx, trfID string, 
 // DeleteTx deletes the transfer trfID of the tenant tx is bound to, with
 // (by cascade) its recipients and files, inside tx. The data key of every
 // file, and the sealed download token of an available transfer
-// (DownloadTokenKeyID), must have been destroyed first in the same
-// transaction ([WrappedKeys.DeleteTx]); otherwise it returns
+// (DownloadTokenKeyID) and of each recipient link, must have been
+// destroyed first in the same transaction ([WrappedKeys.DeleteTx]);
+// otherwise it returns
 // [ErrKeysRemain] and deletes nothing. It returns ErrNotFound when the transfer does not exist
 // or belongs to another tenant. Callers delete the files on disk once the
 // transaction is committed, then call [DB.ScrubDeleted]. After an error,

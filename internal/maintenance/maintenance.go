@@ -39,6 +39,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/textsafe"
@@ -143,6 +144,9 @@ type Options struct {
 	Start time.Time
 	// Now is the clock; time.Now when nil.
 	Now func() time.Time
+	// Events receives the maintenance.enabled and maintenance.disabled
+	// events of [Mode.Set]; nil publishes nothing.
+	Events events.Publisher
 }
 
 // snapshot is an immutable state of the mode, swapped atomically.
@@ -160,9 +164,10 @@ type snapshot struct {
 // Mode is the maintenance mode of the instance. It is safe for concurrent
 // use.
 type Mode struct {
-	repo  Repository
-	audit Auditor
-	now   func() time.Time
+	repo   Repository
+	audit  Auditor
+	events events.Publisher
+	now    func() time.Time
 
 	// mu serializes the changes (Set, Force); readers only load state.
 	mu    sync.Mutex
@@ -183,7 +188,7 @@ func New(ctx context.Context, repo Repository, auditor Auditor, opts Options) (*
 	if err != nil {
 		return nil, fmt.Errorf("maintenance: load the system settings: %w", err)
 	}
-	m := &Mode{repo: repo, audit: auditor, now: now}
+	m := &Mode{repo: repo, audit: auditor, events: events.OrDiscard(opts.Events), now: now}
 	s := fromRow(row)
 	s.forced = opts.Forced
 	if s.forced {
@@ -296,7 +301,10 @@ func (m *Mode) Get(_ context.Context, p adminauth.Principal) (State, error) {
 // messages entirely (nil or empty for none). The change and its audit
 // event (maintenance.enabled or maintenance.disabled, a global event whose
 // details list the message languages only) commit in one transaction,
-// then the new state takes effect at once.
+// then the new state takes effect at once. A change of the effective mode
+// publishes maintenance.enabled or maintenance.disabled once committed; a
+// change of the messages alone, or of the stored choice while
+// TT_MAINTENANCE forces the mode, publishes nothing.
 //
 // It returns adminauth.ErrUnauthenticated or adminauth.ErrForbidden for a
 // caller who is not an authenticated super admin, an *InvalidError for an
@@ -344,6 +352,16 @@ func (m *Mode) Set(ctx context.Context, p adminauth.Principal, enabled bool, mes
 	next := fromRow(row)
 	next.forced, next.forcedSince = cur.forced, cur.forcedSince
 	m.publish(next)
+	if active := m.state.Load().active; active != cur.active {
+		typ := events.MaintenanceDisabled
+		if active {
+			typ = events.MaintenanceEnabled
+		}
+		m.events.Publish(events.Event{
+			Type: typ, Severity: events.SeverityInfo, OccurredAt: m.now(), AdminPath: events.AdminPathSystem,
+			Counts: map[string]float64{},
+		})
+	}
 	return m.State(), nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
@@ -90,6 +91,10 @@ type Deps struct {
 	// Usage receives the download starts and the bytes served, for the
 	// tenant statistics; nil counts nothing.
 	Usage Usage
+	// Audit is the shared audit writer of the application, which publishes
+	// the events it writes; nil means a writer of its own over the
+	// database, publishing nothing.
+	Audit *audit.Writer
 }
 
 // Options tunes a [Service].
@@ -211,7 +216,7 @@ func New(deps Deps, opts Options) *Service {
 		usage = deps.Usage
 	}
 	return &Service{
-		repo: storeRepo{db: deps.DB, audit: auditWriter(deps.DB)}, vault: deps.Vault, files: deps.Files, keys: deps.Keys,
+		repo: storeRepo{db: deps.DB, audit: auditWriter(deps.DB, deps.Audit)}, vault: deps.Vault, files: deps.Files, keys: deps.Keys,
 		passwords: deps.Passwords, notifier: deps.Notifier, seclog: deps.SecurityLog, usage: usage,
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,
