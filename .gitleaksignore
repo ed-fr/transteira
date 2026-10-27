@@ -1,0 +1,6 @@
+# Findings reviewed and accepted, one gitleaks fingerprint per line (commit:file:rule:line).
+#
+# Made-up example token in the first draft of the API specification, written before any code
+# existed; it never authenticated anything. Commit cdd0963 replaced it with the fake
+# "tt_EXAMPLE..." shape that .gitleaks.toml allows.
+1c41b84737b63b1f82501c2d98bedc4811fd20e4:api/openapi.yaml:transteira-api-token:2286
