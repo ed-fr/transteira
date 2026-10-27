@@ -2,7 +2,7 @@
 
 > Document de cadrage destiné au développement (Claude Code). Il décrit le besoin fonctionnel, les contraintes techniques, les exigences de qualité et les règles de travail de **TransTeira**, un outil de transfert de fichiers multi-tenant open source. Toutes les valeurs indiquées sont validées.
 >
-> Le périmètre est découpé en trois versions (section 2). Les fonctionnalités marquées **[V1.1]** ou **[V2]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
+> Le périmètre est découpé en quatre versions (section 2). Les fonctionnalités marquées **[V1.1]**, **[V2]** ou **[V2.1]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
 
 ---
 
@@ -25,6 +25,7 @@ TransTeira est un outil de transfert de fichiers de type WeTransfer / SwissTrans
 | **V1, le cœur** | Tout le présent cahier des charges hors éléments marqués [V1.1] et [V2], y compris : journal de sécurité pour fail2ban et CrowdSec, configurations de reverse proxys (Caddy, Nginx, Traefik, Apache), configuration par variables d'environnement, mode maintenance, empreinte SHA-256 des fichiers, rotation de la clé maître, effacement cryptographique, guides utilisateur et aide intégrée avec captures automatiques, modèle de menaces. |
 | **V1.1, l'exploitation** | Détection des abus (seuils et alertes), métriques Prometheus, endpoint d'état JSON, tableau de bord Grafana et template Zabbix, export syslog, alertes par webhook, rappel d'expiration, nombre maximal de téléchargements, « Mes envois », vérification du destinataire par code, suivi par destinataire, envoi de dossiers par glisser-déposer, dépôt depuis l'extérieur pour les internes déjà vérifiés, réponse au transfert, niveaux de confidentialité, restriction des destinataires, mode sombre, documentation utilisateur personnalisée par entité et export PDF. |
 | **V2, l'entreprise** | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise en PDF, export / import de configuration d'entité, lien de dépôt permanent, image Docker signée avec SBOM, kit de conformité, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option. |
+| **V2.1, le partage de secrets** | Module de partage de secrets à usage unique, chiffrés dans le navigateur (section 22.1). |
 
 ---
 
@@ -488,6 +489,15 @@ Pour chacun, les réglages critiques sont expliqués :
 - **Option lien seul, sans mail** (section 8.2).
 - **Chiffrement de bout en bout en option** : les fichiers sont chiffrés dans le navigateur de l'expéditeur, et la clé n'est jamais transmise au serveur (ex. clé placée dans le fragment `#` du lien), qui ne peut donc jamais lire les fichiers. Conséquence assumée : **l'analyse antivirus est impossible** pour ces envois, ce que la page de téléchargement indique clairement. L'option peut être autorisée, imposée ou interdite par entité et par niveau de confidentialité.
 - **Kit de conformité** dans la documentation : fiche prête à l'emploi pour le **registre des traitements RGPD** et **correspondance avec les mesures de l'annexe A de l'ISO 27001**, accompagnées du **modèle de menaces** (section 27.1).
+
+### 22.1 [V2.1] Partage de secrets
+
+- Module de partage de secrets à usage unique (mots de passe, clés, codes), dans l'esprit de Cryptgeon.
+- Chiffrement dans le navigateur : le serveur ne voit jamais le secret en clair, la clé reste dans la partie du lien après le dièse.
+- Secret détruit après la première lecture ou à expiration.
+- Mêmes règles que les transferts : cloisonnement par entité, accès interne et externe sur invitation, journaux d'audit.
+- S'appuie sur la brique de chiffrement de bout en bout de la V2.
+- L'architecture V1 et V2 ne doit pas empêcher l'ajout de ce module.
 
 ---
 
