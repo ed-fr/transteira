@@ -44,7 +44,19 @@ export interface paths {
          *     download streams, errors, disk usage, webhook deliveries. Served outside any tenant, like
          *     `/healthz`, whatever the `Host` (a tenant FQDN, the admin host or the container address),
          *     and still answered in maintenance mode. Metrics carry the tenant identifier as a label
-         *     (`tenant="ten_..."`), never an e-mail address, a file name or a token.
+         *     (`tenant="ten_..."`), never an e-mail address, a file name or a token. Values are
+         *     computed every 15 seconds and served from that snapshot: a scrape never queries the
+         *     database. Counters (`_total`) count since the start of the process.
+         *
+         *     Metric names (all prefixed `transteira_`): `build_info`, `uptime_seconds`, `maintenance`,
+         *     `transfers_total`, `uploaded_bytes_total`, `downloads_total`, `downloaded_bytes_total`,
+         *     `antivirus_detections_total` (per tenant), `storage_used_bytes`, `storage_quota_bytes`,
+         *     `active_transfers` (per tenant), `scan_queue_files`, `antivirus_up`, `antivirus_alert`,
+         *     `disk_used_ratio`, `disk_used_bytes`, `disk_total_bytes`, `disk_alert`, `download_streams`,
+         *     `http_requests_total` (per status class), `webhook_deliveries_total` (per result),
+         *     `events_dropped_total` (per subscriber), `syslog_messages_total` (per result),
+         *     `mail_queue_length`, `mail_dropped_total`, `lifecycle_last_success_timestamp_seconds` (per
+         *     task). New names may be added; existing ones are never renamed within `1.x`.
          *
          *     Protection: the endpoint only exists when `TT_METRICS_TOKEN` is set (`404 not-found`
          *     otherwise, as for an unknown path). When `TT_METRICS_ALLOWED_IPS` (CIDR list) is set, a
@@ -75,7 +87,8 @@ export interface paths {
          * Instance status (JSON)
          * @description Since 1.1. A JSON summary of the instance state, for monitoring tools that do not read the
          *     Prometheus format (Observium, scripts): component health as in `/healthz`, maintenance,
-         *     disk usage and alert, antivirus queue and outage alert, and per tenant the storage usage
+         *     disk usage and alert, antivirus queue and outage alert, last successful run of each
+         *     cleanup task, and per tenant the storage usage
          *     and transfer counters. Served outside any tenant and protected exactly like `/metrics`
          *     (same token, same optional IP allowlist, `404` when `TT_METRICS_TOKEN` is unset). Tenants
          *     are named by identifier and name only, never with an e-mail address. The answer is `200`
@@ -4220,6 +4233,15 @@ export interface components {
                 /** @description The antivirus outage alert is raised. */
                 alertActive: boolean;
             };
+            /**
+             * @description End of the last successful run of each periodic cleanup task (`expire`,
+             *     `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`,
+             *     `orphans`, `backup`), keyed by task name. A task that never succeeded since the start
+             *     is absent. A run that left work for the next run after a failure does not move it.
+             */
+            lifecycle?: {
+                [key: string]: string;
+            };
             /** @description One row per active tenant. */
             tenants: {
                 id: string;
@@ -5538,6 +5560,11 @@ export interface operations {
                      *         "engine": "clamd",
                      *         "queuedFiles": 0,
                      *         "alertActive": false
+                     *       },
+                     *       "lifecycle": {
+                     *         "expire": "2026-10-27T08:59:30Z",
+                     *         "purge-rows": "2026-10-27T03:00:05Z",
+                     *         "backup": "2026-10-27T02:30:41Z"
                      *       },
                      *       "tenants": [
                      *         {

@@ -13,7 +13,7 @@ description: "Detect brute force against TransTeira (codes, passwords, admin log
 # scope="download_streams" smuggled into another value is quoted and escaped
 # and never matches. Checked by internal/securitylog/crowdsec_test.go: keep
 # the filter on a single line.
-filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event in ['verification_code_invalid', 'transfer_password_invalid', 'admin_login_failed', 'api_token_invalid', 'deposit_refused', 'rate_limited'] && !(evt.Meta.transteira_event == 'rate_limited' && evt.Parsed.fields matches '^transfer=\"trf_[0-9A-Z]{10}\" scope=\"download_streams\"$')"
+filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event in ['verification_code_invalid', 'transfer_password_invalid', 'admin_login_failed', 'api_token_invalid', 'deposit_refused', 'rate_limited', 'metrics_token_invalid'] && !(evt.Meta.transteira_event == 'rate_limited' && evt.Parsed.fields matches '^transfer=\"trf_[0-9A-Z]{10}\" scope=\"download_streams\"$')"
 groupby: evt.Meta.source_ip
 capacity: 9
 leakspeed: 1m

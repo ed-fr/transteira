@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/metrics/metricstate"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -352,5 +353,40 @@ func TestCloseTimeoutWhileRunHangs(t *testing.T) {
 	defer cancel()
 	if err := r.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Close = %v, want DeadlineExceeded while Run hangs", err)
+	}
+}
+
+// sinkRecorder collects the increments given to a Sink.
+type sinkRecorder struct {
+	mu  sync.Mutex
+	got map[string]metricstate.Usage
+}
+
+func (s *sinkRecorder) AddUsage(tenantID string, u metricstate.Usage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur := s.got[tenantID]
+	cur.Transfers += u.Transfers
+	cur.UploadedBytes += u.UploadedBytes
+	cur.Downloads += u.Downloads
+	cur.DownloadedBytes += u.DownloadedBytes
+	cur.VirusDetections += u.VirusDetections
+	s.got[tenantID] = cur
+}
+
+func TestSink(t *testing.T) {
+	s := &sinkRecorder{got: map[string]metricstate.Usage{}}
+	f := newFake()
+	r := newRecorder(f, Options{Sink: s})
+	r.TransferFinalized("ten_a", 100, time.Time{})
+	r.DownloadStarted("ten_a", time.Time{})
+	r.BytesServed("ten_a", 40, time.Time{})
+	r.VirusDetected("ten_a", time.Time{})
+	r.TransferFinalized("", 5, time.Time{})
+	var nilRec *Recorder
+	nilRec.VirusDetected("ten_a", time.Time{})
+	want := metricstate.Usage{Transfers: 1, UploadedBytes: 100, Downloads: 1, DownloadedBytes: 40, VirusDetections: 1}
+	if len(s.got) != 1 || s.got["ten_a"] != want {
+		t.Fatalf("sink got %+v, want %+v", s.got, want)
 	}
 }

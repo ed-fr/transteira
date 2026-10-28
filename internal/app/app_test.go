@@ -309,6 +309,10 @@ func TestRunServes(t *testing.T) {
 		if code, body := s.get(t, "/api/openapi.yaml", "anything"); code != http.StatusOK || !strings.HasPrefix(body, "openapi:") {
 			t.Fatalf("spec = %d", code)
 		}
+		// Without TT_METRICS_TOKEN the supervision endpoints do not exist.
+		if code, _ := s.get(t, "/metrics", "anything"); code != http.StatusNotFound {
+			t.Fatalf("metrics without a token = %d", code)
+		}
 		if code, _ := s.get(t, "/api/v1/version", "transfer.unknown.localhost"); code != http.StatusMisdirectedRequest {
 			t.Fatalf("unknown host = %d", code)
 		}

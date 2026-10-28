@@ -94,6 +94,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
@@ -270,7 +271,10 @@ type Monitor struct {
 	// phase, the outage it follows (cur, curSince), when it is evaluated
 	// again (deadline), the number of postponements by a ping, and whether
 	// its mails wait for the hourly slot (mailPending).
-	evalMu      sync.Mutex
+	evalMu sync.Mutex
+	// active mirrors phase == raised for [Monitor.Active], readable without
+	// waiting for an evaluation in progress.
+	active      atomic.Bool
 	phase       phase
 	cur         uint64
 	curSince    time.Time
@@ -438,6 +442,7 @@ func (m *Monitor) Evaluate(ctx context.Context) time.Time {
 			slog.Int("postponement", m.postponed), slog.Int("max_postponements", MaxPostponements))
 	default:
 		m.phase = raised
+		m.active.Store(true)
 		// The raise is decided: a Close arriving now does not cancel its
 		// audit event nor its mails, which it waits for within its budget
 		// only.
@@ -487,7 +492,13 @@ func (m *Monitor) end(ctx context.Context, at time.Time, why string) {
 			slog.Duration("outage", outage), slog.Duration("grace", m.grace))
 	}
 	m.phase, m.mailPending = idle, false
+	m.active.Store(false)
 }
+
+// Active reports whether the antivirus outage alert is raised: true from
+// the moment the alert is decided until the outage ends. It never blocks and
+// is safe for concurrent use.
+func (m *Monitor) Active() bool { return m.active.Load() }
 
 // answers reports whether clamd answers a ping (false without a pinger).
 func (m *Monitor) answers(ctx context.Context) bool {

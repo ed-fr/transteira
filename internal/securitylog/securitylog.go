@@ -59,6 +59,9 @@ const (
 	DepositRefused EventType = "deposit_refused"
 	// RateLimited: a rate limit was exceeded; field scope names the limiter.
 	RateLimited EventType = "rate_limited"
+	// MetricsTokenInvalid: a wrong monitoring token was presented to
+	// /metrics or /status (since 1.1).
+	MetricsTokenInvalid EventType = "metrics_token_invalid"
 )
 
 // Well-known field keys.

@@ -28,10 +28,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/diskusage"
+	"github.com/ed-fr/transteira/internal/metrics/metricstate"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -167,7 +170,12 @@ type repo interface {
 	usedBytesAll(ctx context.Context) (map[tenant.ID]int64, error)
 	usage(ctx context.Context, tid tenant.ID, fromDay time.Time) ([]store.DailyUsage, error)
 	usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error)
+	scanQueueFiles(ctx context.Context) (int64, error)
+	activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error)
 }
+
+// Compile-time check: the service is the state reader of the collector.
+var _ metricstate.StateReader = (*Service)(nil)
 
 // SettingsReader reads the instance settings. *store.SystemSettings
 // implements it.
@@ -331,6 +339,59 @@ func (s *Service) GlobalStats(ctx context.Context, p adminauth.Principal, period
 			Storage: storage(used[t.ID], t.StorageQuotaBytes),
 		})
 	}
+	return out, nil
+}
+
+// InstanceState returns the state of the instance for the supervision
+// collector (metricstate.StateReader): the disk, the disk alert, the files
+// waiting for the antivirus and one row per active tenant, sorted by ID,
+// with its storage, its available transfers and those made available during
+// the last 24 hours.
+//
+// It takes no principal: it is reserved to the collector of the metrics and
+// the status, which expose it behind the monitoring token and never to an
+// administrator session or a tenant. It returns an error when the disk
+// cannot be measured (logged; never reported as zeros) or a read fails.
+func (s *Service) InstanceState(ctx context.Context) (metricstate.InstanceState, error) {
+	total, free, err := s.measure(s.dataDir)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "stats: disk usage unavailable", slog.String("error", err.Error()))
+		return metricstate.InstanceState{}, fmt.Errorf("stats: measure disk: %w", err)
+	}
+	d := disk(total, free)
+	out := metricstate.InstanceState{DiskTotalBytes: d.TotalBytes, DiskUsedBytes: d.UsedBytes, DiskAlertThreshold: d.AlertThreshold}
+	if s.settings != nil {
+		row, err := s.settings.Get(ctx)
+		if err != nil {
+			return metricstate.InstanceState{}, fmt.Errorf("stats: read the system settings: %w", err)
+		}
+		out.DiskAlertThreshold = float64(row.DiskAlertThresholdBP) / basisPoints
+		out.DiskAlertActive = row.DiskAlertLevel == store.DiskAlertLevelRaised
+	}
+	if out.ScanQueueFiles, err = s.repo.scanQueueFiles(ctx); err != nil {
+		return metricstate.InstanceState{}, fmt.Errorf("stats: count files waiting for the antivirus: %w", err)
+	}
+	tenants, err := s.repo.activeTenants(ctx)
+	if err != nil {
+		return metricstate.InstanceState{}, fmt.Errorf("stats: list tenants: %w", err)
+	}
+	used, err := s.repo.usedBytesAll(ctx)
+	if err != nil {
+		return metricstate.InstanceState{}, fmt.Errorf("stats: read storage used: %w", err)
+	}
+	counts, err := s.repo.activeCounts(ctx, s.now().Add(-24*time.Hour))
+	if err != nil {
+		return metricstate.InstanceState{}, fmt.Errorf("stats: count transfers: %w", err)
+	}
+	out.Tenants = make([]metricstate.TenantState, 0, len(tenants))
+	for _, t := range tenants {
+		c := counts[t.ID]
+		out.Tenants = append(out.Tenants, metricstate.TenantState{
+			ID: string(t.ID), Name: t.Name, StorageUsedBytes: used[t.ID], StorageQuotaBytes: t.StorageQuotaBytes,
+			ActiveTransfers: c.Active, TransfersLast24h: c.MadeAvailableSince,
+		})
+	}
+	slices.SortFunc(out.Tenants, func(a, b metricstate.TenantState) int { return strings.Compare(a.ID, b.ID) })
 	return out, nil
 }
 

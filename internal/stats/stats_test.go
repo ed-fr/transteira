@@ -16,6 +16,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/metrics/metricstate"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -102,6 +103,7 @@ func TestDisk(t *testing.T) {
 type faultRepo struct {
 	repo
 	tenantErr, activeErr, usedErr, usedAllErr, usageErr, usageAllErr error
+	queueErr, countsErr                                              error
 }
 
 func (f *faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
@@ -194,8 +196,9 @@ func (ev *env) add(tn *tenant.Tenant, d time.Time, c store.UsageCounts) {
 	}
 }
 
-// use stores an uploading transfer of tn declaring size bytes.
-func (ev *env) use(tn *tenant.Tenant, size int64) {
+// use stores an uploading transfer of tn declaring size bytes and returns
+// its ID and the ID of its file.
+func (ev *env) use(tn *tenant.Tenant, size int64) (trfID, fileID string) {
 	ev.t.Helper()
 	ctx := context.Background()
 	s, err := ev.db.Scoped(tn.ID)
@@ -217,7 +220,37 @@ func (ev *env) use(tn *tenant.Tenant, size int64) {
 			ID: id.New(id.File), Name: "file.bin", Size: size, DEKKeyID: wk.ID, StorageName: hex.EncodeToString(name), UploadID: upl,
 		}
 		tr := store.Transfer{ID: id.New(id.Transfer), SenderEmail: "alice@entity-a.example.com", SenderKind: store.DepositorInternal, ExpiryDays: 7}
+		trfID, fileID = tr.ID, f.ID
 		return ev.db.Transfers().CreateTx(ctx, tx, tr, []string{"bob@example.com"}, []store.TransferFile{f})
+	})
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	return trfID, fileID
+}
+
+// available makes the uploading transfer trfID of tn (file fileID) available
+// at now.
+func (ev *env) available(tn *tenant.Tenant, trfID, fileID string, now time.Time) {
+	ev.t.Helper()
+	ctx := context.Background()
+	if err := ev.db.TransferFiles().CompleteUpload(ctx, tn.ID, fileID, strings.Repeat("1", 64), 50, now); err != nil {
+		ev.t.Fatal(err)
+	}
+	s, err := ev.db.Scoped(tn.ID)
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+		if err := ev.db.Transfers().FinalizeTx(ctx, tx, trfID, now); err != nil {
+			return err
+		}
+		keyID := id.New(id.WrappedKey)
+		wk := store.WrappedKey{ID: keyID, Purpose: store.KeyPurposeSecret, KeyID: "mk_0123456789abcdef", Blob: []byte("k")}
+		if err := ev.db.WrappedKeys().CreateTx(ctx, tx, wk); err != nil {
+			return err
+		}
+		return ev.db.Transfers().MarkAvailableTx(ctx, tx, trfID, append(bytes.Repeat([]byte{7}, store.TokenHashSize-len(trfID)), trfID...), keyID, now)
 	})
 	if err != nil {
 		ev.t.Fatal(err)
@@ -568,4 +601,174 @@ func TestNewOptions(t *testing.T) {
 	if err != nil || s.settings == nil || !s.mailOK {
 		t.Fatalf("New: %v %+v", err, s)
 	}
+}
+
+func (f *faultRepo) scanQueueFiles(ctx context.Context) (int64, error) {
+	if f.queueErr != nil {
+		return 0, f.queueErr
+	}
+	return f.repo.scanQueueFiles(ctx)
+}
+
+func (f *faultRepo) activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error) {
+	if f.countsErr != nil {
+		return nil, f.countsErr
+	}
+	return f.repo.activeCounts(ctx, since)
+}
+
+func TestInstanceState(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+		ctx := context.Background()
+		a, b, gone := ev.tenant(1000), ev.tenant(4000), ev.tenant(1000)
+		ev.use(a, 500)
+		ev.use(gone, 10)
+		if err := ev.db.Tenants().SetStatus(ctx, gone.ID, tenant.StatusDeleting); err != nil {
+			t.Fatal(err)
+		}
+		ev.svc.measure = func(path string) (uint64, uint64, error) {
+			if path != ev.svc.dataDir {
+				t.Errorf("measured %q", path)
+			}
+			return 1000, 300, nil
+		}
+		s, err := ev.svc.InstanceState(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.DiskTotalBytes != 1000 || s.DiskUsedBytes != 700 || s.DiskAlertThreshold != DefaultDiskAlertThreshold || s.DiskAlertActive || s.ScanQueueFiles != 0 {
+			t.Fatalf("state %+v", s)
+		}
+		want := []metricstate.TenantState{
+			{ID: string(a.ID), Name: a.Name, StorageUsedBytes: 500, StorageQuotaBytes: 1000},
+			{ID: string(b.ID), Name: b.Name, StorageQuotaBytes: 4000},
+		}
+		slices.SortFunc(want, func(x, y metricstate.TenantState) int { return strings.Compare(x.ID, y.ID) })
+		if !slices.Equal(s.Tenants, want) {
+			t.Fatalf("tenants %+v, want %+v", s.Tenants, want)
+		}
+
+		// The stored threshold and level.
+		ev.svc.settings = settingsFunc(func(context.Context) (store.SystemSettingsRow, error) {
+			return store.SystemSettingsRow{DiskAlertThresholdBP: 9000, DiskAlertLevel: store.DiskAlertLevelRaised}, nil
+		})
+		s, err = ev.svc.InstanceState(ctx)
+		if err != nil || s.DiskAlertThreshold != 0.9 || !s.DiskAlertActive {
+			t.Fatalf("settings: %v %+v", err, s)
+		}
+	})
+}
+
+// fixedRepo overrides the supervision reads of a repo, and returns its
+// tenants in reverse order.
+type fixedRepo struct {
+	repo
+	queue  int64
+	counts map[tenant.ID]store.TenantTransferCounts
+}
+
+func (f fixedRepo) scanQueueFiles(context.Context) (int64, error) { return f.queue, nil }
+
+func (f fixedRepo) activeCounts(context.Context, time.Time) (map[tenant.ID]store.TenantTransferCounts, error) {
+	return f.counts, nil
+}
+
+func (f fixedRepo) activeTenants(ctx context.Context) ([]*tenant.Tenant, error) {
+	ts, err := f.repo.activeTenants(ctx)
+	slices.Reverse(ts)
+	return ts, err
+}
+
+func TestInstanceStateCounts(t *testing.T) {
+	ev := newEnv(t, storetest.SQLite(t), time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+	a, b := ev.tenant(100), ev.tenant(100)
+	ev.svc.repo = fixedRepo{
+		repo:   ev.fault,
+		queue:  7,
+		counts: map[tenant.ID]store.TenantTransferCounts{b.ID: {TenantID: b.ID, Active: 4, MadeAvailableSince: 2}},
+	}
+	ev.svc.measure = func(string) (uint64, uint64, error) { return 10, 5, nil }
+	s, err := ev.svc.InstanceState(context.Background())
+	if err != nil || s.ScanQueueFiles != 7 || len(s.Tenants) != 2 {
+		t.Fatalf("state %+v, %v", s, err)
+	}
+	byID := map[string]metricstate.TenantState{}
+	for _, ts := range s.Tenants {
+		byID[ts.ID] = ts
+	}
+	if byID[string(b.ID)].ActiveTransfers != 4 || byID[string(b.ID)].TransfersLast24h != 2 || byID[string(a.ID)].ActiveTransfers != 0 {
+		t.Fatalf("tenants %+v", s.Tenants)
+	}
+	if !slices.IsSortedFunc(s.Tenants, func(x, y metricstate.TenantState) int { return strings.Compare(x.ID, y.ID) }) {
+		t.Fatalf("tenants not sorted: %+v", s.Tenants)
+	}
+}
+
+func TestInstanceStateFailures(t *testing.T) {
+	ev := newEnv(t, storetest.SQLite(t), time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+	ctx := context.Background()
+	ev.svc.measure = func(string) (uint64, uint64, error) { return 10, 5, nil }
+	for name, set := range map[string]func(f *faultRepo){
+		"queue":   func(f *faultRepo) { f.queueErr = errBoom },
+		"active":  func(f *faultRepo) { f.activeErr = errBoom },
+		"usedAll": func(f *faultRepo) { f.usedAllErr = errBoom },
+		"counts":  func(f *faultRepo) { f.countsErr = errBoom },
+	} {
+		*ev.fault = faultRepo{repo: ev.fault.repo}
+		set(ev.fault)
+		if _, err := ev.svc.InstanceState(ctx); !errors.Is(err, errBoom) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	*ev.fault = faultRepo{repo: ev.fault.repo}
+	ev.svc.settings = settingsFunc(func(context.Context) (store.SystemSettingsRow, error) {
+		return store.SystemSettingsRow{}, errBoom
+	})
+	if _, err := ev.svc.InstanceState(ctx); !errors.Is(err, errBoom) {
+		t.Errorf("settings: %v", err)
+	}
+	ev.svc.settings = nil
+	ev.svc.measure = func(string) (uint64, uint64, error) { return 0, 0, errBoom }
+	if _, err := ev.svc.InstanceState(ctx); !errors.Is(err, errBoom) || !strings.Contains(ev.logs.String(), "disk usage unavailable") {
+		t.Errorf("measure: %v", err)
+	}
+}
+
+func TestStoreRepoSupervision(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC))
+		r := storeRepo{db: ev.db}
+		ctx := context.Background()
+		if n, err := r.scanQueueFiles(ctx); err != nil || n != 0 {
+			t.Fatalf("scanQueueFiles = %d, %v", n, err)
+		}
+		if m, err := r.activeCounts(ctx, time.Now()); err != nil || m == nil || len(m) != 0 {
+			t.Fatalf("activeCounts = %v, %v", m, err)
+		}
+		_ = ev.db.Close()
+		if _, err := r.scanQueueFiles(ctx); err == nil {
+			t.Fatal("scanQueueFiles on a closed database")
+		}
+		if _, err := r.activeCounts(ctx, time.Now()); err == nil {
+			t.Fatal("activeCounts on a closed database")
+		}
+	})
+}
+
+func TestInstanceStateTransfers(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		now := time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
+		ev := newEnv(t, e, now)
+		ev.svc.measure = func(string) (uint64, uint64, error) { return 10, 5, nil }
+		a := ev.tenant(1000)
+		trf, file := ev.use(a, 100)
+		ev.available(a, trf, file, now.Add(-time.Hour))
+		trf, file = ev.use(a, 100)
+		ev.available(a, trf, file, now.Add(-48*time.Hour)) // available, but not in the last 24 hours
+		s, err := ev.svc.InstanceState(context.Background())
+		if err != nil || len(s.Tenants) != 1 || s.Tenants[0].ActiveTransfers != 2 || s.Tenants[0].TransfersLast24h != 1 || s.ScanQueueFiles != 0 {
+			t.Fatalf("state %+v, %v", s, err)
+		}
+	})
 }

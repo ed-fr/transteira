@@ -512,6 +512,9 @@ func TestRaiseAndClear(t *testing.T) {
 		start := ev.now()
 		ev.outage()
 
+		if !ev.m.Active() {
+			t.Error("Active is false while the alert is raised")
+		}
 		raised := ev.events(audit.ActionAntivirusAlertRaised)
 		if len(raised) != 1 || raised[0].Actor != actor || raised[0].ObjectID != objectID || raised[0].TenantID != "" {
 			t.Fatalf("raised events: %+v", raised)
@@ -559,6 +562,9 @@ func TestRaiseAndClear(t *testing.T) {
 		}
 
 		ev.recover()
+		if ev.m.Active() {
+			t.Error("Active is true after the recovery")
+		}
 		cleared := ev.events(audit.ActionAntivirusAlertCleared)
 		if len(cleared) != 1 || details(t, cleared[0])["outageSeconds"] != 3660 {
 			t.Fatalf("cleared events: %+v", cleared)

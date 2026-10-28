@@ -45,6 +45,7 @@ import (
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/masterkey"
+	"github.com/ed-fr/transteira/internal/metrics"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/quota"
@@ -375,7 +376,10 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// The mails of a tenant use its customized templates when it has some.
 	overrides := notify.StoreOverrides(db.TenantEmailTemplates())
 	// One recorder counts the usage statistics.
-	usageCounts := usage.New(db, usage.Options{Logger: logger})
+	// counters are the in-memory counters of /metrics, fed by the usage
+	// recorder and the HTTP server.
+	counters := metrics.NewCounters()
+	usageCounts := usage.New(db, usage.Options{Logger: logger, Sink: counters})
 	deposits := deposit.New(db, keys, vault, mailQueue, secLog, deposit.Options{
 		SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides, Audit: auditLog,
 	})
@@ -457,7 +461,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// The outputs of the bus: the webhook dispatcher and the syslog export.
 	// They subscribe before the bus starts and are closed right after it, in
 	// the last close stage (see outputs).
-	webhooks, outputs, err := newBusOutputs(cfg, db, vault, auditLog, bus, logger)
+	busOut, err := newBusOutputs(cfg, db, vault, auditLog, bus, logger)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -468,7 +472,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// while the database is still open.
 	defer closeStages(ctx, logger,
 		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations}},
-		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, outputs}})
+		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, busOut.closer}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
 		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
@@ -490,7 +494,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: start the event bus: %w", err)
 	}
 	if o.busReady != nil {
-		o.busReady(bus, webhooks)
+		o.busReady(bus, busOut.hooks)
 	}
 	// Started before the worker, so that the outage its start-up sweep may
 	// find is followed at once (a report made earlier is kept anyway).
@@ -542,17 +546,37 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 
+	healthChecks := &health.Service{
+		Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
+		Antivirus: health.Check{Checker: health.CheckerFunc(clamd.Ping)},
+		Storage:   health.Check{Checker: health.StorageCheck(cfg.DataDir)},
+		Logger:    logger,
+	}
+	// The supervision collector (/metrics, /status) computes its snapshot
+	// before the server starts (bounded by metrics.CollectTimeout when a
+	// component such as clamd does not answer); it stops before the other
+	// components.
+	collector := metrics.NewCollector(supervisionSources(busOut, metrics.Sources{
+		State: statistics, Health: healthChecks.Run, Antivirus: worker, AVAlert: avAlerts,
+		Maintenance: maint, Mail: mailQueues(mailQueue, sysMail.queue), Bus: bus,
+		LastRun: func(task string) time.Time { return sweeper.LastRun(lifecycle.Task(task)) },
+		Tasks:   supervisedTasks, AntivirusEngine: "clamd",
+	}), counters, metrics.WithStartTime(processStart), metrics.WithLogger(logger))
+	if err := collector.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the supervision collector: %w", err)
+	}
+	defer closeStages(ctx, logger, closeStage{timeout: BackgroundCloseTimeout, closers: []closer{collector}})
+	supervision := metrics.NewHandler(metrics.HandlerOptions{
+		Token: cfg.MetricsToken, AllowedIPs: cfg.MetricsAllowedIPs, Collector: collector,
+		Events: httpserver.NewSecurityEvents(secLog, logger), Logger: logger,
+	})
+
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,
 		SecurityLog:  secLog,
-		Health: &health.Service{
-			Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
-			Antivirus: health.Check{Checker: health.CheckerFunc(clamd.Ping)},
-			Storage:   health.Check{Checker: health.StorageCheck(cfg.DataDir)},
-			Logger:    logger,
-		},
-		Maintenance: maint,
+		Health:       healthChecks,
+		Maintenance:  maint,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
 			public.WithTenantService(tenants), public.WithMaintenance(maint)),
@@ -564,13 +588,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
-			admin.WithWebhookService(webhooks)),
+			admin.WithWebhookService(busOut.hooks)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
 		Spec:                api.OpenAPISpec,
 		APIDocsPublic:       cfg.APIDocsPublic,
 		WebUI:               webUI(&o),
+		Requests:            counters,
+		Streams:             counters,
+		Metrics:             supervision.Metrics,
+		Status:              supervision.Status,
 		Logger:              logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)
@@ -1105,45 +1133,87 @@ func closeWith(closeFn func() error, what string) error {
 // it, before it starts: the webhook dispatcher (CLAUDE.md section 12.4) and,
 // when TT_SYSLOG_ADDR is set, the syslog export (section 19). It returns the
 // webhook administration service, which is also the store of the dispatcher,
-// and the closer of the bus and its outputs.
+// the closer of the bus and its outputs, and the outputs read by the
+// supervision.
 func newBusOutputs(cfg *config.Config, db *store.DB, vault *masterkey.Vault, auditLog *audit.Writer,
 	bus *events.Bus, logger *slog.Logger,
-) (*webhookadmin.Service, closer, error) {
+) (busOutputs, error) {
 	client, err := webhook.NewClient(webhook.ClientOptions{
 		Allow: cfg.WebhookAllowNetworks, AllowHTTP: cfg.WebhookAllowHTTPNetworks,
 		Deny: cfg.WebhookDenyNetworks, AdminURL: adminBaseURL(cfg),
 	})
 	if err != nil {
-		return nil, nil, err
+		return busOutputs{}, err
 	}
 	hooks, err := webhookadmin.New(db, vault, webhookadmin.Options{
 		Validator: client, Tester: client, Audit: auditLog, Logger: logger,
 	})
 	if err != nil {
-		return nil, nil, err
+		return busOutputs{}, err
 	}
 	dispatcher, err := webhook.NewDispatcher(webhook.DispatcherOptions{Store: hooks, Client: client, Logger: logger})
 	if err != nil {
-		return nil, nil, err
+		return busOutputs{}, err
 	}
 	if err := dispatcher.Register(bus); err != nil {
-		return nil, nil, err
+		return busOutputs{}, err
 	}
 	out := outputs{bus, dispatcher}
+	res := busOutputs{hooks: hooks, webhook: dispatcher}
 	if cfg.Syslog.Enabled() {
 		exporter, err := syslog.New(syslog.Options{
 			Addr: cfg.Syslog.Addr, Protocol: cfg.Syslog.Protocol, Streams: cfg.Syslog.Streams,
 			Facility: cfg.Syslog.Facility, CAFile: cfg.Syslog.CAFile, Logger: logger,
 		})
 		if err != nil {
-			return nil, nil, err
+			return busOutputs{}, err
 		}
 		if err := exporter.Register(bus); err != nil {
-			return nil, nil, err
+			return busOutputs{}, err
 		}
 		out = append(out, exporter)
+		res.syslog = exporter
 	}
-	return hooks, out, nil
+	res.closer = out
+	return res, nil
+}
+
+// mailQueues returns the mail queues read by the supervision, leaving out
+// the system queue when no system SMTP is configured (nil).
+func mailQueues(tenantQueue, systemQueue *mail.Queue) []metrics.QueueState {
+	qs := []metrics.QueueState{tenantQueue}
+	if systemQueue != nil {
+		qs = append(qs, systemQueue)
+	}
+	return qs
+}
+
+// busOutputs are the outputs of the event bus built by newBusOutputs.
+type busOutputs struct {
+	hooks   *webhookadmin.Service
+	closer  outputs
+	webhook *webhook.Dispatcher
+	syslog  *syslog.Exporter // nil when the syslog export is disabled
+}
+
+// supervisedTasks lists the cleanup tasks whose last success /status and
+// /metrics report.
+var supervisedTasks = []string{
+	string(lifecycle.TaskExpire), string(lifecycle.TaskDeleteAfterDownload),
+	string(lifecycle.TaskAbandonedUploads), string(lifecycle.TaskTenantDeletions),
+	string(lifecycle.TaskPurgeRows), string(lifecycle.TaskOrphans), string(lifecycle.TaskBackup),
+}
+
+// supervisionSources completes src with the bus outputs of b, leaving the
+// syslog members nil (not a typed nil) when the export is disabled.
+func supervisionSources(b busOutputs, src metrics.Sources) metrics.Sources {
+	src.Webhook = b.webhook
+	src.Subscribers = []string{webhook.SubscriberName}
+	if b.syslog != nil {
+		src.Syslog = b.syslog
+		src.Subscribers = append(src.Subscribers, syslog.SubscriberName)
+	}
+	return src
 }
 
 // outputs closes the event bus then its outputs, one after the other within

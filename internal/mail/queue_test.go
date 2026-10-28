@@ -207,6 +207,9 @@ func TestQueueCloseTimeout(t *testing.T) {
 	if strings.Count(out, "mail dropped at shutdown") != 2 || strings.Count(out, "mail delivery failed") != 1 {
 		t.Fatalf("logs: %s", out)
 	}
+	if n := q.Dropped(); n != 2 {
+		t.Errorf("Dropped = %d, want 2", n)
+	}
 }
 
 func TestQueueRetryInterruptedByClose(t *testing.T) {
@@ -418,6 +421,9 @@ func TestQueueCircuitBreaker(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "dropped=1") {
 		t.Fatalf("dropped job not counted: %s", logs.String())
+	}
+	if n := q.Dropped(); n != 1 {
+		t.Errorf("Dropped = %d, want 1", n)
 	}
 	// Other tenants are unaffected.
 	if err := q.Enqueue(tenantJob("ten_a")); err != nil {

@@ -102,8 +102,20 @@
 	}
 }
 
-# The admin host and every tenant FQDN. Add a tenant by appending its FQDN.
+# The admin host and every tenant FQDN. Add a tenant by appending its FQDN to
+# the second block.
 # TransTeira routes by the Host header, which Caddy passes through unchanged.
-admin.transfer.example.com, transfer.entity-a.example.com, transfer.entity-b.example.com {
+admin.transfer.example.com {
+	import transteira
+}
+
+# Tenant FQDNs: /metrics and /status (monitoring, token protected) are not
+# published here, only on the admin host above (threat model T-191). Caddy
+# runs "respond" before "reverse_proxy", so the request never reaches
+# TransTeira.
+transfer.entity-a.example.com, transfer.entity-b.example.com {
+	@monitoring path /metrics /metrics/* /status /status/*
+	respond @monitoring 404
+
 	import transteira
 }

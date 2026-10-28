@@ -56,6 +56,13 @@ func (s *SecurityEvents) APITokenInvalid(ctx context.Context, ip netip.Addr, ten
 	s.write(ctx, securitylog.Event{Type: securitylog.APITokenInvalid, IP: ip, Tenant: tenantFQDN})
 }
 
+// MetricsTokenInvalid records a metrics_token_invalid event: a wrong
+// monitoring token on /metrics or /status, outside any tenant. The token
+// itself is never written.
+func (s *SecurityEvents) MetricsTokenInvalid(ctx context.Context, ip netip.Addr) {
+	s.write(ctx, securitylog.Event{Type: securitylog.MetricsTokenInvalid, IP: ip})
+}
+
 // DepositRefused records a deposit_refused event with its reason (one of
 // the securitylog Reason* deposit values).
 func (s *SecurityEvents) DepositRefused(ctx context.Context, ip netip.Addr, tenantFQDN, reason string) {

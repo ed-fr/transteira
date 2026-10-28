@@ -369,6 +369,47 @@ func TestTransfersScanningCounts(t *testing.T) {
 	})
 }
 
+func TestSupervisionCounts(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		transfers := db.Transfers()
+		since := fixedNow.Add(-24 * time.Hour)
+		if n, err := transfers.ScanQueueFiles(ctx); err != nil || n != 0 {
+			t.Fatalf("ScanQueueFiles(empty) = %d, %v", n, err)
+		}
+		if got, err := transfers.ActiveCounts(ctx, since); err != nil || len(got) != 0 {
+			t.Fatalf("ActiveCounts(empty) = %+v, %v", got, err)
+		}
+		a := newTenant(t, db, "transfer.entity-a.example.com")
+		b := newTenant(t, db, "transfer.entity-b.example.com")
+		newTenant(t, db, "transfer.entity-c.example.com") // nothing
+
+		scanningTransfer(t, db, a.ID, fixedNow, 3) // 3 files waiting
+		scanningTransfer(t, db, b.ID, fixedNow, 1) // 1 file waiting
+		avail := scanningTransfer(t, db, a.ID, fixedNow, 2)
+		markAvailable(t, db, a.ID, avail.ID) // made available at fixedNow: no longer waiting
+		mustTransfer(t, db, b.ID, newTransfer())
+		if n, err := transfers.ScanQueueFiles(ctx); err != nil || n != 4 {
+			t.Errorf("ScanQueueFiles = %d, %v; want 4", n, err)
+		}
+
+		got, err := transfers.ActiveCounts(ctx, since)
+		want := []store.TenantTransferCounts{{TenantID: a.ID, Active: 1, MadeAvailableSince: 1}}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("ActiveCounts = %+v, %v; want %+v", got, err, want)
+		}
+		// Made available before the window: still active, not recent.
+		got, err = transfers.ActiveCounts(ctx, fixedNow.Add(time.Hour))
+		want = []store.TenantTransferCounts{{TenantID: a.ID, Active: 1, MadeAvailableSince: 0}}
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("ActiveCounts(later) = %+v, %v; want %+v", got, err, want)
+		}
+	})
+}
+
 func TestScanStatusDeliverable(t *testing.T) {
 	t.Parallel()
 	for s, want := range map[store.ScanStatus]bool{

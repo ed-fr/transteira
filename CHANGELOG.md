@@ -31,6 +31,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Syslog export of the audit and security logs (RFC 5424 over TLS, TCP or UDP, octet-counting
   framing), configured with the `TT_SYSLOG_*` variables; never blocking
   (`docs/operations/syslog.md`).
+- Supervision (specification section 19): Prometheus metrics on `/metrics` and a JSON status on
+  `/status` (transfers, volumes, quotas, antivirus, disk, HTTP requests, download streams, mail
+  queue, webhook and syslog deliveries, dropped events, last cleanup runs), both disabled until
+  `TT_METRICS_TOKEN` is set and optionally limited to `TT_METRICS_ALLOWED_IPS`. Values computed
+  every 15 seconds; a wrong token is written to the security log (`metrics_token_invalid`, added to
+  the fail2ban and CrowdSec filters). Grafana dashboard and Zabbix 7.0 template in `integrations/`;
+  the shipped Caddy, Nginx and Apache configurations hide both paths on the tenant hosts
+  (`docs/operations/supervision.md`).
 - `make check-full`: `make check` with the 20 GB test forced, required before every release.
 - `make check` prints the duration of every gate.
 

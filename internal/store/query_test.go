@@ -700,6 +700,9 @@ var systemAllowlist = map[string]string{
 	// Antivirus alert: transfers waiting per tenant (identifiers and counts
 	// only).
 	`SELECT tenant_id, COUNT(*) FROM transfers WHERE status = 'scanning' GROUP BY tenant_id ORDER BY tenant_id`: reasonAntivirusAlert,
+	// Supervision metrics (counts only).
+	`SELECT count(*) FROM transfer_files f JOIN transfers t ON t.tenant_id = f.tenant_id AND t.id = f.transfer_id WHERE t.status = 'scanning' AND f.scan_status IN ('pending', 'scanning')`:                                                                                                      reasonSupervision,
+	`SELECT tenant_id, CAST(COALESCE(SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END), 0) AS BIGINT), CAST(COALESCE(SUM(CASE WHEN available_at >= ? THEN 1 ELSE 0 END), 0) AS BIGINT) FROM transfers WHERE status = 'available' OR available_at >= ? GROUP BY tenant_id ORDER BY tenant_id`: reasonSupervision,
 	// Deletion after the first download (identifiers only).
 	`SELECT tenant_id, id, delete_after FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? ` +
 		`AND status = 'available' AND (delete_after, tenant_id, id) > (?, ?, ?) ` +

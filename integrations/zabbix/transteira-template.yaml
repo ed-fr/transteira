@@ -1,0 +1,567 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 5e7dd7dd26b144f9b20d97ae83209a46
+      name: Templates/Applications
+  templates:
+    - uuid: 21cf3e73e90749b898a8ca6f876afa21
+      template: TransTeira
+      name: TransTeira
+      description: |
+        TransTeira instance supervision through its Prometheus endpoint (/metrics).
+        Set {$TRANSTEIRA.URL} and {$TRANSTEIRA.TOKEN} on the host. See integrations/zabbix/README.md.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 9e1e0b803d1941ca8e9c2657bd1ea54f
+          name: TransTeira metrics (raw)
+          type: HTTP_AGENT
+          key: transteira.metrics.raw
+          delay: 1m
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: Prometheus text exposition fetched from /metrics; the other items read it.
+          url: '{$TRANSTEIRA.URL}/metrics'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$TRANSTEIRA.TOKEN}'
+          timeout: 10s
+          tags:
+            - tag: component
+              value: raw
+        - uuid: db39aa5b81f2427cbefbff25017c1707
+          name: 'Uptime'
+          type: DEPENDENT
+          key: transteira.uptime
+          delay: '0'
+          history: 14d
+          units: s
+          description: 'Seconds since the process started.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_uptime_seconds'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: uptime
+        - uuid: 6d364b92b62048b7ac385b2761419e7a
+          name: 'Maintenance mode'
+          type: DEPENDENT
+          key: transteira.maintenance
+          delay: '0'
+          history: 14d
+          description: '1 while the maintenance mode is on.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_maintenance'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: maintenance
+        - uuid: c0831dd231bf44ae98cc88bbac7ae179
+          name: 'Antivirus up'
+          type: DEPENDENT
+          key: transteira.antivirus.up
+          delay: '0'
+          history: 14d
+          description: '1 when the antivirus answers.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_antivirus_up'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: antivirus
+        - uuid: d7fb8bbca79543deac789f23ffdebe87
+          name: 'Antivirus alert'
+          type: DEPENDENT
+          key: transteira.antivirus.alert
+          delay: '0'
+          history: 14d
+          description: '1 while the antivirus outage alert is raised.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_antivirus_alert'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: antivirus
+        - uuid: e1cd60a0707940b8bbb5f96efe69780b
+          name: 'Files in the scan queue'
+          type: DEPENDENT
+          key: transteira.antivirus.queue
+          delay: '0'
+          history: 14d
+          description: 'Files waiting for or under analysis.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_scan_queue_files'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: antivirus
+        - uuid: 883ada8991ce4a0fba42d7018efdf35d
+          name: 'Data disk used ratio'
+          type: DEPENDENT
+          key: transteira.disk.used_ratio
+          delay: '0'
+          history: 14d
+          description: 'Used fraction of the data disk (0 to 1).'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_disk_used_ratio'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: disk
+        - uuid: 6c181d873eb74619b799567c4a98daf5
+          name: 'Data disk used'
+          type: DEPENDENT
+          key: transteira.disk.used_bytes
+          delay: '0'
+          history: 14d
+          units: B
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_disk_used_bytes'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: disk
+        - uuid: 3aa7ed9cc5c54fbbb8514c9b4c366003
+          name: 'Data disk total'
+          type: DEPENDENT
+          key: transteira.disk.total_bytes
+          delay: '0'
+          history: 14d
+          units: B
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_disk_total_bytes'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: disk
+        - uuid: b060d17865b14a20b189f1d5551b4fe5
+          name: 'Disk alert'
+          type: DEPENDENT
+          key: transteira.disk.alert
+          delay: '0'
+          history: 14d
+          description: '1 while the disk space alert is raised.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_disk_alert'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: disk
+        - uuid: 128e724765c54daaa649dc987955b84c
+          name: 'Download streams open'
+          type: DEPENDENT
+          key: transteira.download.streams
+          delay: '0'
+          history: 14d
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_download_streams'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: download
+        - uuid: 95176eab629c47aa8a4d0c725050421c
+          name: 'HTTP 5xx responses per second'
+          type: DEPENDENT
+          key: transteira.http.requests.5xx
+          delay: '0'
+          history: 14d
+          units: rps
+          description: 'Server errors, rate since the previous poll.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_http_requests_total{class="5xx"}'
+                - value
+                - ''
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: http
+        - uuid: 56a8d99c212446b1804b3b61dbfa6c10
+          name: 'HTTP 4xx responses per second'
+          type: DEPENDENT
+          key: transteira.http.requests.4xx
+          delay: '0'
+          history: 14d
+          units: rps
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_http_requests_total{class="4xx"}'
+                - value
+                - ''
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: http
+        - uuid: 3c32e57ea34348d59fcbab068982ebad
+          name: 'Mail queue length'
+          type: DEPENDENT
+          key: transteira.mail.queue
+          delay: '0'
+          history: 14d
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_mail_queue_length'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: mail
+        - uuid: 0b22b817419d49b3ab3adc2705bda81e
+          name: 'Mails dropped'
+          type: DEPENDENT
+          key: transteira.mail.dropped
+          delay: '0'
+          history: 14d
+          description: 'Counter since the start of the process.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_mail_dropped_total'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: mail
+        - uuid: 7e22942f7ce0418f97fa8a4fb97d537c
+          name: 'Events dropped (all subscribers)'
+          type: DEPENDENT
+          key: transteira.events.dropped
+          delay: '0'
+          history: 14d
+          description: 'Counter since the start of the process.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_events_dropped_total'
+                - sum
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: events
+        - uuid: 2c72dd1500954da7ba1960a8d3c059a8
+          name: 'Syslog messages failed'
+          type: DEPENDENT
+          key: transteira.syslog.failed
+          delay: '0'
+          history: 14d
+          description: 'Counter since the start of the process.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_syslog_messages_total{result="failed"}'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: syslog
+        - uuid: 81d16f5bbff0408fa4c8c9a9cbc0683f
+          name: 'Syslog messages dropped'
+          type: DEPENDENT
+          key: transteira.syslog.dropped
+          delay: '0'
+          history: 14d
+          description: 'Counter since the start of the process.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_syslog_messages_total{result="dropped"}'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: syslog
+        - uuid: cebebf1eac2f4d27911ca51e51e36c69
+          name: 'Webhook deliveries failed'
+          type: DEPENDENT
+          key: transteira.webhooks.failed
+          delay: '0'
+          history: 14d
+          description: 'Counter since the start of the process.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'transteira_webhook_deliveries_total{result="failed"}'
+                - value
+                - ''
+          master_item:
+            key: transteira.metrics.raw
+          tags:
+            - tag: component
+              value: webhooks
+      discovery_rules:
+        - uuid: 75d435e812d8436097ba19d3490fcb08
+          name: Tenant discovery
+          type: DEPENDENT
+          key: transteira.tenants.discovery
+          delay: '0'
+          description: One entry per tenant (label tenant = tenant ID, never a name).
+          item_prototypes:
+            - uuid: a3188e33dd894912b6ea5aa807b24f8c
+              name: 'Tenant {#TENANT}: storage used'
+              type: DEPENDENT
+              key: 'transteira.tenant.storage_used[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_storage_used_bytes{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: 22ff8b2ca7e34cb1a5675c26060877fc
+              name: 'Tenant {#TENANT}: storage quota'
+              type: DEPENDENT
+              key: 'transteira.tenant.storage_quota[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              units: B
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_storage_quota_bytes{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: e9c349b4e2114123af6a6d185a22abc5
+              name: 'Tenant {#TENANT}: active transfers'
+              type: DEPENDENT
+              key: 'transteira.tenant.active_transfers[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_active_transfers{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: 3b2cfae843bc4560b297c6feb5515a8f
+              name: 'Tenant {#TENANT}: transfers per second'
+              type: DEPENDENT
+              key: 'transteira.tenant.transfers_rate[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              units: rps
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_transfers_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: f7691e4610e84fe886f9e4231d0aac72
+              name: 'Tenant {#TENANT}: downloads per second'
+              type: DEPENDENT
+              key: 'transteira.tenant.downloads_rate[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              units: rps
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_downloads_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+                - type: CHANGE_PER_SECOND
+                  parameters:
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+            - uuid: 5aece13d640d47628833ea945ae81ecc
+              name: 'Tenant {#TENANT}: antivirus detections'
+              type: DEPENDENT
+              key: 'transteira.tenant.av_detections[{#TENANT}]'
+              delay: '0'
+              history: 14d
+              preprocessing:
+                - type: PROMETHEUS_PATTERN
+                  parameters:
+                    - 'transteira_antivirus_detections_total{tenant="{#TENANT}"}'
+                    - value
+                    - ''
+              master_item:
+                key: transteira.metrics.raw
+              tags:
+                - tag: component
+                  value: tenant
+                - tag: tenant
+                  value: '{#TENANT}'
+          trigger_prototypes:
+            - uuid: dfdacafaf822465ab3bfa09903ddffae
+              expression: 'last(/TransTeira/transteira.tenant.storage_quota[{#TENANT}])>0 and last(/TransTeira/transteira.tenant.storage_used[{#TENANT}])>={$TRANSTEIRA.QUOTA.WARN}*last(/TransTeira/transteira.tenant.storage_quota[{#TENANT}])'
+              name: 'Tenant {#TENANT}: storage quota reached {$TRANSTEIRA.QUOTA.WARN}'
+              priority: WARNING
+              description: New deposits are blocked once the quota is full.
+          master_item:
+            key: transteira.metrics.raw
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - transteira_storage_quota_bytes
+          lld_macro_paths:
+            - lld_macro: '{#TENANT}'
+              path: $.labels['tenant']
+      triggers:
+        - uuid: c80c7e809eb742b5855f456dfe779a37
+          expression: 'last(/TransTeira/transteira.disk.used_ratio)>{$TRANSTEIRA.DISK.WARN}'
+          name: 'TransTeira: data disk used above {$TRANSTEIRA.DISK.WARN}'
+          priority: AVERAGE
+          description: 'Free space or extend the volume: uploads fail when the disk is full.'
+        - uuid: 3cd5bcda92784aac91738823b66bc38f
+          expression: 'last(/TransTeira/transteira.disk.alert)=1'
+          name: 'TransTeira: disk space alert raised'
+          priority: WARNING
+        - uuid: 34461b83e2e24eec8670c12158ec828d
+          expression: 'last(/TransTeira/transteira.antivirus.up)=0'
+          name: 'TransTeira: antivirus unavailable'
+          priority: HIGH
+          description: 'Files stay in the scan queue while the antivirus is down.'
+        - uuid: 279b2aae491e4925bfa1ef1c2eaf3679
+          expression: 'last(/TransTeira/transteira.antivirus.alert)=1'
+          name: 'TransTeira: antivirus alert raised'
+          priority: WARNING
+        - uuid: 0568973a863643a2b33e4844cbf302d6
+          expression: 'change(/TransTeira/transteira.events.dropped)>0'
+          name: 'TransTeira: internal events dropped'
+          priority: WARNING
+          description: 'A subscriber (mail, webhook, syslog) could not keep up.'
+        - uuid: 7a9f27fd30cb4cb5ab24aca9ab25c0b0
+          expression: 'change(/TransTeira/transteira.syslog.failed)>0 or change(/TransTeira/transteira.syslog.dropped)>0'
+          name: 'TransTeira: syslog messages lost'
+          priority: WARNING
+        - uuid: b756f1b3edfe4501ad4f42c71b95f449
+          expression: 'change(/TransTeira/transteira.mail.dropped)>0'
+          name: 'TransTeira: mails dropped'
+          priority: WARNING
+        - uuid: 75980d3025c64d3f89fd8dcefa2857e9
+          expression: 'change(/TransTeira/transteira.webhooks.failed)>0'
+          name: 'TransTeira: webhook deliveries failed'
+          priority: INFO
+        - uuid: 43ce4742536f443484230786af5de6b4
+          expression: 'min(/TransTeira/transteira.http.requests.5xx,10m)>0'
+          name: 'TransTeira: server errors (HTTP 5xx) for 10 minutes'
+          priority: WARNING
+        - uuid: f1583edba360499390d0d55013167e3e
+          expression: 'nodata(/TransTeira/transteira.metrics.raw,5m)=1'
+          name: 'TransTeira: no metrics received for 5 minutes'
+          priority: HIGH
+          description: 'Check {$TRANSTEIRA.URL}, the token and, if used, TT_METRICS_ALLOWED_IPS.'
+      macros:
+        - macro: '{$TRANSTEIRA.URL}'
+          value: 'https://admin.transfer.example.com'
+          description: 'Base URL of the admin host, no trailing slash.'
+        - macro: '{$TRANSTEIRA.TOKEN}'
+          type: SECRET_TEXT
+          description: 'Value of TT_METRICS_TOKEN.'
+        - macro: '{$TRANSTEIRA.DISK.WARN}'
+          value: '0.85'
+          description: 'Data disk ratio (0 to 1) above which the trigger fires.'
+        - macro: '{$TRANSTEIRA.QUOTA.WARN}'
+          value: '0.8'
+          description: 'Tenant quota ratio (0 to 1) above which the trigger fires.'

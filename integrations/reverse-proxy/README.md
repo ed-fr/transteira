@@ -134,6 +134,26 @@ plain HTTP, would become unreachable over HTTP for the duration of `max-age`,
 and this cannot be undone remotely. Add `includeSubDomains` only after checking
 that every subdomain of each served name is HTTPS-only.
 
+## Monitoring endpoints
+
+`/metrics` and `/status` (Prometheus metrics and JSON status, see
+[docs/operations/supervision.md](../../docs/operations/supervision.md)) are protected by a token,
+but they belong to the instance, not to a tenant, and nothing requires publishing them on the
+tenant FQDNs (threat model T-191). The configurations therefore answer `404` for these two paths
+on every host name except the admin host, which stays the host that Prometheus or Zabbix scrape:
+
+- **Caddy**: the tenant FQDNs have their own site block with a `respond @monitoring 404`
+  matcher; the admin host block does not.
+- **Nginx**: a `map` on `$host` lists the admin host(s); a `location` for the two paths returns
+  `404` for the others. Keep the map in line with `TT_ADMIN_HOSTS`.
+- **Apache**: a `RewriteCond` on the `Host` header and a `RewriteRule` returning `404`.
+- **Traefik**: documented as a comment in `dynamic/transteira.yml` only (a new router would
+  change what `check.sh` verifies): restrict the rule of the `transteira` router with
+  `!PathRegexp`. With the labels variant, apply the same rule to the `transteira` router.
+
+When you add a tenant, add its FQDN to the tenant block or list, never to the admin one. To
+restrict the admin host further, set `TT_METRICS_ALLOWED_IPS` on TransTeira.
+
 ## Validation
 
 `make proxy-configs-check` (part of `make check`) validates the four

@@ -45,6 +45,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/metrics/metricstate"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -70,6 +71,12 @@ type adder interface {
 	Add(ctx context.Context, tid tenant.ID, day time.Time, delta store.UsageCounts) error
 }
 
+// Sink receives every increment recorded, for the in-memory counters of the
+// supervision endpoints (*metrics.Counters implements it).
+type Sink interface {
+	AddUsage(tenantID string, u metricstate.Usage)
+}
+
 // Options tune a Recorder. The zero value uses the defaults.
 type Options struct {
 	// Interval is the delay between two flushes of [Recorder.Run]
@@ -83,6 +90,9 @@ type Options struct {
 	// Logger receives the flush failures and the dropped counters
 	// (discarded when nil).
 	Logger *slog.Logger
+	// Sink, when not nil, receives each increment as it is recorded, whatever
+	// the later flushes do.
+	Sink Sink
 }
 
 // key identifies a pending entry: a tenant and a UTC day (Unix seconds of
@@ -101,6 +111,7 @@ type Recorder struct {
 	maxPending int
 	now        func() time.Time
 	logger     *slog.Logger
+	sink       Sink
 
 	mu      sync.Mutex
 	pending map[key]store.UsageCounts
@@ -123,7 +134,7 @@ func New(db *store.DB, opts Options) *Recorder {
 // newRecorder returns a Recorder adding its counters through a.
 func newRecorder(a adder, opts Options) *Recorder {
 	r := &Recorder{
-		db: a, interval: opts.Interval, maxPending: opts.MaxPending, now: opts.Now, logger: opts.Logger, pending: map[key]store.UsageCounts{},
+		db: a, interval: opts.Interval, maxPending: opts.MaxPending, now: opts.Now, logger: opts.Logger, sink: opts.Sink, pending: map[key]store.UsageCounts{},
 	}
 	if r.interval <= 0 {
 		r.interval = DefaultInterval
@@ -182,6 +193,12 @@ func (r *Recorder) record(tid tenant.ID, at time.Time, c store.UsageCounts) {
 	r.mu.Unlock()
 	if ok {
 		r.logDropped(dropped, dc)
+	}
+	if r.sink != nil {
+		r.sink.AddUsage(string(tid), metricstate.Usage{
+			Transfers: c.Transfers, UploadedBytes: c.BytesUploaded, Downloads: c.Downloads,
+			DownloadedBytes: c.BytesDownloaded, VirusDetections: c.VirusDetections,
+		})
 	}
 }
 

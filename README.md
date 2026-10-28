@@ -220,6 +220,7 @@ Operation:
 - [Antivirus](docs/operations/antivirus.md) (ClamAV limits, signature updates)
 - [Big file trial](docs/operations/bigfile-trial.md): acceptance test with very big files
   behind the reverse proxy, in a real browser
+- [Supervision](docs/operations/supervision.md) (`/healthz`, `/metrics`, `/status`, Grafana dashboard and Zabbix template in [integrations/](integrations/grafana/README.md))
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec) and [Syslog export](docs/operations/syslog.md) (audit and security logs to a SIEM)
 - [Administration](docs/operations/admin.md) (accounts, tenant operations, API tokens, audit
   log, GDPR, statistics, maintenance mode, disk alert, system SMTP) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)

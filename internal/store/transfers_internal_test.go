@@ -157,6 +157,17 @@ func TestTransferDriverFaults(t *testing.T) {
 		return func() error { _, err := f.db.Transfers().ScanningCounts(ctx); return err }
 	}
 
+	// queueFiles and activeCounts run the supervision counts.
+	queueFiles := func(f *transferFixture) func() error {
+		return func() error { _, err := f.db.Transfers().ScanQueueFiles(ctx); return err }
+	}
+	activeCounts := func(f *transferFixture) func() error {
+		if _, err := f.db.write.ExecContext(ctx, `UPDATE transfers SET status = 'available', finalized_at = 1, expires_at = 2, available_at = 1, download_token_hash = randomblob(32) WHERE id = '`+f.trf.ID+`'`); err != nil {
+			panic(err)
+		}
+		return func() error { _, err := f.db.Transfers().ActiveCounts(ctx, now); return err }
+	}
+
 	steps := []struct {
 		name, op, match string
 		run             func(*testing.T, *transferFixture) func() error
@@ -213,6 +224,10 @@ func TestTransferDriverFaults(t *testing.T) {
 		{"sweep scan", faultScanNil, "WHERE status = 'scanning' ORDER BY", func(_ *testing.T, f *transferFixture) func() error { return sweep(f) }},
 		{"scanning counts", faultQuery, "WHERE status = 'scanning' GROUP BY", func(_ *testing.T, f *transferFixture) func() error { return counts(f) }},
 		{"scanning counts scan", faultScanNil, "WHERE status = 'scanning' GROUP BY", func(_ *testing.T, f *transferFixture) func() error { return counts(f) }},
+		{"scan queue files", faultQuery, "FROM transfer_files f JOIN transfers t", func(_ *testing.T, f *transferFixture) func() error { return queueFiles(f) }},
+		{"scan queue files scan", faultScanNil, "FROM transfer_files f JOIN transfers t", func(_ *testing.T, f *transferFixture) func() error { return queueFiles(f) }},
+		{"active counts", faultQuery, "GROUP BY tenant_id ORDER BY tenant_id", func(_ *testing.T, f *transferFixture) func() error { return activeCounts(f) }},
+		{"active counts scan", faultScanNil, "GROUP BY tenant_id ORDER BY tenant_id", func(_ *testing.T, f *transferFixture) func() error { return activeCounts(f) }},
 	}
 	for _, s := range steps {
 		t.Run(s.name, func(t *testing.T) {

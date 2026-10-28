@@ -754,6 +754,15 @@ func (w *Worker) clamdDown(ctx context.Context, culprit ...slog.Attr) time.Durat
 	return max(w.nextProbe.Sub(now), time.Millisecond)
 }
 
+// Up reports whether clamd currently answers: false from the first report
+// of an unreachable antivirus until it answers again. It is true before any
+// report. It is safe for concurrent use.
+func (w *Worker) Up() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return !w.outage
+}
+
 // clamdUp ends a clamd outage, logging it once and telling the outage
 // observer.
 func (w *Worker) clamdUp(ctx context.Context) {

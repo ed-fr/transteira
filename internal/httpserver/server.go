@@ -13,6 +13,9 @@
 //     read slowly forever; the matched operation replaces them, and the
 //     streaming routes clear them;
 //  4. real client IP (trusted proxies only);
+//     4b. response counter by status code (Deps.Requests), right after the
+//     client IP so that it sees every response of the layers below,
+//     404 and 429 included;
 //  5. security headers;
 //  6. rate limit per client IP: the asset limit for the build files of
 //     the web interface (GET and HEAD under /assets/, any Host), the
@@ -352,6 +355,16 @@ type Deps struct {
 	// uses web.Dist(). It is loaded in memory by New; a missing entry page
 	// is logged at warning level and answered by a 503 fallback page.
 	WebUI fs.FS
+	// Requests counts every response by status code (*metrics.Counters);
+	// nil disables the counting.
+	Requests RequestCounter
+	// Streams tracks the file and archive downloads in progress
+	// (*metrics.Counters); nil disables the gauge.
+	Streams StreamCounter
+	// Metrics and Status serve /metrics and /status (metrics.Handlers),
+	// outside any tenant like /healthz. Nil leaves the path to the 404
+	// fallback.
+	Metrics, Status http.Handler
 	// Logger is the application logger; nil discards.
 	Logger *slog.Logger
 }
@@ -495,6 +508,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 			tokens.middleware,
 			maintenanceMiddleware(maintenance),
 			idleWriteMiddleware(idleDownload, logger),
+			streamGaugeMiddleware(deps.Streams),
 			deadlineMiddleware(logger),
 			tusMiddleware,
 		},
@@ -504,13 +518,20 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// Routes outside any tenant. They are matched on the exact path, before
 	// tenant resolution: the health check must answer for probes that do
 	// not send a tenant FQDN (Docker, Uptime Kuma), and the OpenAPI document
-	// is identical for every tenant. MetricsPath and StatusPath are routed
-	// here too but have no handler yet: they answer the 404 Problem of the
-	// fallback whatever the Host. Nothing else is served without a known
+	// is identical for every tenant. MetricsPath and StatusPath are served
+	// here when their handlers are set (they answer 404 themselves while
+	// TT_METRICS_TOKEN is unset), otherwise by the 404 Problem of the
+	// fallback, whatever the Host. Nothing else is served without a known
 	// Host.
 	freeMux := http.NewServeMux()
 	freeMux.Handle(HealthPath, health.Handler(deps.Health, maintenance.Active))
 	freeMux.Handle(http.MethodGet+" "+SpecPath, public.SpecHandler(deps.Spec))
+	if deps.Metrics != nil {
+		freeMux.Handle(MetricsPath, deps.Metrics)
+	}
+	if deps.Status != nil {
+		freeMux.Handle(StatusPath, deps.Status)
+	}
 	tenantFree := withProblemFallback(freeMux)
 
 	// Tenant-scoped routes. The bare APIBaseURL would otherwise be
@@ -567,6 +588,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		// download.
 		fixedDeadline(o.defaultDeadline, logger),
 		middleware.RealIP(trusted),
+		requestCountMiddleware(deps.Requests),
 		middleware.SecurityHeaders(),
 		// Every request is charged to exactly one of the two limiters:
 		// the asset limiter for the build files of the web interface, the

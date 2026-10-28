@@ -69,6 +69,9 @@ func TestOutageObserver(t *testing.T) {
 		ev := newEnv(t, e, Options{})
 		obs := &fakeObserver{}
 		ev.w.observer = obs
+		if !ev.w.Up() {
+			t.Error("Up is false before any report")
+		}
 		ev.clamd.Stop()
 		trf1 := ev.scanning(ev.a, clean(10))
 		trf2 := ev.scanning(ev.b, clean(10))
@@ -79,11 +82,17 @@ func TestOutageObserver(t *testing.T) {
 		if _, ups := obs.counts(); ups != 0 {
 			t.Fatalf("during the outage: %d up reports, want 0", ups)
 		}
+		if ev.w.Up() {
+			t.Error("Up is true during the outage")
+		}
 		ev.clamd.Restart(t)
 		ev.waitStatus(ev.a, trf1, store.TransferAvailable)
 		ev.waitStatus(ev.b, trf2, store.TransferAvailable)
 		if _, ups := obs.counts(); ups != 1 {
 			t.Errorf("after the recovery: %d up reports, want 1", ups)
+		}
+		if !ev.w.Up() {
+			t.Error("Up is false after the recovery")
 		}
 	})
 }

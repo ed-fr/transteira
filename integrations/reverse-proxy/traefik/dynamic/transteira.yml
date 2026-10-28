@@ -53,6 +53,15 @@ http:
       tls:
         certResolver: letsencrypt
 
+    # Monitoring endpoints (/metrics, /status) are token protected but should
+    # not be published on the tenant FQDNs (threat model T-191). To serve them
+    # on the admin host only, change the rule of the "transteira" router above to:
+    #   Host(`admin.transfer.example.com`) ||
+    #   ((Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`))
+    #    && !PathRegexp(`^/(metrics|status)/?$`))
+    # Tenant hosts then get Traefik's own 404 for these two paths. See
+    # README.md.
+
   middlewares:
     # HSTS (CLAUDE.md section 16.2). No includeSubDomains by default: see
     # README.md.

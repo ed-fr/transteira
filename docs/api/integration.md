@@ -28,6 +28,7 @@ administration.
 - [5. Errors and retries](#5-errors-and-retries)
 - [6. Managing tokens: list, change, revoke](#6-managing-tokens-list-change-revoke)
 - [7. Receiving webhooks](#7-receiving-webhooks)
+- [8. Monitoring endpoints](#8-monitoring-endpoints)
 
 ## Basics
 
@@ -1025,3 +1026,35 @@ or cloud metadata address, nor towards its own networks (protection against serv
 forgery). The operator can open a receiver on an internal network with `TT_WEBHOOK_ALLOW_NETWORKS`
 (and plain HTTP with `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`); see `.env.example`. Redirects are never
 followed: give the final URL.
+
+## 8. Monitoring endpoints
+
+Since 1.1, `/metrics` (Prometheus text) and `/status` (JSON) report the health of the whole
+instance. They are not part of `/api/v1`, belong to no tenant, and are called on the **admin
+host** with the monitoring token (`TT_METRICS_TOKEN` or `TT_METRICS_TOKEN_FILE`), which is not an
+API token. Without a configured token they answer `404`. Wrong token: `401`; ten failures within
+10 minutes lock the client out for 15 minutes (`429`). Metric list and setup: [docs/operations/supervision.md](../operations/supervision.md).
+
+With curl (the token is read from a file and handed to curl on standard input, not on the
+command line):
+
+```bash
+printf 'header = "Authorization: Bearer %s"\n' "$(cat /etc/transteira/metrics_token)" |
+  curl -fsS -K - https://admin.transfer.example.com/status | jq '{status, disk: .disk.usedRatio}'
+```
+
+```json
+{ "status": "ok", "disk": 0.42 }
+```
+
+With PowerShell 7:
+
+```powershell
+$token = (Get-Content -Raw -Path C:\ProgramData\transteira\metrics_token).Trim()
+$status = Invoke-RestMethod -Uri https://admin.transfer.example.com/status `
+  -Headers @{ Authorization = "Bearer $token" }
+"$($status.status), disk used $([math]::Round($status.disk.usedRatio * 100)) %"
+```
+
+`/metrics` works the same way and returns text: `Invoke-RestMethod -Uri .../metrics -Headers ...`
+or `curl -K - .../metrics`.

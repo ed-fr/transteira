@@ -25,7 +25,7 @@ const tenantA = "transfer.entity-a.example.com"
 // CrowdSec tests check that the integrations cover exactly these.
 var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
-	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited,
+	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
 }
 
 type goldenCase struct {
@@ -76,6 +76,12 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: APITokenInvalid, IP: netip.MustParseAddr("192.0.2.12"), Tenant: tenantA},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.12 tenant=transfer.entity-a.example.com event=api_token_invalid`,
 		banIP: "192.0.2.12",
+	},
+	{
+		name:  "metrics token invalid",
+		ev:    Event{Type: MetricsTokenInvalid, IP: netip.MustParseAddr("192.0.2.13")},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.13 tenant=- event=metrics_token_invalid`,
+		banIP: "192.0.2.13",
 	},
 	{
 		name:  "unknown fqdn",

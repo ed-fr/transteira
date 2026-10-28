@@ -62,6 +62,9 @@ const (
 	EnvSyslogStreams            = "TT_SYSLOG_STREAMS"
 	EnvSyslogFacility           = "TT_SYSLOG_FACILITY"
 	EnvSyslogCAFile             = "TT_SYSLOG_CA_FILE"
+	EnvMetricsToken             = "TT_METRICS_TOKEN"      //nolint:gosec // G101: variable name, not a credential
+	EnvMetricsTokenFile         = "TT_METRICS_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
+	EnvMetricsAllowedIPs        = "TT_METRICS_ALLOWED_IPS"
 )
 
 // Default values applied by [Load] when a variable is unset or empty.
@@ -495,6 +498,25 @@ func Variables() []Var {
 				"to verify the syslog server, only with " + EnvSyslogProtocol + "=tls. Empty " +
 				"(default): the certificate authorities of the system are used. The file must " +
 				"contain at least one certificate.",
+		},
+		{
+			Name: EnvMetricsToken, Group: "Monitoring", Secret: true,
+			Description: "Bearer token (32 to 512 characters) protecting the Prometheus metrics " +
+				"(/metrics) and the JSON status (/status). Empty (default): both endpoints answer " +
+				"404. Changed by restarting with a new value. Mutually exclusive with " +
+				EnvMetricsTokenFile + ".",
+		},
+		{
+			Name: EnvMetricsTokenFile, Group: "Monitoring",
+			Description: "Path of a file (e.g. a Docker secret) containing the monitoring token " +
+				"(alternative to " + EnvMetricsToken + ").",
+		},
+		{
+			Name: EnvMetricsAllowedIPs, Group: "Monitoring",
+			Description: "Comma-separated CIDR list of the client addresses allowed to read " +
+				"/metrics and /status, checked before the token on the real client IP (read " +
+				"through the trusted proxies only); other clients get 404. Empty (default): any " +
+				"address holding the token.",
 		},
 	}
 }

@@ -2480,7 +2480,13 @@ type InstanceStatus struct {
 		UsedBytes      ByteSize `json:"usedBytes"`
 		UsedRatio      float32  `json:"usedRatio"`
 	} `json:"disk"`
-	Maintenance bool `json:"maintenance"`
+
+	// Lifecycle End of the last successful run of each periodic cleanup task (`expire`,
+	// `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`,
+	// `orphans`, `backup`), keyed by task name. A task that never succeeded since the start
+	// is absent. A run that left work for the next run after a failure does not move it.
+	Lifecycle   *map[string]time.Time `json:"lifecycle,omitempty"`
+	Maintenance bool                  `json:"maintenance"`
 
 	// Status `degraded` when a component of `checks` is unavailable.
 	Status InstanceStatusStatus `json:"status"`

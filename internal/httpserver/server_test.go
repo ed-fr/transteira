@@ -171,6 +171,11 @@ type envConfig struct {
 	// set (Deps.WebUI left nil: the build embedded in package web).
 	webUI         fs.FS
 	embeddedWebUI bool
+	// requests and streams are Deps.Requests and Deps.Streams.
+	requests RequestCounter
+	streams  StreamCounter
+	// metrics and status are Deps.Metrics and Deps.Status.
+	metrics, status http.Handler
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -202,6 +207,10 @@ func newEnv(t *testing.T, c envConfig) *env {
 		UploadIdleTimeout:   c.idle,
 		DownloadIdleTimeout: c.downloadIdle,
 		APIDocsPublic:       c.docsPublic,
+		Requests:            c.requests,
+		Metrics:             c.metrics,
+		Status:              c.status,
+		Streams:             c.streams,
 		Spec:                []byte("openapi: 3.1.0\n"),
 		WebUI:               c.webUI,
 		Logger:              slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -1135,6 +1144,39 @@ func TestSecurityEventsRateLimitedWithTenant(t *testing.T) {
 	NewSecurityEvents(securitylog.New(&buf), nil).RateLimited(context.Background(), netip.MustParseAddr("192.0.2.1"), hostA, "codes")
 	if !strings.Contains(buf.String(), "ip=192.0.2.1 tenant="+hostA+" event=rate_limited scope=\"codes\"") {
 		t.Errorf("line %q", buf.String())
+	}
+}
+
+func TestSecurityEventsMetricsTokenInvalid(t *testing.T) {
+	t.Parallel()
+	var buf lockedBuffer
+	NewSecurityEvents(securitylog.New(&buf), nil).MetricsTokenInvalid(context.Background(), netip.MustParseAddr("192.0.2.1"))
+	if !strings.Contains(buf.String(), "ip=192.0.2.1 tenant=- event=metrics_token_invalid") {
+		t.Errorf("line %q", buf.String())
+	}
+}
+
+func TestSupervisionRoutes(t *testing.T) {
+	t.Parallel()
+	named := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, name) })
+	}
+	// Mounted outside any tenant, whatever the Host, in maintenance too.
+	e := newEnv(t, envConfig{metrics: named("metrics"), status: named("status")})
+	e.maintenance.Store(true)
+	for path, want := range map[string]string{MetricsPath: "metrics", StatusPath: "status"} {
+		for _, host := range []string{hostUnknown, hostA, hostAdmin} {
+			if rec := e.do(t, http.MethodGet, path, host, nil); rec.Code != http.StatusOK || rec.Body.String() != want {
+				t.Errorf("%s on %s = %d %q", path, host, rec.Code, rec.Body.String())
+			}
+		}
+	}
+	// Without handlers, the paths fall to the 404 problem.
+	e = newEnv(t, envConfig{})
+	for _, path := range []string{MetricsPath, StatusPath} {
+		if rec := e.do(t, http.MethodGet, path, hostUnknown, nil); rec.Code != http.StatusNotFound {
+			t.Errorf("%s without handler = %d", path, rec.Code)
+		}
 	}
 }
 

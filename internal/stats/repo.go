@@ -75,3 +75,21 @@ func (r storeRepo) usage(ctx context.Context, tid tenant.ID, fromDay time.Time) 
 func (r storeRepo) usageAll(ctx context.Context, fromDay time.Time) (map[tenant.ID]store.UsageCounts, error) {
 	return r.db.TenantUsage().RangeAll(ctx, fromDay)
 }
+
+// scanQueueFiles implements repo.
+func (r storeRepo) scanQueueFiles(ctx context.Context) (int64, error) {
+	return r.db.Transfers().ScanQueueFiles(ctx)
+}
+
+// activeCounts implements repo.
+func (r storeRepo) activeCounts(ctx context.Context, since time.Time) (map[tenant.ID]store.TenantTransferCounts, error) {
+	rows, err := r.db.Transfers().ActiveCounts(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[tenant.ID]store.TenantTransferCounts, len(rows))
+	for _, c := range rows {
+		out[c.TenantID] = c
+	}
+	return out, nil
+}

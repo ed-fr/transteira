@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -137,6 +138,10 @@ type Queue struct {
 	total   int      // waiting jobs, all tenants
 	closed  bool
 
+	// dropped counts the accepted jobs lost without a delivery attempt: the
+	// jobs purged when a circuit opens and those dropped at shutdown.
+	dropped atomic.Uint64
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -241,6 +246,12 @@ func (q *Queue) Len() int {
 	return q.total
 }
 
+// Dropped returns the number of accepted jobs dropped since the queue was
+// created: those discarded when a tenant's circuit opens and those still
+// queued when Close gave up waiting. Jobs refused by Enqueue (full queue,
+// open circuit) and deliveries that failed are not counted.
+func (q *Queue) Dropped() uint64 { return q.dropped.Load() }
+
 // Close stops accepting jobs and waits for the workers to deliver what is
 // queued. If ctx ends first, in-flight deliveries are canceled, the jobs
 // still queued are dropped (and counted in the log) and ctx.Err() is
@@ -328,6 +339,7 @@ func (q *Queue) worker() {
 // they are dropped when it opens.
 func (q *Queue) process(job Job) {
 	if q.ctx.Err() != nil {
+		q.dropped.Add(1)
 		q.logger.LogAttrs(context.Background(), slog.LevelWarn, "mail dropped at shutdown", jobAttrs(job)...)
 		return
 	}
@@ -382,6 +394,7 @@ func (q *Queue) purge(tenantID string, ts *tenantState) int {
 	}
 	clear(ts.jobs)
 	ts.jobs = nil
+	q.dropped.Add(uint64(n))
 	q.total -= n
 	for i, id := range q.order {
 		if id == tenantID {

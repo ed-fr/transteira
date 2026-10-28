@@ -182,6 +182,10 @@ The instance webhooks send the alerts of the whole instance to a Microsoft Teams
 
 By default, the address of a webhook must use `https://` and lead to a public address; an address whose host name cannot be resolved is refused with the same message, so that the check reveals nothing of the internal DNS. Some networks can never be opened: unspecified addresses, link-local addresses (including the cloud metadata services), multicast, reserved and broadcast addresses, the networks of the TransTeira container itself, IPv4-compatible IPv6 addresses, and the ranges listed in `TT_WEBHOOK_DENY_NETWORKS`. The private ranges (RFC 1918, `100.64.0.0/10`, `fc00::/7` and the other reserved ranges listed in `.env.example`) are refused too, but the operator can open them for a receiver on the internal network by declaring its range in `TT_WEBHOOK_ALLOW_NETWORKS`. Plain `http://` is accepted only towards a range listed in `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`, and that range must itself be reachable: a private range must also be listed in `TT_WEBHOOK_ALLOW_NETWORKS`. TransTeira refuses to start when an allowed range overlaps the networks that can never be opened, for example a range containing the Docker network of the container. These variables are described in `.env.example` and apply to the webhooks of every entity. Creating webhooks and entering new addresses is limited to 30 times per hour per administrator.
 
+### Supervision
+
+The instance can be monitored by Prometheus, Grafana, Zabbix or any script through the `/metrics` and `/status` endpoints. They are not configured in the administration: the operator enables them with environment variables (`TT_METRICS_TOKEN` or `TT_METRICS_TOKEN_FILE`, and optionally `TT_METRICS_ALLOWED_IPS`) and changes the token by restarting the instance. Without a token they do not exist. Uptime Kuma and load balancers use `/healthz`, which needs no token. See `docs/operations/supervision.md` for the metrics and the setup.
+
 <!-- topic: system-audit -->
 ### Global audit log
 

@@ -90,17 +90,20 @@ stack_cleanup() {
 
 # stack_caddyfile OUT writes the Caddyfile of the test proxy, derived from the reference
 # integrations/reverse-proxy/caddy/Caddyfile with exactly two changes:
-#   - the site addresses become the test admin and tenant hosts (*.localhost);
-#   - that site block gets `tls internal`: certificates from Caddy's internal CA instead of ACME
+#   - the site addresses of the admin block and of the tenant block become the test admin host
+#     and the test tenant host (*.localhost);
+#   - both site blocks get `tls internal`: certificates from Caddy's internal CA instead of ACME
 #     (no public DNS name, no port 80 reachable from the Internet).
-# Every other directive (timeouts, buffering, compression, logs, headers) is used as is.
+# Every other directive (timeouts, buffering, compression, logs, headers, the monitoring paths
+# hidden on the tenant hosts) is used as is.
 stack_caddyfile() {
 	local ref="$root/integrations/reverse-proxy/caddy/Caddyfile"
-	awk -v hosts="$admin_host, $tenant_host" '
-		/^admin\.transfer\.example\.com, .*\{$/ { print hosts " {"; print "\ttls internal"; done = 1; next }
+	awk -v admin="$admin_host" -v tenant="$tenant_host" '
+		/^admin\.transfer\.example\.com \{$/ { print admin " {"; print "\ttls internal"; a = 1; next }
+		/^transfer\.entity-a\.example\.com, .*\{$/ { print tenant " {"; print "\ttls internal"; t = 1; next }
 		{ print }
-		END { if (!done) exit 3 }
-	' "$ref" >"$1" || fail "the site line of $ref was not found (update stack_caddyfile in scripts/lib/stack.sh)"
+		END { if (!a || !t) exit 3 }
+	' "$ref" >"$1" || fail "the site lines of $ref were not found (update stack_caddyfile in scripts/lib/stack.sh)"
 }
 
 stack_free_port() {

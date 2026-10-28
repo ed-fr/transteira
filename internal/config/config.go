@@ -48,6 +48,12 @@ const (
 	maxSetupTokenLength = 128
 )
 
+// Monitoring token length bounds (threat T-193).
+const (
+	minMetricsTokenLength = 32
+	maxMetricsTokenLength = 512
+)
+
 // Duration bounds.
 const (
 	minUploadTTL                = time.Hour
@@ -251,6 +257,13 @@ type Config struct {
 	// Syslog is the RFC 5424 export of the audit and security logs
 	// (decision P41). It is disabled when its Addr is empty.
 	Syslog SyslogConfig
+
+	// MetricsToken protects /metrics and /status; when unset both answer
+	// 404 (threats T-191 to T-193).
+	MetricsToken Secret
+	// MetricsAllowedIPs, when not empty, lists the client networks allowed
+	// to read /metrics and /status, checked before the token.
+	MetricsAllowedIPs []netip.Prefix
 }
 
 // Transports of the syslog export (TT_SYSLOG_PROTOCOL).
@@ -392,6 +405,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadMaintenance(c)
 	l.loadWebhooks(c)
 	l.loadSyslog(c)
+	l.loadMetrics(c)
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
@@ -845,6 +859,24 @@ func (l *loader) loadWebhooks(c *Config) {
 	} else if err := netpolicy.CheckWebhookAllow(c.WebhookAllowNetworks, c.WebhookAllowHTTPNetworks, core); err != nil {
 		l.fail(EnvWebhookAllowHTTPNetworks, "%v (list it in %s too)", err, EnvWebhookAllowNetworks)
 	}
+}
+
+// loadMetrics reads the monitoring token and its IP allowlist.
+func (l *loader) loadMetrics(c *Config) {
+	allowed, err := parsePrefixes(l.get(EnvMetricsAllowedIPs))
+	if err != nil {
+		l.fail(EnvMetricsAllowedIPs, "%v", err)
+	}
+	c.MetricsAllowedIPs = allowed
+	token, ok := l.secret(EnvMetricsToken, EnvMetricsTokenFile)
+	if !ok {
+		return
+	}
+	if n := len(token.Reveal()); token.IsSet() && (n < minMetricsTokenLength || n > maxMetricsTokenLength) {
+		l.fail(l.setName(EnvMetricsToken, EnvMetricsTokenFile), "must be between %d and %d characters long", minMetricsTokenLength, maxMetricsTokenLength)
+		return
+	}
+	c.MetricsToken = token
 }
 
 // syslogGroup lists the TT_SYSLOG_* variables that require TT_SYSLOG_ADDR,
