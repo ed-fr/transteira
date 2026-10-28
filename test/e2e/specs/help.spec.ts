@@ -321,6 +321,18 @@ test.describe('admin contextual help', () => {
         topic: 'tenant-tokens',
       },
       {
+        name: 'tenant webhooks',
+        path: (id) => `/admin/tenants/${id}/webhooks`,
+        titleKey: 'adminOps.webhooks.title',
+        topic: 'tenant-webhooks',
+      },
+      {
+        name: 'instance webhooks',
+        path: () => '/admin/system/webhooks',
+        titleKey: 'adminSystem.webhooks.title',
+        topic: 'system-webhooks',
+      },
+      {
         name: 'master key',
         path: () => '/admin/system/master-key',
         titleKey: 'adminSystem.masterKey.title',

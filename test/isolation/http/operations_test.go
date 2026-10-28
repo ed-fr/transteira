@@ -219,6 +219,26 @@ var isolationCases = map[string]isolationCase{
 	"startMasterKeyRotation": systemOperation,
 	"getMasterKeyRotation":   systemOperation,
 	"getMasterKeyStatus":     systemOperation,
+	// Webhooks (webhooks_test.go): served on the admin host only. The
+	// delegated admin of tenant A gets for tenant B's ID exactly the answer
+	// of an unknown tenant ID, even with an invalid body, and, under A's
+	// own path, for a webhook of B exactly the answer of an unknown
+	// webhook; B's webhook is never listed, changed, tested nor deleted.
+	// The instance-wide webhooks are reserved to the super admin (403 for
+	// the delegated admin, even with a valid body), and a tenant webhook
+	// is unknown under their path.
+	"listTenantWebhooks":  adminWebhook,
+	"createTenantWebhook": adminWebhook,
+	"getTenantWebhook":    adminWebhook,
+	"updateTenantWebhook": adminWebhook,
+	"deleteTenantWebhook": adminWebhook,
+	"testTenantWebhook":   adminWebhook,
+	"listSystemWebhooks":  systemWebhook,
+	"createSystemWebhook": systemWebhook,
+	"getSystemWebhook":    systemWebhook,
+	"updateSystemWebhook": systemWebhook,
+	"deleteSystemWebhook": systemWebhook,
+	"testSystemWebhook":   systemWebhook,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.

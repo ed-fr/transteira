@@ -108,6 +108,12 @@
     "path": "{lang}/admin-system-settings.png"
   },
   {
+    "name": "admin-system-webhooks",
+    "screen": "admin /admin/system/webhooks",
+    "profile": "super-admin",
+    "path": "{lang}/admin-system-webhooks.png"
+  },
+  {
     "name": "admin-tenant-branding",
     "screen": "admin /admin/tenants/:id/branding",
     "profile": "delegated-admin",
@@ -190,6 +196,12 @@
     "screen": "admin /admin/tenants/:id/transfers",
     "profile": "delegated-admin",
     "path": "{lang}/admin-transfers.png"
+  },
+  {
+    "name": "admin-webhooks",
+    "screen": "admin /admin/tenants/:id/webhooks",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-webhooks.png"
   },
   {
     "name": "deposit-code",

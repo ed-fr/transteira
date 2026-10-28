@@ -46,6 +46,25 @@ func TestVaultSystemSecrets(t *testing.T) {
 			t.Errorf("a second WrapSystem must use a new ID and nonce: %v", err)
 		}
 
+		// The webhook purpose is a system purpose too, and a webhook secret
+		// never opens as a TOTP secret (nor the reverse).
+		whk, err := v.WrapSystem(crypto.PurposeWebhook, []byte("https://hooks.example.com/x"))
+		if err != nil || whk.Purpose != store.SecretPurposeWebhook {
+			t.Fatalf("WrapSystem(webhook) = %+v, %v", whk, err)
+		}
+		if err := db.SystemSecrets().Create(ctx, whk); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := v.OpenSystem(ctx, crypto.PurposeWebhook, whk.ID); err != nil || string(got) != "https://hooks.example.com/x" {
+			t.Errorf("OpenSystem(webhook) = %q, %v", got, err)
+		}
+		if _, err := v.OpenSystem(ctx, crypto.PurposeAdminTOTP, whk.ID); !errors.Is(err, masterkey.ErrPurposeMismatch) {
+			t.Errorf("OpenSystem(webhook row as TOTP) = %v", err)
+		}
+		if _, err := v.OpenSystem(ctx, crypto.PurposeWebhook, row.ID); !errors.Is(err, masterkey.ErrPurposeMismatch) {
+			t.Errorf("OpenSystem(TOTP row as webhook) = %v", err)
+		}
+
 		// Purposes: only system purposes are wrapped, and the stored
 		// purpose must match.
 		for _, p := range []crypto.Purpose{crypto.PurposeDEK, crypto.PurposeSecret, "bogus"} {
@@ -130,8 +149,8 @@ func TestRotateSystemSecretsInterruptedThenResumed(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()
 		f := newFixture(t, e)
-		// Batches of one key: cancel once every tenant key and one of the two
-		// system secrets under k1 are re-wrapped.
+		// Batches of one key: cancel once every tenant key and all but one of
+		// the system secrets under k1 are re-wrapped.
 		rctx, cancel := context.WithCancel(ctx)
 		rot, err := masterkey.Rotate(rctx, f.db, f.both(t), nil, masterkey.Options{
 			BatchSize: 1,
@@ -151,7 +170,7 @@ func TestRotateSystemSecretsInterruptedThenResumed(t *testing.T) {
 		for _, s := range f.secrets {
 			under[secretKeyIDOf(t, f.db, s)]++
 		}
-		if under[f.k1.ID()] != 1 || under[f.k2.ID()] != 2 {
+		if under[f.k1.ID()] != 1 || under[f.k2.ID()] != len(f.secrets)-1 {
 			t.Fatalf("system secrets by master key = %v", under)
 		}
 		// Everything opens with both keys while the rotation is half done,
@@ -197,7 +216,7 @@ func TestRotateSystemSecretUnwrapFailure(t *testing.T) {
 		// The tenant keys were re-wrapped, the failed batch of system
 		// secrets was rolled back.
 		stored, err := f.db.KeyRotations().Get(ctx, rot.ID)
-		if err != nil || stored.Status != store.RotationFailed || stored.RewrappedKeys != f.underOld-2 {
+		if err != nil || stored.Status != store.RotationFailed || stored.RewrappedKeys != f.underOld-f.systemUnderOld {
 			t.Errorf("stored rotation = %+v, %v", stored, err)
 		}
 		expectOpens(t, vault(f.db, f.both(t)), f.keys)

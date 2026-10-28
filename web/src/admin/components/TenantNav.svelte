@@ -1,7 +1,7 @@
 <script lang="ts">
   // Sub-navigation of a tenant: the tenant name, then two titled groups of links, configuration
   // (general, branding, network, SMTP, templates, legal) and operations (transfers, invitations,
-  // blocklist, API tokens, audit, statistics, privacy). Each group is a list labelled by its
+  // blocklist, API tokens, webhooks, audit, statistics, privacy). Each group is a list labelled by its
   // heading. aria-current="page" marks the section shown, "true" its sub-pages (template or legal
   // editor, transfer detail, token creation). Rendered by App.svelte above every
   // /tenants/:id/... screen.

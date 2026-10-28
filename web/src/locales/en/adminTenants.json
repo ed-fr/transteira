@@ -83,7 +83,17 @@
       "done": "The entity {name} has been deleted.",
       "resumes": "The deletion could not be completed. It will resume automatically: until then, the entity stays marked as “deletion in progress”."
     },
-    "legend": "Entity settings"
+    "legend": "Entity settings",
+    "webhooks": {
+      "title": "Webhooks",
+      "intro": "Content of the alerts sent to the webhooks of the entity.",
+      "includeAddresses": {
+        "label": "Include addresses in webhooks",
+        "hint": "Adds the sender and recipient addresses concerned to the alerts. Addresses are personal data and leave TransTeira with the alert: enable only if the receivers need them and are trusted. Off by default."
+      },
+      "save": "Save the webhook setting",
+      "saved": "Webhook setting saved."
+    }
   },
   "branding": {
     "title": "Branding",

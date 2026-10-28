@@ -16,6 +16,11 @@ const reasonSystemSecrets = "secrets sealed by the master key that belong to no 
 // the wrapping purpose.
 const SecretPurposeAdminTOTP = "admin-totp"
 
+// SecretPurposeWebhook is the purpose of a system secret holding the URL
+// or the signing secret of an instance-wide webhook. It matches
+// crypto.PurposeWebhook, the wrapping purpose.
+const SecretPurposeWebhook = "webhook"
+
 // sealedRowColumns is the column list read by the system secret queries.
 const sealedRowColumns = `id, purpose, key_id, blob, created_at`
 
@@ -48,7 +53,7 @@ type SystemSecret struct {
 	// ID is the row identifier ("ss_" + ULID). The caller assigns it,
 	// because the sealing authenticates it.
 	ID string
-	// Purpose is SecretPurposeAdminTOTP.
+	// Purpose is SecretPurposeAdminTOTP or SecretPurposeWebhook.
 	Purpose string
 	// KeyID identifies the master key Blob is sealed under.
 	KeyID string
@@ -76,7 +81,7 @@ func validateSystemSecret(s SystemSecret) error {
 	switch {
 	case !id.Valid(id.SystemSecret, s.ID):
 		return invalid("malformed system secret id")
-	case s.Purpose != SecretPurposeAdminTOTP:
+	case s.Purpose != SecretPurposeAdminTOTP && s.Purpose != SecretPurposeWebhook:
 		return invalid("unknown system secret purpose")
 	case !validMasterKeyID(s.KeyID):
 		return invalid("malformed master key id")
@@ -164,6 +169,21 @@ func (r *SystemSecrets) Delete(ctx context.Context, ssID string) error {
 		}
 		return expectOne(res)
 	})
+	if err != nil {
+		return wrap("delete system secret", err)
+	}
+	return nil
+}
+
+// DeleteTx is Delete inside tx, so that a secret and the row referencing
+// it can be destroyed together (an instance-wide webhook,
+// [SystemWebhooks.DeleteTx]). It returns ErrNotFound when the secret does
+// not exist. Callers run [DB.ScrubDeleted] once tx is committed.
+func (r *SystemSecrets) DeleteTx(ctx context.Context, tx *SystemTx, ssID string) error {
+	res, err := tx.Exec(ctx, qSystemSecretDelete, ssID)
+	if err == nil {
+		err = expectOne(res)
+	}
 	if err != nil {
 		return wrap("delete system secret", err)
 	}

@@ -75,6 +75,9 @@ const (
 	// Event identifies an event of the internal event bus, as delivered to
 	// the webhooks (OpenAPI WebhookEvent "id").
 	Event Prefix = "evt"
+	// Webhook identifies a tenant or instance-wide webhook (OpenAPI
+	// WebhookId).
+	Webhook Prefix = "whk"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

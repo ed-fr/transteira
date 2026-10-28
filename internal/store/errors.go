@@ -17,7 +17,8 @@ var (
 	// cases apart.
 	ErrNotFound = errors.New("store: not found")
 	// ErrConflict reports a uniqueness violation (duplicate FQDN, duplicate
-	// blocklist entry...).
+	// blocklist entry...) or a concurrent change (a guarded update whose row
+	// changed since it was read).
 	ErrConflict = errors.New("store: conflict")
 	// ErrInvalid reports an argument rejected before reaching the database
 	// (malformed value, unknown kind, bad cursor...).
@@ -59,6 +60,10 @@ var (
 	// cryptographic erasure (spec 16.1, T-110) destroys the keys first,
 	// then deletes the rows. Nothing is deleted.
 	ErrKeysRemain = errors.New("store: data keys must be destroyed before the files they protect")
+	// ErrLimitReached reports a creation over a fixed limit, such as the
+	// MaxWebhooks webhooks of a tenant or of the instance. Nothing is
+	// created.
+	ErrLimitReached = errors.New("store: limit reached")
 	// ErrScrubBusy reports a WAL checkpoint that could not complete because
 	// readers were active: deleted data may remain in the SQLite WAL until
 	// the next [DB.ScrubDeleted]. It is not fatal.

@@ -50,7 +50,7 @@ var (
 	viewA   = tenantadmin.TenantView{
 		ID: "ten_a", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, StorageQuotaBytes: 1 << 40, StorageUsedBytes: 1 << 30,
-		Status: tenant.StatusActive, CreatedAt: created, UpdatedAt: now,
+		Status: tenant.StatusActive, WebhookIncludeAddresses: true, CreatedAt: created, UpdatedAt: now,
 	}
 	brandingA = tenantadmin.Branding{
 		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true,
@@ -198,13 +198,14 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		want       []problem.FieldError
 	}{
 		{"null name", `{"name": null}`, []problem.FieldError{{Field: "/name", Code: fieldNotNullable}}},
-		{"every null, in order", `{"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
+		{"every null, in order", `{"webhookIncludeAddresses":null,"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
 			{Field: "/name", Code: fieldNotNullable},
 			{Field: "/fqdn", Code: fieldNotNullable},
 			{Field: "/defaultLanguage", Code: fieldNotNullable},
 			{Field: "/storageQuotaBytes", Code: fieldNotNullable},
 			{Field: "/maxTransferBytes", Code: fieldNotNullable},
 			{Field: "/maxTransferCeiling", Code: fieldNotNullable},
+			{Field: "/webhookIncludeAddresses", Code: fieldNotNullable},
 		}},
 		{"null among valid fields", `{"defaultLanguage": "en", "maxTransferBytes": null}`, []problem.FieldError{{Field: "/maxTransferBytes", Code: fieldNotNullable}}},
 		{"null body", `null`, []problem.FieldError{{Field: "", Code: fieldInvalidFormat}}},
@@ -212,6 +213,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		{"string body", `"x"`, []problem.FieldError{{Field: "", Code: fieldInvalidFormat}}},
 		{"wrong type", `{"storageQuotaBytes": "big"}`, []problem.FieldError{{Field: "/storageQuotaBytes", Code: fieldInvalidFormat}}},
 		{"object instead of string", `{"name": {"first": "A"}}`, []problem.FieldError{{Field: "/name", Code: fieldInvalidFormat}}},
+		{"string instead of boolean", `{"webhookIncludeAddresses": "yes"}`, []problem.FieldError{{Field: "/webhookIncludeAddresses", Code: fieldInvalidFormat}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -424,7 +426,7 @@ func TestTenantsHandlers(t *testing.T) {
 	wantTenant := gen.Tenant{
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.Active, StorageQuotaBytes: 1 << 40,
-		StorageUsedBytes: 1 << 30, CreatedAt: created, UpdatedAt: now,
+		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), CreatedAt: created, UpdatedAt: now,
 	}
 
 	cursor, limit := "c1", 10
@@ -446,21 +448,22 @@ func TestTenantsHandlers(t *testing.T) {
 	}
 
 	upd, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(
-		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "unknown": null}`,
+		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "unknown": null}`,
 	)})
 	if err != nil || upd.(gen.UpdateTenant200JSONResponse).Id != "ten_a" {
 		t.Fatalf("update %+v %v", upd, err)
 	}
 	in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate)
 	if *in.Name != "Entity A2" || *in.DefaultLanguage != "en" || *in.MaxTransferBytes != 1<<30 || in.FQDN != nil ||
-		in.MaxTransferCeiling != nil || in.StorageQuotaBytes != nil || svc.args["UpdateTenant"][3] != clientIP {
+		in.MaxTransferCeiling != nil || in.StorageQuotaBytes != nil || in.WebhookIncludeAddresses == nil ||
+		*in.WebhookIncludeAddresses || svc.args["UpdateTenant"][3] != clientIP {
 		t.Errorf("update input %+v", svc.args["UpdateTenant"])
 	}
 	// No language: left unchanged.
 	if _, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(` { } `)}); err != nil {
 		t.Fatal(err)
 	}
-	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil {
+	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil {
 		t.Errorf("language set: %+v", in)
 	}
 

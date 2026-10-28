@@ -25,5 +25,6 @@
   "invalid-color": "Saisissez une couleur au format #RRGGBB.",
   "invalid-port": "Saisissez un port entre 1 et 65535.",
   "invalid-code": "Le code est composé de 6 chiffres.",
-  "unknown": "Ce champ n’est pas reconnu."
+  "unknown": "Ce champ n’est pas reconnu.",
+  "url-not-allowed": "Cette adresse n’est pas autorisée : son nom d’hôte ne peut pas être résolu, ou elle mène à un réseau refusé par l’instance (adresse privée ou réservée). Vérifiez l’adresse, et adressez-vous à l’exploitant de l’instance si ce destinataire est interne."
 }

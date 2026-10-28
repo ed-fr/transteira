@@ -83,7 +83,17 @@
       "done": "L’entité {name} a été supprimée.",
       "resumes": "La suppression n’a pas pu se terminer. Elle reprendra automatiquement : l’entité reste marquée « suppression en cours » d’ici là."
     },
-    "legend": "Paramètres de l’entité"
+    "legend": "Paramètres de l’entité",
+    "webhooks": {
+      "title": "Webhooks",
+      "intro": "Contenu des alertes envoyées aux webhooks de l’entité.",
+      "includeAddresses": {
+        "label": "Inclure les adresses dans les webhooks",
+        "hint": "Ajoute aux alertes les adresses de l’expéditeur et des destinataires concernés. Les adresses sont des données personnelles qui quittent TransTeira avec l’alerte : activez seulement si les destinataires en ont besoin et sont de confiance. Désactivé par défaut."
+      },
+      "save": "Enregistrer le réglage des webhooks",
+      "saved": "Réglage des webhooks enregistré."
+    }
   },
   "branding": {
     "title": "Habillage",

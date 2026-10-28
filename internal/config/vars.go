@@ -54,6 +54,14 @@ const (
 	EnvSystemSMTPPasswordFile   = "TT_SYSTEM_SMTP_PASSWORD_FILE" //nolint:gosec // G101: variable name, not a credential
 	EnvBackupTime               = "TT_BACKUP_TIME"
 	EnvBackupKeep               = "TT_BACKUP_KEEP"
+	EnvWebhookAllowNetworks     = "TT_WEBHOOK_ALLOW_NETWORKS"
+	EnvWebhookAllowHTTPNetworks = "TT_WEBHOOK_ALLOW_HTTP_NETWORKS"
+	EnvWebhookDenyNetworks      = "TT_WEBHOOK_DENY_NETWORKS"
+	EnvSyslogAddr               = "TT_SYSLOG_ADDR"
+	EnvSyslogProtocol           = "TT_SYSLOG_PROTOCOL"
+	EnvSyslogStreams            = "TT_SYSLOG_STREAMS"
+	EnvSyslogFacility           = "TT_SYSLOG_FACILITY"
+	EnvSyslogCAFile             = "TT_SYSLOG_CA_FILE"
 )
 
 // Default values applied by [Load] when a variable is unset or empty.
@@ -85,6 +93,9 @@ const (
 	DefaultSystemSMTPFromName       = "TransTeira"
 	DefaultBackupTime               = "02:30"
 	DefaultBackupKeep               = "7"
+	DefaultSyslogProtocol           = SyslogProtocolTLS
+	DefaultSyslogStreams            = SyslogStreamAudit + "," + SyslogStreamSecurity
+	DefaultSyslogFacility           = "local0"
 )
 
 // DefaultSMTPDenyNetworks lists the networks a tenant SMTP server may never
@@ -417,6 +428,73 @@ func Variables() []Var {
 				"(between 1 and 90). A copy keeps the wrapped keys of the files present that day, " +
 				"so cryptographic erasure reaches the copies only once the oldest copy holding a " +
 				"key is rotated out (or after a master key rotation).",
+		},
+		{
+			Name: EnvWebhookAllowNetworks, Group: "Webhooks",
+			Description: "Comma-separated list of IP addresses or CIDR prefixes that webhook URLs " +
+				"may reach over HTTPS although the built-in deny list refuses them, e.g. the " +
+				"network of an internal chat gateway. The built-in deny list, checked on the " +
+				"address resolved at connection time (protection against server-side request " +
+				"forgery and DNS rebinding), refuses the private ranges of RFC 1918, the shared " +
+				"address space 100.64.0.0/10, 192.0.0.0/24, the benchmarking range 198.18.0.0/15, " +
+				"unique local IPv6 addresses fc00::/7, site-local fec0::/10, the IPv6 prefixes " +
+				"embedding an IPv4 address (SIIT, NAT64, 6to4, Teredo) and the IPv4 loopback " +
+				"127.0.0.0/8: this variable opens them (opening the loopback is meant for tests " +
+				"only). Its core can never be opened, and a prefix overlapping it is refused at " +
+				"startup: unspecified addresses (0.0.0.0/8, ::), link-local addresses (including " +
+				"the cloud metadata addresses 169.254.169.254 and fd00:ec2::254), IPv4-compatible " +
+				"IPv6 ::/96 (which holds the IPv6 loopback ::1), multicast, the reserved range " +
+				"240.0.0.0/4 with broadcast, and the networks of the container itself. IPv4-mapped " +
+				"IPv6 addresses are judged as IPv4. " + EnvWebhookDenyNetworks + " still wins over " +
+				"this variable. Empty (default): webhooks only reach public addresses.",
+		},
+		{
+			Name: EnvWebhookAllowHTTPNetworks, Group: "Webhooks",
+			Description: "Comma-separated list of IP addresses or CIDR prefixes towards which a " +
+				"webhook URL may use plain http instead of https. Webhooks always use HTTPS " +
+				"elsewhere. A prefix overlapping the built-in deny list must also be covered by " +
+				EnvWebhookAllowNetworks + ", and one overlapping its core is refused, both at " +
+				"startup (see " + EnvWebhookAllowNetworks + "). Empty (default): plain http is " +
+				"never allowed.",
+		},
+		{
+			Name: EnvWebhookDenyNetworks, Group: "Webhooks",
+			Description: "Comma-separated list of IP addresses or CIDR prefixes that webhook URLs " +
+				"may never reach, in addition to the built-in deny list (see " +
+				EnvWebhookAllowNetworks + "); it wins over " + EnvWebhookAllowNetworks + " and " +
+				EnvWebhookAllowHTTPNetworks + ". Empty (default): only the built-in deny list applies.",
+		},
+		{
+			Name: EnvSyslogAddr, Group: "Syslog",
+			Description: "host:port of the syslog server (SIEM) receiving a copy of the audit and " +
+				"security logs in RFC 5424 format. Empty (default): the export is disabled and the " +
+				"other TT_SYSLOG_* variables are refused. The local logs stay the reference: " +
+				"the export never blocks the application, and messages are dropped (and counted) " +
+				"while the server is unreachable.",
+		},
+		{
+			Name: EnvSyslogProtocol, Group: "Syslog", Default: DefaultSyslogProtocol,
+			Description: "Transport of the syslog export: tls (TCP with TLS, the certificate of the " +
+				"server is always verified and this cannot be disabled), tcp or udp. tcp and udp " +
+				"send personal data (addresses, IP addresses) unencrypted: use them only on a " +
+				"trusted internal network. tcp and tls use octet-counting framing (RFC 6587).",
+		},
+		{
+			Name: EnvSyslogStreams, Group: "Syslog", Default: DefaultSyslogStreams,
+			Description: "Comma-separated list of the logs exported: audit, security, or both. An " +
+				"unknown value stops the startup.",
+		},
+		{
+			Name: EnvSyslogFacility, Group: "Syslog", Default: DefaultSyslogFacility,
+			Description: "RFC 5424 facility of the exported messages: kern, user, mail, daemon, " +
+				"auth, syslog, lpr, news, uucp, cron, authpriv, ftp or local0 to local7.",
+		},
+		{
+			Name: EnvSyslogCAFile, Group: "Syslog",
+			Description: "Absolute path of a PEM file holding the certificate authorities trusted " +
+				"to verify the syslog server, only with " + EnvSyslogProtocol + "=tls. Empty " +
+				"(default): the certificate authorities of the system are used. The file must " +
+				"contain at least one certificate.",
 		},
 	}
 }

@@ -27,6 +27,7 @@ administration.
 - [4. Complete script: PowerShell 7](#4-complete-script-powershell-7)
 - [5. Errors and retries](#5-errors-and-retries)
 - [6. Managing tokens: list, change, revoke](#6-managing-tokens-list-change-revoke)
+- [7. Receiving webhooks](#7-receiving-webhooks)
 
 ## Basics
 
@@ -924,3 +925,103 @@ curl -sS -X DELETE "$TT_ADMIN_URL/api/v1/admin/tenants/$TT_TENANT_ID/api-tokens/
 A transfer belongs to the token that created it: a transfer still uploading when its token is
 revoked can no longer be resumed or finalized, and is cleaned up when its uploads expire. Rotate
 between two runs.
+
+## 7. Receiving webhooks
+
+From version 1.1, the administrators can send the alerts of TransTeira (virus detected, quota,
+disk space, antivirus outage, maintenance, master key rotation, abuse) to a webhook: Microsoft
+Teams, Slack, or a **generic** receiver of your own. This section is for the generic receiver.
+The payload is the `WebhookEvent` schema of the [specification](../../api/openapi.yaml)
+(operation `receiveWebhookEvent`).
+
+### What TransTeira sends
+
+```http
+POST /hooks/transteira HTTP/1.1
+Host: hooks.example.com
+Content-Type: application/json
+X-TransTeira-Event: quota.warning
+X-TransTeira-Delivery: evt_01JBC3Q4ZK8X2V6N7M9P0R1S2T
+X-TransTeira-Signature: t=1793170150,v1=5f0c...e9a1
+
+{"id":"evt_01JBC3Q4ZK8X2V6N7M9P0R1S2T","type":"quota.warning","severity":"warning",
+ "occurredAt":"2026-10-27T08:09:10Z","tenant":{"id":"ten_...","name":"Entity A"},
+ "counts":{"usedRatio":0.82,"threshold":0.8},
+ "adminUrl":"https://admin.example.com/admin/tenants/ten_.../audit"}
+```
+
+(The body is shown on several lines for reading; the real body is one compact line. Never
+re-serialize it before checking the signature.)
+
+- The payload is minimal: counters, the tenant and a link to the administration. It never
+  contains file names, links to transfers, tokens or passwords. Mail addresses are added only
+  when the tenant enabled the option "Include the addresses in the webhooks".
+- Answer with any **2xx within 10 seconds**. Any other answer, a redirect or a timeout is a
+  failure: TransTeira tries again, up to 5 attempts with a growing delay. After 5 failed
+  deliveries in a row, the webhook is suspended for 15 minutes (shown in the administration).
+- `X-TransTeira-Delivery` is the event ID, identical across the attempts: use it to ignore a
+  duplicate.
+- The test button of the administration sends a `webhook.test` event.
+
+### Verifying the signature
+
+The secret of a generic webhook is shown **once**, when it is created or rotated. Use it as
+shown, byte for byte, as the HMAC key. To verify a request:
+
+1. Read `t` (Unix time in seconds) and `v1` (hex) from `X-TransTeira-Signature`.
+2. Refuse the request if `t` is more than 5 minutes away from your clock (replay).
+3. Compute `HMAC-SHA256(secret, "<t>.<raw body>")` over the **raw bytes** of the body, before
+   any JSON parsing, and compare it with `v1` in constant time.
+
+With bash and OpenSSL, for a captured request (body in `body.json`):
+
+```bash
+#!/usr/bin/env bash
+# verify-webhook.sh HEADER_VALUE BODY_FILE: checks a TransTeira webhook signature.
+# The secret comes from the file named by TT_WEBHOOK_SECRET_FILE, never from argv.
+set -euo pipefail
+header="$1" body_file="$2"
+t="$(sed -n 's/.*t=\([0-9]*\).*/\1/p' <<<"$header")"
+v1="$(sed -n 's/.*v1=\([0-9a-f]*\).*/\1/p' <<<"$header")"
+now="$(date +%s)"
+if (( now - t > 300 || t - now > 300 )); then echo "stale timestamp" >&2; exit 1; fi
+expected="$( { printf '%s.' "$t"; cat "$body_file"; } |
+  openssl dgst -sha256 -mac HMAC -macopt "key:$(cat "$TT_WEBHOOK_SECRET_FILE")" -r | cut -d' ' -f1)"
+[ "$expected" = "$v1" ] && echo "valid" || { echo "invalid signature" >&2; exit 1; }
+```
+
+(`-macopt key:` puts the secret on the command line of openssl, visible to the other users of
+the machine; prefer the code of your receiver, as below, in production.)
+
+With PowerShell 7:
+
+```powershell
+#Requires -Version 7.0
+# Test-TransTeiraSignature: checks the X-TransTeira-Signature header of a request.
+function Test-TransTeiraSignature {
+    param(
+        [Parameter(Mandatory)] [string] $Header,
+        [Parameter(Mandatory)] [byte[]] $RawBody,
+        [Parameter(Mandatory)] [string] $Secret
+    )
+    if ($Header -notmatch 't=(\d+),v1=([0-9a-f]{64})') { return $false }
+    $t = [long]$Matches[1]; $v1 = $Matches[2]
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if ([Math]::Abs($now - $t) -gt 300) { return $false }
+    $prefix = [Text.Encoding]::ASCII.GetBytes("$t.")
+    $hmac = [Security.Cryptography.HMACSHA256]::new([Text.Encoding]::ASCII.GetBytes($Secret))
+    try {
+        $mac = $hmac.ComputeHash([byte[]]($prefix + $RawBody))
+    } finally { $hmac.Dispose() }
+    $expected = [Convert]::FromHexString($v1)
+    return [Security.Cryptography.CryptographicOperations]::FixedTimeEquals($mac, $expected)
+}
+```
+
+### Network rules
+
+TransTeira calls webhooks over **HTTPS** only, and never towards a private, loopback, link-local
+or cloud metadata address, nor towards its own networks (protection against server-side request
+forgery). The operator can open a receiver on an internal network with `TT_WEBHOOK_ALLOW_NETWORKS`
+(and plain HTTP with `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`); see `.env.example`. Redirects are never
+followed: give the final URL.

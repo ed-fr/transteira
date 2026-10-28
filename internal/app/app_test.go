@@ -37,6 +37,17 @@ const (
 	adminHost  = "admin.localhost"
 )
 
+const (
+	// startupTimeout bounds the start-up of Run in the tests (start,
+	// waitListening): it applies every schema migration on a fresh
+	// database, which takes seconds on a loaded PostgreSQL. The requests
+	// keep the shorter timeout of memListener.client, once the server
+	// listens.
+	startupTimeout = 2 * time.Minute
+	// listeningLog is the message Run logs once its HTTP server serves.
+	listeningLog = "HTTP server listening"
+)
+
 // memListener is an in-memory net.Listener whose connections are net.Pipe
 // pairs.
 type memListener struct {
@@ -86,16 +97,57 @@ type memAddr struct{}
 func (memAddr) Network() string { return "memory" }
 func (memAddr) String() string  { return "memory" }
 
-// syncBuffer is a concurrency-safe bytes.Buffer.
+// syncBuffer is a concurrency-safe bytes.Buffer that tells its waiters
+// about every write (next).
 type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
+	mu      sync.Mutex
+	b       bytes.Buffer
+	changed chan struct{} // closed by the next Write; nil without waiter
 }
 
 func (s *syncBuffer) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.changed != nil {
+		close(s.changed)
+		s.changed = nil
+	}
 	return s.b.Write(p)
+}
+
+// next returns a channel closed by the next Write.
+func (s *syncBuffer) next() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.changed == nil {
+		s.changed = make(chan struct{})
+	}
+	return s.changed
+}
+
+// waitListening waits until Run, whose result is sent on done, logs that
+// its HTTP server is listening, which it does once the start-up (database
+// opening, schema migrations, master key check) is over. It fails the test
+// when Run returns first or after startupTimeout; the result of Run is put
+// back on done for the caller's cleanup.
+func waitListening(t *testing.T, logs *syncBuffer, done chan error) {
+	t.Helper()
+	timeout := time.NewTimer(startupTimeout)
+	defer timeout.Stop()
+	for {
+		changed := logs.next() // before reading, not to miss a write
+		if strings.Contains(logs.String(), listeningLog) {
+			return
+		}
+		select {
+		case <-changed:
+		case err := <-done:
+			done <- err
+			t.Fatalf("Run returned %v before listening (logs: %s)", err, logs)
+		case <-timeout.C:
+			t.Fatalf("Run not listening within %s (logs: %s)", startupTimeout, logs)
+		}
+	}
 }
 
 func (s *syncBuffer) String() string {
@@ -194,6 +246,9 @@ func start(t *testing.T, cfg *config.Config, opts ...Option) *started {
 			t.Logf("Run: %v", err)
 		}
 	})
+	// The first request must not have to cover the start-up: the dial of
+	// memListener waits for Accept, under the request timeout only.
+	waitListening(t, s.logs, s.done)
 	return s
 }
 
@@ -274,7 +329,7 @@ func TestRunServes(t *testing.T) {
 		if strings.Contains(logs, "web interface not built") != (notBuilt != nil) {
 			t.Errorf("web interface warning mismatch (built: %v): %s", notBuilt == nil, logs)
 		}
-		for _, want := range []string{"HTTP server listening", "stopped"} {
+		for _, want := range []string{listeningLog, "stopped"} {
 			if !strings.Contains(logs, want) {
 				t.Errorf("logs lack %q: %s", want, logs)
 			}
@@ -374,13 +429,7 @@ func TestRunRealListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- Run(ctx, cfg, WithLogOutput(logs)) }()
-	deadline := time.Now().Add(20 * time.Second)
-	for !strings.Contains(logs.String(), "HTTP server listening") {
-		if time.Now().After(deadline) {
-			t.Fatalf("server did not start: %s", logs.String())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitListening(t, logs, done)
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)

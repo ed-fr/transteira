@@ -96,6 +96,13 @@ func TestAdminPathTenantAudit(t *testing.T) {
 	}
 }
 
+func TestAdminPathTenantWebhooks(t *testing.T) {
+	t.Parallel()
+	if got := AdminPathTenantWebhooks("ten_1"); got != "/admin/tenants/ten_1/webhooks" {
+		t.Fatalf("AdminPathTenantWebhooks = %q", got)
+	}
+}
+
 func TestRecorder(t *testing.T) {
 	t.Parallel()
 	r := &Recorder{}

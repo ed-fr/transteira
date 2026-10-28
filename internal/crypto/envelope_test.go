@@ -9,7 +9,7 @@ import (
 
 func TestWrapRoundTrip(t *testing.T) {
 	k := testKey(t)
-	for _, p := range []Purpose{PurposeDEK, PurposeSecret} {
+	for _, p := range []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook} {
 		for _, pt := range [][]byte{nil, {}, []byte("smtp-password"), testDEK(7), bytes.Repeat([]byte{1}, 4096)} {
 			blob, err := k.Wrap(p, "ten_a", "wk_1", pt)
 			if err != nil {
@@ -47,6 +47,7 @@ func TestUnwrapMismatch(t *testing.T) {
 		"other tenant":     {k, PurposeDEK, "ten_b", "wk_1", blob},
 		"other row":        {k, PurposeDEK, "ten_a", "wk_2", blob},
 		"purpose swap":     {k, PurposeSecret, "ten_a", "wk_1", blob},
+		"webhook purpose":  {k, PurposeWebhook, "ten_a", "wk_1", blob},
 		"unknown purpose":  {k, Purpose("file"), "ten_a", "wk_1", blob},
 		"empty purpose":    {k, Purpose(""), "ten_a", "wk_1", blob},
 		"other master key": {otherKey(t), PurposeDEK, "ten_a", "wk_1", blob},

@@ -3688,7 +3688,7 @@ type WebhookWithSecret struct {
 	LastDelivery *WebhookDelivery `json:"lastDelivery"`
 	Name         string           `json:"name"`
 
-	// Secret Signing secret (HMAC-SHA256 key), shown once.
+	// Secret Signing secret, shown once: 64 lowercase hexadecimal characters (256 random bits). The receiver uses this text as shown, byte for byte, as the HMAC-SHA256 key.
 	Secret    *string   `json:"secret,omitempty"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
@@ -11615,6 +11615,25 @@ func (response CreateSystemWebhook409ApplicationProblemPlusJSONResponse) VisitCr
 	return err
 }
 
+type CreateSystemWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSystemWebhook429ApplicationProblemPlusJSONResponse) VisitCreateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateSystemWebhook500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -11880,6 +11899,41 @@ func (response UpdateSystemWebhook404ApplicationProblemPlusJSONResponse) VisitUp
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook409ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSystemWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSystemWebhook429ApplicationProblemPlusJSONResponse) VisitUpdateSystemWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -16751,6 +16805,25 @@ func (response CreateTenantWebhook409ApplicationProblemPlusJSONResponse) VisitCr
 	return err
 }
 
+type CreateTenantWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenantWebhook429ApplicationProblemPlusJSONResponse) VisitCreateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateTenantWebhook500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -17003,6 +17076,41 @@ func (response UpdateTenantWebhook404ApplicationProblemPlusJSONResponse) VisitUp
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook409ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateTenantWebhook429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateTenantWebhook429ApplicationProblemPlusJSONResponse) VisitUpdateTenantWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }

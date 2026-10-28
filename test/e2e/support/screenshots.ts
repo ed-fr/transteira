@@ -73,6 +73,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     screen: 'admin /admin/tenants/:id/tokens/new (secret shown once)',
     profile: 'delegated-admin',
   },
+  {
+    name: 'admin-webhooks',
+    screen: 'admin /admin/tenants/:id/webhooks',
+    profile: 'delegated-admin',
+  },
   { name: 'admin-audit', screen: 'admin /admin/tenants/:id/audit', profile: 'delegated-admin' },
   { name: 'admin-stats', screen: 'admin /admin/tenants/:id/stats', profile: 'delegated-admin' },
   {
@@ -100,6 +105,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'admin-system-settings', screen: 'admin /admin/system/settings', profile: 'super-admin' },
   { name: 'admin-system-audit', screen: 'admin /admin/system/audit', profile: 'super-admin' },
   { name: 'admin-system-master-key', screen: 'admin /admin/system/master-key', profile: 'super-admin' },
+  {
+    name: 'admin-system-webhooks',
+    screen: 'admin /admin/system/webhooks',
+    profile: 'super-admin',
+  },
   {
     name: 'admin-system-maintenance',
     screen: 'admin /admin/system/maintenance (mode on)',

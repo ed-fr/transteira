@@ -1,0 +1,160 @@
+{
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "suspended": "Suspended"
+  },
+  "kinds": {
+    "teams": "Microsoft Teams",
+    "slack": "Slack",
+    "generic": "Generic JSON"
+  },
+  "events": {
+    "virus": {
+      "detected": "Virus detected"
+    },
+    "abuse": {
+      "threshold_exceeded": "Abuse threshold exceeded",
+      "unusual_activity": "Unusual activity",
+      "reported": "Abuse reported"
+    },
+    "quota": {
+      "warning": "Quota at 80 %",
+      "reached": "Quota reached"
+    },
+    "disk": {
+      "alert_raised": "Disk space alert",
+      "alert_cleared": "Disk space back to normal"
+    },
+    "antivirus": {
+      "alert_raised": "Antivirus unavailable",
+      "alert_cleared": "Antivirus available again"
+    },
+    "maintenance": {
+      "enabled": "Maintenance mode on",
+      "disabled": "Maintenance mode off"
+    },
+    "master_key": {
+      "rotation_completed": "Master key rotation completed",
+      "rotation_failed": "Master key rotation failed"
+    },
+    "webhook": {
+      "test": "Test event"
+    }
+  },
+  "categories": {
+    "dns": "Name not resolved",
+    "refused_network": "Address refused by the network rules",
+    "connect": "Connection failed",
+    "tls": "TLS error",
+    "timeout": "No answer within 10 seconds",
+    "http_status": "Error answer",
+    "unknown": "Unknown cause"
+  },
+  "list": {
+    "caption": "Webhooks",
+    "create": "Add a webhook",
+    "empty": "No webhook yet.",
+    "columns": {
+      "name": "Name and address",
+      "kind": "Kind",
+      "events": "Events",
+      "status": "Status",
+      "delivery": "Last delivery",
+      "actions": "Actions"
+    },
+    "suspendedUntil": "Deliveries suspended until {date} after repeated failures.",
+    "test": "Test",
+    "testing": "Sending the test…",
+    "edit": "Edit",
+    "rotate": "New secret",
+    "delete": "Delete"
+  },
+  "delivery": {
+    "never": "None yet",
+    "success": "Delivered",
+    "failure": "Failed",
+    "httpStatus": "HTTP {status}",
+    "duration": "{ms} ms"
+  },
+  "test": {
+    "success": "Test of {name} delivered: {detail}.",
+    "failure": "Test of {name} failed: {cause} ({detail}).",
+    "rateLimited": "Too many tests: at most {max} per hour. Try again later.",
+    "rateLimitedRetry": "Too many tests: at most {max} per hour. Try again in {minutes} min."
+  },
+  "form": {
+    "createTitle": "New webhook",
+    "editTitle": "Edit the webhook {name}",
+    "legend": "Webhook settings",
+    "createIntro": "The receiver gets one request per selected event. No file name, link or password is ever sent.",
+    "editIntro": "Leave the address empty to keep the current one. Re-enabling a suspended webhook resumes its deliveries at once.",
+    "submit": "Create the webhook",
+    "created": "Webhook created.",
+    "saved": "Webhook updated.",
+    "discardConfirm": "You have unsaved changes. Close without saving? They will be lost.",
+    "name": {
+      "label": "Name",
+      "hint": "Describes the receiver, for example “Security team channel” (100 characters at most)."
+    },
+    "kind": {
+      "label": "Kind",
+      "hints": {
+        "teams": "Incoming webhook of a Microsoft Teams channel (or a Workflows URL): a formatted message.",
+        "slack": "Incoming webhook of a Slack channel: a formatted message.",
+        "generic": "Any HTTPS receiver (SIEM, script): a JSON document signed with a secret shown once."
+      }
+    },
+    "url": {
+      "label": "Address (URL)",
+      "newLabel": "New address (URL)",
+      "hint": "Full https:// address given by the receiver, at most {max} characters. It is stored encrypted and never shown again in full.",
+      "editHint": "Current address: {hint}. Leave empty to keep it."
+    },
+    "events": {
+      "label": "Events",
+      "hintTenant": "Alerts of this entity to send. Addresses are only included if the entity allows it (General screen).",
+      "hintSystem": "Alerts of the whole instance to send. The events of the entities are never sent to these webhooks."
+    },
+    "enabled": {
+      "label": "Enabled",
+      "hint": "A disabled webhook receives nothing until it is enabled again."
+    }
+  },
+  "secret": {
+    "createdTitle": "Webhook {name} created",
+    "rotatedTitle": "New secret of the webhook {name}",
+    "text": "The receiver uses this secret to check the X-TransTeira-Signature header of each request. Copy it now into the configuration of the receiver.",
+    "label": "Signing secret"
+  },
+  "rotate": {
+    "title": "Generate a new secret for {name}?",
+    "text": "The current secret stops working at once: requests are signed with the new one, which you must enter in the receiver. Its previous key is destroyed.",
+    "confirm": "Generate a new secret",
+    "done": "New secret generated for {name}."
+  },
+  "delete": {
+    "title": "Delete the webhook {name}?",
+    "text": "The receiver no longer gets any alert, and deliveries in progress are abandoned. The encrypted address and secret are destroyed. This action cannot be undone.",
+    "confirm": "Delete the webhook",
+    "done": "Webhook {name} deleted."
+  },
+  "addresses": {
+    "included": "The alerts of this entity include the addresses concerned.",
+    "excluded": "The alerts of this entity do not include any address.",
+    "change": "Change on the General screen"
+  },
+  "errors": {
+    "nameTooLong": "The name is limited to {max} characters.",
+    "urlInvalid": "Enter the full address given by the receiver, starting with https and its host name.",
+    "urlScheme": "The address must use https.",
+    "urlCredentials": "The address must not contain a user name or a password.",
+    "urlTooLong": "The address is limited to {max} characters.",
+    "eventsRequired": "Select at least one event.",
+    "eventNotAllowed": "One of the selected events is not available for these webhooks.",
+    "limit": "At most {max} webhooks: delete one before adding another.",
+    "rateLimited": "Too many new webhook addresses: at most {max} creations and address changes per hour. Try again later.",
+    "rateLimitedRetry": "Too many new webhook addresses: at most {max} creations and address changes per hour. Try again in {minutes} min.",
+    "notFound": "This webhook no longer exists. Reload the page."
+  }
+}

@@ -581,6 +581,19 @@ var tenantAllowlist = map[string]int{
 	`SELECT level, changed_at FROM tenant_quota_alerts WHERE tenant_id = ?`:                      0,
 	`UPDATE tenant_quota_alerts SET level = ?, changed_at = ? WHERE tenant_id = ? AND level = ?`: 2,
 	`INSERT INTO tenant_quota_alerts (tenant_id, level, changed_at) VALUES (?, ?, ?)`:            0,
+	// Webhooks (0018).
+	`INSERT INTO webhooks (tenant_id, id, name, kind, url_key_id, url_hint, secret_key_id, events, enabled, ` +
+		`created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT count(*) FROM webhooks WHERE tenant_id = ?`:                                       0,
+	`SELECT count(*) FROM webhooks WHERE tenant_id = ? AND id = ?`:                            0,
+	`SELECT ` + webhookColumns + ` FROM webhooks WHERE tenant_id = ? AND id = ?`:              0,
+	`SELECT ` + webhookColumns + ` FROM webhooks WHERE tenant_id = ? ORDER BY created_at, id`: 0,
+	`UPDATE webhooks SET name = ?, url_key_id = ?, url_hint = ?, secret_key_id = ?, events = ?, enabled = ?, ` +
+		`updated_at = ? WHERE tenant_id = ? AND id = ? AND updated_at = ?`: 7,
+	`UPDATE webhooks SET consecutive_failures = 0, circuit_open_until = NULL WHERE tenant_id = ? AND id = ?`: 0,
+	`UPDATE webhooks SET last_delivery_at = ?, last_status = ?, last_http_status = ?, last_duration_ms = ?, ` +
+		`last_error = ?, consecutive_failures = ?, circuit_open_until = ? WHERE tenant_id = ? AND id = ? AND updated_at = ?`: 7,
+	`DELETE FROM webhooks WHERE tenant_id = ? AND id = ? AND url_key_id IS NULL AND secret_key_id IS NULL`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -653,11 +666,11 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                                reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                             reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
-	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`DELETE FROM tenants WHERE id = ?`:                             reasonTenantAdmin,
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
 	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,
@@ -777,6 +790,19 @@ var systemAllowlist = map[string]string{
 		`(disk_alert_mailed_at IS NULL OR disk_alert_mailed_at <= ? OR disk_alert_mailed_at > ?)`: reasonSystemSettings,
 	`UPDATE system_settings SET antivirus_alert_mailed_at = ? WHERE id = 1 AND ` +
 		`(antivirus_alert_mailed_at IS NULL OR antivirus_alert_mailed_at <= ? OR antivirus_alert_mailed_at > ?)`: reasonSystemSettings,
+	// Instance-wide webhooks (0018).
+	`INSERT INTO system_webhooks (id, name, kind, url_secret_id, url_hint, hmac_secret_id, events, enabled, ` +
+		`created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: reasonSystemWebhooks,
+	`SELECT count(*) FROM system_webhooks`:                                             reasonSystemWebhooks,
+	`SELECT count(*) FROM system_webhooks WHERE id = ?`:                                reasonSystemWebhooks,
+	`SELECT ` + systemWebhookColumns + ` FROM system_webhooks WHERE id = ?`:            reasonSystemWebhooks,
+	`SELECT ` + systemWebhookColumns + ` FROM system_webhooks ORDER BY created_at, id`: reasonSystemWebhooks,
+	`UPDATE system_webhooks SET name = ?, url_secret_id = ?, url_hint = ?, hmac_secret_id = ?, events = ?, ` +
+		`enabled = ?, updated_at = ? WHERE id = ? AND updated_at = ?`: reasonSystemWebhooks,
+	`UPDATE system_webhooks SET consecutive_failures = 0, circuit_open_until = NULL WHERE id = ?`: reasonSystemWebhooks,
+	`UPDATE system_webhooks SET last_delivery_at = ?, last_status = ?, last_http_status = ?, last_duration_ms = ?, ` +
+		`last_error = ?, consecutive_failures = ?, circuit_open_until = ? WHERE id = ? AND updated_at = ?`: reasonSystemWebhooks,
+	`DELETE FROM system_webhooks WHERE id = ? AND url_secret_id IS NULL AND hmac_secret_id IS NULL`: reasonSystemWebhooks,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

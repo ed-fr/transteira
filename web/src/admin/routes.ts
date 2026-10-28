@@ -29,6 +29,7 @@ import Privacy from './screens/ops/Privacy.svelte';
 import TenantStats from './screens/ops/TenantStats.svelte';
 import TokenCreate from './screens/ops/TokenCreate.svelte';
 import TokenList from './screens/ops/TokenList.svelte';
+import TenantWebhooks from './screens/ops/TenantWebhooks.svelte';
 import TransferDetail from './screens/ops/TransferDetail.svelte';
 import TransferList from './screens/ops/TransferList.svelte';
 import GlobalAudit from './screens/system/GlobalAudit.svelte';
@@ -36,6 +37,7 @@ import Maintenance from './screens/system/Maintenance.svelte';
 import MasterKey from './screens/system/MasterKey.svelte';
 import SystemOverview from './screens/system/SystemOverview.svelte';
 import SystemSettings from './screens/system/SystemSettings.svelte';
+import SystemWebhooks from './screens/system/SystemWebhooks.svelte';
 import LegalEdit from './screens/tenants/LegalEdit.svelte';
 import LegalList from './screens/tenants/LegalList.svelte';
 import TemplateEdit from './screens/tenants/TemplateEdit.svelte';
@@ -219,6 +221,14 @@ export const routes: readonly AdminRoute[] = [
     tenantNav: true,
   },
   {
+    pattern: '/tenants/:id/webhooks',
+    component: TenantWebhooks,
+    titleKey: 'adminOps.webhooks.title',
+    access: 'auth',
+    helpTopic: 'tenant-webhooks',
+    tenantNav: true,
+  },
+  {
     pattern: '/tenants/:id/audit',
     component: AuditLog,
     titleKey: 'adminOps.audit.title',
@@ -285,6 +295,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminSystem.settings.title',
     access: 'super',
     helpTopic: 'system-settings',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/webhooks',
+    component: SystemWebhooks,
+    titleKey: 'adminSystem.webhooks.title',
+    access: 'super',
+    helpTopic: 'system-webhooks',
     systemNav: true,
   },
   {

@@ -6,6 +6,7 @@
     "invitations": "Invitations",
     "blocklist": "Blocklist",
     "tokens": "API tokens",
+    "webhooks": "Webhooks",
     "audit": "Audit log",
     "stats": "Statistics",
     "privacy": "Personal data"
@@ -27,6 +28,10 @@
     "title": "API tokens",
     "createTitle": "New API token",
     "intro": "Tokens let scripts and third-party software deposit files through the API. A token is shown only once, when it is created."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "intro": "Alerts of this entity (virus detected, abuse, quotas) sent to a Microsoft Teams or Slack channel, or to any JSON receiver such as a SIEM, in addition to the emails."
   },
   "audit": {
     "title": "Audit log",

@@ -59,7 +59,8 @@
     "data_subject": "Personne concernée",
     "deposit_session": "Session de dépôt",
     "master_key_rotation": "Rotation de la clé maître",
-    "system": "Système"
+    "system": "Système",
+    "webhook": "Webhook"
   },
   "groups": {
     "transfers": "Transferts",

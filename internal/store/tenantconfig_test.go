@@ -46,7 +46,8 @@ func TestTenantsConfigFields(t *testing.T) {
 		// Defaults on creation.
 		a := newTenant(t, db, "transfer.entity-a.example.com")
 		if a.MaxTransferCeiling != a.MaxTransferBytes || a.Status != tenant.StatusActive ||
-			a.PrimaryColor != tenant.DefaultPrimaryColor || a.AccentColor != tenant.DefaultAccentColor || a.HasLogo || a.HasBackground {
+			a.PrimaryColor != tenant.DefaultPrimaryColor || a.AccentColor != tenant.DefaultAccentColor || a.HasLogo || a.HasBackground ||
+			a.WebhookIncludeAddresses {
 			t.Fatalf("created tenant = %+v", a)
 		}
 		if got, err := repo.Get(ctx, a.ID); err != nil || *got != *a {
@@ -58,12 +59,13 @@ func TestTenantsConfigFields(t *testing.T) {
 			Name: "B", FQDN: "transfer.entity-b.example.com", DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 30, MaxTransferCeiling: tenant.MaxTransferLimit, StorageQuotaBytes: 1 << 40,
 			PrimaryColor: "#000000", AccentColor: "#abcdef", HasLogo: true, HasBackground: true,
+			WebhookIncludeAddresses: true,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got, err := repo.Get(ctx, b.ID); err != nil || *got != *b || got.MaxTransferCeiling != tenant.MaxTransferLimit ||
-			got.AccentColor != "#abcdef" || !got.HasLogo || !got.HasBackground {
+			got.AccentColor != "#abcdef" || !got.HasLogo || !got.HasBackground || !got.WebhookIncludeAddresses {
 			t.Fatalf("Get(B) = %+v, %v", got, err)
 		}
 
@@ -105,11 +107,18 @@ func TestTenantsConfigFields(t *testing.T) {
 		upd.MaxTransferCeiling, upd.MaxTransferBytes = 2<<30, 2<<30
 		upd.PrimaryColor, upd.AccentColor = "#111111", "#222222"
 		upd.HasLogo, upd.HasBackground = true, false
+		upd.WebhookIncludeAddresses = true
 		upd.Status = tenant.StatusDeleting
 		out, err := repo.Update(ctx, upd)
 		if err != nil || out.MaxTransferCeiling != 2<<30 || out.MaxTransferBytes != 2<<30 || out.PrimaryColor != "#111111" ||
-			out.AccentColor != "#222222" || !out.HasLogo || out.HasBackground || out.Status != tenant.StatusActive {
+			out.AccentColor != "#222222" || !out.HasLogo || out.HasBackground || !out.WebhookIncludeAddresses ||
+			out.Status != tenant.StatusActive {
 			t.Fatalf("Update = %+v, %v", out, err)
+		}
+		upd = out.Clone()
+		upd.WebhookIncludeAddresses = false
+		if out, err := repo.Update(ctx, upd); err != nil || out.WebhookIncludeAddresses {
+			t.Fatalf("Update(webhook addresses off) = %+v, %v", out, err)
 		}
 		upd = out.Clone()
 		upd.Status = "bogus"

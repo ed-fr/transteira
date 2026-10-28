@@ -59,7 +59,8 @@
     "data_subject": "Data subject",
     "deposit_session": "Deposit session",
     "master_key_rotation": "Master key rotation",
-    "system": "System"
+    "system": "System",
+    "webhook": "Webhook"
   },
   "groups": {
     "transfers": "Transfers",

@@ -19,17 +19,21 @@
 package config
 
 import (
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	netmail "net/mail"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/ed-fr/transteira/internal/netpolicy"
 )
 
 // Supported database drivers.
@@ -233,7 +237,69 @@ type Config struct {
 	BackupTime time.Duration
 	// BackupKeep is the number of nightly database copies kept.
 	BackupKeep int
+
+	// WebhookAllowNetworks lists the networks webhook URLs may reach over
+	// HTTPS although the built-in deny list refuses them (decision P30).
+	WebhookAllowNetworks []netip.Prefix
+	// WebhookAllowHTTPNetworks lists the networks towards which a webhook
+	// URL may use plain http.
+	WebhookAllowHTTPNetworks []netip.Prefix
+	// WebhookDenyNetworks lists the networks webhook URLs may never reach,
+	// in addition to the built-in deny list; it wins over the allow lists.
+	WebhookDenyNetworks []netip.Prefix
+
+	// Syslog is the RFC 5424 export of the audit and security logs
+	// (decision P41). It is disabled when its Addr is empty.
+	Syslog SyslogConfig
 }
+
+// Transports of the syslog export (TT_SYSLOG_PROTOCOL).
+const (
+	SyslogProtocolUDP = "udp"
+	SyslogProtocolTCP = "tcp"
+	SyslogProtocolTLS = "tls"
+)
+
+// Logs that the syslog export can carry (TT_SYSLOG_STREAMS).
+const (
+	SyslogStreamAudit    = "audit"
+	SyslogStreamSecurity = "security"
+)
+
+// syslogFacilities maps the RFC 5424 facility names accepted by
+// TT_SYSLOG_FACILITY to their numeric codes.
+var syslogFacilities = map[string]int{
+	"kern": 0, "user": 1, "mail": 2, "daemon": 3, "auth": 4, "syslog": 5, "lpr": 6, "news": 7,
+	"uucp": 8, "cron": 9, "authpriv": 10, "ftp": 11,
+	"local0": 16, "local1": 17, "local2": 18, "local3": 19,
+	"local4": 20, "local5": 21, "local6": 22, "local7": 23,
+}
+
+// SyslogConfig is the export of the audit and security logs to a syslog
+// server, configured by the TT_SYSLOG_* variables. It is an installation
+// setting: no API can change it.
+type SyslogConfig struct {
+	// Addr is the "host:port" of the server, "" when the export is
+	// disabled.
+	Addr string
+	// Protocol is SyslogProtocolUDP, SyslogProtocolTCP or SyslogProtocolTLS.
+	Protocol string
+	// Streams lists the exported logs (SyslogStreamAudit,
+	// SyslogStreamSecurity), sorted and without duplicates.
+	Streams []string
+	// Facility is the RFC 5424 numeric facility code (0 to 23).
+	Facility int
+	// CAFile is the absolute path of a PEM file of trusted certificate
+	// authorities, "" to use those of the system. Only set with
+	// SyslogProtocolTLS; the server certificate is always verified.
+	CAFile string
+}
+
+// Enabled reports whether the syslog export is configured.
+func (s SyslogConfig) Enabled() bool { return s.Addr != "" }
+
+// HasStream reports whether the export carries the given log.
+func (s SyslogConfig) HasStream(stream string) bool { return slices.Contains(s.Streams, stream) }
 
 // Security modes of the system SMTP server (TT_SYSTEM_SMTP_SECURITY), the
 // values of the tenant SMTP settings.
@@ -324,6 +390,8 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadMail(c)
 	l.loadAntivirus(c)
 	l.loadMaintenance(c)
+	l.loadWebhooks(c)
+	l.loadSyslog(c)
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
@@ -742,6 +810,142 @@ func (l *loader) loadMaintenance(c *Config) {
 		l.fail(EnvBackupKeep, "%v", err)
 	}
 	c.BackupKeep = n
+}
+
+// loadWebhooks reads the networks of the webhook egress policy. The
+// built-in deny list itself lives in internal/netpolicy: an allowed or
+// plain http network overlapping its core (which can never be opened) is
+// refused, and so is a plain http network inside the built-in deny list
+// that TT_WEBHOOK_ALLOW_NETWORKS does not open. The networks of the
+// container, also part of the core, are checked when the webhook client
+// starts.
+func (l *loader) loadWebhooks(c *Config) {
+	ok := true
+	for _, v := range []struct {
+		name string
+		dst  *[]netip.Prefix
+	}{
+		{EnvWebhookAllowNetworks, &c.WebhookAllowNetworks},
+		{EnvWebhookAllowHTTPNetworks, &c.WebhookAllowHTTPNetworks},
+		{EnvWebhookDenyNetworks, &c.WebhookDenyNetworks},
+	} {
+		p, err := parsePrefixes(l.get(v.name))
+		if err != nil {
+			l.fail(v.name, "%v", err)
+			ok = false
+		}
+		*v.dst = p
+	}
+	if !ok {
+		return
+	}
+	core := netpolicy.WebhookAlwaysDenyNetworks()
+	if err := netpolicy.CheckWebhookAllow(c.WebhookAllowNetworks, nil, core); err != nil {
+		l.fail(EnvWebhookAllowNetworks, "%v", err)
+	} else if err := netpolicy.CheckWebhookAllow(c.WebhookAllowNetworks, c.WebhookAllowHTTPNetworks, core); err != nil {
+		l.fail(EnvWebhookAllowHTTPNetworks, "%v (list it in %s too)", err, EnvWebhookAllowNetworks)
+	}
+}
+
+// syslogGroup lists the TT_SYSLOG_* variables that require TT_SYSLOG_ADDR,
+// with their documented default ("" if none).
+var syslogGroup = []struct{ name, def string }{
+	{EnvSyslogProtocol, DefaultSyslogProtocol},
+	{EnvSyslogStreams, DefaultSyslogStreams},
+	{EnvSyslogFacility, DefaultSyslogFacility},
+	{EnvSyslogCAFile, ""},
+}
+
+// loadSyslog reads the TT_SYSLOG_* variables. Without TT_SYSLOG_ADDR the
+// export is disabled and every other variable of the group set to anything
+// but its documented default is refused, so that a forgotten address never
+// silently disables the export (an .env.example with every default
+// uncommented stays valid, as for the system SMTP server).
+func (l *loader) loadSyslog(c *Config) {
+	addr := l.get(EnvSyslogAddr)
+	if addr == "" {
+		for _, v := range syslogGroup {
+			if raw := strings.ToLower(strings.TrimSpace(l.get(v.name))); raw != "" && raw != v.def {
+				l.fail(v.name, "requires %s (the syslog export is disabled without it)", EnvSyslogAddr)
+			}
+		}
+		return
+	}
+	s := SyslogConfig{Addr: addr}
+	if err := validateHostPort(addr, true); err != nil {
+		l.fail(EnvSyslogAddr, "%v", err)
+	}
+	s.Protocol = strings.ToLower(l.getOr(EnvSyslogProtocol, DefaultSyslogProtocol))
+	switch s.Protocol {
+	case SyslogProtocolUDP, SyslogProtocolTCP, SyslogProtocolTLS:
+	default:
+		l.fail(EnvSyslogProtocol, "%q is not supported (use %s, %s or %s)", s.Protocol,
+			SyslogProtocolTLS, SyslogProtocolTCP, SyslogProtocolUDP)
+	}
+	streams, err := parseSyslogStreams(l.getOr(EnvSyslogStreams, DefaultSyslogStreams))
+	if err != nil {
+		l.fail(EnvSyslogStreams, "%v", err)
+	}
+	s.Streams = streams
+	facility := strings.ToLower(strings.TrimSpace(l.getOr(EnvSyslogFacility, DefaultSyslogFacility)))
+	code, ok := syslogFacilities[facility]
+	if !ok {
+		l.fail(EnvSyslogFacility, "%q is not a syslog facility (use kern, user, mail, daemon, auth, syslog, "+
+			"lpr, news, uucp, cron, authpriv, ftp or local0 to local7)", facility)
+	}
+	s.Facility = code
+	s.CAFile = l.syslogCAFile(s.Protocol)
+	c.Syslog = s
+}
+
+// parseSyslogStreams parses TT_SYSLOG_STREAMS: a comma-separated list of
+// SyslogStreamAudit and SyslogStreamSecurity, case-insensitive, returned
+// sorted without duplicates. An unknown or empty list is an error.
+func parseSyslogStreams(raw string) ([]string, error) {
+	var streams []string
+	for _, item := range splitList(raw) {
+		item = strings.ToLower(item)
+		if item != SyslogStreamAudit && item != SyslogStreamSecurity {
+			return nil, fmt.Errorf("%q is not a log (use %s and/or %s)", item, SyslogStreamAudit, SyslogStreamSecurity)
+		}
+		if !slices.Contains(streams, item) {
+			streams = append(streams, item)
+		}
+	}
+	if len(streams) == 0 {
+		return nil, fmt.Errorf("must list %s and/or %s", SyslogStreamAudit, SyslogStreamSecurity)
+	}
+	slices.Sort(streams)
+	return streams, nil
+}
+
+// syslogCAFile reads TT_SYSLOG_CA_FILE, only allowed with the tls
+// protocol: an absolute path to a readable file holding at least one PEM
+// certificate. It returns the cleaned path, "" when unset or invalid.
+func (l *loader) syslogCAFile(protocol string) string {
+	raw := l.get(EnvSyslogCAFile)
+	if raw == "" {
+		return ""
+	}
+	if protocol != SyslogProtocolTLS {
+		l.fail(EnvSyslogCAFile, "is only allowed when %s is %s", EnvSyslogProtocol, SyslogProtocolTLS)
+		return ""
+	}
+	path, err := checkAbsPath(raw)
+	if err != nil {
+		l.fail(EnvSyslogCAFile, "%q %v", raw, err)
+		return ""
+	}
+	data, err := l.readFile(path)
+	if err != nil {
+		l.fail(EnvSyslogCAFile, "cannot read file: %v", err)
+		return ""
+	}
+	if !x509.NewCertPool().AppendCertsFromPEM(data) {
+		l.fail(EnvSyslogCAFile, "the file holds no PEM certificate")
+		return ""
+	}
+	return path
 }
 
 // systemSMTPPorts are the default ports of the system SMTP security modes.

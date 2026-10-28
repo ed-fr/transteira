@@ -57,6 +57,7 @@ describe('admin routes', () => {
     ['/admin/tenants/ten_1/blocklist', '/tenants/:id/blocklist', 'auth', 'tenant-blocklist'],
     ['/admin/tenants/ten_1/tokens', '/tenants/:id/tokens', 'auth', 'tenant-tokens'],
     ['/admin/tenants/ten_1/tokens/new', '/tenants/:id/tokens/new', 'auth', 'tenant-tokens'],
+    ['/admin/tenants/ten_1/webhooks', '/tenants/:id/webhooks', 'auth', 'tenant-webhooks'],
     ['/admin/tenants/ten_1/audit', '/tenants/:id/audit', 'auth', 'tenant-audit'],
     ['/admin/tenants/ten_1/stats', '/tenants/:id/stats', 'auth', 'tenant-stats'],
     ['/admin/tenants/ten_1/privacy', '/tenants/:id/privacy', 'auth', 'tenant-privacy'],
@@ -67,6 +68,7 @@ describe('admin routes', () => {
     ['/admin/system/', '/system', 'super', 'system-overview'],
     ['/admin/system/maintenance', '/system/maintenance', 'super', 'system-maintenance'],
     ['/admin/system/settings', '/system/settings', 'super', 'system-settings'],
+    ['/admin/system/webhooks', '/system/webhooks', 'super', 'system-webhooks'],
     ['/admin/system/audit', '/system/audit', 'super', 'system-audit'],
     ['/admin/system/master-key', '/system/master-key', 'super', 'system-master-key'],
     ['/admin/system/unknown', '*', 'any', 'admin'],
@@ -115,6 +117,7 @@ describe('admin routes', () => {
       '/system',
       '/system/maintenance',
       '/system/settings',
+      '/system/webhooks',
       '/system/audit',
       '/system/master-key',
     ]);

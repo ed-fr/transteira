@@ -43,8 +43,10 @@
 //     of the tenant settings (SMTP password), referenced by ID. A row is
 //     bound to its tenant and its "wk_" ID: the envelope AAD carries
 //     lp(purpose) | lp(tenant ID) | lp(row ID).
-//   - system_secrets: the secrets that belong to no tenant, today the TOTP
-//     secrets of the administrators (crypto.PurposeAdminTOTP). A row is
+//   - system_secrets: the secrets that belong to no tenant: the TOTP
+//     secrets of the administrators (crypto.PurposeAdminTOTP) and the URL
+//     and signing secret of the instance-wide webhooks
+//     (crypto.PurposeWebhook). A row is
 //     bound to the reserved tenant binding "system" and to its own "ss_" ID,
 //     the exact counterpart of a tenant key. A tenant ID is always "ten_"
 //     followed by a ULID, so it never equals "system", and the row prefixes

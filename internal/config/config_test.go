@@ -100,6 +100,10 @@ func TestLoadDefaults(t *testing.T) {
 		{"ScanWorkers", c.ScanWorkers, 2},
 		{"BackupTime", c.BackupTime, 2*time.Hour + 30*time.Minute},
 		{"BackupKeep", c.BackupKeep, 7},
+		{"WebhookAllowNetworks", len(c.WebhookAllowNetworks), 0},
+		{"WebhookAllowHTTPNetworks", len(c.WebhookAllowHTTPNetworks), 0},
+		{"WebhookDenyNetworks", len(c.WebhookDenyNetworks), 0},
+		{"Syslog.Enabled", c.Syslog.Enabled(), false},
 	}
 	for _, tc := range checks {
 		if tc.got != tc.want {

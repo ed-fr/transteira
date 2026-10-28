@@ -25,5 +25,6 @@
   "invalid-color": "Enter a color in the #RRGGBB format.",
   "invalid-port": "Enter a port between 1 and 65535.",
   "invalid-code": "The code is made of 6 digits.",
-  "unknown": "This field is not recognised."
+  "unknown": "This field is not recognised.",
+  "url-not-allowed": "This address is not allowed: its host name cannot be resolved, or it leads to a network refused by the instance (private or reserved address). Check the address, and ask the operator of the instance if this receiver is internal."
 }

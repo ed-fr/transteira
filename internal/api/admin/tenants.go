@@ -232,18 +232,20 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 // (the generated type is raw JSON) so that a null field can be told from
 // an absent one.
 type tenantPatch struct {
-	Name               *string `json:"name"`
-	FQDN               *string `json:"fqdn"`
-	DefaultLanguage    *string `json:"defaultLanguage"`
-	StorageQuotaBytes  *int64  `json:"storageQuotaBytes"`
-	MaxTransferBytes   *int64  `json:"maxTransferBytes"`
-	MaxTransferCeiling *int64  `json:"maxTransferCeiling"`
+	Name                    *string `json:"name"`
+	FQDN                    *string `json:"fqdn"`
+	DefaultLanguage         *string `json:"defaultLanguage"`
+	StorageQuotaBytes       *int64  `json:"storageQuotaBytes"`
+	MaxTransferBytes        *int64  `json:"maxTransferBytes"`
+	MaxTransferCeiling      *int64  `json:"maxTransferCeiling"`
+	WebhookIncludeAddresses *bool   `json:"webhookIncludeAddresses"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
 // their errors are reported.
 var tenantPatchFields = []string{
 	"name", "fqdn", "defaultLanguage", "storageQuotaBytes", "maxTransferBytes", "maxTransferCeiling",
+	"webhookIncludeAddresses",
 }
 
 // decodeTenantUpdate decodes a tenant merge patch: a JSON object whose
@@ -277,6 +279,7 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 	return tenantadmin.TenantUpdate{
 		Name: b.Name, FQDN: b.FQDN, DefaultLanguage: b.DefaultLanguage, StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: b.MaxTransferBytes, MaxTransferCeiling: b.MaxTransferCeiling,
+		WebhookIncludeAddresses: b.WebhookIncludeAddresses,
 	}, nil
 }
 
@@ -299,7 +302,7 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		Id: string(v.ID), Name: v.Name, Fqdn: v.FQDN, DefaultLanguage: gen.Language(v.DefaultLanguage),
 		MaxTransferBytes: v.MaxTransferBytes, MaxTransferCeiling: v.MaxTransferCeiling,
 		Status: gen.TenantStatus(v.Status), StorageQuotaBytes: v.StorageQuotaBytes, StorageUsedBytes: v.StorageUsedBytes,
-		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 

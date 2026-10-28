@@ -6,6 +6,7 @@
     "invitations": "Invitations",
     "blocklist": "Liste de blocage",
     "tokens": "Jetons d’API",
+    "webhooks": "Webhooks",
     "audit": "Journal d’audit",
     "stats": "Statistiques",
     "privacy": "Données personnelles"
@@ -27,6 +28,10 @@
     "title": "Jetons d’API",
     "createTitle": "Nouveau jeton d’API",
     "intro": "Les jetons permettent à des scripts et à des logiciels tiers de déposer des fichiers par l’API. Un jeton n’est affiché qu’une seule fois, à sa création."
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "intro": "Alertes de cette entité (virus détecté, abus, quotas) envoyées vers un canal Microsoft Teams ou Slack, ou vers tout destinataire JSON comme un SIEM, en plus des mails."
   },
   "audit": {
     "title": "Journal d’audit",

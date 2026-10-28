@@ -32,9 +32,12 @@ type TenantView struct {
 	StorageUsedBytes   int64
 	// Status is active, or deleting while a deletion is in progress (only
 	// the super admin sees such a tenant, to resume its deletion).
-	Status    tenant.Status
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Status tenant.Status
+	// WebhookIncludeAddresses tells whether the tenant webhooks receive the
+	// addresses concerned by an event.
+	WebhookIncludeAddresses bool
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 // TenantPage is a page of tenants.
@@ -70,6 +73,9 @@ type TenantUpdate struct {
 	// MaxTransferCeiling is the ceiling of MaxTransferBytes, super admin
 	// only.
 	MaxTransferCeiling *int64
+	// WebhookIncludeAddresses turns on or off the addresses in the payloads
+	// of the tenant webhooks; a delegated admin may change it.
+	WebhookIncludeAddresses *bool
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -82,7 +88,7 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		ID: t.ID, Name: t.Name, FQDN: t.FQDN, DefaultLanguage: t.DefaultLanguage,
 		MaxTransferBytes: t.MaxTransferBytes, MaxTransferCeiling: t.MaxTransferCeiling,
 		StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: used, Status: t.Status,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		WebhookIncludeAddresses: t.WebhookIncludeAddresses, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -225,7 +231,8 @@ func createLimits(in TenantCreate) (limit, ceiling int64, err error) {
 // may change every field; when it sets the transfer limit above the
 // ceiling without a new ceiling, the ceiling rises with it, and a ceiling
 // below the limit lowers the limit. A delegated admin may only change the
-// default language and set the transfer limit at most to the ceiling:
+// default language and the webhook address option, and set the transfer
+// limit at most to the ceiling:
 // another changed field, or a limit above the ceiling, is ErrForbidden.
 // The audit event names the changed fields.
 func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, in TenantUpdate, ip netip.Addr) (TenantView, error) {
@@ -283,6 +290,9 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 		}
 		next.StorageQuotaBytes = *in.StorageQuotaBytes
 	}
+	if in.WebhookIncludeAddresses != nil {
+		next.WebhookIncludeAddresses = *in.WebhookIncludeAddresses
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -326,6 +336,7 @@ func changedFields(a, b *tenant.Tenant) []string {
 	add(a.StorageQuotaBytes != b.StorageQuotaBytes, "storageQuotaBytes")
 	add(a.MaxTransferBytes != b.MaxTransferBytes, "maxTransferBytes")
 	add(a.MaxTransferCeiling != b.MaxTransferCeiling, "maxTransferCeiling")
+	add(a.WebhookIncludeAddresses != b.WebhookIncludeAddresses, "webhookIncludeAddresses")
 	return out
 }
 

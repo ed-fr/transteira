@@ -1942,15 +1942,22 @@ export interface paths {
          *
          *     Network guard: the URL must be `https:`, at most 2048 characters, without user
          *     information. Its host is resolved again at every connection and the address checked
-         *     before connecting (no DNS rebinding); denied by default: loopback, unspecified,
-         *     link-local, cloud metadata (`169.254.169.254`, `fd00:ec2::254`), private RFC 1918
-         *     ranges, CGNAT `100.64.0.0/10`, unique local `fc00::/7`, IPv4-mapped and -compatible
-         *     IPv6, multicast, broadcast and the container's own networks, plus
-         *     `TT_WEBHOOK_DENY_NETWORKS`. Only `TT_WEBHOOK_ALLOW_NETWORKS` (CIDRs) opens denied ranges
-         *     (for an internal receiver), and plain `http:` is accepted only towards
-         *     `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`. Redirects are never followed. A URL that resolves to a
-         *     denied address now is refused at once (`400 validation-failed`, field code
-         *     `url-not-allowed`). The URL is sealed with the master key and never returned in full.
+         *     before connecting (no DNS rebinding). Never reachable, whatever the configuration:
+         *     unspecified addresses, link-local and cloud metadata (`169.254.169.254`,
+         *     `fd00:ec2::254`), IPv4-compatible IPv6 (with `::1`), multicast, reserved and broadcast
+         *     ranges, the container's own networks, and `TT_WEBHOOK_DENY_NETWORKS`. Denied unless
+         *     `TT_WEBHOOK_ALLOW_NETWORKS` (CIDRs) opens them, for an internal receiver: private RFC
+         *     1918 ranges, CGNAT `100.64.0.0/10`, `192.0.0.0/24`, `198.18.0.0/15`, unique local
+         *     `fc00::/7`, site-local `fec0::/10`, the IPv6 prefixes embedding an IPv4 address and the
+         *     IPv4 loopback (tests only). IPv4-mapped IPv6 addresses are judged as IPv4. Plain `http:`
+         *     is accepted only towards `TT_WEBHOOK_ALLOW_HTTP_NETWORKS` (otherwise
+         *     `invalid-format`). Redirects are never followed. A URL whose host does not resolve now,
+         *     or resolves to a denied address, is refused at once with the same answer for both
+         *     (`400 validation-failed`, field code `url-not-allowed`), so that the check reveals
+         *     nothing of the internal DNS; `invalid-format` is kept for a malformed URL. Every URL
+         *     checked counts against a limit of 30 creations and URL changes per hour per
+         *     administrator and tenant (`429` with `Retry-After`). The URL is sealed with the master
+         *     key and never returned in full.
          *
          *     For the `generic` kind, the server generates a signing secret, returned **once** in
          *     `secret` and sealed in the database: every delivery carries
@@ -2002,7 +2009,10 @@ export interface paths {
          * Update a webhook
          * @description Since 1.1. JSON Merge Patch (RFC 7396) of a webhook: an absent member is left unchanged,
          *     `null` is refused, an unknown member is refused (`400 validation-failed`). A new `url`
-         *     follows the rules of `createTenantWebhook`. `rotateSecret: true` (generic kind only)
+         *     follows the rules of `createTenantWebhook`, including its limit of 30 creations and URL
+         *     changes per hour per administrator and tenant (`429`); the other members do not count.
+         *     Deliveries still queued or retrying use the new settings, and stop when the webhook is
+         *     disabled or no longer subscribed. `rotateSecret: true` (generic kind only)
          *     replaces the signing secret, returned once in `secret`; the previous key material is
          *     destroyed at once. Re-enabling a webhook closes its circuit breaker. Requires the right to change
          *     the tenant. Audited as `webhook.updated` (names of the changed fields only).
@@ -2919,7 +2929,7 @@ export interface paths {
         put?: never;
         /**
          * Create an instance-wide webhook (super admin)
-         * @description Since 1.1. Same rules as `createTenantWebhook` (network guard, sealed URL, generic secret shown once), with the system event types only (a tenant event is refused with `400 validation-failed` on `/events/<index>`); at most 20 instance-wide webhooks. Reserved to the super admin, checked before the body. Audited as `webhook.created`, without tenant.
+         * @description Since 1.1. Same rules as `createTenantWebhook` (network guard, `url-not-allowed` for a host that does not resolve or resolves to a denied address, limit of 30 creations and URL changes per hour per administrator with `429`, sealed URL, generic secret shown once), with the system event types only (a tenant event is refused with `400 validation-failed` on `/events/<index>`); at most 20 instance-wide webhooks. Reserved to the super admin (another admin gets `403`; a body that is not valid JSON is refused with `400` first). Audited as `webhook.created`, without tenant.
          */
         post: operations["createSystemWebhook"];
         delete?: never;
@@ -2957,7 +2967,7 @@ export interface paths {
         head?: never;
         /**
          * Update an instance-wide webhook (super admin)
-         * @description Since 1.1. Same semantics as `updateTenantWebhook`. Reserved to the super admin, checked before the body. Audited as `webhook.updated`, without tenant.
+         * @description Since 1.1. Same semantics as `updateTenantWebhook`, a new `url` counting against the limit of 30 creations and URL changes per hour per administrator (`429`). Reserved to the super admin, checked before the patch is read. Audited as `webhook.updated`, without tenant.
          */
         patch: operations["updateSystemWebhook"];
         trace?: never;
@@ -3004,7 +3014,7 @@ export interface webhooks {
          * @description Since 1.1. Request TransTeira sends to the URL of a `generic` webhook (tenant or
          *     instance-wide) for each subscribed event; `teams` and `slack` webhooks receive a formatted
          *     message instead. The receiver answers any `2xx` status within 10 seconds to acknowledge;
-         *     any other answer, or none, is retried up to 5 times with exponential back-off. See
+         *     any other answer, or none, is a failure, and the delivery makes up to 5 attempts in all with exponential back-off. See
          *     `WebhookEvent` for the headers and the signature.
          */
         post: operations["receiveWebhookEvent"];
@@ -4572,7 +4582,7 @@ export interface components {
         };
         /** @description Since 1.1. A webhook with its signing secret, present only in the answer of a creation of a `generic` webhook or of a secret rotation. */
         WebhookWithSecret: components["schemas"]["Webhook"] & {
-            /** @description Signing secret (HMAC-SHA256 key), shown once. */
+            /** @description Signing secret, shown once: 64 lowercase hexadecimal characters (256 random bits). The receiver uses this text as shown, byte for byte, as the HMAC-SHA256 key. */
             secret?: string;
         };
         WebhookCreate: {
@@ -9676,7 +9686,7 @@ export interface operations {
                      *       "updatedAt": "2026-10-27T09:00:00Z",
                      *       "lastDelivery": null,
                      *       "circuitOpenUntil": null,
-                     *       "secret": "whsec_EXAMPLE8fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5d"
+                     *       "secret": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
                      *     }
                      */
                     "application/json": components["schemas"]["WebhookWithSecret"];
@@ -9687,6 +9697,7 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["StateConflict"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -9852,6 +9863,8 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -11966,6 +11979,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["StateConflict"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -12107,6 +12121,8 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };

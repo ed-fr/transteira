@@ -88,6 +88,7 @@ describe('system navigation', () => {
       '/system',
       '/system/maintenance',
       '/system/settings',
+      '/system/webhooks',
       '/system/audit',
       '/system/master-key',
     ]);

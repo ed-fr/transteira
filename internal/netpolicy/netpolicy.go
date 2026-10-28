@@ -13,7 +13,9 @@
 // [ParsePrefix], the parsing of an IP range shared by the installation
 // configuration and the tenant settings, and [DialGuard], which keeps every
 // connection to a tenant SMTP server (mail queue and SMTP test) out of the
-// denied networks (TT_SMTP_DENY_NETWORKS, threat model P21).
+// denied networks (TT_SMTP_DENY_NETWORKS, threat model P21) and every
+// webhook delivery out of the webhook egress policy
+// ([WebhookDenyNetworks], threat model T-181 and P30).
 package netpolicy
 
 import (

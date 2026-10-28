@@ -12,6 +12,8 @@
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import type net from 'node:net';
 import path from 'node:path';
 import { request } from '../support/api';
 import { makeFile, textFile, type GeneratedFile } from '../support/data';
@@ -351,6 +353,66 @@ function volatileAreas(page: Page, lang: Lang): Locator[] {
   ];
 }
 
+/** A local webhook receiver (127.0.0.1, allowed by TT_WEBHOOK_ALLOW_* of support/server.ts). */
+async function startWebhookReceiver(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as net.AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  };
+}
+
+/** A webhook to create for a capture: [name per language, kind, path, events]. */
+type ShotWebhook = [Record<Lang, string>, 'teams' | 'slack' | 'generic', string, string[]];
+
+/**
+ * Creates the webhooks of a capture in the language shown, runs the capture, then deletes them:
+ * the other language and the other screens never see them. A test is not a delivery: the last
+ * delivery of each webhook stays "None yet".
+ */
+async function withWebhooks(
+  base: string,
+  lang: Lang,
+  hooks: readonly ShotWebhook[],
+  capture: () => Promise<void>,
+): Promise<void> {
+  const api = superAdminApi();
+  const receiver = await startWebhookReceiver();
+  const ids: string[] = [];
+  try {
+    for (const [names, kind, hookPath, events] of hooks) {
+      const created = await api.ok<{ id: string }>(
+        'POST',
+        base,
+        { name: names[lang], kind, url: `${receiver.url}${hookPath}`, events },
+        [201],
+      );
+      ids.push(created.id);
+    }
+    await capture();
+  } finally {
+    for (const id of ids) await api.ok('DELETE', `${base}/${id}`, undefined, [204]);
+    await receiver.close();
+  }
+}
+
+/** Areas of the webhook screens that change at every run (receiver port, delivery duration). */
+function webhookVolatile(page: Page): Locator[] {
+  return [page.locator('.tt-webhooks__hint'), page.locator('.tt-webhooks__when')];
+}
+
 /** Lets the screen settle, then writes docs/user/screenshots/<lang>/<name>.png. */
 async function shoot(
   page: Page,
@@ -588,6 +650,32 @@ test.describe('delegated admin', () => {
     }
   });
 
+  test('webhooks of an entity', async ({ newContext, state }) => {
+    const hooks: ShotWebhook[] = [
+      [
+        { en: 'Security team channel', fr: 'Canal de l’équipe sécurité' },
+        'teams',
+        '/teams',
+        ['virus.detected', 'abuse.threshold_exceeded', 'abuse.unusual_activity', 'abuse.reported'],
+      ],
+      [
+        { en: 'SIEM collector', fr: 'Collecteur SIEM' },
+        'generic',
+        '/siem',
+        ['virus.detected', 'abuse.reported', 'quota.reached'],
+      ],
+    ];
+    for (const lang of LANGS) {
+      await withWebhooks(`/admin/tenants/${state.tenants.a.id}/webhooks`, lang, hooks, async () => {
+        const page = await openPage(newContext, lang, STORAGE_DELEGATE);
+        await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/webhooks`);
+        await heading(page, lang, 'adminOps.webhooks.title');
+        await expect(page.getByText(hooks[1]![0][lang]).first()).toBeVisible();
+        await shoot(page, lang, 'admin-webhooks', webhookVolatile(page));
+      });
+    }
+  });
+
   test('account and two-factor enrollment', async ({ newContext, state }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang, STORAGE_DELEGATE);
@@ -638,6 +726,26 @@ test.describe('super admin', () => {
         await heading(page, lang, key);
         await shoot(page, lang, name);
       }
+    }
+  });
+
+  test('instance webhooks', async ({ newContext }) => {
+    const hooks: ShotWebhook[] = [
+      [
+        { en: 'Operations channel', fr: 'Canal de l’exploitation' },
+        'slack',
+        '/ops',
+        ['disk.alert_raised', 'disk.alert_cleared', 'antivirus.alert_raised', 'antivirus.alert_cleared'],
+      ],
+    ];
+    for (const lang of LANGS) {
+      await withWebhooks('/admin/system/webhooks', lang, hooks, async () => {
+        const page = await openPage(newContext, lang, STORAGE_SUPER);
+        await page.goto(`${ORIGINS.admin}/admin/system/webhooks`);
+        await heading(page, lang, 'adminSystem.webhooks.title');
+        await expect(page.getByText(hooks[0]![0][lang]).first()).toBeVisible();
+        await shoot(page, lang, 'admin-system-webhooks', webhookVolatile(page));
+      });
     }
   });
 

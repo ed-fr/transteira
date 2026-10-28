@@ -83,6 +83,7 @@ test.describe('tenant isolation (delegated admin of entity A)', () => {
     { name: 'blocklist', path: (b) => `/tenants/${b}/blocklist` },
     { name: 'tokens', path: (b) => `/tenants/${b}/tokens` },
     { name: 'new token', path: (b) => `/tenants/${b}/tokens/new` },
+    { name: 'webhooks', path: (b) => `/tenants/${b}/webhooks` },
     { name: 'audit', path: (b) => `/tenants/${b}/audit` },
     { name: 'stats', path: (b) => `/tenants/${b}/stats` },
     { name: 'privacy', path: (b) => `/tenants/${b}/privacy` },
@@ -204,6 +205,12 @@ test.describe('tenant isolation (delegate session on the admin API)', () => {
       ['POST', `${base}/blocklist`, { kind: 'email', value: victim }],
       ['GET', `${base}/api-tokens`],
       ['POST', `${base}/api-tokens`, { name: 'isolation', allowedCidrs: ['127.0.0.1/32'] }],
+      ['GET', `${base}/webhooks`],
+      [
+        'POST',
+        `${base}/webhooks`,
+        { name: 'isolation', kind: 'teams', url: 'https://hooks.example.com/x', events: ['virus.detected'] },
+      ],
       ['GET', `${base}/audit-events`],
       ['GET', `${base}/stats`],
       ['POST', `${base}/data-subjects/search`, { email: victim }],
@@ -225,6 +232,7 @@ test.describe('tenant isolation (delegate session on the admin API)', () => {
       '/admin/system/settings',
       '/admin/system/audit-events',
       '/admin/system/master-key',
+      '/admin/system/webhooks',
     ]) {
       const res = await api.call('GET', path);
       if (res.status !== 403 && res.status !== 404) failures.push(`GET ${path} -> ${res.status}`);
@@ -241,6 +249,8 @@ test.describe('tenant isolation (delegate session on the admin API)', () => {
     expect(JSON.stringify(blocklist)).not.toContain(victim);
     const tokens = await sa.ok<unknown>('GET', `${base}/api-tokens`);
     expect(JSON.stringify(tokens)).not.toMatch(/"name":"isolation"/);
+    const webhooks = await sa.ok<unknown>('GET', `${base}/webhooks`);
+    expect(JSON.stringify(webhooks)).not.toMatch(/"name":"isolation"/);
     const network = await sa.ok<{ internalCidrs: string[] }>('GET', `${base}/network`);
     expect(network.internalCidrs).toContain('127.0.0.1/32');
   });

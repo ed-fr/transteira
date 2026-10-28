@@ -35,7 +35,7 @@ var (
 const systemBinding = "system"
 
 // systemPurposes lists the purposes a system secret may be wrapped for.
-var systemPurposes = map[crypto.Purpose]bool{crypto.PurposeAdminTOTP: true}
+var systemPurposes = map[crypto.Purpose]bool{crypto.PurposeAdminTOTP: true, crypto.PurposeWebhook: true}
 
 // generateDEK creates data encryption keys; replaced in tests to cover a
 // failure of the random source.
@@ -192,7 +192,7 @@ func (v *Vault) Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID 
 // instance store.Admins.SetPendingTOTPTx), and gets store.ErrKeyRetired
 // from the database if the wrapping key is retired. It returns an error
 // matching ErrPurposeMismatch when p is not a system secret purpose
-// (crypto.PurposeAdminTOTP). The caller keeps ownership of plaintext.
+// (crypto.PurposeAdminTOTP, crypto.PurposeWebhook). The caller keeps ownership of plaintext.
 func (v *Vault) WrapSystem(p crypto.Purpose, plaintext []byte) (store.SystemSecret, error) {
 	if !systemPurposes[p] {
 		return store.SystemSecret{}, fmt.Errorf("%w: %q is not a system secret purpose", ErrPurposeMismatch, p)

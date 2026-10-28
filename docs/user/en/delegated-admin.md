@@ -1,6 +1,6 @@
 # Delegated administrator guide
 
-As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, blocklist, API tokens, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
+As a delegated administrator, you configure and operate the entities attached to your account: their branding, network rules, mail server, email templates and legal texts, and you follow their transfers, invitations, blocklist, API tokens, webhooks, audit log, statistics and personal data requests. Everything happens in the administration, at the address given by your organisation (for example `admin.transfer.example.com/admin/`). The **Help** link at the bottom of each screen opens the matching section of this guide.
 
 <!-- topic: admin-roles -->
 ## Roles
@@ -130,7 +130,7 @@ Creating and deleting entities is reserved to the super administrator: these act
 Once an entity is open, a navigation bar shows its name and two groups of screens.
 
 - **Configuration**: **General**, **Branding**, **Network**, **Mail (SMTP)**, **Email templates**, **Legal information**.
-- **Operations**: **Transfers**, **Invitations**, **Blocklist**, **API tokens**, **Audit log**, **Statistics**, **Personal data**.
+- **Operations**: **Transfers**, **Invitations**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Statistics**, **Personal data**.
 
 The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
 
@@ -151,6 +151,8 @@ At the top, the status of the entity and the line **Storage used** give the occu
 - **Maximum size per transfer**: total of the files of one transfer. You can choose any value up to the ceiling set by the super administrator, itself at most 20 GB. Lower it if your users should not send very large transfers.
 
 Click **Save** to apply.
+
+The **Webhooks** section below sets the content of the alerts sent to the [webhooks](topic:tenant-webhooks) of the entity. **Include addresses in webhooks** adds the addresses of the sender and of the recipients concerned. Addresses are personal data that leave TransTeira with each alert: tick it only if the receivers need them and are trusted. It is off by default; click **Save the webhook setting** under the box to apply.
 
 <!-- topic: tenant-branding -->
 ### Branding
@@ -323,6 +325,38 @@ The secret of the token is shown **only once**. Click **Copy the secret**, tick 
 ![Secret of a new API token shown once, with the copy button and the confirmation box](../screenshots/en/admin-token-secret.png)
 
 **Edit** changes the name, the ranges and the senders (not the expiry: create a new token instead). **Revoke** refuses every request made with the token from now on; this is final, and transfers already created stay available to their recipients. To write a script, see the integration guide `docs/api/integration.md` in the TransTeira repository and click **Open the API documentation**.
+
+<!-- topic: tenant-webhooks -->
+### Webhooks
+
+Webhooks send the alerts of the entity to a Microsoft Teams or Slack channel, or to any receiver that accepts JSON (a SIEM, a script), in addition to the alert emails.
+
+The list shows, for each webhook, its **Name and address** (only the scheme and the host of the address: the full address is stored encrypted and never shown again), its **Kind**, its **Events**, its **Status** and its **Last delivery** (delivered or failed, the HTTP status or the cause, the duration and the date). An entity can have at most 20 webhooks.
+
+![List of the webhooks of an entity with their status and last delivery](../screenshots/en/admin-webhooks.png)
+
+To add one, click **Add a webhook**:
+
+1. **Name**: what the receiver is, for example "Security team channel".
+2. **Kind**: **Microsoft Teams** or **Slack** for the incoming webhook of a channel (a formatted message), **Generic JSON** for any other receiver (a JSON document signed with a secret).
+3. **Address (URL)**: the full `https://` address given by the receiver. An address whose host name cannot be resolved is refused (**This address is not allowed**), as are addresses of private or reserved networks unless the operator of the instance allowed them. You can create webhooks or enter new addresses 30 times per hour; beyond that, the form tells you how long to wait.
+4. **Events**: **Virus detected**, **Abuse threshold exceeded**, **Unusual activity**, **Abuse reported**, **Quota at 80 %** and **Quota reached**. Select at least one.
+5. Leave **Enabled** ticked, then click **Create the webhook**.
+
+For a **Generic JSON** webhook, the signing secret is shown **only once**: copy it into the configuration of the receiver, which uses it to check the `X-TransTeira-Signature` header of each request (see `docs/api/integration.md` in the TransTeira repository). Then tick **I have stored this secret, it will not be shown again** and click **Close**.
+
+The actions of each webhook:
+
+- **Test** sends a test event right away and shows the result above the list: delivered with the HTTP status and the duration, or failed with a short cause (**Name not resolved**, **Address refused by the network rules**, **Connection failed**, **TLS error**, **No answer within 10 seconds**, **Error answer**). A test is not a delivery: it changes neither the **Last delivery** column nor a suspension. You can run 10 tests per hour.
+- **Edit** changes the name, the events and **Enabled**, or replaces the address: leave **New address (URL)** empty to keep the current one. The kind cannot be changed.
+- **New secret** (generic webhooks) replaces the signing secret: the old one stops working at once, and the new one is shown once.
+- **Delete** removes the webhook and destroys its encrypted address and secret.
+
+Deleting or disabling a webhook, or removing an event from it, stops at once the deliveries still waiting for it. After a change of address or of secret, the alerts in progress go to the new address with the new secret, never to the old address.
+
+After 5 failed deliveries in a row, a webhook is **Suspended** for 15 minutes: the list shows until when. Fix the receiver and check it with **Test** (a test does not end the suspension); disabling and enabling the webhook again in **Edit** resumes the deliveries at once. Each delivery makes up to 5 attempts; alerts waiting to be sent are lost if the service restarts, but the emails and the [audit log](topic:tenant-audit) are not affected.
+
+The alerts never contain a file name, a link to a transfer or a password. They contain no email address either, unless **Include addresses in webhooks** is ticked on the [General](topic:tenant-general) screen.
 
 <!-- topic: tenant-audit -->
 ### Audit log

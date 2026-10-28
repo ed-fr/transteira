@@ -19,10 +19,24 @@ and the project follows [Semantic Versioning](https://semver.org/).
   confidentiality levels, abuse detection, webhooks, "My transfers", mail templates), on SQLite and
   PostgreSQL, with row-level security on every new tenant table. Existing transfers keep their
   single shared link; existing tenants get the default confidentiality levels and abuse settings.
+- Webhook alerts (specification section 12.4): Microsoft Teams, Slack and generic JSON signed
+  with HMAC-SHA256, configured per tenant by its administrators (tenant alerts) and for the
+  instance by the super admin (system alerts). URL and secret sealed with the master key; HTTPS
+  only; private networks refused unless allowed by `TT_WEBHOOK_ALLOW_NETWORKS` /
+  `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`, cloud metadata, link-local and the container's own networks
+  always refused; at most 30 new addresses per hour per administrator; no redirects; 5 attempts with
+  back-off and a circuit breaker; deleting or disabling a webhook stops its pending deliveries, a new
+  address or secret applies to them; test button; minimal payload, mail addresses only with the new
+  tenant option "Include the addresses in the webhooks". Receiver guide in `docs/api/integration.md`.
+- Syslog export of the audit and security logs (RFC 5424 over TLS, TCP or UDP, octet-counting
+  framing), configured with the `TT_SYSLOG_*` variables; never blocking
+  (`docs/operations/syslog.md`).
 - `make check-full`: `make check` with the 20 GB test forced, required before every release.
 - `make check` prints the duration of every gate.
 
 ### Changed
+- `golang.org/x/net` 0.62.0 (fixes GO-2026-6860 and another advisory of the HTML parser used to
+  sanitize the mail templates).
 - SQLite migrations run on a reserved connection with foreign keys disabled before the
   transaction and checked (`foreign_key_check`) before commit, so that rebuilding a referenced table
   never deletes dependent rows.

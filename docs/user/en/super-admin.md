@@ -126,7 +126,7 @@ If you are the only super administrator and lost your device, sign in with a rec
 
 ## System
 
-The **System** entry gathers the settings of the whole instance. Its sub-navigation has five screens: **Overview**, **Maintenance**, **Settings**, **Audit log** and **Master key**. Delegated administrators do not see it.
+The **System** entry gathers the settings of the whole instance. Its sub-navigation has six screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log** and **Master key**. Delegated administrators do not see it.
 
 <!-- topic: system-overview -->
 ### System overview
@@ -172,6 +172,15 @@ The system settings hold the disk usage alert of the whole instance.
 - **Additional alert address**: optional, it receives the disk alert and the antivirus alert in addition to the super administrators. This address is not verified: type it a second time in **Alert address again** and check it carefully. Leave the field empty to remove it.
 
 Click **Save**. The alert mails go through the system SMTP server of the instance, configured by environment variables, never through the SMTP settings of an entity. Without it, no alert mail is sent.
+
+<!-- topic: system-webhooks -->
+### Instance webhooks
+
+The instance webhooks send the alerts of the whole instance to a Microsoft Teams or Slack channel, or to any JSON receiver, in addition to the alert emails. They work like the [webhooks of an entity](topic:tenant-webhooks), with other events: **Disk space alert**, **Disk space back to normal**, **Antivirus unavailable**, **Antivirus available again**, **Maintenance mode on**, **Maintenance mode off**, **Master key rotation completed** and **Master key rotation failed**. They never receive the events of an entity, which are configured in each entity. The instance can have at most 20 webhooks.
+
+![List of the instance webhooks with their status and last delivery](../screenshots/en/admin-system-webhooks.png)
+
+By default, the address of a webhook must use `https://` and lead to a public address; an address whose host name cannot be resolved is refused with the same message, so that the check reveals nothing of the internal DNS. Some networks can never be opened: unspecified addresses, link-local addresses (including the cloud metadata services), multicast, reserved and broadcast addresses, the networks of the TransTeira container itself, IPv4-compatible IPv6 addresses, and the ranges listed in `TT_WEBHOOK_DENY_NETWORKS`. The private ranges (RFC 1918, `100.64.0.0/10`, `fc00::/7` and the other reserved ranges listed in `.env.example`) are refused too, but the operator can open them for a receiver on the internal network by declaring its range in `TT_WEBHOOK_ALLOW_NETWORKS`. Plain `http://` is accepted only towards a range listed in `TT_WEBHOOK_ALLOW_HTTP_NETWORKS`, and that range must itself be reachable: a private range must also be listed in `TT_WEBHOOK_ALLOW_NETWORKS`. TransTeira refuses to start when an allowed range overlaps the networks that can never be opened, for example a range containing the Docker network of the container. These variables are described in `.env.example` and apply to the webhooks of every entity. Creating webhooks and entering new addresses is limited to 30 times per hour per administrator.
 
 <!-- topic: system-audit -->
 ### Global audit log

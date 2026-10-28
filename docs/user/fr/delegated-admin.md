@@ -1,6 +1,6 @@
 # Guide de l’administrateur délégué
 
-En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, de la liste de blocage, des jetons d’API, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
+En tant qu’administrateur délégué, vous configurez et exploitez les entités rattachées à votre compte : habillage, règles réseau, serveur de messagerie, modèles de mails et mentions légales, ainsi que le suivi des transferts, des invitations, de la liste de blocage, des jetons d’API, des webhooks, du journal d’audit, des statistiques et des demandes relatives aux données personnelles. Tout se passe dans l’administration, à l’adresse communiquée par votre organisation (par exemple `admin.transfer.example.com/admin/`). Le lien **Aide** en bas de chaque écran ouvre directement la section correspondante de ce guide.
 
 <!-- topic: admin-roles -->
 ## Rôles
@@ -130,7 +130,7 @@ La création et la suppression d’une entité sont réservées au super adminis
 Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
 
 - **Configuration** : **Général**, **Habillage**, **Réseau**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
-- **Exploitation** : **Transferts**, **Invitations**, **Liste de blocage**, **Jetons d’API**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
+- **Exploitation** : **Transferts**, **Invitations**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
 
 Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
 
@@ -151,6 +151,8 @@ En haut, le statut de l’entité et la ligne **Stockage utilisé** indiquent l�
 - **Taille maximale par envoi** : somme des fichiers d’un envoi. Vous pouvez choisir toute valeur jusqu’au plafond fixé par le super administrateur, lui-même de 20 Go au plus. Abaissez-la si vos utilisateurs ne doivent pas envoyer de très gros transferts.
 
 Cliquez sur **Enregistrer** pour appliquer.
+
+La section **Webhooks** ci-dessous règle le contenu des alertes envoyées aux [webhooks](topic:tenant-webhooks) de l’entité. **Inclure les adresses dans les webhooks** ajoute les adresses de l’expéditeur et des destinataires concernés. Les adresses sont des données personnelles qui quittent TransTeira avec chaque alerte : cochez la case seulement si les destinataires en ont besoin et sont de confiance. Elle est décochée par défaut ; cliquez sur **Enregistrer le réglage des webhooks** sous la case pour appliquer.
 
 <!-- topic: tenant-branding -->
 ### Habillage
@@ -323,6 +325,38 @@ Le secret du jeton n’est affiché **qu’une seule fois**. Cliquez sur **Copie
 ![Secret d’un nouveau jeton d’API affiché une seule fois, avec le bouton de copie et la case de confirmation](../screenshots/fr/admin-token-secret.png)
 
 **Modifier** change le nom, les plages et les expéditeurs (pas l’expiration : créez plutôt un nouveau jeton). **Révoquer** refuse dès maintenant toute requête faite avec le jeton ; c’est définitif, et les transferts déjà créés restent disponibles pour leurs destinataires. Pour écrire un script, consultez le guide d’intégration `docs/api/integration.md` dans le dépôt TransTeira et cliquez sur **Ouvrir la documentation de l’API**.
+
+<!-- topic: tenant-webhooks -->
+### Webhooks
+
+Les webhooks envoient les alertes de l’entité vers un canal Microsoft Teams ou Slack, ou vers tout destinataire qui accepte du JSON (un SIEM, un script), en plus des mails d’alerte.
+
+La liste indique, pour chaque webhook, son **Nom et adresse** (seulement le schéma et l’hôte de l’adresse : l’adresse complète est conservée chiffrée et n’est plus jamais affichée), son **Type**, ses **Événements**, son **État** et son **Dernier envoi** (remis ou en échec, le statut HTTP ou la cause, la durée et la date). Une entité peut avoir 20 webhooks au plus.
+
+![Liste des webhooks d’une entité avec leur état et leur dernier envoi](../screenshots/fr/admin-webhooks.png)
+
+Pour en ajouter un, cliquez sur **Ajouter un webhook** :
+
+1. **Nom** : ce qu’est le destinataire, par exemple « Canal de l’équipe sécurité ».
+2. **Type** : **Microsoft Teams** ou **Slack** pour le webhook entrant d’un canal (un message mis en forme), **JSON générique** pour tout autre destinataire (un document JSON signé avec un secret).
+3. **Adresse (URL)** : l’adresse `https://` complète fournie par le destinataire. Une adresse dont le nom d’hôte ne peut pas être résolu est refusée (**Cette adresse n’est pas autorisée**), comme les adresses de réseaux privés ou réservés, sauf si l’exploitant de l’instance les a autorisées. Vous pouvez créer des webhooks ou saisir de nouvelles adresses 30 fois par heure ; au-delà, le formulaire indique combien de temps attendre.
+4. **Événements** : **Virus détecté**, **Seuil d’abus dépassé**, **Activité inhabituelle**, **Abus signalé**, **Quota à 80 %** et **Quota atteint**. Choisissez-en au moins un.
+5. Laissez **Activé** coché, puis cliquez sur **Créer le webhook**.
+
+Pour un webhook **JSON générique**, le secret de signature est affiché **une seule fois** : copiez-le dans la configuration du destinataire, qui s’en sert pour vérifier l’en-tête `X-TransTeira-Signature` de chaque requête (voir `docs/api/integration.md` dans le dépôt de TransTeira). Cochez ensuite **J’ai conservé ce secret, il ne sera plus affiché** et cliquez sur **Fermer**.
+
+Les actions de chaque webhook :
+
+- **Tester** envoie aussitôt un événement de test et affiche le résultat au-dessus de la liste : remis, avec le statut HTTP et la durée, ou en échec, avec une cause succincte (**Nom non résolu**, **Adresse refusée par les règles réseau**, **Échec de la connexion**, **Erreur TLS**, **Pas de réponse en 10 secondes**, **Réponse en erreur**). Un test n’est pas un envoi : il ne modifie ni la colonne **Dernier envoi** ni une suspension. Vous pouvez faire 10 tests par heure.
+- **Modifier** change le nom, les événements et **Activé**, ou remplace l’adresse : laissez **Nouvelle adresse (URL)** vide pour conserver l’actuelle. Le type ne peut pas être changé.
+- **Nouveau secret** (webhooks génériques) remplace le secret de signature : l’ancien cesse aussitôt de fonctionner, et le nouveau est affiché une seule fois.
+- **Supprimer** retire le webhook et détruit son adresse et son secret chiffrés.
+
+Supprimer ou désactiver un webhook, ou lui retirer un événement, arrête aussitôt les envois encore en attente pour lui. Après un changement d’adresse ou de secret, les alertes en cours partent vers la nouvelle adresse avec le nouveau secret, jamais vers l’ancienne adresse.
+
+Après 5 envois en échec consécutifs, un webhook est **Suspendu** pendant 15 minutes : la liste indique jusqu’à quand. Corrigez le destinataire et vérifiez-le avec **Tester** (un test ne met pas fin à la suspension) ; le désactiver puis le réactiver dans **Modifier** reprend les envois aussitôt. Chaque envoi fait jusqu’à 5 tentatives ; les alertes en attente sont perdues si le service redémarre, mais les mails et le [journal d’audit](topic:tenant-audit) n’en dépendent pas.
+
+Les alertes ne contiennent jamais de nom de fichier, de lien vers un transfert ni de mot de passe. Elles ne contiennent pas non plus d’adresse mail, sauf si **Inclure les adresses dans les webhooks** est coché dans l’écran [Général](topic:tenant-general).
 
 <!-- topic: tenant-audit -->
 ### Journal d’audit

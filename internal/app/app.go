@@ -53,6 +53,7 @@ import (
 	"github.com/ed-fr/transteira/internal/stats"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/syslog"
 	"github.com/ed-fr/transteira/internal/systemsettings"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
@@ -61,6 +62,8 @@ import (
 	"github.com/ed-fr/transteira/internal/upload"
 	"github.com/ed-fr/transteira/internal/usage"
 	"github.com/ed-fr/transteira/internal/version"
+	"github.com/ed-fr/transteira/internal/webhook"
+	"github.com/ed-fr/transteira/internal/webhookadmin"
 	"github.com/ed-fr/transteira/web"
 )
 
@@ -111,7 +114,9 @@ const (
 	// its own deadline so that an exhausted first stage never deprives it:
 	// the retrier of the admin mails hands its jobs to the mail queue, and
 	// the usage recorder makes the final flush of the counters recorded
-	// until then (shutdown included), while the database is still open.
+	// until then (shutdown included), while the database is still open, and
+	// the event bus drains its queues into its outputs (webhook dispatcher,
+	// syslog export), which are then closed (see outputs).
 	// It takes one second from the former 6 s of ShutdownTimeout.
 	FinalCloseTimeout = time.Second
 	// MailDrainTimeout bounds the delivery of the mails still queued at
@@ -146,6 +151,9 @@ type runOptions struct {
 	avAlertOpts     func(*avalert.Options)
 	rotationOpts    func(*keyrotation.Options)
 	webUI           fs.FS
+	// busReady, a seam of the package tests, receives the started event
+	// bus and the webhook service.
+	busReady func(events.Publisher, *webhookadmin.Service)
 }
 
 // WithWebUI serves the web interface from fsys instead of the build
@@ -295,18 +303,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		}
 	}
 	// The event bus carries what the components decide (alerts, audit and
-	// security log lines) to the outputs that subscribe to it. It is
-	// closed in the second close stage, once the workers that publish have
+	// security log lines) to the outputs that subscribe to it. Subscribers
+	// register before it starts, just before the background services: the
+	// events published in the meantime wait in their queues. It is closed
+	// in the second close stage, once the workers that publish have
 	// stopped; an event published later (a handler still draining) is
 	// dropped.
 	bus := events.New(events.Options{Logger: logger})
-	if err := bus.Start(ctx); err != nil {
-		return fmt.Errorf("app: start the event bus: %w", err)
-	}
 	// Closes the bus when the start-up fails before closeStages is
-	// deferred; on a normal shutdown the second close stage has already
-	// closed it and this Close returns at once (it is idempotent), bounded
-	// anyway so that a stuck subscriber never blocks the exit.
+	// deferred (a bus never started closes at once); on a normal shutdown
+	// the second close stage has already closed it and this Close returns
+	// at once (it is idempotent), bounded anyway so that a stuck
+	// subscriber never blocks the exit.
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), FinalCloseTimeout)
 		defer cancel()
@@ -446,6 +454,13 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
+	// The outputs of the bus: the webhook dispatcher and the syslog export.
+	// They subscribe before the bus starts and are closed right after it, in
+	// the last close stage (see outputs).
+	webhooks, outputs, err := newBusOutputs(cfg, db, vault, auditLog, bus, logger)
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	// Deferred after closeMailQueues, the data directory and the database, so
 	// it runs before them: the workers stop enqueueing mails, touching the
 	// files and counting usage before the queue drains, then the retrier of
@@ -453,7 +468,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// while the database is still open.
 	defer closeStages(ctx, logger,
 		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations}},
-		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, bus}})
+		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, outputs}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
 		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
@@ -468,6 +483,14 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
+	}
+	// The subscribers (webhook dispatcher, syslog) are registered above:
+	// Subscribe is refused once the bus has started.
+	if err := bus.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the event bus: %w", err)
+	}
+	if o.busReady != nil {
+		o.busReady(bus, webhooks)
 	}
 	// Started before the worker, so that the outage its start-up sweep may
 	// find is followed at once (a report made earlier is kept anyway).
@@ -540,7 +563,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
-			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations)),
+			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
+			admin.WithWebhookService(webhooks)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
@@ -1075,4 +1099,66 @@ func closeWith(closeFn func() error, what string) error {
 		return fmt.Errorf("app: close %s: %w", what, err)
 	}
 	return nil
+}
+
+// newBusOutputs builds the outputs of the event bus and subscribes them to
+// it, before it starts: the webhook dispatcher (CLAUDE.md section 12.4) and,
+// when TT_SYSLOG_ADDR is set, the syslog export (section 19). It returns the
+// webhook administration service, which is also the store of the dispatcher,
+// and the closer of the bus and its outputs.
+func newBusOutputs(cfg *config.Config, db *store.DB, vault *masterkey.Vault, auditLog *audit.Writer,
+	bus *events.Bus, logger *slog.Logger,
+) (*webhookadmin.Service, closer, error) {
+	client, err := webhook.NewClient(webhook.ClientOptions{
+		Allow: cfg.WebhookAllowNetworks, AllowHTTP: cfg.WebhookAllowHTTPNetworks,
+		Deny: cfg.WebhookDenyNetworks, AdminURL: adminBaseURL(cfg),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	hooks, err := webhookadmin.New(db, vault, webhookadmin.Options{
+		Validator: client, Tester: client, Audit: auditLog, Logger: logger,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	dispatcher, err := webhook.NewDispatcher(webhook.DispatcherOptions{Store: hooks, Client: client, Logger: logger})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := dispatcher.Register(bus); err != nil {
+		return nil, nil, err
+	}
+	out := outputs{bus, dispatcher}
+	if cfg.Syslog.Enabled() {
+		exporter, err := syslog.New(syslog.Options{
+			Addr: cfg.Syslog.Addr, Protocol: cfg.Syslog.Protocol, Streams: cfg.Syslog.Streams,
+			Facility: cfg.Syslog.Facility, CAFile: cfg.Syslog.CAFile, Logger: logger,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := exporter.Register(bus); err != nil {
+			return nil, nil, err
+		}
+		out = append(out, exporter)
+	}
+	return hooks, out, nil
+}
+
+// outputs closes the event bus then its outputs, one after the other within
+// the same deadline: the bus first drains its queues into the outputs, which
+// then abandon what they could not deliver (pending webhook deliveries are
+// lost, threat model D27) and close their connections.
+type outputs []closer
+
+// Close implements closer.
+func (o outputs) Close(ctx context.Context) error {
+	var errs []error
+	for _, c := range o {
+		if err := c.Close(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }

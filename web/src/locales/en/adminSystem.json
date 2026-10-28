@@ -4,6 +4,7 @@
     "overview": "Overview",
     "maintenance": "Maintenance",
     "settings": "Settings",
+    "webhooks": "Webhooks",
     "audit": "Audit log",
     "masterKey": "Master key"
   },
@@ -18,6 +19,10 @@
   "settings": {
     "title": "System settings",
     "intro": "Settings of the whole instance: disk usage alert threshold and alert address."
+  },
+  "webhooks": {
+    "title": "Instance webhooks",
+    "intro": "Alerts of the whole instance (disk space, antivirus outage, maintenance mode, master key rotation) sent to a Microsoft Teams or Slack channel, or to any JSON receiver. The alerts of the entities are configured in each entity."
   },
   "audit": {
     "title": "Global audit log",

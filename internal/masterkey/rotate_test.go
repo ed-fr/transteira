@@ -20,7 +20,9 @@ import (
 )
 
 // fixture is a database holding keys of three tenants and both purposes,
-// and system secrets, most under k1 and some under k2.
+// and system secrets, most under k1 and some under k2, including the
+// sealed URLs and signing secrets of a tenant webhook and of an
+// instance-wide webhook.
 type fixture struct {
 	db      *store.DB
 	k1, k2  *crypto.MasterKey
@@ -29,6 +31,8 @@ type fixture struct {
 	secrets []sealedSystem
 	// underOld counts the keys and system secrets created under k1.
 	underOld int64
+	// systemUnderOld counts the system secrets created under k1.
+	systemUnderOld int64
 }
 
 func newFixture(t *testing.T, e storetest.Engine) *fixture {
@@ -54,6 +58,10 @@ func newFixture(t *testing.T, e storetest.Engine) *fixture {
 	}
 	f.secrets = append(f.secrets, sealSystem(t, f.db, old), sealSystem(t, f.db, both), sealSystem(t, f.db, old))
 	f.underOld += 2
+	hookKeys, hookSecrets := sealWebhooks(t, f.db, old, f.tenants[0])
+	f.keys, f.secrets = append(f.keys, hookKeys...), append(f.secrets, hookSecrets...)
+	f.underOld += int64(len(hookKeys) + len(hookSecrets))
+	f.systemUnderOld = 2 + int64(len(hookSecrets))
 	return f
 }
 
@@ -109,7 +117,7 @@ func TestRotate(t *testing.T) {
 			!rot.CompletedAt.Equal(done) {
 			t.Errorf("rotation = %+v", rot)
 		}
-		// 12 tenant keys then 2 system secrets by 2, plus the final empty
+		// 14 tenant keys then 4 system secrets by 2, plus the final empty
 		// batch (the empty batch ending the tenant keys is not reported).
 		if want := int(f.underOld/2) + 1; batches != want {
 			t.Errorf("batches = %d, want %d", batches, want)

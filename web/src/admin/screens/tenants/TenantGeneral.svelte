@@ -9,13 +9,24 @@
   // - A tenant being deleted shows a banner and accepts no change, except resuming the deletion.
   // - Deletion (super admin): the name must be typed exactly (DELETE ?confirm=<name>); a 500
   //   leaves the tenant "deleting", completed later by the periodic cleanup.
+  // - Webhooks (since 1.1, any admin of the tenant): whether the tenant webhooks receive the
+  //   addresses concerned (webhookIncludeAddresses, off by default: addresses are personal data),
+  //   saved by its own form so that it never sends the general settings being edited.
   // The admin profile is reloaded after a rename and after a deletion (it lists the tenants).
   // The tenant sub-navigation (components/TenantNav.svelte) is rendered by App.svelte above
   // every /tenants/:id/... screen: it is not rendered again here.
   import { onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, RadioGroup, Spinner, TextField, announce } from '../../../shared/components';
+  import {
+    Alert,
+    Button,
+    Checkbox,
+    RadioGroup,
+    Spinner,
+    TextField,
+    announce,
+  } from '../../../shared/components';
   import { formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ByteSizeField from '../../components/ByteSizeField.svelte';
@@ -25,6 +36,7 @@
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { MAX_TRANSFER_BYTES, formatBytes as formatBinaryBytes } from '../../forms/bytes';
   import NotFound from '../NotFound.svelte';
+  import { includeAddressesPatch, includesAddresses } from '../ops/webhooks';
   import type { AdminScreenProps } from '../types';
   import {
     TENANT_LANGUAGES,
@@ -59,6 +71,7 @@
     storageQuotaBytes: `${uid}-quota`,
     maxTransferCeiling: `${uid}-ceiling`,
     maxTransferBytes: `${uid}-max`,
+    webhookIncludeAddresses: `${uid}-webhook-addresses`,
   };
 
   const tenantId = $derived(params['id'] ?? '');
@@ -73,12 +86,16 @@
   let loadError = $state('');
   let errors = $state<SummaryError[]>([]);
   let inputs: Partial<Record<SizeField, HTMLInputElement>> = $state({});
+  // Webhook payloads: include the addresses concerned.
+  let includeAddresses = $state(false);
 
   // Deletion.
   let deleteOpen = $state(false);
   let deleted = $state(false);
   let deleteMessage = $state('');
   const deleting = $derived(tenant?.status === 'deleting');
+  const webhookPatch = $derived(tenant === undefined ? {} : includeAddressesPatch(tenant, includeAddresses));
+  const webhookDirty = $derived(!deleted && Object.keys(webhookPatch).length > 0);
   const dirty = $derived(
     !deleted && tenant !== undefined && form !== undefined && isDirty(tenant, form, role),
   );
@@ -113,6 +130,7 @@
   function show(next: Tenant): void {
     tenant = next;
     form = formFromTenant(next);
+    includeAddresses = includesAddresses(next);
   }
 
   async function load(): Promise<void> {
@@ -188,6 +206,25 @@
       return { ok: true, message: t('adminTenants.general.saved') };
     } catch (err) {
       return tenantFailure(describeError(i18n, err), refs, t);
+    }
+  }
+
+  async function saveWebhookSetting(): Promise<SubmitOutcome> {
+    if (tenant === undefined) {
+      return { ok: false, message: t('errors.unknown') };
+    }
+    const patch = includeAddressesPatch(tenant, includeAddresses);
+    if (Object.keys(patch).length === 0) {
+      return { ok: true, message: t('admin.common.noChanges') };
+    }
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', { path: { tenantId }, body: patch });
+      // Only the tenant and this setting: the general settings being edited are kept.
+      tenant = res.data;
+      includeAddresses = includesAddresses(res.data);
+      return { ok: true, message: t('adminTenants.general.webhooks.saved') };
+    } catch (err) {
+      return { ok: false, message: describeError(i18n, err).message };
     }
   }
 
@@ -347,6 +384,25 @@
         error={sizeError('maxTransferBytes', form.maxTransferBytes)}
         bind:element={inputs.maxTransferBytes}
         bind:bytes={form.maxTransferBytes}
+      />
+    </FormSection>
+
+    <FormSection
+      title={t('adminTenants.general.webhooks.title')}
+      intro={t('adminTenants.general.webhooks.intro')}
+      dirty={webhookDirty}
+      addGuard={(guard) => nav.addGuard(guard)}
+      onsubmit={saveWebhookSetting}
+      disabled={deleting}
+      saveLabel={t('adminTenants.general.webhooks.save')}
+      successMessage={t('adminTenants.general.webhooks.saved')}
+    >
+      <Checkbox
+        id={ids.webhookIncludeAddresses}
+        label={t('adminTenants.general.webhooks.includeAddresses.label')}
+        hint={t('adminTenants.general.webhooks.includeAddresses.hint')}
+        disabled={deleting}
+        bind:checked={includeAddresses}
       />
     </FormSection>
 

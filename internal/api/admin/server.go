@@ -11,7 +11,8 @@
 // over internal/apitoken, and the system operations of the super admin
 // (sections 4, 16.1 and 19: maintenance mode, instance settings and master
 // key rotation) over internal/maintenance, internal/systemsettings and
-// internal/keyrotation.
+// internal/keyrotation, and the alert webhooks of the tenants and of the
+// instance (section 12.4) over internal/webhookadmin.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -104,6 +105,9 @@ type Server struct {
 	// tokenSvc manages the API tokens of the tenants; nil until
 	// WithAPITokenService.
 	tokenSvc APITokenService
+	// webhookSvc manages the webhooks of the tenants and of the instance;
+	// nil until WithWebhookService.
+	webhookSvc WebhookService
 	// maintenance reads and changes the maintenance mode; nil until
 	// WithMaintenance.
 	maintenance MaintenanceService

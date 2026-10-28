@@ -112,10 +112,11 @@ func TestDialGuard(t *testing.T) {
 		t.Error("bad port accepted")
 	}
 	_, err = open.DialContext(ctx, "tcp", "empty.example.com:25")
-	wantErr(t, "no address", err, errNoAddress)
+	wantErr(t, "no address", err, ErrNoAddress)
 	res.err = errBoom
 	_, err = open.DialContext(ctx, "tcp", "relay.internal:25")
 	wantErr(t, "resolution failure", err, errBoom)
+	wantErr(t, "resolution failure", err, ErrResolve)
 
 	// Every address failing: the last error.
 	open.dial = func(context.Context, string, string) (net.Conn, error) { return nil, errBoom }

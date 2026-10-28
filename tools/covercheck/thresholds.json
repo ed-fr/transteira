@@ -41,6 +41,7 @@
     "internal/stats": 100,
     "internal/store": 100,
     "internal/storage": 100,
+    "internal/syslog": 100,
     "internal/systemsettings": 100,
     "internal/tenant": 100,
     "internal/tenantadmin": 100,
@@ -49,6 +50,8 @@
     "internal/transfer": 100,
     "internal/upload": 100,
     "internal/usage": 100,
+    "internal/webhook": 100,
+    "internal/webhookadmin": 100,
     "internal/zipstream": 100
   }
 }

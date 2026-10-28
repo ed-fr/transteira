@@ -57,10 +57,15 @@ const (
 	// on system records (not bound to an entity) and rewrapped by the master
 	// key rotation like every other wrapped blob.
 	PurposeAdminTOTP Purpose = "admin-totp"
+	// PurposeWebhook wraps the URL and the signing secret of the
+	// instance-wide webhooks, stored on system records (not bound to an
+	// entity) and rewrapped by the master key rotation like every other
+	// wrapped blob.
+	PurposeWebhook Purpose = "webhook"
 )
 
 // purposes lists every valid Purpose.
-var purposes = []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP}
+var purposes = []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook}
 
 // MasterKey is the master key of the instance. It never exposes its bytes:
 // every textual representation (String, GoString, Format, LogValue) only shows

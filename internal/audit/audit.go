@@ -172,6 +172,21 @@ const (
 	ActionAntivirusAlertCleared Action = "antivirus.alert_cleared"
 )
 
+// Actions of the webhooks (tenant and instance-wide), each listed in the
+// AuditAction enumeration of the specification. Their details never hold
+// the URL (only its host) nor the signing secret (threat model T-184).
+const (
+	// ActionWebhookCreated: an administrator created a webhook.
+	ActionWebhookCreated Action = "webhook.created"
+	// ActionWebhookUpdated: an administrator changed a webhook (names of
+	// the changed fields only).
+	ActionWebhookUpdated Action = "webhook.updated"
+	// ActionWebhookDeleted: an administrator deleted a webhook.
+	ActionWebhookDeleted Action = "webhook.deleted"
+	// ActionWebhookTested: an administrator sent a test event to a webhook.
+	ActionWebhookTested Action = "webhook.tested"
+)
+
 // Object kinds.
 const (
 	// ObjectAdmin is an administrator account (object ID: its "adm_" ID).
@@ -201,6 +216,8 @@ const (
 	// ObjectMasterKeyRotation is a master key rotation (object ID: its
 	// "rot_" ID).
 	ObjectMasterKeyRotation = "master_key_rotation"
+	// ObjectWebhook is a webhook (object ID: its "whk_" ID, never its URL).
+	ObjectWebhook = "webhook"
 )
 
 // ErrSecretDetail reports details whose key names a secret (password,

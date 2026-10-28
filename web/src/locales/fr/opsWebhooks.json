@@ -1,0 +1,160 @@
+{
+  "status": {
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "suspended": "Suspendu"
+  },
+  "kinds": {
+    "teams": "Microsoft Teams",
+    "slack": "Slack",
+    "generic": "JSON générique"
+  },
+  "events": {
+    "virus": {
+      "detected": "Virus détecté"
+    },
+    "abuse": {
+      "threshold_exceeded": "Seuil d’abus dépassé",
+      "unusual_activity": "Activité inhabituelle",
+      "reported": "Abus signalé"
+    },
+    "quota": {
+      "warning": "Quota à 80 %",
+      "reached": "Quota atteint"
+    },
+    "disk": {
+      "alert_raised": "Alerte d’espace disque",
+      "alert_cleared": "Espace disque revenu à la normale"
+    },
+    "antivirus": {
+      "alert_raised": "Antivirus indisponible",
+      "alert_cleared": "Antivirus de nouveau disponible"
+    },
+    "maintenance": {
+      "enabled": "Mode maintenance activé",
+      "disabled": "Mode maintenance désactivé"
+    },
+    "master_key": {
+      "rotation_completed": "Rotation de la clé maître terminée",
+      "rotation_failed": "Échec de la rotation de la clé maître"
+    },
+    "webhook": {
+      "test": "Événement de test"
+    }
+  },
+  "categories": {
+    "dns": "Nom non résolu",
+    "refused_network": "Adresse refusée par les règles réseau",
+    "connect": "Échec de la connexion",
+    "tls": "Erreur TLS",
+    "timeout": "Pas de réponse en 10 secondes",
+    "http_status": "Réponse en erreur",
+    "unknown": "Cause inconnue"
+  },
+  "list": {
+    "caption": "Webhooks",
+    "create": "Ajouter un webhook",
+    "empty": "Aucun webhook pour l’instant.",
+    "columns": {
+      "name": "Nom et adresse",
+      "kind": "Type",
+      "events": "Événements",
+      "status": "État",
+      "delivery": "Dernier envoi",
+      "actions": "Actions"
+    },
+    "suspendedUntil": "Envois suspendus jusqu’au {date} après des échecs répétés.",
+    "test": "Tester",
+    "testing": "Envoi du test…",
+    "edit": "Modifier",
+    "rotate": "Nouveau secret",
+    "delete": "Supprimer"
+  },
+  "delivery": {
+    "never": "Aucun pour l’instant",
+    "success": "Remis",
+    "failure": "Échec",
+    "httpStatus": "HTTP {status}",
+    "duration": "{ms} ms"
+  },
+  "test": {
+    "success": "Test de {name} remis : {detail}.",
+    "failure": "Échec du test de {name} : {cause} ({detail}).",
+    "rateLimited": "Trop de tests : {max} par heure au plus. Réessayez plus tard.",
+    "rateLimitedRetry": "Trop de tests : {max} par heure au plus. Réessayez dans {minutes} min."
+  },
+  "form": {
+    "createTitle": "Nouveau webhook",
+    "editTitle": "Modifier le webhook {name}",
+    "legend": "Paramètres du webhook",
+    "createIntro": "Le destinataire reçoit une requête par événement choisi. Aucun nom de fichier, lien ou mot de passe n’est jamais envoyé.",
+    "editIntro": "Laissez l’adresse vide pour conserver l’actuelle. Réactiver un webhook suspendu reprend ses envois aussitôt.",
+    "submit": "Créer le webhook",
+    "created": "Webhook créé.",
+    "saved": "Webhook mis à jour.",
+    "discardConfirm": "Vous avez des modifications non enregistrées. Fermer sans enregistrer ? Elles seront perdues.",
+    "name": {
+      "label": "Nom",
+      "hint": "Décrit le destinataire, par exemple « Canal de l’équipe sécurité » (100 caractères au plus)."
+    },
+    "kind": {
+      "label": "Type",
+      "hints": {
+        "teams": "Webhook entrant d’un canal Microsoft Teams (ou URL de Workflows) : un message mis en forme.",
+        "slack": "Webhook entrant d’un canal Slack : un message mis en forme.",
+        "generic": "Tout destinataire HTTPS (SIEM, script) : un document JSON signé avec un secret affiché une seule fois."
+      }
+    },
+    "url": {
+      "label": "Adresse (URL)",
+      "newLabel": "Nouvelle adresse (URL)",
+      "hint": "Adresse https:// complète fournie par le destinataire, {max} caractères au plus. Elle est conservée chiffrée et n’est plus jamais affichée en entier.",
+      "editHint": "Adresse actuelle : {hint}. Laissez vide pour la conserver."
+    },
+    "events": {
+      "label": "Événements",
+      "hintTenant": "Alertes de cette entité à envoyer. Les adresses ne sont incluses que si l’entité l’autorise (écran Général).",
+      "hintSystem": "Alertes de toute l’instance à envoyer. Les événements des entités ne sont jamais envoyés à ces webhooks."
+    },
+    "enabled": {
+      "label": "Activé",
+      "hint": "Un webhook désactivé ne reçoit plus rien jusqu’à sa réactivation."
+    }
+  },
+  "secret": {
+    "createdTitle": "Webhook {name} créé",
+    "rotatedTitle": "Nouveau secret du webhook {name}",
+    "text": "Le destinataire utilise ce secret pour vérifier l’en-tête X-TransTeira-Signature de chaque requête. Copiez-le maintenant dans la configuration du destinataire.",
+    "label": "Secret de signature"
+  },
+  "rotate": {
+    "title": "Générer un nouveau secret pour {name} ?",
+    "text": "Le secret actuel cesse de fonctionner aussitôt : les requêtes sont signées avec le nouveau, à saisir dans le destinataire. Son ancienne clé est détruite.",
+    "confirm": "Générer un nouveau secret",
+    "done": "Nouveau secret généré pour {name}."
+  },
+  "delete": {
+    "title": "Supprimer le webhook {name} ?",
+    "text": "Le destinataire ne reçoit plus aucune alerte, et les envois en cours sont abandonnés. L’adresse et le secret chiffrés sont détruits. Cette action est irréversible.",
+    "confirm": "Supprimer le webhook",
+    "done": "Webhook {name} supprimé."
+  },
+  "addresses": {
+    "included": "Les alertes de cette entité incluent les adresses concernées.",
+    "excluded": "Les alertes de cette entité ne contiennent aucune adresse.",
+    "change": "Modifier dans l’écran Général"
+  },
+  "errors": {
+    "nameTooLong": "Le nom est limité à {max} caractères.",
+    "urlInvalid": "Saisissez l’adresse complète fournie par le destinataire, commençant par https et son nom d’hôte.",
+    "urlScheme": "L’adresse doit utiliser https.",
+    "urlCredentials": "L’adresse ne doit contenir ni nom d’utilisateur ni mot de passe.",
+    "urlTooLong": "L’adresse est limitée à {max} caractères.",
+    "eventsRequired": "Choisissez au moins un événement.",
+    "eventNotAllowed": "Un des événements choisis n’est pas disponible pour ces webhooks.",
+    "limit": "{max} webhooks au plus : supprimez-en un avant d’en ajouter un autre.",
+    "rateLimited": "Trop de nouvelles adresses de webhook : {max} créations et changements d’adresse par heure au plus. Réessayez plus tard.",
+    "rateLimitedRetry": "Trop de nouvelles adresses de webhook : {max} créations et changements d’adresse par heure au plus. Réessayez dans {minutes} min.",
+    "notFound": "Ce webhook n’existe plus. Rechargez la page."
+  }
+}

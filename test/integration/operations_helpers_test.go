@@ -597,30 +597,37 @@ func (m *mailpit) waitQuotaMails(t *testing.T, addr, name string, warning, reach
 }
 
 // holdPatch starts a tus PATCH of c for the first half of data on the
-// upload uploadURL (offset 0) and waits until the server holds the upload
-// lock of the transfer trfID; finish sends the rest and returns the
-// response.
+// upload uploadURL of the transfer trfID, which must not have started
+// (offset 0, no file on disk), and waits until the server holds the upload
+// lock of that file; finish sends the rest and returns the response.
+//
+// The lock is observed through the encrypted file: the upload engine
+// creates it, on the first byte of the body, while holding the lock, which
+// it keeps until the PATCH ends. The wait must not probe with an operation
+// that takes the upload lock itself (finalize, deletion): the PATCH that
+// tries to lock during such a probe is refused with 409 (upload.ErrBusy),
+// which is correct server behavior but not what this helper waits for.
 func (c *depositor) holdPatch(t *testing.T, trfID, uploadURL string, data []byte) (finish func() response) {
 	t.Helper()
+	enc := c.d.encPath(c.d.storageNameOf(t, trfID, uploadURL))
+	if exists(t, enc) {
+		t.Fatalf("holdPatch: the upload %s has already started", uploadURL)
+	}
 	conn := c.rawPatch(t, uploadURL, 0, int64(len(data)))
 	half := len(data) / 2
 	if _, err := conn.Write(data[:half]); err != nil {
 		t.Fatalf("write the first half of the PATCH: %v", err)
 	}
 	eventually(t, "upload lock held", func() bool {
-		resp := c.finalize(t, trfID)
-		var p transferProblem
-		mustJSON(t, resp.body, &p)
-		switch {
-		case resp.status == http.StatusConflict && p.Code == "state-conflict":
+		if exists(t, enc) {
 			return true
-		case resp.status == http.StatusConflict && p.Code == "upload-incomplete":
-			failIfAnswered(t, conn)
-			return false
 		}
-		t.Fatalf("finalize while waiting for the upload lock: %d %s", resp.status, resp.body)
+		failIfAnswered(t, conn)
 		return false
 	})
+	// The file exists: the lock was taken. Make sure the PATCH is still
+	// running, so that the lock is still held.
+	failIfAnswered(t, conn)
 	return func() response {
 		if _, err := conn.Write(data[half:]); err != nil {
 			t.Fatalf("write the rest of the PATCH: %v", err)
@@ -629,9 +636,25 @@ func (c *depositor) holdPatch(t *testing.T, trfID, uploadURL string, data []byte
 	}
 }
 
+// storageNameOf returns the storage name of the file of the transfer trfID
+// of tenant A whose tus upload URL is uploadURL.
+func (d *depositEnv) storageNameOf(t *testing.T, trfID, uploadURL string) string {
+	t.Helper()
+	for _, f := range d.files(t, trfID) {
+		if strings.HasSuffix(uploadURL, "/"+f.UploadID) {
+			return f.StorageName
+		}
+	}
+	t.Fatalf("no file of %s has the upload URL %s", trfID, uploadURL)
+	return ""
+}
+
 // failIfAnswered fails the test when the server already answered the
 // half-sent PATCH on conn (an early refusal): waiting for its upload lock
-// would otherwise run until the timeout without saying why.
+// would otherwise run until the timeout without saying why. The answer
+// itself may be lost: the server closes a refused PATCH with unread body
+// bytes, and on Windows that close resets the connection, which discards
+// the response not read yet; the read error then tells it.
 func failIfAnswered(t *testing.T, conn net.Conn) {
 	t.Helper()
 	_ = conn.SetReadDeadline(time.Now().Add(time.Millisecond))

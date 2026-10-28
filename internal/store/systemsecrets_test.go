@@ -31,6 +31,14 @@ func TestSystemSecrets(t *testing.T) {
 			t.Errorf("Get = %+v, %v", got, err)
 		}
 		wantErr(t, "Create(duplicate)", repo.Create(ctx, s), store.ErrConflict)
+		whk := newTOTPSecret("webhook url")
+		whk.Purpose = store.SecretPurposeWebhook
+		if err := repo.Create(ctx, whk); err != nil {
+			t.Fatalf("Create(webhook) = %v", err)
+		}
+		if got, err := repo.Get(ctx, whk.ID); err != nil || got.Purpose != store.SecretPurposeWebhook {
+			t.Errorf("Get(webhook) = %+v, %v", got, err)
+		}
 		bad := map[string]func(*store.SystemSecret){
 			"id":      func(s *store.SystemSecret) { s.ID = id.New(id.WrappedKey) },
 			"purpose": func(s *store.SystemSecret) { s.Purpose = store.KeyPurposeSecret },

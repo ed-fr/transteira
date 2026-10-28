@@ -13,6 +13,8 @@ import (
 
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/events"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/store"
@@ -247,26 +249,75 @@ func whileUnregistered(t *testing.T, e storetest.Engine, db *store.DB, old *cryp
 // sealedSystem is a system secret created by a test with its expected
 // plaintext.
 type sealedSystem struct {
-	id     string
-	secret []byte
+	id      string
+	purpose crypto.Purpose
+	secret  []byte
 }
 
 // sealSystem wraps a random admin TOTP secret through v and stores it in
 // db.
 func sealSystem(t *testing.T, db *store.DB, v *masterkey.Vault) sealedSystem {
 	t.Helper()
+	return sealSystemPurpose(t, db, v, crypto.PurposeAdminTOTP)
+}
+
+// sealSystemPurpose wraps a random secret of purpose p through v and
+// stores it in db.
+func sealSystemPurpose(t *testing.T, db *store.DB, v *masterkey.Vault, p crypto.Purpose) sealedSystem {
+	t.Helper()
 	secret := make([]byte, 20)
 	if _, err := rand.Read(secret); err != nil {
 		t.Fatal(err)
 	}
-	row, err := v.WrapSystem(crypto.PurposeAdminTOTP, secret)
+	row, err := v.WrapSystem(p, secret)
 	if err != nil {
 		t.Fatalf("WrapSystem: %v", err)
 	}
 	if err := db.SystemSecrets().Create(context.Background(), row); err != nil {
 		t.Fatalf("Create system secret: %v", err)
 	}
-	return sealedSystem{id: row.ID, secret: secret}
+	return sealedSystem{id: row.ID, purpose: p, secret: secret}
+}
+
+// sealWebhooks stores a generic webhook of tid and an instance-wide generic
+// webhook, their URLs and signing secrets sealed through v (wrapped keys
+// of purpose secret, system secrets of purpose webhook), and returns the
+// four sealed values.
+func sealWebhooks(t *testing.T, db *store.DB, v *masterkey.Vault, tid tenant.ID) ([]sealed, []sealedSystem) {
+	t.Helper()
+	ctx := context.Background()
+	keys := []sealed{seal(t, v, tid, crypto.PurposeSecret), seal(t, v, tid, crypto.PurposeSecret)}
+	hook := func(urlKey, secretKey string, ev events.Type) store.Webhook {
+		return store.Webhook{
+			ID: id.New(id.Webhook), Name: "SIEM collector", Kind: store.WebhookGeneric, URLKeyID: urlKey,
+			URLHint: "https://siem.example.com", SecretKeyID: secretKey, Events: []events.Type{ev},
+			Enabled: true, CreatedBy: "admin.a",
+		}
+	}
+	sc, err := db.Scoped(tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		_, err := db.Webhooks().CreateTx(ctx, tx, hook(keys[0].id, keys[1].id, events.VirusDetected))
+		return err
+	}); err != nil {
+		t.Fatalf("create tenant webhook: %v", err)
+	}
+	secrets := []sealedSystem{
+		sealSystemPurpose(t, db, v, crypto.PurposeWebhook), sealSystemPurpose(t, db, v, crypto.PurposeWebhook),
+	}
+	sys, err := db.System("tests: instance-wide webhook")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sys.Tx(ctx, func(tx *store.SystemTx) error {
+		_, err := db.SystemWebhooks().CreateTx(ctx, tx, hook(secrets[0].id, secrets[1].id, events.DiskAlertRaised))
+		return err
+	}); err != nil {
+		t.Fatalf("create system webhook: %v", err)
+	}
+	return keys, secrets
 }
 
 // expectSystemOpens checks that every system secret opens through v with
@@ -274,7 +325,7 @@ func sealSystem(t *testing.T, db *store.DB, v *masterkey.Vault) sealedSystem {
 func expectSystemOpens(t *testing.T, v *masterkey.Vault, secrets []sealedSystem) {
 	t.Helper()
 	for _, s := range secrets {
-		got, err := v.OpenSystem(context.Background(), crypto.PurposeAdminTOTP, s.id)
+		got, err := v.OpenSystem(context.Background(), s.purpose, s.id)
 		if err != nil {
 			t.Errorf("OpenSystem(%s): %v", s.id, err)
 			continue

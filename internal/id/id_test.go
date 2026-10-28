@@ -126,7 +126,7 @@ func TestNewGeneratorDefaults(t *testing.T) {
 }
 
 func TestNewAllPrefixes(t *testing.T) {
-	for _, p := range []Prefix{Tenant, Transfer, File, Invitation, Blocklist, APIToken, Admin, Rotation, WrappedKey, DepositSession, AdminSession, AdminActivation, SystemSecret, Audit, Request, Event} {
+	for _, p := range []Prefix{Tenant, Transfer, File, Invitation, Blocklist, APIToken, Admin, Rotation, WrappedKey, DepositSession, AdminSession, AdminActivation, SystemSecret, Audit, Request, Event, Webhook} {
 		before := time.Now().Add(-time.Millisecond)
 		s := New(p)
 		if !strings.HasPrefix(s, string(p)+"_") || len(s) != len(p)+1+ulidLen {
@@ -337,5 +337,12 @@ func TestMonotonicGeneratorOrder(t *testing.T) {
 			t.Fatalf("id %d %q not after %q", i, s, prev)
 		}
 		prev = s
+	}
+}
+
+func TestWebhookPrefixMatchesSpec(t *testing.T) {
+	// OpenAPI WebhookId pattern: ^whk_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	if Webhook != "whk" || !Valid(Webhook, "whk_01JABCQ1R2S3T4V5W6X7Y8Z9A0") {
+		t.Errorf("Webhook prefix %q does not accept the OpenAPI example", Webhook)
 	}
 }

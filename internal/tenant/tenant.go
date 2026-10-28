@@ -100,6 +100,10 @@ type Tenant struct {
 	// database); the default ones are used otherwise.
 	HasLogo       bool
 	HasBackground bool
+	// WebhookIncludeAddresses tells whether the tenant webhooks receive the
+	// sender and recipient addresses concerned by an event; off by default
+	// (minimal payloads, decision P31).
+	WebhookIncludeAddresses bool
 	// CreatedAt is the creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the time of the last modification.

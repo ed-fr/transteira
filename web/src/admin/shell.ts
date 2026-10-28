@@ -78,6 +78,7 @@ export const TENANT_OPS_SECTIONS = [
   'invitations',
   'blocklist',
   'tokens',
+  'webhooks',
   'audit',
   'stats',
   'privacy',
@@ -155,7 +156,14 @@ export function tenantLinkGroups(tenantId: string): TenantLinkGroup[] {
 }
 
 /** Sections of the system administration (super admin), in navigation order. */
-export const SYSTEM_SECTIONS = ['overview', 'maintenance', 'settings', 'audit', 'masterKey'] as const;
+export const SYSTEM_SECTIONS = [
+  'overview',
+  'maintenance',
+  'settings',
+  'webhooks',
+  'audit',
+  'masterKey',
+] as const;
 
 /** A section of the system administration. */
 export type SystemSection = (typeof SYSTEM_SECTIONS)[number];
@@ -175,6 +183,7 @@ const SYSTEM_SEGMENTS: Record<SystemSection, string> = {
   overview: '',
   maintenance: '/maintenance',
   settings: '/settings',
+  webhooks: '/webhooks',
   audit: '/audit',
   masterKey: '/master-key',
 };

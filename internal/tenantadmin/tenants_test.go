@@ -300,6 +300,37 @@ func TestUpdateTenantDelegated(t *testing.T) {
 		}
 		_, err = ev.svc.UpdateTenant(ctx, ev.adminB, ev.a.ID, TenantUpdate{DefaultLanguage: ptr("fr")}, clientIP)
 		wantErr(t, "other tenant", err, ErrNotFound)
+
+		// The webhook address option is off by default and a delegated
+		// admin may turn it on and off; the audit names the field only.
+		if v.WebhookIncludeAddresses {
+			t.Fatalf("webhook addresses on by default: %+v", v)
+		}
+		v, err = ev.svc.UpdateTenant(ctx, ev.adminA, ev.a.ID, TenantUpdate{WebhookIncludeAddresses: ptr(true)}, clientIP)
+		mustNoErr(t, "webhook addresses on", err)
+		if !v.WebhookIncludeAddresses {
+			t.Fatalf("webhook addresses not stored: %+v", v)
+		}
+		if got, err := ev.svc.GetTenant(ctx, ev.adminA, ev.a.ID); err != nil || !got.WebhookIncludeAddresses {
+			t.Fatalf("get after update: %+v, %v", got, err)
+		}
+		if b, err := ev.db.Tenants().Get(ctx, ev.b.ID); err != nil || b.WebhookIncludeAddresses {
+			t.Fatalf("tenant B changed: %+v, %v", b, err)
+		}
+		found := false
+		for _, e := range ev.auditEvents(t, ev.a.ID, ActionTenantUpdated) {
+			var details struct{ Fields []string }
+			mustNoErr(t, "details", json.Unmarshal(e.Details, &details))
+			found = found || slices.Equal(details.Fields, []string{"webhookIncludeAddresses"})
+		}
+		if !found {
+			t.Fatal("no audit event naming webhookIncludeAddresses")
+		}
+		v, err = ev.svc.UpdateTenant(ctx, ev.adminA, ev.a.ID, TenantUpdate{WebhookIncludeAddresses: ptr(false)}, clientIP)
+		mustNoErr(t, "webhook addresses off", err)
+		if v.WebhookIncludeAddresses {
+			t.Fatalf("webhook addresses still on: %+v", v)
+		}
 	})
 }
 

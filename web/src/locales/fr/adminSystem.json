@@ -4,6 +4,7 @@
     "overview": "Vue d’ensemble",
     "maintenance": "Maintenance",
     "settings": "Paramètres",
+    "webhooks": "Webhooks",
     "audit": "Journal d’audit",
     "masterKey": "Clé maître"
   },
@@ -18,6 +19,10 @@
   "settings": {
     "title": "Paramètres du système",
     "intro": "Réglages de toute l’instance : seuil d’alerte d’occupation du disque et adresse d’alerte."
+  },
+  "webhooks": {
+    "title": "Webhooks de l’instance",
+    "intro": "Alertes de toute l’instance (espace disque, panne de l’antivirus, mode maintenance, rotation de la clé maître) envoyées vers un canal Microsoft Teams ou Slack, ou vers tout destinataire JSON. Les alertes des entités se configurent dans chaque entité."
   },
   "audit": {
     "title": "Journal d’audit global",

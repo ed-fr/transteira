@@ -48,6 +48,7 @@ func TestVariablesMatchLoad(t *testing.T) {
 		{EnvDBDriver: DriverPostgres, EnvDBDSN: "postgres://x", EnvDBMigrateDSN: "postgres://y", EnvSetupToken: fakeToken},
 		{EnvDBDSNFile: "/nonexistent", EnvDBMigrateDSNFile: "/nonexistent", EnvSetupTokenFile: "/nonexistent", EnvMasterKeyNewFile: "/run/k2"},
 		{EnvSystemSMTPHost: "smtp.example.com"},
+		{EnvSyslogAddr: "siem.example.com:6514", EnvSyslogCAFile: "/nonexistent"},
 	}
 	read := make(map[string]bool)
 	for _, vars := range envs {

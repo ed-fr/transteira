@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -73,7 +74,37 @@ const (
 	MasterKeyRotationCompleted Type = "master_key.rotation_completed"
 	// MasterKeyRotationFailed: a master key rotation stopped on an error.
 	MasterKeyRotationFailed Type = "master_key.rotation_failed"
+	// WebhookTest: a test delivery requested by an admin. It is only sent
+	// by the webhook test operations and can never be subscribed to.
+	WebhookTest Type = "webhook.test"
 )
+
+// TenantTypes returns the alert types that concern one tenant, which only
+// the webhooks of that tenant may subscribe to (decision P30).
+func TenantTypes() []Type {
+	return []Type{
+		VirusDetected, AbuseThresholdExceeded, AbuseUnusualActivity, AbuseReported, QuotaWarning, QuotaReached,
+	}
+}
+
+// SystemTypes returns the alert types that concern the whole instance,
+// which only the instance-wide webhooks may subscribe to (decision P30).
+func SystemTypes() []Type {
+	return []Type{
+		DiskAlertRaised, DiskAlertCleared, AntivirusAlertRaised, AntivirusAlertCleared,
+		MaintenanceEnabled, MaintenanceDisabled, MasterKeyRotationCompleted, MasterKeyRotationFailed,
+	}
+}
+
+// IsTenant reports whether t is one of [TenantTypes].
+func IsTenant(t Type) bool { return slices.Contains(TenantTypes(), t) }
+
+// IsSystem reports whether t is one of [SystemTypes].
+func IsSystem(t Type) bool { return slices.Contains(SystemTypes(), t) }
+
+// IsSubscribable reports whether a webhook may subscribe to t: a tenant or
+// system alert type, never [WebhookTest] nor a log type.
+func IsSubscribable(t Type) bool { return IsTenant(t) || IsSystem(t) }
 
 // Log event types, which carry a [LogRecord].
 const (
@@ -226,7 +257,15 @@ const (
 	AdminPathSystem = "/admin/system"
 	// AdminPathMasterKey is the master key page.
 	AdminPathMasterKey = "/admin/system/master-key"
+	// AdminPathSystemWebhooks is the page of the instance-wide webhooks.
+	AdminPathSystemWebhooks = "/admin/system/webhooks"
 )
+
+// AdminPathTenantWebhooks returns the path of the webhook page of tenant
+// tid.
+func AdminPathTenantWebhooks(tid string) string {
+	return "/admin/tenants/" + tid + "/webhooks"
+}
 
 // AdminPathTenantAudit returns the path of the audit page of tenant tid.
 func AdminPathTenantAudit(tid string) string {

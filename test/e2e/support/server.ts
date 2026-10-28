@@ -157,6 +157,9 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     TT_CLAMAV_MAX_SCAN_BYTES: String(CLAMAV_MAX_SCAN_BYTES),
     // Tenant SMTP servers point at Mailpit on loopback, denied by default (SSRF protection).
     TT_SMTP_DENY_NETWORKS: '169.254.0.0/16',
+    // Webhook receivers of the e2e specs listen on 127.0.0.1 over plain HTTP.
+    TT_WEBHOOK_ALLOW_NETWORKS: '127.0.0.0/8',
+    TT_WEBHOOK_ALLOW_HTTP_NETWORKS: '127.0.0.0/8',
     TT_SYSTEM_SMTP_HOST: MAILPIT_SMTP_HOST,
     TT_SYSTEM_SMTP_PORT: String(MAILPIT_SMTP_PORT),
     TT_SYSTEM_SMTP_SECURITY: 'none',
