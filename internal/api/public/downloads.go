@@ -16,6 +16,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
+	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
@@ -43,6 +44,9 @@ type DownloadFile struct {
 // DownloadContent is the decrypted content of a file (*download.Content).
 type DownloadContent interface {
 	io.ReadSeeker
+	// Begin decides the response (download limit) once it is about to be
+	// answered 200 or 206, before its headers; get is false for HEAD.
+	Begin(get bool) error
 	// Delivered tells that the response was written without error.
 	Delivered()
 	// Close releases the file and records the ranges served.
@@ -51,6 +55,9 @@ type DownloadContent interface {
 
 // DownloadArchive is the ZIP archive of a transfer (*download.Archive).
 type DownloadArchive interface {
+	// Begin decides the response (download limit) before its headers; get
+	// is false for HEAD.
+	Begin(ctx context.Context, get bool) error
 	Size() int64
 	Write(ctx context.Context, w io.Writer) error
 	// Close releases the stream slot; it is idempotent.
@@ -136,20 +143,39 @@ func (s *Server) GetDownload(ctx context.Context, req gen.GetDownloadRequestObje
 	if err != nil {
 		return nil, downloadError(err)
 	}
-	return gen.GetDownload200JSONResponse(publicTransfer(req.LinkToken, v)), nil
+	return gen.GetDownload200JSONResponse(publicTransfer(req.LinkToken, v, downloadLanguage(ctx, t))), nil
 }
 
-// publicTransfer renders a view as the OpenAPI PublicTransfer. A locked
-// view only carries the sender, the expiry and the flags.
-func publicTransfer(token string, v download.View) gen.PublicTransfer {
+// downloadLanguage returns the language of the download page: the
+// Accept-Language of the request in ctx when supported, else the default
+// language of t.
+func downloadLanguage(ctx context.Context, t *tenant.Tenant) string {
+	accept := ""
+	if r, ok := requestOf(ctx); ok {
+		accept = r.Header.Get("Accept-Language")
+	}
+	return i18n.Negotiate(accept, t.DefaultLanguage)
+}
+
+// publicTransfer renders a view as the OpenAPI PublicTransfer, the label
+// of its confidentiality level in lang (else in English, else in any
+// language). A locked view only carries the sender, the expiry and the
+// flags, never the confidentiality level.
+func publicTransfer(token string, v download.View, lang string) gen.PublicTransfer {
 	out := gen.PublicTransfer{
 		SenderEmail: gen.Email(v.SenderEmail), ExpiresAt: v.ExpiresAt, PasswordProtected: v.PasswordProtected, Locked: v.Locked,
+		ConfidentialityLevel: downloadLevel(v.Confidentiality, lang),
 	}
 	if v.Locked {
+		out.ConfidentialityLevel = nil
 		return out
 	}
 	del, total := v.DeleteAfterFirstDownload, v.TotalBytes
 	out.Message, out.DeleteAfterFirstDownload, out.TotalBytes = optional(v.Message), &del, &total
+	if v.DownloadsRemaining != nil {
+		left := max(*v.DownloadsRemaining, 0)
+		out.DownloadsRemaining = &left
+	}
 	if v.ArchiveAvailable {
 		u := downloadPath + token + "/archive"
 		out.ArchiveUrl = &u
@@ -162,6 +188,27 @@ func publicTransfer(token string, v download.View) gen.PublicTransfer {
 		}
 	}
 	out.Files = &files
+	return out
+}
+
+// downloadLevel renders the confidentiality level of a download page, nil
+// without level.
+func downloadLevel(c *download.Confidentiality, lang string) *gen.ConfidentialityLevelRef {
+	if c == nil {
+		return nil
+	}
+	out := &gen.ConfidentialityLevelRef{Key: gen.ConfidentialityLevelKey(c.Key), Label: c.Label(lang, "en")}
+	if r := c.Rules; r != nil {
+		days := []gen.ExpiryDays{}
+		for _, d := range r.AllowedExpiryDays() {
+			days = append(days, gen.ExpiryDays(d))
+		}
+		out.Rules = &gen.ConfidentialityRules{
+			AllowedExpiryDays: days, ForceDeleteAfterFirstDownload: r.ForceDeleteAfterFirstDownload,
+			InternalRecipientsOnly: r.InternalRecipientsOnly, MaxDownloads: r.MaxDownloadsCap,
+			RequirePassword: r.RequirePassword, RequireRecipientVerification: r.RequireRecipientVerification,
+		}
+	}
 	return out
 }
 
@@ -248,6 +295,8 @@ func downloadError(err error) error {
 		return problem.New(problem.CodeNotFound)
 	case errors.Is(err, download.ErrGone):
 		return problem.New(problem.CodeTransferGone)
+	case errors.Is(err, download.ErrMaxDownloads):
+		return problem.New(problem.CodeMaxDownloadsReached)
 	case errors.Is(err, download.ErrDownloadLocked):
 		return problem.New(problem.CodeDownloadLocked)
 	default:
@@ -282,7 +331,10 @@ type fileResponse struct {
 // The strong ETag is the SHA-256 of the file, so that If-Range and
 // If-None-Match are safe. A request for several ranges gets the full file
 // (single ranges only); the request itself is never modified. An
-// unsatisfiable range gets a range-not-satisfiable Problem. The content is
+// unsatisfiable range gets a range-not-satisfiable Problem. Before a 200
+// or 206 is written, the content decides the response (Begin, the
+// download limit): a refusal replaces it with its Problem
+// (max-downloads-reached), nothing of the file being sent. The content is
 // credited as delivered only for a GET answered 200 or 206 whose response
 // was written and flushed without error; it is always closed.
 func (resp fileResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
@@ -298,8 +350,15 @@ func (resp fileResponse) VisitDownloadFileResponse(w http.ResponseWriter) error 
 		clone.Header.Del("Range")
 		r = &clone
 	}
-	ew := &errorWriter{ResponseWriter: w, instance: middleware.RequestID(r.Context())}
+	ew := &errorWriter{
+		ResponseWriter: w, instance: middleware.RequestID(r.Context()),
+		begin: func() error { return resp.file.Content.Begin(r.Method == http.MethodGet) },
+	}
 	http.ServeContent(ew, r, "", time.Time{}, resp.file.Content)
+	if ew.refused != nil {
+		_ = resp.file.Content.Close(resp.r.Context())
+		return downloadError(ew.refused)
+	}
 	err := ew.err
 	if err == nil && !ew.problem {
 		err = http.NewResponseController(ew).Flush()
@@ -315,16 +374,25 @@ func (resp fileResponse) VisitDownloadFileResponse(w http.ResponseWriter) error 
 
 // errorWriter records the status and the first write error of a file
 // response, and turns the plain-text 416 answer of http.ServeContent into
-// a range-not-satisfiable Problem (keeping its Content-Range).
+// a range-not-satisfiable Problem (keeping its Content-Range). Before a
+// 200 or 206, it calls begin: a refusal is kept in refused, nothing is
+// written, and the caller answers it.
 type errorWriter struct {
 	http.ResponseWriter
 	instance string
+	begin    func() error
 	status   int
 	err      error
-	// problem is set once the Problem replaced the answer: the text that
-	// http.ServeContent writes after it is dropped.
+	// refused is the refusal of begin.
+	refused error
+	// problem is set once the Problem replaced the answer, or the answer
+	// was refused: what http.ServeContent writes after it is dropped.
 	problem bool
 }
+
+// fileHeaders are the headers of a file answer, removed when it is
+// refused.
+var fileHeaders = []string{"Content-Length", "Content-Range", "Content-Disposition", "ETag", "Accept-Ranges", "Last-Modified"}
 
 // WriteHeader implements http.ResponseWriter.
 func (w *errorWriter) WriteHeader(code int) {
@@ -332,6 +400,15 @@ func (w *errorWriter) WriteHeader(code int) {
 		return // superfluous call, ignored as net/http does
 	}
 	w.status = code
+	if (code == http.StatusOK || code == http.StatusPartialContent) && w.begin != nil {
+		if err := w.begin(); err != nil {
+			w.refused, w.problem = err, true
+			for _, k := range fileHeaders {
+				w.Header().Del(k)
+			}
+			return
+		}
+	}
 	if code != http.StatusRequestedRangeNotSatisfiable {
 		w.ResponseWriter.WriteHeader(code)
 		return
@@ -368,13 +445,18 @@ type archiveResponse struct {
 }
 
 // VisitDownloadArchiveResponse implements gen.DownloadArchiveResponseObject.
-// A HEAD request gets the headers only. The archive is written through a
+// The archive first decides the response (Begin, the download limit): a
+// refusal is answered as its Problem (max-downloads-reached). A HEAD
+// request gets the headers only. The archive is written through a
 // writer that flushes the response as soon as its last byte is written,
 // so that the completion that Archive.Write records after it (first
 // download, deletion after the first download) never counts bytes still
 // buffered on the server. The stream slot is always released.
 func (resp archiveResponse) VisitDownloadArchiveResponse(w http.ResponseWriter) error {
 	defer resp.archive.Close()
+	if err := resp.archive.Begin(resp.r.Context(), resp.r.Method == http.MethodGet); err != nil {
+		return downloadError(err)
+	}
 	size := resp.archive.Size()
 	h := w.Header()
 	setAttachmentHeaders(h, "application/zip", attachment(archiveName))

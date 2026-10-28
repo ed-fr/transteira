@@ -47,6 +47,7 @@ func (fakeDownloads) PrepareArchive(context.Context, *tenant.Tenant, string, net
 
 type content struct{ *bytes.Reader }
 
+func (*content) Begin(bool) error            { return nil }
 func (*content) Delivered()                  {}
 func (*content) Close(context.Context) error { return nil }
 
@@ -89,7 +90,8 @@ type stalledContent struct {
 	delivered atomic.Bool
 }
 
-func (c *stalledContent) Delivered() { c.delivered.Store(true) }
+func (*stalledContent) Begin(bool) error { return nil }
+func (c *stalledContent) Delivered()     { c.delivered.Store(true) }
 func (c *stalledContent) Close(context.Context) error {
 	close(c.closed)
 	return nil

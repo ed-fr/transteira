@@ -37,6 +37,19 @@ func TestViewOf(t *testing.T) {
 		!v.ExpiresAt.Equal(exp) || !v.PasswordProtected || len(v.Recipients) != 1 || len(v.Files) != len(statuses) {
 		t.Fatalf("view %+v", v)
 	}
+	if v.ConfidentialityLabels != nil {
+		t.Errorf("labels without level = %v", v.ConfidentialityLabels)
+	}
+	d.ConfidentialityLevel = "secret"
+	d.ConfidentialityLabel = map[string]string{"fr": "Secret", "en": "Secret EN"}
+	lv := ViewOf(d)
+	if lv.ConfidentialityLabels["en"] != "Secret EN" || len(lv.ConfidentialityLabels) != 2 {
+		t.Errorf("labels = %v", lv.ConfidentialityLabels)
+	}
+	lv.ConfidentialityLabels["en"] = "changed"
+	if d.ConfidentialityLabel["en"] != "Secret EN" {
+		t.Error("the view shares the labels of the transfer")
+	}
 	for i, s := range statuses {
 		f := v.Files[i]
 		if f.Scan != want[s] || f.Name != string(s) || f.Size != 3 || f.SHA256 != "ab" {

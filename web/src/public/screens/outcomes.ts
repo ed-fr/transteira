@@ -32,6 +32,17 @@ export function loadFailure(err: unknown): LoadFailure {
   return 'error';
 }
 
+/** Page state after a failed GET of a download link: also the maximum number of downloads. */
+export type DownloadLoadFailure = LoadFailure | 'max-downloads';
+
+/** Classifies the error of a GET of a download link: 410 max-downloads-reached is its own state. */
+export function downloadLoadFailure(err: unknown): DownloadLoadFailure {
+  if (err instanceof ApiProblem && err.status === 410 && err.code === 'max-downloads-reached') {
+    return 'max-downloads';
+  }
+  return loadFailure(err);
+}
+
 /** Outcome of a failed POST /downloads/{token}/unlock. */
 export type UnlockFailure =
   | { kind: 'wrong'; attemptsRemaining: number | undefined }
@@ -39,6 +50,7 @@ export type UnlockFailure =
   | { kind: 'required' }
   | { kind: 'not-found' }
   | { kind: 'gone' }
+  | { kind: 'max-downloads' }
   | { kind: 'error' };
 
 /** Classifies the error of an unlock attempt. */
@@ -54,7 +66,7 @@ export function unlockFailure(err: unknown): UnlockFailure {
     case 404:
       return { kind: 'not-found' };
     case 410:
-      return { kind: 'gone' };
+      return err.code === 'max-downloads-reached' ? { kind: 'max-downloads' } : { kind: 'gone' };
     case 429:
       return { kind: 'locked', retryAfterSeconds: err.retryAfterSeconds };
     default:
@@ -140,6 +152,10 @@ export interface DownloadView {
   /** At least one file was not analysed by the antivirus. */
   hasUnscanned: boolean;
   deleteAfterFirstDownload: boolean;
+  /** Label of the confidentiality level, when the transfer has one. */
+  levelLabel: string | undefined;
+  /** Downloads left before the maximum is reached, when the transfer has a limit. */
+  downloadsRemaining: number | undefined;
 }
 
 /** Builds the download view of a transfer (every API URL goes through safeApiHref). */
@@ -159,6 +175,8 @@ export function downloadView(transfer: PublicTransfer): DownloadView {
     archiveHref: files.length > 0 ? safeApiHref(transfer.archiveUrl) : undefined,
     hasUnscanned: files.some((f) => isNotScanned(f.scanStatus)),
     deleteAfterFirstDownload: transfer.deleteAfterFirstDownload === true,
+    levelLabel: transfer.confidentialityLevel?.label,
+    downloadsRemaining: transfer.downloadsRemaining,
   };
 }
 

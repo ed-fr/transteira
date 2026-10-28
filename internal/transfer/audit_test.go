@@ -171,11 +171,11 @@ func TestAuditEvents(t *testing.T) {
 			}
 		}
 		wantEvent(t, events[0], audit.ActionTransferCreated, alice, internalIP, d.ID,
-			map[string]any{"fileCount": 2, "totalBytes": int64(300), "origin": "internal"})
+			map[string]any{"fileCount": 2, "totalBytes": int64(300), "origin": "internal", "confidentialityLevel": "internal"})
 		wantEvent(t, events[1], audit.ActionTransferFinalized, alice, internalIP, d.ID,
 			map[string]any{"fileCount": 2, "totalBytes": int64(300)})
 		wantEvent(t, events[2], audit.ActionTransferCreated, bob, ext.ClientIP, x.ID,
-			map[string]any{"fileCount": 2, "totalBytes": int64(300), "origin": "invitation"})
+			map[string]any{"fileCount": 2, "totalBytes": int64(300), "origin": "invitation", "confidentialityLevel": "internal"})
 		wantEvent(t, events[3], audit.ActionTransferDeleted, bob, ext.ClientIP, x.ID,
 			map[string]any{"by": "sender"})
 

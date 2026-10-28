@@ -49,6 +49,11 @@ const (
 	ActionTenantTemplateUpdated audit.Action = "tenant.template_updated"
 	ActionTenantTemplateReset   audit.Action = "tenant.template_reset"
 	ActionTenantLegalUpdated    audit.Action = "tenant.legal_updated"
+
+	// ActionTenantConfidentialityUpdated records the replacement of the confidentiality levels.
+	ActionTenantConfidentialityUpdated audit.Action = "tenant.confidentiality_updated"
+	// ActionTenantRecipientRulesUpdated records the replacement of the recipient domain rules.
+	ActionTenantRecipientRulesUpdated audit.Action = "tenant.recipient_rules_updated"
 )
 
 // TenantEraser erases every piece of data of a tenant being deleted

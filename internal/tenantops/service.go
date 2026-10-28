@@ -157,14 +157,19 @@ func New(db *store.DB, opts Options) (*Service, error) {
 
 // readable checks that p may read tenant tid, which must be active.
 func (s *Service) readable(ctx context.Context, p adminauth.Principal, tid tenant.ID) error {
+	_, err := s.readableTenant(ctx, p, tid)
+	return err
+}
+
+// readableTenant is readable returning the tenant, which must be active.
+func (s *Service) readableTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID) (*tenant.Tenant, error) {
 	if err := adminauth.RequireAuthenticated(p); err != nil {
-		return err
+		return nil, err
 	}
 	if err := adminauth.RequireTenantAccess(p.Admin, tid); err != nil {
-		return err
+		return nil, err
 	}
-	_, err := s.activeTenant(ctx, tid)
-	return err
+	return s.activeTenant(ctx, tid)
 }
 
 // writable checks that p may change tenant tid and returns the tenant,

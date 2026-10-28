@@ -110,7 +110,7 @@ type senderTransferJSON struct {
 // Members allowed by the SenderTransfer and SenderFile schemas, and the
 // required ones.
 var (
-	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files"}
+	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel"}
 	transferRequiredMembers = []string{"id", "status", "senderEmail", "recipients", "expiryDays", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "files"}
 	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset"}
 	fileRequiredMembers     = []string{"id", "name", "size", "scanStatus"}

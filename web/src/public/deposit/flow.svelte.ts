@@ -39,13 +39,26 @@ import {
 } from '../../shared/upload/resume-store';
 import {
   addFiles,
-  defaultExpiry,
+  defaultLevel,
+  selectableLevels,
+  effectiveDeleteAfterFirst,
+  effectiveExpiryDays,
+  invalidFields,
   isEmail,
+  keepExpiry,
+  keepMaxDownloads,
+  levelByKey,
+  mapRecipientDomainErrors,
+  mapRuleErrors,
   mapServerErrors,
+  parseMaxDownloads,
   parseRecipients,
   validateForm,
+  validatePolicy,
   type FormErrors,
+  type LevelRules,
   type Message,
+  type PublicLevel,
 } from './form';
 
 /** Public tenant description (GET /tenant). */
@@ -97,6 +110,10 @@ export interface DepositForm {
   expiryDays: number | undefined;
   password: string;
   deleteAfterFirstDownload: boolean;
+  /** Maximum number of downloads as typed; empty for no limit. */
+  maxDownloadsText: string;
+  /** Key of the chosen confidentiality level; undefined when the tenant has none. */
+  confidentialityLevel: string | undefined;
   files: DepositFile[];
 }
 
@@ -191,13 +208,16 @@ function isProblem(err: unknown, code?: string): err is ApiProblem {
   return err instanceof ApiProblem && (code === undefined || err.code === code);
 }
 
-function emptyForm(expiryDays: readonly number[] = []): DepositForm {
+function emptyForm(expiryDays: readonly number[] = [], levels: readonly PublicLevel[] = []): DepositForm {
+  const level = defaultLevel(levels);
   return {
     recipientsText: '',
     message: '',
-    expiryDays: defaultExpiry(expiryDays),
+    expiryDays: keepExpiry(undefined, effectiveExpiryDays(expiryDays, level?.rules)),
     password: '',
     deleteAfterFirstDownload: false,
+    maxDownloadsText: '',
+    confidentialityLevel: level?.key,
     files: [],
   };
 }
@@ -271,6 +291,8 @@ export class DepositFlow {
 
   constructor(tenant: PublicTenant, invitation: InvitationContext | undefined, deps: DepositFlowDeps) {
     this.tenant = tenant;
+    this.form.confidentialityLevel = defaultLevel(this.levels)?.key;
+    this.#syncLevel();
     this.invitation = invitation;
     this.#deps = deps;
     this.#key = new IdempotencyKey(deps.newKey);
@@ -296,6 +318,56 @@ export class DepositFlow {
   /** The session may issue invitations (internal depositor). */
   get canInvite(): boolean {
     return this.session?.kind === 'internal' && this.session.canInvite;
+  }
+
+  /** Confidentiality levels the sender can use, in display order (see selectableLevels). */
+  get levels(): readonly PublicLevel[] {
+    return selectableLevels(
+      this.tenant.confidentialityLevels ?? [],
+      this.limits.expiryDays,
+      this.tenant.features?.recipientVerification === true,
+    );
+  }
+
+  /** The tenant has levels but none can be used: no transfer can be sent. */
+  get noUsableLevel(): boolean {
+    return (this.tenant.confidentialityLevels ?? []).length > 0 && this.levels.length === 0;
+  }
+
+  /** The chosen confidentiality level, undefined when the tenant has none. */
+  get level(): PublicLevel | undefined {
+    return levelByKey(this.levels, this.form.confidentialityLevel) ?? defaultLevel(this.levels);
+  }
+
+  /** Rules of the chosen level; they apply even when the selector is hidden. */
+  get rules(): LevelRules | undefined {
+    return this.level?.rules;
+  }
+
+  /** The "maximum number of downloads" option is offered to senders. */
+  get maxDownloadsOffered(): boolean {
+    return this.tenant.features?.maxDownloads === true;
+  }
+
+  /** Durations offered: those of the limits that the chosen level allows. */
+  get expiryOptions(): number[] {
+    return effectiveExpiryDays(this.limits.expiryDays, this.rules);
+  }
+
+  /** Delete-after-first-download as sent: forced by the level or chosen by the sender. */
+  get deleteAfterFirstEffective(): boolean {
+    return effectiveDeleteAfterFirst(this.form.deleteAfterFirstDownload, this.rules);
+  }
+
+  /** Chooses a confidentiality level; the duration and the download limit stay valid. */
+  setLevel(key: string): void {
+    this.form.confidentialityLevel = key;
+    this.#syncLevel();
+  }
+
+  #syncLevel(): void {
+    this.form.expiryDays = keepExpiry(this.form.expiryDays, this.expiryOptions);
+    this.form.maxDownloadsText = keepMaxDownloads(this.form.maxDownloadsText, this.rules);
   }
 
   /** Limits of the session (or of the tenant before identification). */
@@ -495,7 +567,10 @@ export class DepositFlow {
     const session = this.session;
     if (this.busy || session === undefined) return;
     const needRecipients = session.kind !== 'external';
-    const errors = validateForm(this.form, session.limits, needRecipients);
+    const errors = {
+      ...validateForm(this.form, { ...session.limits, expiryDays: this.expiryOptions }, needRecipients),
+      ...validatePolicy(this.form.password, this.form.maxDownloadsText, this.rules, this.maxDownloadsOffered),
+    };
     this.stepError = undefined;
     this.notice = undefined;
     if (Object.keys(errors).length > 0) {
@@ -507,7 +582,7 @@ export class DepositFlow {
     const files = [...this.form.files];
     const body: TransferCreate = {
       expiryDays: this.form.expiryDays as TransferCreate['expiryDays'],
-      deleteAfterFirstDownload: this.form.deleteAfterFirstDownload,
+      deleteAfterFirstDownload: this.deleteAfterFirstEffective,
       files: files.map((f) =>
         f.type === '' ? { name: f.name, size: f.size } : { name: f.name, size: f.size, mediaType: f.type },
       ),
@@ -515,6 +590,11 @@ export class DepositFlow {
     if (needRecipients) body.recipients = parseRecipients(this.form.recipientsText);
     if (this.form.message.trim() !== '') body.message = this.form.message;
     if (this.form.password !== '') body.password = this.form.password;
+    if (this.maxDownloadsOffered) {
+      const parsed = parseMaxDownloads(this.form.maxDownloadsText);
+      if (parsed.ok && parsed.value !== undefined) body.maxDownloads = parsed.value;
+    }
+    if (this.level !== undefined) body.confidentialityLevel = this.level.key;
     const language = this.#deps.language();
     if ((languageValues as readonly string[]).includes(language)) {
       body.language = language as TransferCreate['language'];
@@ -636,7 +716,7 @@ export class DepositFlow {
     this.stepError = undefined;
     this.notice = undefined;
     this.formErrors = {};
-    this.form = emptyForm(this.limits.expiryDays);
+    this.form = emptyForm(this.limits.expiryDays, this.levels);
     this.#renewKey();
     this.step = this.session === undefined ? 'email' : 'form';
   }
@@ -739,12 +819,8 @@ export class DepositFlow {
     this.stepError = undefined;
     this.attemptsRemaining = undefined;
     this.retryAt = undefined;
-    if (
-      this.form.expiryDays === undefined ||
-      !(session.limits.expiryDays as readonly number[]).includes(this.form.expiryDays)
-    ) {
-      this.form.expiryDays = defaultExpiry(session.limits.expiryDays);
-    }
+    this.form.confidentialityLevel = this.level?.key;
+    this.#syncLevel();
     const record = this.#deps.resumeStore.load();
     if (record !== undefined) {
       try {
@@ -837,6 +913,10 @@ export class DepositFlow {
     if (isProblem(err, 'validation-failed')) {
       this.formErrors = mapServerErrors(err.errors, (key) => this.#deps.tr.has(key));
       this.formRefusals++;
+    } else if (isProblem(err, 'confidentiality-rule-violated')) {
+      this.#ruleErrors(err, mapRuleErrors(err.errors));
+    } else if (isProblem(err, 'recipient-domain-refused')) {
+      this.#ruleErrors(err, mapRecipientDomainErrors(err.errors));
     } else if (isProblem(err, 'transfer-too-large')) {
       this.formErrors = { files: { key: 'deposit.form.files.tooLarge' } };
       this.formRefusals++;
@@ -845,6 +925,16 @@ export class DepositFlow {
     } else {
       this.stepError = { cause: err };
     }
+  }
+
+  /** Shows rule errors next to their fields; the general message when none matches a field. */
+  #ruleErrors(err: ApiProblem, mapped: FormErrors): void {
+    if (invalidFields(mapped).length === 0) {
+      this.stepError = { cause: err };
+      return;
+    }
+    this.formErrors = mapped;
+    this.formRefusals++;
   }
 
   #clearFileErrors(): void {

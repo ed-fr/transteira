@@ -12,7 +12,9 @@ Open the link in the email, or scan the QR code with your phone's camera. The pa
 - **Sent by**: the email address of the person who sent you the files;
 - **Available until**: the date and time after which the files are deleted;
 - **Total**: the number of files and their total size;
-- **Message from the sender**: the message written by the sender, if there is one.
+- **Message from the sender**: the message written by the sender, if there is one;
+- **Confidentiality**: the confidentiality level chosen by the sender, if there is one;
+- **Downloads left**: when the sender has limited the number of downloads, the number that remain.
 
 ![The download page: sender, expiry date, total, message from the sender, the button to download all files as a ZIP archive, and the list of files with their size, SHA-256 fingerprint and Download button](../screenshots/en/download.png)
 
@@ -93,6 +95,8 @@ These files are delivered anyway, because they may be perfectly legitimate. Befo
 - if in doubt, ask the sender by another means (phone, separate email) whether they really sent them;
 - analyse the file with your own antivirus before opening it.
 
+> **Note** If the sender has limited the number of downloads, every start of a download counts, whoever downloads. When the page shows **Maximum number of downloads reached**, the transfer can no longer be downloaded: ask the sender to send the files again.
+
 <!-- topic: download-problems -->
 ## Link not working
 
@@ -100,6 +104,7 @@ This section explains the messages you may see instead of the files, and what to
 
 - **Transfer not found**: the link is incomplete or has been altered. Copy the whole link from the email, or click it directly in the email.
 - **Transfer no longer available**: the transfer has expired, has been deleted by an administrator, or was deleted after its first download. Ask the sender to send the files again.
+- **Maximum number of downloads reached**: the sender allowed a limited number of downloads and it has been used up, by you or by the other recipients. Ask the sender to send the files again.
 - The page shows **Maintenance in progress**: only new transfers are suspended. Downloads remain available, so you can continue normally.
 
 To answer the sender, reply by email: TransTeira does not carry replies.

@@ -114,35 +114,35 @@ func TestCreateValidation(t *testing.T) {
 		edit func(r *CreateRequest)
 		want []FieldError
 	}{
-		{"idempotency key", "bad key", func(*CreateRequest) {}, []FieldError{{FieldIdempotencyKey, CodeInvalidFormat}}},
-		{"idempotency key long", strings.Repeat("k", 65), func(*CreateRequest) {}, []FieldError{{FieldIdempotencyKey, CodeInvalidFormat}}},
-		{"sender email", "", func(r *CreateRequest) { r.SenderEmail = alice }, []FieldError{{FieldSenderEmail, CodeNotAllowed}}},
-		{"no recipients", "", func(r *CreateRequest) { r.Recipients = nil }, []FieldError{{FieldRecipients, CodeRequired}}},
+		{"idempotency key", "bad key", func(*CreateRequest) {}, []FieldError{{Pointer: FieldIdempotencyKey, Code: CodeInvalidFormat}}},
+		{"idempotency key long", strings.Repeat("k", 65), func(*CreateRequest) {}, []FieldError{{Pointer: FieldIdempotencyKey, Code: CodeInvalidFormat}}},
+		{"sender email", "", func(r *CreateRequest) { r.SenderEmail = alice }, []FieldError{{Pointer: FieldSenderEmail, Code: CodeNotAllowed}}},
+		{"no recipients", "", func(r *CreateRequest) { r.Recipients = nil }, []FieldError{{Pointer: FieldRecipients, Code: CodeRequired}}},
 		{"too many recipients", "", func(r *CreateRequest) {
 			r.Recipients = []string{"a@x.example.com", "b@x.example.com", "c@x.example.com", "d@x.example.com"}
-		}, []FieldError{{FieldRecipients, CodeTooMany}}},
+		}, []FieldError{{Pointer: FieldRecipients, Code: CodeTooMany}}},
 		{"bad recipients", "", func(r *CreateRequest) {
 			r.Recipients = []string{"Dave <dave@customer.example.net>", dave, "DAVE@customer.example.net"}
-		}, []FieldError{{"/recipients/0", CodeInvalidEmail}, {"/recipients/2", CodeDuplicate}}},
+		}, []FieldError{{Pointer: "/recipients/0", Code: CodeInvalidEmail}, {Pointer: "/recipients/2", Code: CodeDuplicate}}},
 		{
 			"recipient ip literal", "", func(r *CreateRequest) { r.Recipients = []string{"x@sub.123"} },
-			[]FieldError{{"/recipients/0", CodeInvalidEmail}},
+			[]FieldError{{Pointer: "/recipients/0", Code: CodeInvalidEmail}},
 		},
-		{"message utf8", "", func(r *CreateRequest) { r.Message = "\xff" }, []FieldError{{FieldMessage, CodeInvalidFormat}}},
+		{"message utf8", "", func(r *CreateRequest) { r.Message = "\xff" }, []FieldError{{Pointer: FieldMessage, Code: CodeInvalidFormat}}},
 		{
 			"message long", "", func(r *CreateRequest) { r.Message = strings.Repeat("\u00e9", MaxMessageRunes+1) },
-			[]FieldError{{FieldMessage, CodeTooLong}},
+			[]FieldError{{Pointer: FieldMessage, Code: CodeTooLong}},
 		},
-		{"expiry", "", func(r *CreateRequest) { r.ExpiryDays = 2 }, []FieldError{{FieldExpiryDays, CodeNotAllowed}}},
-		{"password empty", "", func(r *CreateRequest) { r.Password = str("") }, []FieldError{{FieldPassword, CodeRequired}}},
+		{"expiry", "", func(r *CreateRequest) { r.ExpiryDays = 2 }, []FieldError{{Pointer: FieldExpiryDays, Code: CodeNotAllowed}}},
+		{"password empty", "", func(r *CreateRequest) { r.Password = str("") }, []FieldError{{Pointer: FieldPassword, Code: CodeRequired}}},
 		{
 			"password long", "", func(r *CreateRequest) { r.Password = str(strings.Repeat("p", MaxPasswordRunes+1)) },
-			[]FieldError{{FieldPassword, CodeTooLong}},
+			[]FieldError{{Pointer: FieldPassword, Code: CodeTooLong}},
 		},
-		{"password utf8", "", func(r *CreateRequest) { r.Password = str("pw\xff") }, []FieldError{{FieldPassword, CodeInvalidFormat}}},
-		{"language", "", func(r *CreateRequest) { r.Language = "de" }, []FieldError{{FieldLanguage, CodeNotAllowed}}},
-		{"no files", "", func(r *CreateRequest) { r.Files = nil }, []FieldError{{FieldFiles, CodeRequired}}},
-		{"too many files", "", func(r *CreateRequest) { r.Files = tooManyFiles }, []FieldError{{FieldFiles, CodeTooMany}}},
+		{"password utf8", "", func(r *CreateRequest) { r.Password = str("pw\xff") }, []FieldError{{Pointer: FieldPassword, Code: CodeInvalidFormat}}},
+		{"language", "", func(r *CreateRequest) { r.Language = "de" }, []FieldError{{Pointer: FieldLanguage, Code: CodeNotAllowed}}},
+		{"no files", "", func(r *CreateRequest) { r.Files = nil }, []FieldError{{Pointer: FieldFiles, Code: CodeRequired}}},
+		{"too many files", "", func(r *CreateRequest) { r.Files = tooManyFiles }, []FieldError{{Pointer: FieldFiles, Code: CodeTooMany}}},
 		{"file fields", "", func(r *CreateRequest) {
 			r.Files = []FileDeclaration{
 				{Name: "../etc", Size: -1, MediaType: "text/plain\r\nX: y", ExpectedSHA256: "abc"},
@@ -150,14 +150,14 @@ func TestCreateValidation(t *testing.T) {
 				{Name: "CON.txt", MediaType: "\xff"},
 			}
 		}, []FieldError{
-			{"/files/0/name", CodeInvalidFileName},
-			{"/files/0/size", CodeInvalidFormat},
-			{"/files/0/mediaType", CodeInvalidFormat},
-			{"/files/0/expectedSha256", CodeInvalidFormat},
-			{"/files/1/mediaType", CodeInvalidFormat},
-			{"/files/1/expectedSha256", CodeInvalidFormat},
-			{"/files/2/name", CodeInvalidFileName},
-			{"/files/2/mediaType", CodeInvalidFormat},
+			{Pointer: "/files/0/name", Code: CodeInvalidFileName},
+			{Pointer: "/files/0/size", Code: CodeInvalidFormat},
+			{Pointer: "/files/0/mediaType", Code: CodeInvalidFormat},
+			{Pointer: "/files/0/expectedSha256", Code: CodeInvalidFormat},
+			{Pointer: "/files/1/mediaType", Code: CodeInvalidFormat},
+			{Pointer: "/files/1/expectedSha256", Code: CodeInvalidFormat},
+			{Pointer: "/files/2/name", Code: CodeInvalidFileName},
+			{Pointer: "/files/2/mediaType", Code: CodeInvalidFormat},
 		}},
 	}
 	for _, tc := range tests {

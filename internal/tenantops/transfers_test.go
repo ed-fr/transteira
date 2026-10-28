@@ -266,8 +266,9 @@ func TestDeleteBusy(t *testing.T) {
 			t.Errorf("audit events = %d, want 1", n)
 		}
 
-		// A canceled request stops waiting.
-		cctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		// A canceled request stops waiting. The deadline leaves room for the
+		// first attempt on a loaded machine; the hour-long delay is what it cuts.
+		cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 		ev.eraser.calls, ev.svc.busyDelay = nil, time.Hour
 		wantErr(t, "canceled", ev.svc.DeleteTransfer(cctx, ev.adminA, ev.a.ID, other.id, "", clientIP), context.DeadlineExceeded)
@@ -490,9 +491,37 @@ func TestTransferOrigin(t *testing.T) {
 		{store.Transfer{SenderKind: store.DepositorExternal, InvitationID: id.New(id.Invitation)}, OriginExternal, ""},
 		{store.Transfer{SenderKind: store.DepositorInternal, APITokenID: tokID}, OriginAPI, tokID},
 	} {
-		got := transferOf(c.tr, nil, 0)
+		got := transferOf(c.tr, nil, 0, "en")
 		if got.Origin != c.want || got.APITokenID != c.token {
 			t.Errorf("transferOf(%+v) = origin %q token %q, want %q %q", c.tr, got.Origin, got.APITokenID, c.want, c.token)
 		}
+	}
+}
+
+// TestTransferLevel exposes the confidentiality snapshot of a transfer,
+// with its label in the transfer language, else the tenant default.
+func TestTransferLevel(t *testing.T) {
+	t.Parallel()
+	maxDl := 4
+	rules := &store.ConfidentialityRules{ExpiryDaysMask: store.ExpiryMaskAll, RequirePassword: true}
+	tr := store.Transfer{
+		MaxDownloads: &maxDl, ConfidentialityLevel: "secret", Rules: rules,
+		ConfidentialityLabel: map[string]string{"fr": "Secret FR", "en": "Secret EN"},
+	}
+	got := transferOf(tr, nil, 0, "fr")
+	if got.ConfidentialityLevel != "secret" || got.ConfidentialityLabel != "Secret FR" || got.Rules != rules ||
+		got.MaxDownloads == nil || *got.MaxDownloads != 4 {
+		t.Errorf("transfer = %+v", got)
+	}
+	tr.Language = "en"
+	if got := transferOf(tr, nil, 0, "fr"); got.ConfidentialityLabel != "Secret EN" {
+		t.Errorf("label in the transfer language = %q", got.ConfidentialityLabel)
+	}
+	if got := transferOf(store.Transfer{}, nil, 0, "fr"); got.ConfidentialityLevel != "" || got.ConfidentialityLabel != "" || got.Rules != nil {
+		t.Errorf("without level = %+v", got)
+	}
+	tr.ConfidentialityLabel, tr.Language = map[string]string{"de": "Intern", "it": "Interno"}, ""
+	if got := transferOf(tr, nil, 0, "fr"); got.ConfidentialityLabel != "Intern" {
+		t.Errorf("label in another language = %q", got.ConfidentialityLabel)
 	}
 }

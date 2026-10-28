@@ -63,7 +63,8 @@ Click **Create the entity**. The other settings are configured afterwards, in th
 3. [Branding](topic:tenant-branding): logo, colors and background image.
 4. [Legal information](topic:tenant-legal): legal notice and privacy policy.
 5. [Email templates](topic:tenant-templates): optional, the default templates work as they are.
-6. Attach a delegated administrator to the entity, see [Creating a delegated administrator](topic:admin-create).
+6. [Recipient domains](topic:tenant-recipient-rules) and [Confidentiality levels](topic:tenant-confidentiality): optional; by default, any recipient domain is allowed and the entity has default confidentiality levels. Delegated administrators can adjust them.
+7. Attach a delegated administrator to the entity, see [Creating a delegated administrator](topic:admin-create).
 
 <!-- topic: tenant-general-super -->
 ### Settings reserved to the super administrator

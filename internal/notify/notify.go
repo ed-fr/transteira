@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"strings"
 	"time"
@@ -133,6 +134,11 @@ type TransferView struct {
 	// Files lists every file of the transfer, infected and withheld ones
 	// included.
 	Files []FileView
+	// ConfidentialityLabels are the labels, by language, of the
+	// confidentiality level snapshotted on the transfer; nil without level.
+	// The notification and confirmation mails show the label in their
+	// language.
+	ConfidentialityLabels map[string]string
 }
 
 // Vault unseals the wrapped secrets of a tenant. *masterkey.Vault
@@ -289,6 +295,7 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 	data := mail.TransferNotificationData{
 		TenantName: t.Name, SenderEmail: v.sender, Message: v.message, Link: link,
 		Files: v.files, ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, QR: true,
+		ConfidentialityLabel: n.levelLabel(t, tr),
 	}
 	msg, err := n.render(ctx, t, tr, mail.TemplateTransferNotification, data)
 	if err != nil {
@@ -325,6 +332,7 @@ func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr 
 	data := mail.TransferConfirmationData{
 		TenantName: t.Name, Link: link, Recipients: recipients, Files: v.files,
 		ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, Withheld: withheldFiles(tr.Files),
+		ConfidentialityLabel: n.levelLabel(t, tr),
 	}
 	return n.senderJob(ctx, t, tr, v.sender, mail.TemplateTransferConfirmation, data)
 }
@@ -485,6 +493,19 @@ func (*Notifier) language(t *tenant.Tenant, tr TransferView) string {
 		return tr.Language
 	}
 	return t.DefaultLanguage
+}
+
+// levelLabel returns the label of the confidentiality level of tr in the
+// language of its mails (see language), else in the default language of
+// the templates, else "" (no level, or no label in either language: the
+// mail then shows no level rather than a label in another language). The
+// label is reduced to one line of at most maxNameRunes characters.
+func (n *Notifier) levelLabel(t *tenant.Tenant, tr TransferView) string {
+	l, ok := tr.ConfidentialityLabels[n.language(t, tr)]
+	if !ok {
+		l = tr.ConfidentialityLabels[i18n.Default]
+	}
+	return oneLine(l, maxNameRunes)
 }
 
 // settings loads the SMTP settings of t and unseals their password, wiping
@@ -652,6 +673,9 @@ func ViewOf(d store.TransferDetails) TransferView {
 	v := TransferView{
 		ID: d.ID, Language: d.Language, SenderEmail: d.SenderEmail, Recipients: d.Recipients,
 		Message: d.Message, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
+	}
+	if d.ConfidentialityLevel != "" {
+		v.ConfidentialityLabels = maps.Clone(d.ConfidentialityLabel)
 	}
 	for _, f := range d.Files {
 		fv := FileView{Name: f.Name, Size: f.Size, SHA256: f.SHA256}

@@ -62,7 +62,7 @@ func checkPassword(pw string) error {
 // A locked transfer or IP costs no password hashing.
 //
 // It returns ErrPasswordRequired for an empty password, ErrInvalid for a
-// malformed one, ErrNotFound and ErrGone
+// malformed one, ErrNotFound, ErrGone and ErrMaxDownloads
 // as Resolve does, ErrNoClientIP for an invalid clientIP, a *LockedError
 // (ErrLocked) while locked or when this wrong password sets the lock, and
 // a *WrongPasswordError (ErrWrongPassword) for a wrong password while
@@ -72,7 +72,7 @@ func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string,
 	if err := checkPassword(password); err != nil {
 		return "", err
 	}
-	a, err := s.resolve(ctx, t, rawToken, grantCookie)
+	a, err := s.resolve(ctx, t, rawToken, grantCookie, true)
 	if err != nil {
 		return "", err
 	}

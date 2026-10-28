@@ -67,6 +67,8 @@ export const TENANT_CONFIG_SECTIONS = [
   'general',
   'branding',
   'network',
+  'recipientRules',
+  'confidentiality',
   'smtp',
   'templates',
   'legal',
@@ -122,9 +124,14 @@ export interface TenantLinkGroup {
   links: TenantLink[];
 }
 
+/** Path segment of the sections whose segment differs from their name. */
+const TENANT_SEGMENTS: Partial<Record<TenantSection, string>> = {
+  recipientRules: 'recipient-rules',
+};
+
 /** Application path of a section of a tenant (the id is percent-encoded). */
 export function tenantPath(tenantId: string, section: TenantSection): string {
-  return `/tenants/${encodeURIComponent(tenantId)}/${section}`;
+  return `/tenants/${encodeURIComponent(tenantId)}/${TENANT_SEGMENTS[section] ?? section}`;
 }
 
 /** Group of a section. */

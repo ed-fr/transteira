@@ -163,6 +163,24 @@ func TestCreateTransfer(t *testing.T) {
 	if f.req.Recipients != nil || f.req.Password != nil || f.key != "" || f.sender.InvitationID != "" || f.sender.Kind != deposit.KindInternal {
 		t.Errorf("minimal request = %+v, sender %+v", f.req, f.sender)
 	}
+	if f.req.MaxDownloads != nil || f.req.ConfidentialityLevel != "" || f.req.RecipientVerification {
+		t.Errorf("minimal options = %+v", f.req)
+	}
+
+	// The options of version 1.1.
+	maxDl, level, verif := 3, gen.ConfidentialityLevelKey("confidential"), true
+	f = &fakeTransfers{details: uploadingDetails()}
+	if _, err := NewServer(WithTransfers(f)).CreateTransfer(depositCtx(t, &internal), gen.CreateTransferRequestObject{
+		Body: &gen.TransferCreate{
+			ExpiryDays: 1, Files: []gen.FileDeclaration{{Name: "a", Size: 1}},
+			MaxDownloads: &maxDl, ConfidentialityLevel: &level, RecipientVerification: &verif,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.req.MaxDownloads == nil || *f.req.MaxDownloads != 3 || f.req.ConfidentialityLevel != "confidential" || !f.req.RecipientVerification {
+		t.Errorf("options = %+v", f.req)
+	}
 
 	// No body.
 	_, err = NewServer(WithTransfers(&fakeTransfers{})).CreateTransfer(depositCtx(t, &internal), gen.CreateTransferRequestObject{})
@@ -204,6 +222,31 @@ func TestTransferBody(t *testing.T) {
 		b.DownloadUrl == nil || *b.DownloadUrl != d.DownloadURL || b.Files[0].ScanSignature == nil ||
 		*b.Files[0].ScanSignature != "Eicar-Test-Signature" || b.Files[0].ScanStatus != "infected" || b.Files[1].ScanSignature != nil {
 		t.Errorf("finalized body = %+v", b)
+	}
+}
+
+func TestTransferBodyLevel(t *testing.T) {
+	t.Parallel()
+	b := transferBody(uploadingDetails())
+	if b.ConfidentialityLevel != nil || b.MaxDownloads != nil || b.RecipientVerification == nil || *b.RecipientVerification {
+		t.Errorf("without level = %+v", b)
+	}
+	d := uploadingDetails()
+	maxDl, maxCap := 2, 5
+	d.MaxDownloads, d.ConfidentialityLevel, d.ConfidentialityLabel = &maxDl, "secret", "Secret"
+	b = transferBody(d)
+	if b.ConfidentialityLevel == nil || b.ConfidentialityLevel.Key != "secret" || b.ConfidentialityLevel.Label != "Secret" ||
+		b.ConfidentialityLevel.Rules != nil || b.MaxDownloads == nil || *b.MaxDownloads != 2 {
+		t.Errorf("level without rules = %+v", b.ConfidentialityLevel)
+	}
+	d.Rules = &store.ConfidentialityRules{
+		ExpiryDaysMask: store.ExpiryMask1Day | store.ExpiryMask30Days, MaxDownloadsCap: &maxCap, RequirePassword: true,
+		RequireRecipientVerification: true, InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true,
+	}
+	r := transferBody(d).ConfidentialityLevel.Rules
+	if r == nil || !slices.Equal(r.AllowedExpiryDays, []gen.ExpiryDays{1, 30}) || r.MaxDownloads == nil || *r.MaxDownloads != 5 ||
+		!r.RequirePassword || !r.RequireRecipientVerification || !r.InternalRecipientsOnly || !r.ForceDeleteAfterFirstDownload {
+		t.Errorf("rules = %+v", r)
 	}
 }
 
@@ -272,6 +315,29 @@ func TestTransferError(t *testing.T) {
 			},
 		},
 		{err: &transfer.FilesError{Kind: transfer.ErrChecksumMismatch, FileIDs: []string{"fil_2"}}, code: problem.CodeChecksumMismatch},
+		{
+			err: &transfer.RuleError{Kind: transfer.ErrConfidentialityRule, Fields: []transfer.FieldError{
+				{Pointer: "/password", Code: "required"}, {Pointer: "/expiryDays", Code: "not-allowed", Allowed: []int{1, 7}},
+			}},
+			code: problem.CodeConfidentialityRuleViolated, check: func(t *testing.T, p *problem.Problem) {
+				t.Helper()
+				if len(p.Errors) != 2 || p.Errors[0].Field != "/password" || p.Errors[0].Allowed != nil ||
+					!slices.Equal(p.Errors[1].Allowed, []any{1, 7}) {
+					t.Errorf("errors = %+v", p.Errors)
+				}
+			},
+		},
+		{
+			err: fmt.Errorf("w: %w", &transfer.RuleError{Kind: transfer.ErrRecipientDomainRefused, Fields: []transfer.FieldError{
+				{Pointer: "/recipients/1", Code: "domain-denied"},
+			}}),
+			code: problem.CodeRecipientDomainRefused, check: func(t *testing.T, p *problem.Problem) {
+				t.Helper()
+				if len(p.Errors) != 1 || p.Errors[0].Field != "/recipients/1" || p.Errors[0].Code != "domain-denied" {
+					t.Errorf("errors = %+v", p.Errors)
+				}
+			},
+		},
 		{err: transfer.ErrIncomplete, code: problem.CodeUploadIncomplete},
 		{err: transfer.ErrChecksumMismatch, code: problem.CodeChecksumMismatch},
 		{err: transfer.ErrBlockedFile, code: problem.CodeBlockedFile},

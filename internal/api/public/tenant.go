@@ -37,6 +37,8 @@ type TenantService interface {
 	Asset(ctx context.Context, t *tenant.Tenant, asset string) (branding.Image, error)
 	PublicLegal(ctx context.Context, t *tenant.Tenant, doc, lang string) (tenantadmin.PublicLegalDocument, error)
 	LegalDocuments(ctx context.Context, t *tenant.Tenant) ([]string, error)
+	PublicConfidentialityLevels(ctx context.Context, t *tenant.Tenant, lang string) ([]tenantadmin.PublicConfidentialityLevel, error)
+	HasRecipientRules(ctx context.Context, t *tenant.Tenant) (bool, error)
 }
 
 // Compile-time check that the tenant configuration service fits.
@@ -108,6 +110,14 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		return nil, err
 	}
 	lang := i18n.Negotiate(deref(req.Params.AcceptLanguage), t.DefaultLanguage)
+	levels, err := svc.PublicConfidentialityLevels(ctx, t, lang)
+	if err != nil {
+		return nil, err
+	}
+	restricted, err := svc.HasRecipientRules(ctx, t)
+	if err != nil {
+		return nil, err
+	}
 	body := gen.PublicTenant{
 		Name: t.Name, Language: gen.Language(lang),
 		LegalDocuments: make([]gen.PublicTenantLegalDocuments, len(docs)),
@@ -134,9 +144,47 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	}
 	body.Limits.MaxTransferBytes = t.MaxTransferBytes
 	body.Limits.ExpiryDays = append([]gen.ExpiryDays{}, expiryDays...)
+	body.ConfidentialityLevels = publicLevels(levels)
+	// The features announce what the server really offers. The options
+	// of later steps (per-recipient links and their verification, replies,
+	// folders, remote deposit, antivirus switch) stay off or at their
+	// default until they exist.
+	body.Features = &gen.TenantFeatures{
+		MaxDownloads:          true,
+		RecipientVerification: false, // per-recipient links come with step 6
+		RecipientRestrictions: restricted,
+		Antivirus:             gen.Enabled,
+	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},
 	}, nil
+}
+
+// publicLevels renders the confidentiality levels of the public
+// configuration.
+func publicLevels(levels []tenantadmin.PublicConfidentialityLevel) *[]gen.PublicConfidentialityLevel {
+	out := make([]gen.PublicConfidentialityLevel, len(levels))
+	for i, l := range levels {
+		days := make([]gen.ExpiryDays, len(l.Rules.AllowedExpiryDays))
+		for j, d := range l.Rules.AllowedExpiryDays {
+			days[j] = gen.ExpiryDays(d)
+		}
+		out[i] = gen.PublicConfidentialityLevel{
+			Key: l.Key, Label: l.Label, IsDefault: l.IsDefault,
+			Rules: gen.ConfidentialityRules{
+				AllowedExpiryDays: days, MaxDownloads: l.Rules.MaxDownloads,
+				RequirePassword:               l.Rules.RequirePassword,
+				RequireRecipientVerification:  l.Rules.RequireRecipientVerification,
+				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
+				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+			},
+		}
+		if l.Description != "" {
+			d := l.Description
+			out[i].Description = &d
+		}
+	}
+	return &out
 }
 
 // GetTenantAsset serves the logo or background image of the current

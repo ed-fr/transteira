@@ -1,6 +1,7 @@
 package download
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -38,6 +39,13 @@ type Archive struct {
 	size    int64
 	ip      netip.Addr
 	release func()
+	// limited is set for a transfer with a download limit; begun once
+	// [Archive.Begin] ran, refused holding its refusal, and allowed once
+	// it allowed a GET.
+	limited bool
+	begun   bool
+	allowed bool
+	refused error
 }
 
 // PrepareArchive prepares the archive of the transfer of the download
@@ -46,12 +54,14 @@ type Archive struct {
 // the deliverable files by position, named by filename.ArchiveName
 // (sanitized and made unique), stored without compression.
 //
-// It returns ErrNotFound and ErrGone as Resolve does, ErrDownloadLocked for
-// a password-protected transfer not unlocked by this browser, a
+// It returns ErrNotFound and ErrGone as Resolve does (a transfer whose
+// download limit is reached is prepared: [Archive.Begin] decides),
+// ErrDownloadLocked for a password-protected transfer not unlocked by this
+// browser, a
 // *TooManyStreamsError (ErrTooManyStreams) over the concurrent stream
 // limits, and ErrNoClientIP for an invalid clientIP.
 func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (*Archive, error) {
-	a, err := s.resolve(ctx, t, rawToken, grantCookie)
+	a, err := s.resolve(ctx, t, rawToken, grantCookie, false)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +81,30 @@ func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken
 	if err != nil {
 		return nil, err
 	}
-	return &Archive{svc: s, t: t, d: a.d, files: a.files, entries: entries, size: size, ip: clientIP, release: release}, nil
+	return &Archive{
+		svc: s, t: t, d: a.d, files: a.files, entries: entries, size: size, ip: clientIP, release: release,
+		limited: a.d.MaxDownloads != nil,
+	}, nil
+}
+
+// Begin decides the response of the archive of a transfer with a download
+// limit, before its headers are written: the HTTP layer calls it first,
+// get telling a GET (false for HEAD). The archive counts as one download
+// start of its own object (no range is ever served). It returns
+// ErrMaxDownloads once the limit is reached for a client whose start of
+// the archive is not remembered, ErrGone for a transfer deleted meanwhile,
+// or an internal error; the response must then be that error, and Write
+// fails with it, writing nothing. See [Service.claimStart]. Without
+// download limit, it does nothing: Write records the start, as in version
+// 1.0. Only its first call decides.
+func (a *Archive) Begin(ctx context.Context, get bool) error {
+	if !a.limited || a.begun {
+		return a.refused
+	}
+	a.begun = true
+	_, a.refused = a.svc.claimStart(ctx, a.t, a.d, archiveObject, a.ip, get)
+	a.allowed = get && a.refused == nil
+	return a.refused
 }
 
 // Close releases the stream slot of the archive, if Write did not already.
@@ -86,8 +119,11 @@ func (a *Archive) Size() int64 { return a.size }
 // at a time. Calling Write is a download start: it first records the
 // transfer.downloaded audit event and counts one download (the HTTP layer
 // never calls it for HEAD); a failure of that recording is logged and the
-// archive is still written. When it returns, the plaintext bytes of the
-// files written are counted in the tenant usage. When the whole archive was written without error, the
+// archive is still written. For a transfer with a download limit, the
+// start is decided by [Archive.Begin] instead (called by Write as a GET
+// when the HTTP layer did not), and a refusal writes nothing. When it
+// returns, the plaintext bytes of the files written are counted in the
+// tenant usage. When the whole archive was written without error, the
 // transfer counts as downloaded (the first download mail and the deletion
 // after the first download follow, see the package documentation); a
 // partial write never counts; a transfer already downloaded is not
@@ -97,7 +133,17 @@ func (a *Archive) Size() int64 { return a.size }
 // slot when it returns.
 func (a *Archive) Write(ctx context.Context, w io.Writer) error {
 	defer a.release()
-	a.svc.downloadStarted(ctx, a.t, a.d.ID, archiveObject, a.ip)
+	switch {
+	case !a.limited:
+		a.svc.downloadStarted(ctx, a.t, a.d.ID, archiveObject, a.ip)
+	case a.allowed:
+	case a.begun:
+		return cmp.Or(a.refused, errNotBegun)
+	default:
+		if err := a.Begin(ctx, true); err != nil {
+			return err
+		}
+	}
 	var served int64
 	defer func() { a.svc.bytesServed(a.t.ID, served) }()
 	err := archiveFormat.Write(w, a.entries, func(i int) (io.Reader, error) {

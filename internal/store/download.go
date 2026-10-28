@@ -31,6 +31,17 @@ var (
 		`UPDATE transfers SET first_downloaded_at = ?, delete_after = ?
 		WHERE tenant_id = ? AND id = ? AND status = 'available' AND first_downloaded_at IS NULL
 		AND delete_after_first_download`)
+	// qTransferClaimDownload counts a download start of an available
+	// transfer with a download limit not reached yet. The start reaching
+	// the limit also makes the transfer due for deletion, keeping an
+	// earlier due time. SET reads the old values on both engines;
+	// RETURNING reads the new ones.
+	qTransferClaimDownload = tenantQuery(
+		`UPDATE transfers SET download_count = download_count + 1,
+		delete_after = (CASE WHEN download_count + 1 >= max_downloads THEN COALESCE(delete_after, ?) ELSE delete_after END)
+		WHERE tenant_id = ? AND id = ? AND status = 'available' AND max_downloads IS NOT NULL
+		AND download_count < max_downloads
+		RETURNING max_downloads - download_count`)
 	// qTransferMarkDeleted deletes an available transfer whose sealed
 	// download token was destroyed first (T-110); the store checks the
 	// file keys beforehand.
@@ -105,6 +116,52 @@ func markFirstDownload(ctx context.Context, tx *ScopedTx, trfID string, now, del
 		return false, invalid("a transfer deleted after its first download needs its deletion time")
 	default:
 		return false, invalid("only a transfer deleted after its first download has a deletion time")
+	}
+}
+
+// ClaimDownloadTx counts, inside tx, a download start (of a file or of the
+// archive, never a HEAD request or a resumed range) of the available
+// transfer trfID of the tenant tx is bound to, which has a download limit
+// (Transfer.MaxDownloads), and returns the starts still allowed after this
+// one. It replaces [Transfers.IncrementDownloadsTx] for such a transfer.
+// The update is conditional, so that concurrent starts never exceed the
+// limit. The start reaching the limit also sets DeleteAfter to deleteAfter
+// (an earlier DeleteAfter is kept), so that the deletion sweep
+// ([Transfers.DueDeletions]) erases the transfer.
+//
+// It returns ErrMaxDownloads when the limit was already reached (nothing is
+// counted), ErrInvalid for a zero deleteAfter or a transfer without limit,
+// ErrNotFound when the transfer does not exist or belongs to another
+// tenant, and ErrConflict when it is not available. After an error, the
+// caller must abort the transaction.
+func (r *Transfers) ClaimDownloadTx(ctx context.Context, tx *ScopedTx, trfID string, deleteAfter time.Time) (int, error) {
+	remaining, err := claimDownload(ctx, tx, trfID, deleteAfter)
+	if err != nil {
+		return 0, wrap("claim download", err)
+	}
+	return remaining, nil
+}
+
+// claimDownload implements ClaimDownloadTx, returning raw errors.
+func claimDownload(ctx context.Context, tx *ScopedTx, trfID string, deleteAfter time.Time) (int, error) {
+	if deleteAfter.IsZero() {
+		return 0, invalid("a download limit needs the deletion time")
+	}
+	var remaining int
+	err := tx.QueryRow(ctx, qTransferClaimDownload, toMillis(deleteAfter), trfID).Scan(&remaining)
+	if !errors.Is(err, ErrNotFound) {
+		return remaining, err
+	}
+	t, err := scanTransfer(tx.QueryRow(ctx, qTransferGet, trfID))
+	switch {
+	case err != nil:
+		return 0, err
+	case t.MaxDownloads == nil:
+		return 0, invalid("the transfer has no download limit")
+	case t.Status != TransferAvailable:
+		return 0, ErrConflict
+	default:
+		return 0, ErrMaxDownloads
 	}
 }
 

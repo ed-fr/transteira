@@ -67,13 +67,18 @@ Remplissez les champs :
 - **Disponible pendant** : **1 jour**, **7 jours** ou **30 jours**. La durée court à partir du moment où le transfert devient disponible, c’est-à-dire après l’analyse antivirus.
 - **Mot de passe** : facultatif, sans règle de complexité. Transmettez-le aux destinataires par un autre canal (téléphone, SMS), jamais dans le même mail. Après 3 mots de passe erronés, le transfert est bloqué pendant 15 minutes.
 - **Supprimer le transfert après le premier téléchargement** : le transfert est supprimé pour tous les destinataires dès que l’un d’eux a téléchargé tous les fichiers, soit en une archive ZIP, soit fichier par fichier. La suppression intervient quelques minutes plus tard.
+- **Niveau de confidentialité** : si votre organisation propose plusieurs niveaux, choisissez celui qui correspond à la sensibilité des fichiers ; sa description s’affiche sous le niveau. Un niveau peut imposer des règles : restreindre les durées disponibles, rendre le mot de passe obligatoire, imposer la suppression après le premier téléchargement, limiter les destinataires à l’organisation ou plafonner le nombre maximal de téléchargements. Le formulaire limite alors les choix ou renseigne les options à votre place, et vous explique pourquoi. Si votre organisation n’a qu’un niveau, le sélecteur n’est pas affiché mais ses règles s’appliquent quand même.
+- **Nombre maximal de téléchargements** : facultatif, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Laissez le champ vide pour ne pas limiter, sauf si le niveau choisi impose un plafond.
 - **Fichiers à envoyer** : faites glisser vos fichiers sur la zone **Glissez-déposez des fichiers ici, ou** cliquez sur **choisissez des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait à côté de son nom. Sous la liste, le formulaire affiche **Total :** suivi de la taille de vos fichiers et de la taille autorisée.
 
 Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu fixer une limite plus basse. L’indication sous **Fichiers à envoyer** donne les limites réelles (taille totale et nombre de fichiers).
 
 > **À savoir** Un dossier ne peut pas être envoyé tel quel. Sélectionnez les fichiers qu’il contient, ou compressez vous-même le dossier en fichier ZIP et envoyez ce fichier.
 
-Quand tout est prêt, cliquez sur **Envoyer**.
+Quand tout est prêt, cliquez sur **Envoyer**. Deux messages peuvent refuser le transfert :
+
+- un message indiquant que le niveau de confidentialité choisi exige un champ, n’autorise pas une valeur, n’autorise que des destinataires de l’organisation ou fixe un maximum plus bas : corrigez le champ nommé dans le message, ou choisissez un autre niveau ;
+- **Ce service n’autorise pas l’envoi vers le domaine de cette adresse.** : votre organisation n’autorise pas ce domaine de destinataire. Retirez l’adresse, ou interrogez votre administrateur.
 
 <!-- topic: deposit-upload -->
 ### Suivre l’envoi

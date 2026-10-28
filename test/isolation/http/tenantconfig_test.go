@@ -155,11 +155,13 @@ func tenantScoped(t *testing.T, h *harness, op operation) {
 // refused the same way whatever the tenant): with them, the request
 // reaches the tenant check. The other operations accept the sample body.
 var validBodies = map[string]string{
-	"updateBranding":      `{"primaryColor":"#112233","accentColor":"#445566"}`,
-	"updateSmtpSettings":  `{"host":"smtp-relay","port":25,"security":"none","fromAddress":"no-reply@entity-b.example.com"}`,
-	"testSmtp":            `{"to":"admin@entity-b.example.com"}`,
-	"updateLegalDocument": `{"markdown":"# Notice"}`,
-	"updateNetworkRules":  `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["entity-b.example.com"]}`,
+	"updateBranding":              `{"primaryColor":"#112233","accentColor":"#445566"}`,
+	"updateSmtpSettings":          `{"host":"smtp-relay","port":25,"security":"none","fromAddress":"no-reply@entity-b.example.com"}`,
+	"testSmtp":                    `{"to":"admin@entity-b.example.com"}`,
+	"updateLegalDocument":         `{"markdown":"# Notice"}`,
+	"updateNetworkRules":          `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["entity-b.example.com"]}`,
+	"updateConfidentialityLevels": `{"items":[{"key":"open","labels":{"en":"Open","fr":"Ouvert"},"isDefault":true,"rules":{"requireRecipientVerification":false,"requirePassword":false,"allowedExpiryDays":[1,7,30],"internalRecipientsOnly":false,"forceDeleteAfterFirstDownload":false,"maxDownloads":null}}]}`,
+	"updateRecipientRules":        `{"allowedDomains":["entity-b.example.com"],"deniedDomains":[]}`,
 	// The tenant operations check the rights first; with valid bodies, a
 	// broken check would show (409 for B's existing entry, B's sender
 	// counted or erased).

@@ -1,9 +1,9 @@
 // Package download is the recipient side of TransTeira (CLAUDE.md section
-// 10, threat model T-47 to T-57, decisions P3, P4, P9 and P23): it resolves
-// the download links, checks the transfer passwords, streams the files with
-// Range support and the ZIP archive, and records the first complete
-// download. It is independent of HTTP: the handlers map its errors to
-// problems (see the errors) and serve its streams.
+// 10, threat model T-47 to T-57 and T-197, decisions P3, P4, P9 and P23):
+// it resolves the download links, checks the transfer passwords, streams
+// the files with Range support and the ZIP archive, and records the first
+// complete download. It is independent of HTTP: the handlers map its
+// errors to problems (see the errors) and serve its streams.
 //
 // # Access by token
 //
@@ -13,9 +13,11 @@
 // whose transfer is not available (expired, deleted, rejected), past its
 // expiry, past its deletion after the first download, or without any
 // deliverable file gives ErrGone (410): the token proves the recipient got
-// the link (P9). Only the files whose scan status is deliverable
-// (store.ScanStatus.Deliverable) are listed and served; scan signatures
-// and the other recipients are never exposed.
+// the link (P9). A transfer whose download limit is reached gives
+// ErrMaxDownloads (410) on its page (see "Download limit"). Only the files
+// whose scan status is deliverable (store.ScanStatus.Deliverable) are
+// listed and served; scan signatures and the other recipients are never
+// exposed.
 //
 // # Password and download grant
 //
@@ -108,11 +110,13 @@
 //
 // # Download starts and usage
 //
-// A download start is a GET of a file read from offset 0 (whole file, or a
-// range starting at 0; an empty file once delivered) or a written archive;
-// never a HEAD request nor a resumed range. Each start records, in one
-// tenant-scoped transaction, the transfer.downloaded audit event (actor
-// kind recipient, actor "link", object the transfer, details the file ID
+// Without download limit, a download start is a GET of a file read from
+// offset 0 (whole file, or a range starting at 0; an empty file once
+// delivered) or a written archive; never a HEAD request nor a resumed
+// range (a transfer with a download limit: see "Download limit"). Each
+// start records, in one tenant-scoped transaction, the
+// transfer.downloaded audit event (actor kind recipient, actor "link",
+// object the transfer, details the file ID
 // or "archive") and one more store.Transfer.DownloadCount, before the first
 // byte, bounded by a short timeout. Serving never depends on that
 // recording: a failure is logged and the download goes on unrecorded. The
@@ -130,6 +134,78 @@
 // recorded per window opened at its first one, whatever the clients, in a
 // separate bounded map that such cycling cannot reset. Served bytes stay
 // exact.
+//
+// # Download limit
+//
+// A transfer may cap its download starts (store.Transfer.MaxDownloads, 1
+// to 1000, all recipients together; CLAUDE.md section 8.2, threat model
+// T-197). A start of such a transfer is not recorded after the first byte
+// on a best effort basis, as above, but decided before any byte, by
+// [Content.Begin] and [Archive.Begin], which the HTTP layer calls once the
+// response is about to be answered 200 or 206 (after the preconditions
+// and the Range header were evaluated, so that a 304, 412 or 416 answer
+// never counts), and before writing the headers:
+//
+//   - A GET by a client (IPv4 address or IPv6 /64) whose start of the same
+//     object (file or archive) is remembered within Options.StartWindow is
+//     served without being counted: a resumed range, or a new request from
+//     offset 0 within the window.
+//   - Any other GET, whatever its range, is a download start: its audit
+//     event and its count (store.Transfers.ClaimDownloadTx, one
+//     conditional update) are written in one transaction before the first
+//     byte, so that concurrent starts never exceed the limit; at the limit
+//     it is refused with ErrMaxDownloads (410 max-downloads-reached). A
+//     range from a later offset by a client that never started counts too:
+//     otherwise anyone holding the link could fetch every byte but the
+//     first without being counted. The start reaching the limit makes the
+//     transfer due for deletion Options.Grace later (the grace period of
+//     the deletion after the first download, P23); the existing deletion
+//     sweep erases it, and the link then answers ErrGone.
+//   - A HEAD request is never counted and remembers nothing; it is refused
+//     like the GET would be when the limit is reached (from the state read
+//     when the request was opened).
+//   - A failure of the count refuses the request (fail closed, 500); a
+//     start that is refused or fails remembers nothing.
+//
+// The window of a counted client runs from its start and is moved to the
+// end of each of its interrupted responses of a file (a write error, or
+// the client gone before the end of the response), so that a long
+// download can still resume an hour after its last interruption. A
+// response written to its end moves nothing, whether it delivered the end
+// of the file or a range the client chose to end before it (a
+// "bytes=0-0" loop cannot keep the window open), so that the same client
+// downloading again after the window is counted again. Interruptions
+// never move the window past the time of the counted start plus
+// startCeilingWindows (4) windows, 4 hours by default: a client
+// interrupting its responses on purpose cannot keep its key uncounted for
+// the life of the transfer. Since the key is the client address, every
+// client behind the same IPv4 address or IPv6 /64 (NAT, CGNAT) is served
+// uncounted within that window (accepted, T-197); a download longer than
+// the ceiling counts as a new start when resumed after it. The memory is the
+// bounded in-process map of the deduplication: a restart, an eviction or
+// a new client address (a mobile network) makes a resumption count as a
+// new start, refused once the limit is reached (accepted, T-197). The
+// decisions on a transfer are serialized by its in-process lock, so that
+// the concurrent requests of a download manager are counted once. Should
+// the HTTP layer not call Begin, the first read of the file (or Write of
+// the archive) begins it as a GET, and a refusal fails it before any byte.
+// A request already allowed is served to its end, even when the limit is
+// reached meanwhile.
+//
+// The download page and the unlock of a transfer whose limit is reached
+// answer ErrMaxDownloads, even during the grace period: no new download
+// may start, and a download in progress resumes without the page. Before,
+// the page tells the starts left ([View].DownloadsRemaining, absent while
+// locked). Without limit, the version 1.0 path is unchanged.
+//
+// # Confidentiality level
+//
+// The page shows the confidentiality level snapshotted at the creation of
+// the transfer ([View].Confidentiality: key, labels by language and rules).
+// While locked, the level is absent: the page keeps the 1.0 set of fields
+// (sender, expiry, flags), so an intercepted link does not reveal which
+// transfers are the sensitive ones. The HTTP layer picks the label in the
+// language of the request ([Confidentiality.Label]).
 //
 // # Logs
 //

@@ -144,6 +144,10 @@ type TransferNotificationData struct {
 	// PasswordRequired tells the recipient that a password protects the
 	// transfer and will come through another channel (T-88).
 	PasswordRequired bool
+	// ConfidentialityLabel is the label of the confidentiality level of the
+	// transfer, already localized in the language of the mail; empty shows no
+	// level.
+	ConfidentialityLabel string
 	// QR shows the QR code of Link, an inline part of Content-ID
 	// [QRContentID] that the caller attaches.
 	QR bool
@@ -164,6 +168,10 @@ type TransferConfirmationData struct {
 	// PasswordRequired reminds the sender to give the password to the
 	// recipients through another channel.
 	PasswordRequired bool
+	// ConfidentialityLabel is the label of the confidentiality level of the
+	// transfer, already localized in the language of the mail; empty shows no
+	// level.
+	ConfidentialityLabel string
 	// Withheld lists the files that could not be analyzed and are withheld
 	// (never downloadable); SHA256 is not shown.
 	Withheld []FileInfo

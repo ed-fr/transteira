@@ -59,20 +59,34 @@ var (
 	// ErrBlockedFile reports a file whose SHA-256 is on the tenant blocklist
 	// (403 blocked-file, threat T-27).
 	ErrBlockedFile = errors.New("transfer: file refused by the blocklist")
+	// ErrConfidentialityRule reports a transfer that breaks a rule of its
+	// confidentiality level (422 confidentiality-rule-violated, spec 8.3).
+	// The error is a *[RuleError] listing every broken rule.
+	ErrConfidentialityRule = errors.New("transfer: confidentiality rule violated")
+	// ErrRecipientDomainRefused reports recipients refused by the recipient
+	// domain rules of the tenant (403 recipient-domain-refused, spec 8.4).
+	// The error is a *[RuleError] naming every refused recipient. It is a
+	// policy refusal: audited, never written to the security log.
+	ErrRecipientDomainRefused = errors.New("transfer: recipient domain refused")
 )
 
 // JSON pointers of the request fields named by a [FieldError]. The file
 // fields are indexed: /files/<i>/name and so on, /recipients/<i> likewise.
 // FieldIdempotencyKey names the Idempotency-Key header, not a body field.
 const (
-	FieldSenderEmail    = "/senderEmail"
-	FieldRecipients     = "/recipients"
-	FieldMessage        = "/message"
-	FieldExpiryDays     = "/expiryDays"
-	FieldPassword       = "/password"
-	FieldLanguage       = "/language"
-	FieldFiles          = "/files"
-	FieldIdempotencyKey = "Idempotency-Key"
+	FieldSenderEmail = "/senderEmail"
+	FieldRecipients  = "/recipients"
+	FieldMessage     = "/message"
+	FieldExpiryDays  = "/expiryDays"
+	FieldPassword    = "/password"
+	FieldLanguage    = "/language"
+	FieldFiles       = "/files"
+	// FieldMaxDownloads, FieldConfidentialityLevel and
+	// FieldRecipientVerification are the transfer options of version 1.1.
+	FieldMaxDownloads          = "/maxDownloads"
+	FieldConfidentialityLevel  = "/confidentialityLevel"
+	FieldRecipientVerification = "/recipientVerification"
+	FieldIdempotencyKey        = "Idempotency-Key"
 )
 
 // Codes of a [FieldError] (the code member of the validation-failed
@@ -87,8 +101,10 @@ const (
 	// CodeInvalidFileName: the file name is refused by the file name policy
 	// (decision P8).
 	CodeInvalidFileName = "invalid-file-name"
-	// CodeNotAllowed: the value is not one of the accepted values, or the
-	// field is not accepted in this context (senderEmail with a session).
+	// CodeNotAllowed: the value is not one of the accepted values (a
+	// maxDownloads outside 1 to store.MaxDownloadsLimit included), or the
+	// field is not accepted in this context (senderEmail with a session,
+	// recipientVerification until the per-recipient links exist).
 	CodeNotAllowed = "not-allowed"
 	// CodeTooLong: the text exceeds its maximum length.
 	CodeTooLong = "too-long"
@@ -96,6 +112,16 @@ const (
 	CodeTooMany = "too-many"
 	// CodeDuplicate: the item repeats an earlier one.
 	CodeDuplicate = "duplicate"
+	// CodeInternalOnly: the recipient is outside the internal domains of
+	// the tenant, which the confidentiality level requires
+	// (confidentiality-rule-violated only).
+	CodeInternalOnly = "internal-only"
+	// CodeMaxExceeded: maxDownloads exceeds the cap of the confidentiality
+	// level (confidentiality-rule-violated only).
+	CodeMaxExceeded = "max-exceeded"
+	// CodeDomainDenied: the recipient domain is refused by the recipient
+	// domain rules (recipient-domain-refused only).
+	CodeDomainDenied = "domain-denied"
 )
 
 // FieldError is one invalid field of a request.
@@ -105,6 +131,10 @@ type FieldError struct {
 	Pointer string
 	// Code is the reason (CodeRequired...).
 	Code string
+	// Allowed optionally lists the accepted values (the validities a
+	// confidentiality level allows, with CodeNotAllowed on FieldExpiryDays);
+	// nil otherwise.
+	Allowed []int
 }
 
 // ValidationError lists the invalid fields of a request, in the order of
@@ -173,3 +203,25 @@ func (e *RateLimitError) Error() string {
 
 // Is makes errors.Is(err, ErrRateLimited) true.
 func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
+
+// RuleError lists the fields of a creation request refused by a tenant
+// policy, in the order the checks run. It matches its Kind:
+// [ErrConfidentialityRule] or [ErrRecipientDomainRefused].
+type RuleError struct {
+	// Kind is ErrConfidentialityRule or ErrRecipientDomainRefused.
+	Kind error
+	// Fields are the refused fields, at least one.
+	Fields []FieldError
+}
+
+// Error implements error; it names the fields, never their values.
+func (e *RuleError) Error() string {
+	parts := make([]string, len(e.Fields))
+	for i, f := range e.Fields {
+		parts[i] = f.Pointer + " (" + f.Code + ")"
+	}
+	return fmt.Sprintf("%v: %s", e.Kind, strings.Join(parts, ", "))
+}
+
+// Is makes errors.Is(err, e.Kind) true.
+func (e *RuleError) Is(target error) bool { return target == e.Kind }

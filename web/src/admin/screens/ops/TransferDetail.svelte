@@ -271,7 +271,20 @@
         <dt>{t('opsTransfers.detail.firstDownload')}</dt>
         <dd>{dateOr(transfer.firstDownloadedAt, t('opsTransfers.detail.never'), dateTime)}</dd>
         <dt>{t('opsTransfers.detail.downloadCount')}</dt>
-        <dd>{formatNumber(transfer.downloadCount)}</dd>
+        <dd>
+          {#if transfer.maxDownloads != null}
+            {t('opsTransfers.detail.downloadsOfMax', {
+              count: formatNumber(transfer.downloadCount),
+              max: formatNumber(transfer.maxDownloads),
+            })}
+          {:else}
+            {formatNumber(transfer.downloadCount)}
+          {/if}
+        </dd>
+        {#if transfer.confidentialityLevel}
+          <dt>{t('opsTransfers.detail.confidentialityLevel')}</dt>
+          <dd>{transfer.confidentialityLevel.label}</dd>
+        {/if}
         <dt>{t('opsTransfers.detail.sender')}</dt>
         <dd class="tt-break">{transfer.senderEmail}</dd>
         <dt>{t('opsTransfers.detail.senderIp')}</dt>

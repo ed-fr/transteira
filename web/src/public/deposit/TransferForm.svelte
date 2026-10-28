@@ -19,6 +19,7 @@
   import {
     fileIssues,
     invalidFields,
+    maxDownloadsCap,
     MAX_FILES,
     MESSAGE_MAX_LENGTH,
     recipientIssues,
@@ -40,8 +41,11 @@
     message: 'tt-deposit-message',
     expiryDays: 'tt-deposit-expiry',
     password: 'tt-deposit-password',
+    maxDownloads: 'tt-deposit-max-downloads',
     files: 'tt-deposit-files',
   };
+
+  const levelGroupName = 'tt-deposit-level';
 
   let showPassword = $state(false);
   let remaining = $state(0);
@@ -78,8 +82,18 @@
   });
   const nameIssues = $derived(fileIssues(errors, flow.form.files.length));
   const overLimit = $derived(flow.totalBytes > flow.limits.maxTransferBytes);
+  const levelOptions = $derived(
+    flow.levels.map((l) => ({
+      value: l.key,
+      label: l.label,
+      ...(l.description === undefined ? {} : { hint: l.description }),
+    })),
+  );
+  const passwordRequired = $derived(flow.rules?.requirePassword === true);
+  const deleteForced = $derived(flow.rules?.forceDeleteAfterFirstDownload === true);
+  const downloadsCap = $derived(maxDownloadsCap(flow.rules));
   const expiryOptions = $derived(
-    flow.limits.expiryDays.map((d) => ({ value: d, label: t('deposit.form.expiry.days', { count: d }) })),
+    flow.expiryOptions.map((d) => ({ value: d, label: t('deposit.form.expiry.days', { count: d }) })),
   );
 
   function fieldLabel(field: FormField): string {
@@ -92,6 +106,8 @@
         return t('deposit.form.expiry.legend');
       case 'password':
         return t('deposit.form.password.label');
+      case 'maxDownloads':
+        return t('deposit.form.maxDownloads.label');
       case 'files':
         return t('deposit.form.files.label');
     }
@@ -173,6 +189,18 @@
     bind:value={flow.form.message}
   />
 
+  {#if flow.levels.length > 1}
+    <RadioGroup
+      legend={t('deposit.form.level.legend')}
+      hint={t('deposit.form.level.hint')}
+      name={levelGroupName}
+      options={levelOptions}
+      required
+      value={flow.level?.key}
+      onchange={(key) => flow.setLevel(key)}
+    />
+  {/if}
+
   <RadioGroup
     legend={t('deposit.form.expiry.legend')}
     name={ids.expiryDays}
@@ -188,7 +216,8 @@
     label={t('deposit.form.password.label')}
     type={showPassword ? 'text' : 'password'}
     autocomplete="new-password"
-    hint={t('deposit.form.password.hint')}
+    required={passwordRequired}
+    hint={passwordRequired ? t('deposit.form.password.requiredHint') : t('deposit.form.password.hint')}
     error={say(errors['password'])}
     bind:value={flow.form.password}
   >
@@ -204,11 +233,36 @@
     {/snippet}
   </TextField>
 
-  <Checkbox
-    label={t('deposit.form.deleteAfterFirstDownload.label')}
-    hint={t('deposit.form.deleteAfterFirstDownload.hint')}
-    bind:checked={flow.form.deleteAfterFirstDownload}
-  />
+  {#if flow.maxDownloadsOffered}
+    <TextField
+      id={ids.maxDownloads}
+      label={t('deposit.form.maxDownloads.label')}
+      type="number"
+      inputmode="numeric"
+      min={1}
+      max={downloadsCap}
+      hint={t('deposit.form.maxDownloads.hint', { max: downloadsCap })}
+      error={say(errors['maxDownloads'])}
+      bind:value={flow.form.maxDownloadsText}
+    />
+  {/if}
+
+  {#if deleteForced}
+    <Checkbox
+      id="tt-deposit-delete-after-first"
+      label={t('deposit.form.deleteAfterFirstDownload.label')}
+      hint={t('deposit.form.deleteAfterFirstDownload.forced')}
+      checked={true}
+      disabled
+    />
+  {:else}
+    <Checkbox
+      id="tt-deposit-delete-after-first"
+      label={t('deposit.form.deleteAfterFirstDownload.label')}
+      hint={t('deposit.form.deleteAfterFirstDownload.hint')}
+      bind:checked={flow.form.deleteAfterFirstDownload}
+    />
+  {/if}
 
   <FileDrop
     id={ids.files}
@@ -243,12 +297,16 @@
   {/if}
 
   <Countdown until={flow.retryAt} bind:remaining />
-  <Button
-    type="submit"
-    loading={flow.busy}
-    disabled={remaining > 0}
-    loadingLabel={t('deposit.form.submitting')}
-  >
-    {t('deposit.form.submit')}
-  </Button>
+  {#if flow.noUsableLevel}
+    <Alert severity="error">{t('deposit.form.level.none')}</Alert>
+  {:else}
+    <Button
+      type="submit"
+      loading={flow.busy}
+      disabled={remaining > 0}
+      loadingLabel={t('deposit.form.submitting')}
+    >
+      {t('deposit.form.submit')}
+    </Button>
+  {/if}
 </form>

@@ -42,11 +42,13 @@ import LegalEdit from './screens/tenants/LegalEdit.svelte';
 import LegalList from './screens/tenants/LegalList.svelte';
 import TemplateEdit from './screens/tenants/TemplateEdit.svelte';
 import TemplateList from './screens/tenants/TemplateList.svelte';
+import TenantConfidentiality from './screens/tenants/TenantConfidentiality.svelte';
 import TenantBranding from './screens/tenants/TenantBranding.svelte';
 import TenantCreate from './screens/tenants/TenantCreate.svelte';
 import TenantGeneral from './screens/tenants/TenantGeneral.svelte';
 import TenantList from './screens/tenants/TenantList.svelte';
 import TenantNetwork from './screens/tenants/TenantNetwork.svelte';
+import TenantRecipientRules from './screens/tenants/TenantRecipientRules.svelte';
 import TenantSmtp from './screens/tenants/TenantSmtp.svelte';
 import type { AdminScreenComponent } from './screens/types';
 
@@ -130,6 +132,22 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminTenants.network.title',
     access: 'auth',
     helpTopic: 'tenant-network',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/recipient-rules',
+    component: TenantRecipientRules,
+    titleKey: 'adminTenants.recipientRules.title',
+    access: 'auth',
+    helpTopic: 'tenant-recipient-rules',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/confidentiality',
+    component: TenantConfidentiality,
+    titleKey: 'adminTenants.confidentiality.title',
+    access: 'auth',
+    helpTopic: 'tenant-confidentiality',
     tenantNav: true,
   },
   {

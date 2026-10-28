@@ -39,6 +39,13 @@ type repo interface {
 	// event ev, through the checks of the audit package, and one more
 	// download, in one transaction.
 	started(ctx context.Context, tid tenant.ID, trfID string, ev audit.Event) error
+	// claim records a download start of the transfer trfID, which has a
+	// download limit: the audit event ev and the conditional count of the
+	// start (store.Transfers.ClaimDownloadTx, deleteAfter being the
+	// deletion time set by the start reaching the limit), in one
+	// transaction. It returns the starts still allowed, or
+	// store.ErrMaxDownloads when the limit was already reached.
+	claim(ctx context.Context, tid tenant.ID, trfID string, deleteAfter time.Time, ev audit.Event) (int, error)
 }
 
 // storeRepo implements repo over a *store.DB.
@@ -126,4 +133,16 @@ func (r storeRepo) started(ctx context.Context, tid tenant.ID, trfID string, ev 
 		}
 		return r.db.Transfers().IncrementDownloadsTx(ctx, tx, trfID)
 	})
+}
+
+func (r storeRepo) claim(ctx context.Context, tid tenant.ID, trfID string, deleteAfter time.Time, ev audit.Event) (int, error) {
+	var remaining int
+	err := r.tx(ctx, tid, func(tx *store.ScopedTx) error {
+		var err error
+		if remaining, err = r.db.Transfers().ClaimDownloadTx(ctx, tx, trfID, deleteAfter); err != nil {
+			return err
+		}
+		return r.audit.RecordScopedTx(ctx, tx, ev)
+	})
+	return remaining, err
 }

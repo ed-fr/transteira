@@ -54,6 +54,17 @@ type Details struct {
 	DownloadURL string
 	// Files are the files, by position.
 	Files []File
+	// MaxDownloads is the limit on the download starts, nil for none.
+	MaxDownloads *int
+	// ConfidentialityLevel is the key of the level snapshotted at creation,
+	// "" for a transfer without level.
+	ConfidentialityLevel string
+	// ConfidentialityLabel is the label of that level in the language of
+	// the transfer (the tenant default when it has none), "" without level.
+	ConfidentialityLabel string
+	// Rules are the rules of the level as snapshotted at creation, nil
+	// without level. Later changes of the level never affect them.
+	Rules *store.ConfidentialityRules
 }
 
 // File is a file of a transfer as its sender sees it (OpenAPI SenderFile).
@@ -97,6 +108,10 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		ExpiryDays: d.ExpiryDays, PasswordProtected: d.PasswordProtected(),
 		DeleteAfterFirstDownload: d.DeleteAfterFirstDownload, TotalBytes: d.TotalBytes,
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
+		MaxDownloads: d.MaxDownloads, ConfidentialityLevel: d.ConfidentialityLevel, Rules: d.Rules,
+	}
+	if d.ConfidentialityLevel != "" {
+		out.ConfidentialityLabel = store.LevelLabel(d.ConfidentialityLabel, d.Language, t.DefaultLanguage, "en")
 	}
 	// The expires_at written at finalization is provisional: it becomes
 	// the expiry when the antivirus makes the transfer available.

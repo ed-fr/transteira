@@ -39,6 +39,10 @@ type TenantService interface {
 	DeleteAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string, ip netip.Addr) error
 	GetNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.NetworkRules, error)
 	UpdateNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID, cidrs, domains []string, ip netip.Addr) (tenantadmin.NetworkRules, error)
+	GetConfidentialityLevels(ctx context.Context, p adminauth.Principal, tid tenant.ID) ([]tenantadmin.ConfidentialityLevel, error)
+	UpdateConfidentialityLevels(ctx context.Context, p adminauth.Principal, tid tenant.ID, levels []tenantadmin.ConfidentialityLevel, ip netip.Addr) ([]tenantadmin.ConfidentialityLevel, error)
+	GetRecipientRules(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.RecipientRules, error)
+	UpdateRecipientRules(ctx context.Context, p adminauth.Principal, tid tenant.ID, allowed, denied []string, ip netip.Addr) (tenantadmin.RecipientRules, error)
 	GetSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SMTPView, error)
 	UpdateSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SMTPUpdate, ip netip.Addr) (tenantadmin.SMTPView, error)
 	TestSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID, to string, ip netip.Addr) (tenantadmin.SMTPTestResult, error)

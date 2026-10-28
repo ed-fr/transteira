@@ -51,6 +51,22 @@ func operations(ev *env, logo []byte) map[string]func(p adminauth.Principal, tid
 			_, err := ev.svc.UpdateNetworkRules(ctx, p, tid, []string{"10.0.0.0/8"}, nil, clientIP)
 			return err
 		},
+		"GetConfidentialityLevels": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.GetConfidentialityLevels(ctx, p, tid)
+			return err
+		},
+		"UpdateConfidentialityLevels": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.UpdateConfidentialityLevels(ctx, p, tid, []ConfidentialityLevel{goodLevel("public", true)}, clientIP)
+			return err
+		},
+		"GetRecipientRules": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.GetRecipientRules(ctx, p, tid)
+			return err
+		},
+		"UpdateRecipientRules": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.UpdateRecipientRules(ctx, p, tid, []string{"example.com"}, nil, clientIP)
+			return err
+		},
 		"GetSMTP": func(p adminauth.Principal, tid tenant.ID) error { _, err := ev.svc.GetSMTP(ctx, p, tid); return err },
 		"UpdateSMTP": func(p adminauth.Principal, tid tenant.ID) error {
 			_, err := ev.svc.UpdateSMTP(ctx, p, tid, relay(), clientIP)

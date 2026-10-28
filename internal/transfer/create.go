@@ -73,6 +73,17 @@ type CreateRequest struct {
 	Language string
 	// Files are the declared files.
 	Files []FileDeclaration
+	// MaxDownloads is the optional limit on the download starts of the
+	// transfer (1 to store.MaxDownloadsLimit), nil for none (or the cap of
+	// the confidentiality level, when it has one).
+	MaxDownloads *int
+	// ConfidentialityLevel is the key of the chosen confidentiality level,
+	// "" for the default level of the tenant.
+	ConfidentialityLevel string
+	// RecipientVerification asks every recipient to prove their address by
+	// code. It is refused until the per-recipient links exist (version 1.1
+	// step 6), so a level that requires it cannot be used meanwhile.
+	RecipientVerification bool
 }
 
 // FileDeclaration declares one file of a transfer (OpenAPI
@@ -171,6 +182,18 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 	}
 	if req.Language != "" && !tenant.IsLanguage(req.Language) {
 		v.add(FieldLanguage, CodeNotAllowed)
+	}
+	if n := req.MaxDownloads; n != nil && (*n < 1 || *n > store.MaxDownloadsLimit) {
+		v.add(FieldMaxDownloads, CodeNotAllowed)
+	}
+	if k := req.ConfidentialityLevel; k != "" && !store.ValidLevelKey(k) {
+		v.add(FieldConfidentialityLevel, CodeInvalidFormat)
+	}
+	// Recipient verification needs per-recipient links, which come with
+	// step 6 of version 1.1: until then the option is refused, and the
+	// public configuration announces it as unavailable.
+	if req.RecipientVerification {
+		v.add(FieldRecipientVerification, CodeNotAllowed)
 	}
 	p.files, p.total = validateFiles(&v, req.Files)
 	return p, v.err()
@@ -316,11 +339,17 @@ func fingerprint(p plan, req CreateRequest) string {
 		Delete     bool     `json:"d"`
 		Language   string   `json:"l"`
 		Files      []file   `json:"f"`
+		// The options of version 1.1 are omitted when unset, so that a
+		// request without them keeps the fingerprint it had before.
+		MaxDownloads *int   `json:"x,omitempty"`
+		Level        string `json:"c,omitempty"`
+		Verification bool   `json:"v,omitempty"`
 	}{
 		Sender:     p.sender,
 		Recipients: slices.Sorted(slices.Values(p.recipients)), Message: p.message, ExpiryDays: req.ExpiryDays,
 		Password: p.password != nil, Delete: req.DeleteAfterFirstDownload, Language: req.Language,
-		Files: make([]file, len(p.files)),
+		Files: make([]file, len(p.files)), MaxDownloads: req.MaxDownloads, Level: req.ConfidentialityLevel,
+		Verification: req.RecipientVerification,
 	}
 	for i, f := range p.files {
 		canonical.Files[i] = file{Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256}
@@ -346,16 +375,23 @@ func fingerprint(p plan, req CreateRequest) string {
 //     eligibility (blocklist, internal domain and allowed senders of the
 //     token, without the IP part, replaced by the ranges of the token)
 //     applies to the validated SenderEmail;
-//  3. per-transfer limit of the tenant (*TooLargeError);
-//  4. with an idempotency key, a transfer the same sender (the same API
+//  3. the tenant policies (see applyPolicies): confidentiality level
+//     (unknown key: *ValidationError), its rules (*RuleError,
+//     ErrConfidentialityRule), then the recipient domain rules (*RuleError,
+//     ErrRecipientDomainRefused, audited as transfer.recipient_refused);
+//     the forced deletion after the first download and the download cap
+//     of the level are applied, and the level, its labels and its rules
+//     are snapshotted on the transfer;
+//  4. per-transfer limit of the tenant (*TooLargeError);
+//  5. with an idempotency key, a transfer the same sender (the same API
 //     token for a token sender) created with it in the last
 //     store.IdempotencyRetention is returned as is, provided the request
 //     has the same fingerprint (see fingerprint); ErrIdempotencyMismatch
 //     otherwise;
-//  5. the password is hashed with argon2id (bounded concurrency, T-125),
+//  6. the password is hashed with argon2id (bounded concurrency, T-125),
 //     before the transaction so that the lock is not held meanwhile; its
 //     plaintext bytes are cleared afterwards;
-//  6. in one transaction, under the tenant lock: the cap on the unfinished
+//  7. in one transaction, under the tenant lock: the cap on the unfinished
 //     transfers of the sender (Options.MaxOpenTransfers for an internal
 //     sender and per API token, MaxOpenTransfersExternal for an external
 //     one; until the cleanup job exists, nothing else frees the quota held
@@ -388,6 +424,10 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	if sender.Kind == store.DepositorExternal {
 		p.recipients = []string{inv.InvitedBy}
 	}
+	pol, err := s.applyPolicies(ctx, t, sender, email, req, p.recipients)
+	if err != nil {
+		return Details{}, err
+	}
 	limits, err := s.repo.tenant(ctx, t.ID)
 	if err != nil {
 		return Details{}, fmt.Errorf("transfer: read tenant: %w", err)
@@ -418,9 +458,9 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	rec := store.Transfer{
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
 		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
-		DeleteAfterFirstDownload: req.DeleteAfterFirstDownload, IdempotencyKey: idempotencyKey,
-		RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
+		IdempotencyKey: idempotencyKey, RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
 	}
+	pol.snapshot(&rec)
 	deks := make([][]byte, len(p.files))
 	defer func() {
 		for _, k := range deks {
@@ -474,8 +514,11 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		return Details{}, fmt.Errorf("transfer: create transfer: %w", err)
 	}
 	s.onQuota(t.ID, false)
-	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID,
-		map[string]any{"fileCount": len(p.files), "totalBytes": p.total, "origin": origin(sender)})
+	created := map[string]any{"fileCount": len(p.files), "totalBytes": p.total, "origin": origin(sender)}
+	if pol.level != nil {
+		created["confidentialityLevel"] = pol.level.Key
+	}
+	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID, created)
 	if sender.APITokenID != "" {
 		s.write(ctx, t, audit.Event{
 			ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP, Action: audit.ActionAPITokenUsed,

@@ -155,12 +155,19 @@ async function createData(): Promise<ScreenshotData> {
         files: apiFiles(lang),
         message: MESSAGES[lang],
         language: lang,
+        // Shows the "Downloads left" line of the download page (V1.1).
+        maxDownloads: 5,
       },
       { host: HOSTS.a },
     );
     download[lang] = downloadPath(t.downloadUrl!);
     if (lang === 'en') transferId = t.id;
   }
+  // A denied recipient domain, for the Recipient domains screen.
+  await api.ok('PUT', `/admin/tenants/${a}/recipient-rules`, {
+    allowedDomains: [],
+    deniedDomains: ['webmail.example.net'],
+  });
   const protectedTransfer = await tokenDeposit(
     s.apiTokenA,
     API_SENDER,
@@ -489,11 +496,11 @@ test.describe('depositor', () => {
         .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
         .setInputFiles(files.map((f) => ({ name: f.name, mimeType: f.mimeType, buffer: f.buffer })));
       for (const f of files) await expect(page.getByText(f.name).first()).toBeVisible();
-      // The selected files are at the bottom of the form: scroll down to the send button, so that
-      // the capture (one viewport, 1280 x 800) shows the file list with the options above it.
+      // The capture (one viewport, 1280 x 800) starts at the confidentiality level and shows the options that
+      // follow it (duration, password, maximum number of downloads).
       await page
-        .getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true })
-        .evaluate((el) => el.scrollIntoView({ block: 'end' }));
+        .getByRole('group', { name: msg(lang, 'deposit.form.level.legend') })
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
       await shoot(page, lang, 'deposit-form');
 
       await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
@@ -572,6 +579,8 @@ test.describe('delegated admin', () => {
     ['admin-tenant-general', () => 'general', 'adminTenants.general.title'],
     ['admin-tenant-branding', () => 'branding', 'adminTenants.branding.title'],
     ['admin-tenant-network', () => 'network', 'adminTenants.network.title'],
+    ['admin-tenant-confidentiality', () => 'confidentiality', 'adminTenants.confidentiality.title'],
+    ['admin-tenant-recipient-rules', () => 'recipient-rules', 'adminTenants.recipientRules.title'],
     ['admin-tenant-smtp', () => 'smtp', 'adminTenants.smtp.title'],
     ['admin-tenant-templates', () => 'templates', 'adminTenants.templates.title'],
     ['admin-tenant-template-editor', (lang) => `templates/transfer-notification/${lang}`],

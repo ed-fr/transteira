@@ -3439,6 +3439,7 @@ export interface components {
             recipientEmailMasked?: string;
             /** @description Since 1.1. Download starts left before `maxDownloads` is reached; absent without limit or while `locked`. */
             downloadsRemaining?: number;
+            /** @description Since 1.1. Confidentiality level chosen by the sender, absent while `locked`. */
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
             /** @description Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`. */
             replyAllowed?: boolean;

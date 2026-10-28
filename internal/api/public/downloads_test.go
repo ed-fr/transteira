@@ -28,8 +28,15 @@ const linkToken = "dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf" // gitleaks:allow (fictitious 
 type fakeContent struct {
 	*bytes.Reader
 	delivered, closed bool
+	// begin is the refusal of Begin; begins records its get arguments.
+	begin  error
+	begins []bool
 }
 
+func (c *fakeContent) Begin(get bool) error {
+	c.begins = append(c.begins, get)
+	return c.begin
+}
 func (c *fakeContent) Delivered()                  { c.delivered = true }
 func (c *fakeContent) Close(context.Context) error { c.closed = true; return nil }
 
@@ -39,6 +46,14 @@ type fakeArchive struct {
 	written bool
 	closed  bool
 	err     error
+	// begin is the refusal of Begin; begins records its get arguments.
+	begin  error
+	begins []bool
+}
+
+func (a *fakeArchive) Begin(_ context.Context, get bool) error {
+	a.begins = append(a.begins, get)
+	return a.begin
 }
 
 func (a *fakeArchive) Close() { a.closed = true }
@@ -201,6 +216,66 @@ func TestGetDownload(t *testing.T) {
 
 	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrGone})).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{})
 	wantProblem(t, err, problem.CodeTransferGone)
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrMaxDownloads})).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{})
+	wantProblem(t, err, problem.CodeMaxDownloadsReached)
+}
+
+// TestGetDownloadLimitAndLevel checks downloadsRemaining and the
+// confidentiality level of the download page (since 1.1).
+func TestGetDownloadLimitAndLevel(t *testing.T) {
+	t.Parallel()
+	left, cap3 := 2, 3
+	level := &download.Confidentiality{
+		Key: "confidential", Labels: map[string]string{"fr": "Restreint", "en": "Confidential"},
+		Rules: &store.ConfidentialityRules{
+			ExpiryDaysMask: store.ExpiryMask1Day | store.ExpiryMask7Days, MaxDownloadsCap: &cap3,
+			RequirePassword: true, InternalRecipientsOnly: true,
+		},
+	}
+	f := &fakeDownloads{view: download.View{SenderEmail: "alice@entity-a.example.com", DownloadsRemaining: &left, Confidentiality: level}}
+	get := func(accept string) gen.PublicTransfer {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		if accept != "" {
+			r.Header.Set("Accept-Language", accept)
+		}
+		resp, err := NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, r), gen.GetDownloadRequestObject{LinkToken: linkToken})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	}
+	got := get("fr-FR,fr;q=0.9")
+	if got.DownloadsRemaining == nil || *got.DownloadsRemaining != 2 {
+		t.Errorf("downloadsRemaining = %v", got.DownloadsRemaining)
+	}
+	l := got.ConfidentialityLevel
+	if l == nil || l.Key != "confidential" || l.Label != "Restreint" || l.Rules == nil {
+		t.Fatalf("level = %+v", l)
+	}
+	if r := l.Rules; fmt.Sprint(r.AllowedExpiryDays) != "[1 7]" || r.MaxDownloads == nil || *r.MaxDownloads != 3 ||
+		!r.RequirePassword || !r.InternalRecipientsOnly || r.RequireRecipientVerification || r.ForceDeleteAfterFirstDownload {
+		t.Errorf("rules = %+v", r)
+	}
+	if got := get("de"); got.ConfidentialityLevel.Label != "Confidential" { // tenant default (en)
+		t.Errorf("label in the default language = %q", got.ConfidentialityLevel.Label)
+	}
+	// A label missing in the request language falls back to English.
+	f.view.Confidentiality = &download.Confidentiality{Key: "internal", Labels: map[string]string{"en": "Internal"}}
+	if got := get("fr"); got.ConfidentialityLevel.Label != "Internal" || got.ConfidentialityLevel.Rules != nil {
+		t.Errorf("fallback level = %+v", got.ConfidentialityLevel)
+	}
+	// Locked: neither the level nor the downloads left.
+	f.view.Locked = true
+	f.view.Confidentiality.Rules = &store.ConfidentialityRules{RequirePassword: true}
+	if got := get(""); got.DownloadsRemaining != nil || got.ConfidentialityLevel != nil {
+		t.Errorf("locked: %+v", got)
+	}
+	// No limit, no level: both absent.
+	f.view = download.View{SenderEmail: "alice@entity-a.example.com"}
+	if got := get(""); got.DownloadsRemaining != nil || got.ConfidentialityLevel != nil {
+		t.Errorf("without limit nor level: %+v", got)
+	}
 }
 
 func TestUnlockDownload(t *testing.T) {
@@ -281,6 +356,7 @@ func TestDownloadError(t *testing.T) {
 		}},
 		{err: download.ErrNotFound, code: problem.CodeNotFound},
 		{err: download.ErrGone, code: problem.CodeTransferGone},
+		{err: download.ErrMaxDownloads, code: problem.CodeMaxDownloadsReached},
 		{err: download.ErrDownloadLocked, code: problem.CodeDownloadLocked},
 		{err: download.ErrNoClientIP, code: problem.CodeInternalError},
 		{err: boom, code: problem.CodeInternalError},
@@ -416,9 +492,56 @@ func TestDownloadFile(t *testing.T) {
 		t.Errorf("after a write error: delivered %v closed %v", f.content.delivered, f.content.closed)
 	}
 
+	// Begin is called with the method before a 200 or 206 only.
+	if got := fmt.Sprint(f.content.begins); got != "[true]" {
+		t.Errorf("begins of a GET = %s", got)
+	}
+	f = newFake()
+	r = httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Range", "bytes=50-60")
+	serveFile(t, f, r)
+	if f.content.begins != nil {
+		t.Errorf("416: begins %v", f.content.begins)
+	}
+	f = newFake()
+	serveFile(t, f, httptest.NewRequest(http.MethodHead, "/", nil))
+	if got := fmt.Sprint(f.content.begins); got != "[false]" {
+		t.Errorf("begins of a HEAD = %s", got)
+	}
+
 	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrDownloadLocked})).DownloadFile(
 		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadFileRequestObject{})
 	wantProblem(t, err, problem.CodeDownloadLocked)
+}
+
+// TestDownloadFileRefused: a refusal of Begin (download limit) answers its
+// Problem, with none of the file headers nor bytes, and closes the content
+// without crediting it.
+func TestDownloadFileRefused(t *testing.T) {
+	t.Parallel()
+	for _, rng := range []string{"", "bytes=2-4"} {
+		f := &fakeDownloads{name: "plans.pdf", sha: "abc", content: &fakeContent{
+			Reader: bytes.NewReader([]byte("0123456789")), begin: download.ErrMaxDownloads,
+		}}
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		if rng != "" {
+			r.Header.Set("Range", rng)
+		}
+		resp, err := NewServer(WithDownloads(f)).DownloadFile(downloadCtx(t, r), gen.DownloadFileRequestObject{LinkToken: linkToken, FileId: "fil_1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		wantProblem(t, resp.VisitDownloadFileResponse(rec), problem.CodeMaxDownloadsReached)
+		h := rec.Header()
+		if rec.Body.Len() != 0 || h.Get("Content-Length") != "" || h.Get("Content-Range") != "" || h.Get("ETag") != "" ||
+			h.Get("Content-Disposition") != "" || h.Get("Accept-Ranges") != "" || rec.Flushed {
+			t.Errorf("%q: refused answer wrote %q %v", rng, rec.Body, h)
+		}
+		if f.content.delivered || !f.content.closed {
+			t.Errorf("%q: delivered %v closed %v", rng, f.content.delivered, f.content.closed)
+		}
+	}
 }
 
 // flushFailWriter fails the flush.
@@ -512,6 +635,16 @@ func TestDownloadArchive(t *testing.T) {
 		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
 	if err := resp.VisitDownloadArchiveResponse(httptest.NewRecorder()); err == nil {
 		t.Error("archive failure not returned")
+	}
+
+	// A refusal of Begin: its Problem, nothing written.
+	a = &fakeArchive{data: []byte("PK"), begin: download.ErrMaxDownloads}
+	resp, _ = NewServer(WithDownloads(&fakeDownloads{archive: a})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodHead, "/", nil)), gen.DownloadArchiveRequestObject{})
+	rec = httptest.NewRecorder()
+	wantProblem(t, resp.VisitDownloadArchiveResponse(rec), problem.CodeMaxDownloadsReached)
+	if a.written || !a.closed || rec.Body.Len() != 0 || len(rec.Header()) != 0 || fmt.Sprint(a.begins) != "[false]" {
+		t.Errorf("refused archive: written %v closed %v %q %v begins %v", a.written, a.closed, rec.Body, rec.Header(), a.begins)
 	}
 
 	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrNotFound})).DownloadArchive(

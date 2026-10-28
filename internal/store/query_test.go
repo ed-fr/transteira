@@ -358,9 +358,25 @@ func normalizeSQL(s string) string { return strings.Join(strings.Fields(s), " ")
 // its tenant slot. Adding or changing a tenant query requires a visible
 // update of this list.
 var tenantAllowlist = map[string]int{
-	`SELECT kind, value FROM tenant_network_rules WHERE tenant_id = ?`:                                                         0,
-	`DELETE FROM tenant_network_rules WHERE tenant_id = ?`:                                                                     0,
-	`INSERT INTO tenant_network_rules (tenant_id, kind, value) VALUES (?, ?, ?)`:                                               0,
+	`SELECT kind, value FROM tenant_network_rules WHERE tenant_id = ?`:           0,
+	`DELETE FROM tenant_network_rules WHERE tenant_id = ?`:                       0,
+	`INSERT INTO tenant_network_rules (tenant_id, kind, value) VALUES (?, ?, ?)`: 0,
+	// Confidentiality levels and recipient domain rules.
+	`SELECT ` + levelColumns + ` FROM confidentiality_levels WHERE tenant_id = ? ORDER BY position`: 0,
+	`SELECT ` + levelColumns + ` FROM confidentiality_levels WHERE tenant_id = ? AND key = ?`:       0,
+	`SELECT ` + levelColumns + ` FROM confidentiality_levels WHERE tenant_id = ? AND is_default`:    0,
+	`DELETE FROM confidentiality_levels WHERE tenant_id = ?`:                                        0,
+	`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, descriptions, is_default, ` +
+		`require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, ` +
+		`force_delete_after_download, max_downloads_cap, updated_at, updated_by) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT kind, domain FROM recipient_domain_rules WHERE tenant_id = ?`:                          0,
+	`DELETE FROM recipient_domain_rules WHERE tenant_id = ?`:                                       0,
+	`INSERT INTO recipient_domain_rules (tenant_id, kind, domain, created_at) VALUES (?, ?, ?, ?)`: 0,
+	`UPDATE transfers SET download_count = download_count + 1, ` +
+		`delete_after = (CASE WHEN download_count + 1 >= max_downloads THEN COALESCE(delete_after, ?) ELSE delete_after END) ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'available' AND max_downloads IS NOT NULL ` +
+		`AND download_count < max_downloads RETURNING max_downloads - download_count`: 1,
 	`INSERT INTO blocklist_entries (tenant_id, id, kind, value, comment, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND id > ? ORDER BY id LIMIT ?`:                    0,
 	`SELECT ` + blockColumns + ` FROM blocklist_entries WHERE tenant_id = ? AND kind = ? AND id > ? ORDER BY id LIMIT ?`:       0,
@@ -432,7 +448,10 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at, sender_ip, api_token_id, link_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`: 0,
+		`created_at, sender_ip, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
+		`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
+		`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +

@@ -55,7 +55,8 @@
       "hint": "One or more email addresses, separated by commas or line breaks.",
       "external": "The files will be sent to {invitedBy}, who invited you.",
       "addressError": "{address}: {message}",
-      "tooMany": "Enter at most {max} recipients."
+      "tooMany": "Enter at most {max} recipients.",
+      "domainRefused": "This service does not allow sending to the domain of this address."
     },
     "message": {
       "label": "Message",
@@ -72,11 +73,14 @@
       "label": "Password",
       "hint": "Optional. The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
       "show": "Show",
-      "hide": "Hide"
+      "hide": "Hide",
+      "requiredHint": "Required by the chosen confidentiality level. The recipients will need it to download the files: share it through another channel (phone, text message), never in the same email.",
+      "requiredByLevel": "The chosen confidentiality level requires a password."
     },
     "deleteAfterFirstDownload": {
       "label": "Delete the transfer after the first download",
-      "hint": "The files are deleted as soon as one recipient has downloaded them."
+      "hint": "The files are deleted as soon as one recipient has downloaded them.",
+      "forced": "Required by the chosen confidentiality level."
     },
     "files": {
       "label": "Files to send",
@@ -89,6 +93,23 @@
         "other": "{count} file names are not accepted: rename the files and add them again."
       },
       "total": "Total: {total} of {max} allowed."
+    },
+    "level": {
+      "legend": "Confidentiality level",
+      "hint": "The level sets rules for this transfer (duration, password, recipients…).",
+      "none": "No confidentiality level is currently available for you, so no transfer can be sent. Contact your administrator."
+    },
+    "maxDownloads": {
+      "label": "Maximum number of downloads",
+      "hint": "Optional, from 1 to {max}. Once reached, the transfer can no longer be downloaded and is deleted.",
+      "invalid": "Enter a whole number between 1 and {max}, or leave the field empty.",
+      "exceeded": "The chosen confidentiality level allows at most {max} downloads."
+    },
+    "rules": {
+      "required": "The chosen confidentiality level requires this field.",
+      "not-allowed": "The chosen confidentiality level does not allow this value.",
+      "internal-only": "The chosen confidentiality level only allows recipients of the organisation.",
+      "max-exceeded": "This value is above the maximum allowed by the chosen confidentiality level."
     }
   },
   "upload": {

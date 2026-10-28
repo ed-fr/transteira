@@ -428,6 +428,40 @@ func TestTransferOperations(t *testing.T) {
 		t.Errorf("token transfer detail = %v", body)
 	}
 
+	// The confidentiality snapshot and the download limit (version 1.1).
+	if body["recipientVerification"] != false || body["confidentialityLevel"] != nil || body["maxDownloads"] != nil {
+		t.Errorf("transfer without level = %v", body)
+	}
+	maxDl, maxCap := 3, 5
+	level := tenantops.Transfer{
+		MaxDownloads: &maxDl, ConfidentialityLevel: "secret", ConfidentialityLabel: "Secret",
+		Rules: &store.ConfidentialityRules{ExpiryDaysMask: store.ExpiryMask1Day | store.ExpiryMask7Days, MaxDownloadsCap: &maxCap, RequirePassword: true},
+	}
+	o.transfer.MaxDownloads, o.transfer.ConfidentialityLevel, o.transfer.ConfidentialityLabel, o.transfer.Rules =
+		level.MaxDownloads, level.ConfidentialityLevel, level.ConfidentialityLabel, level.Rules
+	o.detail.Transfer = o.transfer
+	resp, _ = s.ListTenantTransfers(ctx, gen.ListTenantTransfersRequestObject{TenantId: "ten_a"})
+	_, body = decode(t, resp)
+	listed := body["items"].([]any)[0].(map[string]any)
+	ref, _ := listed["confidentialityLevel"].(map[string]any)
+	if listed["maxDownloads"] != float64(3) || listed["recipientVerification"] != false || ref["key"] != "secret" || ref["label"] != "Secret" {
+		t.Errorf("listed level = %v", listed)
+	}
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	_, body = decode(t, got)
+	ref, _ = body["confidentialityLevel"].(map[string]any)
+	rules, _ := ref["rules"].(map[string]any)
+	if body["maxDownloads"] != float64(3) || rules["maxDownloads"] != float64(5) || rules["requirePassword"] != true ||
+		len(rules["allowedExpiryDays"].([]any)) != 2 || rules["internalRecipientsOnly"] != false {
+		t.Errorf("detail level = %v", body)
+	}
+	o.transfer.Rules = nil
+	o.detail.Transfer = o.transfer
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	if _, body = decode(t, got); body["confidentialityLevel"].(map[string]any)["rules"] != nil {
+		t.Errorf("level without rules = %v", body["confidentialityLevel"])
+	}
+
 	del, err := s.DeleteTenantTransfer(ctx, gen.DeleteTenantTransferRequestObject{
 		TenantId: "ten_a", TransferId: "trf_01", Body: &gen.AdminReason{Reason: ptr("wrong recipient")},
 	})

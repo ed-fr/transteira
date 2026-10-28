@@ -67,13 +67,18 @@ Fill in the fields:
 - **Available for**: **1 day**, **7 days** or **30 days**. The period starts when the transfer becomes available, that is after the antivirus analysis.
 - **Password**: optional, with no complexity rule. Send it to the recipients through another channel (phone, text message), never in the same email. After 3 wrong passwords, the transfer is locked for 15 minutes.
 - **Delete the transfer after the first download**: the transfer is deleted, for all recipients, once one of them has downloaded all the files, either as one ZIP archive or file by file. The deletion happens a few minutes later.
+- **Confidentiality level**: if your organisation offers several levels, choose the one that matches the sensitivity of the files; its description appears under it. A level can impose rules: it may restrict the available durations, make the password mandatory, force the deletion after the first download, limit the recipients to the organisation, or cap the maximum number of downloads. The form then limits the choices or fills in the options for you, and tells you why. If your organisation has a single level, the selector is not shown but its rules still apply.
+- **Maximum number of downloads**: optional, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. Leave the field empty for no limit, unless the chosen level sets a cap.
 - **Files to send**: drag your files onto the area **Drag and drop files here, or** click **choose files**. To remove a file from the list, use the remove button next to its name. Under the list, the form shows **Total:** followed by the size of your files and the size allowed.
 
 A transfer can contain up to 20 GB in total; your organisation may have set a lower limit. The hint under **Files to send** shows the actual limits (total size and number of files).
 
 > **Note** Folders cannot be sent as such. Select the files inside the folder, or compress the folder into a ZIP file yourself and send that file.
 
-When everything is ready, click **Send**.
+When everything is ready, click **Send**. Two messages may refuse the transfer:
+
+- a message saying that the chosen confidentiality level requires a field, does not allow a value, only allows recipients of the organisation or sets a lower maximum: correct the field named in the message, or choose another level;
+- **This service does not allow sending to the domain of this address.**: your organisation does not allow this recipient domain. Remove the address, or ask your administrator.
 
 <!-- topic: deposit-upload -->
 ### Following the upload

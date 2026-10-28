@@ -2984,7 +2984,7 @@ type PublicTransfer struct {
 	// ArchiveUrl URL of the ZIP archive of the listed files; absent while `locked`.
 	ArchiveUrl *string `json:"archiveUrl,omitempty"`
 
-	// ConfidentialityLevel Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none.
+	// ConfidentialityLevel Since 1.1. Confidentiality level chosen by the sender, absent while `locked`.
 	ConfidentialityLevel     *ConfidentialityLevelRef `json:"confidentialityLevel,omitempty"`
 	DeleteAfterFirstDownload *bool                    `json:"deleteAfterFirstDownload,omitempty"`
 

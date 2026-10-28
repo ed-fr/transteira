@@ -50,5 +50,11 @@
   "gone": {
     "title": "Transfert plus disponible",
     "text": "Ce transfert a expiré ou a été supprimé. Demandez à l’expéditeur de renvoyer les fichiers."
+  },
+  "level": "Confidentialité",
+  "downloadsRemaining": "Téléchargements restants",
+  "maxDownloads": {
+    "title": "Nombre maximal de téléchargements atteint",
+    "text": "Ce transfert a atteint son nombre maximal de téléchargements et ne peut plus être téléchargé. Demandez à l’expéditeur de renvoyer les fichiers."
   }
 }

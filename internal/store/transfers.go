@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"math"
 	"net/netip"
@@ -102,7 +103,9 @@ const IdempotencyRetention = 24 * time.Hour
 const transferColumns = `id, status, sender_email, sender_kind, invitation_id, message, language, expiry_days, ` +
 	`password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, created_at, ` +
 	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
-	`ended_at, sender_ip, download_count, api_token_id`
+	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
+	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
+	`rule_internal_recipients_only, rule_force_delete_after_first_download`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -130,8 +133,10 @@ var (
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at, sender_ip, api_token_id, link_mode)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`)
+		created_at, sender_ip, api_token_id, max_downloads, confidentiality_level, confidentiality_label,
+		rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification,
+		rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -333,6 +338,23 @@ type Transfer struct {
 	// deposit session. Such a transfer has an internal sender kind; only
 	// that token owns it ([Depositor.Owns]).
 	APITokenID string
+	// MaxDownloads is the largest number of download starts of the
+	// transfer (1 to MaxDownloadsLimit, spec 8.2), nil when unlimited. The
+	// starts of a limited transfer are counted with
+	// [Transfers.ClaimDownloadTx].
+	MaxDownloads *int
+	// ConfidentialityLevel is the key of the confidentiality level chosen
+	// for the transfer (spec 8.3), "" without level.
+	ConfidentialityLevel string
+	// ConfidentialityLabel is the snapshot of the labels of the level at
+	// creation, by language ("fr" and "en", 1 to MaxLevelLabelRunes
+	// characters each), nil without level. Renaming or removing the level
+	// later never changes it.
+	ConfidentialityLabel map[string]string
+	// Rules is the snapshot of the rules of the level at creation, nil
+	// without level (and required with one). The store only checks that the
+	// rules are well formed: the caller enforces them on the transfer.
+	Rules *ConfidentialityRules
 }
 
 // PasswordProtected reports whether the transfer has a password.
@@ -523,6 +545,11 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("a new transfer cannot be ended")
 	case t.DownloadCount != 0:
 		return Transfer{}, invalid("a new transfer cannot be downloaded")
+	case t.MaxDownloads != nil && (*t.MaxDownloads < 1 || *t.MaxDownloads > MaxDownloadsLimit):
+		return Transfer{}, invalid("max downloads must be 1 to %d", MaxDownloadsLimit)
+	}
+	if err := normalizeTransferLevel(&t); err != nil {
+		return Transfer{}, err
 	}
 	t.Status, t.TotalBytes = TransferUploading, total
 	if t.SenderIP.IsValid() {
@@ -684,10 +711,13 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 	if t.SenderIP.IsValid() {
 		senderIP = t.SenderIP.String()
 	}
-	_, err = tx.Exec(ctx, qTransferInsert, t.ID, string(t.Status), t.SenderEmail, string(t.SenderKind),
+	args := []any{
+		t.ID, string(t.Status), t.SenderEmail, string(t.SenderKind),
 		nullText(t.InvitationID), t.Message, t.Language, t.ExpiryDays, nullText(t.PasswordHash),
 		t.DeleteAfterFirstDownload, t.TotalBytes, nullText(t.IdempotencyKey), nullText(t.RequestFingerprint),
-		toMillis(created), senderIP, nullText(t.APITokenID))
+		toMillis(created), senderIP, nullText(t.APITokenID), nullInt(t.MaxDownloads),
+	}
+	_, err = tx.Exec(ctx, qTransferInsert, append(args, levelArgs(t)...)...)
 	if err != nil {
 		return err
 	}
@@ -727,16 +757,30 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		t                                Transfer
 		status, kind                     string
 		inv, pwd, key, fp, tokenKey, ip  sql.NullString
-		apiToken                         sql.NullString
+		apiToken, level, label           sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
 		downloaded, deleteAfter, ended   sql.NullInt64
+		maxDownloads, mask, maxCap       sql.NullInt64
+		pwdRule, verifRule, intRule, del sql.NullBool
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
-		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken)
+		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
+		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del)
 	if err != nil {
 		return Transfer{}, err
+	}
+	t.MaxDownloads, t.ConfidentialityLevel = intPtr(maxDownloads), level.String
+	if level.Valid {
+		if err := json.Unmarshal([]byte(label.String), &t.ConfidentialityLabel); err != nil {
+			return Transfer{}, invalid("stored confidentiality label is malformed")
+		}
+		t.Rules = &ConfidentialityRules{
+			ExpiryDaysMask: int(mask.Int64), MaxDownloadsCap: intPtr(maxCap), RequirePassword: pwdRule.Bool,
+			RequireRecipientVerification: verifRule.Bool, InternalRecipientsOnly: intRule.Bool,
+			ForceDeleteAfterFirstDownload: del.Bool,
+		}
 	}
 	t.Status, t.SenderKind = TransferStatus(status), DepositorKind(kind)
 	t.InvitationID, t.PasswordHash, t.IdempotencyKey, t.RequestFingerprint = inv.String, pwd.String, key.String, fp.String

@@ -120,6 +120,12 @@
     "path": "{lang}/admin-tenant-branding.png"
   },
   {
+    "name": "admin-tenant-confidentiality",
+    "screen": "admin /admin/tenants/:id/confidentiality",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-tenant-confidentiality.png"
+  },
+  {
     "name": "admin-tenant-create",
     "screen": "admin /admin/tenants/new",
     "profile": "super-admin",
@@ -148,6 +154,12 @@
     "screen": "admin /admin/tenants/:id/network",
     "profile": "delegated-admin",
     "path": "{lang}/admin-tenant-network.png"
+  },
+  {
+    "name": "admin-tenant-recipient-rules",
+    "screen": "admin /admin/tenants/:id/recipient-rules",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-tenant-recipient-rules.png"
   },
   {
     "name": "admin-tenant-smtp",

@@ -131,6 +131,52 @@ func TestTenantAdminLifecycle(t *testing.T) {
 			t.Errorf("network rules = %+v", rules)
 		}
 
+		// Confidentiality levels and recipient rules.
+		resp = mustStatus(t, "updateConfidentialityLevels", dc.call(t, http.MethodPut, tenantPath(c.ID, "/confidentiality-levels"),
+			map[string]any{"items": []map[string]any{{
+				"key": "open", "labels": map[string]string{"en": "Open", "fr": "Ouvert"}, "isDefault": true,
+				"rules": map[string]any{
+					"requireRecipientVerification": false, "requirePassword": false, "allowedExpiryDays": []int{7},
+					"internalRecipientsOnly": false, "forceDeleteAfterFirstDownload": false, "maxDownloads": 3,
+				},
+			}}}), http.StatusOK)
+		var levels struct {
+			Items []struct {
+				Key   string `json:"key"`
+				Rules struct {
+					RequirePassword   bool  `json:"requirePassword"`
+					AllowedExpiryDays []int `json:"allowedExpiryDays"`
+					MaxDownloads      *int  `json:"maxDownloads"`
+				} `json:"rules"`
+			} `json:"items"`
+		}
+		mustJSON(t, resp.body, &levels)
+		if len(levels.Items) != 1 || levels.Items[0].Key != "open" || levels.Items[0].Rules.RequirePassword ||
+			!slices.Equal(levels.Items[0].Rules.AllowedExpiryDays, []int{7}) || *levels.Items[0].Rules.MaxDownloads != 3 {
+			t.Errorf("confidentiality levels = %s", resp.body)
+		}
+		expectProblem(t, dc.call(t, http.MethodPut, tenantPath(c.ID, "/confidentiality-levels"),
+			map[string]any{"items": []map[string]any{{
+				"key": "Bad Key", "labels": map[string]string{"en": "Open", "fr": "Ouvert"}, "isDefault": true,
+				"rules": map[string]any{
+					"requireRecipientVerification": false, "requirePassword": false, "allowedExpiryDays": []int{7},
+					"internalRecipientsOnly": false, "forceDeleteAfterFirstDownload": false, "maxDownloads": nil,
+				},
+			}}}), http.StatusBadRequest, "validation-failed")
+		resp = mustStatus(t, "updateRecipientRules", dc.call(t, http.MethodPut, tenantPath(c.ID, "/recipient-rules"),
+			// A deny rule, so that the later deposit on C to example.net still passes.
+			map[string][]string{"allowedDomains": {}, "deniedDomains": {"Webmail.Example.org."}}), http.StatusOK)
+		var recipients struct {
+			Allowed []string `json:"allowedDomains"`
+			Denied  []string `json:"deniedDomains"`
+		}
+		mustJSON(t, resp.body, &recipients)
+		if !slices.Equal(recipients.Denied, []string{"webmail.example.org"}) || recipients.Allowed == nil || len(recipients.Allowed) != 0 {
+			t.Errorf("recipient rules = %s", resp.body)
+		}
+		expectProblem(t, dc.call(t, http.MethodPut, tenantPath(c.ID, "/recipient-rules"),
+			map[string][]string{"allowedDomains": {"a@b.example"}, "deniedDomains": {}}), http.StatusBadRequest, "validation-failed")
+
 		// SMTP to Mailpit, then the test mail.
 		resp = mustStatus(t, "updateSmtpSettings", dc.call(t, http.MethodPut, tenantPath(c.ID, "/smtp"), map[string]any{
 			"host": a.mp.host, "port": a.mp.port, "security": "none", "fromAddress": "noreply@" + domainC, "fromName": nameC,
@@ -227,7 +273,8 @@ func TestTenantAdminLifecycle(t *testing.T) {
 
 		// 7. Audit of every change, without secret.
 		rows := a.expectTenantAudit(t, c.ID, "tenant.created", "tenant.updated", "tenant.branding_updated",
-			"tenant.asset_uploaded", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested",
+			"tenant.asset_uploaded", "tenant.network_updated", "tenant.confidentiality_updated", "tenant.recipient_rules_updated",
+			"tenant.smtp_updated", "tenant.smtp_tested",
 			"tenant.template_updated", "tenant.legal_updated")
 		a.expectNoSecrets(t, rows)
 	})
@@ -310,7 +357,7 @@ type tenantOp struct {
 	ctype  string
 }
 
-// tenantOps lists the 20 operations of api/openapi.yaml taking a tenant
+// tenantOps lists the 24 operations of api/openapi.yaml taking a tenant
 // ID, with valid inputs (so that only the tenant decides the answer).
 func tenantOps(t *testing.T) []tenantOp {
 	t.Helper()
@@ -328,6 +375,10 @@ func tenantOps(t *testing.T) []tenantOp {
 		{"deleteBrandingAsset", http.MethodDelete, "/branding/logo", "", ""},
 		{"getNetworkRules", http.MethodGet, "/network", "", ""},
 		{"updateNetworkRules", http.MethodPut, "/network", `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["example.org"]}`, contentJSON},
+		{"getConfidentialityLevels", http.MethodGet, "/confidentiality-levels", "", ""},
+		{"updateConfidentialityLevels", http.MethodPut, "/confidentiality-levels", `{"items":[{"key":"open","labels":{"en":"Open","fr":"Ouvert"},"isDefault":true,"rules":{"requireRecipientVerification":false,"requirePassword":false,"allowedExpiryDays":[1,7,30],"internalRecipientsOnly":false,"forceDeleteAfterFirstDownload":false,"maxDownloads":null}}]}`, contentJSON},
+		{"getRecipientRules", http.MethodGet, "/recipient-rules", "", ""},
+		{"updateRecipientRules", http.MethodPut, "/recipient-rules", `{"allowedDomains":["example.org"],"deniedDomains":[]}`, contentJSON},
 		{"getSmtpSettings", http.MethodGet, "/smtp", "", ""},
 		{"updateSmtpSettings", http.MethodPut, "/smtp", `{"host":"mail.example.org","port":25,"security":"none","fromAddress":"x@example.org"}`, contentJSON},
 		{"testSmtp", http.MethodPost, "/smtp/test", `{"to":"probe@example.org"}`, contentJSON},
@@ -371,7 +422,7 @@ func unknownTenantID(tid string) string {
 
 // TestTenantAdminRights: a delegated admin of C may lower or raise the
 // limit up to the ceiling only and change no reserved setting; a delegated
-// admin of A gets, for each of the 20 operations on C's ID, exactly the
+// admin of A gets, for each of the 24 operations on C's ID, exactly the
 // answer of an unknown ID and changes nothing of C; the FQDN can be
 // neither an admin host nor one already used.
 func TestTenantAdminRights(t *testing.T) {

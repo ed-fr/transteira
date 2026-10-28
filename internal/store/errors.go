@@ -64,6 +64,10 @@ var (
 	// MaxWebhooks webhooks of a tenant or of the instance. Nothing is
 	// created.
 	ErrLimitReached = errors.New("store: limit reached")
+	// ErrMaxDownloads reports a download start of a transfer that already
+	// reached its download limit ([Transfers.ClaimDownloadTx]): nothing is
+	// counted.
+	ErrMaxDownloads = errors.New("store: download limit reached")
 	// ErrScrubBusy reports a WAL checkpoint that could not complete because
 	// readers were active: deleted data may remain in the SQLite WAL until
 	// the next [DB.ScrubDeleted]. It is not fatal.

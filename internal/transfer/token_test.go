@@ -93,19 +93,19 @@ func TestTokenValidation(t *testing.T) {
 		}{
 			"missing sender": {
 				func(r *CreateRequest) { r.SenderEmail = "" },
-				[]FieldError{{FieldSenderEmail, CodeRequired}},
+				[]FieldError{{Pointer: FieldSenderEmail, Code: CodeRequired}},
 			},
 			"display name": {
 				func(r *CreateRequest) { r.SenderEmail = "Carol <" + carol + ">" },
-				[]FieldError{{FieldSenderEmail, CodeInvalidEmail}},
+				[]FieldError{{Pointer: FieldSenderEmail, Code: CodeInvalidEmail}},
 			},
 			"malformed sender": {
 				func(r *CreateRequest) { r.SenderEmail = "carol@" },
-				[]FieldError{{FieldSenderEmail, CodeInvalidEmail}},
+				[]FieldError{{Pointer: FieldSenderEmail, Code: CodeInvalidEmail}},
 			},
 			"missing recipients": {
 				func(r *CreateRequest) { r.Recipients = nil },
-				[]FieldError{{FieldRecipients, CodeRequired}},
+				[]FieldError{{Pointer: FieldRecipients, Code: CodeRequired}},
 			},
 		}
 		for name, c := range cases {
@@ -120,7 +120,7 @@ func TestTokenValidation(t *testing.T) {
 		// A session may not name the sender.
 		_, err := ev.svc.Create(ctx, ev.a, internalSender(), tokenRequest(), "")
 		var verr *ValidationError
-		if !errors.As(err, &verr) || !reflect.DeepEqual(verr.Fields, []FieldError{{FieldSenderEmail, CodeNotAllowed}}) {
+		if !errors.As(err, &verr) || !reflect.DeepEqual(verr.Fields, []FieldError{{Pointer: FieldSenderEmail, Code: CodeNotAllowed}}) {
 			t.Errorf("session with senderEmail: err = %v", err)
 		}
 		// Nothing was refused by the eligibility (validation first).

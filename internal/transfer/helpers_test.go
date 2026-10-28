@@ -269,6 +269,20 @@ func (r *faultRepo) networkRules(ctx context.Context, tid tenant.ID) (store.Netw
 	return r.inner.networkRules(ctx, tid)
 }
 
+func (r *faultRepo) confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	if err := r.check("confidentialityLevels"); err != nil {
+		return nil, err
+	}
+	return r.inner.confidentialityLevels(ctx, tid)
+}
+
+func (r *faultRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error) {
+	if err := r.check("recipientRules"); err != nil {
+		return store.RecipientRuleSet{}, err
+	}
+	return r.inner.recipientRules(ctx, tid)
+}
+
 func (r *faultRepo) invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error) {
 	if err := r.check("invitation"); err != nil {
 		return store.Invitation{}, err

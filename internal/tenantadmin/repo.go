@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
@@ -22,6 +23,10 @@ type repo interface {
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
 	replaceNetworkRules(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (store.NetworkRuleSet, error)
+	confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error)
+	replaceConfidentialityLevels(ctx context.Context, tid tenant.ID, levels []store.ConfidentialityLevel, by string, now time.Time) ([]store.ConfidentialityLevel, error)
+	recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error)
+	replaceRecipientRules(ctx context.Context, tid tenant.ID, set store.RecipientRuleSet, now time.Time) (store.RecipientRuleSet, error)
 	smtp(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error)
 	putSMTP(ctx context.Context, tid tenant.ID, c store.SMTPConfig, update passwordUpdate) error
 	openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
@@ -208,3 +213,19 @@ func (r *storeRepo) listLegal(ctx context.Context, tid tenant.ID) ([]store.Legal
 }
 
 func (r *storeRepo) audit(ctx context.Context, ev audit.Event) error { return r.writer.Record(ctx, ev) }
+
+func (r *storeRepo) confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	return r.db.ConfidentialityLevels().List(ctx, tid)
+}
+
+func (r *storeRepo) replaceConfidentialityLevels(ctx context.Context, tid tenant.ID, levels []store.ConfidentialityLevel, by string, now time.Time) ([]store.ConfidentialityLevel, error) {
+	return r.db.ConfidentialityLevels().Replace(ctx, tid, levels, by, now)
+}
+
+func (r *storeRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error) {
+	return r.db.RecipientRules().Get(ctx, tid)
+}
+
+func (r *storeRepo) replaceRecipientRules(ctx context.Context, tid tenant.ID, set store.RecipientRuleSet, now time.Time) (store.RecipientRuleSet, error) {
+	return r.db.RecipientRules().Replace(ctx, tid, set, now)
+}

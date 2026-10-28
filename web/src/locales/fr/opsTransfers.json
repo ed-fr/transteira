@@ -110,7 +110,9 @@
     "backToList": "Retour aux transferts",
     "notFoundTitle": "Transfert introuvable",
     "notFoundText": "Ce transfert n’existe pas ou n’appartient plus à cette entité.",
-    "actionsTitle": "Actions"
+    "actionsTitle": "Actions",
+    "downloadsOfMax": "{count} sur {max} autorisés",
+    "confidentialityLevel": "Niveau de confidentialité"
   },
   "resend": {
     "button": "Renvoyer la notification",

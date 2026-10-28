@@ -23,6 +23,26 @@ type fakeTenantConfig struct {
 	img     branding.Image
 	legal   tenantadmin.PublicLegalDocument
 	gotLang string
+	levels  []tenantadmin.PublicConfidentialityLevel
+	// restricted is the answer of HasRecipientRules; levelsLang records the
+	// language the levels were asked in.
+	restricted bool
+	levelsLang string
+}
+
+func (f *fakeTenantConfig) PublicConfidentialityLevels(_ context.Context, t *tenant.Tenant, lang string) ([]tenantadmin.PublicConfidentialityLevel, error) {
+	if t.ID != "ten_x" {
+		return nil, errors.New("unexpected arguments")
+	}
+	f.levelsLang = lang
+	return f.levels, f.err
+}
+
+func (f *fakeTenantConfig) HasRecipientRules(_ context.Context, t *tenant.Tenant) (bool, error) {
+	if t.ID != "ten_x" {
+		return false, errors.New("unexpected arguments")
+	}
+	return f.restricted, f.err
 }
 
 func (f *fakeTenantConfig) Asset(_ context.Context, t *tenant.Tenant, asset string) (branding.Image, error) {
@@ -148,6 +168,57 @@ func TestGetPublicTenant(t *testing.T) {
 	if _, err := NewServer(WithTenantService(&fakeTenantConfig{err: boom})).GetPublicTenant(brandedCtx(false),
 		gen.GetPublicTenantRequestObject{}); !errors.Is(err, boom) {
 		t.Errorf("failure: %v", err)
+	}
+}
+
+func TestGetPublicTenantOptions(t *testing.T) {
+	t.Parallel()
+	cap3 := 3
+	svc := &fakeTenantConfig{
+		restricted: true,
+		levels: []tenantadmin.PublicConfidentialityLevel{
+			{Key: "internal", Label: "Interne", Description: "Usage interne", IsDefault: true, Rules: tenantadmin.ConfidentialityRules{
+				AllowedExpiryDays: []int{1, 7, 30},
+			}},
+			{Key: "secret", Label: "Secret", Rules: tenantadmin.ConfidentialityRules{
+				AllowedExpiryDays: []int{1}, MaxDownloads: &cap3, RequirePassword: true, RequireRecipientVerification: true,
+				InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true,
+			}},
+		},
+	}
+	s := NewServer(WithTenantService(svc))
+	accept := "en"
+	resp, err := s.GetPublicTenant(brandedCtx(false), gen.GetPublicTenantRequestObject{
+		Params: gen.GetPublicTenantParams{AcceptLanguage: &accept},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := resp.(gen.GetPublicTenant200JSONResponse).Body
+	if svc.levelsLang != "en" || b.ConfidentialityLevels == nil || len(*b.ConfidentialityLevels) != 2 {
+		t.Fatalf("levels asked in %q: %+v", svc.levelsLang, b.ConfidentialityLevels)
+	}
+	l := *b.ConfidentialityLevels
+	if l[0].Key != "internal" || l[0].Label != "Interne" || l[0].Description == nil || *l[0].Description != "Usage interne" ||
+		!l[0].IsDefault || l[0].Rules.MaxDownloads != nil || !reflect.DeepEqual(l[0].Rules.AllowedExpiryDays, []gen.ExpiryDays{1, 7, 30}) {
+		t.Errorf("first level %+v", l[0])
+	}
+	r := l[1].Rules
+	if l[1].Description != nil || l[1].IsDefault || *r.MaxDownloads != 3 || !r.RequirePassword || !r.RequireRecipientVerification ||
+		!r.InternalRecipientsOnly || !r.ForceDeleteAfterFirstDownload || !reflect.DeepEqual(r.AllowedExpiryDays, []gen.ExpiryDays{1}) {
+		t.Errorf("second level %+v", l[1])
+	}
+	// Per-recipient links come with step 6: the verification is not offered yet.
+	if b.Features == nil || !b.Features.MaxDownloads || b.Features.RecipientVerification || !b.Features.RecipientRestrictions {
+		t.Errorf("features %+v", b.Features)
+	}
+	svc.restricted = false
+	resp, err = s.GetPublicTenant(brandedCtx(false), gen.GetPublicTenantRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features.RecipientRestrictions || svc.levelsLang != "fr" {
+		t.Errorf("unrestricted: %+v (levels asked in %q)", b.Features, svc.levelsLang)
 	}
 }
 

@@ -27,7 +27,9 @@
     "network": "Network",
     "smtp": "Mail (SMTP)",
     "templates": "Email templates",
-    "legal": "Legal information"
+    "legal": "Legal information",
+    "recipientRules": "Recipient domains",
+    "confidentiality": "Confidentiality levels"
   },
   "fields": {
     "name": {
@@ -387,6 +389,7 @@
         "download_link": "Download link.",
         "expiry_datetime": "Date and time when the transfer expires.",
         "password_notice": "Notice that the password comes through another channel; empty without password.",
+        "confidentiality_notice": "Confidentiality level of the transfer; empty when the transfer has no level.",
         "qr_code": "QR code of the download link (HTML only; empty in the text body).",
         "files": "List of the files.",
         "file_count": "Number of files.",
@@ -485,6 +488,86 @@
         "action": "Delete the document"
       },
       "formTitle": "Content"
+    }
+  },
+  "recipientRules": {
+    "title": "Recipient domains",
+    "intro": "Limit the domains senders can address. Leave both lists empty to allow any recipient. The rules apply to transfers created after saving.",
+    "form": {
+      "title": "Recipient rules"
+    },
+    "allowed": {
+      "label": "Allowed domains",
+      "hint": "One domain per line. When this list is not empty, recipients can only belong to these domains. Subdomains are included: example.org also covers mail.example.org."
+    },
+    "denied": {
+      "label": "Denied domains",
+      "hint": "One domain per line, for example consumer webmail. Subdomains are included. A denied domain is always refused, even when it is also in the allowed list."
+    },
+    "warnings": {
+      "both": "{domain} is in both lists: it is denied, because the deny list wins.",
+      "restricts": {
+        "one": "The allowed list is not empty: recipients are restricted to this {count} domain.",
+        "other": "The allowed list is not empty: recipients are restricted to these {count} domains."
+      }
+    },
+    "saved": "Recipient rules saved.",
+    "normalized": "Some values were rewritten or removed by the server (lowercase, duplicates): the lists now show the saved values."
+  },
+  "confidentiality": {
+    "title": "Confidentiality levels",
+    "intro": "Levels the sender chooses from when creating a transfer. Each level imposes its own rules. With a single level, the selector is hidden but its rules still apply. The rules apply to transfers created after saving.",
+    "form": {
+      "title": "Levels"
+    },
+    "level": {
+      "legend": "Level {n}: {name}",
+      "unnamed": "new level"
+    },
+    "fields": {
+      "default": "Default level",
+      "key": "Key",
+      "label": "Label ({lang})",
+      "description": "Description ({lang})",
+      "days": "Available durations",
+      "requirePassword": "Password required",
+      "requireRecipientVerification": "Recipient verification required",
+      "internalRecipientsOnly": "Internal recipients only",
+      "forceDeleteAfterFirstDownload": "Delete after the first download (forced)",
+      "maxDownloads": "Maximum number of downloads (cap)"
+    },
+    "hints": {
+      "key": "Lowercase letters, digits, hyphen or underscore, starting with a letter (32 characters at most). Identifies the level in the API; keep it stable.",
+      "description": "Optional. Shown to the sender under the level.",
+      "recipientVerification": "Takes effect once per-recipient links are available. Until then, the option is stored but not applied.",
+      "internalRecipientsOnly": "Recipients must belong to the internal domains of the entity.",
+      "maxDownloads": "Optional, from 1 to {max}. Caps the number of downloads a sender can set; empty for no cap."
+    },
+    "dayChoice": {
+      "one": "{count} day",
+      "other": "{count} days"
+    },
+    "up": "Move up",
+    "down": "Move down",
+    "remove": "Remove",
+    "add": "Add a level",
+    "count": "{count} of {max} levels.",
+    "moveUp": "Move the level {name} up",
+    "moveDown": "Move the level {name} down",
+    "removeLevel": "Remove the level {name}",
+    "saved": "Confidentiality levels saved.",
+    "errors": {
+      "noLevel": "Add at least one level.",
+      "tooMany": "There can be at most {max} levels.",
+      "defaultCount": "Choose exactly one default level.",
+      "keyRequired": "Enter a key.",
+      "keyFormat": "Use lowercase letters, digits, hyphen or underscore, starting with a letter (32 characters at most).",
+      "keyDuplicate": "This key is used by another level.",
+      "labelRequired": "Enter a label.",
+      "labelTooLong": "The label is too long (at most {max} characters).",
+      "descriptionTooLong": "The description is too long (at most {max} characters).",
+      "daysRequired": "Allow at least one duration.",
+      "capInvalid": "Enter a whole number between 1 and {max}, or leave the field empty."
     }
   }
 }

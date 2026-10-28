@@ -64,6 +64,17 @@ type Transfer struct {
 	// FirstDownloadedAt is zero (null) before the first complete download.
 	FirstDownloadedAt time.Time
 	DownloadCount     int64
+	// MaxDownloads is the limit on the download starts, nil for none.
+	MaxDownloads *int
+	// ConfidentialityLevel is the key of the level snapshotted at creation,
+	// "" for a transfer without level.
+	ConfidentialityLevel string
+	// ConfidentialityLabel is the label of that level in the language of
+	// the transfer (the tenant default when it has none), "" without level.
+	ConfidentialityLabel string
+	// Rules are the rules of the level as snapshotted at creation, nil
+	// without level.
+	Rules *store.ConfidentialityRules
 }
 
 // TransferDetail is a transfer with its files (OpenAPI
@@ -120,14 +131,19 @@ func originOf(t store.Transfer) Origin {
 	return OriginInternal
 }
 
-// transferOf converts a stored transfer.
-func transferOf(t store.Transfer, recipients []string, fileCount int) Transfer {
+// transferOf converts a stored transfer; lang is the default language of
+// its tenant, for the label of its confidentiality level.
+func transferOf(t store.Transfer, recipients []string, fileCount int, lang string) Transfer {
 	out := Transfer{
 		ID: t.ID, Status: t.Status, Origin: originOf(t), SenderEmail: t.SenderEmail,
 		Recipients: append([]string{}, recipients...), InvitationID: t.InvitationID, APITokenID: t.APITokenID,
 		FileCount: fileCount, TotalBytes: t.TotalBytes, PasswordProtected: t.PasswordProtected(),
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
+		MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel, Rules: t.Rules,
+	}
+	if t.ConfidentialityLevel != "" {
+		out.ConfidentialityLabel = store.LevelLabel(t.ConfidentialityLabel, t.Language, lang, "en")
 	}
 	if !t.AvailableAt.IsZero() {
 		out.ExpiresAt = t.ExpiresAt
@@ -138,7 +154,8 @@ func transferOf(t store.Transfer, recipients []string, fileCount int) Transfer {
 // ListTransfers returns a page of the transfers of tenant tid, most recent
 // first, in every status, with their recipients and number of files.
 func (s *Service) ListTransfers(ctx context.Context, p adminauth.Principal, tid tenant.ID, f TransferFilter) (store.Page[Transfer], error) {
-	if err := s.readable(ctx, p, tid); err != nil {
+	tn, err := s.readableTenant(ctx, p, tid)
+	if err != nil {
 		return store.Page[Transfer]{}, err
 	}
 	sf := store.AdminTransferFilter{
@@ -162,7 +179,7 @@ func (s *Service) ListTransfers(ctx context.Context, p adminauth.Principal, tid 
 	}
 	out := store.Page[Transfer]{Items: make([]Transfer, len(page.Items)), NextCursor: page.NextCursor}
 	for i, t := range page.Items {
-		out.Items[i] = transferOf(t.Transfer, t.Recipients, t.FileCount)
+		out.Items[i] = transferOf(t.Transfer, t.Recipients, t.FileCount, tn.DefaultLanguage)
 	}
 	return out, nil
 }
@@ -187,7 +204,8 @@ func (s *Service) transfer(ctx context.Context, tid tenant.ID, trfID string) (st
 // their fingerprints and antivirus results: never a file content nor the
 // download link.
 func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid tenant.ID, trfID string) (TransferDetail, error) {
-	if err := s.readable(ctx, p, tid); err != nil {
+	tn, err := s.readableTenant(ctx, p, tid)
+	if err != nil {
 		return TransferDetail{}, err
 	}
 	d, err := s.transfer(ctx, tid, trfID)
@@ -195,7 +213,7 @@ func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid te
 		return TransferDetail{}, err
 	}
 	out := TransferDetail{
-		Transfer: transferOf(d.Transfer, d.Recipients, len(d.Files)), SenderIP: d.SenderIP,
+		Transfer: transferOf(d.Transfer, d.Recipients, len(d.Files), tn.DefaultLanguage), SenderIP: d.SenderIP,
 		Files: make([]File, len(d.Files)),
 	}
 	for i, f := range d.Files {

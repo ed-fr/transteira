@@ -126,6 +126,22 @@ func (f *fakeTenantService) UpdateNetworkRules(_ context.Context, p adminauth.Pr
 	return tenantadmin.NetworkRules{CIDRs: cidrs, Domains: domains}, f.record("UpdateNetworkRules", p.SessionID, tid, cidrs, domains, ip)
 }
 
+func (f *fakeTenantService) GetConfidentialityLevels(_ context.Context, p adminauth.Principal, tid tenant.ID) ([]tenantadmin.ConfidentialityLevel, error) {
+	return nil, f.record("GetConfidentialityLevels", p.SessionID, tid)
+}
+
+func (f *fakeTenantService) UpdateConfidentialityLevels(_ context.Context, p adminauth.Principal, tid tenant.ID, levels []tenantadmin.ConfidentialityLevel, ip netip.Addr) ([]tenantadmin.ConfidentialityLevel, error) {
+	return levels, f.record("UpdateConfidentialityLevels", p.SessionID, tid, levels, ip)
+}
+
+func (f *fakeTenantService) GetRecipientRules(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.RecipientRules, error) {
+	return tenantadmin.RecipientRules{}, f.record("GetRecipientRules", p.SessionID, tid)
+}
+
+func (f *fakeTenantService) UpdateRecipientRules(_ context.Context, p adminauth.Principal, tid tenant.ID, allowed, denied []string, ip netip.Addr) (tenantadmin.RecipientRules, error) {
+	return tenantadmin.RecipientRules{Allowed: allowed, Denied: denied}, f.record("UpdateRecipientRules", p.SessionID, tid, allowed, denied, ip)
+}
+
 func (f *fakeTenantService) GetSMTP(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SMTPView, error) {
 	return smtpA, f.record("GetSMTP", p.SessionID, tid)
 }
@@ -260,6 +276,14 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("GetNetworkRules", err)
 	_, err = s.UpdateNetworkRules(ctx, gen.UpdateNetworkRulesRequestObject{TenantId: "ten_a", Body: &gen.NetworkRules{}})
 	call("UpdateNetworkRules", err)
+	_, err = s.GetConfidentialityLevels(ctx, gen.GetConfidentialityLevelsRequestObject{TenantId: "ten_a"})
+	call("GetConfidentialityLevels", err)
+	_, err = s.UpdateConfidentialityLevels(ctx, gen.UpdateConfidentialityLevelsRequestObject{TenantId: "ten_a", Body: &gen.ConfidentialityLevelList{}})
+	call("UpdateConfidentialityLevels", err)
+	_, err = s.GetRecipientRules(ctx, gen.GetRecipientRulesRequestObject{TenantId: "ten_a"})
+	call("GetRecipientRules", err)
+	_, err = s.UpdateRecipientRules(ctx, gen.UpdateRecipientRulesRequestObject{TenantId: "ten_a", Body: &gen.RecipientRules{}})
+	call("UpdateRecipientRules", err)
 	_, err = s.GetSmtpSettings(ctx, gen.GetSmtpSettingsRequestObject{TenantId: "ten_a"})
 	call("GetSMTP", err)
 	_, err = s.UpdateSmtpSettings(ctx, gen.UpdateSmtpSettingsRequestObject{TenantId: "ten_a", Body: &gen.SmtpSettingsUpdate{}})
@@ -313,8 +337,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 23 {
-		t.Fatalf("%d operations, want 23", len(ops))
+	if len(ops) != 27 {
+		t.Fatalf("%d operations, want 27", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)
@@ -401,6 +425,10 @@ func TestTenantMissingBodies(t *testing.T) {
 	_, err = s.UpdateBranding(ctx, gen.UpdateBrandingRequestObject{})
 	errs = append(errs, err)
 	_, err = s.UpdateNetworkRules(ctx, gen.UpdateNetworkRulesRequestObject{})
+	errs = append(errs, err)
+	_, err = s.UpdateConfidentialityLevels(ctx, gen.UpdateConfidentialityLevelsRequestObject{})
+	errs = append(errs, err)
+	_, err = s.UpdateRecipientRules(ctx, gen.UpdateRecipientRulesRequestObject{})
 	errs = append(errs, err)
 	_, err = s.UpdateSmtpSettings(ctx, gen.UpdateSmtpSettingsRequestObject{})
 	errs = append(errs, err)
@@ -628,6 +656,82 @@ func TestNetworkHandlers(t *testing.T) {
 	}
 	if svc.args["UpdateNetworkRules"][4] != clientIP {
 		t.Errorf("update args %v", svc.args["UpdateNetworkRules"])
+	}
+}
+
+func TestConfidentialityHandlers(t *testing.T) {
+	t.Parallel()
+	svc := &fakeTenantService{}
+	s := tenantServer(svc)
+	ctx := ctxWith(store.SessionAuthenticated, delegated)
+	got, err := s.GetConfidentialityLevels(ctx, gen.GetConfidentialityLevelsRequestObject{TenantId: "ten_a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := got.(gen.GetConfidentialityLevels200JSONResponse); l.Items == nil || len(l.Items) != 0 {
+		t.Errorf("get %+v", l)
+	}
+	cap5 := 5
+	upd, err := s.UpdateConfidentialityLevels(ctx, gen.UpdateConfidentialityLevelsRequestObject{TenantId: "ten_a", Body: &gen.ConfidentialityLevelList{
+		Items: []gen.ConfidentialityLevel{{
+			Key: "secret", Labels: map[string]string{"en": "Secret", "fr": "Secret"}, IsDefault: true,
+			Rules: gen.ConfidentialityRules{
+				AllowedExpiryDays: []gen.ExpiryDays{1, 7}, MaxDownloads: &cap5, RequirePassword: true,
+				RequireRecipientVerification: true, InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true,
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := svc.args["UpdateConfidentialityLevels"][2].([]tenantadmin.ConfidentialityLevel)
+	want := tenantadmin.ConfidentialityLevel{
+		Key: "secret", Labels: map[string]string{"en": "Secret", "fr": "Secret"}, IsDefault: true,
+		Rules: tenantadmin.ConfidentialityRules{
+			AllowedExpiryDays: []int{1, 7}, MaxDownloads: &cap5, RequirePassword: true,
+			RequireRecipientVerification: true, InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true,
+		},
+	}
+	if len(in) != 1 || !reflect.DeepEqual(in[0], want) || svc.args["UpdateConfidentialityLevels"][3] != clientIP {
+		t.Errorf("service args %+v", svc.args["UpdateConfidentialityLevels"])
+	}
+	out := upd.(gen.UpdateConfidentialityLevels200JSONResponse).Items
+	if len(out) != 1 || out[0].Descriptions == nil || !reflect.DeepEqual(out[0].Rules.AllowedExpiryDays, []gen.ExpiryDays{1, 7}) ||
+		*out[0].Rules.MaxDownloads != 5 || !out[0].Rules.RequirePassword || !out[0].Rules.ForceDeleteAfterFirstDownload {
+		t.Errorf("update %+v", out)
+	}
+	desc := map[string]string{"en": "d"}
+	body := levelListBody([]tenantadmin.ConfidentialityLevel{{Key: "k", Descriptions: desc}})
+	if !reflect.DeepEqual(*body.Items[0].Descriptions, desc) {
+		t.Errorf("descriptions %+v", body.Items[0].Descriptions)
+	}
+}
+
+func TestRecipientRulesHandlers(t *testing.T) {
+	t.Parallel()
+	svc := &fakeTenantService{}
+	s := tenantServer(svc)
+	ctx := ctxWith(store.SessionAuthenticated, delegated)
+	got, err := s.GetRecipientRules(ctx, gen.GetRecipientRulesRequestObject{TenantId: "ten_a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Empty lists, never null.
+	if r := got.(gen.GetRecipientRules200JSONResponse); r.AllowedDomains == nil || r.DeniedDomains == nil {
+		t.Errorf("get %+v", r)
+	}
+	upd, err := s.UpdateRecipientRules(ctx, gen.UpdateRecipientRulesRequestObject{TenantId: "ten_a", Body: &gen.RecipientRules{
+		AllowedDomains: []string{"partner.example.com"}, DeniedDomains: []string{"mail.example.com"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := upd.(gen.UpdateRecipientRules200JSONResponse)
+	if !reflect.DeepEqual(r.AllowedDomains, []string{"partner.example.com"}) || !reflect.DeepEqual(r.DeniedDomains, []string{"mail.example.com"}) {
+		t.Errorf("update %+v", r)
+	}
+	if svc.args["UpdateRecipientRules"][4] != clientIP {
+		t.Errorf("update args %v", svc.args["UpdateRecipientRules"])
 	}
 }
 

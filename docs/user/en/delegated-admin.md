@@ -129,7 +129,7 @@ Creating and deleting entities is reserved to the super administrator: these act
 
 Once an entity is open, a navigation bar shows its name and two groups of screens.
 
-- **Configuration**: **General**, **Branding**, **Network**, **Mail (SMTP)**, **Email templates**, **Legal information**.
+- **Configuration**: **General**, **Branding**, **Network**, **Recipient domains**, **Confidentiality levels**, **Mail (SMTP)**, **Email templates**, **Legal information**.
 - **Operations**: **Transfers**, **Invitations**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Statistics**, **Personal data**.
 
 The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
@@ -193,6 +193,45 @@ Watch the warnings:
 - a range covering every address, such as `0.0.0.0/0`, means that any user of an internal domain can deposit from anywhere.
 
 TransTeira sees the address of the client as transmitted by the reverse proxy. If you are not sure which ranges to enter (offices, VPN, outgoing addresses), ask the operator of the service.
+
+<!-- topic: tenant-recipient-rules -->
+### Recipient domains
+
+The Recipient domains screen limits the email domains senders may address, for example to prevent files from leaving for consumer webmail.
+
+![Recipient domains screen with the allowed and denied domain lists](../screenshots/en/admin-tenant-recipient-rules.png)
+
+- **Allowed domains**: one domain per line. When this list is not empty, recipients can only belong to these domains.
+- **Denied domains**: one domain per line. A denied domain is always refused.
+
+A rule on a domain also covers its subdomains: `example.org` covers `mail.example.org`. If a domain is in both lists, it is denied, because the deny list wins. Leave both lists empty to allow any recipient. Each list holds at most 500 entries; the server saves the domains in lowercase, without duplicates, and shows the saved values. The screen warns you when a domain is in both lists and when a non-empty allowed list restricts the recipients. Click **Save**.
+
+The rules apply to every new transfer, whether it is sent from the web page or with an API token. A transfer addressed to a refused domain is not created: the sender sees a message naming the refused addresses, and the refusal is recorded in the [audit log](topic:tenant-audit) with the refused domains. It is not written to the security log. Transfers that already exist are not affected.
+
+<!-- topic: tenant-confidentiality -->
+### Confidentiality levels
+
+The Confidentiality levels screen defines the levels senders choose from when they create a transfer. Each level imposes its own rules. You can define from 1 to 10 levels, with exactly one **Default level**, which applies when the sender does not choose one. With a single level, the sender sees no selector, but its rules still apply.
+
+![Confidentiality levels screen with the rules of each level](../screenshots/en/admin-tenant-confidentiality.png)
+
+For each level, fill in:
+
+- **Key**: lowercase letters, digits, hyphen or underscore, starting with a letter (32 characters at most). It identifies the level in the API: keep it stable.
+- **Label** in French and in English (50 characters at most), and an optional **Description** in each language (500 characters at most), shown to the sender under the level.
+- **Rules** (each one is a separate field):
+- **Available durations**: the durations among 1, 7 and 30 days that the sender may choose (at least one).
+- **Password required**.
+- **Recipient verification required**. This rule is stored but not applied yet: it takes effect once per-recipient links are available.
+- **Internal recipients only**: recipients must belong to the internal domains of the entity (see [Network](topic:tenant-network)).
+- **Delete after the first download (forced)**.
+- **Maximum number of downloads (cap)**: optional, from 1 to 1000. It caps the number of downloads the sender can set; if the sender sets none, the cap applies.
+
+Use the arrows to reorder the levels, **Add a level** to create one, and **Save** to apply. The screen reports errors level by level.
+
+A transfer that breaks a rule of its level is refused, whatever the way it is created (web page or API token), and the sender is told which rule is not met. The rules of the level are copied onto each transfer when it is created: editing or deleting a level never changes the transfers that already exist. The level of a transfer is shown to the recipients in the email and on the download page, in the transfer details (see [Transfers](topic:tenant-transfers)) and in the [audit log](topic:tenant-audit).
+
+> **Note** Check the rules of the default level: they apply to every sender who does not choose a level.
 
 <!-- topic: tenant-smtp -->
 ### Mail (SMTP)
@@ -273,7 +312,7 @@ Filter by **Status**, by **Email address** (exact address of the sender or of a 
 
 ![List of the transfers of an entity with the filters](../screenshots/en/admin-transfers.png)
 
-Open a transfer to see its **Transfer details**: status, dates, first download, sender and sender IP address, origin, options, recipients, and the files with their size, SHA-256 fingerprint and antivirus result. File contents and download links are never available to administrators.
+Open a transfer to see its **Transfer details**: status, dates, first download, sender and sender IP address, origin, options (including the **Confidentiality level** and the number of downloads, shown as the count out of the maximum allowed when the sender set one), recipients, and the files with their size, SHA-256 fingerprint and antivirus result. File contents and download links are never available to administrators.
 
 ![Transfer details with its information, recipients and files](../screenshots/en/admin-transfer-detail.png)
 

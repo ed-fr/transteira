@@ -2,11 +2,14 @@ package transfer
 
 import (
 	"errors"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/filename"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/textsafe"
 )
@@ -76,6 +79,56 @@ func FuzzValidate(f *testing.F) {
 		again, err := s.validate(req, Sender{Depositor: store.Depositor{Kind: store.DepositorInternal}}, "")
 		if err != nil || fingerprint(p, req) != fingerprint(again, req) {
 			t.Fatal("fingerprint is not deterministic")
+		}
+	})
+}
+
+// FuzzPolicies checks the invariants of the tenant policies applied to a
+// creation request: no panic, every refused field names an existing
+// recipient or a known option, the refused domains are sorted and unique,
+// and a request satisfying the level keeps at most the cap and the forced
+// deletion.
+func FuzzPolicies(f *testing.F) {
+	f.Add("carol@entity-a.example.com,dave@customer.example.net", "customer.example.net", "", 7, 3, 5, true, true)
+	f.Add("x@Sub.Customer.Example.NET", "", "entity-a.example.com", 1, 0, 0, false, false)
+	f.Add("a@b", "b", "b", 30, 1001, 1, true, false)
+	f.Fuzz(func(t *testing.T, rcpts, denied, allowed string, days, maxDl, maxCap int, pw, internalOnly bool) {
+		recipients := strings.Split(rcpts, ",")
+		set := store.RecipientRuleSet{Denied: strings.Split(denied, ","), Allowed: strings.Split(allowed, ",")}
+		if allowed == "" {
+			set.Allowed = nil
+		}
+		fields, domains := refusedRecipients(recipients, set)
+		if len(domains) > len(fields) || !slices.IsSorted(domains) || len(slices.Compact(slices.Clone(domains))) != len(domains) {
+			t.Fatalf("domains %v for fields %v", domains, fields)
+		}
+		for _, fe := range fields {
+			i, err := strconv.Atoi(strings.TrimPrefix(fe.Pointer, FieldRecipients+"/"))
+			if err != nil || i < 0 || i >= len(recipients) || fe.Code != CodeDomainDenied {
+				t.Fatalf("field %+v", fe)
+			}
+		}
+		level := &store.ConfidentialityLevel{Key: "k", Rules: store.ConfidentialityRules{
+			ExpiryDaysMask: store.ExpiryMaskAll &^ store.ExpiryMask30Days, RequirePassword: pw,
+			InternalRecipientsOnly: internalOnly, ForceDeleteAfterFirstDownload: pw,
+		}}
+		if maxCap > 0 {
+			level.Rules.MaxDownloadsCap = &maxCap
+		}
+		req := CreateRequest{ExpiryDays: days}
+		if maxDl > 0 {
+			req.MaxDownloads = &maxDl
+		}
+		broken := checkLevelRules(level, req, recipients, netpolicy.Rules{Domains: set.Allowed})
+		if len(broken) > 0 {
+			return
+		}
+		p := applyLevel(level, req)
+		if maxCap > 0 && (p.maxDownloads == nil || *p.maxDownloads > maxCap) {
+			t.Fatalf("limit %v above the cap %d", p.maxDownloads, maxCap)
+		}
+		if pw && !p.deleteAfterFirstDownload {
+			t.Fatal("forced deletion lost")
 		}
 	})
 }

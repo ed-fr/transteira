@@ -173,6 +173,7 @@ func (c *slowContent) Read(p []byte) (int, error) {
 	return c.Reader.Read(p[:min(len(p), 32<<10)])
 }
 
+func (*slowContent) Begin(bool) error            { return nil }
 func (*slowContent) Delivered()                  {}
 func (*slowContent) Close(context.Context) error { return nil }
 

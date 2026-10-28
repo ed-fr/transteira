@@ -110,7 +110,9 @@
     "backToList": "Back to the transfers",
     "notFoundTitle": "Transfer not found",
     "notFoundText": "This transfer does not exist or no longer belongs to this entity.",
-    "actionsTitle": "Actions"
+    "actionsTitle": "Actions",
+    "downloadsOfMax": "{count} of {max} allowed",
+    "confidentialityLevel": "Confidentiality level"
   },
   "resend": {
     "button": "Resend the notification",

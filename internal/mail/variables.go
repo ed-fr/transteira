@@ -138,6 +138,7 @@ var keyDefs = map[string]keyDef{
 			{"download_link", VarURL, true, "Download link."},
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Notice that the password comes through another channel; empty without password."},
+			confidentialityVar,
 			{"qr_code", VarBlock, false, "QR code of the download link (HTML only; empty in the text body)."},
 			filesVar(true),
 			{"file_count", VarText, false, "Number of files."},
@@ -145,7 +146,7 @@ var keyDefs = map[string]keyDef{
 		values: notificationValues,
 		sample: TransferNotificationData{
 			TenantName: sampleTenant, SenderEmail: sampleSender, Message: sampleMessage, Link: sampleLink,
-			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true, QR: true,
+			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true, QR: true, ConfidentialityLabel: "Confidential",
 		},
 	},
 	TemplateTransferConfirmation: {
@@ -154,6 +155,7 @@ var keyDefs = map[string]keyDef{
 			{"download_link", VarURL, true, "Download link."},
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Reminder to give the password through another channel; empty without password."},
+			confidentialityVar,
 			{"recipients", VarBlock, false, "List of the recipients."},
 			filesVar(false),
 			{"file_count", VarText, false, "Number of delivered files."},
@@ -163,7 +165,7 @@ var keyDefs = map[string]keyDef{
 		sample: TransferConfirmationData{
 			TenantName: sampleTenant, Link: sampleLink, Recipients: []string{"bob@example.com", "carol@example.org"},
 			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true,
-			Withheld: []FileInfo{{Name: "archive.zip", Size: 3 << 20}},
+			ConfidentialityLabel: "Confidential", Withheld: []FileInfo{{Name: "archive.zip", Size: 3 << 20}},
 		},
 	},
 	TemplateFileProblems: {
@@ -384,15 +386,16 @@ func notificationValues(l *labels, lang string, data any) (map[string]value, boo
 		return nil, false
 	}
 	return map[string]value{
-		"tenant_name":     textValue(d.TenantName),
-		"sender_email":    textValue(d.SenderEmail),
-		"message":         messageBlock(l, d.Message),
-		"download_link":   urlValue(d.Link),
-		"expiry_datetime": textValue(FormatDateTime(lang, d.ExpiresAt)),
-		"password_notice": noticeBlock(d.PasswordRequired, l.otherChannelRecipient, true),
-		"qr_code":         qrBlock(l, d.QR),
-		"files":           filesBlock(l, lang, d.Files),
-		"file_count":      textValue(strconv.Itoa(len(d.Files))),
+		"tenant_name":            textValue(d.TenantName),
+		"sender_email":           textValue(d.SenderEmail),
+		"message":                messageBlock(l, d.Message),
+		"download_link":          urlValue(d.Link),
+		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
+		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelRecipient, true),
+		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
+		"qr_code":                qrBlock(l, d.QR),
+		"files":                  filesBlock(l, lang, d.Files),
+		"file_count":             textValue(strconv.Itoa(len(d.Files))),
 	}, true
 }
 
@@ -402,14 +405,15 @@ func confirmationValues(l *labels, lang string, data any) (map[string]value, boo
 		return nil, false
 	}
 	return map[string]value{
-		"tenant_name":     textValue(d.TenantName),
-		"download_link":   urlValue(d.Link),
-		"expiry_datetime": textValue(FormatDateTime(lang, d.ExpiresAt)),
-		"password_notice": noticeBlock(d.PasswordRequired, l.otherChannelSender, true),
-		"recipients":      recipientsBlock(d.Recipients),
-		"files":           filesBlock(l, lang, d.Files),
-		"file_count":      textValue(strconv.Itoa(len(d.Files))),
-		"withheld_files":  withheldConfirmationBlock(l, lang, d.Withheld),
+		"tenant_name":            textValue(d.TenantName),
+		"download_link":          urlValue(d.Link),
+		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
+		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelSender, true),
+		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
+		"recipients":             recipientsBlock(d.Recipients),
+		"files":                  filesBlock(l, lang, d.Files),
+		"file_count":             textValue(strconv.Itoa(len(d.Files))),
+		"withheld_files":         withheldConfirmationBlock(l, lang, d.Withheld),
 	}, true
 }
 
@@ -633,6 +637,16 @@ func noticeBlock(on bool, text string, strong bool) value {
 		h = "<strong>" + h + "</strong>"
 	}
 	return blockValue(trustedHTML("<p>"+h+"</p>"), text)
+}
+
+// confidentialityVar is the variable showing the confidentiality level of a
+// transfer in the transfer mails.
+var confidentialityVar = varSpec{"confidentiality_notice", VarBlock, false, "Confidentiality level of the transfer; empty when the transfer has no level."}
+
+// confidentialityBlock is the notice of the confidentiality level, or nothing
+// when label is empty.
+func confidentialityBlock(l *labels, label string) value {
+	return noticeBlock(label != "", l.confidentiality+label, true)
 }
 
 // paragraphsBlock renders paragraphs, or nothing.

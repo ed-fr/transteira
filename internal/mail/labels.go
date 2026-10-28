@@ -10,6 +10,7 @@ type labels struct {
 	messageIntro          string
 	otherChannelRecipient string
 	otherChannelSender    string
+	confidentiality       string // prefix of the confidentiality level notice
 	qrIntro               string
 	qrAlt                 string
 	sha                   string
@@ -54,6 +55,7 @@ var allLabels = map[string]*labels{
 		colon:                 ":",
 		messageIntro:          "Their message:",
 		otherChannelRecipient: "This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.",
+		confidentiality:       "Confidentiality level: ",
 		otherChannelSender:    "The transfer is protected by a password. Give it to the recipients through another channel (phone, text message...), never in the same e-mail as the link.",
 		qrIntro:               "You can also scan this QR code to open the download page:",
 		qrAlt:                 "QR code of the download link",
@@ -86,6 +88,7 @@ var allLabels = map[string]*labels{
 		colon:                 " :",
 		messageIntro:          "Son message :",
 		otherChannelRecipient: "Ce transfert est protégé par un mot de passe. Le mot de passe vous sera transmis par un autre canal ; il ne figure jamais dans ce message.",
+		confidentiality:       "Niveau de confidentialité : ",
 		otherChannelSender:    "Le transfert est protégé par un mot de passe. Communiquez-le aux destinataires par un autre canal (téléphone, SMS...), jamais dans le même e-mail que le lien.",
 		qrIntro:               "Vous pouvez aussi scanner ce QR code pour ouvrir la page de téléchargement :",
 		qrAlt:                 "QR code du lien de téléchargement",

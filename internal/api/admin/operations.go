@@ -226,8 +226,31 @@ func adminTransferBody(t tenantops.Transfer) gen.AdminTransfer {
 		FileCount: t.FileCount, TotalBytes: t.TotalBytes,
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: optionalTime(t.ExpiresAt), FirstDownloadedAt: optionalTime(t.FirstDownloadedAt),
-		DownloadCount: int(t.DownloadCount),
+		DownloadCount: int(t.DownloadCount), MaxDownloads: t.MaxDownloads, ConfidentialityLevel: transferLevelRef(t),
+		RecipientVerification: new(false),
 	}
+}
+
+// transferLevelRef renders the confidentiality level snapshotted on t as
+// the OpenAPI ConfidentialityLevelRef, nil for a transfer without level.
+func transferLevelRef(t tenantops.Transfer) *gen.ConfidentialityLevelRef {
+	if t.ConfidentialityLevel == "" {
+		return nil
+	}
+	ref := &gen.ConfidentialityLevelRef{Key: t.ConfidentialityLevel, Label: t.ConfidentialityLabel}
+	if r := t.Rules; r != nil {
+		days := r.AllowedExpiryDays()
+		allowed := make([]gen.ExpiryDays, len(days))
+		for i, n := range days {
+			allowed[i] = gen.ExpiryDays(n)
+		}
+		ref.Rules = &gen.ConfidentialityRules{
+			AllowedExpiryDays: allowed, ForceDeleteAfterFirstDownload: r.ForceDeleteAfterFirstDownload,
+			InternalRecipientsOnly: r.InternalRecipientsOnly, MaxDownloads: r.MaxDownloadsCap,
+			RequirePassword: r.RequirePassword, RequireRecipientVerification: r.RequireRecipientVerification,
+		}
+	}
+	return ref
 }
 
 // GetTenantTransfer returns the metadata and files of a transfer, never
@@ -247,7 +270,8 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 		InvitationId: t.InvitationId, ApiTokenId: t.ApiTokenId, FileCount: t.FileCount, TotalBytes: t.TotalBytes,
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, FirstDownloadedAt: t.FirstDownloadedAt,
-		DownloadCount: t.DownloadCount,
+		DownloadCount: t.DownloadCount, MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel,
+		RecipientVerification: t.RecipientVerification,
 	}
 	if d.SenderIP.IsValid() {
 		ip := d.SenderIP.String()

@@ -39,6 +39,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
   the fail2ban and CrowdSec filters). Grafana dashboard and Zabbix 7.0 template in `integrations/`;
   the shipped Caddy, Nginx and Apache configurations hide both paths on the tenant hosts
   (`docs/operations/supervision.md`).
+- Transfer options (specification sections 8.2, 8.3 and 8.4): optional maximum number of downloads
+  per transfer (1 to 1000, counting every download start of all the recipients together; once
+  reached, the transfer is deleted after a short grace period and the link answers "maximum number
+  of downloads reached"); confidentiality levels managed per tenant by its administrators (1 to 10
+  levels, one default, French and English labels, rules on durations, password, internal
+  recipients, deletion after the first download and a downloads cap; the rules are copied onto
+  each transfer, so editing a level never changes existing transfers; the level is shown in the
+  mails, on the download page, in the transfer details and in the audit log); recipient domain
+  allow and deny lists per tenant (subdomains included, deny wins, refusals audited). The expiry
+  reminder and the recipient verification come in a later step.
 - `make check-full`: `make check` with the 20 GB test forced, required before every release.
 - `make check` prints the duration of every gate.
 

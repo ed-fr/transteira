@@ -79,6 +79,11 @@ const (
 const (
 	// ActionTransferCreated: a depositor created a transfer.
 	ActionTransferCreated Action = "transfer.created"
+	// ActionTransferRecipientRefused: the recipient domain rules of the
+	// tenant refused recipients of a transfer creation (details: the
+	// refused domains, never an address; audit only, never in the security
+	// log).
+	ActionTransferRecipientRefused Action = "transfer.recipient_refused"
 	// ActionTransferFinalized: a depositor finalized the upload of a
 	// transfer.
 	ActionTransferFinalized Action = "transfer.finalized"

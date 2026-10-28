@@ -15,6 +15,8 @@ import (
 type repo interface {
 	blocked(ctx context.Context, tid tenant.ID, email, sha256 string) (bool, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
+	confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error)
+	recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error)
 	invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error)
 	apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error)
 	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
@@ -59,6 +61,14 @@ func (r storeRepo) blocked(ctx context.Context, tid tenant.ID, email, sha256 str
 
 func (r storeRepo) networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error) {
 	return r.db.NetworkRules().Get(ctx, tid)
+}
+
+func (r storeRepo) confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	return r.db.ConfidentialityLevels().List(ctx, tid)
+}
+
+func (r storeRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error) {
+	return r.db.RecipientRules().Get(ctx, tid)
 }
 
 func (r storeRepo) invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error) {

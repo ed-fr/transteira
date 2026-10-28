@@ -26,6 +26,14 @@ const (
 	DefaultMaxStartsPerTransfer = 1000
 )
 
+// startCeilingWindows bounds, in windows, how long the counted start of a
+// client of a transfer with a download limit stays remembered: its window
+// is moved by its interrupted responses ([startDedup.extend]), but never
+// past its claim time plus startCeilingWindows windows (4 hours by
+// default), so that a client cannot keep its key, shared by every client
+// behind the same address, uncounted for the life of the transfer.
+const startCeilingWindows = 4
+
 // startKey identifies the download starts that count as one within the
 // window: an object (a file ID, or archiveObject) of a transfer, by one
 // client (its IPv4 address, or its IPv6 /64, as the rate limits key it).
@@ -50,10 +58,12 @@ type transferCount struct {
 	n   int
 }
 
-// startEntry is a remembered download start.
+// startEntry is a remembered download start: at opens its window, claimed
+// is the time its start was counted (at, for [startDedup.first]).
 type startEntry struct {
-	key startKey
-	at  time.Time
+	key     startKey
+	at      time.Time
+	claimed time.Time
 }
 
 // startDedup remembers the download starts recorded within the window, so
@@ -74,7 +84,10 @@ type startEntry struct {
 // in memory only: a restart forgets it, which only lets a start be counted
 // once more. It is safe for concurrent use.
 type startDedup struct {
-	window      time.Duration
+	window time.Duration
+	// ceiling bounds the life of a remembered start from its claim time
+	// (startCeilingWindows windows).
+	ceiling     time.Duration
 	max         int
 	perTransfer int
 
@@ -93,7 +106,7 @@ type startDedup struct {
 // of a transfer per window.
 func newStartDedup(window time.Duration, maxEntries, perTransfer int) *startDedup {
 	return &startDedup{
-		window: window, max: maxEntries, perTransfer: perTransfer,
+		window: window, ceiling: startCeilingWindows * window, max: maxEntries, perTransfer: perTransfer,
 		order: list.New(), items: map[startKey]*list.Element{},
 		counted: list.New(), transfers: map[transferKey]*list.Element{},
 	}
@@ -107,14 +120,9 @@ func newStartDedup(window time.Duration, maxEntries, perTransfer int) *startDedu
 func (d *startDedup) first(k startKey, now time.Time) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for el := d.order.Front(); el != nil && d.expired(el.Value.(*startEntry).at, now); el = d.order.Front() {
-		d.remove(el)
-	}
-	for el := d.counted.Front(); el != nil && d.expired(el.Value.(*transferCount).at, now); el = d.counted.Front() {
-		d.removeCount(el)
-	}
+	d.expire(now)
 	if el, ok := d.items[k]; ok {
-		if !d.expired(el.Value.(*startEntry).at, now) {
+		if d.live(el.Value.(*startEntry), now) {
 			return false
 		}
 		// The clock went back: the entry is not at the front.
@@ -123,11 +131,83 @@ func (d *startDedup) first(k startKey, now time.Time) bool {
 	if !d.count(transferKey{tid: k.tid, trf: k.trf}, now) {
 		return false
 	}
+	d.push(&startEntry{key: k, at: now, claimed: now})
+	return true
+}
+
+// seen reports whether a start of k is remembered at now and, if so, the
+// time it was counted. It remembers nothing: the starts of a transfer with
+// a download limit are remembered by [startDedup.claim] once counted.
+func (d *startDedup) seen(k startKey, now time.Time) (time.Time, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	el, ok := d.items[k]
+	if !ok || !d.live(el.Value.(*startEntry), now) {
+		return time.Time{}, false
+	}
+	return el.Value.(*startEntry).claimed, true
+}
+
+// claim remembers k counted at now, its window opened at now, in place of
+// any entry of k. It does not count the start for its transfer (the
+// download limit bounds those starts) and never refuses; when full, the
+// oldest entry is forgotten.
+func (d *startDedup) claim(k startKey, now time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.expire(now)
+	if el, ok := d.items[k]; ok {
+		d.remove(el)
+	}
+	d.push(&startEntry{key: k, at: now, claimed: now})
+}
+
+// extend moves to now the window of k, counted at claimed, after an
+// interrupted response, so that a download interrupted after a long
+// transfer can still resume within the window; k is remembered again if
+// it expired or was evicted meanwhile. The window never ends after
+// claimed plus the ceiling (see [startDedup.live]): past it, extend
+// forgets k, and its next start is counted again. Of the claim time given
+// and the one remembered, the later holds (k may have been counted again
+// meanwhile).
+func (d *startDedup) extend(k startKey, claimed, now time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.expire(now)
+	if el, ok := d.items[k]; ok {
+		if c := el.Value.(*startEntry).claimed; c.After(claimed) {
+			claimed = c
+		}
+		d.remove(el)
+	}
+	if e := (&startEntry{key: k, at: now, claimed: claimed}); d.live(e, now) {
+		d.push(e)
+	}
+}
+
+// push remembers e as the newest entry, forgetting the oldest when full.
+func (d *startDedup) push(e *startEntry) {
 	if len(d.items) >= d.max {
 		d.remove(d.order.Front())
 	}
-	d.items[k] = d.order.PushBack(&startEntry{key: k, at: now})
-	return true
+	d.items[e.key] = d.order.PushBack(e)
+}
+
+// live reports whether the entry e is remembered at now: its window is not
+// over, and it was counted less than the ceiling before now.
+func (d *startDedup) live(e *startEntry, now time.Time) bool {
+	return !d.expired(e.at, now) && now.Sub(e.claimed) < d.ceiling
+}
+
+// expire forgets the entries and transfer counts whose window is over at
+// now.
+func (d *startDedup) expire(now time.Time) {
+	for el := d.order.Front(); el != nil && d.expired(el.Value.(*startEntry).at, now); el = d.order.Front() {
+		d.remove(el)
+	}
+	for el := d.counted.Front(); el != nil && d.expired(el.Value.(*transferCount).at, now); el = d.counted.Front() {
+		d.removeCount(el)
+	}
 }
 
 // count counts a start of the transfer tk at now and reports whether it is

@@ -189,6 +189,13 @@ func (r faultRepo) started(ctx context.Context, tid tenant.ID, trfID string, ev 
 	return r.inner.started(ctx, tid, trfID, ev)
 }
 
+func (r faultRepo) claim(ctx context.Context, tid tenant.ID, trfID string, deleteAfter time.Time, ev audit.Event) (int, error) {
+	if err := r.f.hit("claim"); err != nil {
+		return 0, err
+	}
+	return r.inner.claim(ctx, tid, trfID, deleteAfter, ev)
+}
+
 // faultVault wraps the vault with the fault "open".
 type faultVault struct {
 	inner *masterkey.Vault
@@ -521,6 +528,10 @@ type spec struct {
 	sizes       map[int]int64
 	password    bool
 	deleteAfter bool
+	// maxDownloads is the download limit, 0 for none.
+	maxDownloads int
+	// level sets a confidentiality level.
+	level bool
 }
 
 // random returns n random bytes.
@@ -579,6 +590,14 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 		}
 		if sp.password {
 			tr.PasswordHash = passwordHash()
+		}
+		if sp.maxDownloads > 0 {
+			tr.MaxDownloads = &sp.maxDownloads
+		}
+		if sp.level {
+			tr.ConfidentialityLevel = "confidential"
+			tr.ConfidentialityLabel = map[string]string{"fr": "Restreint", "en": "Confidential"}
+			tr.Rules = &store.ConfidentialityRules{ExpiryDaysMask: store.ExpiryMaskAll, RequirePassword: true}
 		}
 		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, []string{dave}, files); err != nil {
 			return err

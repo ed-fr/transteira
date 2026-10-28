@@ -1,6 +1,7 @@
 package download
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/store"
@@ -18,6 +20,11 @@ import (
 // errSizeMismatch reports a stored file whose plaintext size differs from
 // the size recorded for it.
 var errSizeMismatch = errors.New("download: stored file size differs from the recorded size")
+
+// errNotBegun reports a read of a file of a transfer with a download
+// limit whose [Content.Begin] allowed no GET (a HEAD request): nothing is
+// read.
+var errNotBegun = errors.New("download: content read without a download start")
 
 // File is one deliverable file opened for download (downloadFile).
 type File struct {
@@ -56,6 +63,12 @@ type File struct {
 // HEAD request (never read, never delivered) and a resumed range (read
 // from a later offset) are no start. The HTTP layer must set Content-Type,
 // so that http.ServeContent does not read the content to sniff it.
+//
+// For a transfer with a download limit, the start is decided before any
+// byte instead, by [Content.Begin], which the HTTP layer calls when the
+// response is about to be answered 200 or 206 (see [Service.claimStart]).
+// Should it not, the first read begins it as a GET, and a refusal fails
+// that read (fail closed).
 type Content struct {
 	svc *Service
 	// ctx is the request context, for the recording of the download start:
@@ -80,6 +93,15 @@ type Content struct {
 	closed    bool
 	// started is set once the download start is recorded.
 	started bool
+	// limited is set for a transfer with a download limit; begun once
+	// [Content.Begin] ran, refused holding its refusal, and allowed once it
+	// allowed a GET (never set by a HEAD request).
+	limited bool
+	begun   bool
+	allowed bool
+	refused error
+	// claimed is the time the start allowed by Begin was counted.
+	claimed time.Time
 	// served counts the credited bytes.
 	served  int64
 	release func()
@@ -92,7 +114,8 @@ type Content struct {
 //
 // It returns ErrNotFound and ErrGone as Resolve does, ErrDownloadLocked for
 // a password-protected transfer not unlocked by this browser, ErrNotFound
-// for a file that is not a deliverable file of the transfer, a
+// for a file that is not a deliverable file of the transfer (a transfer
+// whose download limit is reached is opened: [Content.Begin] decides), a
 // *TooManyStreamsError (ErrTooManyStreams) over the concurrent stream
 // limits, and ErrNoClientIP for an invalid clientIP.
 //
@@ -108,7 +131,7 @@ type Content struct {
 // requests, the transfer counts as downloaded (see the package
 // documentation).
 func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (*File, error) {
-	a, err := s.resolve(ctx, t, rawToken, grantCookie)
+	a, err := s.resolve(ctx, t, rawToken, grantCookie, false)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +155,7 @@ func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken strin
 	}
 	c := &Content{
 		svc: s, ctx: ctx, ip: clientIP, t: t, d: a.d, files: a.files, file: f, osf: osf, release: release,
-		sr: io.NewSectionReader(ra, 0, ra.Size()), track: a.d.FirstDownloadedAt.IsZero(),
+		sr: io.NewSectionReader(ra, 0, ra.Size()), track: a.d.FirstDownloadedAt.IsZero(), limited: a.d.MaxDownloads != nil,
 	}
 	return &File{ID: f.ID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, Content: c}, nil
 }
@@ -173,9 +196,37 @@ func (c *Content) credit() {
 	c.pending = span{}
 }
 
+// Begin decides the response of a file of a transfer with a download
+// limit, before its headers are written: the HTTP layer calls it once
+// http.ServeContent is about to answer 200 or 206, get telling a GET
+// (false for HEAD). It returns ErrMaxDownloads once the limit is reached
+// for a client whose start is not remembered, ErrGone for a transfer
+// deleted meanwhile, or an internal error; the response must then be that
+// error, and every later read fails with it. See [Service.claimStart].
+// Without download limit, it does nothing: the start is recorded at the
+// first read from offset 0, as in version 1.0. Only its first call
+// decides.
+func (c *Content) Begin(get bool) error {
+	if !c.limited || c.begun {
+		return c.refused
+	}
+	c.begun = true
+	c.claimed, c.refused = c.svc.claimStart(c.ctx, c.t, c.d, c.file.ID, c.ip, get)
+	c.allowed = get && c.refused == nil
+	return c.refused
+}
+
 // Read implements io.Reader: it reads decrypted bytes from the current
 // offset.
 func (c *Content) Read(p []byte) (int, error) {
+	if c.limited && !c.allowed {
+		if c.begun {
+			return 0, cmp.Or(c.refused, errNotBegun)
+		}
+		if err := c.Begin(true); err != nil {
+			return 0, err
+		}
+	}
 	c.credit()
 	if c.pos == 0 {
 		c.start()
@@ -210,9 +261,10 @@ func (c *Content) Delivered() {
 	}
 }
 
-// start records the download start, once.
+// start records the download start, once; a start of a transfer with a
+// download limit is recorded by [Content.Begin] only.
 func (c *Content) start() {
-	if c.started {
+	if c.started || c.limited {
 		return
 	}
 	c.started = true
@@ -232,6 +284,9 @@ func (c *Content) Close(ctx context.Context) error {
 	c.closed = true
 	defer c.release()
 	c.svc.bytesServed(c.t.ID, c.served)
+	if c.allowed && !c.delivered {
+		c.svc.touchStart(c.t.ID, c.d.ID, c.file.ID, c.ip, c.claimed)
+	}
 	err := c.osf.Close()
 	if c.track && (len(c.spans) > 0 || (c.file.Size == 0 && c.delivered)) {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.svc.opts.CommitTimeout)

@@ -42,6 +42,16 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'admin-tenant-general', screen: 'admin /admin/tenants/:id/general', profile: 'delegated-admin' },
   { name: 'admin-tenant-branding', screen: 'admin /admin/tenants/:id/branding', profile: 'delegated-admin' },
   { name: 'admin-tenant-network', screen: 'admin /admin/tenants/:id/network', profile: 'delegated-admin' },
+  {
+    name: 'admin-tenant-confidentiality',
+    screen: 'admin /admin/tenants/:id/confidentiality',
+    profile: 'delegated-admin',
+  },
+  {
+    name: 'admin-tenant-recipient-rules',
+    screen: 'admin /admin/tenants/:id/recipient-rules',
+    profile: 'delegated-admin',
+  },
   { name: 'admin-tenant-smtp', screen: 'admin /admin/tenants/:id/smtp', profile: 'delegated-admin' },
   {
     name: 'admin-tenant-templates',

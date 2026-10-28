@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -294,7 +296,8 @@ type FileView struct {
 // View is a transfer as a recipient sees it (OpenAPI PublicTransfer). The
 // other recipients and the scan signatures are never part of it. While
 // Locked, only SenderEmail, ExpiresAt, PasswordProtected and Locked are
-// set, as the specification requires; every other field is zero.
+// set, as the specification requires; every other field is zero,
+// including Confidentiality.
 type View struct {
 	// TransferID identifies the transfer, for the logs and the audit; it is
 	// not part of the response.
@@ -321,6 +324,59 @@ type View struct {
 	ArchiveAvailable bool
 	// Files are the deliverable files, by position.
 	Files []FileView
+	// DownloadsRemaining is the number of download starts left before the
+	// download limit of the transfer is reached (at least 1, since the page
+	// of a transfer whose limit is reached answers ErrMaxDownloads), nil
+	// without limit or while Locked.
+	DownloadsRemaining *int
+	// Confidentiality is the confidentiality level of the transfer, as
+	// snapshotted at its creation, nil without level.
+	Confidentiality *Confidentiality
+}
+
+// Confidentiality is the confidentiality level of a transfer, as
+// snapshotted at its creation (OpenAPI ConfidentialityLevelRef, whose
+// label the HTTP layer picks with [Confidentiality.Label]).
+type Confidentiality struct {
+	// Key is the key of the level.
+	Key string
+	// Labels are the labels of the level by language ("fr", "en").
+	Labels map[string]string
+	// Rules are the rules applied to the transfer, nil when unknown.
+	Rules *store.ConfidentialityRules
+}
+
+// Label returns the label of the level in the first of langs that has
+// one, else in the lexically first language that has one ("" when there
+// is no label at all), so that a label is always shown.
+func (c Confidentiality) Label(langs ...string) string {
+	for _, l := range langs {
+		if v := c.Labels[l]; v != "" {
+			return v
+		}
+	}
+	keys := slices.Sorted(maps.Keys(c.Labels))
+	for _, k := range keys {
+		if v := c.Labels[k]; v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// confidentiality returns the confidentiality level of d, nil without
+// level.
+func confidentiality(d store.TransferDetails) *Confidentiality {
+	if d.ConfidentialityLevel == "" {
+		return nil
+	}
+	return &Confidentiality{Key: d.ConfidentialityLevel, Labels: maps.Clone(d.ConfidentialityLabel), Rules: d.Rules}
+}
+
+// limitReached reports whether d has a download limit that its download
+// starts already reached.
+func limitReached(d store.TransferDetails) bool {
+	return d.MaxDownloads != nil && d.DownloadCount >= int64(*d.MaxDownloads)
 }
 
 // access is a resolved download link.
@@ -337,8 +393,12 @@ type access struct {
 
 // resolve looks up the download token rawToken in tenant t and checks that
 // its transfer can be downloaded now. grantCookie is the raw value of the
-// grant cookie ("" when absent).
-func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (access, error) {
+// grant cookie ("" when absent). With gate, a transfer whose download
+// limit is reached is refused with ErrMaxDownloads (the page and the
+// unlock); the file and archive requests pass gate false, since a client
+// whose download was already counted is still served during the grace
+// period: their start decides ([Content.Begin], [Archive.Begin]).
+func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string, gate bool) (access, error) {
 	if !id.DownloadTokenValid(rawToken) {
 		return access{}, ErrNotFound
 	}
@@ -364,6 +424,9 @@ func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken, grant
 	if len(a.files) == 0 {
 		return access{}, ErrGone
 	}
+	if gate && limitReached(d) {
+		return access{}, ErrMaxDownloads
+	}
 	if !a.unlocked {
 		if a.unlocked, err = s.granted(grantCookie, t.ID, d.ID, now); err != nil {
 			return access{}, err
@@ -375,10 +438,13 @@ func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken, grant
 // Resolve returns the transfer of the download token rawToken in tenant t,
 // as the download page shows it (getDownload). grantCookie is the raw value
 // of the GrantCookieName cookie, "" when absent. It returns ErrNotFound for
-// a malformed or unknown token (including one of another tenant) and
-// ErrGone for a transfer that can no longer be downloaded.
+// a malformed or unknown token (including one of another tenant), ErrGone
+// for a transfer that can no longer be downloaded, and ErrMaxDownloads for
+// a transfer whose download limit is reached (even during its grace
+// period: no new download may start, and a download in progress does not
+// need the page to resume).
 func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (View, error) {
-	a, err := s.resolve(ctx, t, rawToken, grantCookie)
+	a, err := s.resolve(ctx, t, rawToken, grantCookie, true)
 	if err != nil {
 		return View{}, err
 	}
@@ -387,9 +453,16 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grant
 		PasswordProtected: a.d.PasswordProtected(), Locked: !a.unlocked,
 	}
 	if v.Locked {
+		// The level is part of what the password protects: a locked view
+		// keeps the 1.0 set of fields.
 		return v, nil
 	}
+	v.Confidentiality = confidentiality(a.d)
 	v.Message, v.DeleteAfterFirstDownload, v.ArchiveAvailable = a.d.Message, a.d.DeleteAfterFirstDownload, true
+	if m := a.d.MaxDownloads; m != nil {
+		left := int(int64(*m) - a.d.DownloadCount)
+		v.DownloadsRemaining = &left
+	}
 	for _, f := range a.files {
 		v.TotalBytes += f.Size
 		v.Files = append(v.Files, FileView{

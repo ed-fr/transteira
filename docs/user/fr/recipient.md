@@ -12,7 +12,9 @@ Ouvrez le lien du mail, ou scannez le QR code avec l’appareil photo de votre t
 - **Envoyé par** : l’adresse mail de la personne qui vous a envoyé les fichiers ;
 - **Disponible jusqu’au** : la date et l’heure après lesquelles les fichiers sont supprimés ;
 - **Total** : le nombre de fichiers et leur taille totale ;
-- **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un.
+- **Message de l’expéditeur** : le message rédigé par l’expéditeur, s’il y en a un ;
+- **Confidentialité** : le niveau de confidentialité choisi par l’expéditeur, s’il y en a un ;
+- **Téléchargements restants** : quand l’expéditeur a limité le nombre de téléchargements, le nombre qui reste.
 
 ![La page de téléchargement : expéditeur, date d’expiration, total, message de l’expéditeur, bouton pour télécharger tous les fichiers en archive ZIP et liste des fichiers avec leur taille, leur empreinte SHA-256 et un bouton Télécharger](../screenshots/fr/download.png)
 
@@ -93,6 +95,8 @@ Ces fichiers sont tout de même transmis, car ils peuvent être parfaitement lé
 - en cas de doute, demandez à l’expéditeur par un autre moyen (téléphone, mail séparé) s’il les a bien envoyés ;
 - analysez le fichier avec votre propre antivirus avant de l’ouvrir.
 
+> **Note** Si l’expéditeur a limité le nombre de téléchargements, chaque début de téléchargement compte, quelle que soit la personne qui télécharge. Quand la page affiche **Nombre maximal de téléchargements atteint**, le transfert ne peut plus être téléchargé : demandez à l’expéditeur de renvoyer les fichiers.
+
 <!-- topic: download-problems -->
 ## Le lien ne fonctionne pas
 
@@ -100,6 +104,7 @@ Cette section explique les messages que vous pouvez voir à la place des fichier
 
 - **Transfert introuvable** : le lien est incomplet ou a été modifié. Copiez le lien en entier depuis le mail, ou cliquez directement dessus dans le mail.
 - **Transfert plus disponible** : le transfert a expiré, a été supprimé par un administrateur, ou a été supprimé après son premier téléchargement. Demandez à l’expéditeur de renvoyer les fichiers.
+- **Nombre maximal de téléchargements atteint** : l’expéditeur avait autorisé un nombre limité de téléchargements et il est épuisé, par vous ou par les autres destinataires. Demandez à l’expéditeur de renvoyer les fichiers.
 - La page affiche **Maintenance en cours** : seuls les nouveaux transferts sont suspendus. Les téléchargements restent disponibles, vous pouvez donc continuer normalement.
 
 Pour répondre à l’expéditeur, répondez-lui par mail : TransTeira ne transmet pas les réponses.

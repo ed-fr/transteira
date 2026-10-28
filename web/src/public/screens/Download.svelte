@@ -16,7 +16,7 @@
   import {
     downloadView,
     isNotScanned,
-    loadFailure,
+    downloadLoadFailure,
     shouldRecheck,
     unlockFailure,
     type PublicTransfer,
@@ -28,6 +28,7 @@
     | { kind: 'ready'; transfer: PublicTransfer }
     | { kind: 'not-found' }
     | { kind: 'gone' }
+    | { kind: 'max-downloads' }
     | { kind: 'error' };
 
   let { params, nav }: ScreenProps = $props();
@@ -56,7 +57,7 @@
       const { data } = await api.get('/downloads/{linkToken}', { path: { linkToken } });
       view = { kind: 'ready', transfer: data };
     } catch (err) {
-      const failure = loadFailure(err);
+      const failure = downloadLoadFailure(err);
       view = { kind: failure };
     }
   }
@@ -76,7 +77,7 @@
         announce(formError);
       }
     } catch (err) {
-      const failure = loadFailure(err);
+      const failure = downloadLoadFailure(err);
       if (failure !== 'error') {
         view = { kind: failure };
       }
@@ -135,6 +136,7 @@
           break;
         case 'not-found':
         case 'gone':
+        case 'max-downloads':
           view = { kind: failure.kind };
           break;
         default:
@@ -155,6 +157,13 @@
   <NotFound {nav} title={t('download.notFound.title')} text={t('download.notFound.text')} homeLink={false} />
 {:else if view.kind === 'gone'}
   <NotFound {nav} title={t('download.gone.title')} text={t('download.gone.text')} homeLink={false} />
+{:else if view.kind === 'max-downloads'}
+  <NotFound
+    {nav}
+    title={t('download.maxDownloads.title')}
+    text={t('download.maxDownloads.text')}
+    homeLink={false}
+  />
 {:else if view.kind === 'error'}
   <ErrorPage onretry={() => void retry()} {retrying} />
 {:else if view.transfer.locked}
@@ -165,6 +174,10 @@
     <dd>{transfer.senderEmail}</dd>
     <dt>{t('download.expires')}</dt>
     <dd>{formatDate(transfer.expiresAt, { dateStyle: 'long', timeStyle: 'short' })}</dd>
+    {#if transfer.confidentialityLevel}
+      <dt>{t('download.level')}</dt>
+      <dd>{transfer.confidentialityLevel.label}</dd>
+    {/if}
   </dl>
   <p>{t('download.locked.text')}</p>
   <form class="tt-stack" onsubmit={unlock} novalidate>
@@ -199,6 +212,14 @@
     <dd>{formatDate(transfer.expiresAt, { dateStyle: 'long', timeStyle: 'short' })}</dd>
     <dt>{t('download.total')}</dt>
     <dd>{t('download.totalValue', { count: dl.files.length, size: formatBytes(dl.totalBytes) })}</dd>
+    {#if dl.levelLabel !== undefined}
+      <dt>{t('download.level')}</dt>
+      <dd>{dl.levelLabel}</dd>
+    {/if}
+    {#if dl.downloadsRemaining !== undefined}
+      <dt>{t('download.downloadsRemaining')}</dt>
+      <dd>{dl.downloadsRemaining}</dd>
+    {/if}
   </dl>
   {#if transfer.message}
     <h2 class="tt-text-lg">{t('download.message')}</h2>

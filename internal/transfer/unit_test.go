@@ -90,7 +90,7 @@ func TestDefaultHasher(t *testing.T) {
 
 func TestErrorTypes(t *testing.T) {
 	t.Parallel()
-	verr := &ValidationError{Fields: []FieldError{{FieldMessage, CodeTooLong}, {"/files/0/name", CodeInvalidFileName}}}
+	verr := &ValidationError{Fields: []FieldError{{Pointer: FieldMessage, Code: CodeTooLong}, {Pointer: "/files/0/name", Code: CodeInvalidFileName}}}
 	if got := verr.Error(); got != "transfer: invalid request: /message (too-long), /files/0/name (invalid-file-name)" {
 		t.Errorf("ValidationError = %q", got)
 	}

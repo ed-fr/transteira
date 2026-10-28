@@ -155,6 +155,9 @@ func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 		DeleteAfterFirstDownload: deref(b.DeleteAfterFirstDownload),
 		Language:                 string(deref(b.Language)),
 		Files:                    make([]transfer.FileDeclaration, len(b.Files)),
+		MaxDownloads:             b.MaxDownloads,
+		ConfidentialityLevel:     string(deref(b.ConfidentialityLevel)),
+		RecipientVerification:    deref(b.RecipientVerification),
 	}
 	if b.Recipients != nil {
 		req.Recipients = make([]string, len(*b.Recipients))
@@ -180,7 +183,8 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		PasswordProtected: d.PasswordProtected, DeleteAfterFirstDownload: d.DeleteAfterFirstDownload,
 		TotalBytes: d.TotalBytes, CreatedAt: d.CreatedAt, UploadExpiresAt: optionalTime(d.UploadExpiresAt),
 		FinalizedAt: optionalTime(d.FinalizedAt), DownloadUrl: optional(d.DownloadURL),
-		Files: make([]gen.SenderFile, len(d.Files)),
+		Files: make([]gen.SenderFile, len(d.Files)), MaxDownloads: d.MaxDownloads,
+		ConfidentialityLevel: senderLevelRef(d), RecipientVerification: new(false),
 	}
 	for i, r := range d.Recipients {
 		body.Recipients[i] = gen.Email(r)
@@ -197,6 +201,28 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		body.Files[i] = file
 	}
 	return body
+}
+
+// senderLevelRef renders the confidentiality level snapshotted on d as the
+// OpenAPI ConfidentialityLevelRef, nil for a transfer without level.
+func senderLevelRef(d transfer.Details) *gen.ConfidentialityLevelRef {
+	if d.ConfidentialityLevel == "" {
+		return nil
+	}
+	ref := &gen.ConfidentialityLevelRef{Key: d.ConfidentialityLevel, Label: d.ConfidentialityLabel}
+	if r := d.Rules; r != nil {
+		days := r.AllowedExpiryDays()
+		allowed := make([]gen.ExpiryDays, len(days))
+		for i, n := range days {
+			allowed[i] = gen.ExpiryDays(n)
+		}
+		ref.Rules = &gen.ConfidentialityRules{
+			AllowedExpiryDays: allowed, ForceDeleteAfterFirstDownload: r.ForceDeleteAfterFirstDownload,
+			InternalRecipientsOnly: r.InternalRecipientsOnly, MaxDownloads: r.MaxDownloadsCap,
+			RequirePassword: r.RequirePassword, RequireRecipientVerification: r.RequireRecipientVerification,
+		}
+	}
+	return ref
 }
 
 // optional returns &v, or nil for the empty string.
@@ -223,14 +249,17 @@ func transferError(err error) error {
 		tooLarge *transfer.TooLargeError
 		files    *transfer.FilesError
 		limited  *transfer.RateLimitError
+		rule     *transfer.RuleError
 	)
 	switch {
 	case errors.As(err, &invalid):
-		fields := make([]problem.FieldError, len(invalid.Fields))
-		for i, f := range invalid.Fields {
-			fields[i] = problem.FieldError{Field: f.Pointer, Code: f.Code}
+		return problem.New(problem.CodeValidationFailed, problem.WithFieldErrors(fieldErrors(invalid.Fields)...))
+	case errors.As(err, &rule):
+		code := problem.CodeConfidentialityRuleViolated
+		if errors.Is(rule.Kind, transfer.ErrRecipientDomainRefused) {
+			code = problem.CodeRecipientDomainRefused
 		}
-		return problem.New(problem.CodeValidationFailed, problem.WithFieldErrors(fields...))
+		return problem.New(code, problem.WithFieldErrors(fieldErrors(rule.Fields)...))
 	case errors.As(err, &limited):
 		return problem.New(problem.CodeRateLimited, problem.WithRetryAfter(limited.RetryAfter))
 	case errors.As(err, &tooLarge):
@@ -258,4 +287,17 @@ func transferError(err error) error {
 	default:
 		return err
 	}
+}
+
+// fieldErrors converts the field errors of the transfer service, with their
+// accepted values.
+func fieldErrors(in []transfer.FieldError) []problem.FieldError {
+	out := make([]problem.FieldError, len(in))
+	for i, f := range in {
+		out[i] = problem.FieldError{Field: f.Pointer, Code: f.Code}
+		for _, v := range f.Allowed {
+			out[i].Allowed = append(out[i].Allowed, v)
+		}
+	}
+	return out
 }

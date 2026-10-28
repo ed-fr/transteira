@@ -36,6 +36,18 @@ describe('admin routes', () => {
     ['/admin/tenants/ten_1/general', '/tenants/:id/general', 'auth', 'tenant-general'],
     ['/admin/tenants/ten_1/branding', '/tenants/:id/branding', 'auth', 'tenant-branding'],
     ['/admin/tenants/ten_1/network', '/tenants/:id/network', 'auth', 'tenant-network'],
+    [
+      '/admin/tenants/ten_1/recipient-rules',
+      '/tenants/:id/recipient-rules',
+      'auth',
+      'tenant-recipient-rules',
+    ],
+    [
+      '/admin/tenants/ten_1/confidentiality',
+      '/tenants/:id/confidentiality',
+      'auth',
+      'tenant-confidentiality',
+    ],
     ['/admin/tenants/ten_1/smtp', '/tenants/:id/smtp', 'auth', 'tenant-smtp'],
     ['/admin/tenants/ten_1/templates', '/tenants/:id/templates', 'auth', 'tenant-templates'],
     [

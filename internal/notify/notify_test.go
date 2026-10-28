@@ -615,3 +615,45 @@ func TestOneLine(t *testing.T) {
 		t.Errorf("exact: %q", got)
 	}
 }
+
+// TestConfidentialityLabel shows the label of the level of the transfer in
+// the language of each mail, and nothing without level.
+func TestConfidentialityLabel(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tr := testTransfer()
+	tr.ConfidentialityLabels = map[string]string{"fr": "Diffusion restreinte", "en": "Restricted\r\nBcc: x"}
+	for lang, want := range map[string]string{"fr": "Diffusion restreinte", "en": "Restricted Bcc: x", "": "Diffusion restreinte"} {
+		tr.Language = lang
+		jobs, err := e.n.RecipientJobs(ctx, e.t, tr, testLink)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conf, err := e.n.SenderConfirmation(ctx, e.t, tr, testLink)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range []mail.Message{jobs[0].Message, conf.Message} {
+			if !strings.Contains(m.Text, want) || !strings.Contains(m.HTML, want) {
+				t.Errorf("%q: mail lacks %q:\n%s", lang, want, m.Text)
+			}
+		}
+	}
+	// A label missing in the mail language falls back to the default
+	// language of the templates.
+	tr.Language, tr.ConfidentialityLabels = "fr", map[string]string{"en": "Internal only"}
+	if got := e.n.levelLabel(e.t, tr); got != "Internal only" {
+		t.Errorf("fallback label = %q", got)
+	}
+	tr.ConfidentialityLabels = nil
+	if got := e.n.levelLabel(e.t, tr); got != "" {
+		t.Errorf("label without level = %q", got)
+	}
+	jobs, err := e.n.RecipientJobs(ctx, e.t, tr, testLink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(jobs[0].Message.Text, "Diffusion restreinte") {
+		t.Error("label shown without level")
+	}
+}

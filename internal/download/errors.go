@@ -19,6 +19,12 @@ var (
 	// rejected, past its deletion after the first download, or without any
 	// deliverable file (410 transfer-gone).
 	ErrGone = errors.New("download: transfer no longer available")
+	// ErrMaxDownloads reports a transfer whose download limit
+	// (store.Transfer.MaxDownloads) is reached: the download page, an
+	// unlock, or a download start by a client not already counted (410
+	// max-downloads-reached). A download already started by the client
+	// stays served during the grace period (see the package documentation).
+	ErrMaxDownloads = errors.New("download: download limit reached")
 	// ErrDownloadLocked reports a password-protected transfer that this
 	// browser has not unlocked: no valid grant in the cookie (401
 	// download-locked).

@@ -595,3 +595,31 @@ func mustNoErr(t *testing.T, what string, err error) {
 
 // containsString reports whether s holds sub.
 func containsString(s, sub string) bool { return strings.Contains(s, sub) }
+
+func (f *faultRepo) confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	if err := f.fail("confidentialityLevels"); err != nil {
+		return nil, err
+	}
+	return f.repo.confidentialityLevels(ctx, tid)
+}
+
+func (f *faultRepo) replaceConfidentialityLevels(ctx context.Context, tid tenant.ID, l []store.ConfidentialityLevel, by string, now time.Time) ([]store.ConfidentialityLevel, error) {
+	if err := f.fail("replaceConfidentialityLevels"); err != nil {
+		return nil, err
+	}
+	return f.repo.replaceConfidentialityLevels(ctx, tid, l, by, now)
+}
+
+func (f *faultRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error) {
+	if err := f.fail("recipientRules"); err != nil {
+		return store.RecipientRuleSet{}, err
+	}
+	return f.repo.recipientRules(ctx, tid)
+}
+
+func (f *faultRepo) replaceRecipientRules(ctx context.Context, tid tenant.ID, set store.RecipientRuleSet, now time.Time) (store.RecipientRuleSet, error) {
+	if err := f.fail("replaceRecipientRules"); err != nil {
+		return store.RecipientRuleSet{}, err
+	}
+	return f.repo.replaceRecipientRules(ctx, tid, set, now)
+}

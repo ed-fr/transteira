@@ -50,7 +50,10 @@ use to ban the client IP.
 - **HTTP status:** 400 Bad Request
 - **Meaning:** the request is malformed (invalid JSON, wrong type) or a field is invalid.
   The `errors` member lists each invalid field with a reason code and, when relevant, the
-  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). A mail address that
+  accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). Since 1.1, on
+  transfer creation: `maxDownloads` outside 1 to 1000 and `recipientVerification: true` (not
+  offered until per-recipient links are available) are reported as `not-allowed`, a malformed
+  `confidentialityLevel` as `invalid-format` and an unknown one as `not-allowed`. A mail address that
   is not a bare address (`user@entity-a.example.com`; a display-name form such as
   `Name <user@entity-a.example.com>` is refused, never rewritten) is reported with the code
   `invalid-email` on its field: `/email` (deposit session, invitation, data subject search or
@@ -502,7 +505,7 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 1.1.
-- **Meaning:** at least one recipient is refused by the recipient domain rules of the entity (a denied domain, or a domain outside a non-empty allow list). Each refused recipient is named in `errors` (`/recipients/<index>`).
+- **Meaning:** at least one recipient is refused by the recipient domain rules of the entity (a denied domain, or a domain outside a non-empty allow list). Each refused recipient is named in `errors` (`/recipients/<index>`, code `domain-denied`).
 - **Typical endpoints:** `POST /transfers`.
 - **What to do:** remove or replace the refused recipients.
 
@@ -535,7 +538,7 @@ use to ban the client IP.
 - **HTTP status:** 410 Gone
 - **Since:** 1.1.
 - **Meaning:** the transfer reached the maximum number of downloads chosen by its sender; it is deleted after a short grace period.
-- **Typical endpoints:** `GET /downloads/{linkToken}/files/{fileId}`, `GET /downloads/{linkToken}/archive`.
+- **Typical endpoints:** `GET /downloads/{linkToken}`, `POST /downloads/{linkToken}/unlock`, `GET /downloads/{linkToken}/files/{fileId}`, `GET /downloads/{linkToken}/archive`. A download already started by the same client can still be resumed during the grace period.
 - **What to do:** ask the sender for a new transfer.
 
 ### reply-not-allowed

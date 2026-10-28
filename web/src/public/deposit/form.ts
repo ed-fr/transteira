@@ -3,6 +3,7 @@
 // the mapping of validation-failed field errors back to the form.
 import type { ProblemFieldError } from '../../shared/api/client';
 import { normalizeField } from '../../shared/api/problem';
+import type { components } from '../../shared/api/schema';
 import { EMAIL_MAX_LENGTH, isEmail } from '../../shared/validation/email';
 
 export { EMAIL_MAX_LENGTH, isEmail };
@@ -17,6 +18,14 @@ export const MAX_FILES = 1000;
 export const FILE_NAME_MAX_LENGTH = 255;
 /** Maximum length of the transfer password (TransferCreate.password). */
 export const PASSWORD_MAX_LENGTH = 1024;
+
+/** Maximum value of the maximum number of downloads (TransferCreate.maxDownloads). */
+export const MAX_DOWNLOADS_LIMIT = 1000;
+
+/** A confidentiality level as offered to senders (GET /tenant). */
+export type PublicLevel = components['schemas']['PublicConfidentialityLevel'];
+/** Rules of a confidentiality level. */
+export type LevelRules = components['schemas']['ConfidentialityRules'];
 
 /** A message to display: a translation key with its parameters. */
 export interface Message {
@@ -218,7 +227,14 @@ export function fileIssues(errors: FormErrors, count: number): Map<number, Messa
 }
 
 /** Ordered list of the form fields that have an error, for the error summary. */
-export const FIELD_ORDER = ['recipients', 'message', 'expiryDays', 'password', 'files'] as const;
+export const FIELD_ORDER = [
+  'recipients',
+  'message',
+  'expiryDays',
+  'password',
+  'maxDownloads',
+  'files',
+] as const;
 
 /** A form field of the summary. */
 export type FormField = (typeof FIELD_ORDER)[number];
@@ -244,4 +260,149 @@ export function invalidFields(errors: FormErrors): FormField[] {
 /** Default expiry: 7 days when offered, else the first value offered. */
 export function defaultExpiry(expiryDays: readonly number[]): number | undefined {
   return expiryDays.includes(7) ? 7 : expiryDays[0];
+}
+
+// ---- Confidentiality levels and download limit (version 1.1) -----------------------------
+
+/** The level with the given key, undefined when absent. */
+export function levelByKey(levels: readonly PublicLevel[], key: string | undefined): PublicLevel | undefined {
+  return key === undefined ? undefined : levels.find((l) => l.key === key);
+}
+
+/**
+ * Levels a sender can actually use: those that do not require the per-recipient verification
+ * while it is unavailable (the server refuses such transfers) and that allow at least one of
+ * the durations offered by the session. The order is kept.
+ */
+export function selectableLevels(
+  levels: readonly PublicLevel[],
+  sessionDays: readonly number[],
+  recipientVerification: boolean,
+): PublicLevel[] {
+  return levels.filter(
+    (l) =>
+      (recipientVerification || !l.rules.requireRecipientVerification) &&
+      effectiveExpiryDays(sessionDays, l.rules).length > 0,
+  );
+}
+
+/** The level to preselect: the default one, else the first. */
+export function defaultLevel(levels: readonly PublicLevel[]): PublicLevel | undefined {
+  return levels.find((l) => l.isDefault) ?? levels[0];
+}
+
+/** Durations offered by the form: those of the session that the level also allows. */
+export function effectiveExpiryDays(sessionDays: readonly number[], rules: LevelRules | undefined): number[] {
+  if (rules === undefined) {
+    return [...sessionDays];
+  }
+  return sessionDays.filter((d) => (rules.allowedExpiryDays as readonly number[]).includes(d));
+}
+
+/** Largest value accepted for the maximum number of downloads under the rules. */
+export function maxDownloadsCap(rules: LevelRules | undefined): number {
+  return Math.min(MAX_DOWNLOADS_LIMIT, rules?.maxDownloads ?? MAX_DOWNLOADS_LIMIT);
+}
+
+/** Result of reading the "maximum number of downloads" field. */
+export type MaxDownloadsParse = { ok: true; value: number | undefined } | { ok: false; code: string };
+
+/** Reads the field: empty means no limit; otherwise an integer between 1 and the cap. */
+export function parseMaxDownloads(
+  text: string | number | null | undefined,
+  cap = MAX_DOWNLOADS_LIMIT,
+): MaxDownloadsParse {
+  // A number input bound with bind:value yields a number (or null when empty).
+  const trimmed = String(text ?? '').trim();
+  if (trimmed === '') {
+    return { ok: true, value: undefined };
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return { ok: false, code: 'invalid' };
+  }
+  const n = Number(trimmed);
+  if (n < 1) {
+    return { ok: false, code: 'too-small' };
+  }
+  if (n > cap) {
+    return { ok: false, code: cap < MAX_DOWNLOADS_LIMIT ? 'max-exceeded' : 'too-large' };
+  }
+  return { ok: true, value: n };
+}
+
+/** Value of the delete-after-first-download option once the level is applied. */
+export function effectiveDeleteAfterFirst(chosen: boolean, rules: LevelRules | undefined): boolean {
+  return chosen || rules?.forceDeleteAfterFirstDownload === true;
+}
+
+/** Duration to keep when the offered ones change: the current one when still offered. */
+export function keepExpiry(current: number | undefined, offered: readonly number[]): number | undefined {
+  return current !== undefined && offered.includes(current) ? current : defaultExpiry(offered);
+}
+
+/** Maximum number of downloads to keep when the level changes: clamped to the new cap. */
+export function keepMaxDownloads(
+  text: string | number | null | undefined,
+  rules: LevelRules | undefined,
+): string {
+  const parsed = parseMaxDownloads(text);
+  const cap = rules?.maxDownloads;
+  if (parsed.ok && parsed.value !== undefined && cap !== null && cap !== undefined && parsed.value > cap) {
+    return String(cap);
+  }
+  return String(text ?? '');
+}
+
+/**
+ * Errors of the fields tied to the chosen level and to the download limit: password required by
+ * the level, maximum number of downloads (only when the option is offered).
+ */
+export function validatePolicy(
+  password: string,
+  maxDownloadsText: string,
+  rules: LevelRules | undefined,
+  maxDownloadsOffered: boolean,
+): FormErrors {
+  const errors: FormErrors = {};
+  if (rules?.requirePassword === true && password === '') {
+    errors['password'] = { key: 'deposit.form.password.requiredByLevel' };
+  }
+  if (maxDownloadsOffered) {
+    const parsed = parseMaxDownloads(maxDownloadsText, maxDownloadsCap(rules));
+    if (!parsed.ok) {
+      errors['maxDownloads'] =
+        parsed.code === 'max-exceeded'
+          ? { key: 'deposit.form.maxDownloads.exceeded', params: { max: maxDownloadsCap(rules) } }
+          : { key: 'deposit.form.maxDownloads.invalid', params: { max: maxDownloadsCap(rules) } };
+    }
+  }
+  return errors;
+}
+
+/**
+ * Maps the field errors of a 422 confidentiality-rule-violated problem to form errors: a
+ * password required, a duration not allowed, a recipient outside the internal domains, a
+ * maximum number of downloads above the cap. Unknown fields are kept under their path.
+ */
+export function mapRuleErrors(errors: readonly ProblemFieldError[] | undefined): FormErrors {
+  const out: FormErrors = {};
+  for (const error of errors ?? []) {
+    const field = normalizeField(error.field);
+    if (Object.hasOwn(out, field)) {
+      continue;
+    }
+    const key = `deposit.form.rules.${error.code}`;
+    const known = ['required', 'not-allowed', 'internal-only', 'max-exceeded'].includes(error.code);
+    out[field] = { key: known ? key : 'fieldErrors.invalid' };
+  }
+  return out;
+}
+
+/** Maps the field errors of a 403 recipient-domain-refused problem ("/recipients/<i>"). */
+export function mapRecipientDomainErrors(errors: readonly ProblemFieldError[] | undefined): FormErrors {
+  const out: FormErrors = {};
+  for (const error of errors ?? []) {
+    out[normalizeField(error.field)] = { key: 'deposit.form.recipients.domainRefused' };
+  }
+  return out;
 }

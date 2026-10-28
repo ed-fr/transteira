@@ -55,7 +55,8 @@
       "hint": "Une ou plusieurs adresses électroniques, séparées par des virgules ou des retours à la ligne.",
       "external": "Les fichiers seront envoyés à {invitedBy}, qui vous a invité.",
       "addressError": "{address} : {message}",
-      "tooMany": "Saisissez au plus {max} destinataires."
+      "tooMany": "Saisissez au plus {max} destinataires.",
+      "domainRefused": "Ce service n’autorise pas l’envoi vers le domaine de cette adresse."
     },
     "message": {
       "label": "Message",
@@ -72,11 +73,14 @@
       "label": "Mot de passe",
       "hint": "Facultatif. Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
       "show": "Afficher",
-      "hide": "Masquer"
+      "hide": "Masquer",
+      "requiredHint": "Exigé par le niveau de confidentialité choisi. Les destinataires en auront besoin pour télécharger les fichiers : transmettez-le par un autre canal (téléphone, SMS), jamais dans le même courriel.",
+      "requiredByLevel": "Le niveau de confidentialité choisi exige un mot de passe."
     },
     "deleteAfterFirstDownload": {
       "label": "Supprimer le transfert après le premier téléchargement",
-      "hint": "Les fichiers sont supprimés dès qu’un destinataire les a téléchargés."
+      "hint": "Les fichiers sont supprimés dès qu’un destinataire les a téléchargés.",
+      "forced": "Exigé par le niveau de confidentialité choisi."
     },
     "files": {
       "label": "Fichiers à envoyer",
@@ -89,6 +93,23 @@
         "other": "{count} noms de fichiers ne sont pas acceptés : renommez les fichiers puis ajoutez-les de nouveau."
       },
       "total": "Total : {total} sur {max} autorisés."
+    },
+    "level": {
+      "legend": "Niveau de confidentialité",
+      "hint": "Le niveau fixe des règles pour ce transfert (durée, mot de passe, destinataires…).",
+      "none": "Aucun niveau de confidentialité n’est actuellement disponible pour vous : aucun transfert ne peut être envoyé. Contactez votre administrateur."
+    },
+    "maxDownloads": {
+      "label": "Nombre maximal de téléchargements",
+      "hint": "Facultatif, de 1 à {max}. Une fois atteint, le transfert ne peut plus être téléchargé et il est supprimé.",
+      "invalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide.",
+      "exceeded": "Le niveau de confidentialité choisi autorise au plus {max} téléchargements."
+    },
+    "rules": {
+      "required": "Le niveau de confidentialité choisi exige ce champ.",
+      "not-allowed": "Le niveau de confidentialité choisi n’autorise pas cette valeur.",
+      "internal-only": "Le niveau de confidentialité choisi n’autorise que des destinataires de l’organisation.",
+      "max-exceeded": "Cette valeur dépasse le maximum autorisé par le niveau de confidentialité choisi."
     }
   },
   "upload": {

@@ -27,7 +27,9 @@
     "network": "Réseau",
     "smtp": "Messagerie (SMTP)",
     "templates": "Modèles de mails",
-    "legal": "Mentions légales"
+    "legal": "Mentions légales",
+    "recipientRules": "Domaines destinataires",
+    "confidentiality": "Niveaux de confidentialité"
   },
   "fields": {
     "name": {
@@ -387,6 +389,7 @@
         "download_link": "Lien de téléchargement.",
         "expiry_datetime": "Date et heure d’expiration du transfert.",
         "password_notice": "Mention du mot de passe transmis par un autre canal ; vide sans mot de passe.",
+        "confidentiality_notice": "Niveau de confidentialité du transfert ; vide sans niveau.",
         "qr_code": "QR code du lien de téléchargement (HTML uniquement ; vide dans le corps texte).",
         "files": "Liste des fichiers.",
         "file_count": "Nombre de fichiers.",
@@ -485,6 +488,86 @@
         "action": "Supprimer le document"
       },
       "formTitle": "Contenu"
+    }
+  },
+  "recipientRules": {
+    "title": "Domaines destinataires",
+    "intro": "Limitez les domaines auxquels les expéditeurs peuvent écrire. Laissez les deux listes vides pour autoriser tout destinataire. Les règles s’appliquent aux transferts créés après l’enregistrement.",
+    "form": {
+      "title": "Règles des destinataires"
+    },
+    "allowed": {
+      "label": "Domaines autorisés",
+      "hint": "Un domaine par ligne. Lorsque cette liste n’est pas vide, les destinataires doivent appartenir à ces domaines. Les sous-domaines sont inclus : example.org couvre aussi mail.example.org."
+    },
+    "denied": {
+      "label": "Domaines interdits",
+      "hint": "Un domaine par ligne, par exemple les messageries personnelles grand public. Les sous-domaines sont inclus. Un domaine interdit est toujours refusé, même s’il figure aussi dans la liste des domaines autorisés."
+    },
+    "warnings": {
+      "both": "{domain} figure dans les deux listes : il est interdit, car la liste d’interdiction l’emporte.",
+      "restricts": {
+        "one": "La liste des domaines autorisés n’est pas vide : les destinataires sont limités à ce domaine ({count}).",
+        "other": "La liste des domaines autorisés n’est pas vide : les destinataires sont limités à ces {count} domaines."
+      }
+    },
+    "saved": "Règles des destinataires enregistrées.",
+    "normalized": "Certaines valeurs ont été réécrites ou retirées par le serveur (minuscules, doublons) : les listes affichent maintenant les valeurs enregistrées."
+  },
+  "confidentiality": {
+    "title": "Niveaux de confidentialité",
+    "intro": "Niveaux proposés à l’expéditeur lors de la création d’un transfert. Chaque niveau impose ses propres règles. Avec un seul niveau, le sélecteur est masqué mais ses règles s’appliquent toujours. Les règles s’appliquent aux transferts créés après l’enregistrement.",
+    "form": {
+      "title": "Niveaux"
+    },
+    "level": {
+      "legend": "Niveau {n} : {name}",
+      "unnamed": "nouveau niveau"
+    },
+    "fields": {
+      "default": "Niveau par défaut",
+      "key": "Clé",
+      "label": "Libellé ({lang})",
+      "description": "Description ({lang})",
+      "days": "Durées disponibles",
+      "requirePassword": "Mot de passe obligatoire",
+      "requireRecipientVerification": "Vérification du destinataire obligatoire",
+      "internalRecipientsOnly": "Destinataires internes uniquement",
+      "forceDeleteAfterFirstDownload": "Suppression après le premier téléchargement (imposée)",
+      "maxDownloads": "Nombre maximal de téléchargements (plafond)"
+    },
+    "hints": {
+      "key": "Lettres minuscules, chiffres, tiret ou tiret bas, en commençant par une lettre (32 caractères au plus). Identifie le niveau dans l’API : gardez-la stable.",
+      "description": "Facultatif. Affichée à l’expéditeur sous le niveau.",
+      "recipientVerification": "Prend effet lorsque les liens propres à chaque destinataire seront disponibles. D’ici là, l’option est enregistrée mais pas appliquée.",
+      "internalRecipientsOnly": "Les destinataires doivent appartenir aux domaines internes de l’entité.",
+      "maxDownloads": "Facultatif, de 1 à {max}. Plafonne le nombre de téléchargements que l’expéditeur peut fixer ; vide pour aucun plafond."
+    },
+    "dayChoice": {
+      "one": "{count} jour",
+      "other": "{count} jours"
+    },
+    "up": "Monter",
+    "down": "Descendre",
+    "remove": "Supprimer",
+    "add": "Ajouter un niveau",
+    "count": "{count} niveaux sur {max}.",
+    "moveUp": "Monter le niveau {name}",
+    "moveDown": "Descendre le niveau {name}",
+    "removeLevel": "Supprimer le niveau {name}",
+    "saved": "Niveaux de confidentialité enregistrés.",
+    "errors": {
+      "noLevel": "Ajoutez au moins un niveau.",
+      "tooMany": "Il peut y avoir au plus {max} niveaux.",
+      "defaultCount": "Choisissez exactement un niveau par défaut.",
+      "keyRequired": "Saisissez une clé.",
+      "keyFormat": "Utilisez des lettres minuscules, chiffres, tiret ou tiret bas, en commençant par une lettre (32 caractères au plus).",
+      "keyDuplicate": "Cette clé est utilisée par un autre niveau.",
+      "labelRequired": "Saisissez un libellé.",
+      "labelTooLong": "Le libellé est trop long ({max} caractères au plus).",
+      "descriptionTooLong": "La description est trop longue ({max} caractères au plus).",
+      "daysRequired": "Autorisez au moins une durée.",
+      "capInvalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide."
     }
   }
 }

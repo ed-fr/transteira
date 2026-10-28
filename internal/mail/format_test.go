@@ -114,3 +114,36 @@ func TestTransferTemplatesVariants(t *testing.T) {
 		}
 	}
 }
+
+// TestConfidentialityNotice covers the confidentiality level of the transfer
+// mails: shown, escaped, and absent without a level.
+func TestConfidentialityNotice(t *testing.T) {
+	gd := goldenData()
+	for lang, prefix := range map[string]string{"fr": "Niveau de confidentialité : ", "en": "Confidentiality level: "} {
+		n := gd[TemplateTransferNotification].(TransferNotificationData)
+		c := gd[TemplateTransferConfirmation].(TransferConfirmationData)
+		n.ConfidentialityLabel, c.ConfidentialityLabel = "Secret <b>&", "Secret <b>&"
+		for name, data := range map[string]any{TemplateTransferNotification: n, TemplateTransferConfirmation: c} {
+			m, err := Render(name, lang, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(m.Text, prefix+"Secret <b>&") {
+				t.Errorf("%s/%s: text lacks the level:\n%s", name, lang, m.Text)
+			}
+			if !strings.Contains(m.HTML, "<strong>"+prefix+"Secret &lt;b&gt;&amp;</strong>") {
+				t.Errorf("%s/%s: html lacks the escaped level", name, lang)
+			}
+		}
+		n.ConfidentialityLabel, c.ConfidentialityLabel = "", ""
+		for name, data := range map[string]any{TemplateTransferNotification: n, TemplateTransferConfirmation: c} {
+			m, err := Render(name, lang, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(m.Text, prefix) || strings.Contains(m.HTML, prefix) {
+				t.Errorf("%s/%s: level shown without label", name, lang)
+			}
+		}
+	}
+}

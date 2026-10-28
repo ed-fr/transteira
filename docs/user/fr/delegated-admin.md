@@ -129,7 +129,7 @@ La création et la suppression d’une entité sont réservées au super adminis
 
 Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
 
-- **Configuration** : **Général**, **Habillage**, **Réseau**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
+- **Configuration** : **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Niveaux de confidentialité**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
 - **Exploitation** : **Transferts**, **Invitations**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
 
 Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
@@ -193,6 +193,45 @@ Soyez attentif aux avertissements :
 - une plage couvrant toutes les adresses, comme `0.0.0.0/0`, signifie que tout utilisateur d’un domaine interne pourra déposer depuis n’importe où.
 
 TransTeira voit l’adresse du client telle que la transmet le reverse proxy. Si vous ne savez pas quelles plages saisir (sites, VPN, adresses de sortie), demandez à l’exploitant du service.
+
+<!-- topic: tenant-recipient-rules -->
+### Domaines destinataires
+
+L’écran Domaines destinataires limite les domaines de messagerie que les expéditeurs peuvent adresser, par exemple pour éviter que des fichiers partent vers des messageries personnelles grand public.
+
+![Écran Domaines destinataires avec les listes de domaines autorisés et interdits](../screenshots/fr/admin-tenant-recipient-rules.png)
+
+- **Domaines autorisés** : un domaine par ligne. Quand cette liste n’est pas vide, les destinataires ne peuvent appartenir qu’à ces domaines.
+- **Domaines interdits** : un domaine par ligne. Un domaine interdit est toujours refusé.
+
+Une règle sur un domaine couvre aussi ses sous-domaines : `example.org` couvre `mail.example.org`. Si un domaine figure dans les deux listes, il est interdit, car l’interdiction l’emporte. Laissez les deux listes vides pour autoriser tous les destinataires. Chaque liste compte 500 entrées au plus ; le serveur enregistre les domaines en minuscules, sans doublons, et affiche les valeurs enregistrées. L’écran avertit lorsqu’un domaine est dans les deux listes et lorsqu’une liste d’autorisations non vide restreint les destinataires. Cliquez sur **Enregistrer**.
+
+Les règles s’appliquent à tout nouveau transfert, qu’il soit envoyé depuis la page web ou avec un jeton d’API. Un transfert adressé à un domaine refusé n’est pas créé : l’expéditeur voit un message qui nomme les adresses refusées, et le refus est enregistré dans le [journal d’audit](topic:tenant-audit) avec les domaines refusés. Il n’est pas écrit dans le journal de sécurité. Les transferts déjà créés ne sont pas touchés.
+
+<!-- topic: tenant-confidentiality -->
+### Niveaux de confidentialité
+
+L’écran Niveaux de confidentialité définit les niveaux parmi lesquels l’expéditeur choisit en créant un transfert. Chaque niveau impose ses propres règles. Vous pouvez définir de 1 à 10 niveaux, avec exactement un **Niveau par défaut**, appliqué quand l’expéditeur n’en choisit pas. Avec un seul niveau, l’expéditeur ne voit aucun sélecteur, mais les règles du niveau s’appliquent quand même.
+
+![Écran Niveaux de confidentialité avec les règles de chaque niveau](../screenshots/fr/admin-tenant-confidentiality.png)
+
+Pour chaque niveau, renseignez :
+
+- **Clé** : lettres minuscules, chiffres, tiret ou tiret bas, en commençant par une lettre (32 caractères au plus). Elle identifie le niveau dans l’API : gardez-la stable.
+- **Libellé** en français et en anglais (50 caractères au plus), et une **Description** facultative dans chaque langue (500 caractères au plus), affichée à l’expéditeur sous le niveau.
+- **Règles** (chacune est un champ distinct) :
+- **Durées disponibles** : les durées parmi 1, 7 et 30 jours que l’expéditeur peut choisir (au moins une).
+- **Mot de passe obligatoire**.
+- **Vérification du destinataire obligatoire**. Cette règle est enregistrée mais pas encore appliquée : elle prendra effet avec les liens propres à chaque destinataire.
+- **Destinataires internes uniquement** : les destinataires doivent appartenir aux domaines internes de l’entité (voir [Réseau](topic:tenant-network)).
+- **Suppression après le premier téléchargement (imposée)**.
+- **Nombre maximal de téléchargements (plafond)** : facultatif, de 1 à 1000. Il plafonne le nombre de téléchargements que l’expéditeur peut fixer ; si l’expéditeur n’en fixe aucun, le plafond s’applique.
+
+Utilisez les flèches pour réordonner les niveaux, **Ajouter un niveau** pour en créer un et **Enregistrer** pour appliquer. L’écran signale les erreurs niveau par niveau.
+
+Un transfert qui enfreint une règle de son niveau est refusé, quel que soit le moyen de création (page web ou jeton d’API), et l’expéditeur est informé de la règle non respectée. Les règles du niveau sont copiées sur chaque transfert à sa création : modifier ou supprimer un niveau ne change jamais les transferts existants. Le niveau d’un transfert est montré aux destinataires dans le mail et sur la page de téléchargement, dans le détail du transfert (voir [Transferts](topic:tenant-transfers)) et dans le [journal d’audit](topic:tenant-audit).
+
+> **Note** Vérifiez les règles du niveau par défaut : elles s’appliquent à tout expéditeur qui ne choisit pas de niveau.
 
 <!-- topic: tenant-smtp -->
 ### Messagerie (SMTP)
@@ -273,7 +312,7 @@ Filtrez par **Statut**, par **Adresse mail** (adresse exacte de l’expéditeur 
 
 ![Liste des transferts d’une entité avec les filtres](../screenshots/fr/admin-transfers.png)
 
-Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, premier téléchargement, expéditeur et adresse IP de l’expéditeur, origine, options, destinataires, et les fichiers avec leur taille, leur empreinte SHA-256 et le résultat de l’antivirus. Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
+Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, premier téléchargement, expéditeur et adresse IP de l’expéditeur, origine, options (dont le **Niveau de confidentialité** et le nombre de téléchargements, affiché sur le maximum autorisé quand l’expéditeur en a fixé un), destinataires, et les fichiers avec leur taille, leur empreinte SHA-256 et le résultat de l’antivirus. Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
 
 ![Détail d’un transfert avec ses informations, ses destinataires et ses fichiers](../screenshots/fr/admin-transfer-detail.png)
 

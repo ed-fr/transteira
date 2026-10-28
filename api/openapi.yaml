@@ -7133,7 +7133,7 @@ components:
           description: "Since 1.1. Masked address of the recipient the link was issued for (`c***@customer.example.net`), present while the verification is awaited."
           example: c***@customer.example.net
         downloadsRemaining: { type: integer, minimum: 0, description: "Since 1.1. Download starts left before `maxDownloads` is reached; absent without limit or while `locked`." }
-        confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef' }
+        confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef', description: "Since 1.1. Confidentiality level chosen by the sender, absent while `locked`." }
         replyAllowed: { type: boolean, description: "Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`." }
 
     # --- Admin auth -------------------------------------------------------

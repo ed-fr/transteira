@@ -63,7 +63,8 @@ Cliquez sur **Créer l’entité**. Les autres réglages se configurent ensuite,
 3. [Habillage](topic:tenant-branding) : logo, couleurs et image de fond.
 4. [Mentions légales](topic:tenant-legal) : mentions légales et politique de confidentialité.
 5. [Modèles de mails](topic:tenant-templates) : facultatif, les modèles par défaut fonctionnent tels quels.
-6. Rattachez un administrateur délégué à l’entité, voir [Créer un administrateur délégué](topic:admin-create).
+6. [Domaines destinataires](topic:tenant-recipient-rules) et [Niveaux de confidentialité](topic:tenant-confidentiality) : facultatifs ; par défaut, tout domaine destinataire est autorisé et l’entité dispose de niveaux de confidentialité par défaut. Les administrateurs délégués peuvent les ajuster.
+7. Rattachez un administrateur délégué à l’entité, voir [Créer un administrateur délégué](topic:admin-create).
 
 <!-- topic: tenant-general-super -->
 ### Réglages réservés au super administrateur

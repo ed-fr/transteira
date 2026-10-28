@@ -24,6 +24,14 @@ func (noLogoTenants) PublicLegal(context.Context, *tenant.Tenant, string, string
 	return tenantadmin.PublicLegalDocument{}, tenantadmin.ErrNotFound
 }
 
+func (noLogoTenants) PublicConfidentialityLevels(context.Context, *tenant.Tenant, string) ([]tenantadmin.PublicConfidentialityLevel, error) {
+	return nil, nil
+}
+
+func (noLogoTenants) HasRecipientRules(context.Context, *tenant.Tenant) (bool, error) {
+	return false, nil
+}
+
 func (noLogoTenants) LegalDocuments(context.Context, *tenant.Tenant) ([]string, error) {
 	return nil, nil
 }

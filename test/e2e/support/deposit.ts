@@ -39,6 +39,10 @@ export interface TransferSpec {
   message?: string;
   password?: string;
   deleteAfterFirstDownload?: boolean;
+  /** Maximum number of downloads (V1.1). */
+  maxDownloads?: number;
+  /** Key of the confidentiality level (V1.1; the tenant default when omitted). */
+  confidentialityLevel?: string;
   /** Language of the recipients' mails and of the download page default (default "en"). */
   language?: 'en' | 'fr';
 }
@@ -157,6 +161,8 @@ function transferBody(spec: TransferSpec, senderEmail?: string): Record<string, 
     ...(spec.deleteAfterFirstDownload === undefined
       ? {}
       : { deleteAfterFirstDownload: spec.deleteAfterFirstDownload }),
+    ...(spec.maxDownloads === undefined ? {} : { maxDownloads: spec.maxDownloads }),
+    ...(spec.confidentialityLevel === undefined ? {} : { confidentialityLevel: spec.confidentialityLevel }),
     language: spec.language ?? 'en',
     files: spec.files.map((f) => ({
       name: f.name,

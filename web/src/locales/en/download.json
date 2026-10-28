@@ -50,5 +50,11 @@
   "gone": {
     "title": "Transfer no longer available",
     "text": "This transfer has expired or has been deleted. Ask the sender to send the files again."
+  },
+  "level": "Confidentiality",
+  "downloadsRemaining": "Downloads left",
+  "maxDownloads": {
+    "title": "Maximum number of downloads reached",
+    "text": "This transfer has reached its maximum number of downloads and can no longer be downloaded. Ask the sender to send the files again."
   }
 }

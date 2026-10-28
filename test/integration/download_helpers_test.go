@@ -52,7 +52,7 @@ const (
 // Members allowed by the PublicTransfer and PublicFile schemas, the
 // required ones, and the members of a locked page (exactly these).
 var (
-	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files"}
+	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files", "confidentialityLevel", "downloadsRemaining"}
 	publicTransferRequired = []string{"senderEmail", "expiresAt", "passwordProtected", "locked"}
 	publicFileMembers      = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "downloadUrl"}
 	publicFileRequired     = []string{"id", "name", "size", "sha256", "scanStatus", "downloadUrl"}
