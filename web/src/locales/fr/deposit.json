@@ -110,6 +110,12 @@
       "not-allowed": "Le niveau de confidentialité choisi n’autorise pas cette valeur.",
       "internal-only": "Le niveau de confidentialité choisi n’autorise que des destinataires de l’organisation.",
       "max-exceeded": "Cette valeur dépasse le maximum autorisé par le niveau de confidentialité choisi."
+    },
+    "recipientVerification": {
+      "label": "Les destinataires doivent vérifier leur adresse par un code",
+      "hint": "Chaque destinataire reçoit un lien personnel et doit saisir un code envoyé à son adresse avant de télécharger. Un lien transféré à quelqu’un d’autre est inutilisable.",
+      "forced": "Imposé par le niveau de confidentialité choisi.",
+      "requiredByLevel": "Le niveau de confidentialité choisi impose que les destinataires vérifient leur adresse."
     }
   },
   "upload": {

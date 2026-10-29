@@ -183,7 +183,6 @@ func TestCreateOptionsValidation(t *testing.T) {
 		{"max downloads above", func(r *CreateRequest) { r.MaxDownloads = intp(1001) }, FieldError{Pointer: FieldMaxDownloads, Code: CodeNotAllowed}},
 		{"level malformed", func(r *CreateRequest) { r.ConfidentialityLevel = "Secret" }, FieldError{Pointer: FieldConfidentialityLevel, Code: CodeInvalidFormat}},
 		{"level unknown", func(r *CreateRequest) { r.ConfidentialityLevel = "secret" }, FieldError{Pointer: FieldConfidentialityLevel, Code: CodeNotAllowed}},
-		{"recipient verification", func(r *CreateRequest) { r.RecipientVerification = true }, FieldError{Pointer: FieldRecipientVerification, Code: CodeNotAllowed}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			req := request()
@@ -314,6 +313,37 @@ func TestCreateSeededConfidentialNeedsVerification(t *testing.T) {
 		[]FieldError{{Pointer: FieldRecipientVerification, Code: CodeRequired}}) {
 		t.Errorf("fields = %+v", got)
 	}
+	// With the option, the seeded level is usable since step 6 of 1.1.
+	req.RecipientVerification = true
+	d, err := ev.svc.Create(context.Background(), ev.a, internalSender(), req, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.RecipientVerification || d.ConfidentialityLevel != "confidential" {
+		t.Errorf("details = %+v", d)
+	}
+}
+
+func TestCreatePerRecipientLinks(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		for _, verif := range []bool{false, true} {
+			req := request()
+			req.RecipientVerification = verif
+			d := ev.mustCreate(t, internalSender(), req)
+			if d.RecipientVerification != verif || d.DownloadURL != "" {
+				t.Errorf("verification %v: details = %+v", verif, d)
+			}
+			stored, err := ev.db.Transfers().Get(ctx, ev.a.ID, d.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stored.LinkMode != store.LinkModePerRecipient || stored.RecipientVerification != verif {
+				t.Errorf("verification %v: stored mode %q verification %v", verif, stored.LinkMode, stored.RecipientVerification)
+			}
+		}
+	})
 }
 
 func TestCreateCheckOrder(t *testing.T) {

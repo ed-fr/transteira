@@ -96,6 +96,13 @@ const (
 	// ActionTransferNotificationResent: an administrator resent the
 	// notification of a transfer to its recipients.
 	ActionTransferNotificationResent Action = "transfer.notification_resent"
+	// ActionTransferReminderSent: the system mailed the expiry reminder to
+	// the recipients of a transfer who had not downloaded it (the details
+	// carry their number).
+	ActionTransferReminderSent Action = "transfer.reminder_sent"
+	// ActionRecipientVerified: the recipient of a per-recipient link proved
+	// their address by code (the details name the link, never the code).
+	ActionRecipientVerified Action = "recipient.verified"
 	// ActionInvitationCreated: an internal user invited an external one.
 	ActionInvitationCreated Action = "invitation.created"
 	// ActionInvitationUsed: an external user deposited through an

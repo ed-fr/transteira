@@ -67,7 +67,7 @@ test.describe('public: external invitation', () => {
     // The external form has no recipient field: the files go to the inviter.
     await expect(gpage.getByRole('heading', { name: 'New transfer', level: 1 })).toBeVisible();
     await expect(gpage.getByText(`The files will be sent to ${inviter}, who invited you.`)).toBeVisible();
-    await expect(gpage.getByLabel(/^Recipients/)).toHaveCount(0);
+    await expect(gpage.getByRole('textbox', { name: /^Recipients/ })).toHaveCount(0);
     // An external depositor cannot invite anyone.
     await expect(gpage.getByRole('link', { name: 'Invite someone to send you files' })).toHaveCount(0);
     await checkA11y(gpage);

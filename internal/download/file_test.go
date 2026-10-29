@@ -26,20 +26,20 @@ func TestOpenFileAccess(t *testing.T) {
 			password: true,
 		})
 		q := ev.publish(ev.a, spec{contents: [][]byte{random(10)}})
-		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		wantErr(t, err, ErrDownloadLocked)
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		wantErr(t, err, ErrDownloadLocked)
 		cookie := ev.unlock(p, "")
 		for _, fid := range []string{p.files[1].ID, q.files[0].ID, id.New(id.File), ""} {
-			_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, cookie, fid)
+			_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{Grant: cookie}, fid)
 			wantErr(t, err, ErrNotFound)
 		}
-		_, err = ev.svc.OpenFile(ctx, ev.a, "dl_x", ipOne, cookie, p.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, "dl_x", ipOne, Cookies{Grant: cookie}, p.files[0].ID)
 		wantErr(t, err, ErrNotFound)
 		// The cookie of p does not unlock another protected transfer.
 		r := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true})
-		_, err = ev.svc.OpenFile(ctx, ev.a, r.token, ipOne, cookie, r.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, r.token, ipOne, Cookies{Grant: cookie}, r.files[0].ID)
 		wantErr(t, err, ErrDownloadLocked)
 	})
 }
@@ -50,7 +50,7 @@ func TestOpenFileContent(t *testing.T) {
 		ctx := context.Background()
 		content := random(50_000)
 		p := ev.publish(ev.a, spec{contents: [][]byte{content, random(10)}})
-		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -76,7 +76,7 @@ func TestOpenFileContent(t *testing.T) {
 			t.Fatalf("served %v", got)
 		}
 		// An unsatisfiable range gives 416 and records nothing more.
-		f, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		f, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +92,7 @@ func TestOpenFileContent(t *testing.T) {
 			t.Fatalf("served %v", got)
 		}
 		// Seek errors leave the offset alone.
-		f, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		f, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func TestRangeUnion(t *testing.T) {
 			t.Fatalf("served %v", got)
 		}
 		// Opening without reading records nothing.
-		f, err := ev.svc.OpenFile(context.Background(), ev.a, p.token, ipOne, "", fa)
+		f, err := ev.svc.OpenFile(context.Background(), ev.a, p.token, ipOne, Cookies{}, fa)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,11 +206,11 @@ func TestOpenFileFailures(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(5000), random(10)}, sizes: map[int]int64{1: 11}})
 		for _, fault := range []string{"open", "openRead"} {
 			ev.f.set(fault, 1, nil)
-			_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+			_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 			wantInternal(t, err)
 		}
 		// The recorded size differs from the stored file.
-		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[1].ID)
+		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[1].ID)
 		wantInternal(t, err)
 		// The stored file is corrupt.
 		if err := ev.files.Remove(ev.a.ID, p.files[0].StorageName); err != nil {
@@ -222,7 +222,7 @@ func TestOpenFileFailures(t *testing.T) {
 		}
 		_, _ = w.Write([]byte("not an encrypted file at all"))
 		_ = w.Close()
-		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		wantInternal(t, err)
 		if ev.logs.count("file not opened") != 4 {
 			t.Fatalf("failures not logged:\n%s", ev.logs.all())
@@ -283,7 +283,7 @@ func TestCompletionAfterDeletion(t *testing.T) {
 		ctx := context.Background()
 		content := random(3000)
 		p := ev.publish(ev.a, spec{contents: [][]byte{content}})
-		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -302,7 +302,7 @@ func TestCompletionAfterDeletion(t *testing.T) {
 		if ev.logs.count("no longer available") != 1 || ev.state(p) != nil {
 			t.Fatal("completion on a deleted transfer not handled")
 		}
-		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		wantErr(t, err, ErrGone)
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"testing"
@@ -542,6 +543,8 @@ func TestGetAvailableDownloadURL(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
 		ctx := context.Background()
+		// A transfer created before 1.1, with its single shared link.
+		ev.svc.linkMode = store.LinkModeShared
 		d := ev.mustCreate(t, internalSender(), request())
 		ev.complete(t, d.ID, "")
 		ev.finalizeDirect(t, d.ID)
@@ -600,6 +603,64 @@ func TestGetRejectedHasNoExpiry(t *testing.T) {
 		got, err := ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
 		if err != nil || got.Status != store.TransferRejected || !got.ExpiresAt.IsZero() || got.DownloadURL != "" {
 			t.Errorf("rejected: status %s, expiresAt %v, link %q, err %v", got.Status, got.ExpiresAt, got.DownloadURL, err)
+		}
+	})
+}
+
+func TestGetPerRecipientTracking(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		req := request()
+		req.Recipients = []string{dave, carol}
+		req.RecipientVerification = true
+		d := ev.mustCreate(t, internalSender(), req)
+		ev.complete(t, d.ID, "")
+		ev.finalizeDirect(t, d.ID)
+		got, err := ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err != nil || got.RecipientTracking != nil || got.DownloadURL != "" {
+			t.Fatalf("scanning: tracking %+v, link %q, err %v", got.RecipientTracking, got.DownloadURL, err)
+		}
+		s, err := ev.db.Scoped(ev.a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = s.Tx(ctx, func(tx *store.ScopedTx) error {
+			for _, f := range d.Files {
+				if err := ev.db.TransferFiles().SetScanResultTx(ctx, tx, f.ID, store.ScanClean, "", ev.clock.Now()); err != nil {
+					return err
+				}
+			}
+			tokens := make([]store.LinkToken, len(req.Recipients))
+			for i := range tokens {
+				token := fmt.Sprintf("dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8JfAb5Cd7Ef9Gh1Jk%d", i) // gitleaks:allow (fictitious test token)
+				wkID, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+				if err != nil {
+					return err
+				}
+				h := sha256.Sum256([]byte(token))
+				tokens[i] = store.LinkToken{Hash: h[:], KeyID: wkID}
+			}
+			_, err := ev.db.Transfers().MarkAvailableLinksTx(ctx, tx, d.ID, tokens, ev.clock.Now())
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err = ev.svc.Get(ctx, ev.a, internalSender(), d.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Never a link for a per-recipient transfer (P27, T-199).
+		if got.DownloadURL != "" || !got.RecipientVerification || got.Status != store.TransferAvailable {
+			t.Errorf("details = %+v", got)
+		}
+		if len(got.RecipientTracking) != 2 || got.RecipientTracking[0].Email != dave || got.RecipientTracking[1].Email != carol {
+			t.Errorf("tracking = %+v", got.RecipientTracking)
+		}
+		ev.faults().fail["tracking"] = errFault
+		if _, err := ev.svc.Get(ctx, ev.a, internalSender(), d.ID); !errors.Is(err, errFault) {
+			t.Errorf("tracking failure = %v", err)
 		}
 	})
 }

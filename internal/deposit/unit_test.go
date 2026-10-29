@@ -20,6 +20,7 @@ import (
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/vcode"
 )
 
 func TestNewDefaults(t *testing.T) {
@@ -78,12 +79,12 @@ func (r *seqReader) Read(p []byte) (int, error) {
 
 func TestNewCode(t *testing.T) {
 	t.Parallel()
-	if codeRejectAtOrAbv%codeSpace != 0 || codeRejectAtOrAbv > 1<<32 || (1<<32)-codeRejectAtOrAbv >= codeSpace {
-		t.Fatalf("rejection bound %d is not the largest multiple of %d", int64(codeRejectAtOrAbv), codeSpace)
+	if vcode.RejectAtOrAbove%vcode.Space != 0 || vcode.RejectAtOrAbove > 1<<32 || (1<<32)-vcode.RejectAtOrAbove >= vcode.Space {
+		t.Fatalf("rejection bound %d is not the largest multiple of %d", int64(vcode.RejectAtOrAbove), vcode.Space)
 	}
 	s := &Service{}
 	// Values in the incomplete last block are rejected, the next is used.
-	s.rand = &seqReader{vals: []uint32{0xFFFFFFFF, codeRejectAtOrAbv, codeRejectAtOrAbv - 1}}
+	s.rand = &seqReader{vals: []uint32{0xFFFFFFFF, vcode.RejectAtOrAbove, vcode.RejectAtOrAbove - 1}}
 	if code, err := s.newCode(); err != nil || code != "999999" {
 		t.Errorf("newCode after rejections: err %v, value ok %v", err, code == "999999")
 	}

@@ -178,7 +178,7 @@ func TestCoalescedBounds(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(maxPendingSpans*4 + 100)}})
 		fid := p.files[0].ID
 		// Too many spans in memory: written.
-		f, err := ev.svc.OpenFile(context.Background(), ev.a, p.token, ipOne, "", fid)
+		f, err := ev.svc.OpenFile(context.Background(), ev.a, p.token, ipOne, Cookies{}, fid)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -331,7 +331,7 @@ func TestWriteAfterDeletion(t *testing.T) {
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(5000)}})
 		fid := p.files[0].ID
-		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", fid)
+		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, fid)
 		if err != nil {
 			t.Fatal(err)
 		}

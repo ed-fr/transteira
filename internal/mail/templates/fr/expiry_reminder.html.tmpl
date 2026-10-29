@@ -1,0 +1,15 @@
+<h1 style="font-size:20px;margin:0 0 16px;">{{tenant_name}}</h1>
+<p>Bonjour,</p>
+<p>Ceci est un rappel : <strong>{{sender_email}}</strong> vous a envoyé des fichiers via le service de transfert {{tenant_name}} et vous ne les avez pas encore téléchargés.</p>
+<p><strong>Les fichiers seront supprimés le {{expiry_datetime}}.</strong></p>
+<p><a href="{{download_link}}" style="padding:12px 20px;background-color:#1a1a1a;color:#ffffff;text-decoration:none;font-weight:bold;border-radius:4px;">Télécharger les fichiers</a></p>
+<p>Si le bouton ne fonctionne pas, copiez cette adresse dans votre navigateur :<br><span style="word-break:break-all;">{{download_link}}</span></p>
+{{confidentiality_notice}}
+{{password_notice}}
+{{verification_notice}}
+<h2 style="font-size:18px;margin:24px 0 8px;">Fichiers</h2>
+{{files}}
+<p>Ne transférez pas ce message : ce lien vous est personnel.</p>
+<p>Si vous n'attendiez pas ce message, vous pouvez l'ignorer sans risque.</p>
+<hr style="border:0;border-top:1px solid #767676;margin:24px 0 16px;">
+<p style="font-size:14px;color:#4a4a4a;">Ce message a été envoyé automatiquement par {{tenant_name}}. Merci de ne pas y répondre.</p>

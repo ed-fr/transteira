@@ -10,7 +10,7 @@ import { HOSTS, ORIGINS, STORAGE_DELEGATE } from '../support/env';
 import { checkA11y, expect, test } from '../support/fixtures';
 import { internalEmail, textFile } from '../support/data';
 import { delegateApi, loadState, superAdminApi } from '../support/state';
-import { createTenantToken, downloadPath, tokenDeposit } from '../support/deposit';
+import { createTenantToken, recipientPath, tokenDeposit } from '../support/deposit';
 
 /** Entity-B transfer created once per worker (as the super admin, through an entity-B token). */
 let entityBTransfer: Promise<string> | undefined;
@@ -277,16 +277,17 @@ test.describe('tenant isolation (public hosts)', () => {
     expect(tenant.name).toBe(b.name);
 
     // An entity-A download link opened on the entity-B host: not found, nothing of A shown.
+    const recipient = internalEmail('isolation-a-recipient');
     const transfer = await tokenDeposit(
       state.apiTokenA,
       internalEmail('isolation-a-sender'),
       {
-        recipients: [internalEmail('isolation-a-recipient')],
+        recipients: [recipient],
         files: [textFile('entity-a-report.txt', 'entity A content')],
       },
       { host: HOSTS.a },
     );
-    const path = downloadPath(transfer.downloadUrl!);
+    const path = await recipientPath(transfer, recipient);
     guards.allowHttpError(404, /\/api\/v1\/downloads\//);
     await page.goto(`${b.origin}${path}`);
     await expect(page.getByRole('heading', { name: 'Transfer not found', level: 1 })).toBeVisible();

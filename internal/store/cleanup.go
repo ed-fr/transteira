@@ -108,13 +108,16 @@ var (
 		`SELECT id FROM tenants ORDER BY id`,
 		reasonCleanupTenants)
 
-	// qTransferMarkExpired expires a transfer whose sealed download token
-	// was destroyed first (T-110); the store checks the file keys
-	// beforehand.
-	qTransferMarkExpired = tenantQuery(
-		`UPDATE transfers SET status = 'expired', ended_at = ?
-		WHERE tenant_id = ? AND id = ? AND status IN ('uploading', 'scanning', 'available')
-		AND download_token_key_id IS NULL`)
+	// qTransferMarkExpired expires a transfer whose sealed download token,
+	// and the sealed token of each of its recipient links, were destroyed
+	// first (T-110); the store checks the file keys beforehand.
+	qTransferMarkExpired = reviewedTenantQuery(
+		`UPDATE transfers AS t SET status = 'expired', ended_at = ?
+		WHERE t.tenant_id = ? AND t.id = ? AND t.status IN ('uploading', 'scanning', 'available')
+		AND t.download_token_key_id IS NULL
+		AND NOT EXISTS (SELECT 1 FROM recipient_links l
+			WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`,
+		reasonTransferEndLinkKeys)
 	qTransferListEnded = tenantQuery(
 		`SELECT id FROM transfers
 		WHERE tenant_id = ? AND status IN ('rejected', 'expired', 'deleted') AND ended_at <= ?
@@ -271,9 +274,10 @@ func (r *Transfers) AbandonedUploads(ctx context.Context, createdBefore time.Tim
 // expired, inside tx, keeping its row (and its download token hash, so
 // that the link answers "gone"), and sets EndedAt to now. The transfer must
 // be uploading, scanning or available; the caller checks that it is due
-// (expiry, or an abandoned upload). The data key of every file and the
-// sealed download token (DownloadTokenKeyID) must have been destroyed first
-// ([WrappedKeys.DeleteTx]), the token key in the same transaction;
+// (expiry, or an abandoned upload). The data key of every file, the
+// sealed download token (DownloadTokenKeyID) and the sealed token of every
+// recipient link must have been destroyed first ([WrappedKeys.DeleteTx],
+// [RecipientLinks.DestroyKeysTx]), the token keys in the same transaction;
 // otherwise it returns [ErrKeysRemain] and changes nothing. It returns
 // ErrNotFound when the transfer does not exist or belongs to another
 // tenant, and ErrConflict when it is in another status. After an error,

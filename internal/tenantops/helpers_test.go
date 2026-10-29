@@ -122,9 +122,13 @@ func (e *fakeEraser) EraseTransfer(ctx context.Context, tid tenant.ID, trfID str
 	return lifecycle.Erased, err
 }
 
-// endTransfer destroys the keys of d (data keys and sealed token) and
-// moves it to the terminal status to, inside tx.
+// endTransfer destroys the keys of d (data keys and sealed tokens, of the
+// transfer or of its recipient links) and moves it to the terminal status
+// to, inside tx.
 func endTransfer(ctx context.Context, db *store.DB, tx *store.ScopedTx, d store.TransferDetails, to store.TransferStatus) error {
+	if _, err := db.RecipientLinks().DestroyKeysTx(ctx, tx, d.ID); err != nil {
+		return err
+	}
 	keys := []string{d.DownloadTokenKeyID}
 	for _, f := range d.Files {
 		keys = append(keys, f.DEKKeyID)
@@ -147,13 +151,27 @@ func (e *fakeEraser) count() int {
 }
 
 // recNotifier delegates to a real notifier and records the links and
-// views it was given; err replaces the result.
+// views it was given (perLinks for PerRecipientJobs); err replaces the
+// result.
 type recNotifier struct {
-	inner Notifier
-	mu    sync.Mutex
-	links []string
-	views []notify.TransferView
-	err   error
+	inner    Notifier
+	mu       sync.Mutex
+	links    []string
+	perLinks [][]notify.RecipientLink
+	views    []notify.TransferView
+	err      error
+}
+
+func (n *recNotifier) PerRecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, links []notify.RecipientLink) ([]mail.Job, error) {
+	n.mu.Lock()
+	n.perLinks = append(n.perLinks, links)
+	n.views = append(n.views, tr)
+	err := n.err
+	n.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return n.inner.PerRecipientJobs(ctx, t, tr, links)
 }
 
 func (n *recNotifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, link string) ([]mail.Job, error) {
@@ -273,6 +291,20 @@ func (f *faultRepo) listAudit(ctx context.Context, fl store.AuditFilter) (store.
 	return f.repo.listAudit(ctx, fl)
 }
 
+func (f *faultRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
+	if err := f.fail("recipientLinks"); err != nil {
+		return nil, err
+	}
+	return f.repo.recipientLinks(ctx, tid, trfID)
+}
+
+func (f *faultRepo) tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error) {
+	if err := f.fail("tracking"); err != nil {
+		return nil, err
+	}
+	return f.repo.tracking(ctx, tid, trfID)
+}
+
 func (f *faultRepo) openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error) {
 	if err := f.fail("openSecret"); err != nil {
 		return nil, err
@@ -383,16 +415,31 @@ func (ev *env) faults(methods ...string) *faultRepo {
 }
 
 // seeded is a transfer stored by seed, with its raw download token when
-// it became available.
+// it became available (seedLinks: the raw token of each recipient link,
+// by address).
 type seeded struct {
-	id    string
-	token string
+	id     string
+	token  string
+	tokens map[string]string
 }
 
 // seed stores a transfer of tn from alice to the recipients, with two
 // files, and brings it to status (uploading, scanning, available,
 // expired or deleted). An available transfer has a sealed download token.
 func (ev *env) seed(tn *tenant.Tenant, status store.TransferStatus, recipients ...string) seeded {
+	ev.t.Helper()
+	return ev.seedMode(tn, store.LinkModeShared, status, recipients...)
+}
+
+// seedLinks is seed for a transfer with one link per recipient: an
+// available one has a sealed token per recipient link.
+func (ev *env) seedLinks(tn *tenant.Tenant, status store.TransferStatus, recipients ...string) seeded {
+	ev.t.Helper()
+	return ev.seedMode(tn, store.LinkModePerRecipient, status, recipients...)
+}
+
+// seedMode is seed with the given link mode.
+func (ev *env) seedMode(tn *tenant.Tenant, mode store.LinkMode, status store.TransferStatus, recipients ...string) seeded {
 	ev.t.Helper()
 	ctx := context.Background()
 	out := seeded{id: id.New(id.Transfer)}
@@ -421,7 +468,7 @@ func (ev *env) seed(tn *tenant.Tenant, status store.TransferStatus, recipients .
 		}
 		tr := store.Transfer{
 			ID: out.id, SenderEmail: alice, SenderKind: store.DepositorInternal, ExpiryDays: 7,
-			Message: "Here are the plans", SenderIP: netip.MustParseAddr("10.10.4.21"),
+			Message: "Here are the plans", SenderIP: netip.MustParseAddr("10.10.4.21"), LinkMode: mode,
 		}
 		trs := ev.db.Transfers()
 		if err := trs.CreateTx(ctx, tx, tr, recipients, files); err != nil {
@@ -441,18 +488,24 @@ func (ev *env) seed(tn *tenant.Tenant, status store.TransferStatus, recipients .
 				return err
 			}
 		}
-		token, err := id.NewDownloadToken()
-		if err != nil {
-			return err
-		}
-		out.token = token
-		wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
-		if err != nil {
-			return err
-		}
-		hash := sha256.Sum256([]byte(token))
-		if err := trs.MarkAvailableTx(ctx, tx, out.id, hash[:], wk, now); err != nil {
-			return err
+		if mode == store.LinkModePerRecipient {
+			if err := ev.makeLinks(ctx, tx, out.id, recipients, &out, now); err != nil {
+				return err
+			}
+		} else {
+			token, err := id.NewDownloadToken()
+			if err != nil {
+				return err
+			}
+			out.token = token
+			wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+			if err != nil {
+				return err
+			}
+			hash := sha256.Sum256([]byte(token))
+			if err := trs.MarkAvailableTx(ctx, tx, out.id, hash[:], wk, now); err != nil {
+				return err
+			}
 		}
 		if status == store.TransferAvailable {
 			return nil
@@ -467,6 +520,35 @@ func (ev *env) seed(tn *tenant.Tenant, status store.TransferStatus, recipients .
 		ev.t.Fatalf("seed %s: %v", status, err)
 	}
 	return out
+}
+
+// makeLinks makes the scanning transfer trfID available with one sealed
+// token per recipient, recording the raw tokens in out by address.
+func (ev *env) makeLinks(ctx context.Context, tx *store.ScopedTx, trfID string, recipients []string, out *seeded, now time.Time) error {
+	tokens := make([]store.LinkToken, len(recipients))
+	raw := make(map[string]string, len(recipients))
+	for i := range recipients {
+		token, err := id.NewDownloadToken()
+		if err != nil {
+			return err
+		}
+		wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+		if err != nil {
+			return err
+		}
+		hash := sha256.Sum256([]byte(token))
+		tokens[i] = store.LinkToken{Hash: hash[:], KeyID: wk}
+		raw[string(hash[:])] = token
+	}
+	links, err := ev.db.Transfers().MarkAvailableLinksTx(ctx, tx, trfID, tokens, now)
+	if err != nil {
+		return err
+	}
+	out.tokens = make(map[string]string, len(links))
+	for _, l := range links {
+		out.tokens[l.Email] = raw[string(l.TokenHash)]
+	}
+	return nil
 }
 
 // invite stores a pending invitation of dave issued by alice in tn.

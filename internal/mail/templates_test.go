@@ -69,6 +69,14 @@ func goldenData() map[string]any {
 			DownloadedAt: time.Date(2027, time.October, 14, 16, 5, 0, 0, time.UTC),
 			DeleteAt:     time.Date(2027, time.October, 14, 16, 20, 0, 0, time.UTC),
 		},
+		TemplateExpiryReminder: ExpiryReminderData{
+			TenantName: "Entity A & Co", SenderEmail: "alice@entity-a.example.com", Link: goldenLink,
+			Files: goldenFiles(), ExpiresAt: goldenExpiry, PasswordRequired: true, VerificationRequired: true,
+			ConfidentialityLabel: "Confidential <b>",
+		},
+		TemplateRecipientVerificationCode: RecipientVerificationCodeData{
+			TenantName: "Entity A & Co", Code: "123456", ValidityMinutes: 15,
+		},
 		TemplateQuotaWarning: QuotaAlertData{
 			TenantName: "Entity A & Co", UsedBytes: 85 << 30, QuotaBytes: 100 << 30, AdminLink: goldenAdminLink,
 		},
@@ -114,7 +122,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -475,6 +483,80 @@ func TestNewTemplatesErrors(t *testing.T) {
 	for name, fsys := range cases {
 		if _, err := NewTemplates(fsys); err == nil {
 			t.Errorf("%s: want error", name)
+		}
+	}
+}
+
+func TestTemplatesFirstDownloadRecipient(t *testing.T) {
+	data := goldenData()[TemplateFirstDownload].(FirstDownloadData)
+	data.RecipientEmail = "bob+<x>@example.com"
+	for lang, want := range map[string]string{"en": "Downloaded by: ", "fr": "Téléchargé par : "} {
+		m, err := Render(TemplateFirstDownload, lang, data)
+		if err != nil || !strings.Contains(m.Text, want+data.RecipientEmail) ||
+			!strings.Contains(m.HTML, want+"bob+&lt;x&gt;@example.com") {
+			t.Errorf("%s recipient: %v: %s", lang, err, m.HTML)
+		}
+	}
+}
+
+func TestTemplatesExpiryReminderVariants(t *testing.T) {
+	data := goldenData()[TemplateExpiryReminder].(ExpiryReminderData)
+	data.PasswordRequired, data.VerificationRequired, data.ConfidentialityLabel = false, false, ""
+	for lang, notices := range map[string][]string{
+		"en": {"another channel", "confirm your e-mail", "Confidentiality level"},
+		"fr": {"autre canal", "confirmer votre adresse", "Niveau de confidentialité"},
+	} {
+		m, err := Render(TemplateExpiryReminder, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range notices {
+			if strings.Contains(m.Text, n) || strings.Contains(m.HTML, n) {
+				t.Errorf("%s: %q shown without its option", lang, n)
+			}
+		}
+		if strings.Contains(m.Text, "\n\n\n") {
+			t.Errorf("%s: blank lines left by empty blocks: %q", lang, m.Text)
+		}
+		if strings.Contains(m.Text, "SHA-256") {
+			t.Errorf("%s: reminder lists digests", lang)
+		}
+	}
+	data.PasswordRequired, data.VerificationRequired, data.ConfidentialityLabel = true, true, "Confidential"
+	for lang, notices := range map[string][]string{
+		"en": {"another channel", "confirm your e-mail", "Confidentiality level: Confidential"},
+		"fr": {"autre canal", "confirmer votre adresse", "Niveau de confidentialité : Confidential"},
+	} {
+		m, err := Render(TemplateExpiryReminder, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range notices {
+			if !strings.Contains(m.Text, n) || !strings.Contains(m.HTML, n) {
+				t.Errorf("%s: %q missing", lang, n)
+			}
+		}
+	}
+}
+
+// TestConfirmationWithoutLink checks the sender confirmation of a transfer
+// whose recipients all have a personal link: no link, one sentence instead.
+func TestConfirmationWithoutLink(t *testing.T) {
+	tpl := DefaultTemplates()
+	data := TransferConfirmationData{TenantName: "T", Recipients: []string{"bob@example.com"}, ExpiresAt: goldenExpiry}
+	for lang, sentence := range map[string]string{
+		"fr": "Chaque destinataire a reçu son propre lien personnel.",
+		"en": "Each recipient received their own personal link.",
+	} {
+		m, err := tpl.Render(TemplateTransferConfirmation, lang, data)
+		if err != nil {
+			t.Fatalf("%s: %v", lang, err)
+		}
+		if strings.Contains(m.HTML, "href=") || strings.Contains(m.Text, "http") {
+			t.Errorf("%s: a link is shown:\n%s\n%s", lang, m.Text, m.HTML)
+		}
+		if !strings.Contains(m.HTML, sentence) || !strings.Contains(m.Text, sentence) {
+			t.Errorf("%s: sentence missing:\n%s\n%s", lang, m.Text, m.HTML)
 		}
 	}
 }

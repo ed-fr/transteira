@@ -157,8 +157,9 @@ type Scanner interface {
 	Ping(ctx context.Context) error
 }
 
-// Vault opens the data keys of the files, seals the download tokens and
-// unseals them for the mails deferred by a hold. *masterkey.Vault
+// Vault opens the data keys of the files, seals the download tokens (the
+// shared token, or the token of each recipient link) and unseals them for
+// the mails deferred by a hold. *masterkey.Vault
 // implements it.
 type Vault interface {
 	Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID string) ([]byte, error)
@@ -180,6 +181,7 @@ type Remover interface {
 // implements it.
 type Notifier interface {
 	RecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, link string) ([]mail.Job, error)
+	PerRecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, links []notify.RecipientLink) ([]mail.Job, error)
 	SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, link string) (mail.Job, error)
 	FileProblems(ctx context.Context, t *tenant.Tenant, tr notify.TransferView) (mail.Job, error)
 	FileNotScanned(ctx context.Context, t *tenant.Tenant, tr notify.TransferView) (mail.Job, error)

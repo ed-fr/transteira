@@ -38,7 +38,8 @@ type FailureScope string
 // Failure scopes.
 const (
 	// FailureScopeTransfer counts the failures on one transfer, all client
-	// IPs together.
+	// IPs together, or on one recipient link of a per-recipient transfer
+	// (see LinkFailureKey).
 	FailureScopeTransfer FailureScope = "transfer"
 	// FailureScopeIP counts the failures of one client, all transfers of
 	// the tenant together.
@@ -46,18 +47,30 @@ const (
 )
 
 // FailureKey identifies a password failure counter of a tenant. Build it
-// with [TransferFailureKey] or [IPFailureKey].
+// with [TransferFailureKey], [LinkFailureKey] or [IPFailureKey].
 type FailureKey struct {
 	// Scope is the scope of the counter.
 	Scope FailureScope
-	// Key is the transfer ID ("trf_" + ULID) for FailureScopeTransfer, or
-	// the normalized client IP for FailureScopeIP (see IPFailureKey).
+	// Key is the transfer ID ("trf_" + ULID) or the recipient link ID
+	// ("rcl_" + ULID) for FailureScopeTransfer, or the normalized client IP
+	// for FailureScopeIP (see IPFailureKey).
 	Key string
 }
 
-// TransferFailureKey returns the counter of the transfer trfID.
+// TransferFailureKey returns the counter of the transfer trfID (shared
+// link).
 func TransferFailureKey(trfID string) FailureKey {
 	return FailureKey{Scope: FailureScopeTransfer, Key: trfID}
+}
+
+// LinkFailureKey returns the counter of the recipient link linkID. The
+// download layer uses it in place of [TransferFailureKey] for a
+// per-recipient transfer (user decision: the password tries are counted
+// per link, so that one recipient cannot lock the others out); the per-IP
+// counter is unchanged. The two kinds of IDs never collide (distinct
+// prefixes), so they share the transfer scope of the schema.
+func LinkFailureKey(linkID string) FailureKey {
+	return FailureKey{Scope: FailureScopeTransfer, Key: linkID}
 }
 
 // IPFailureKey returns the counter of the client ip. An IPv4 address (or an
@@ -84,7 +97,7 @@ func IPFailureKey(ip netip.Addr) FailureKey {
 func (k FailureKey) valid() bool {
 	switch k.Scope {
 	case FailureScopeTransfer:
-		return id.Valid(id.Transfer, k.Key)
+		return id.Valid(id.Transfer, k.Key) || id.Valid(id.RecipientLink, k.Key)
 	case FailureScopeIP:
 		if ip, err := netip.ParseAddr(k.Key); err == nil {
 			return ip.Is4() && ip.String() == k.Key

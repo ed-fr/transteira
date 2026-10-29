@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/api/public"
+	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -183,7 +184,7 @@ type slowDownloads struct {
 	size int
 }
 
-func (d slowDownloads) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (public.DownloadFile, error) {
+func (d slowDownloads) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies, string) (public.DownloadFile, error) {
 	return public.DownloadFile{Name: "big.bin", Content: &slowContent{Reader: bytes.NewReader(make([]byte, d.size))}}, nil
 }
 

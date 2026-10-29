@@ -56,5 +56,29 @@
   "maxDownloads": {
     "title": "Maximum number of downloads reached",
     "text": "This transfer has reached its maximum number of downloads and can no longer be downloaded. Ask the sender to send the files again."
+  },
+  "verify": {
+    "title": "Confirm your address",
+    "intro": "To protect this transfer, confirm that you are its recipient: we send a 6-digit code to your email address.",
+    "address": "Address: {email}",
+    "personal": "This link is personal. Do not forward it: it cannot be used by anyone else.",
+    "send": "Send me a code",
+    "sent": "A 6-digit code has been sent to {email}. Check your inbox, and your spam folder if needed.",
+    "expires": "The code is valid until {time}.",
+    "label": "Verification code",
+    "hint": "6 digits, for example 123456",
+    "submit": "Verify",
+    "resend": "Send a new code",
+    "required": "Enter the code.",
+    "format": "The code is made of 6 digits.",
+    "wrong": "The code is not correct.",
+    "exhausted": "The code has expired or too many wrong codes were entered. Ask for a new code.",
+    "noCode": "No code is pending any more. Ask for a new code.",
+    "resent": "A new code has been sent.",
+    "done": "Address confirmed.",
+    "expired": "Your access has expired: confirm your address again with a new code.",
+    "rateLimited": "Too many requests. Please wait before asking for another code.",
+    "mailUnavailable": "The code could not be sent. Please try again later.",
+    "conflict": "A code cannot be sent for this link right now. Reload the page and try again."
   }
 }

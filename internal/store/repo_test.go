@@ -478,6 +478,22 @@ func TestBlocklistMatch(t *testing.T) {
 		if _, err := bl.Match(ctx, a.ID, "", "zz"); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("Match(bad sha) err = %v", err)
 		}
+		// MatchTx: the same answers inside a transaction of the tenant.
+		err := inTxCtx(ctx, t, db, a.ID, func(tx *store.ScopedTx) error {
+			if got, err := bl.MatchTx(ctx, tx, "x@a.b.evil.example.net", ""); err != nil || len(got) != 1 || got[0].ID != dom.ID {
+				t.Errorf("MatchTx = %+v, %v", got, err)
+			}
+			if got, err := bl.MatchTx(ctx, tx, "", ""); err != nil || len(got) != 0 {
+				t.Errorf("MatchTx(nothing) = %+v, %v", got, err)
+			}
+			if _, err := bl.MatchTx(ctx, tx, "not-an-email", ""); !errors.Is(err, store.ErrInvalid) {
+				t.Errorf("MatchTx(bad email) err = %v", err)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/api/apiutil"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/deposit"
@@ -184,7 +185,13 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		TotalBytes: d.TotalBytes, CreatedAt: d.CreatedAt, UploadExpiresAt: optionalTime(d.UploadExpiresAt),
 		FinalizedAt: optionalTime(d.FinalizedAt), DownloadUrl: optional(d.DownloadURL),
 		Files: make([]gen.SenderFile, len(d.Files)), MaxDownloads: d.MaxDownloads,
-		ConfidentialityLevel: senderLevelRef(d), RecipientVerification: new(false),
+		ConfidentialityLevel: senderLevelRef(d), RecipientVerification: &d.RecipientVerification,
+	}
+	// A transfer with one link per recipient never shows a link (P27): the
+	// sender follows the recipients through their tracking only.
+	if d.RecipientTracking != nil {
+		tracking := apiutil.RecipientTracking(d.RecipientTracking)
+		body.RecipientTracking = &tracking
 	}
 	for i, r := range d.Recipients {
 		body.Recipients[i] = gen.Email(r)

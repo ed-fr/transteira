@@ -14,7 +14,7 @@ import type { Page, Request } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { internalEmail, textFile } from '../support/data';
-import { downloadPath, tokenDeposit } from '../support/deposit';
+import { recipientPath, tokenDeposit } from '../support/deposit';
 import { HOSTS, ORIGINS, REPO_ROOT, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
@@ -166,13 +166,14 @@ function guideImages(lang: Lang, guide: GuideId): string[] {
 
 /** Creates an available transfer of entity A (API token) and returns the path of its download page. */
 async function downloadPage(token: string, label: string): Promise<string> {
+  const recipient = internalEmail(`${label}-recipient`);
   const transfer = await tokenDeposit(
     token,
     internalEmail(`${label}-sender`),
-    { recipients: [internalEmail(`${label}-recipient`)], files: [textFile(`${label}.txt`, `help ${label}`)] },
+    { recipients: [recipient], files: [textFile(`${label}.txt`, `help ${label}`)] },
     { host: HOSTS.a },
   );
-  return downloadPath(transfer.downloadUrl!);
+  return recipientPath(transfer, recipient);
 }
 
 test.describe('public contextual help', () => {

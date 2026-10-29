@@ -18,6 +18,7 @@ import {
   resendFailure,
   resultText,
   scanView,
+  trackedDownloads,
   selectAll,
   selectedCount,
   senderIpText,
@@ -253,5 +254,32 @@ describe('actions', () => {
     ).toBe('too long');
     expect(deleteFailure(view({ status: 400 }), t)).toBe('server message');
     expect(deleteFailure(view({ status: 500 }), t)).toBe('server message');
+  });
+});
+
+describe('trackedDownloads', () => {
+  const files = [{ id: 'f1', name: 'report.pdf' }];
+  const base = { email: 'a@example.com', verifiedAt: null, firstDownloadedAt: null, lastDownloadedAt: null };
+
+  it('maps file ids to names and null to the archive label', () => {
+    const rows = trackedDownloads(
+      {
+        ...base,
+        downloads: [
+          { fileId: 'f1', firstAt: '2026-01-01T10:00:00Z', lastAt: '2026-01-02T10:00:00Z', count: 2 },
+          { fileId: null, firstAt: '2026-01-03T10:00:00Z', lastAt: '2026-01-03T10:00:00Z', count: 1 },
+          { fileId: 'gone', firstAt: '2026-01-03T10:00:00Z', lastAt: '2026-01-03T10:00:00Z', count: 1 },
+          { firstAt: '2026-01-04T10:00:00Z', lastAt: '2026-01-04T10:00:00Z', count: 3 },
+        ],
+      },
+      files,
+      'ZIP archive',
+    );
+    expect(rows.map((r) => r.label)).toEqual(['report.pdf', 'ZIP archive', 'gone', 'ZIP archive']);
+    expect(rows[0]).toMatchObject({ count: 2, lastAt: '2026-01-02T10:00:00Z' });
+  });
+
+  it('returns nothing without downloads', () => {
+    expect(trackedDownloads({ ...base, downloads: [] }, files, 'ZIP')).toEqual([]);
   });
 });

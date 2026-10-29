@@ -152,7 +152,8 @@ var keyDefs = map[string]keyDef{
 	TemplateTransferConfirmation: {
 		vars: []varSpec{
 			tenantVar,
-			{"download_link", VarURL, true, "Download link."},
+			{"download_link", VarURL, false, "Download link; empty when each recipient has a personal link."},
+			{"link_notice", VarBlock, false, "Download link of a shared transfer, or a sentence saying that each recipient received a personal link."},
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Reminder to give the password through another channel; empty without password."},
 			confidentialityVar,
@@ -197,13 +198,42 @@ var keyDefs = map[string]keyDef{
 			tenantVar,
 			{"download_datetime", VarText, true, "Date and time of the first complete download."},
 			{"files", VarBlock, false, "List of the files (name and size)."},
+			{"recipient_notice", VarBlock, false, "Recipient who completed the download; empty with a shared link."},
 			{"deletion_notice", VarBlock, true, "When the transfer will be erased, or that this notice is sent only once."},
 		},
 		values: firstDownloadValues,
 		sample: FirstDownloadData{
 			TenantName: sampleTenant, Files: sampleFiles(), DownloadedAt: sampleTime,
-			DeleteAt: sampleTime.Add(15 * time.Minute),
+			DeleteAt: sampleTime.Add(15 * time.Minute), RecipientEmail: "bob@example.com",
 		},
+	},
+	TemplateExpiryReminder: {
+		vars: []varSpec{
+			tenantVar,
+			{"sender_email", VarText, false, "Address of the sender."},
+			{"download_link", VarURL, true, "Personal download link of the recipient."},
+			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
+			{"password_notice", VarBlock, true, "Notice that the password comes through another channel; empty without password."},
+			confidentialityVar,
+			{"verification_notice", VarBlock, false, "Notice that a code will be asked before the download; empty when the transfer has no recipient verification."},
+			{"files", VarBlock, false, "List of the files (name and size)."},
+			{"file_count", VarText, false, "Number of files."},
+		},
+		values: expiryReminderValues,
+		sample: ExpiryReminderData{
+			TenantName: sampleTenant, SenderEmail: sampleSender, Link: sampleLink, Files: sampleFiles(),
+			ExpiresAt: sampleTime.AddDate(0, 0, 1), PasswordRequired: true, VerificationRequired: true,
+			ConfidentialityLabel: "Confidential",
+		},
+	},
+	TemplateRecipientVerificationCode: {
+		vars: []varSpec{
+			tenantVar,
+			{"code", VarText, true, "One-time verification code (6 digits)."},
+			{"validity_minutes", VarText, false, "Lifetime of the code, in minutes."},
+		},
+		values: recipientVerificationValues,
+		sample: RecipientVerificationCodeData{TenantName: sampleTenant, Code: "123456", ValidityMinutes: 15},
 	},
 	TemplateQuotaWarning: quotaKeyDef(QuotaWarningPercent, 82),
 	TemplateQuotaReached: quotaKeyDef(QuotaReachedPercent, 100),
@@ -407,6 +437,7 @@ func confirmationValues(l *labels, lang string, data any) (map[string]value, boo
 	return map[string]value{
 		"tenant_name":            textValue(d.TenantName),
 		"download_link":          urlValue(d.Link),
+		"link_notice":            linkNoticeBlock(l, d.Link),
 		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
 		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelSender, true),
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
@@ -470,7 +501,38 @@ func firstDownloadValues(l *labels, lang string, data any) (map[string]value, bo
 		"tenant_name":       textValue(d.TenantName),
 		"download_datetime": textValue(FormatDateTime(lang, d.DownloadedAt)),
 		"files":             simpleFilesBlock(lang, d.Files),
+		"recipient_notice":  noticeBlock(d.RecipientEmail != "", l.downloadedBy+d.RecipientEmail, false),
 		"deletion_notice":   deletion,
+	}, true
+}
+
+func expiryReminderValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(ExpiryReminderData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"tenant_name":            textValue(d.TenantName),
+		"sender_email":           textValue(d.SenderEmail),
+		"download_link":          urlValue(d.Link),
+		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
+		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelRecipient, true),
+		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
+		"verification_notice":    noticeBlock(d.VerificationRequired, l.verificationNotice, false),
+		"files":                  simpleFilesBlock(lang, d.Files),
+		"file_count":             textValue(strconv.Itoa(len(d.Files))),
+	}, true
+}
+
+func recipientVerificationValues(_ *labels, _ string, data any) (map[string]value, bool) {
+	d, ok := data.(RecipientVerificationCodeData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"tenant_name":      textValue(d.TenantName),
+		"code":             textValue(d.Code),
+		"validity_minutes": textValue(strconv.Itoa(d.ValidityMinutes)),
 	}, true
 }
 
@@ -637,6 +699,17 @@ func noticeBlock(on bool, text string, strong bool) value {
 		h = "<strong>" + h + "</strong>"
 	}
 	return blockValue(trustedHTML("<p>"+h+"</p>"), text)
+}
+
+// linkNoticeBlock is the download link paragraph of the sender confirmation,
+// or, when link is empty (every recipient has a personal link that the sender
+// never sees), the sentence saying so.
+func linkNoticeBlock(l *labels, link string) value {
+	if link == "" {
+		return noticeBlock(true, l.personalLinks, false)
+	}
+	h := "<p>" + esc(l.downloadLinkIntro+l.colon) + `<br><a href="` + esc(link) + `" style="color:#1a1a1a;word-break:break-all;">` + esc(link) + "</a></p>"
+	return blockValue(trustedHTML(h), l.downloadLinkIntro+l.colon+"\n\n"+link)
 }
 
 // confidentialityVar is the variable showing the confidentiality level of a

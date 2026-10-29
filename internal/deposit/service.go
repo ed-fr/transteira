@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -19,25 +18,26 @@ import (
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/vcode"
 )
 
 // Rules of spec 7 (verification codes), 9 (invitations) and 8.2 (expiry).
 const (
 	// CodeTTL is the validity of a verification code.
-	CodeTTL = 15 * time.Minute
+	CodeTTL = vcode.TTL
 	// CodeDigits is the number of digits of a verification code.
-	CodeDigits = 6
+	CodeDigits = vcode.Digits
 	// MaxCodesPerAddress bounds the codes sent to one address per
 	// RateWindow.
-	MaxCodesPerAddress = 5
+	MaxCodesPerAddress = vcode.MaxPerAddress
 	// MaxCodesPerIP bounds the codes requested from one client IP per
-	// RateWindow.
-	MaxCodesPerIP = 20
+	// RateWindow, all purposes combined.
+	MaxCodesPerIP = vcode.MaxPerIP
 	// RateWindow is the sliding window of the code rate limits.
-	RateWindow = time.Hour
+	RateWindow = vcode.Window
 	// QueueFullRetryAfter is the Retry-After hint when the mail queue is
 	// full.
-	QueueFullRetryAfter = 30 * time.Second
+	QueueFullRetryAfter = vcode.QueueFullRetryAfter
 	// MaxInvitationsPerInviter bounds the invitations one internal address
 	// may issue per RateWindow in a tenant (threats T-12, T-89; the configurable
 	// per-inviter quota of spec 15.2 comes with V1.1).
@@ -58,12 +58,6 @@ const (
 	// InvitationPath is the path of the invitation landing page of the web
 	// interface; the token follows it.
 	InvitationPath = "/i/"
-)
-
-// Code drawing bounds.
-const (
-	codeSpace         = 1_000_000 // 10^CodeDigits
-	codeRejectAtOrAbv = (1 << 32) - (1<<32)%codeSpace
 )
 
 // expiryDays are the transfer lifetimes offered to depositors (spec 8.2).
@@ -196,33 +190,18 @@ func validToken(p, tok string) bool {
 	return id.TokenValid(p, tok, id.MinTokenBodyLen, id.MaxTokenBodyLen)
 }
 
-// newCode draws a verification code uniformly among the 10^6 values: a
-// 32-bit random value is rejected when it falls in the incomplete last
-// block, so that the reduction modulo 10^6 has no bias.
+// newCode draws a verification code from the random source of the service
+// (see vcode.New).
 func (s *Service) newCode() (string, error) {
-	var b [4]byte
-	for {
-		if _, err := io.ReadFull(s.rand, b[:]); err != nil {
-			return "", fmt.Errorf("deposit: read random: %w", err)
-		}
-		if v := binary.BigEndian.Uint32(b[:]); v < codeRejectAtOrAbv {
-			return fmt.Sprintf("%0*d", CodeDigits, v%codeSpace), nil
-		}
+	code, err := vcode.New(s.rand)
+	if err != nil {
+		return "", fmt.Errorf("deposit: %w", err)
 	}
+	return code, nil
 }
 
 // validCode reports whether code is exactly CodeDigits ASCII digits.
-func validCode(code string) bool {
-	if len(code) != CodeDigits {
-		return false
-	}
-	for i := range len(code) {
-		if code[i] < '0' || code[i] > '9' {
-			return false
-		}
-	}
-	return true
-}
+func validCode(code string) bool { return vcode.Valid(code) }
 
 // logEvent writes a security event; a write failure is only reported on the
 // application log.

@@ -3861,7 +3861,7 @@ export interface components {
                 scanStatus: components["schemas"]["ScanStatus"];
                 path?: components["schemas"]["FilePath"];
             }[];
-            /** @description Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links. */
+            /** @description Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links; empty until the transfer is available. Absent for a transfer with a single shared link. */
             recipientTracking?: components["schemas"]["RecipientTracking"][];
         };
         AdminTransferList: {
@@ -4237,7 +4237,7 @@ export interface components {
             /**
              * @description End of the last successful run of each periodic cleanup task (`expire`,
              *     `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`,
-             *     `orphans`, `backup`), keyed by task name. A task that never succeeded since the start
+             *     `orphans`, `expiry-reminder`, `backup`), keyed by task name. A task that never succeeded since the start
              *     is absent. A run that left work for the next run after a failure does not move it.
              */
             lifecycle?: {
@@ -6954,7 +6954,7 @@ export interface operations {
             403: components["responses"]["CsrfInvalid"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["StateConflict"];
-            410: components["responses"]["TransferGone"];
+            410: components["responses"]["DownloadGone"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];

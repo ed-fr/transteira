@@ -208,8 +208,8 @@ func TestGetPublicTenantOptions(t *testing.T) {
 		!r.InternalRecipientsOnly || !r.ForceDeleteAfterFirstDownload || !reflect.DeepEqual(r.AllowedExpiryDays, []gen.ExpiryDays{1}) {
 		t.Errorf("second level %+v", l[1])
 	}
-	// Per-recipient links come with step 6: the verification is not offered yet.
-	if b.Features == nil || !b.Features.MaxDownloads || b.Features.RecipientVerification || !b.Features.RecipientRestrictions {
+	// Every transfer has per-recipient links since 1.1: the verification is offered.
+	if b.Features == nil || !b.Features.MaxDownloads || !b.Features.RecipientVerification || !b.Features.RecipientRestrictions {
 		t.Errorf("features %+v", b.Features)
 	}
 	svc.restricted = false

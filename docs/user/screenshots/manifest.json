@@ -234,6 +234,12 @@
     "path": "{lang}/deposit-form.png"
   },
   {
+    "name": "deposit-form-verification",
+    "screen": "public / (transfer form, recipient verification option checked)",
+    "profile": "depositor",
+    "path": "{lang}/deposit-form-verification.png"
+  },
+  {
     "name": "deposit-sent",
     "screen": "public / (recap: transfer sent)",
     "profile": "depositor",
@@ -250,6 +256,18 @@
     "screen": "public /d/:token (password required)",
     "profile": "recipient",
     "path": "{lang}/download-password.png"
+  },
+  {
+    "name": "download-verify",
+    "screen": "public /d/:token (recipient verification: send a code)",
+    "profile": "recipient",
+    "path": "{lang}/download-verify.png"
+  },
+  {
+    "name": "download-verify-code",
+    "screen": "public /d/:token (recipient verification: code entry)",
+    "profile": "recipient",
+    "path": "{lang}/download-verify-code.png"
   },
   {
     "name": "invitation-landing",

@@ -71,7 +71,7 @@ func (ev *env) downloadEvents(tid tenant.ID) []store.AuditEvent {
 // open opens the file fileID of p, without reading it.
 func (ev *env) open(p published, fileID string) *File {
 	ev.t.Helper()
-	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ipOne, "", fileID)
+	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ipOne, Cookies{}, fileID)
 	if err != nil {
 		ev.t.Fatalf("OpenFile: %v", err)
 	}
@@ -143,14 +143,14 @@ func TestDownloadStarts(t *testing.T) {
 		_ = f.Content.Close(ctx)
 		ev.wantStarts(p, 4, 9210)
 		// An archive prepared but not written (HEAD): no start.
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		a.Close()
 		ev.wantStarts(p, 4, 9210)
 		// An archive written: one start, the plaintext bytes served.
-		a, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+		a, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -201,7 +201,7 @@ func TestDownloadStartEventGuard(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}})
 		w := audit.New(ev.db)
 		for _, object := range []string{p.files[0].ID, archiveObject} {
-			if err := w.RecordScoped(context.Background(), ev.a.ID, startEvent(p.id, object, ipOne)); err != nil {
+			if err := w.RecordScoped(context.Background(), ev.a.ID, startEvent(p.id, "", object, ipOne)); err != nil {
 				t.Errorf("%s: %v", object, err)
 			}
 		}
@@ -221,7 +221,7 @@ func TestDownloadStartNotRecorded(t *testing.T) {
 		if got := ev.fetch(p, "", p.files[0].ID, 0, -1, true); !bytes.Equal(got, content) {
 			t.Fatal("content differs")
 		}
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -243,7 +243,7 @@ func TestDownloadStartNotRecorded(t *testing.T) {
 		// The count failing (unknown transfer) rolls the audit event back.
 		inner := ev.svc.repo.(faultRepo).inner
 		unknown := id.New(id.Transfer)
-		if err := inner.started(ctx, ev.a.ID, unknown, startEvent(unknown, archiveObject, ipOne)); err == nil {
+		if err := inner.started(ctx, ev.a.ID, unknown, "", "", ev.clock.now(), startEvent(unknown, "", archiveObject, ipOne)); err == nil {
 			t.Fatal("started for an unknown transfer")
 		}
 		if got := len(ev.downloadEvents(ev.a.ID)); got != 0 {
@@ -251,13 +251,13 @@ func TestDownloadStartNotRecorded(t *testing.T) {
 		}
 		// An event refused by the store, or by the audit guard, records no
 		// count.
-		bad := startEvent(p.id, archiveObject, ipOne)
+		bad := startEvent(p.id, "", archiveObject, ipOne)
 		bad.Actor = ""
-		if err := inner.started(ctx, ev.a.ID, p.id, bad); err == nil {
+		if err := inner.started(ctx, ev.a.ID, p.id, "", "", ev.clock.now(), bad); err == nil {
 			t.Fatal("started with an invalid event")
 		}
-		personal := startEvent(p.id, "someone@example.com", ipOne)
-		if err := inner.started(ctx, ev.a.ID, p.id, personal); !errors.Is(err, audit.ErrPersonalDetail) {
+		personal := startEvent(p.id, "", "someone@example.com", ipOne)
+		if err := inner.started(ctx, ev.a.ID, p.id, "", "", ev.clock.now(), personal); !errors.Is(err, audit.ErrPersonalDetail) {
 			t.Fatalf("started with an address = %v, want ErrPersonalDetail", err)
 		}
 		if got := ev.get(p).DownloadCount; got != 0 {
@@ -273,7 +273,7 @@ func TestArchiveBytesServedOnFailure(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(100_000), random(100_000)}})
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -307,7 +307,7 @@ func TestDownloadStartFlood(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(1000), random(10)}})
 		fetchFrom := func(ip netip.Addr, fileID string) {
 			t.Helper()
-			f, err := ev.svc.OpenFile(ctx, p.tn, p.token, ip, "", fileID)
+			f, err := ev.svc.OpenFile(ctx, p.tn, p.token, ip, Cookies{}, fileID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func TestDownloadStartFlood(t *testing.T) {
 		ev.wantStarts(p, 4, 54)
 		// The archive is an object of its own, deduplicated as well.
 		for range 3 {
-			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -372,7 +372,7 @@ func TestDownloadStartKeyCycling(t *testing.T) {
 		fetchFrom := func(p published, i int) {
 			t.Helper()
 			ip := netip.AddrFrom16([16]byte{0x20, 0x01, 0x0d, 0xb8, 0, 1, byte(i >> 8), byte(i), 15: 1})
-			f, err := ev.svc.OpenFile(ctx, p.tn, p.token, ip, "", p.files[0].ID)
+			f, err := ev.svc.OpenFile(ctx, p.tn, p.token, ip, Cookies{}, p.files[0].ID)
 			if err != nil {
 				t.Fatal(err)
 			}

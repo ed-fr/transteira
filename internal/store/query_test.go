@@ -407,9 +407,14 @@ var tenantAllowlist = map[string]int{
 		`from_address, from_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	// Verification challenges.
 	`INSERT INTO verification_challenges (tenant_id, id, email, code_mac, attempts_remaining, invitation_id, ` +
-		`client_ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
-	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`:            0,
-	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND email = ? AND created_at >= ?`:     0,
+		`client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`: 0,
+	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`:                    0,
+	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND recipient_link_id = ? ` +
+		`AND purpose = 'recipient' ORDER BY created_at DESC, id DESC LIMIT 1`: 0,
+	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND email = ? AND created_at >= ? ` +
+		`AND purpose = 'deposit'`: 0,
 	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND client_ip = ? AND created_at >= ?`: 0,
 	`DELETE FROM verification_challenges WHERE tenant_id = ? AND id = ?`:                                     0,
 	`UPDATE verification_challenges SET attempts_remaining = attempts_remaining - 1 ` +
@@ -448,10 +453,10 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at, sender_ip, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
-		`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
-		`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`: 0,
+		`created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, confidentiality_level, ` +
+		`confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, ` +
+		`rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
@@ -474,8 +479,6 @@ var tenantAllowlist = map[string]int{
 		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
 	`SELECT CAST(COALESCE(sum(total_bytes), 0) AS BIGINT) FROM transfers ` +
 		`WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`: 0,
-	`UPDATE transfers SET status = ?, ended_at = COALESCE(ended_at, ?) WHERE tenant_id = ? AND id = ? AND status = ? ` +
-		`AND download_token_key_id IS NULL`: 2,
 	`UPDATE transfers SET status = 'scanning', finalized_at = ?, expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) ` +
 		`WHERE tenant_id = ? AND id = ? AND status = 'uploading'`: 2,
 	`UPDATE transfers SET total_bytes = total_bytes - ? WHERE tenant_id = ? AND id = ?`:               1,
@@ -508,7 +511,13 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM transfer_files WHERE tenant_id = ? AND id = ? AND dek_key_id IS NULL RETURNING transfer_id, size`: 0,
 	// Antivirus analysis and download links.
 	`UPDATE transfers SET status = 'available', download_token_hash = ?, download_token_key_id = ?, available_at = ?, ` +
-		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) WHERE tenant_id = ? AND id = ? AND status = 'scanning'`: 4,
+		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) WHERE tenant_id = ? AND id = ? AND status = 'scanning' ` +
+		`AND link_mode = 'shared'`: 4,
+	`UPDATE transfers SET status = 'available', available_at = ?, ` +
+		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT), ` +
+		`expiry_reminder_at = (CASE WHEN expiry_days * CAST(86400000 AS BIGINT) < CAST(? AS BIGINT) ` +
+		`THEN CAST(? AS BIGINT) ELSE NULL END) ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_mode = 'per_recipient'`: 4,
 	`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND download_token_hash = ?`: 0,
 	`UPDATE transfer_files SET scan_status = 'scanning' ` +
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 0,
@@ -518,11 +527,37 @@ var tenantAllowlist = map[string]int{
 		`WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`: 0,
 	// First download and deletion after it.
 	`UPDATE transfers SET first_downloaded_at = ? WHERE tenant_id = ? AND id = ? AND status = 'available' ` +
-		`AND first_downloaded_at IS NULL AND NOT delete_after_first_download`: 1,
+		`AND first_downloaded_at IS NULL AND NOT delete_after_first_download AND link_mode = 'shared'`: 1,
 	`UPDATE transfers SET first_downloaded_at = ?, delete_after = ? WHERE tenant_id = ? AND id = ? ` +
-		`AND status = 'available' AND first_downloaded_at IS NULL AND delete_after_first_download`: 2,
-	`UPDATE transfers SET status = 'deleted', ended_at = ? ` +
-		`WHERE tenant_id = ? AND id = ? AND status = 'available' AND download_token_key_id IS NULL`: 1,
+		`AND status = 'available' AND first_downloaded_at IS NULL AND delete_after_first_download ` +
+		`AND link_mode = 'shared'`: 2,
+	`UPDATE transfers SET first_downloaded_at = ? WHERE tenant_id = ? AND id = ? AND status = 'available' ` +
+		`AND first_downloaded_at IS NULL AND link_mode = 'per_recipient'`: 1,
+	// Recipient links (recipientlinks.go).
+	`INSERT INTO recipient_links (tenant_id, id, transfer_id, position, token_hash, token_key_id, created_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND id = ?`:     0,
+	`SELECT id, transfer_id FROM recipient_links WHERE tenant_id = ? LIMIT ?`: 0,
+	`SELECT token_key_id FROM recipient_links ` +
+		`WHERE tenant_id = ? AND transfer_id = ? AND token_key_id IS NOT NULL ORDER BY position`: 0,
+	`UPDATE recipient_links SET verified_at = ? WHERE tenant_id = ? AND id = ?`: 1,
+	`UPDATE recipient_links SET download_count = download_count + 1, ` +
+		`first_downloaded_at = COALESCE(first_downloaded_at, ?), last_downloaded_at = ? WHERE tenant_id = ? AND id = ?`: 2,
+	`UPDATE recipient_links SET completed_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND completed_at IS NULL AND first_downloaded_at IS NOT NULL`: 1,
+	`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND transfer_id = ? AND completed_at IS NULL`:       0,
+	`UPDATE recipient_links SET reminder_sent_at = ? WHERE tenant_id = ? AND id = ? AND reminder_sent_at IS NULL`: 1,
+	`UPDATE recipient_links SET reminder_sent_at = NULL WHERE tenant_id = ? AND transfer_id = ? AND id = ?`:       0,
+	`UPDATE recipient_downloads SET count = count + 1, last_at = ? ` +
+		`WHERE tenant_id = ? AND recipient_link_id = ? AND item = ?`: 1,
+	`INSERT INTO recipient_downloads (tenant_id, recipient_link_id, item, first_at, last_at) VALUES (?, ?, ?, ?, ?)`: 0,
+	`UPDATE recipient_downloads SET completed_at = ? ` +
+		`WHERE tenant_id = ? AND recipient_link_id = ? AND item = ? AND completed_at IS NULL`: 1,
+	`SELECT count(*) FROM recipient_downloads WHERE tenant_id = ? AND recipient_link_id = ? AND item = ?`: 0,
+	`SELECT item, first_at, last_at, count, completed_at FROM recipient_downloads ` +
+		`WHERE tenant_id = ? AND recipient_link_id = ? ORDER BY first_at, item`: 0,
+	`UPDATE transfers SET expiry_reminder_at = ? WHERE tenant_id = ? AND id = ? AND expiry_reminder_at IS NULL`:                 1,
+	`UPDATE transfers SET expiry_reminder_at = NULL WHERE tenant_id = ? AND id = ? AND status = 'available' AND expires_at > ?`: 0,
 	// Transfer password failures.
 	`SELECT fail_1, fail_2, fail_3, locked_until FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
 	`INSERT INTO password_failures (tenant_id, scope, key, fail_1, fail_2, fail_3, locked_until) ` +
@@ -531,8 +566,6 @@ var tenantAllowlist = map[string]int{
 		`WHERE tenant_id = ? AND scope = ? AND key = ?`: 4,
 	`DELETE FROM password_failures WHERE tenant_id = ? AND scope = ? AND key = ?`: 0,
 	// Periodic cleanup (cleanup.go): expiry, purges and disk reconciliation.
-	`UPDATE transfers SET status = 'expired', ended_at = ? WHERE tenant_id = ? AND id = ? ` +
-		`AND status IN ('uploading', 'scanning', 'available') AND download_token_key_id IS NULL`: 1,
 	`SELECT id FROM transfers WHERE tenant_id = ? AND status IN ('rejected', 'expired', 'deleted') AND ended_at <= ? ` +
 		`ORDER BY ended_at, id LIMIT ?`: 0,
 	`SELECT id FROM transfers WHERE tenant_id = ? AND status = ? ORDER BY id LIMIT ?`:                               0,
@@ -634,6 +667,29 @@ var reviewedAllowlist = map[string]string{
 	`DELETE FROM transfer_recipients AS r WHERE r.tenant_id = ? AND r.transfer_id = ? AND r.email = ? ` +
 		`AND NOT EXISTS (SELECT 1 FROM recipient_links l WHERE l.tenant_id = r.tenant_id ` +
 		`AND l.transfer_id = r.transfer_id AND l.position = r.position AND l.token_key_id IS NOT NULL)`: reasonRecipientDeleteLinkKeys,
+	`UPDATE transfers AS t SET status = ?, ended_at = COALESCE(t.ended_at, ?) ` +
+		`WHERE t.tenant_id = ? AND t.id = ? AND t.status = ? AND t.download_token_key_id IS NULL ` +
+		`AND NOT EXISTS (SELECT 1 FROM recipient_links l ` +
+		`WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`: reasonTransferEndLinkKeys,
+	`UPDATE transfers AS t SET status = 'expired', ended_at = ? ` +
+		`WHERE t.tenant_id = ? AND t.id = ? AND t.status IN ('uploading', 'scanning', 'available') ` +
+		`AND t.download_token_key_id IS NULL AND NOT EXISTS (SELECT 1 FROM recipient_links l ` +
+		`WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`: reasonTransferEndLinkKeys,
+	`UPDATE transfers AS t SET status = 'deleted', ended_at = ? ` +
+		`WHERE t.tenant_id = ? AND t.id = ? AND t.status = 'available' AND t.download_token_key_id IS NULL ` +
+		`AND NOT EXISTS (SELECT 1 FROM recipient_links l ` +
+		`WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`: reasonTransferEndLinkKeys,
+	`UPDATE transfers AS t SET delete_after = COALESCE(t.delete_after, ?) ` +
+		`WHERE t.tenant_id = ? AND t.id = ? AND t.status = 'available' AND t.link_mode = 'per_recipient' ` +
+		`AND t.delete_after_first_download AND t.first_downloaded_at IS NOT NULL ` +
+		`AND NOT EXISTS (SELECT 1 FROM recipient_links l ` +
+		`WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.completed_at IS NULL)`: reasonDeleteAfterLinks,
+	`SELECT ` + linkColumns + ` FROM recipient_links l JOIN transfer_recipients r ` +
+		`ON r.tenant_id = l.tenant_id AND r.transfer_id = l.transfer_id AND r.position = l.position WHERE l.tenant_id = ? AND l.token_hash = ?`: reasonRecipientLinkEmail,
+	`SELECT ` + linkColumns + ` FROM recipient_links l JOIN transfer_recipients r ` +
+		`ON r.tenant_id = l.tenant_id AND r.transfer_id = l.transfer_id AND r.position = l.position WHERE l.tenant_id = ? AND l.id = ?`: reasonRecipientLinkEmail,
+	`SELECT ` + linkColumns + ` FROM recipient_links l JOIN transfer_recipients r ` +
+		`ON r.tenant_id = l.tenant_id AND r.transfer_id = l.transfer_id AND r.position = l.position WHERE l.tenant_id = ? AND l.transfer_id = ? ORDER BY l.position`: reasonRecipientLinkEmail,
 	// Declared by the tests (above).
 	`SELECT r.value FROM tenant_network_rules r JOIN tenants t ON t.id = r.tenant_id WHERE r.tenant_id = ?`: "test only: exercises reviewedTenantQuery",
 }
@@ -726,6 +782,10 @@ var systemAllowlist = map[string]string{
 	`SELECT tenant_id, id, delete_after FROM transfers WHERE delete_after IS NOT NULL AND delete_after <= ? ` +
 		`AND status = 'available' AND (delete_after, tenant_id, id) > (?, ?, ?) ` +
 		`ORDER BY delete_after, tenant_id, id LIMIT ?`: reasonDeleteAfterDownload,
+	`SELECT tenant_id, id, expires_at FROM transfers ` +
+		`WHERE status = 'available' AND link_mode = 'per_recipient' AND expiry_reminder_at IS NULL ` +
+		`AND expires_at <= ? AND expires_at > ? AND (expires_at, tenant_id, id) > (?, ?, ?) ` +
+		`ORDER BY expires_at, tenant_id, id LIMIT ?`: reasonReminderSweep,
 	// Periodic cleanup (identifiers only).
 	`SELECT tenant_id, id, due_at FROM ( ` +
 		`SELECT tenant_id, id, expires_at AS due_at FROM transfers WHERE status = 'available' AND expires_at <= ? ` +

@@ -61,6 +61,16 @@ const (
 	// template key "antivirus-unavailable"); data:
 	// [AntivirusUnavailableData].
 	TemplateAntivirusUnavailable = "antivirus_unavailable"
+	// TemplateExpiryReminder is the reminder sent the day before the expiry
+	// of a transfer to a recipient who has not downloaded it yet (tenant
+	// template key "expiry-reminder", threat T-198); data:
+	// [ExpiryReminderData].
+	TemplateExpiryReminder = "expiry_reminder"
+	// TemplateRecipientVerificationCode is the verification code sent to the
+	// address of a personal download link before the recipient can download
+	// (tenant template key "recipient-verification-code", threat T-144);
+	// data: [RecipientVerificationCodeData].
+	TemplateRecipientVerificationCode = "recipient_verification_code"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -212,9 +222,9 @@ type FileNotScannedData struct {
 	Files []FileInfo
 }
 
-// FirstDownloadData is the data of [TemplateFirstDownload]. It names no
-// recipient: in V1 a transfer has a single download link, so the download
-// cannot be attributed to one recipient.
+// FirstDownloadData is the data of [TemplateFirstDownload]. It names a
+// recipient only for a transfer with one download link per recipient; with
+// the single shared link of a V1 transfer the download cannot be attributed.
 type FirstDownloadData struct {
 	// TenantName is the display name of the entity.
 	TenantName string
@@ -228,6 +238,46 @@ type FirstDownloadData struct {
 	// when the sender asked for deletion after the first download; zero
 	// when the transfer stays until its expiry.
 	DeleteAt time.Time
+	// RecipientEmail is the address of the recipient who completed the
+	// download, for a transfer with one link per recipient; empty with a
+	// shared link (the mail then names nobody).
+	RecipientEmail string
+}
+
+// ExpiryReminderData is the data of [TemplateExpiryReminder].
+type ExpiryReminderData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// SenderEmail is the verified address of the sender.
+	SenderEmail string
+	// Link is the personal absolute download URL of the recipient, built from
+	// the registered FQDN of the tenant.
+	Link string
+	// Files lists the files available for download (name and size).
+	Files []FileInfo
+	// ExpiresAt is when the transfer expires.
+	ExpiresAt time.Time
+	// PasswordRequired tells the recipient that a password protects the
+	// transfer and comes through another channel.
+	PasswordRequired bool
+	// VerificationRequired tells the recipient that a code sent to this
+	// address will be asked before the download.
+	VerificationRequired bool
+	// ConfidentialityLabel is the label of the confidentiality level of the
+	// transfer, already localized in the language of the mail; empty shows no
+	// level.
+	ConfidentialityLabel string
+}
+
+// RecipientVerificationCodeData is the data of
+// [TemplateRecipientVerificationCode].
+type RecipientVerificationCodeData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// Code is the one-time code (6 digits). It is never logged.
+	Code string
+	// ValidityMinutes is the lifetime of the code (15).
+	ValidityMinutes int
 }
 
 // QuotaAlertData is the data of [TemplateQuotaWarning] and

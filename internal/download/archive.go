@@ -34,6 +34,7 @@ type Archive struct {
 	svc     *Service
 	t       *tenant.Tenant
 	d       store.TransferDetails
+	link    *store.RecipientLink // nil for a shared link
 	files   []store.TransferFile
 	entries []zipstream.Entry
 	size    int64
@@ -49,21 +50,24 @@ type Archive struct {
 }
 
 // PrepareArchive prepares the archive of the transfer of the download
-// token rawToken in tenant t, for the client clientIP. grantCookie is the
-// raw value of the GrantCookieName cookie, "" when absent. The entries are
-// the deliverable files by position, named by filename.ArchiveName
-// (sanitized and made unique), stored without compression.
+// token rawToken in tenant t, for the client clientIP. cookies are the raw
+// technical cookies of the request. The entries are the deliverable files
+// by position, named by filename.ArchiveName (sanitized and made unique),
+// stored without compression.
 //
 // It returns ErrNotFound and ErrGone as Resolve does (a transfer whose
 // download limit is reached is prepared: [Archive.Begin] decides),
-// ErrDownloadLocked for a password-protected transfer not unlocked by this
-// browser, a
-// *TooManyStreamsError (ErrTooManyStreams) over the concurrent stream
-// limits, and ErrNoClientIP for an invalid clientIP.
-func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (*Archive, error) {
-	a, err := s.resolve(ctx, t, rawToken, grantCookie, false)
+// ErrVerificationRequired for a recipient link awaiting its verification on
+// this browser, ErrDownloadLocked for a password-protected transfer not
+// unlocked by this browser, a *TooManyStreamsError (ErrTooManyStreams) over
+// the concurrent stream limits, and ErrNoClientIP for an invalid clientIP.
+func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies Cookies) (*Archive, error) {
+	a, err := s.resolve(ctx, t, rawToken, cookies, false)
 	if err != nil {
 		return nil, err
+	}
+	if a.awaiting() {
+		return nil, ErrVerificationRequired
 	}
 	if !a.unlocked {
 		return nil, ErrDownloadLocked
@@ -82,7 +86,7 @@ func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken
 		return nil, err
 	}
 	return &Archive{
-		svc: s, t: t, d: a.d, files: a.files, entries: entries, size: size, ip: clientIP, release: release,
+		svc: s, t: t, d: a.d, link: a.link, files: a.files, entries: entries, size: size, ip: clientIP, release: release,
 		limited: a.d.MaxDownloads != nil,
 	}, nil
 }
@@ -102,7 +106,7 @@ func (a *Archive) Begin(ctx context.Context, get bool) error {
 		return a.refused
 	}
 	a.begun = true
-	_, a.refused = a.svc.claimStart(ctx, a.t, a.d, archiveObject, a.ip, get)
+	_, a.refused = a.svc.claimStart(ctx, a.t, a.d, linkIDOf(a.link), archiveObject, a.ip, get)
 	a.allowed = get && a.refused == nil
 	return a.refused
 }
@@ -127,7 +131,9 @@ func (a *Archive) Size() int64 { return a.size }
 // transfer counts as downloaded (the first download mail and the deletion
 // after the first download follow, see the package documentation); a
 // partial write never counts; a transfer already downloaded is not
-// recorded again. The output must be discarded after an error. The
+// recorded again. Through a recipient link, the archive and the link count
+// as downloaded instead (once each), and the transfer with its first
+// completed link. The output must be discarded after an error. The
 // recording done after a complete write is detached from the cancellation
 // of ctx; its failures are logged, not returned. Write releases the stream
 // slot when it returns.
@@ -135,7 +141,7 @@ func (a *Archive) Write(ctx context.Context, w io.Writer) error {
 	defer a.release()
 	switch {
 	case !a.limited:
-		a.svc.downloadStarted(ctx, a.t, a.d.ID, archiveObject, a.ip)
+		a.svc.downloadStarted(ctx, a.t, a.d.ID, linkIDOf(a.link), archiveObject, a.ip)
 	case a.allowed:
 	case a.begun:
 		return cmp.Or(a.refused, errNotBegun)
@@ -157,12 +163,12 @@ func (a *Archive) Write(ctx context.Context, w io.Writer) error {
 	for _, f := range a.files {
 		served += f.Size
 	}
-	if !a.d.FirstDownloadedAt.IsZero() {
+	if !tracked(a.d, a.link) {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.svc.opts.CommitTimeout)
 	defer cancel()
-	a.svc.completeArchive(ctx, a.t, a.d)
+	a.svc.completeArchive(ctx, a.t, a.d, a.link)
 	return nil
 }
 

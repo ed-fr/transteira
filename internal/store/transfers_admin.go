@@ -235,7 +235,7 @@ func (r *Transfers) IDsByInvitation(ctx context.Context, tid tenant.ID, invID st
 // transfer (or the transfer does not exist or belongs to another tenant),
 // and ErrKeysRemain when the recipient link still keeps its sealed token,
 // which must be destroyed first in the same transaction
-// ([WrappedKeys.DeleteTx]). After an error, the caller must abort the transaction.
+// ([RecipientLinks.DestroyRecipientKeyTx]). After an error, the caller must abort the transaction.
 func (r *Transfers) RemoveRecipientTx(ctx context.Context, tx *ScopedTx, trfID, email string) error {
 	email, err := NormalizeEmail(email)
 	if err != nil {

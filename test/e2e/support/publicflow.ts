@@ -57,7 +57,8 @@ export interface TransferInput {
 
 /** Fills the deposit form (without sending it). */
 export async function fillTransfer(page: Page, input: TransferInput): Promise<void> {
-  if (input.recipients) await page.getByLabel(/^Recipients/).fill(input.recipients.join('\n'));
+  if (input.recipients)
+    await page.getByRole('textbox', { name: /^Recipients/ }).fill(input.recipients.join('\n'));
   if (input.message !== undefined) await page.getByLabel(/^Message/).fill(input.message);
   if (input.password !== undefined) await page.getByLabel('Password', { exact: true }).fill(input.password);
   await page

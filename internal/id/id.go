@@ -78,6 +78,10 @@ const (
 	// Webhook identifies a tenant or instance-wide webhook (OpenAPI
 	// WebhookId).
 	Webhook Prefix = "whk"
+	// RecipientLink identifies the own download link of one recipient of a
+	// transfer (since 1.1). It is internal to the administration and "my
+	// transfers" views: the link itself carries a separate "dl_" token.
+	RecipientLink Prefix = "rcl"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

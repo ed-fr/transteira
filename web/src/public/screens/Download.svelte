@@ -3,6 +3,8 @@
   // attempts lock the transfer for 15 minutes, shown as a countdown with the field disabled).
   // Unlocked: sender, message (text), expiry, total, files with size and SHA-256, warnings for
   // files not analysed by the antivirus, per-file and ZIP links (filtered by safeApiHref).
+  // A per-recipient link (version 1.1) first asks the recipient to prove their address by code
+  // (VerificationStep), then the password form if any, then the files.
   // Downloads stay available during maintenance (the banner is shown by App.svelte).
   // When the window gets the focus back, the transfer is read again (at most once a minute): the
   // one-hour download grant may have expired (password form again), or the transfer may be gone.
@@ -13,10 +15,12 @@
   import { Countdown } from './countdown.svelte';
   import ErrorPage from './ErrorPage.svelte';
   import NotFound from './NotFound.svelte';
+  import VerificationStep from './VerificationStep.svelte';
   import {
     downloadView,
     isNotScanned,
     downloadLoadFailure,
+    needsVerification,
     shouldRecheck,
     unlockFailure,
     type PublicTransfer,
@@ -40,6 +44,8 @@
   let formError = $state<string | undefined>();
   let unlocking = $state(false);
   let retrying = $state(false);
+  // The recipient had access and has to verify again (the one-hour cookie expired).
+  let verifyExpired = $state(false);
   let passwordInput: HTMLInputElement | undefined = $state();
   const lock = new Countdown({
     ondone: () => {
@@ -72,7 +78,10 @@
     try {
       const { data } = await api.get('/downloads/{linkToken}', { path: { linkToken: token } });
       view = { kind: 'ready', transfer: data };
-      if (wasUnlocked && data.locked) {
+      if (wasUnlocked && needsVerification(data)) {
+        verifyExpired = true;
+        announce(t('download.verify.expired'));
+      } else if (wasUnlocked && data.locked) {
         formError = t('download.locked.expired');
         announce(formError);
       }
@@ -134,6 +143,10 @@
           passwordError = t('download.locked.required');
           passwordInput?.focus();
           break;
+        case 'verification-required':
+          verifyExpired = true;
+          await load(token);
+          break;
         case 'not-found':
         case 'gone':
         case 'max-downloads':
@@ -166,6 +179,17 @@
   />
 {:else if view.kind === 'error'}
   <ErrorPage onretry={() => void retry()} {retrying} />
+{:else if needsVerification(view.transfer)}
+  <VerificationStep
+    {token}
+    emailMasked={view.transfer.recipientEmailMasked}
+    expired={verifyExpired}
+    onverified={async () => {
+      verifyExpired = false;
+      await load(token);
+    }}
+    ongone={(kind) => (view = { kind })}
+  />
 {:else if view.transfer.locked}
   {@const transfer = view.transfer}
   <h1 tabindex="-1">{t('download.locked.title')}</h1>

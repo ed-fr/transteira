@@ -55,7 +55,72 @@ var (
 	// error; the attempt is refused (fail closed) before any password
 	// check (500 internal-error).
 	ErrNoClientIP = errors.New("download: client IP unknown")
+	// ErrVerificationRequired reports a per-recipient link whose transfer
+	// requires the recipient verification, used without a valid entry of
+	// the recipient verification cookie for the link (401
+	// recipient-verification-required). No password attempt is counted.
+	ErrVerificationRequired = errors.New("download: recipient verification required")
+	// ErrVerificationNotNeeded reports a recipient verification asked on a
+	// link that needs none: a shared V1 link, a transfer without the
+	// option, or a verification before a reply, which comes with the reply
+	// to a transfer (409 state-conflict).
+	ErrVerificationNotNeeded = errors.New("download: no recipient verification for this link")
+	// ErrNoChallenge reports a code submitted for a link without a pending
+	// code: never requested, already used, expired, or replaced by a newer
+	// one being exhausted (409 state-conflict).
+	ErrNoChallenge = errors.New("download: no pending verification code")
+	// ErrVerificationExhausted reports a code invalidated after too many
+	// wrong attempts, including by this wrong code (410
+	// verification-exhausted).
+	ErrVerificationExhausted = errors.New("download: verification code exhausted")
+	// ErrWrongCode reports a wrong verification code while attempts remain
+	// (422 verification-code-invalid). The error is a *[WrongCodeError]
+	// carrying attemptsRemaining.
+	ErrWrongCode = errors.New("download: wrong verification code")
+	// ErrInvalidCode reports a code that is not 6 ASCII digits (400
+	// validation-failed, field /code, code invalid-format); no attempt is
+	// spent.
+	ErrInvalidCode = errors.New("download: malformed verification code")
+	// ErrRateLimited reports a code request over a rate limit, or refused by
+	// a full mail queue (429 rate-limited). The error is a
+	// *[RateLimitError] carrying the Retry-After delay.
+	ErrRateLimited = errors.New("download: too many verification codes")
+	// ErrMailUnavailable reports a code that cannot be sent: no SMTP
+	// settings for the tenant, mail queue shut down or SMTP circuit open
+	// (503 mail-unavailable).
+	ErrMailUnavailable = errors.New("download: verification mail unavailable")
 )
+
+// WrongCodeError reports a wrong verification code. It matches
+// [ErrWrongCode].
+type WrongCodeError struct {
+	// Remaining is the number of attempts left (at least 1), the
+	// attemptsRemaining member of the problem.
+	Remaining int
+}
+
+// Error implements error.
+func (e *WrongCodeError) Error() string {
+	return fmt.Sprintf("download: wrong verification code, %d attempt(s) remaining", e.Remaining)
+}
+
+// Is makes errors.Is(err, ErrWrongCode) true.
+func (e *WrongCodeError) Is(target error) bool { return target == ErrWrongCode }
+
+// RateLimitError reports a code request refused by a rate limit or by the
+// mail queue. It matches [ErrRateLimited].
+type RateLimitError struct {
+	// RetryAfter is the Retry-After hint.
+	RetryAfter time.Duration
+}
+
+// Error implements error.
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("download: too many verification codes, retry after %s", e.RetryAfter)
+}
+
+// Is makes errors.Is(err, ErrRateLimited) true.
+func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
 
 // WrongPasswordError reports a wrong transfer password. It matches
 // [ErrWrongPassword].

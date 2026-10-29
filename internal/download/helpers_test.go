@@ -182,18 +182,81 @@ func (r faultRepo) markFirst(ctx context.Context, tid tenant.ID, trfID string, n
 	return r.inner.markFirst(ctx, tid, trfID, now, deleteAfter)
 }
 
-func (r faultRepo) started(ctx context.Context, tid tenant.ID, trfID string, ev audit.Event) error {
+func (r faultRepo) started(ctx context.Context, tid tenant.ID, trfID, linkID, item string, now time.Time, ev audit.Event) error {
 	if err := r.f.hit("started"); err != nil {
 		return err
 	}
-	return r.inner.started(ctx, tid, trfID, ev)
+	return r.inner.started(ctx, tid, trfID, linkID, item, now, ev)
 }
 
-func (r faultRepo) claim(ctx context.Context, tid tenant.ID, trfID string, deleteAfter time.Time, ev audit.Event) (int, error) {
+func (r faultRepo) claim(ctx context.Context, tid tenant.ID, trfID, linkID, item string, now, deleteAfter time.Time, ev audit.Event) (int, error) {
 	if err := r.f.hit("claim"); err != nil {
 		return 0, err
 	}
-	return r.inner.claim(ctx, tid, trfID, deleteAfter, ev)
+	return r.inner.claim(ctx, tid, trfID, linkID, item, now, deleteAfter, ev)
+}
+
+func (r faultRepo) linkByToken(ctx context.Context, tid tenant.ID, hash []byte) (store.RecipientLink, error) {
+	if err := r.f.hit("linkByToken"); err != nil {
+		return store.RecipientLink{}, err
+	}
+	return r.inner.linkByToken(ctx, tid, hash)
+}
+
+func (r faultRepo) link(ctx context.Context, tid tenant.ID, linkID string) (store.RecipientLink, error) {
+	if err := r.f.hit("link"); err != nil {
+		return store.RecipientLink{}, err
+	}
+	return r.inner.link(ctx, tid, linkID)
+}
+
+func (r faultRepo) completeItem(ctx context.Context, tid tenant.ID, linkID, item string, now time.Time) error {
+	if err := r.f.hit("completeItem"); err != nil {
+		return err
+	}
+	return r.inner.completeItem(ctx, tid, linkID, item, now)
+}
+
+func (r faultRepo) completeLink(ctx context.Context, tid tenant.ID, trfID, linkID string, now, deleteAfter time.Time) (bool, error) {
+	if err := r.f.hit("completeLink"); err != nil {
+		return false, err
+	}
+	return r.inner.completeLink(ctx, tid, trfID, linkID, now, deleteAfter)
+}
+
+func (r faultRepo) latestChallenge(ctx context.Context, tid tenant.ID, linkID string) (store.Challenge, error) {
+	if err := r.f.hit("latestChallenge"); err != nil {
+		return store.Challenge{}, err
+	}
+	return r.inner.latestChallenge(ctx, tid, linkID)
+}
+
+func (r faultRepo) createChallenge(ctx context.Context, tid tenant.ID, ch store.Challenge, since time.Time) (string, error) {
+	if err := r.f.hit("createChallenge"); err != nil {
+		return "", err
+	}
+	return r.inner.createChallenge(ctx, tid, ch, since)
+}
+
+func (r faultRepo) deleteChallenge(ctx context.Context, tid tenant.ID, chID string) error {
+	if err := r.f.hit("deleteChallenge"); err != nil {
+		return err
+	}
+	return r.inner.deleteChallenge(ctx, tid, chID)
+}
+
+func (r faultRepo) spend(ctx context.Context, tid tenant.ID, chID string, now time.Time) (int, error) {
+	if err := r.f.hit("spend"); err != nil {
+		return 0, err
+	}
+	return r.inner.spend(ctx, tid, chID, now)
+}
+
+func (r faultRepo) verified(ctx context.Context, tid tenant.ID, chID, linkID string, now time.Time, ev audit.Event) error {
+	if err := r.f.hit("verified"); err != nil {
+		return err
+	}
+	return r.inner.verified(ctx, tid, chID, linkID, now, ev)
 }
 
 // faultVault wraps the vault with the fault "open".
@@ -278,24 +341,49 @@ func (v faultVerifier) VerifyPassword(ctx context.Context, encoded string, pw []
 	return v.inner.VerifyPassword(ctx, encoded, pw)
 }
 
-// faultNotifier wraps the notifier with the fault "firstDownload" and
-// records the deletion times it was given.
+// faultNotifier wraps the notifier with the faults "firstDownload" and
+// "codeMail", and records the deletion times, the recipients named by the
+// first download mails and the codes it was given.
 type faultNotifier struct {
 	inner *notify.Notifier
 	f     *faults
 
-	mu        sync.Mutex
-	deleteAts []time.Time
+	mu         sync.Mutex
+	deleteAts  []time.Time
+	recipients []string
+	codes      []string
 }
 
-func (n *faultNotifier) FirstDownload(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, at, d time.Time) (mail.Job, error) {
+func (n *faultNotifier) FirstDownloadBy(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, at, d time.Time, recipient string) (mail.Job, error) {
 	n.mu.Lock()
 	n.deleteAts = append(n.deleteAts, d)
+	n.recipients = append(n.recipients, recipient)
 	n.mu.Unlock()
 	if err := n.f.hit("firstDownload"); err != nil {
 		return mail.Job{}, err
 	}
-	return n.inner.FirstDownload(ctx, t, tr, at, d)
+	return n.inner.FirstDownloadBy(ctx, t, tr, at, d, recipient)
+}
+
+func (n *faultNotifier) RecipientVerificationCode(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, to, code string) (mail.Job, error) {
+	n.mu.Lock()
+	n.codes = append(n.codes, code)
+	n.mu.Unlock()
+	if err := n.f.hit("codeMail"); err != nil {
+		return mail.Job{}, err
+	}
+	return n.inner.RecipientVerificationCode(ctx, t, tr, to, code)
+}
+
+// lastCode returns the last code mailed.
+func (n *faultNotifier) lastCode(t *testing.T) string {
+	t.Helper()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if len(n.codes) == 0 {
+		t.Fatal("no code mailed")
+	}
+	return n.codes[len(n.codes)-1]
 }
 
 // fakeQueue captures the jobs; errs are returned by the next Enqueue
@@ -532,6 +620,11 @@ type spec struct {
 	maxDownloads int
 	// level sets a confidentiality level.
 	level bool
+	// recipients are the recipients (dave when empty).
+	recipients []string
+	// perRecipient gives each recipient their own link (since 1.1), and
+	// verify requires the recipient verification on top.
+	perRecipient, verify bool
 }
 
 // random returns n random bytes.
@@ -547,21 +640,46 @@ type published struct {
 	id    string
 	token string
 	files []store.TransferFile
+	// tokens and links are the recipient links of a per-recipient
+	// transfer, by position (token is then tokens[0]).
+	tokens []string
+	links  []store.RecipientLink
 }
 
-// publish stores sp as an available transfer of tn from alice to dave,
-// its files encrypted on disk like the upload engine does, and returns it
-// with its download token.
+// link returns the published transfer p used through its recipient link i.
+func (p published) link(i int) published {
+	q := p
+	q.token = p.tokens[i]
+	return q
+}
+
+// publish stores sp as an available transfer of tn from alice to dave (or
+// sp.recipients), its files encrypted on disk like the upload engine does,
+// and returns it with its download token, or its recipient links.
 func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 	ev.t.Helper()
 	ctx := context.Background()
 	p := published{tn: tn, id: id.New(id.Transfer)}
-	token, err := id.NewDownloadToken()
-	if err != nil {
-		ev.t.Fatal(err)
+	recipients := sp.recipients
+	if len(recipients) == 0 {
+		recipients = []string{dave}
 	}
-	p.token = token
-	ev.secrets = append(ev.secrets, token)
+	n := 1
+	if sp.perRecipient {
+		n = len(recipients)
+	}
+	for range n {
+		token, err := id.NewDownloadToken()
+		if err != nil {
+			ev.t.Fatal(err)
+		}
+		p.tokens = append(p.tokens, token)
+		ev.secrets = append(ev.secrets, token)
+	}
+	p.token = p.tokens[0]
+	if !sp.perRecipient {
+		p.tokens = nil
+	}
 	s, err := ev.db.Scoped(tn.ID)
 	if err != nil {
 		ev.t.Fatal(err)
@@ -591,6 +709,9 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 		if sp.password {
 			tr.PasswordHash = passwordHash()
 		}
+		if sp.perRecipient {
+			tr.LinkMode, tr.RecipientVerification = store.LinkModePerRecipient, sp.verify
+		}
 		if sp.maxDownloads > 0 {
 			tr.MaxDownloads = &sp.maxDownloads
 		}
@@ -599,7 +720,7 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 			tr.ConfidentialityLabel = map[string]string{"fr": "Restreint", "en": "Confidential"}
 			tr.Rules = &store.ConfidentialityRules{ExpiryDaysMask: store.ExpiryMaskAll, RequirePassword: true}
 		}
-		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, []string{dave}, files); err != nil {
+		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, recipients, files); err != nil {
 			return err
 		}
 		if err := ev.db.Transfers().FinalizeTx(ctx, tx, p.id, now); err != nil {
@@ -618,12 +739,25 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 				return err
 			}
 		}
-		wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
-		if err != nil {
-			return err
+		raw := p.tokens
+		if len(raw) == 0 {
+			raw = []string{p.token}
 		}
-		hash := sha256.Sum256([]byte(token))
-		return ev.db.Transfers().MarkAvailableTx(ctx, tx, p.id, hash[:], wk, now)
+		var tokens []store.LinkToken
+		for _, token := range raw {
+			wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+			if err != nil {
+				return err
+			}
+			hash := sha256.Sum256([]byte(token))
+			tokens = append(tokens, store.LinkToken{Hash: hash[:], KeyID: wk})
+		}
+		if !sp.perRecipient {
+			return ev.db.Transfers().MarkAvailableTx(ctx, tx, p.id, tokens[0].Hash, tokens[0].KeyID, now)
+		}
+		var err error
+		p.links, err = ev.db.Transfers().MarkAvailableLinksTx(ctx, tx, p.id, tokens, now)
+		return err
 	})
 	if err != nil {
 		ev.t.Fatalf("publish: %v", err)
@@ -697,6 +831,9 @@ func (ev *env) setStatus(p published, st store.TransferStatus) {
 		if err != nil {
 			return err
 		}
+		if _, err := ev.db.RecipientLinks().DestroyKeysTx(ctx, tx, p.id); err != nil {
+			return err
+		}
 		keys := []string{d.DownloadTokenKeyID}
 		for _, f := range d.Files {
 			keys = append(keys, f.DEKKeyID)
@@ -720,7 +857,7 @@ func (ev *env) setStatus(p published, st store.TransferStatus) {
 // grant cookie.
 func (ev *env) unlock(p published, cookie string) string {
 	ev.t.Helper()
-	c, err := ev.svc.Unlock(context.Background(), p.tn, p.token, ipOne, password, cookie)
+	c, err := ev.svc.Unlock(context.Background(), p.tn, p.token, ipOne, password, Cookies{Grant: cookie})
 	if err != nil {
 		ev.t.Fatalf("Unlock: %v", err)
 	}
@@ -732,7 +869,7 @@ func (ev *env) unlock(p published, cookie string) string {
 // set, closes the content and returns what was read.
 func (ev *env) fetch(p published, cookie, fileID string, off, length int64, delivered bool) []byte {
 	ev.t.Helper()
-	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ipOne, cookie, fileID)
+	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ipOne, Cookies{Grant: cookie}, fileID)
 	if err != nil {
 		ev.t.Fatalf("OpenFile: %v", err)
 	}

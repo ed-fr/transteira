@@ -81,8 +81,8 @@ type CreateRequest struct {
 	// "" for the default level of the tenant.
 	ConfidentialityLevel string
 	// RecipientVerification asks every recipient to prove their address by
-	// code. It is refused until the per-recipient links exist (version 1.1
-	// step 6), so a level that requires it cannot be used meanwhile.
+	// code before downloading through their own link (spec 10). A level
+	// that requires it refuses a request without it.
 	RecipientVerification bool
 }
 
@@ -188,12 +188,6 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 	}
 	if k := req.ConfidentialityLevel; k != "" && !store.ValidLevelKey(k) {
 		v.add(FieldConfidentialityLevel, CodeInvalidFormat)
-	}
-	// Recipient verification needs per-recipient links, which come with
-	// step 6 of version 1.1: until then the option is refused, and the
-	// public configuration announces it as unavailable.
-	if req.RecipientVerification {
-		v.add(FieldRecipientVerification, CodeNotAllowed)
 	}
 	p.files, p.total = validateFiles(&v, req.Files)
 	return p, v.err()
@@ -459,6 +453,9 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
 		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
 		IdempotencyKey: idempotencyKey, RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
+		// Every transfer created since 1.1 gives each recipient their own
+		// link (P27), mailed to them only and never shown to the sender.
+		LinkMode: s.linkMode, RecipientVerification: req.RecipientVerification,
 	}
 	pol.snapshot(&rec)
 	deks := make([][]byte, len(p.files))

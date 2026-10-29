@@ -1,0 +1,12 @@
+Bonjour,
+
+Pour télécharger les fichiers qui vous ont été envoyés, saisissez ce code de vérification pour Entity A & Co sur la page de téléchargement :
+
+    123456
+
+Il est valable 15 minutes.
+
+Si vous n'attendiez pas ce message, vous pouvez l'ignorer sans risque.
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

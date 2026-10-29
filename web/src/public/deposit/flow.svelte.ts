@@ -42,6 +42,7 @@ import {
   defaultLevel,
   selectableLevels,
   effectiveDeleteAfterFirst,
+  effectiveRecipientVerification,
   effectiveExpiryDays,
   invalidFields,
   isEmail,
@@ -112,6 +113,8 @@ export interface DepositForm {
   deleteAfterFirstDownload: boolean;
   /** Maximum number of downloads as typed; empty for no limit. */
   maxDownloadsText: string;
+  /** Every recipient proves their address by code (a per-recipient link each). */
+  recipientVerification: boolean;
   /** Key of the chosen confidentiality level; undefined when the tenant has none. */
   confidentialityLevel: string | undefined;
   files: DepositFile[];
@@ -217,6 +220,7 @@ function emptyForm(expiryDays: readonly number[] = [], levels: readonly PublicLe
     password: '',
     deleteAfterFirstDownload: false,
     maxDownloadsText: '',
+    recipientVerification: false,
     confidentialityLevel: level?.key,
     files: [],
   };
@@ -347,6 +351,20 @@ export class DepositFlow {
   /** The "maximum number of downloads" option is offered to senders. */
   get maxDownloadsOffered(): boolean {
     return this.tenant.features?.maxDownloads === true;
+  }
+
+  /** The "recipients must verify their address" option is offered to senders. */
+  get recipientVerificationOffered(): boolean {
+    return this.tenant.features?.recipientVerification === true;
+  }
+
+  /** Recipient verification as sent: forced by the level or chosen by the sender. */
+  get recipientVerificationEffective(): boolean {
+    return effectiveRecipientVerification(
+      this.form.recipientVerification,
+      this.rules,
+      this.recipientVerificationOffered,
+    );
   }
 
   /** Durations offered: those of the limits that the chosen level allows. */
@@ -594,6 +612,7 @@ export class DepositFlow {
       const parsed = parseMaxDownloads(this.form.maxDownloadsText);
       if (parsed.ok && parsed.value !== undefined) body.maxDownloads = parsed.value;
     }
+    if (this.recipientVerificationEffective) body.recipientVerification = true;
     if (this.level !== undefined) body.confidentialityLevel = this.level.key;
     const language = this.#deps.language();
     if ((languageValues as readonly string[]).includes(language)) {

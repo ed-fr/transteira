@@ -39,7 +39,7 @@ func TestArchive(t *testing.T) {
 			contents: contents, names: names, deleteAfter: true,
 			statuses: []store.ScanStatus{store.ScanClean, store.ScanNotScannedTooLarge, store.ScanClean, store.ScanNotScannedEncrypted, store.ScanInfected},
 		})
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestArchivePartial(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(20_000), random(500)}})
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +131,7 @@ func TestArchivePartial(t *testing.T) {
 		saved := archiveSize
 		archiveSize = func([]zipstream.Entry) (int64, error) { return 0, zipstream.ErrTooLarge }
 		defer func() { archiveSize = saved }()
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		wantInternal(t, err)
 	})
 }
@@ -149,14 +149,14 @@ func TestFirstDownloadOnce(t *testing.T) {
 		// MaxStreamsPerTransferClient streams of the transfer.
 		for i := range n {
 			wg.Go(func() {
-				a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(100 + i)}), "")
+				a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(100 + i)}), Cookies{})
 				if err == nil {
 					err = a.Write(ctx, io.Discard)
 				}
 				errs <- err
 			})
 			wg.Go(func() {
-				f, err := ev.svc.OpenFile(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(150 + i)}), "", p.files[0].ID)
+				f, err := ev.svc.OpenFile(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(150 + i)}), Cookies{}, p.files[0].ID)
 				if err != nil {
 					errs <- err
 					return

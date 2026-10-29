@@ -46,9 +46,12 @@
 // recognition salt and an issue day), the entries of the download grant
 // cookie set once a transfer password has been entered
 // (MACPurposeDownloadGrant, over a tenant ID, a transfer ID and an expiry),
-// and the CSRF tokens derived from administrator session tokens
+// the CSRF tokens derived from administrator session tokens
 // (MACPurposeAdminCSRF, distinct from the deposit CSRF purpose so that a
-// token of one kind of session is never valid for the other).
+// token of one kind of session is never valid for the other), and the
+// entries of the recipient verification cookie
+// (MACPurposeRecipientVerification, over a tenant ID, a recipient link ID
+// and an expiry).
 //
 //	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
 //	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))

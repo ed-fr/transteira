@@ -24,7 +24,10 @@
 #      internal/db subnets (172.31.247.0/24, 172.31.248.0/24), Caddy with `tls internal` for
 #      admin.bigfile.localhost and transfer.bigfile.localhost on 127.0.0.1:<free port>, the real
 #      ClamAV (TT_CLAMAV_MAX_SCAN_BYTES left at 2 GiB unless BIGFILE_CLAMAV_MAX_SCAN_BYTES lowers
-#      it: a 20 GiB file is accepted as not scanned);
+#      it: a 20 GiB file is accepted as not scanned), plus a Mailpit mail sink on its own network
+#      (test/deploy/docker-compose.bigfile-mail.yml, subnet BIGFILE_MAIL_SUBNET, API on loopback)
+#      where the tenant SMTP points: the client reads the recipient's personal link from the mail
+#      (no API response carries a download link);
 #   3. waits until transteira is healthy, copies Caddy's internal root CA, reads the setup token
 #      from the transteira log, starts the memory sampler: a helper container
 #      (scripts/lib/memsampler.sh) reading, once a second, the cgroup memory of transteira and
@@ -60,7 +63,7 @@
 # 2147483648: set as TT_CLAMAV_MAX_SCAN_BYTES of the stack and given to the client, which expects
 # not_scanned_too_large above it and clean below; the clamd limits of deploy/ stop at 2 GiB),
 # TRANSTEIRA_IMAGE (transteira:local), BIGFILE_SUBNET / BIGFILE_PROXY_IP (172.31.249.0/24 /
-# 172.31.249.10), BIGFILE_INTERNAL_SUBNET / BIGFILE_DB_SUBNET, BIGFILE_CLAMAV_DB_VOLUME
+# 172.31.249.10), BIGFILE_INTERNAL_SUBNET / BIGFILE_DB_SUBNET / BIGFILE_MAIL_SUBNET (172.31.246.0/24), BIGFILE_CLAMAV_DB_VOLUME
 # (transteira-bigfile-clamav-db, must start with transteira-bigfile-; kept between runs as a cache
 # of the public signatures), BIGFILE_TIMEOUT (seconds to wait for a healthy stack, 900),
 # BIGFILE_CLIENT_TIMEOUT (4h), BIGFILE_MIN_DOCKER_MEM (7GiB), BIGFILE_MIN_FREE (disk space
@@ -406,6 +409,10 @@ setup_token() {
 run_engine() {
 	local engine=$1 t0=$SECONDS t
 	stack_prepare "$engine" ${stack_env[@]+"${stack_env[@]}"}
+	# Mail sink: the API returns no download link, the client reads it from the recipient's mail.
+	BIGFILE_MAIL_PORT=$(stack_free_port)
+	export BIGFILE_MAIL_PORT
+	stack+=(-f "$(native "$root/test/deploy/docker-compose.bigfile-mail.yml")")
 	stack_up_proxy "BIGFILE_SUBNET and BIGFILE_PROXY_IP"
 	stack_up "$timeout"
 	local up_s=$((SECONDS - t0)) tt=$project-transteira
@@ -417,6 +424,7 @@ run_engine() {
 	rm -f "$report"
 
 	local port=$SMOKE_HTTPS_PORT
+	export BIGFILE_MAIL_API="http://127.0.0.1:$BIGFILE_MAIL_PORT"
 	export BIGFILE_BASE_URL="https://$tenant_host:$port" BIGFILE_ADMIN_URL="https://$admin_host:$port"
 	export BIGFILE_CA_FILE BIGFILE_REPORT BIGFILE_SETUP_TOKEN=$token BIGFILE_BYTES=$bytes
 	BIGFILE_CA_FILE=$(native "$ca")

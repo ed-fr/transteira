@@ -1780,7 +1780,7 @@ type AdminTransferDetail struct {
 	Origin            TransferOrigin `json:"origin"`
 	PasswordProtected bool           `json:"passwordProtected"`
 
-	// RecipientTracking Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links.
+	// RecipientTracking Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links; empty until the transfer is available. Absent for a transfer with a single shared link.
 	RecipientTracking *[]RecipientTracking `json:"recipientTracking,omitempty"`
 
 	// RecipientVerification Since 1.1.
@@ -2483,7 +2483,7 @@ type InstanceStatus struct {
 
 	// Lifecycle End of the last successful run of each periodic cleanup task (`expire`,
 	// `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`,
-	// `orphans`, `backup`), keyed by task name. A task that never succeeded since the start
+	// `orphans`, `expiry-reminder`, `backup`), keyed by task name. A task that never succeeded since the start
 	// is absent. A run that left work for the next run after a failure does not move it.
 	Lifecycle   *map[string]time.Time `json:"lifecycle,omitempty"`
 	Maintenance bool                  `json:"maintenance"`
@@ -18610,7 +18610,7 @@ func (response StartRecipientVerification409ApplicationProblemPlusJSONResponse) 
 }
 
 type StartRecipientVerification410ApplicationProblemPlusJSONResponse struct {
-	TransferGoneApplicationProblemPlusJSONResponse
+	DownloadGoneApplicationProblemPlusJSONResponse
 }
 
 func (response StartRecipientVerification410ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {

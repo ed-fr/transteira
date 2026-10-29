@@ -56,5 +56,29 @@
   "maxDownloads": {
     "title": "Nombre maximal de téléchargements atteint",
     "text": "Ce transfert a atteint son nombre maximal de téléchargements et ne peut plus être téléchargé. Demandez à l’expéditeur de renvoyer les fichiers."
+  },
+  "verify": {
+    "title": "Confirmez votre adresse",
+    "intro": "Pour protéger ce transfert, confirmez que vous en êtes le destinataire : nous envoyons un code à 6 chiffres à votre adresse mail.",
+    "address": "Adresse : {email}",
+    "personal": "Ce lien est personnel. Ne le transférez pas : personne d’autre ne pourra l’utiliser.",
+    "send": "Envoyez-moi un code",
+    "sent": "Un code à 6 chiffres a été envoyé à {email}. Vérifiez votre boîte de réception, et vos courriers indésirables si besoin.",
+    "expires": "Le code est valable jusqu’à {time}.",
+    "label": "Code de vérification",
+    "hint": "6 chiffres, par exemple 123456",
+    "submit": "Vérifier",
+    "resend": "Envoyer un nouveau code",
+    "required": "Saisissez le code.",
+    "format": "Le code est composé de 6 chiffres.",
+    "wrong": "Le code n’est pas correct.",
+    "exhausted": "Le code a expiré ou trop de codes erronés ont été saisis. Demandez un nouveau code.",
+    "noCode": "Aucun code n’est en attente. Demandez un nouveau code.",
+    "resent": "Un nouveau code a été envoyé.",
+    "done": "Adresse confirmée.",
+    "expired": "Votre accès a expiré : confirmez à nouveau votre adresse avec un nouveau code.",
+    "rateLimited": "Trop de demandes. Patientez avant de demander un autre code.",
+    "mailUnavailable": "Le code n’a pas pu être envoyé. Réessayez plus tard.",
+    "conflict": "Aucun code ne peut être envoyé pour ce lien pour le moment. Rechargez la page et réessayez."
   }
 }

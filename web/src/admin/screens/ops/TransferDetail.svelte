@@ -50,6 +50,8 @@
     selectedCount,
     senderIpText,
     statusView,
+    trackedDownloads,
+    type RecipientTracking,
     type ResendFailure,
     type TransferDetail,
     type TransferFile,
@@ -230,6 +232,42 @@
   {/if}
 {/snippet}
 
+{#snippet trackedEmailCell(row: RecipientTracking)}
+  <span class="tt-break">{row.email}</span>
+{/snippet}
+
+{#snippet trackedVerifiedCell(row: RecipientTracking)}
+  {dateOr(row.verifiedAt, t('opsTransfers.detail.tracking.noVerified'), dateTime)}
+{/snippet}
+
+{#snippet trackedFirstCell(row: RecipientTracking)}
+  {dateOr(row.firstDownloadedAt, t('opsTransfers.detail.never'), dateTime)}
+{/snippet}
+
+{#snippet trackedLastCell(row: RecipientTracking)}
+  {dateOr(row.lastDownloadedAt, t('opsTransfers.detail.never'), dateTime)}
+{/snippet}
+
+{#snippet trackedFilesCell(row: RecipientTracking)}
+  {@const lines = trackedDownloads(row, transfer?.files ?? [], t('opsTransfers.detail.tracking.archive'))}
+  {#if lines.length === 0}
+    {t('opsTransfers.detail.tracking.noDownloads')}
+  {:else}
+    <ul class="tt-lines">
+      {#each lines as line, i (i)}
+        <li class="tt-break">
+          {t('opsTransfers.detail.tracking.downloadLine', {
+            name: line.label,
+            count: formatNumber(line.count),
+            first: dateTime(line.firstAt),
+            last: dateTime(line.lastAt),
+          })}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+{/snippet}
+
 {#snippet scanCell(file: TransferFile)}
   {@const view = scanView(file.scanStatus, t)}
   <StatusBadge variant={view.variant} label={view.label} />
@@ -315,11 +353,55 @@
 
     <section aria-labelledby="{uid}-recipients">
       <h2 id="{uid}-recipients">{t('opsTransfers.detail.recipientsTitle')}</h2>
-      <ul>
-        {#each transfer.recipients as recipient (recipient)}
-          <li class="tt-break">{recipient}</li>
-        {/each}
-      </ul>
+      <!-- recipientTracking is absent for a single shared link (before 1.1),
+           empty for per-recipient links not created yet. -->
+      {#if transfer.recipientTracking && transfer.recipientVerification !== undefined}
+        <p>
+          <strong>{t('opsTransfers.detail.tracking.verificationTitle')}</strong>
+          {transfer.recipientVerification
+            ? t('opsTransfers.detail.tracking.verificationOn')
+            : t('opsTransfers.detail.tracking.verificationOff')}
+        </p>
+      {/if}
+      {#if transfer.recipientTracking?.length}
+        <DataTable
+          caption={t('opsTransfers.detail.tracking.trackingCaption')}
+          captionHidden
+          rows={transfer.recipientTracking}
+          key={(row) => row.email}
+          columns={[
+            {
+              id: 'email',
+              header: t('opsTransfers.detail.tracking.recipient'),
+              cell: trackedEmailCell,
+              rowHeader: true,
+            },
+            ...(transfer.recipientVerification
+              ? [
+                  {
+                    id: 'verified',
+                    header: t('opsTransfers.detail.tracking.verified'),
+                    cell: trackedVerifiedCell,
+                  },
+                ]
+              : []),
+            { id: 'first', header: t('opsTransfers.detail.tracking.firstDl'), cell: trackedFirstCell },
+            { id: 'last', header: t('opsTransfers.detail.tracking.lastDl'), cell: trackedLastCell },
+            { id: 'files', header: t('opsTransfers.detail.tracking.downloadsCol'), cell: trackedFilesCell },
+          ]}
+        />
+      {:else}
+        <ul>
+          {#each transfer.recipients as recipient (recipient)}
+            <li class="tt-break">{recipient}</li>
+          {/each}
+        </ul>
+        <p class="tt-hint">
+          {transfer.recipientTracking
+            ? t('opsTransfers.detail.tracking.trackingPending')
+            : t('opsTransfers.detail.tracking.trackingNone')}
+        </p>
+      {/if}
     </section>
 
     <section aria-labelledby="{uid}-files">
@@ -440,6 +522,11 @@
   .tt-hint {
     color: var(--tt-muted);
     font-size: var(--tt-font-size-sm);
+  }
+
+  .tt-lines {
+    margin: 0;
+    padding-left: var(--tt-space-4);
   }
 
   .tt-actions {

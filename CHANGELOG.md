@@ -47,8 +47,23 @@ and the project follows [Semantic Versioning](https://semver.org/).
   recipients, deletion after the first download and a downloads cap; the rules are copied onto
   each transfer, so editing a level never changes existing transfers; the level is shown in the
   mails, on the download page, in the transfer details and in the audit log); recipient domain
-  allow and deny lists per tenant (subdomains included, deny wins, refusals audited). The expiry
-  reminder and the recipient verification come in a later step.
+  allow and deny lists per tenant (subdomains included, deny wins, refusals audited).
+- Per-recipient links, recipient verification, tracking and expiry reminder (specification
+  sections 8.2, 10 and 12.2): every new transfer gives each recipient a personal link, never shown
+  to the sender, the administrators or the API tokens (transfers created before 1.1 keep their single
+  shared link). With the sender's option or a confidentiality level rule, the recipient first enters
+  a 6-digit code sent to the address of the link (valid 15 minutes, 2 tries, 5 codes per hour per
+  address and link, 20 per hour per IP shared with the deposit codes, `429` when exceeded); the
+  `__Host-tt_rv` cookie then lasts 1 hour. The sender and the administrators see per recipient
+  which files were downloaded and when, never the IP address or browser. The `expiry-reminder`
+  task (every 15 minutes) mails once per link, the day before expiry, the recipients who have not
+  downloaded yet (skipped for blocklisted recipients and for lifetimes under 36 hours). The transfer
+  password allows 3 tries counted per link; "delete after the first download" waits for every
+  recipient; the sender confirmation no longer contains a link; the first-download receipt names the
+  recipient; resending an administrator notification mails each recipient their own link. Security
+  log: `verification_code_invalid` gains `purpose` (`deposit` or `recipient`) and `rate_limited` the
+  scopes `verification_link` and `verification_ip`. Replying to a transfer still answers `409` until
+  a later step.
 - `make check-full`: `make check` with the 20 GB test forced, required before every release.
 - `make check` prints the duration of every gate.
 

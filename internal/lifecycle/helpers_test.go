@@ -109,7 +109,7 @@ func (f *faults) called(name string) int {
 // faultRepo wraps a repo with a fault per method: "due" (the deletion
 // listing), "dueExpirations", "rejectedKeyed", "abandoned", "transfer", "finish", "scrub",
 // "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "purgeSystem:<name>", "storageRefs",
-// "availableIDs", "deletingTenants", "getTenant", "transferIDs", "keyIDs",
+// "availableIDs", "linkTransfers", "linkIDs", "deletingTenants", "getTenant", "transferIDs", "keyIDs",
 // "destroyKeys", "deleteTenant", "audit", "backup", and "backupUnsupported" (any
 // fault makes backupSupported false). refsHook, when set, edits the storage refs
 // returned.
@@ -145,6 +145,27 @@ func (r *faultRepo) abandonedUploads(ctx context.Context, createdBefore time.Tim
 		return nil, err
 	}
 	return r.inner.abandonedUploads(ctx, createdBefore, page)
+}
+
+func (r *faultRepo) dueReminders(ctx context.Context, now time.Time, page store.SweepPage) ([]store.TenantTransfer, error) {
+	if err := r.f.hit("dueReminders"); err != nil {
+		return nil, err
+	}
+	return r.inner.dueReminders(ctx, now, page)
+}
+
+func (r *faultRepo) prepareReminder(ctx context.Context, tid tenant.ID, trfID string, now time.Time) (reminderBatch, error) {
+	if err := r.f.hit("prepareReminder"); err != nil {
+		return reminderBatch{}, err
+	}
+	return r.inner.prepareReminder(ctx, tid, trfID, now)
+}
+
+func (r *faultRepo) resetReminder(ctx context.Context, tid tenant.ID, trfID string, linkIDs []string, now time.Time) error {
+	if err := r.f.hit("resetReminder"); err != nil {
+		return err
+	}
+	return r.inner.resetReminder(ctx, tid, trfID, linkIDs, now)
 }
 
 func (r *faultRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error) {
@@ -212,6 +233,20 @@ func (r *faultRepo) storageRefs(ctx context.Context, tid tenant.ID) (map[string]
 		r.refsHook(refs)
 	}
 	return refs, err
+}
+
+func (r *faultRepo) linkTransfers(ctx context.Context, tid tenant.ID) (map[string]string, error) {
+	if err := r.f.hit("linkTransfers"); err != nil {
+		return nil, err
+	}
+	return r.inner.linkTransfers(ctx, tid)
+}
+
+func (r *faultRepo) linkIDs(ctx context.Context, tid tenant.ID, trfID string) ([]string, error) {
+	if err := r.f.hit("linkIDs"); err != nil {
+		return nil, err
+	}
+	return r.inner.linkIDs(ctx, tid, trfID)
 }
 
 func (r *faultRepo) availableIDs(ctx context.Context, tid tenant.ID) ([]string, error) {
@@ -498,7 +533,7 @@ func (ft *fakeTimers) stops(t Task) int {
 }
 
 // allTasks are the tasks in their order.
-var allTasks = []Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions, TaskPurgeRows, TaskOrphans, TaskBackup}
+var allTasks = []Task{TaskDeleteAfterDownload, TaskExpire, TaskAbandonedUploads, TaskTenantDeletions, TaskPurgeRows, TaskOrphans, TaskExpiryReminder, TaskBackup}
 
 // runResult is the outcome of a scheduled run.
 type runResult struct {

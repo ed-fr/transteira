@@ -48,10 +48,20 @@ type Details struct {
 	UploadExpiresAt time.Time
 	// FinalizedAt is the finalization time (zero before).
 	FinalizedAt time.Time
-	// DownloadURL is the public download page of an available transfer,
-	// built from the FQDN stored for the tenant and the unsealed download
-	// token ("" otherwise). It carries a bearer token: never log it.
+	// DownloadURL is the public download page of an available transfer
+	// with a single shared link (created before 1.1), built from the FQDN
+	// stored for the tenant and the unsealed download token ("" otherwise).
+	// It carries a bearer token: never log it. A transfer with one link
+	// per recipient never has one: those links are mailed to each
+	// recipient only (P27, T-199).
 	DownloadURL string
+	// RecipientVerification reports whether each recipient must prove
+	// their address by code before downloading.
+	RecipientVerification bool
+	// RecipientTracking is, once a transfer with one link per recipient is
+	// available, the download tracking of each recipient, by position. It
+	// never carries a link or a token. Nil otherwise.
+	RecipientTracking []store.RecipientTracking
 	// Files are the files, by position.
 	Files []File
 	// MaxDownloads is the limit on the download starts, nil for none.
@@ -97,7 +107,9 @@ type File struct {
 // details converts d, a transfer of tenant t. While d is uploading, the
 // upload engine gives the last activity of the transfer and its upload
 // expiry, and every file carries its upload identifier and offset (Size
-// for a completed file). Once d is available, its download token is
+// for a completed file). Once d is available, a transfer with one link per
+// recipient gets the tracking of its recipients (never their links), and a
+// shared transfer gets its download token
 // unsealed to build the download link (id.DownloadURL); a token that cannot
 // be unsealed is logged and the transfer is returned without link, rather
 // than failing the whole view.
@@ -109,6 +121,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		DeleteAfterFirstDownload: d.DeleteAfterFirstDownload, TotalBytes: d.TotalBytes,
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
 		MaxDownloads: d.MaxDownloads, ConfidentialityLevel: d.ConfidentialityLevel, Rules: d.Rules,
+		RecipientVerification: d.RecipientVerification,
 	}
 	if d.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(d.ConfidentialityLabel, d.Language, t.DefaultLanguage, "en")
@@ -142,6 +155,16 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 			}
 		}
 		out.Files[i] = file
+	}
+	if d.LinkMode == store.LinkModePerRecipient {
+		if !d.AvailableAt.IsZero() {
+			tracking, err := s.repo.tracking(ctx, tid, d.ID)
+			if err != nil {
+				return Details{}, fmt.Errorf("transfer: read recipient tracking: %w", err)
+			}
+			out.RecipientTracking = tracking
+		}
+		return out, nil
 	}
 	if d.Status == store.TransferAvailable && d.DownloadTokenKeyID != "" {
 		token, err := s.repo.downloadToken(ctx, tid, d.DownloadTokenKeyID)

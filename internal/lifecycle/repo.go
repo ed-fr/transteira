@@ -24,6 +24,9 @@ type repo interface {
 	dueDeletions(ctx context.Context, now time.Time, page store.SweepPage) ([]store.TenantTransfer, error)
 	dueExpirations(ctx context.Context, now time.Time, scanningMaxAge time.Duration, page store.SweepPage) ([]store.TenantTransfer, error)
 	rejectedKeyed(ctx context.Context, page store.SweepPage) ([]store.TenantTransfer, error)
+	dueReminders(ctx context.Context, now time.Time, page store.SweepPage) ([]store.TenantTransfer, error)
+	prepareReminder(ctx context.Context, tid tenant.ID, trfID string, now time.Time) (reminderBatch, error)
+	resetReminder(ctx context.Context, tid tenant.ID, trfID string, linkIDs []string, now time.Time) error
 	abandonedUploads(ctx context.Context, createdBefore time.Time, page store.SweepPage) ([]store.TenantTransfer, error)
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
 	finish(ctx context.Context, k kind, tid tenant.ID, trfID string, now time.Time, stillDue func(store.Transfer) bool) error
@@ -37,6 +40,8 @@ type repo interface {
 
 	storageRefs(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, error)
 	availableIDs(ctx context.Context, tid tenant.ID) ([]string, error)
+	linkTransfers(ctx context.Context, tid tenant.ID) (map[string]string, error)
+	linkIDs(ctx context.Context, tid tenant.ID, trfID string) ([]string, error)
 
 	deletingTenants(ctx context.Context) ([]tenant.ID, error)
 	getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
@@ -83,8 +88,8 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 // finish ends the erasure of kind k of the transfer trfID of tid at now,
 // in one transaction: it checks inside it that the transfer is still due
 // (stillDue, which applies finalDue; errNotDue otherwise), destroys its
-// sealed download token if any, then marks it deleted (kindDelete, and
-// kindAdmin from any status) or expired, or deletes its row with its
+// sealed download token if any and those of its recipient links, then
+// marks it deleted (kindDelete, and kindAdmin from any status) or expired, or deletes its row with its
 // recipients and files by cascade (kindTenant, kindSubject). The store
 // refuses while a file key remains (store.ErrKeysRemain).
 func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID string, now time.Time, stillDue func(store.Transfer) bool) error {
@@ -104,6 +109,11 @@ func (r storeRepo) finish(ctx context.Context, k kind, tid tenant.ID, trfID stri
 			if err := r.vault.DestroyTx(ctx, tx, d.DownloadTokenKeyID); err != nil {
 				return err
 			}
+		}
+		// The sealed tokens of the per-recipient links go with it: the store
+		// refuses to end the transfer while one remains (store.ErrKeysRemain).
+		if _, err := r.db.RecipientLinks().DestroyKeysTx(ctx, tx, trfID); err != nil {
+			return err
 		}
 		switch k {
 		case kindDelete:
@@ -155,6 +165,19 @@ func (r storeRepo) storageRefs(ctx context.Context, tid tenant.ID) (map[string]s
 
 func (r storeRepo) availableIDs(ctx context.Context, tid tenant.ID) ([]string, error) {
 	return r.db.Transfers().IDsByStatus(ctx, tid, store.TransferAvailable)
+}
+
+func (r storeRepo) linkTransfers(ctx context.Context, tid tenant.ID) (map[string]string, error) {
+	return r.db.RecipientLinks().TransfersByLink(ctx, tid)
+}
+
+func (r storeRepo) linkIDs(ctx context.Context, tid tenant.ID, trfID string) ([]string, error) {
+	links, err := r.db.RecipientLinks().ListByTransfer(ctx, tid, trfID)
+	ids := make([]string, len(links))
+	for i, l := range links {
+		ids[i] = l.ID
+	}
+	return ids, err
 }
 
 func (r storeRepo) deletingTenants(ctx context.Context) ([]tenant.ID, error) {

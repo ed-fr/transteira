@@ -312,11 +312,11 @@ Filtrez par **Statut**, par **Adresse mail** (adresse exacte de l’expéditeur 
 
 ![Liste des transferts d’une entité avec les filtres](../screenshots/fr/admin-transfers.png)
 
-Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, premier téléchargement, expéditeur et adresse IP de l’expéditeur, origine, options (dont le **Niveau de confidentialité** et le nombre de téléchargements, affiché sur le maximum autorisé quand l’expéditeur en a fixé un), destinataires, et les fichiers avec leur taille, leur empreinte SHA-256 et le résultat de l’antivirus. Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
+Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, premier téléchargement, expéditeur et adresse IP de l’expéditeur, origine, options (dont le **Niveau de confidentialité** et le nombre de téléchargements, affiché sur le maximum autorisé quand l’expéditeur en a fixé un), destinataires, et les fichiers avec leur taille, leur empreinte SHA-256 et le résultat de l’antivirus. Chaque nouveau transfert donne à chaque destinataire un lien personnel : le détail montre donc, pour chaque destinataire, quels fichiers ont été téléchargés et quand (premier et dernier téléchargement), jamais son adresse IP ni son navigateur. Les transferts créés avant la version 1.1 gardent un lien unique partagé et n’ont pas ce suivi. Le contenu des fichiers et les liens de téléchargement ne sont jamais accessibles aux administrateurs.
 
 ![Détail d’un transfert avec ses informations, ses destinataires et ses fichiers](../screenshots/fr/admin-transfer-detail.png)
 
-- **Renvoyer la notification** : choisissez les destinataires et cliquez sur **Renvoyer**. Le mail est renvoyé avec le même lien, 5 fois par heure au plus.
+- **Renvoyer la notification** : choisissez les destinataires et cliquez sur **Renvoyer**. Le mail est renvoyé et chaque destinataire reçoit de nouveau son propre lien personnel, 5 fois par heure au plus. La veille de l’expiration d’un transfert, les destinataires qui n’ont pas encore téléchargé reçoivent automatiquement un mail de rappel (pas pour les transferts valables un jour, ni pour les adresses bloquées).
 - **Supprimer le transfert** : saisissez éventuellement un **Motif (facultatif)**, enregistré dans le journal d’audit, puis confirmez. Les fichiers sont effacés définitivement, y compris des sauvegardes, car leurs clés de chiffrement sont détruites. Le lien de téléchargement cesse de fonctionner.
 - **Voir le journal d’audit depuis le jour de ce transfert** ouvre le journal d’audit au jour de sa création.
 

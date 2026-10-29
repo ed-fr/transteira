@@ -50,6 +50,13 @@ func (ev *env) orphanFixture(tn *tenant.Tenant) orphanSet {
 	ad := ev.get(avail)
 	keep(ad.Files[0].StorageName+".ttef", old)
 	write(storage.StateName(avail.id)+".dlstate", old, true)
+	// Per-recipient transfers: the state of each link is kept while the
+	// transfer is available, removed once it ended.
+	_, prLinks := ev.perRecipient(tn, 7, false, dave)
+	write(storage.StateName(prLinks[0].ID)+".dlstate", old, true)
+	ended, endedLinks := ev.perRecipient(tn, 7, false, dave)
+	ev.mustErase(ended, MarkDeleted, Erased)
+	write(storage.StateName(endedLinks[0].ID)+".dlstate", old, false)
 	// A file whose key was destroyed (failed removal): removed.
 	gone := ev.available(tn, 1, false)
 	gd := ev.get(gone)
@@ -123,7 +130,7 @@ func TestOrphans(t *testing.T) {
 		for _, want := range []string{
 			"lifecycle: directory of an unknown tenant left in place tenant=" + string(stray),
 			"lifecycle: unknown entries left in a tenant directory tenant=" + string(ev.a.ID) + " count=2",
-			"lifecycle: orphan files removed data=4 checkpoints=6 states=2 temps=2 unknown=4",
+			"lifecycle: orphan files removed data=4 checkpoints=6 states=4 temps=2 unknown=4",
 		} {
 			if ev.logs.count(want) != 1 {
 				t.Fatalf("missing %q:\n%s", want, ev.logs.all())
@@ -192,6 +199,8 @@ func TestOrphansFailures(t *testing.T) {
 		{"storageRefs", store.ErrTooManyRows, true},
 		{"availableIDs", nil, false},
 		{"availableIDs", store.ErrTooManyRows, true},
+		{"linkTransfers", nil, false},
+		{"linkTransfers", store.ErrTooManyRows, true},
 		{"lock", upload.ErrBusy, false},
 		{"transfer", nil, false},
 		{"removeData", nil, false},

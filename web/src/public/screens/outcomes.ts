@@ -48,6 +48,7 @@ export type UnlockFailure =
   | { kind: 'wrong'; attemptsRemaining: number | undefined }
   | { kind: 'locked'; retryAfterSeconds: number | undefined }
   | { kind: 'required' }
+  | { kind: 'verification-required' }
   | { kind: 'not-found' }
   | { kind: 'gone' }
   | { kind: 'max-downloads' }
@@ -62,7 +63,10 @@ export function unlockFailure(err: unknown): UnlockFailure {
     case 400:
       return { kind: 'required' };
     case 401:
-      return { kind: 'wrong', attemptsRemaining: err.attemptsRemaining };
+      // The recipient verification cookie expired (1 hour): back to the verification step.
+      return err.code === 'recipient-verification-required'
+        ? { kind: 'verification-required' }
+        : { kind: 'wrong', attemptsRemaining: err.attemptsRemaining };
     case 404:
       return { kind: 'not-found' };
     case 410:
@@ -72,6 +76,90 @@ export function unlockFailure(err: unknown): UnlockFailure {
     default:
       return { kind: 'error' };
   }
+}
+
+/** The recipient must prove their address by code before anything else (per-recipient link). */
+export function needsVerification(transfer: PublicTransfer): boolean {
+  return transfer.verificationRequired === true && transfer.verified !== true;
+}
+
+/** Transfer no longer available, as found by the verification step. */
+export type VerificationGone = 'not-found' | 'gone' | 'max-downloads';
+
+/** Outcome of a failed POST /downloads/{token}/verification (ask for a code). */
+export type VerificationStartFailure =
+  | { kind: 'rate-limited'; retryAfterSeconds: number | undefined }
+  | { kind: 'mail-unavailable' }
+  | { kind: 'conflict' }
+  | { kind: VerificationGone }
+  | { kind: 'error' };
+
+/** Classifies the error of a request for a recipient verification code. */
+export function verificationStartFailure(err: unknown): VerificationStartFailure {
+  if (!(err instanceof ApiProblem)) {
+    return { kind: 'error' };
+  }
+  switch (err.status) {
+    case 404:
+      return { kind: 'not-found' };
+    case 409:
+      return { kind: 'conflict' };
+    case 410:
+      return err.code === 'max-downloads-reached' ? { kind: 'max-downloads' } : { kind: 'gone' };
+    case 429:
+      return { kind: 'rate-limited', retryAfterSeconds: err.retryAfterSeconds };
+    case 503:
+      return { kind: 'mail-unavailable' };
+    default:
+      return { kind: 'error' };
+  }
+}
+
+/** Outcome of a failed POST /downloads/{token}/verification/confirm (code entry). */
+export type VerificationConfirmFailure =
+  | { kind: 'wrong'; attemptsRemaining: number | undefined }
+  | { kind: 'exhausted' }
+  | { kind: 'no-code' }
+  | { kind: 'rate-limited'; retryAfterSeconds: number | undefined }
+  | { kind: VerificationGone }
+  | { kind: 'error' };
+
+/**
+ * Classifies the error of a code entry. A wrong code is recognised by its code (the contract
+ * documents 422, a 401 is accepted too); the code is exhausted after 2 wrong attempts (410), and
+ * a 409 means that no code is pending (expired or already used): a new one must be requested.
+ */
+export function verificationConfirmFailure(err: unknown): VerificationConfirmFailure {
+  if (!(err instanceof ApiProblem)) {
+    return { kind: 'error' };
+  }
+  if (err.code === 'verification-code-invalid') {
+    return { kind: 'wrong', attemptsRemaining: err.attemptsRemaining };
+  }
+  if (err.code === 'verification-exhausted') {
+    return { kind: 'exhausted' };
+  }
+  switch (err.status) {
+    case 400:
+      return { kind: 'wrong', attemptsRemaining: undefined };
+    case 404:
+      return { kind: 'not-found' };
+    case 409:
+      return { kind: 'no-code' };
+    case 410:
+      return err.code === 'max-downloads-reached' ? { kind: 'max-downloads' } : { kind: 'gone' };
+    case 422:
+      return { kind: 'wrong', attemptsRemaining: err.attemptsRemaining };
+    case 429:
+      return { kind: 'rate-limited', retryAfterSeconds: err.retryAfterSeconds };
+    default:
+      return { kind: 'error' };
+  }
+}
+
+/** Code as typed: spaces and separators removed, so that a pasted "123 456" is accepted. */
+export function normalizeCode(value: string): string {
+  return value.replace(/\s+/g, '');
 }
 
 /** Outcome of a failed POST /invitations. */

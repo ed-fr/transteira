@@ -11,6 +11,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
+	"github.com/ed-fr/transteira/internal/api/apiutil"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/datasubject"
@@ -227,7 +228,7 @@ func adminTransferBody(t tenantops.Transfer) gen.AdminTransfer {
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: optionalTime(t.ExpiresAt), FirstDownloadedAt: optionalTime(t.FirstDownloadedAt),
 		DownloadCount: int(t.DownloadCount), MaxDownloads: t.MaxDownloads, ConfidentialityLevel: transferLevelRef(t),
-		RecipientVerification: new(false),
+		RecipientVerification: new(t.RecipientVerification),
 	}
 }
 
@@ -253,8 +254,9 @@ func transferLevelRef(t tenantops.Transfer) *gen.ConfidentialityLevelRef {
 	return ref
 }
 
-// GetTenantTransfer returns the metadata and files of a transfer, never
-// their content nor the download link.
+// GetTenantTransfer returns the metadata and files of a transfer, and the
+// tracking of each recipient for a transfer with one link per recipient:
+// never a file content nor a download link (P27, T-199).
 func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransferRequestObject) (gen.GetTenantTransferResponseObject, error) {
 	svc, p, err := s.opsSession(ctx)
 	if err != nil {
@@ -282,6 +284,10 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 		out := &resp.Files[i]
 		out.Id, out.Name, out.Size, out.MediaType = f.ID, f.Name, f.Size, optional(f.MediaType)
 		out.Sha256, out.ScanStatus = optional(f.SHA256), gen.ScanStatus(f.ScanStatus)
+	}
+	if d.RecipientTracking != nil {
+		tracking := apiutil.RecipientTracking(d.RecipientTracking)
+		resp.RecipientTracking = &tracking
 	}
 	return resp, nil
 }

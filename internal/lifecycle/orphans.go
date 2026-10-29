@@ -72,7 +72,8 @@ func (s *Sweeper) orphans(ctx context.Context) error {
 //     any more (unreadable);
 //   - a checkpoint with no file row, or whose file is complete or whose
 //     transfer is no longer uploading;
-//   - a download state that matches no available transfer;
+//   - a download state that matches no available transfer, nor any
+//     recipient link of one;
 //   - a leftover temporary file.
 //
 // Unknown entries are counted and logged, never removed. A tenant with
@@ -83,31 +84,54 @@ func (s *Sweeper) reconcile(ctx context.Context, tid tenant.ID, now time.Time, c
 	if err != nil {
 		return err
 	}
-	refs, err := s.repo.storageRefs(ctx, tid)
-	if err == nil {
-		var ids []string
-		ids, err = s.repo.availableIDs(ctx, tid)
-		if err == nil {
-			return s.removeOrphans(ctx, tid, now, entries, refs, ids, c)
-		}
-	}
-	if errors.Is(err, store.ErrTooManyRows) {
+	refs, states, err := s.references(ctx, tid)
+	switch {
+	case errors.Is(err, store.ErrTooManyRows):
 		s.logger.WarnContext(ctx, "lifecycle: tenant skipped by the orphan removal: too many rows", slog.String("tenant", string(tid)))
 		return nil
+	case err != nil:
+		return err
 	}
-	return err
+	return s.removeOrphans(ctx, tid, now, entries, refs, states, c)
+}
+
+// references reads what the directory of tid must keep: refs, the storage
+// names of its files, and states, the names of the download states of its
+// available transfers and of their recipient links (each link keeps its
+// own, storage.StateName(linkID)).
+func (s *Sweeper) references(ctx context.Context, tid tenant.ID) (map[string]store.StorageRef, map[string]bool, error) {
+	refs, err := s.repo.storageRefs(ctx, tid)
+	if err != nil {
+		return nil, nil, err
+	}
+	ids, err := s.repo.availableIDs(ctx, tid)
+	if err != nil {
+		return nil, nil, err
+	}
+	links, err := s.repo.linkTransfers(ctx, tid)
+	if err != nil {
+		return nil, nil, err
+	}
+	available := make(map[string]bool, len(ids))
+	states := make(map[string]bool, len(ids)+len(links))
+	for _, trfID := range ids {
+		available[trfID] = true
+		states[storage.StateName(trfID)] = true
+	}
+	for linkID, trfID := range links {
+		if available[trfID] {
+			states[storage.StateName(linkID)] = true
+		}
+	}
+	return refs, states, nil
 }
 
 // removeOrphans applies the rules of reconcile to entries, with refs the
-// storage names of the files of tid and available the identifiers of its
-// available transfers.
+// storage names of the files of tid and states the names of the download
+// states to keep (see [Sweeper.references]).
 func (s *Sweeper) removeOrphans(ctx context.Context, tid tenant.ID, now time.Time, entries []storage.Entry,
-	refs map[string]store.StorageRef, available []string, c *orphanCounts,
+	refs map[string]store.StorageRef, states map[string]bool, c *orphanCounts,
 ) error {
-	states := make(map[string]bool, len(available))
-	for _, trfID := range available {
-		states[storage.StateName(trfID)] = true
-	}
 	cutoff := now.Add(-s.orphanGrace)
 	unknown := 0
 	var errs []error

@@ -44,23 +44,23 @@ func TestUnlockInput(t *testing.T) {
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true})
 		for _, pw := range []string{strings.Repeat("é", MaxPasswordRunes+1), "\xff\xfe", strings.Repeat("a", MaxPasswordBytes+1)} {
-			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, pw, "")
+			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, pw, Cookies{})
 			wantErr(t, err, ErrInvalid)
 			if errors.Is(err, ErrPasswordRequired) {
 				t.Fatal("a malformed password reported as missing")
 			}
 		}
-		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "", "")
+		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "", Cookies{})
 		wantErr(t, err, ErrPasswordRequired)
 		wantErr(t, err, ErrInvalid)
-		_, err = ev.svc.Unlock(ctx, ev.a, "dl_bad", ipOne, password, "")
+		_, err = ev.svc.Unlock(ctx, ev.a, "dl_bad", ipOne, password, Cookies{})
 		wantErr(t, err, ErrNotFound)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, netip.Addr{}, password, "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, netip.Addr{}, password, Cookies{})
 		wantErr(t, err, ErrNoClientIP)
 
 		// Without password: nothing to do, no hashing.
 		q := ev.publish(ev.a, spec{contents: [][]byte{random(10)}})
-		c, err := ev.svc.Unlock(ctx, ev.a, q.token, netip.Addr{}, "anything", "dg_x")
+		c, err := ev.svc.Unlock(ctx, ev.a, q.token, netip.Addr{}, "anything", Cookies{Grant: "dg_x"})
 		if err != nil || c != "" {
 			t.Fatalf("Unlock without password = %q, %v", c, err)
 		}
@@ -75,17 +75,17 @@ func TestUnlockPerTransfer(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true})
-		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong-1", "")
+		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong-1", Cookies{})
 		wantWrong(t, err, 2)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipTwo, "wrong-2", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipTwo, "wrong-2", Cookies{})
 		wantWrong(t, err, 1)
 		ev.clock.advance(time.Minute)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipThree, "wrong-3", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipThree, "wrong-3", Cookies{})
 		wantLocked(t, err, store.PasswordLockDuration)
 		// Locked for everyone, even with the right password, without hashing.
 		hashed := ev.f.called("verify")
 		ev.clock.advance(10*time.Minute + 500*time.Millisecond)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, netip.MustParseAddr("192.0.2.200"), password, "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, netip.MustParseAddr("192.0.2.200"), password, Cookies{})
 		wantLocked(t, err, 5*time.Minute)
 		if n := ev.f.called("verify"); n != hashed {
 			t.Fatalf("a locked attempt hashed the password")
@@ -107,7 +107,7 @@ func TestUnlockPerTransfer(t *testing.T) {
 		if !strings.HasPrefix(cookie, GrantCookiePrefix) {
 			t.Fatalf("cookie %q", cookie)
 		}
-		if _, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, cookie, p.files[0].ID); err != nil {
+		if _, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{Grant: cookie}, p.files[0].ID); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -121,22 +121,22 @@ func TestUnlockPerIP(t *testing.T) {
 		for range 4 {
 			ps = append(ps, ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true}))
 		}
-		_, err := ev.svc.Unlock(ctx, ev.a, ps[0].token, ipOne, "wrong", "")
+		_, err := ev.svc.Unlock(ctx, ev.a, ps[0].token, ipOne, "wrong", Cookies{})
 		wantWrong(t, err, 2)
-		_, err = ev.svc.Unlock(ctx, ev.a, ps[1].token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, ps[1].token, ipOne, "wrong", Cookies{})
 		wantWrong(t, err, 1)
-		_, err = ev.svc.Unlock(ctx, ev.a, ps[2].token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, ps[2].token, ipOne, "wrong", Cookies{})
 		wantLocked(t, err, store.PasswordLockDuration)
 		// The IP is locked on every transfer of the tenant...
-		_, err = ev.svc.Unlock(ctx, ev.a, ps[3].token, ipOne, password, "")
+		_, err = ev.svc.Unlock(ctx, ev.a, ps[3].token, ipOne, password, Cookies{})
 		wantLocked(t, err, store.PasswordLockDuration)
 		// ...but another IP may unlock them.
-		if _, err := ev.svc.Unlock(ctx, ev.a, ps[3].token, ipTwo, password, ""); err != nil {
+		if _, err := ev.svc.Unlock(ctx, ev.a, ps[3].token, ipTwo, password, Cookies{}); err != nil {
 			t.Fatal(err)
 		}
 		// The IP is not locked in another tenant.
 		q := ev.publish(ev.b, spec{contents: [][]byte{random(10)}, password: true})
-		if _, err := ev.svc.Unlock(ctx, ev.b, q.token, ipOne, password, ""); err != nil {
+		if _, err := ev.svc.Unlock(ctx, ev.b, q.token, ipOne, password, Cookies{}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -147,25 +147,25 @@ func TestUnlockResetAndFailures(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true})
-		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", "")
+		_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantWrong(t, err, 2)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantWrong(t, err, 1)
 		ev.unlock(p, "")
 		// The right password cleared the transfer counter: another client
 		// starts afresh on the transfer...
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipTwo, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipTwo, "wrong", Cookies{})
 		wantWrong(t, err, 2)
 		// ...but the client keeps its two earlier failures (only the right
 		// attempt was refunded): its third one locks it.
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantLocked(t, err, store.PasswordLockDuration)
 		ev.clock.advance(store.PasswordLockDuration)
 		ev.unlock(p, "")
 
 		// A failing security log does not change the answer.
 		ev.seclog.err = errFault
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipThree, "wrong", "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipThree, "wrong", Cookies{})
 		wantWrong(t, err, 2)
 		if ev.logs.count("security log write failed") != 1 {
 			t.Fatal("security log failure not logged")
@@ -176,10 +176,10 @@ func TestUnlockResetAndFailures(t *testing.T) {
 		for i, fault := range []string{"reserve", "verify", "unlocked", "mac"} {
 			ev.f.set(fault, 1, nil)
 			ip := netip.AddrFrom4([4]byte{192, 0, 2, byte(100 + i)})
-			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ip, password, "")
+			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ip, password, Cookies{})
 			wantInternal(t, err)
 		}
-		if _, err := ev.svc.Unlock(ctx, ev.a, p.token, ipThree, password, ""); err != nil {
+		if _, err := ev.svc.Unlock(ctx, ev.a, p.token, ipThree, password, Cookies{}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -195,20 +195,20 @@ func TestUnlockUnverifiedRefund(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ev.f.hook["verify"] = cancel
 			ev.f.set("verify", 1, context.Canceled)
-			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", "")
+			_, err := ev.svc.Unlock(ctx, ev.a, p.token, ipOne, "wrong", Cookies{})
 			wantErr(t, err, context.Canceled)
 		}
-		_, err := ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", "")
+		_, err := ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantWrong(t, err, 2)
 		// A refund that fails is logged; the attempt stays counted.
 		ev.f.set("verify", 1, nil)
 		ev.f.set("refund", 1, nil)
-		_, err = ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantInternal(t, err)
 		if ev.logs.count("unverified password attempt not refunded") != 1 {
 			t.Fatal("refund failure not logged")
 		}
-		_, err = ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", "")
+		_, err = ev.svc.Unlock(context.Background(), ev.a, p.token, ipOne, "wrong", Cookies{})
 		wantLocked(t, err, store.PasswordLockDuration)
 	})
 }

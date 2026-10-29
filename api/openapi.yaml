@@ -1917,7 +1917,7 @@ paths:
         '403': { $ref: '#/components/responses/CsrfInvalid' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
-        '410': { $ref: '#/components/responses/TransferGone' }
+        '410': { $ref: '#/components/responses/DownloadGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503':
@@ -7641,7 +7641,7 @@ components:
                   path: { $ref: '#/components/schemas/FilePath' }
             recipientTracking:
               type: array
-              description: "Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links."
+              description: "Since 1.1. Per-recipient download tracking, for a transfer with per-recipient links; empty until the transfer is available. Absent for a transfer with a single shared link."
               items: { $ref: '#/components/schemas/RecipientTracking' }
     AdminTransferList:
       type: object
@@ -8189,7 +8189,7 @@ components:
           description: |
             End of the last successful run of each periodic cleanup task (`expire`,
             `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`,
-            `orphans`, `backup`), keyed by task name. A task that never succeeded since the start
+            `orphans`, `expiry-reminder`, `backup`), keyed by task name. A task that never succeeded since the start
             is absent. A run that left work for the next run after a failure does not move it.
           additionalProperties: { type: string, format: date-time }
         tenants:

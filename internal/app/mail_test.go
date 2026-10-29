@@ -219,22 +219,30 @@ type fakeBackend struct {
 	err error
 }
 
-func (b fakeBackend) Resolve(context.Context, *tenant.Tenant, string, string) (download.View, error) {
+func (b fakeBackend) Resolve(context.Context, *tenant.Tenant, string, download.Cookies) (download.View, error) {
 	return download.View{TransferID: "trf_x"}, b.err
 }
 
-func (b fakeBackend) Unlock(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (string, error) {
+func (b fakeBackend) Unlock(context.Context, *tenant.Tenant, string, netip.Addr, string, download.Cookies) (string, error) {
 	return "dg_x", b.err
 }
 
-func (b fakeBackend) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (*download.File, error) {
+func (b fakeBackend) StartVerification(context.Context, *tenant.Tenant, string, netip.Addr, bool, string, string) (*download.Challenge, error) {
+	return &download.Challenge{EmailMasked: "c***@example.com"}, b.err
+}
+
+func (b fakeBackend) ConfirmVerification(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (string, error) {
+	return "rv_x", b.err
+}
+
+func (b fakeBackend) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies, string) (*download.File, error) {
 	if b.err != nil {
 		return nil, b.err
 	}
 	return &download.File{Name: "a.txt", SHA256: "abc"}, nil
 }
 
-func (b fakeBackend) PrepareArchive(context.Context, *tenant.Tenant, string, netip.Addr, string) (*download.Archive, error) {
+func (b fakeBackend) PrepareArchive(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies) (*download.Archive, error) {
 	if b.err != nil {
 		return nil, b.err
 	}
@@ -245,24 +253,30 @@ func TestDownloadAdapter(t *testing.T) {
 	t.Parallel()
 	ctx, tn := t.Context(), &tenant.Tenant{}
 	a := downloadAdapter{svc: fakeBackend{}}
-	if v, err := a.Resolve(ctx, tn, "", ""); err != nil || v.TransferID != "trf_x" {
+	if v, err := a.Resolve(ctx, tn, "", download.Cookies{}); err != nil || v.TransferID != "trf_x" {
 		t.Errorf("Resolve = %+v, %v", v, err)
 	}
-	if c, err := a.Unlock(ctx, tn, "", netip.Addr{}, "", ""); err != nil || c != "dg_x" {
+	if c, err := a.Unlock(ctx, tn, "", netip.Addr{}, "", download.Cookies{}); err != nil || c != "dg_x" {
 		t.Errorf("Unlock = %q, %v", c, err)
 	}
-	if f, err := a.OpenFile(ctx, tn, "", netip.Addr{}, "", ""); err != nil || f.Name != "a.txt" || f.SHA256 != "abc" {
+	if ch, err := a.StartVerification(ctx, tn, "", netip.Addr{}, false, "", ""); err != nil || ch.EmailMasked != "c***@example.com" {
+		t.Errorf("StartVerification = %+v, %v", ch, err)
+	}
+	if c, err := a.ConfirmVerification(ctx, tn, "", netip.Addr{}, "", ""); err != nil || c != "rv_x" {
+		t.Errorf("ConfirmVerification = %q, %v", c, err)
+	}
+	if f, err := a.OpenFile(ctx, tn, "", netip.Addr{}, download.Cookies{}, ""); err != nil || f.Name != "a.txt" || f.SHA256 != "abc" {
 		t.Errorf("OpenFile = %+v, %v", f, err)
 	}
-	if ar, err := a.PrepareArchive(ctx, tn, "", netip.Addr{}, ""); err != nil || ar == nil {
+	if ar, err := a.PrepareArchive(ctx, tn, "", netip.Addr{}, download.Cookies{}); err != nil || ar == nil {
 		t.Errorf("PrepareArchive = %v, %v", ar, err)
 	}
 	boom := errors.New("boom")
 	a = downloadAdapter{svc: fakeBackend{err: boom}}
-	if _, err := a.OpenFile(ctx, tn, "", netip.Addr{}, "", ""); !errors.Is(err, boom) {
+	if _, err := a.OpenFile(ctx, tn, "", netip.Addr{}, download.Cookies{}, ""); !errors.Is(err, boom) {
 		t.Errorf("OpenFile error = %v", err)
 	}
-	if ar, err := a.PrepareArchive(ctx, tn, "", netip.Addr{}, ""); !errors.Is(err, boom) || ar != nil {
+	if ar, err := a.PrepareArchive(ctx, tn, "", netip.Addr{}, download.Cookies{}); !errors.Is(err, boom) || ar != nil {
 		t.Errorf("PrepareArchive error = %v, %v", ar, err)
 	}
 }

@@ -24,10 +24,12 @@ import (
 // *download.Service to it (OpenFile and PrepareArchive return the narrow
 // views below, so that the handlers can be tested without storage).
 type DownloadService interface {
-	Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (download.View, error)
-	Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error)
-	OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (DownloadFile, error)
-	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (DownloadArchive, error)
+	Resolve(ctx context.Context, t *tenant.Tenant, rawToken string, cookies download.Cookies) (download.View, error)
+	Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password string, cookies download.Cookies) (string, error)
+	OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies, fileID string) (DownloadFile, error)
+	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies) (DownloadArchive, error)
+	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
+	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
 }
 
 // DownloadFile is a deliverable file opened for download (download.File).
@@ -86,12 +88,14 @@ type requestKey struct{}
 // RequestMiddleware (strict handler operation names).
 var requestOperations = map[string]bool{
 	"GetDownload": true, "UnlockDownload": true, "DownloadFile": true, "DownloadArchive": true,
+	"StartRecipientVerification": true, "ConfirmRecipientVerification": true,
 }
 
 // RequestMiddleware is a strict middleware putting the HTTP request in the
-// context of the download operations, and of them only: the grant cookie
-// is read from it, and the file is served with http.ServeContent, which
-// handles the Range and conditional headers of the request.
+// context of the download operations, and of them only: the grant and
+// recipient verification cookies are read from it, and the file is served
+// with http.ServeContent, which handles the Range and conditional headers
+// of the request.
 func RequestMiddleware(f gen.StrictHandlerFunc, operationID string) gen.StrictHandlerFunc {
 	if !requestOperations[operationID] {
 		return f
@@ -107,18 +111,28 @@ func requestOf(ctx context.Context) (*http.Request, bool) {
 	return r, ok
 }
 
-// grantCookie returns the raw value of the download grant cookie of the
-// request in ctx, "" when absent.
-func grantCookie(ctx context.Context) string {
+// cookieValue returns the raw value of the cookie name of the request in
+// ctx, "" when absent.
+func cookieValue(ctx context.Context, name string) string {
 	r, ok := requestOf(ctx)
 	if !ok {
 		return ""
 	}
-	c, err := r.Cookie(download.GrantCookieName)
+	c, err := r.Cookie(name)
 	if err != nil {
 		return ""
 	}
 	return c.Value
+}
+
+// downloadCookies returns the raw values of the download grant and recipient
+// verification cookies of the request in ctx ("" when absent); the
+// download service parses them defensively.
+func downloadCookies(ctx context.Context) download.Cookies {
+	return download.Cookies{
+		Grant:        cookieValue(ctx, download.GrantCookieName),
+		Verification: cookieValue(ctx, download.VerificationCookieName),
+	}
 }
 
 // downloadTenant returns the tenant of the request and checks the wiring.
@@ -139,7 +153,7 @@ func (s *Server) GetDownload(ctx context.Context, req gen.GetDownloadRequestObje
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.downloads.Resolve(ctx, t, req.LinkToken, grantCookie(ctx))
+	v, err := s.downloads.Resolve(ctx, t, req.LinkToken, downloadCookies(ctx))
 	if err != nil {
 		return nil, downloadError(err)
 	}
@@ -160,11 +174,17 @@ func downloadLanguage(ctx context.Context, t *tenant.Tenant) string {
 // publicTransfer renders a view as the OpenAPI PublicTransfer, the label
 // of its confidentiality level in lang (else in English, else in any
 // language). A locked view only carries the sender, the expiry and the
-// flags, never the confidentiality level.
+// flags (with the masked address of a link awaiting its verification),
+// never the confidentiality level.
 func publicTransfer(token string, v download.View, lang string) gen.PublicTransfer {
 	out := gen.PublicTransfer{
 		SenderEmail: gen.Email(v.SenderEmail), ExpiresAt: v.ExpiresAt, PasswordProtected: v.PasswordProtected, Locked: v.Locked,
 		ConfidentialityLevel: downloadLevel(v.Confidentiality, lang),
+	}
+	if v.VerificationRequired {
+		required, verified := true, v.Verified
+		out.VerificationRequired, out.Verified = &required, &verified
+		out.RecipientEmailMasked = optional(v.RecipientEmailMasked)
 	}
 	if v.Locked {
 		out.ConfidentialityLevel = nil
@@ -222,7 +242,7 @@ func (s *Server) UnlockDownload(ctx context.Context, req gen.UnlockDownloadReque
 	if req.Body == nil || req.Body.Password == "" {
 		return nil, validationFailed(fieldPassword, fieldRequired)
 	}
-	cookie, err := s.downloads.Unlock(ctx, t, req.LinkToken, middleware.ClientIP(ctx), req.Body.Password, grantCookie(ctx))
+	cookie, err := s.downloads.Unlock(ctx, t, req.LinkToken, middleware.ClientIP(ctx), req.Body.Password, downloadCookies(ctx))
 	if err != nil {
 		return nil, downloadError(err)
 	}
@@ -244,7 +264,7 @@ func (s *Server) DownloadFile(ctx context.Context, req gen.DownloadFileRequestOb
 	if !ok {
 		return nil, errNoRequest
 	}
-	f, err := s.downloads.OpenFile(ctx, t, req.LinkToken, middleware.ClientIP(ctx), grantCookie(ctx), req.FileId)
+	f, err := s.downloads.OpenFile(ctx, t, req.LinkToken, middleware.ClientIP(ctx), downloadCookies(ctx), req.FileId)
 	if err != nil {
 		return nil, downloadError(err)
 	}
@@ -261,26 +281,115 @@ func (s *Server) DownloadArchive(ctx context.Context, req gen.DownloadArchiveReq
 	if !ok {
 		return nil, errNoRequest
 	}
-	a, err := s.downloads.PrepareArchive(ctx, t, req.LinkToken, middleware.ClientIP(ctx), grantCookie(ctx))
+	a, err := s.downloads.PrepareArchive(ctx, t, req.LinkToken, middleware.ClientIP(ctx), downloadCookies(ctx))
 	if err != nil {
 		return nil, downloadError(err)
 	}
 	return archiveResponse{r: r, archive: a}, nil
 }
 
-// fieldPassword is the JSON pointer of the unlock password.
-const fieldPassword = "/password"
+// StartRecipientVerification sends a code to the recipient of a link
+// (startRecipientVerification): 202 with the masked address, or 204 when
+// this browser is already verified for the link. The mail is in the
+// language of the body when given (a supported one, else 400), else the
+// one negotiated from Accept-Language, else the tenant default.
+func (s *Server) StartRecipientVerification(ctx context.Context, req gen.StartRecipientVerificationRequestObject) (gen.StartRecipientVerificationResponseObject, error) {
+	t, err := s.downloadTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reply := false
+	language := deref(req.Params.AcceptLanguage)
+	if req.Body != nil && req.Body.Purpose != nil {
+		switch *req.Body.Purpose {
+		case gen.RecipientVerificationStartPurposeDownload:
+		case gen.RecipientVerificationStartPurposeReply:
+			reply = true
+		default:
+			return nil, validationFailed(fieldPurpose, fieldInvalidFormat)
+		}
+	}
+	if req.Body != nil && req.Body.Language != nil {
+		// An exact supported code negotiates to itself.
+		if language = string(*req.Body.Language); !i18n.IsSupported(language) {
+			return nil, validationFailed(fieldLanguage, fieldInvalidFormat)
+		}
+	}
+	ch, err := s.downloads.StartVerification(ctx, t, req.LinkToken, middleware.ClientIP(ctx), reply,
+		language, cookieValue(ctx, download.VerificationCookieName))
+	switch {
+	case err != nil:
+		return nil, downloadError(err)
+	case ch == nil:
+		return gen.StartRecipientVerification204Response{}, nil
+	}
+	return gen.StartRecipientVerification202JSONResponse{
+		EmailMasked: ch.EmailMasked, ExpiresAt: ch.ExpiresAt, AttemptsRemaining: ch.AttemptsRemaining,
+	}, nil
+}
+
+// ConfirmRecipientVerification checks the code of the recipient of a link
+// and sets the recipient verification cookie
+// (confirmRecipientVerification, 204).
+func (s *Server) ConfirmRecipientVerification(ctx context.Context, req gen.ConfirmRecipientVerificationRequestObject) (gen.ConfirmRecipientVerificationResponseObject, error) {
+	t, err := s.downloadTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil || req.Body.Code == "" {
+		return nil, validationFailed(fieldCode, fieldRequired)
+	}
+	cookie, err := s.downloads.ConfirmVerification(ctx, t, req.LinkToken, middleware.ClientIP(ctx), req.Body.Code,
+		cookieValue(ctx, download.VerificationCookieName))
+	if err != nil {
+		return nil, downloadError(err)
+	}
+	v := technicalCookie(download.VerificationCookieName, cookie, download.VerificationTTL)
+	return gen.ConfirmRecipientVerification204Response{
+		Headers: gen.ConfirmRecipientVerification204ResponseHeaders{SetCookie: &v},
+	}, nil
+}
+
+// JSON pointers of the download request fields.
+const (
+	// fieldPassword is the JSON pointer of the unlock password.
+	fieldPassword = "/password"
+	// fieldPurpose is the JSON pointer of the purpose of a recipient
+	// verification.
+	fieldPurpose = "/purpose"
+	// fieldCode is the JSON pointer of a recipient verification code.
+	fieldCode = "/code"
+	// fieldLanguage is the JSON pointer of the language of a recipient
+	// verification mail.
+	fieldLanguage = "/language"
+)
 
 // downloadError maps an error of the download service to the error the
 // strict handler renders. Anything unknown (ErrNoClientIP included) is
 // passed through: 500, logged.
 func downloadError(err error) error {
 	var (
-		wrong   *download.WrongPasswordError
-		locked  *download.LockedError
-		streams *download.TooManyStreamsError
+		wrong     *download.WrongPasswordError
+		locked    *download.LockedError
+		streams   *download.TooManyStreamsError
+		wrongCode *download.WrongCodeError
+		limited   *download.RateLimitError
 	)
 	switch {
+	case errors.Is(err, download.ErrVerificationRequired):
+		return problem.New(problem.CodeRecipientVerificationRequired)
+	case errors.Is(err, download.ErrVerificationNotNeeded), errors.Is(err, download.ErrNoChallenge):
+		return problem.New(problem.CodeStateConflict)
+	case errors.Is(err, download.ErrVerificationExhausted):
+		return problem.New(problem.CodeVerificationExhausted)
+	case errors.As(err, &wrongCode):
+		return problem.New(problem.CodeVerificationCodeInvalid, problem.WithAttemptsRemaining(wrongCode.Remaining))
+	case errors.Is(err, download.ErrInvalidCode):
+		return validationFailed(fieldCode, fieldInvalidFormat)
+	case errors.As(err, &limited):
+		return problem.New(problem.CodeRateLimited, problem.WithRetryAfter(limited.RetryAfter))
+	case errors.Is(err, download.ErrMailUnavailable):
+		return fmt.Errorf("%w: %w", problem.New(problem.CodeMailUnavailable), err)
 	case errors.Is(err, download.ErrPasswordRequired): // before ErrInvalid, which it matches
 		return validationFailed(fieldPassword, fieldRequired)
 	case errors.As(err, &streams):

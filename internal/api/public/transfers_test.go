@@ -250,6 +250,23 @@ func TestTransferBodyLevel(t *testing.T) {
 	}
 }
 
+func TestTransferBodyPerRecipient(t *testing.T) {
+	t.Parallel()
+	b := transferBody(uploadingDetails())
+	if b.RecipientTracking != nil {
+		t.Errorf("tracking without per-recipient links = %+v", b.RecipientTracking)
+	}
+	d := uploadingDetails()
+	d.Status, d.RecipientVerification = store.TransferAvailable, true
+	d.RecipientTracking = []store.RecipientTracking{{LinkID: "rcl_1", Email: "carol@customer.example.net", VerifiedAt: created}}
+	b = transferBody(d)
+	if b.RecipientVerification == nil || !*b.RecipientVerification || b.DownloadUrl != nil || b.RecipientTracking == nil ||
+		len(*b.RecipientTracking) != 1 || (*b.RecipientTracking)[0].Email != "carol@customer.example.net" ||
+		(*b.RecipientTracking)[0].VerifiedAt == nil {
+		t.Errorf("per-recipient body = %+v", b)
+	}
+}
+
 func TestGetCancelFinalizeTransfer(t *testing.T) {
 	t.Parallel()
 	info := internalInfo()

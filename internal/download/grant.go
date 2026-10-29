@@ -16,7 +16,8 @@ import (
 
 // Download grant cookie (OpenAPI security scheme downloadGrant): the
 // browser proof that a transfer password was entered. See the package
-// documentation.
+// documentation. The recipient verification cookie (verify.go) has the same
+// layout, under its own name, prefix and MAC purpose.
 const (
 	// GrantCookieName is the name of the cookie. The __Host- prefix
 	// requires Secure, Path=/ and no Domain attribute; the HTTP layer also
@@ -25,7 +26,8 @@ const (
 	// GrantTTL is the lifetime of a grant entry, and the Max-Age of the
 	// cookie (3600 seconds).
 	GrantTTL = time.Hour
-	// GrantMaxEntries bounds the transfers one browser keeps unlocked.
+	// GrantMaxEntries bounds the transfers (or recipient links) one browser
+	// keeps unlocked.
 	GrantMaxEntries = 10
 	// MaxGrantCookieLen bounds the raw cookie value the service parses; a
 	// longer value is ignored altogether. Ten entries take 552 bytes, so a
@@ -49,14 +51,31 @@ const (
 // It is strict, so that one entry has a single encoding.
 var grantEncoding = base64.RawURLEncoding.Strict()
 
-// parseGrants decodes the raw value of the grant cookie into at most
-// GrantMaxEntries distinct entries of grantRawLen bytes. It is defensive:
-// a value longer than MaxGrantCookieLen or without GrantCookiePrefix is
-// ignored, and so is every entry that is not exactly one entry in unpadded
-// base64url. It never fails. The entries are neither dated nor verified
-// here.
-func parseGrants(raw string) [][]byte {
-	body, ok := strings.CutPrefix(raw, GrantCookiePrefix)
+// entryCookie describes a stateless cookie of MAC-signed entries: the
+// download grant cookie and the recipient verification cookie. Each entry
+// is an expiry (Unix seconds, big-endian) then the MAC, under purpose, of
+// the tenant ID, a subject ID (a transfer or a recipient link) and that
+// expiry; the cookie holds no clear data. Both cookies share GrantTTL,
+// GrantMaxEntries and MaxGrantCookieLen.
+type entryCookie struct {
+	// prefix starts the cookie value.
+	prefix string
+	// purpose keys the MACs of the entries.
+	purpose crypto.MACPurpose
+	// what names the cookie in the errors.
+	what string
+}
+
+// grantSpec is the download grant cookie (GrantCookieName).
+var grantSpec = entryCookie{prefix: GrantCookiePrefix, purpose: crypto.MACPurposeDownloadGrant, what: "grant cookie"}
+
+// parse decodes the raw value of the cookie into at most GrantMaxEntries
+// distinct entries of grantRawLen bytes. It is defensive: a value longer
+// than MaxGrantCookieLen or without the prefix is ignored, and so is every
+// entry that is not exactly one entry in unpadded base64url. It never
+// fails. The entries are neither dated nor verified here.
+func (c entryCookie) parse(raw string) [][]byte {
+	body, ok := strings.CutPrefix(raw, c.prefix)
 	if !ok || len(raw) > MaxGrantCookieLen {
 		return nil
 	}
@@ -77,6 +96,10 @@ func parseGrants(raw string) [][]byte {
 	return entries
 }
 
+// parseGrants decodes the raw value of the grant cookie (see
+// [entryCookie.parse]).
+func parseGrants(raw string) [][]byte { return grantSpec.parse(raw) }
+
 // live reports whether the entry e is still valid at now: its expiry is
 // after now, and not further than GrantTTL ahead (an entry is never issued
 // for longer).
@@ -89,58 +112,57 @@ func live(e []byte, now time.Time) bool {
 	return exp.After(now) && !exp.After(now.Add(GrantTTL))
 }
 
-// grantParts returns the MAC input of an entry for the transfer trfID of
-// tenant tid expiring at expiry (8 bytes): the cookie holds no clear data,
-// and an entry is worthless for another tenant, another transfer or
-// another expiry.
-func grantParts(tid tenant.ID, trfID string, expiry []byte) [][]byte {
-	return [][]byte{[]byte(tid), []byte(trfID), expiry}
+// grantParts returns the MAC input of an entry for the subject (a transfer
+// or a recipient link ID) of tenant tid expiring at expiry (8 bytes): an
+// entry is worthless for another tenant, another subject or another
+// expiry.
+func grantParts(tid tenant.ID, subject string, expiry []byte) [][]byte {
+	return [][]byte{[]byte(tid), []byte(subject), expiry}
 }
 
-// ownGrant reports whether e is a live entry of the transfer trfID of
+// own reports whether e is a live entry of the cookie c for the subject of
 // tenant tid. The MAC comparison runs in constant time (Keys.VerifyMAC).
-func (s *Service) ownGrant(e []byte, now time.Time, tid tenant.ID, trfID string) (bool, error) {
+func (s *Service) own(c entryCookie, e []byte, now time.Time, tid tenant.ID, subject string) (bool, error) {
 	if !live(e, now) {
 		return false, nil
 	}
-	ok, err := s.keys.VerifyMAC(crypto.MACPurposeDownloadGrant, e[grantExpiryLen:],
-		grantParts(tid, trfID, e[:grantExpiryLen])...)
+	ok, err := s.keys.VerifyMAC(c.purpose, e[grantExpiryLen:], grantParts(tid, subject, e[:grantExpiryLen])...)
 	if err != nil {
-		return false, fmt.Errorf("download: verify grant cookie: %w", err)
+		return false, fmt.Errorf("download: verify %s: %w", c.what, err)
 	}
 	return ok, nil
 }
 
-// granted reports whether the grant cookie raw holds a live entry of the
-// transfer trfID of tenant tid.
-func (s *Service) granted(raw string, tid tenant.ID, trfID string, now time.Time) (bool, error) {
-	for _, e := range parseGrants(raw) {
-		if ok, err := s.ownGrant(e, now, tid, trfID); err != nil || ok {
+// holds reports whether the raw value of the cookie c holds a live entry of
+// the subject of tenant tid.
+func (s *Service) holds(c entryCookie, raw string, tid tenant.ID, subject string, now time.Time) (bool, error) {
+	for _, e := range c.parse(raw) {
+		if ok, err := s.own(c, e, now, tid, subject); err != nil || ok {
 			return ok, err
 		}
 	}
 	return false, nil
 }
 
-// grant returns the new value of the grant cookie raw: a new entry of the
-// transfer trfID of tenant tid expiring GrantTTL after now, then the other
-// live entries in their order, without the earlier entries of this
-// transfer, capped at GrantMaxEntries.
-func (s *Service) grant(raw string, tid tenant.ID, trfID string, now time.Time) (string, error) {
+// add returns the new value of the cookie c whose raw value is raw: a new
+// entry of the subject of tenant tid expiring GrantTTL after now, then the
+// other live entries in their order, without the earlier entries of this
+// subject, capped at GrantMaxEntries.
+func (s *Service) add(c entryCookie, raw string, tid tenant.ID, subject string, now time.Time) (string, error) {
 	expiry := binary.BigEndian.AppendUint64(nil, uint64(now.Add(GrantTTL).Unix())) //nolint:gosec // G115: a time after 1970 is positive
-	mac, err := s.keys.MAC(crypto.MACPurposeDownloadGrant, grantParts(tid, trfID, expiry)...)
+	mac, err := s.keys.MAC(c.purpose, grantParts(tid, subject, expiry)...)
 	if err != nil {
-		return "", fmt.Errorf("download: compute grant cookie: %w", err)
+		return "", fmt.Errorf("download: compute %s: %w", c.what, err)
 	}
 	out := []string{grantEncoding.EncodeToString(append(expiry, mac...))}
-	for _, e := range parseGrants(raw) {
+	for _, e := range c.parse(raw) {
 		if len(out) == GrantMaxEntries {
 			break
 		}
 		if !live(e, now) {
 			continue
 		}
-		own, err := s.ownGrant(e, now, tid, trfID)
+		own, err := s.own(c, e, now, tid, subject)
 		if err != nil {
 			return "", err
 		}
@@ -148,5 +170,17 @@ func (s *Service) grant(raw string, tid tenant.ID, trfID string, now time.Time) 
 			out = append(out, grantEncoding.EncodeToString(e))
 		}
 	}
-	return GrantCookiePrefix + strings.Join(out, grantSep), nil
+	return c.prefix + strings.Join(out, grantSep), nil
+}
+
+// granted reports whether the grant cookie raw holds a live entry of the
+// subject (a transfer, or a recipient link) of tenant tid.
+func (s *Service) granted(raw string, tid tenant.ID, subject string, now time.Time) (bool, error) {
+	return s.holds(grantSpec, raw, tid, subject, now)
+}
+
+// grant returns the new value of the grant cookie raw with a new entry of
+// the subject of tenant tid (see [Service.add]).
+func (s *Service) grant(raw string, tid tenant.ID, subject string, now time.Time) (string, error) {
+	return s.add(grantSpec, raw, tid, subject, now)
 }

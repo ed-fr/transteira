@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -284,7 +285,7 @@ func TestDownloadFirstDownload(t *testing.T) {
 			if strings.Contains(d.mp.content(t, msg.ID), token) {
 				t.Error("the first_download mail holds the download token")
 			}
-			if exists(t, statePath(d, tr.ID)) {
+			if exists(t, statePath(t, d, tr.ID)) {
 				t.Error("the served range state is kept after the first download")
 			}
 
@@ -392,7 +393,12 @@ func TestDownloadDeleteAfterFirstDownload(t *testing.T) {
 		expectGone(t, "file past the grace", r.get(t, pa, nil))
 
 		files := d.files(t, tr.ID)
-		tokenKey := row.DownloadTokenKeyID
+		// The sealed token of the link of the (single) recipient.
+		links, err := d.db.RecipientLinks().ListByTransfer(context.Background(), d.tenantA.ID, tr.ID)
+		if err != nil || len(links) != 1 || row.DownloadTokenKeyID != "" {
+			t.Fatalf("links %d (%v), transfer-level key %q: want one link and none", len(links), err, row.DownloadTokenKeyID)
+		}
+		tokenKey := links[0].TokenKeyID
 		if tokenKey == "" {
 			t.Fatal("available transfer without a sealed token key")
 		}
@@ -404,6 +410,16 @@ func TestDownloadDeleteAfterFirstDownload(t *testing.T) {
 
 		if err := d.stop(); err != nil {
 			t.Fatalf("stop: %v", err)
+		}
+		// A complete link tracks no ranges any more, so its state is gone
+		// already: one is planted (as left by a failed removal) so that
+		// the sweep must remove the state of the recipient link.
+		state := statePath(t, d, tr.ID)
+		if exists(t, state) {
+			t.Fatal("the served range state is kept after the first download")
+		}
+		if err := os.WriteFile(state, []byte(`{}`), 0o600); err != nil {
+			t.Fatal(err)
 		}
 		d2 := &depositEnv{server: d.restart(t), db: d.db, mp: d.mp}
 		alice.d, r.d = d2, d2
@@ -419,7 +435,7 @@ func TestDownloadDeleteAfterFirstDownload(t *testing.T) {
 			expectNoFileOnDisk(t, "file "+f.ID, d2.encPath(f.StorageName))
 		}
 		d2.expectKeyDestroyed(t, tokenKey)
-		expectNoFileOnDisk(t, "the served range state", statePath(d2, tr.ID))
+		expectNoFileOnDisk(t, "the served range state", state)
 		if got := d2.transferRow(t, tr.ID); got.DownloadTokenKeyID != "" {
 			t.Errorf("deleted transfer still references the token key %s", got.DownloadTokenKeyID)
 		}

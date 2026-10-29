@@ -406,6 +406,8 @@ const (
 	stateScanning
 	stateAvailable
 	stateDeleted
+	// stateLinks is available with one link per recipient.
+	stateLinks
 )
 
 // transfer stores a transfer of tn sent by sender (with the invitation
@@ -430,6 +432,9 @@ func (ev *env) transfer(tn *tenant.Tenant, sender, invID string, recipients []st
 			files = append(files, f)
 		}
 		tr := store.Transfer{ID: trfID, SenderEmail: sender, SenderKind: kind, InvitationID: invID, ExpiryDays: 7}
+		if st == stateLinks {
+			tr.LinkMode = store.LinkModePerRecipient
+		}
 		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, recipients, files); err != nil {
 			return err
 		}
@@ -441,6 +446,23 @@ func (ev *env) transfer(tn *tenant.Tenant, sender, invID string, recipients []st
 		}
 		if st == stateScanning {
 			return nil
+		}
+		if st == stateLinks {
+			tokens := make([]store.LinkToken, len(recipients))
+			for i := range tokens {
+				token, err := id.NewDownloadToken()
+				if err != nil {
+					return err
+				}
+				hash := sha256.Sum256([]byte(token))
+				wk, err := ev.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+				if err != nil {
+					return err
+				}
+				tokens[i] = store.LinkToken{Hash: hash[:], KeyID: wk}
+			}
+			_, err := ev.db.Transfers().MarkAvailableLinksTx(ctx, tx, trfID, tokens, testStart.Add(-time.Hour))
+			return err
 		}
 		token, err := id.NewDownloadToken()
 		if err != nil {

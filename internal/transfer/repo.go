@@ -24,6 +24,7 @@ type repo interface {
 	transferByKey(ctx context.Context, tid tenant.ID, o owner, key string, since time.Time) (store.TransferDetails, error)
 	completeUpload(ctx context.Context, tid tenant.ID, fileID, sha256 string, ciphertextSize int64, now time.Time) error
 	downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
+	tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error)
 	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
 }
 
@@ -100,6 +101,10 @@ func (r storeRepo) completeUpload(ctx context.Context, tid tenant.ID, fileID, sh
 
 func (r storeRepo) downloadToken(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error) {
 	return r.keys.Open(ctx, tid, crypto.PurposeSecret, wkID)
+}
+
+func (r storeRepo) tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error) {
+	return r.db.RecipientLinks().TrackingByTransfer(ctx, tid, trfID)
 }
 
 func (r storeRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {

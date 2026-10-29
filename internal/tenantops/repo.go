@@ -24,12 +24,14 @@ type repo interface {
 	createBlocklistEntry(ctx context.Context, tid tenant.ID, e store.BlocklistEntry) (store.BlocklistEntry, error)
 	deleteBlocklistEntry(ctx context.Context, tid tenant.ID, entryID string) error
 	listAudit(ctx context.Context, f store.AuditFilter) (store.Page[store.AuditEvent], error)
+	recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error)
+	tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error)
 	openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
 	audit(ctx context.Context, tid tenant.ID, ev audit.Event) error
 }
 
 // Vault opens the secrets of a tenant (*masterkey.Vault): here the sealed
-// download token of a transfer.
+// download token of a transfer, or of each recipient link.
 type Vault interface {
 	// Open unwraps the wrapped key wkID of tenant tid.
 	Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID string) ([]byte, error)
@@ -90,6 +92,14 @@ func (r *storeRepo) deleteBlocklistEntry(ctx context.Context, tid tenant.ID, ent
 
 func (r *storeRepo) listAudit(ctx context.Context, f store.AuditFilter) (store.Page[store.AuditEvent], error) {
 	return r.db.AuditEvents().List(ctx, f)
+}
+
+func (r *storeRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
+	return r.db.RecipientLinks().ListByTransfer(ctx, tid, trfID)
+}
+
+func (r *storeRepo) tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error) {
+	return r.db.RecipientLinks().TrackingByTransfer(ctx, tid, trfID)
 }
 
 func (r *storeRepo) openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error) {

@@ -18,7 +18,7 @@ func TestResolveView(t *testing.T) {
 			contents: [][]byte{random(10), random(20), random(30), random(40), random(50)},
 			statuses: []store.ScanStatus{store.ScanClean, store.ScanInfected, store.ScanNotScannedTooLarge, store.ScanError, store.ScanNotScannedEncrypted},
 		})
-		v, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestResolveLocked(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, password: true, deleteAfter: true})
-		v, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +56,7 @@ func TestResolveLocked(t *testing.T) {
 			t.Fatalf("locked view %+v", v)
 		}
 		cookie := ev.unlock(p, "")
-		v, err = ev.svc.Resolve(ctx, ev.a, p.token, cookie)
+		v, err = ev.svc.Resolve(ctx, ev.a, p.token, Cookies{Grant: cookie})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +65,7 @@ func TestResolveLocked(t *testing.T) {
 		}
 		// The grant key fails: internal error.
 		ev.f.set("verifyMAC", 1, nil)
-		_, err = ev.svc.Resolve(ctx, ev.a, p.token, cookie)
+		_, err = ev.svc.Resolve(ctx, ev.a, p.token, Cookies{Grant: cookie})
 		wantInternal(t, err)
 	})
 }
@@ -75,30 +75,30 @@ func TestResolveStates(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		resolve := func(p published) error {
-			_, err := ev.svc.Resolve(ctx, p.tn, p.token, "")
+			_, err := ev.svc.Resolve(ctx, p.tn, p.token, Cookies{})
 			return err
 		}
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}})
 
 		t.Run("malformed token", func(t *testing.T) {
 			for _, tok := range []string{"", "dl_short", "xx_" + p.token[3:], p.token + "!"} {
-				_, err := ev.svc.Resolve(ctx, ev.a, tok, "")
+				_, err := ev.svc.Resolve(ctx, ev.a, tok, Cookies{})
 				wantErr(t, err, ErrNotFound)
 			}
 		})
 		t.Run("unknown token", func(t *testing.T) {
 			tok, _ := id.NewDownloadToken()
-			_, err := ev.svc.Resolve(ctx, ev.a, tok, "")
+			_, err := ev.svc.Resolve(ctx, ev.a, tok, Cookies{})
 			wantErr(t, err, ErrNotFound)
 		})
 		t.Run("other tenant", func(t *testing.T) {
-			_, err := ev.svc.Resolve(ctx, ev.b, p.token, "")
+			_, err := ev.svc.Resolve(ctx, ev.b, p.token, Cookies{})
 			wantErr(t, err, ErrNotFound)
-			_, err = ev.svc.OpenFile(ctx, ev.b, p.token, ipOne, "", p.files[0].ID)
+			_, err = ev.svc.OpenFile(ctx, ev.b, p.token, ipOne, Cookies{}, p.files[0].ID)
 			wantErr(t, err, ErrNotFound)
-			_, err = ev.svc.PrepareArchive(ctx, ev.b, p.token, ipOne, "")
+			_, err = ev.svc.PrepareArchive(ctx, ev.b, p.token, ipOne, Cookies{})
 			wantErr(t, err, ErrNotFound)
-			_, err = ev.svc.Unlock(ctx, ev.b, p.token, ipOne, password, "")
+			_, err = ev.svc.Unlock(ctx, ev.b, p.token, ipOne, password, Cookies{})
 			wantErr(t, err, ErrNotFound)
 		})
 		t.Run("lookup failure", func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestResolveStates(t *testing.T) {
 			}
 			ev.clock.advance(time.Millisecond)
 			wantErr(t, resolve(q), ErrGone)
-			_, err := ev.svc.OpenFile(context.Background(), q.tn, q.token, ipOne, "", q.files[0].ID)
+			_, err := ev.svc.OpenFile(context.Background(), q.tn, q.token, ipOne, Cookies{}, q.files[0].ID)
 			wantErr(t, err, ErrGone)
 		})
 	})
@@ -151,9 +151,9 @@ func TestResolveDeleteAfter(t *testing.T) {
 			t.Fatal("resumed range differs")
 		}
 		ev.clock.advance(time.Millisecond)
-		_, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		_, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		wantErr(t, err, ErrGone)
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		wantErr(t, err, ErrGone)
 		if n := len(ev.firstDownloads()); n != 1 {
 			t.Fatalf("%d first download mails, want 1", n)

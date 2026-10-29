@@ -216,7 +216,9 @@ func (c *depositor) mustFinalize(t *testing.T, trfID string) {
 }
 
 // waitStatus polls getTransfer until the transfer has the status want, for
-// at most bound. It fails fast on another final status.
+// at most bound. It fails fast on another final status. An available
+// transfer is returned with the link of its first recipient (see
+// withFirstLink): the API returns none.
 func (c *depositor) waitStatus(t *testing.T, trfID, want string, bound time.Duration) senderTransferJSON {
 	t.Helper()
 	deadline := time.Now().Add(bound)
@@ -225,6 +227,8 @@ func (c *depositor) waitStatus(t *testing.T, trfID, want string, bound time.Dura
 	for {
 		got := c.mustGet(t, trfID)
 		switch {
+		case got.Status == want && want == "available":
+			return c.withFirstLink(t, got)
 		case got.Status == want:
 			return got
 		case got.Status != "scanning":
@@ -449,19 +453,28 @@ func TestScanCleanFlow(t *testing.T) {
 				if tc.password {
 					pw = transferPassword
 				}
+				// Each recipient gets their own link (P27), never the other's:
+				// expectRecipientMail checks that a mail names no other
+				// recipient, and the links differ.
+				links := d.recipientLinks(t, hostA, tr.ID)
+				if len(links) != 2 || links[r1] == links[r2] {
+					t.Fatalf("links %d, distinct %v", len(links), links[r1] != links[r2])
+				}
 				for _, r := range []struct{ to, other string }{{r1, r2}, {r2, r1}} {
 					d.expectRecipientMail(t, recipientMail{
-						to: r.to, others: []string{r.other}, from: "noreply@" + domainA, lang: tc.lang,
-						link: got.DownloadURL, expires: *got.ExpiresAt, files: want, password: pw,
+						to: r.to, others: []string{r.other, tokenOf(t, hostA, links[r.other])}, from: "noreply@" + domainA,
+						lang: tc.lang, link: links[r.to], expires: *got.ExpiresAt, files: want, password: pw,
 					})
 				}
+				// The confirmation names the recipients, never a link.
 				conf := d.mp.waitSubject(t, sender, wordings[tc.lang].confirmationSubject)
 				text := conf.text()
-				for _, s := range []string{got.DownloadURL, r1, r2, want[0].sha, want[1].sha, mail.FormatDateTime(tc.lang, *got.ExpiresAt)} {
+				for _, s := range []string{r1, r2, want[0].sha, want[1].sha, mail.FormatDateTime(tc.lang, *got.ExpiresAt)} {
 					if !strings.Contains(text, s) {
 						t.Errorf("the confirmation lacks %q:\n%s", s, text)
 					}
 				}
+				expectNoLink(t, "the confirmation", []byte(d.mp.content(t, conf.ID)))
 				if strings.Contains(d.mp.content(t, conf.ID), transferPassword) {
 					t.Error("the confirmation contains the transfer password")
 				}
@@ -872,16 +885,20 @@ func TestScanTenantIsolation(t *testing.T) {
 			other string
 		}{
 			{"recipient of B", msgB, "noreply@" + domainB, nameB, tokB, tokA},
-			{"sender of A", confA.mpMessage, "noreply@" + domainA, nameA, tokA, tokB},
-			{"sender of B", confB.mpMessage, "noreply@" + domainB, nameB, tokB, tokA},
+			{"sender of A", confA.mpMessage, "noreply@" + domainA, nameA, "", tokB},
+			{"sender of B", confB.mpMessage, "noreply@" + domainB, nameB, "", tokA},
 		} {
 			if c.msg.From.Address != c.from || c.msg.From.Name != c.name {
 				t.Errorf("%s: From = %+v, want %s <%s>", c.who, c.msg.From, c.name, c.from)
 			}
 			raw := d.mp.content(t, c.msg.ID)
-			if !strings.Contains(raw, c.own) || strings.Contains(raw, c.other) {
+			// A sender never sees a recipient link (P27): own is empty for them.
+			if (c.own != "" && !strings.Contains(raw, c.own)) || strings.Contains(raw, c.other) {
 				t.Errorf("%s: the mail must hold its own link and never the other tenant's", c.who)
 			}
+		}
+		for _, raw := range []string{d.mp.content(t, confA.ID), d.mp.content(t, confB.ID)} {
+			expectNoLink(t, "a sender confirmation", []byte(raw))
 		}
 		// Nothing of A ever reaches B's sender or recipient.
 		for _, addr := range []string{senderB, rB} {

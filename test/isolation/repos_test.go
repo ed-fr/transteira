@@ -205,6 +205,17 @@ func TestBlocklistIsolation(t *testing.T) {
 			if err != nil || len(got) != 1 || got[0] != f.blockB[3] {
 				t.Errorf("Match(B, shared fingerprint) = %+v, %v; want only B's entry", got, err)
 			}
+			sb, err := f.db.Scoped(f.b.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = sb.Tx(ctx, func(tx *store.ScopedTx) error {
+				got, err := bl.MatchTx(ctx, tx, "spam-a@example.net", shaShared)
+				if err != nil || len(got) != 1 || got[0] != f.blockB[3] {
+					t.Errorf("MatchTx(B, A's address and shared fingerprint) = %+v, %v; want only B's entry", got, err)
+				}
+				return nil
+			})
 		})
 
 		t.Run("get from A with B's IDs is indistinguishable from a missing ID", func(t *testing.T) {

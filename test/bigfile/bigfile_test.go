@@ -39,10 +39,9 @@ type (
 		UploadURL  string `json:"uploadUrl"`
 	}
 	senderTransfer struct {
-		ID          string       `json:"id"`
-		Status      string       `json:"status"`
-		DownloadURL string       `json:"downloadUrl"`
-		Files       []senderFile `json:"files"`
+		ID     string       `json:"id"`
+		Status string       `json:"status"`
+		Files  []senderFile `json:"files"`
 	}
 	publicFile struct {
 		ID          string `json:"id"`
@@ -64,7 +63,7 @@ type (
 //
 //  1. first-run setup with the logged setup token and TOTP confirmation,
 //     a tenant on the host of BIGFILE_BASE_URL with the 20 GiB limit, its
-//     internal domain and an API token;
+//     internal domain, its SMTP pointed at the Mailpit sink and an API token;
 //  2. a token deposit of one generated file of BIGFILE_BYTES declaring its
 //     SHA-256, uploaded with tus in BIGFILE_CHUNK PATCHes through Caddy;
 //  3. at BIGFILE_CUT_AT, a PATCH cut by a TCP reset in the middle of its
@@ -72,7 +71,9 @@ type (
 //     offset between that checkpoint and the bytes sent, and the upload
 //     resumes from it with the content regenerated from that offset;
 //  4. finalize, then the transfer must become available with the expected
-//     scan status and the server's SHA-256 must equal the expected one;
+//     scan status and the server's SHA-256 must equal the expected one; the
+//     recipient's personal link is read from the mail they received (the
+//     API never returns links);
 //  5. a full download hashed on the fly, then a download abandoned at
 //     BIGFILE_DL_CUT_AT and resumed with Range and If-Range: both hash to
 //     the expected SHA-256.
@@ -176,6 +177,11 @@ func bootstrap(r *run, c *client) {
 	// needed here, no IP range is opened on the tenant.
 	c.admin(r, http.MethodPut, "/admin/tenants/"+tenant.ID+"/network", map[string]any{
 		"internalCidrs": []string{}, "internalDomains": []string{internalDomain},
+	}, nil, http.StatusOK)
+	// The mail sink (Mailpit, on a network of its own shared with TransTeira,
+	// scripts/bigfile.sh): an unauthenticated relay like docs/install/smtp.md.
+	c.admin(r, http.MethodPut, "/admin/tenants/"+tenant.ID+"/smtp", map[string]any{
+		"host": "mailpit", "port": 1025, "security": "none", "fromAddress": "transfer@" + internalDomain,
 	}, nil, http.StatusOK)
 	// Any client address: the stack is a throwaway one bound to the
 	// loopback interface, and the address the server sees behind Docker's
@@ -313,12 +319,11 @@ func waitAvailable(r *run, c *client, trfID, expected string) publicFile {
 		r.fatalf("scan status %q, want %q (file of %d bytes, ClamAV limit %d)", f.ScanStatus, want, cfg.Bytes, cfg.ClamAVMaxScanBytes)
 	}
 
-	u, err := url.Parse(trf.DownloadURL)
-	if trf.DownloadURL == "" || err != nil {
-		r.fatalf("download URL %q of the sender view: %v", trf.DownloadURL, err)
-	}
+	// The sender view carries no link: the recipient's personal link comes
+	// from the mail the recipient received.
+	link := c.recipientLink(r, recipientEmail)
 	var page publicTransfer
-	c.api(r, http.MethodGet, "/api/v1/downloads/"+url.PathEscape(path.Base(u.Path)), nil, &page, nil, http.StatusOK)
+	c.api(r, http.MethodGet, "/api/v1/downloads/"+url.PathEscape(path.Base(link)), nil, &page, nil, http.StatusOK)
 	if page.Locked || len(page.Files) != 1 {
 		r.fatalf("download page: locked %v with %d files, want 1 unlocked file", page.Locked, len(page.Files))
 	}

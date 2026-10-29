@@ -56,11 +56,18 @@ const (
 	// session tokens. It is distinct from MACPurposeCSRF, so that a deposit
 	// CSRF token is never valid for an administrator session and vice versa.
 	MACPurposeAdminCSRF MACPurpose = "admin-csrf"
+	// MACPurposeRecipientVerification keys the entries of the recipient
+	// verification cookie (since 1.1), each one a MAC of a tenant ID, a
+	// recipient link ID and an expiry, and nothing else. It is distinct
+	// from MACPurposeDownloadGrant, so that a grant entry is never a
+	// verification entry and vice versa.
+	MACPurposeRecipientVerification MACPurpose = "recipient-verification"
 )
 
 // macPurposes lists every valid MACPurpose.
 var macPurposes = []MACPurpose{
 	MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant, MACPurposeAdminCSRF,
+	MACPurposeRecipientVerification,
 }
 
 // deriveMACKeys derives the MAC key of every purpose from the master key

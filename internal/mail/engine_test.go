@@ -419,15 +419,17 @@ func TestPreviewAndVariables(t *testing.T) {
 
 	// Required variables of each key.
 	want := map[string]string{
-		TemplateVerificationCode:     "code",
-		TemplateInvitation:           "invitation_link",
-		TemplateTransferNotification: "download_link,password_notice,files",
-		TemplateTransferConfirmation: "download_link,password_notice",
-		TemplateFileProblems:         "infected_files,withheld_files,outcome",
-		TemplateFileNotScanned:       "files",
-		TemplateFirstDownload:        "download_datetime,deletion_notice",
-		TemplateQuotaWarning:         "usage_percent",
-		TemplateQuotaReached:         "usage_percent",
+		TemplateVerificationCode:          "code",
+		TemplateInvitation:                "invitation_link",
+		TemplateTransferNotification:      "download_link,password_notice,files",
+		TemplateTransferConfirmation:      "password_notice",
+		TemplateFileProblems:              "infected_files,withheld_files,outcome",
+		TemplateFileNotScanned:            "files",
+		TemplateFirstDownload:             "download_datetime,deletion_notice",
+		TemplateExpiryReminder:            "download_link,password_notice",
+		TemplateRecipientVerificationCode: "code",
+		TemplateQuotaWarning:              "usage_percent",
+		TemplateQuotaReached:              "usage_percent",
 	}
 	for name, w := range want {
 		vars, _ := Variables(name)

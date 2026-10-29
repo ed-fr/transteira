@@ -332,6 +332,13 @@ func (r *faultRepo) downloadToken(ctx context.Context, tid tenant.ID, wkID strin
 	return r.inner.downloadToken(ctx, tid, wkID)
 }
 
+func (r *faultRepo) tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error) {
+	if err := r.check("tracking"); err != nil {
+		return nil, err
+	}
+	return r.inner.tracking(ctx, tid, trfID)
+}
+
 func (r *faultRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	return r.inner.tx(ctx, tid, func(tx txRepo) error { return fn(faultTx{inner: tx, r: r}) })
 }

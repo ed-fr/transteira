@@ -28,13 +28,27 @@ const downloadPassword = "correct horse battery staple"
 // running).
 func (h *harness) availableDownloadA(t *testing.T) string {
 	t.Helper()
+	return h.availableDownload(t, "")
+}
+
+// availableVerifiedDownloadA is availableDownloadA for a transfer whose
+// recipient must verify their address by code (since 1.1).
+func (h *harness) availableVerifiedDownloadA(t *testing.T) string {
+	t.Helper()
+	return h.availableDownload(t, `,"recipientVerification":true`)
+}
+
+// availableDownload implements availableDownloadA, extra being appended to
+// the members of the transfer creation.
+func (h *harness) availableDownload(t *testing.T, extra string) string {
+	t.Helper()
 	o := h.owner(t)
 	header := http.Header{}
 	for kv := o.headers("Content-Type", "application/json"); len(kv) > 1; kv = kv[2:] {
 		header.Set(kv[0], kv[1])
 	}
 	body := `{"recipients":["erin@customer.example.net"],"expiryDays":1,"password":"` + downloadPassword +
-		`","files":[{"name":"empty.txt","size":0}]}`
+		`","files":[{"name":"empty.txt","size":0}]` + extra + `}`
 	resp := h.do(t, http.MethodPost, "http://"+h.addr+"/api/v1/transfers", hostA, strings.NewReader(body), header)
 	var tr struct {
 		ID    string `json:"id"`
@@ -77,8 +91,11 @@ func (h *harness) availableDownloadA(t *testing.T) string {
 		if err != nil {
 			return err
 		}
+		// The transfer, created since 1.1, has one link per recipient: its
+		// single recipient gets token.
 		hash := sha256.Sum256([]byte(token))
-		return db.Transfers().MarkAvailableTx(ctx, tx, tr.ID, hash[:], wkID, now)
+		_, err = db.Transfers().MarkAvailableLinksTx(ctx, tx, tr.ID, []store.LinkToken{{Hash: hash[:], KeyID: wkID}}, now)
+		return err
 	})
 	if err != nil {
 		t.Fatalf("make the transfer available: %v", err)
@@ -182,4 +199,50 @@ func archiveOfForeignDownload(t *testing.T, h *harness, op operation) {
 		t.Fatalf("%s under %s with the grant: %d %v", op, hostA, a.status, a.header)
 	}
 	refusedUnderB(t, h, op, h.call(t, op, hostB, params, "", cookie...), http.StatusNotFound, "not-found")
+}
+
+// startForeignVerification: A's link asks no code under B (404, never
+// counting against A's budgets), while under A the link requiring the
+// verification is recognized (503 mail-unavailable: A has no SMTP
+// settings), its page is the minimal locked view, and a link without the
+// option gets 409.
+func startForeignVerification(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	token := h.availableVerifiedDownloadA(t)
+	params := map[string]string{"linkToken": token}
+	body := `{"purpose":"download"}`
+	for range 6 {
+		refusedUnderB(t, h, op, h.call(t, op, hostB, params, body), http.StatusNotFound, "not-found")
+	}
+	wantCode(t, op, hostA, h.call(t, op, hostA, params, body), http.StatusServiceUnavailable, "mail-unavailable")
+	page := h.call(t, operation{id: "getDownload", verb: http.MethodGet, template: "/downloads/{linkToken}", base: "/api/v1"},
+		hostA, params, "")
+	if page.status != http.StatusOK || !strings.Contains(string(page.body), `"verificationRequired":true`) ||
+		!strings.Contains(string(page.body), `"recipientEmailMasked":"e***@customer.example.net"`) ||
+		strings.Contains(string(page.body), `"files"`) {
+		t.Fatalf("page of the link under %s: %d %s, want the verification view", hostA, page.status, page.body)
+	}
+	plain := map[string]string{"linkToken": h.availableDownloadA(t)}
+	wantCode(t, op, hostA, h.call(t, op, hostA, plain, body), http.StatusConflict, "state-conflict")
+	refusedUnderB(t, h, op, h.call(t, op, hostB, plain, body), http.StatusNotFound, "not-found")
+}
+
+// confirmForeignVerification: A's link takes no code under B (404, whatever
+// the verification cookie), while under A it is recognized (409: no code
+// pending), and its files stay closed without a verification.
+func confirmForeignVerification(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	token := h.availableVerifiedDownloadA(t)
+	params := map[string]string{"linkToken": token}
+	body := `{"code":"000000"}`
+	forged := []string{"Cookie", download.VerificationCookieName + "=" + download.VerificationCookiePrefix +
+		strings.Repeat("A", 54)}
+	for range 3 {
+		refusedUnderB(t, h, op, h.call(t, op, hostB, params, body, forged...), http.StatusNotFound, "not-found")
+	}
+	wantCode(t, op, hostA, h.call(t, op, hostA, params, body), http.StatusConflict, "state-conflict")
+	archive := operation{id: "downloadArchive", verb: http.MethodGet, template: "/downloads/{linkToken}/archive", base: "/api/v1"}
+	wantCode(t, archive, hostA, h.call(t, archive, hostA, params, "", forged...), http.StatusUnauthorized, "recipient-verification-required")
+	unlock := h.call(t, unlockOp(), hostA, params, `{"password":"`+downloadPassword+`"}`)
+	wantCode(t, unlockOp(), hostA, unlock, http.StatusUnauthorized, "recipient-verification-required")
 }

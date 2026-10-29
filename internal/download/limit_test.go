@@ -20,7 +20,7 @@ import (
 // openAs opens the file fileID of p for the client ip, without reading it.
 func (ev *env) openAs(p published, ip netip.Addr, fileID string) *File {
 	ev.t.Helper()
-	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ip, "", fileID)
+	f, err := ev.svc.OpenFile(context.Background(), p.tn, p.token, ip, Cookies{}, fileID)
 	if err != nil {
 		ev.t.Fatalf("OpenFile: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestMaxDownloads(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{content, random(10)}, maxDownloads: 1})
 		file, other := p.files[0].ID, p.files[1].ID
 
-		v, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		if err != nil || v.DownloadsRemaining == nil || *v.DownloadsRemaining != 1 || v.Confidentiality != nil {
 			t.Fatalf("page before any start: %+v, %v", v, err)
 		}
@@ -86,9 +86,9 @@ func TestMaxDownloads(t *testing.T) {
 		ev.clock.advance(time.Minute)
 
 		// The page, the unlock and the starts of other clients are refused.
-		_, err = ev.svc.Resolve(ctx, ev.a, p.token, "")
+		_, err = ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		wantErr(t, err, ErrMaxDownloads)
-		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, password, "")
+		_, err = ev.svc.Unlock(ctx, ev.a, p.token, ipOne, password, Cookies{})
 		wantErr(t, err, ErrMaxDownloads)
 		wantErr(t, ev.beginAs(p, ipTwo, file, true), ErrMaxDownloads)
 		wantErr(t, ev.beginAs(p, ipTwo, file, false), ErrMaxDownloads)
@@ -105,7 +105,7 @@ func TestMaxDownloads(t *testing.T) {
 		wantErr(t, f.Content.Begin(true), ErrMaxDownloads) // decided once
 		_ = f.Content.Close(ctx)
 		// The archive of another client: refused, nothing written.
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func TestMaxDownloads(t *testing.T) {
 
 		// Past the grace period: gone, and due for deletion.
 		ev.clock.advance(grace)
-		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", file)
+		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, file)
 		wantErr(t, err, ErrGone)
 		due, err := ev.db.Transfers().DueDeletions(ctx, ev.clock.now(), store.SweepPage{Limit: store.DeletionSweepLimit})
 		if err != nil {
@@ -185,7 +185,7 @@ func TestMaxDownloadsConcurrent(t *testing.T) {
 		)
 		for i := range n {
 			wg.Go(func() {
-				left, err := ev.svc.repo.claim(ctx, ev.b.ID, q.id, ev.clock.now().Add(grace), startEvent(q.id, archiveObject, ipOne))
+				left, err := ev.svc.repo.claim(ctx, ev.b.ID, q.id, "", "", ev.clock.now(), ev.clock.now().Add(grace), startEvent(q.id, "", archiveObject, ipOne))
 				mu.Lock()
 				defer mu.Unlock()
 				switch {
@@ -241,7 +241,7 @@ func TestMaxDownloadsWindow(t *testing.T) {
 			t.Fatal(err)
 		}
 		ev.wantLimited(p, 3)
-		if v, err := ev.svc.Resolve(context.Background(), ev.a, p.token, ""); !errors.Is(err, ErrMaxDownloads) {
+		if v, err := ev.svc.Resolve(context.Background(), ev.a, p.token, Cookies{}); !errors.Is(err, ErrMaxDownloads) {
 			t.Errorf("page at the limit: %+v, %v", v, err)
 		}
 	})
@@ -257,7 +257,7 @@ func TestMaxDownloadsArchive(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(300), random(200)}, maxDownloads: 2})
 		archive := func(ip netip.Addr, begin, get bool) error {
 			t.Helper()
-			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip, "")
+			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip, Cookies{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -299,7 +299,7 @@ func TestMaxDownloadsArchive(t *testing.T) {
 		}
 		// A HEAD of a remembered client is served; Write after a HEAD
 		// writes nothing.
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -336,7 +336,7 @@ func TestMaxDownloadsFailures(t *testing.T) {
 		ev.f.set("claim", 1, store.ErrMaxDownloads)
 		wantErr(t, ev.beginAs(p, ipOne, file, true), ErrMaxDownloads)
 		// A failure once the client is gone is not logged as an error.
-		a, err := ev.svc.PrepareArchive(context.Background(), ev.a, p.token, ipOne, "")
+		a, err := ev.svc.PrepareArchive(context.Background(), ev.a, p.token, ipOne, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -387,7 +387,7 @@ func TestUnlimitedBegin(t *testing.T) {
 		f.Content.Delivered()
 		_ = f.Content.Close(ctx)
 		ev.wantStarts(p, 1, 100)
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -399,7 +399,7 @@ func TestUnlimitedBegin(t *testing.T) {
 			t.Fatal(err)
 		}
 		ev.wantStarts(p, 2, 200)
-		v, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		if err != nil || v.DownloadsRemaining != nil {
 			t.Errorf("unlimited page: %+v, %v", v, err)
 		}
@@ -413,7 +413,7 @@ func TestResolveLimitAndLevel(t *testing.T) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
 		p := ev.publish(ev.a, spec{contents: [][]byte{random(10)}, maxDownloads: 3, level: true, password: true})
-		v, err := ev.svc.Resolve(ctx, ev.a, p.token, "")
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -422,7 +422,7 @@ func TestResolveLimitAndLevel(t *testing.T) {
 		}
 		cookie := ev.unlock(p, "")
 		ev.fetch(p, cookie, p.files[0].ID, 0, -1, true)
-		v, err = ev.svc.Resolve(ctx, ev.a, p.token, cookie)
+		v, err = ev.svc.Resolve(ctx, ev.a, p.token, Cookies{Grant: cookie})
 		if err != nil || v.Locked || v.DownloadsRemaining == nil || *v.DownloadsRemaining != 2 || v.Confidentiality == nil ||
 			v.Confidentiality.Rules == nil || !v.Confidentiality.Rules.RequirePassword {
 			t.Fatalf("unlocked page: %+v, %v", v, err)

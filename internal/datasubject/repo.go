@@ -116,7 +116,11 @@ func (r *storeRepo) deleteVerified(ctx context.Context, tid tenant.ID, email str
 }
 
 // removeRecipient removes email from the recipients of the transfer trfID
-// when others remain, in one transaction that counts them first.
+// when others remain, in one transaction that counts them first. The
+// sealed token of the own link of email, for a transfer with one link per
+// recipient, is destroyed first in the same transaction (crypto-erase,
+// T-110): the link stops resolving and its copies in the backups become
+// unreadable.
 func (r *storeRepo) removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error) {
 	sc, err := r.db.Scoped(tid)
 	if err != nil {
@@ -131,6 +135,9 @@ func (r *storeRepo) removeRecipient(ctx context.Context, tid tenant.ID, trfID, e
 		if n == 1 {
 			out = recipientSole
 			return nil
+		}
+		if _, err := r.db.RecipientLinks().DestroyRecipientKeyTx(ctx, tx, trfID, email); err != nil {
+			return err
 		}
 		err = r.db.Transfers().RemoveRecipientTx(ctx, tx, trfID, email)
 		if errors.Is(err, store.ErrNotFound) {

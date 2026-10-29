@@ -312,11 +312,11 @@ Filter by **Status**, by **Email address** (exact address of the sender or of a 
 
 ![List of the transfers of an entity with the filters](../screenshots/en/admin-transfers.png)
 
-Open a transfer to see its **Transfer details**: status, dates, first download, sender and sender IP address, origin, options (including the **Confidentiality level** and the number of downloads, shown as the count out of the maximum allowed when the sender set one), recipients, and the files with their size, SHA-256 fingerprint and antivirus result. File contents and download links are never available to administrators.
+Open a transfer to see its **Transfer details**: status, dates, first download, sender and sender IP address, origin, options (including the **Confidentiality level** and the number of downloads, shown as the count out of the maximum allowed when the sender set one), recipients, and the files with their size, SHA-256 fingerprint and antivirus result. Every new transfer gives each recipient a personal link, so the details also show, for each recipient, which files were downloaded and when (first and last download), never the recipient's IP address or browser. Transfers created before version 1.1 keep a single shared link and show no per-recipient tracking. File contents and download links are never available to administrators.
 
 ![Transfer details with its information, recipients and files](../screenshots/en/admin-transfer-detail.png)
 
-- **Resend the notification**: choose the recipients and click **Resend**. The email is sent again with the same link, at most 5 times per hour.
+- **Resend the notification**: choose the recipients and click **Resend**. The email is sent again and each recipient receives their own personal link again, at most 5 times per hour. The day before a transfer expires, recipients who have not downloaded yet automatically receive a reminder email (not for transfers valid one day, nor for blocked addresses).
 - **Delete the transfer**: optionally type a **Reason (optional)**, recorded in the audit log, then confirm. The files are erased for good, including from backups, since their encryption keys are destroyed. The download link stops working.
 - **View the audit log from the day of this transfer** opens the audit log at the creation day.
 

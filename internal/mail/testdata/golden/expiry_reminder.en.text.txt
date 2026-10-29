@@ -1,0 +1,27 @@
+Hello,
+
+This is a reminder: alice@entity-a.example.com sent you files through the Entity A & Co transfer service and you have not downloaded them yet.
+
+The files will be deleted on October 20, 2027 at 08:30 UTC.
+
+To download the files, open this link:
+
+https://transfer.entity-a.example.com/d/dl_abc123
+
+Confidentiality level: Confidential <b>
+
+This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.
+
+Before downloading, you will be asked to confirm your e-mail address with a code sent to this address.
+
+Files:
+- <script>alert(1)</script> report.pdf (1.5 KB)
+- video.mp4 (3.0 GB)
+- secret.zip (4.0 MB)
+
+Do not forward this message: this link is personal to you.
+
+If you were not expecting this message, you can safely ignore it.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

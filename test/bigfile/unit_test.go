@@ -30,6 +30,7 @@ func minimalEnv() map[string]string {
 		EnvBaseURL:    "https://transfer.bigfile.localhost:8443",
 		EnvAdminURL:   "https://admin.bigfile.localhost:8443/",
 		EnvSetupToken: "setup-token",
+		EnvMailAPI:    "http://127.0.0.1:18025",
 	}
 }
 
@@ -81,7 +82,7 @@ func TestLoadConfigOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{
-		BaseURL: c.BaseURL, AdminURL: c.AdminURL, CAFile: "/tmp/root.crt",
+		BaseURL: c.BaseURL, AdminURL: c.AdminURL, MailAPI: c.MailAPI, CAFile: "/tmp/root.crt",
 		Resolve:    map[string]string{"transfer.bigfile.localhost": "127.0.0.1"},
 		SetupToken: "setup-token", Bytes: 2 << 30, Chunk: 256 << 20, CutAt: 0.5, DownloadCutAt: 0.25,
 		Seed: 7, Report: "out/report.json", Engine: "postgres", ClamAVMaxScanBytes: 2 << 30, ScanTimeout: 5 * time.Minute,
@@ -103,6 +104,9 @@ func TestLoadConfigErrors(t *testing.T) {
 	}{
 		{"base missing", map[string]string{EnvBaseURL: ""}, EnvBaseURL + ": not set"},
 		{"admin missing", map[string]string{EnvAdminURL: ""}, EnvAdminURL + ": not set"},
+		{"mail api missing", map[string]string{EnvMailAPI: ""}, EnvMailAPI + ": not set"},
+		{"mail api https", map[string]string{EnvMailAPI: "https://127.0.0.1:1"}, "not an http origin"},
+		{"mail api path", map[string]string{EnvMailAPI: "http://127.0.0.1:1/x"}, "not an http origin"},
 		{"token missing", map[string]string{EnvSetupToken: ""}, EnvSetupToken + ": not set"},
 		{"http base", map[string]string{EnvBaseURL: "http://transfer.example.com"}, "not an https origin"},
 		{"base with path", map[string]string{EnvBaseURL: "https://transfer.example.com/x"}, "not an https origin"},

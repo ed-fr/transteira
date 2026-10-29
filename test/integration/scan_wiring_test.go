@@ -47,6 +47,8 @@ func TestScanWiring(t *testing.T) {
 			got = alice.mustGet(t, tr.ID)
 			return got.Status == "available"
 		})
+		// The sender view carries no link (P27): follow the first recipient.
+		got = alice.withFirstLink(t, got)
 		if !strings.HasPrefix(got.DownloadURL, id.DownloadURL(hostA, "dl_")) || got.FinalizedAt == nil || got.ExpiresAt == nil {
 			t.Errorf("available transfer = %+v, want a download link on %s, finalizedAt and expiresAt", got, hostA)
 		}

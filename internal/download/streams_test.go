@@ -33,22 +33,22 @@ func TestStreamLimits(t *testing.T) {
 		var open []func()
 		for i := range MaxStreamsPerTransfer {
 			if i%2 == 0 {
-				f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip(i), "", p.files[0].ID)
+				f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip(i), Cookies{}, p.files[0].ID)
 				if err != nil {
 					t.Fatal(err)
 				}
 				open = append(open, func() { _ = f.Content.Close(ctx) })
 			} else {
-				a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(i), "")
+				a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(i), Cookies{})
 				if err != nil {
 					t.Fatal(err)
 				}
 				open = append(open, a.Close)
 			}
 		}
-		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip(50), "", p.files[1].ID)
+		_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip(50), Cookies{}, p.files[1].ID)
 		wantTooMany(t, err)
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(50), "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(50), Cookies{})
 		wantTooMany(t, err)
 		// Another transfer is not affected.
 		q := ev.publish(ev.a, spec{contents: [][]byte{random(100)}})
@@ -58,7 +58,7 @@ func TestStreamLimits(t *testing.T) {
 		open[0]()
 		open[1]()
 		open[1]()
-		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(50), "")
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ip(50), Cookies{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,15 +79,15 @@ func TestStreamLimits(t *testing.T) {
 		// transfer, another client still gets one.
 		open = nil
 		for range MaxStreamsPerTransferClient {
-			f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipTwo, "", p.files[0].ID)
+			f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipTwo, Cookies{}, p.files[0].ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			open = append(open, func() { _ = f.Content.Close(ctx) })
 		}
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 		wantTooMany(t, err)
-		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipThree, "", p.files[0].ID)
+		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipThree, Cookies{}, p.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,18 +106,18 @@ func TestStreamLimits(t *testing.T) {
 		open = nil
 		for i := range MaxStreamsPerClient {
 			q := ps[i/MaxStreamsPerTransferClient]
-			f, err := ev.svc.OpenFile(ctx, ev.a, q.token, v6(byte(i)), "", q.files[0].ID)
+			f, err := ev.svc.OpenFile(ctx, ev.a, q.token, v6(byte(i)), Cookies{}, q.files[0].ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			open = append(open, func() { _ = f.Content.Close(ctx) })
 		}
 		last := ps[len(ps)-1]
-		_, err = ev.svc.OpenFile(ctx, ev.a, last.token, v6(200), "", last.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, last.token, v6(200), Cookies{}, last.files[0].ID)
 		wantTooMany(t, err)
 		// The same address in another tenant is another client.
 		r := ev.publish(ev.b, spec{contents: [][]byte{random(10)}})
-		f, err = ev.svc.OpenFile(ctx, ev.b, r.token, v6(200), "", r.files[0].ID)
+		f, err = ev.svc.OpenFile(ctx, ev.b, r.token, v6(200), Cookies{}, r.files[0].ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,13 +127,13 @@ func TestStreamLimits(t *testing.T) {
 		}
 
 		// A client IP is required.
-		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, netip.Addr{}, "", p.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, netip.Addr{}, Cookies{}, p.files[0].ID)
 		wantErr(t, err, ErrNoClientIP)
-		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, netip.Addr{}, "")
+		_, err = ev.svc.PrepareArchive(ctx, ev.a, p.token, netip.Addr{}, Cookies{})
 		wantErr(t, err, ErrNoClientIP)
 		// A file that cannot be opened releases its slot.
 		ev.f.set("open", 1, nil)
-		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", p.files[0].ID)
+		_, err = ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, p.files[0].ID)
 		wantInternal(t, err)
 		if len(ev.svc.streams.counts) != 0 {
 			t.Fatalf("slots left: %v", ev.svc.streams.counts)
@@ -162,7 +162,7 @@ func TestStreamEvents(t *testing.T) {
 			}
 		}()
 		for range MaxStreamsPerTransferClient {
-			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, "")
+			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +170,7 @@ func TestStreamEvents(t *testing.T) {
 		}
 		refuse := func(ip netip.Addr) {
 			t.Helper()
-			_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip, "", p.files[0].ID)
+			_, err := ev.svc.OpenFile(ctx, ev.a, p.token, ip, Cookies{}, p.files[0].ID)
 			wantTooMany(t, err)
 		}
 		events := func() []securitylog.Event {
@@ -204,7 +204,7 @@ func TestStreamEvents(t *testing.T) {
 		}
 		// Another client has its own budget.
 		for range MaxStreamsPerTransfer - MaxStreamsPerTransferClient {
-			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, "")
+			a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipTwo, Cookies{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +235,7 @@ func TestConcurrentWrongPasswords(t *testing.T) {
 		errs := make(chan error, n)
 		for i := range n {
 			wg.Go(func() {
-				_, err := ev.svc.Unlock(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(i)}), "wrong", "")
+				_, err := ev.svc.Unlock(ctx, ev.a, p.token, netip.AddrFrom4([4]byte{198, 51, 100, byte(i)}), "wrong", Cookies{})
 				errs <- err
 			})
 		}

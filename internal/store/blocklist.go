@@ -255,11 +255,27 @@ func (r *Blocklist) Delete(ctx context.Context, tid tenant.ID, entryID string) e
 // sha256. Either argument may be empty to skip it. It returns an empty
 // slice when nothing matches and ErrInvalid for a malformed argument.
 func (r *Blocklist) Match(ctx context.Context, tid tenant.ID, email, sha256 string) ([]BlocklistEntry, error) {
-	s, err := r.db.Scoped(tid)
+	return readScoped(ctx, r.db, tid, "match blocklist", func(tx *ScopedTx) ([]BlocklistEntry, error) {
+		return matchBlock(ctx, tx, email, sha256)
+	})
+}
+
+// MatchTx is [Blocklist.Match] inside tx, for the tenant tx is bound to
+// (for example to skip the blocked recipients in the transaction that
+// marks their expiry reminder sent). After an error, the caller must abort
+// the transaction.
+func (r *Blocklist) MatchTx(ctx context.Context, tx *ScopedTx, email, sha256 string) ([]BlocklistEntry, error) {
+	out, err := matchBlock(ctx, tx, email, sha256)
 	if err != nil {
-		return nil, err
+		return nil, wrap("match blocklist", err)
 	}
+	return out, nil
+}
+
+// matchBlock implements Match and MatchTx, returning raw errors.
+func matchBlock(ctx context.Context, tx *ScopedTx, email, sha256 string) ([]BlocklistEntry, error) {
 	var domain string
+	var err error
 	if email != "" {
 		if email, err = BlockEmail.Normalize(email); err != nil {
 			return nil, err
@@ -274,17 +290,9 @@ func (r *Blocklist) Match(ctx context.Context, tid tenant.ID, email, sha256 stri
 	if email == "" && sha256 == "" {
 		return []BlocklistEntry{}, nil
 	}
-	var out []BlocklistEntry
-	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
-		rows, err := tx.Query(ctx, qBlockMatch, email, sha256, domain, domain)
-		if err != nil {
-			return err
-		}
-		out, err = collect(rows, func(r *sql.Rows) (BlocklistEntry, error) { return scanBlock(r) })
-		return err
-	})
+	rows, err := tx.Query(ctx, qBlockMatch, email, sha256, domain, domain)
 	if err != nil {
-		return nil, wrap("match blocklist", err)
+		return nil, err
 	}
-	return out, nil
+	return collect(rows, func(r *sql.Rows) (BlocklistEntry, error) { return scanBlock(r) })
 }

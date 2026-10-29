@@ -89,7 +89,7 @@ All names start with `transteira_`.
 | `syslog_messages_total` | counter | `result` (`sent`, `failed`, `dropped`) | Syslog export outcomes. |
 | `mail_queue_length` | gauge | | Alert mails waiting to be sent. |
 | `mail_dropped_total` | counter | | Alert mails dropped. |
-| `lifecycle_last_success_timestamp_seconds` | gauge | `task` | Unix time of the last successful run of each periodic task (`expire`, `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`, `orphans`, `backup`). Absent until the task has succeeded once since the start. |
+| `lifecycle_last_success_timestamp_seconds` | gauge | `task` | Unix time of the last successful run of each periodic task (`expire`, `delete-after-download`, `abandoned-uploads`, `tenant-deletions`, `purge-rows`, `orphans`, `expiry-reminder`, `backup`). Absent until the task has succeeded once since the start. |
 
 New metrics may be added in a minor version; existing names are never renamed within `1.x`.
 

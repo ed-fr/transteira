@@ -97,7 +97,7 @@ func TestEmptyFileCredit(t *testing.T) {
 		p := ev.publish(ev.a, spec{contents: [][]byte{{}, random(10)}})
 		fid := p.files[0].ID
 		// Without Delivered (HEAD, 416, failed write), nothing is credited.
-		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, "", fid)
+		f, err := ev.svc.OpenFile(ctx, ev.a, p.token, ipOne, Cookies{}, fid)
 		if err != nil {
 			t.Fatal(err)
 		}

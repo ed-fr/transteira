@@ -75,6 +75,9 @@ type Transfer struct {
 	// Rules are the rules of the level as snapshotted at creation, nil
 	// without level.
 	Rules *store.ConfidentialityRules
+	// RecipientVerification reports whether each recipient must prove
+	// their address by code before downloading.
+	RecipientVerification bool
 }
 
 // TransferDetail is a transfer with its files (OpenAPI
@@ -85,6 +88,13 @@ type TransferDetail struct {
 	// (null) when unknown.
 	SenderIP netip.Addr
 	Files    []File
+	// RecipientTracking is the download tracking of each recipient of a
+	// transfer with one link per recipient, by position: addresses, dates
+	// and counts, never a link (P27, T-199). Empty, not nil, for such a
+	// transfer before its links exist (never available yet), so that the
+	// administration tells it from a transfer with a single shared link
+	// (created before 1.1), for which it is nil.
+	RecipientTracking []store.RecipientTracking
 }
 
 // File is a file of a transfer: metadata, fingerprint and antivirus
@@ -141,6 +151,7 @@ func transferOf(t store.Transfer, recipients []string, fileCount int, lang strin
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
 		MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel, Rules: t.Rules,
+		RecipientVerification: t.RecipientVerification,
 	}
 	if t.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(t.ConfidentialityLabel, t.Language, lang, "en")
@@ -201,8 +212,9 @@ func (s *Service) transfer(ctx context.Context, tid tenant.ID, trfID string) (st
 }
 
 // GetTransfer returns the transfer trfID of tenant tid with its files,
-// their fingerprints and antivirus results: never a file content nor the
-// download link.
+// their fingerprints and antivirus results, and the tracking of each
+// recipient for a transfer with one link per recipient: never a file
+// content nor a download link.
 func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid tenant.ID, trfID string) (TransferDetail, error) {
 	tn, err := s.readableTenant(ctx, p, tid)
 	if err != nil {
@@ -219,6 +231,14 @@ func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid te
 	for i, f := range d.Files {
 		out.Files[i] = File{
 			ID: f.ID, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+		}
+	}
+	if d.LinkMode == store.LinkModePerRecipient {
+		out.RecipientTracking = []store.RecipientTracking{}
+		if !d.AvailableAt.IsZero() {
+			if out.RecipientTracking, err = s.repo.tracking(ctx, tid, trfID); err != nil {
+				return TransferDetail{}, fmt.Errorf("tenantops: read recipient tracking: %w", err)
+			}
 		}
 	}
 	return out, nil
@@ -301,7 +321,10 @@ func redactReason(reason string) string {
 // original recipient (*InvalidError on "/recipients/<index>").
 //
 // The mail carries the existing link: the download token is unsealed for
-// the build, wiped after it, never rotated, returned or logged. A tenant
+// the build, wiped after it, never rotated, returned or logged. For a
+// transfer with one link per recipient, each recipient gets their own
+// existing link again (the token of each link is unsealed the same way);
+// a recipient whose link key was destroyed (erased) gets nothing. A tenant
 // without SMTP settings is ErrMailUnavailable, with nothing queued. At most
 // ResendLimit resends per transfer and window are queued
 // (*RateLimitError), checked before the token is unsealed; a resend
@@ -319,7 +342,8 @@ func (s *Service) ResendNotification(ctx context.Context, p adminauth.Principal,
 	if err != nil {
 		return err
 	}
-	if d.Status != store.TransferAvailable || d.DownloadTokenKeyID == "" {
+	perRecipient := d.LinkMode == store.LinkModePerRecipient
+	if d.Status != store.TransferAvailable || (!perRecipient && d.DownloadTokenKeyID == "") {
 		return ErrNotAvailable
 	}
 	subset, err := selectRecipients(d.Recipients, recipients)
@@ -333,7 +357,11 @@ func (s *Service) ResendNotification(ctx context.Context, p adminauth.Principal,
 	if ok, retry := s.resends.Allow(key); !ok {
 		return &RateLimitError{RetryAfter: max(retry, time.Second)}
 	}
-	jobs, err := s.resendJobs(ctx, t, d, subset)
+	resend := s.resendJobs
+	if perRecipient {
+		resend = s.resendLinkJobs
+	}
+	jobs, err := resend(ctx, t, d, subset)
 	if err != nil {
 		s.resends.Refund(key)
 		return err
@@ -355,6 +383,45 @@ func (s *Service) resendJobs(ctx context.Context, t *tenant.Tenant, d store.Tran
 	view.Recipients = subset
 	jobs, err := s.notifier.RecipientJobs(ctx, t, view, id.DownloadURL(t.FQDN, string(token)))
 	clear(token)
+	switch {
+	case errors.Is(err, notify.ErrNoSMTP):
+		return nil, ErrMailUnavailable
+	case err != nil:
+		return nil, fmt.Errorf("tenantops: build the notification mails: %w", err)
+	}
+	return jobs, nil
+}
+
+// resendLinkJobs builds the notification mail of each recipient of subset
+// for d, a transfer with one link per recipient, with their own existing
+// link: each sealed token is unsealed for the build and wiped after it.
+// The links whose key was destroyed are skipped; ErrNotAvailable when no
+// link of subset remains.
+func (s *Service) resendLinkJobs(ctx context.Context, t *tenant.Tenant, d store.TransferDetails, subset []string) ([]mail.Job, error) {
+	links, err := s.repo.recipientLinks(ctx, t.ID, d.ID)
+	if err != nil {
+		return nil, fmt.Errorf("tenantops: list the recipient links: %w", err)
+	}
+	wanted := make(map[string]bool, len(subset))
+	for _, r := range subset {
+		wanted[r] = true
+	}
+	var out []notify.RecipientLink
+	for _, l := range links {
+		if !wanted[l.Email] || l.TokenKeyID == "" {
+			continue
+		}
+		token, err := s.repo.openSecret(ctx, t.ID, l.TokenKeyID)
+		if err != nil {
+			return nil, fmt.Errorf("tenantops: open a recipient link token: %w", err)
+		}
+		out = append(out, notify.RecipientLink{Email: l.Email, Link: id.DownloadURL(t.FQDN, string(token))})
+		clear(token)
+	}
+	if len(out) == 0 {
+		return nil, ErrNotAvailable
+	}
+	jobs, err := s.notifier.PerRecipientJobs(ctx, t, notify.ViewOf(d), out)
 	switch {
 	case errors.Is(err, notify.ErrNoSMTP):
 		return nil, ErrMailUnavailable

@@ -57,6 +57,12 @@ func mailKinds(n *Notifier, tn *tenant.Tenant) map[string]func() ([]mail.Job, er
 	one := func(j mail.Job, err error) ([]mail.Job, error) { return []mail.Job{j}, err }
 	return map[string]func() ([]mail.Job, error){
 		mail.TemplateTransferNotification: func() ([]mail.Job, error) { return n.RecipientJobs(ctx, tn, tr, testLink) },
+		mail.TemplateExpiryReminder: func() ([]mail.Job, error) {
+			return n.ExpiryReminderJobs(ctx, tn, tr, testLinks()[:1], true)
+		},
+		mail.TemplateRecipientVerificationCode: func() ([]mail.Job, error) {
+			return one(n.RecipientVerificationCode(ctx, tn, tr, "bob@example.com", "123456"))
+		},
 		mail.TemplateTransferConfirmation: func() ([]mail.Job, error) { return one(n.SenderConfirmation(ctx, tn, tr, testLink)) },
 		mail.TemplateFileProblems:         func() ([]mail.Job, error) { return one(n.FileProblems(ctx, tn, tr)) },
 		mail.TemplateFileNotScanned:       func() ([]mail.Job, error) { return one(n.FileNotScanned(ctx, tn, tr)) },

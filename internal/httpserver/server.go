@@ -262,6 +262,15 @@ var routePolicies = map[string]routePolicy{
 	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/unlock": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
 	},
+	// The recipient verification (since 1.1) needs no session either, but
+	// its codes count against the budgets of the link and of the client IP,
+	// and its wrong codes against the code: same protection.
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/verification": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/verification/confirm": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
 		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline, assetBody: true,
 	},

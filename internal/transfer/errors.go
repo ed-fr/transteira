@@ -103,8 +103,7 @@ const (
 	CodeInvalidFileName = "invalid-file-name"
 	// CodeNotAllowed: the value is not one of the accepted values (a
 	// maxDownloads outside 1 to store.MaxDownloadsLimit included), or the
-	// field is not accepted in this context (senderEmail with a session,
-	// recipientVerification until the per-recipient links exist).
+	// field is not accepted in this context (senderEmail with a session).
 	CodeNotAllowed = "not-allowed"
 	// CodeTooLong: the text exceeds its maximum length.
 	CodeTooLong = "too-long"

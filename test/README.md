@@ -390,6 +390,10 @@ summary), `test/internal/seeded` (deterministic content and its SHA-256).
    `admin.bigfile.localhost, transfer.bigfile.localhost` and `tls internal`, HTTPS on
    `127.0.0.1:<free port>`. `TT_CLAMAV_MAX_SCAN_BYTES` keeps its default (2 GiB) unless
    `BIGFILE_CLAMAV_MAX_SCAN_BYTES` lowers it.
+   A Mailpit container (`test/deploy/docker-compose.bigfile-mail.yml`, own network
+   `BIGFILE_MAIL_SUBNET`, default `172.31.246.0/24`, HTTP API on `127.0.0.1:<free port>`) receives the
+   tenant mail: no API answer carries a download link, so the client reads the recipient's personal
+   link from their mail (`BIGFILE_MAIL_API`).
 3. Once transteira is healthy: Caddy's root CA is copied, the setup token read from the transteira
    log, the memory sampler started (below) and the offset between its clock and the client's
    measured.
@@ -407,7 +411,7 @@ summary), `test/internal/seeded` (deterministic content and its SHA-256).
 Client interface (set by the script; `go test -tags bigfile -run TestBigFile -v ./test/bigfile`
 reads the same variables): `BIGFILE_BASE_URL`, `BIGFILE_ADMIN_URL`, `BIGFILE_CA_FILE`,
 `BIGFILE_RESOLVE` (`host=127.0.0.1,...`), `BIGFILE_SETUP_TOKEN`, `BIGFILE_BYTES`, `BIGFILE_ENGINE`,
-`BIGFILE_REPORT`, and when set `BIGFILE_CHUNK`, `BIGFILE_CUT_AT`, `BIGFILE_DL_CUT_AT`,
+`BIGFILE_REPORT`, `BIGFILE_MAIL_API`, and when set `BIGFILE_CHUNK`, `BIGFILE_CUT_AT`, `BIGFILE_DL_CUT_AT`,
 `BIGFILE_SEED`, `BIGFILE_SCAN_TIMEOUT`, `BIGFILE_CLAMAV_MAX_SCAN_BYTES` (see
 `test/bigfile/config.go`). File downloads send `Accept-Encoding: zstd, gzip` like a browser, with
 the transparent decompression of Go off: a proxy that compressed the file would show up as a

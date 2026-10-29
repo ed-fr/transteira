@@ -318,10 +318,17 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 }
 
 // SenderConfirmation builds the transfer_confirmation mail to the sender:
-// the download link, the recipients, the delivered files with their SHA-256
+// the download link (none when every recipient has a personal link, which the
+// sender never sees: link is then empty), the recipients, the delivered files with their SHA-256
 // digest, the expiry, and the withheld files with a short explanation.
 func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr TransferView, link string) (mail.Job, error) {
-	v, err := n.prepareDownload(tr, link)
+	var v downloadView
+	var err error
+	if link == "" {
+		v, err = n.prepareTransfer(tr)
+	} else {
+		v, err = n.prepareDownload(tr, link)
+	}
 	if err != nil {
 		return mail.Job{}, err
 	}
@@ -401,11 +408,18 @@ func (n *Notifier) FileNotScanned(ctx context.Context, t *tenant.Tenant, tr Tran
 // sent once per transfer; the caller guarantees the once). It lists the
 // delivered files and, when deleteAt is set (deletion after the first
 // download), tells when the transfer is erased; deleteAt is zero when the
-// transfer stays until its expiry. No recipient is named: in V1 the single
-// download link of a transfer does not identify who downloaded. It fails
+// transfer stays until its expiry. No recipient is named: the single
+// download link of a shared transfer does not identify who downloaded (see
+// [Notifier.FirstDownloadBy] for per-recipient links). It fails
 // with ErrInvalidTransfer for an invalid sender, a zero time, a deletion
 // time before at or a transfer without a delivered file.
 func (n *Notifier) FirstDownload(ctx context.Context, t *tenant.Tenant, tr TransferView, at, deleteAt time.Time) (mail.Job, error) {
+	return n.firstDownload(ctx, t, tr, at, deleteAt, "")
+}
+
+// firstDownload builds the first_download mail, naming recipient when it is
+// not empty (see [Notifier.FirstDownloadBy]).
+func (n *Notifier) firstDownload(ctx context.Context, t *tenant.Tenant, tr TransferView, at, deleteAt time.Time, recipient string) (mail.Job, error) {
 	sender, err := mail.ParseAddress(tr.SenderEmail)
 	if err != nil {
 		return mail.Job{}, fmt.Errorf("%w: sender: %w", ErrInvalidTransfer, err)
@@ -420,7 +434,7 @@ func (n *Notifier) FirstDownload(ctx context.Context, t *tenant.Tenant, tr Trans
 	if len(files) == 0 {
 		return mail.Job{}, fmt.Errorf("%w: no delivered file", ErrInvalidTransfer)
 	}
-	data := mail.FirstDownloadData{TenantName: t.Name, Files: files, DownloadedAt: at, DeleteAt: deleteAt}
+	data := mail.FirstDownloadData{TenantName: t.Name, Files: files, DownloadedAt: at, DeleteAt: deleteAt, RecipientEmail: recipient}
 	return n.senderJob(ctx, t, tr, sender, mail.TemplateFirstDownload, data)
 }
 
@@ -435,11 +449,16 @@ type downloadView struct {
 // prepareDownload validates what the download mails need: an unexpired
 // transfer, a valid link and sender, and at least one delivered file.
 func (n *Notifier) prepareDownload(tr TransferView, link string) (downloadView, error) {
-	if !tr.ExpiresAt.After(n.now()) {
-		return downloadView{}, ErrTransferExpired
-	}
 	if err := checkLink(link); err != nil {
 		return downloadView{}, err
+	}
+	return n.prepareTransfer(tr)
+}
+
+// prepareTransfer is prepareDownload without the link check.
+func (n *Notifier) prepareTransfer(tr TransferView) (downloadView, error) {
+	if !tr.ExpiresAt.After(n.now()) {
+		return downloadView{}, ErrTransferExpired
 	}
 	sender, err := mail.ParseAddress(tr.SenderEmail)
 	if err != nil {

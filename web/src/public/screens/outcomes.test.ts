@@ -8,7 +8,11 @@ import {
   isNotScanned,
   loadFailure,
   looksLikeEmail,
+  needsVerification,
+  normalizeCode,
   unlockFailure,
+  verificationConfirmFailure,
+  verificationStartFailure,
   type PublicFile,
   type PublicTransfer,
   RECHECK_INTERVAL_MS,
@@ -66,6 +70,75 @@ describe('unlockFailure', () => {
     expect(unlockFailure(problem(410))).toEqual({ kind: 'gone' });
     expect(unlockFailure(problem(403))).toEqual({ kind: 'error' });
     expect(unlockFailure(new Error('x'))).toEqual({ kind: 'error' });
+  });
+});
+
+describe('recipient verification', () => {
+  const base = {
+    senderEmail: 'a@b.example',
+    expiresAt: '2026-11-01T00:00:00Z',
+    passwordProtected: false,
+    locked: true,
+  };
+
+  it('is needed only for a verification link not verified yet', () => {
+    expect(needsVerification({ ...base })).toBe(false);
+    expect(needsVerification({ ...base, verificationRequired: true, verified: false })).toBe(true);
+    expect(needsVerification({ ...base, verificationRequired: true })).toBe(true);
+    expect(needsVerification({ ...base, verificationRequired: true, verified: true })).toBe(false);
+  });
+
+  it('sends an unlock refused for a missing verification back to the verification step', () => {
+    expect(unlockFailure(problem(401, { code: 'recipient-verification-required' }))).toEqual({
+      kind: 'verification-required',
+    });
+  });
+
+  it('classifies the request of a code', () => {
+    expect(verificationStartFailure(problem(429, { retryAfterSeconds: 30 }))).toEqual({
+      kind: 'rate-limited',
+      retryAfterSeconds: 30,
+    });
+    expect(verificationStartFailure(problem(503))).toEqual({ kind: 'mail-unavailable' });
+    expect(verificationStartFailure(problem(409))).toEqual({ kind: 'conflict' });
+    expect(verificationStartFailure(problem(404))).toEqual({ kind: 'not-found' });
+    expect(verificationStartFailure(problem(410))).toEqual({ kind: 'gone' });
+    expect(verificationStartFailure(problem(410, { code: 'max-downloads-reached' }))).toEqual({
+      kind: 'max-downloads',
+    });
+    expect(verificationStartFailure(problem(500))).toEqual({ kind: 'error' });
+    expect(verificationStartFailure(new Error('x'))).toEqual({ kind: 'error' });
+  });
+
+  it('classifies the entry of a code', () => {
+    expect(
+      verificationConfirmFailure(problem(422, { code: 'verification-code-invalid', attemptsRemaining: 1 })),
+    ).toEqual({ kind: 'wrong', attemptsRemaining: 1 });
+    expect(verificationConfirmFailure(problem(401, { code: 'verification-code-invalid' }))).toEqual({
+      kind: 'wrong',
+      attemptsRemaining: undefined,
+    });
+    expect(verificationConfirmFailure(problem(422))).toEqual({ kind: 'wrong', attemptsRemaining: undefined });
+    expect(verificationConfirmFailure(problem(400))).toEqual({ kind: 'wrong', attemptsRemaining: undefined });
+    expect(verificationConfirmFailure(problem(410, { code: 'verification-exhausted' }))).toEqual({
+      kind: 'exhausted',
+    });
+    expect(verificationConfirmFailure(problem(409))).toEqual({ kind: 'no-code' });
+    expect(verificationConfirmFailure(problem(429, { retryAfterSeconds: 5 }))).toEqual({
+      kind: 'rate-limited',
+      retryAfterSeconds: 5,
+    });
+    expect(verificationConfirmFailure(problem(404))).toEqual({ kind: 'not-found' });
+    expect(verificationConfirmFailure(problem(410, { code: 'transfer-gone' }))).toEqual({ kind: 'gone' });
+    expect(verificationConfirmFailure(problem(410, { code: 'max-downloads-reached' }))).toEqual({
+      kind: 'max-downloads',
+    });
+    expect(verificationConfirmFailure(problem(500))).toEqual({ kind: 'error' });
+    expect(verificationConfirmFailure(new Error('x'))).toEqual({ kind: 'error' });
+  });
+
+  it('strips the spaces of a pasted code', () => {
+    expect(normalizeCode(' 123 456\n')).toBe('123456');
   });
 });
 

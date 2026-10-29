@@ -48,6 +48,17 @@ var goldenCases = []goldenCase{
 		banIP: "203.0.113.7",
 	},
 	{
+		// Since 1.1 (decision P38): a wrong recipient code, as the download
+		// service writes it; same event, so the 1.0 filters ban it.
+		name: "verification code invalid recipient",
+		ev: Event{
+			Type: VerificationCodeInvalid, IP: netip.MustParseAddr("203.0.113.8"), Tenant: tenantA,
+			Fields: []Field{{"transfer", "trf_01JABCD9F1"}, {KeyPurpose, PurposeRecipient}},
+		},
+		line:  `2026-10-20T07:41:00.123Z ip=203.0.113.8 tenant=transfer.entity-a.example.com event=verification_code_invalid transfer="trf_01JABCD9F1" purpose="recipient"`,
+		banIP: "203.0.113.8",
+	},
+	{
 		name:  "transfer password invalid",
 		ev:    Event{Type: TransferPasswordInvalid, IP: netip.MustParseAddr("198.51.100.23"), Tenant: tenantA, Fields: []Field{{"transfer", "tr_01jab"}}},
 		line:  `2026-10-20T07:41:00.123Z ip=198.51.100.23 tenant=transfer.entity-a.example.com event=transfer_password_invalid transfer="tr_01jab"`,

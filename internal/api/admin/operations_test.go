@@ -461,6 +461,31 @@ func TestTransferOperations(t *testing.T) {
 	if _, body = decode(t, got); body["confidentialityLevel"].(map[string]any)["rules"] != nil {
 		t.Errorf("level without rules = %v", body["confidentialityLevel"])
 	}
+	if _, ok := body["recipientTracking"]; ok {
+		t.Errorf("tracking of a shared transfer: %v", body["recipientTracking"])
+	}
+
+	// A transfer with one link per recipient: its verification option and
+	// the tracking of each recipient, never a link.
+	o.transfer.RecipientVerification = true
+	o.detail.Transfer = o.transfer
+	o.detail.RecipientTracking = []store.RecipientTracking{{LinkID: "rcl_01", Email: "carol@customer.example.net"}}
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	_, body = decode(t, got)
+	tracking, _ := body["recipientTracking"].([]any)
+	if body["recipientVerification"] != true || len(tracking) != 1 ||
+		tracking[0].(map[string]any)["email"] != "carol@customer.example.net" || strings.Contains(fmt.Sprint(body), "rcl_") {
+		t.Errorf("per-recipient detail = %v", body)
+	}
+	// Before its links exist: an empty tracking, telling it from a shared
+	// transfer.
+	o.detail.RecipientTracking = []store.RecipientTracking{}
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	_, body = decode(t, got)
+	if tracking, ok := body["recipientTracking"].([]any); !ok || len(tracking) != 0 {
+		t.Errorf("per-recipient detail before the links = %v", body)
+	}
+	o.detail.RecipientTracking = nil
 
 	del, err := s.DeleteTenantTransfer(ctx, gen.DeleteTenantTransferRequestObject{
 		TenantId: "ten_a", TransferId: "trf_01", Body: &gen.AdminReason{Reason: ptr("wrong recipient")},

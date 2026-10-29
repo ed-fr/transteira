@@ -235,7 +235,7 @@ func (s *Sweeper) eraseSteps(ctx context.Context, k kind, tt store.TenantTransfe
 	if k == kindExpire && d.Status == store.TransferRejected {
 		return erased, "", nil
 	}
-	if err := s.files.RemoveState(tt.TenantID, storage.StateName(tt.TransferID)); err != nil {
+	if err := s.removeStates(ctx, tt.TenantID, d); err != nil {
 		return failed, stepState, err
 	}
 	started := d.Status
@@ -256,6 +256,27 @@ func (s *Sweeper) eraseSteps(ctx context.Context, k kind, tt store.TenantTransfe
 			slog.Duration("finalized_age", now.Sub(d.FinalizedAt)))
 	}
 	return erased, "", nil
+}
+
+// removeStates removes the download range states of d: its own and, for a
+// per-recipient transfer, the one of each recipient link
+// (storage.StateName(linkID)). The links are listed before the transfer is
+// finished, while their rows still exist.
+func (s *Sweeper) removeStates(ctx context.Context, tid tenant.ID, d store.TransferDetails) error {
+	keys := []string{d.ID}
+	if d.LinkMode == store.LinkModePerRecipient {
+		links, err := s.repo.linkIDs(ctx, tid, d.ID)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, links...)
+	}
+	for _, k := range keys {
+		if err := s.files.RemoveState(tid, storage.StateName(k)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // check reads the transfer tt and decides whether it is due for k at now.

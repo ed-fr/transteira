@@ -113,11 +113,14 @@ var isolationCases = map[string]isolationCase{
 	"terminateUpload":    terminateForeignUpload,
 	// Downloads (download_test.go): tenant A's link token, with A's grant
 	// cookie, under B's Host is unknown (404); unlock attempts under B
-	// never count against A's transfer.
-	"getDownload":     getForeignDownload,
-	"unlockDownload":  unlockForeignDownload,
-	"downloadFile":    fileOfForeignDownload,
-	"downloadArchive": archiveOfForeignDownload,
+	// never count against A's transfer. The recipient verification of A's
+	// link is unknown under B, with or without a verification cookie.
+	"getDownload":                  getForeignDownload,
+	"unlockDownload":               unlockForeignDownload,
+	"downloadFile":                 fileOfForeignDownload,
+	"downloadArchive":              archiveOfForeignDownload,
+	"startRecipientVerification":   startForeignVerification,
+	"confirmRecipientVerification": confirmForeignVerification,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the

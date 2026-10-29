@@ -313,3 +313,28 @@ export function deleteFailure(view: ErrorView, t: Translate): string {
   }
   return view.message;
 }
+
+/** Download tracking of one recipient (RecipientTracking), since 1.1. */
+export type RecipientTracking = components['schemas']['RecipientTracking'];
+
+/** One line of a recipient's downloads: a file name (or the ZIP archive label) with counts and dates. */
+export type TrackedDownload = { key: string; label: string; count: number; firstAt: string; lastAt: string };
+
+/**
+ * Lines of the downloads of one recipient. A null or missing file id is the ZIP archive; a file id
+ * missing from the transfer's files (should not happen) falls back to the id itself.
+ */
+export function trackedDownloads(
+  tracking: RecipientTracking,
+  files: readonly { id: string; name: string }[],
+  archiveLabel: string,
+): TrackedDownload[] {
+  const names = new Map(files.map((f) => [f.id, f.name]));
+  return tracking.downloads.map((d) => ({
+    key: d.fileId ?? '',
+    label: d.fileId == null ? archiveLabel : (names.get(d.fileId) ?? d.fileId),
+    count: d.count,
+    firstAt: d.firstAt,
+    lastAt: d.lastAt,
+  }));
+}

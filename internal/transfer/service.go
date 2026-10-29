@@ -198,6 +198,11 @@ type Service struct {
 	clock         func() time.Time
 	newID         func(p id.Prefix) (string, error)
 	newUploadID   func() (string, error)
+	// linkMode is the link mode of the created transfers: always
+	// store.LinkModePerRecipient since 1.1 (P27). Only the tests of this
+	// package replace it, with store.LinkModeShared, to exercise the
+	// transfers created before 1.1, which keep their single shared link.
+	linkMode store.LinkMode
 }
 
 // New returns a service over db, creating data keys with keys, handling
@@ -234,7 +239,7 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 		logger: opts.Logger, maxRecipients: opts.MaxRecipients, maxOpen: opts.MaxOpenTransfers,
 		uploadMaxAge: opts.UploadMaxAge,
 		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage,
-		clock: opts.Now, newUploadID: id.NewUploadToken,
+		clock: opts.Now, newUploadID: id.NewUploadToken, linkMode: store.LinkModePerRecipient,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s

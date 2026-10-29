@@ -38,6 +38,11 @@ const (
 	// EnvAdminURL is the admin origin through Caddy (a host of
 	// TT_ADMIN_HOSTS), e.g. https://admin.bigfile.localhost:8443. Mandatory.
 	EnvAdminURL = "BIGFILE_ADMIN_URL"
+	// EnvMailAPI is the HTTP API origin of the Mailpit that captures the mails
+	// of the test tenant, e.g. http://127.0.0.1:18025. The recipient link is
+	// read from the mail sent to the recipient (the API never returns it).
+	// Mandatory.
+	EnvMailAPI = "BIGFILE_MAIL_API"
 	// EnvCAFile is a PEM file of the certificate authorities to trust (the
 	// root of Caddy's internal CA). Optional: the system roots otherwise.
 	EnvCAFile = "BIGFILE_CA_FILE"
@@ -101,6 +106,7 @@ const (
 type Config struct {
 	BaseURL            *url.URL
 	AdminURL           *url.URL
+	MailAPI            *url.URL
 	CAFile             string
 	Resolve            map[string]string
 	SetupToken         string
@@ -144,6 +150,14 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	}
 	c.BaseURL = origin(EnvBaseURL)
 	c.AdminURL = origin(EnvAdminURL)
+	if v := getenv(EnvMailAPI); v == "" {
+		fail(EnvMailAPI, "not set")
+	} else if u, err := url.Parse(v); err != nil || u.Scheme != "http" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.User != nil {
+		fail(EnvMailAPI, "%q is not an http origin (http://host[:port])", v)
+	} else {
+		u.Path = ""
+		c.MailAPI = u
+	}
 	if c.SetupToken == "" {
 		fail(EnvSetupToken, "not set")
 	}

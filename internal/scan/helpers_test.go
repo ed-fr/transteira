@@ -175,11 +175,18 @@ func (r faultRepo) reject(ctx context.Context, tid tenant.ID, trfID string) erro
 	return r.inner.reject(ctx, tid, trfID)
 }
 
-func (r faultRepo) makeAvailable(ctx context.Context, tid tenant.ID, trfID, token string, now time.Time) error {
+func (r faultRepo) makeAvailable(ctx context.Context, tid tenant.ID, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error) {
 	if err := r.f.hit("makeAvailable"); err != nil {
-		return err
+		return nil, err
 	}
-	return r.inner.makeAvailable(ctx, tid, trfID, token, now)
+	return r.inner.makeAvailable(ctx, tid, trfID, perRecipient, tokens, now)
+}
+
+func (r faultRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
+	if err := r.f.hit("recipientLinks"); err != nil {
+		return nil, err
+	}
+	return r.inner.recipientLinks(ctx, tid, trfID)
 }
 
 func (r faultRepo) sweep(ctx context.Context) ([]store.TenantTransfer, error) {
@@ -267,6 +274,13 @@ func (n faultNotifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr n
 		return nil, err
 	}
 	return n.inner.RecipientJobs(ctx, t, tr, link)
+}
+
+func (n faultNotifier) PerRecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, links []notify.RecipientLink) ([]mail.Job, error) {
+	if err := n.f.hit("recipients"); err != nil {
+		return nil, err
+	}
+	return n.inner.PerRecipientJobs(ctx, t, tr, links)
 }
 
 func (n faultNotifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, link string) (mail.Job, error) {
@@ -566,8 +580,21 @@ func clean(n int) []byte {
 
 // scanning stores a finalized transfer of tn (status scanning) from alice
 // to dave and erin, with one file per content, encrypted on disk like the
-// upload engine does.
+// upload engine does. It has a single shared link (a transfer created
+// before 1.1); see perRecipient for the transfers created since.
 func (ev *env) scanning(tn *tenant.Tenant, contents ...[]byte) string {
+	ev.t.Helper()
+	return ev.scanningMode(tn, store.LinkModeShared, contents...)
+}
+
+// perRecipient is scanning for a transfer with one link per recipient.
+func (ev *env) perRecipient(tn *tenant.Tenant, contents ...[]byte) string {
+	ev.t.Helper()
+	return ev.scanningMode(tn, store.LinkModePerRecipient, contents...)
+}
+
+// scanningMode is scanning with the given link mode.
+func (ev *env) scanningMode(tn *tenant.Tenant, mode store.LinkMode, contents ...[]byte) string {
 	ev.t.Helper()
 	ctx := context.Background()
 	trfID := id.New(id.Transfer)
@@ -585,7 +612,7 @@ func (ev *env) scanning(tn *tenant.Tenant, contents ...[]byte) string {
 			f.Name = fmt.Sprintf("file-%d.bin", i)
 			files = append(files, f)
 		}
-		tr := store.Transfer{ID: trfID, SenderEmail: alice, SenderKind: store.DepositorInternal, ExpiryDays: 7}
+		tr := store.Transfer{ID: trfID, SenderEmail: alice, SenderKind: store.DepositorInternal, ExpiryDays: 7, LinkMode: mode}
 		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, []string{dave, erin}, files); err != nil {
 			return err
 		}

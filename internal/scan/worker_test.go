@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -364,6 +365,23 @@ func TestRepoBadTenant(t *testing.T) {
 			t.Error("malformed tenant accepted")
 		}
 	})
+}
+
+// TestRepoSharedTakesOneToken refuses to make a shared transfer available
+// with other than one token, sealing nothing.
+func TestRepoSharedTakesOneToken(t *testing.T) {
+	ev := newEnv(t, storetest.SQLite(t), Options{})
+	trfID := ev.scanning(ev.a, clean(10))
+	r := storeRepo{db: ev.db, vault: ev.vault}
+	tokA, tokB := "dl_"+strings.Repeat("a", 43), "dl_"+strings.Repeat("b", 43)
+	links, err := r.makeAvailable(context.Background(), ev.a.ID, trfID, false, []string{tokA, tokB}, time.Now())
+	if err == nil || links != nil || !strings.Contains(err.Error(), "one token, 2 given") {
+		t.Fatalf("makeAvailable(2 tokens) = %v, %v", links, err)
+	}
+	d, err := ev.db.Transfers().Get(context.Background(), ev.a.ID, trfID)
+	if err != nil || d.Status != store.TransferScanning || d.DownloadTokenKeyID != "" {
+		t.Fatalf("transfer after the refusal = %s %q, %v", d.Status, d.DownloadTokenKeyID, err)
+	}
 }
 
 // TestIsolation sends the mails of each tenant with its own SMTP settings

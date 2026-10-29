@@ -118,8 +118,27 @@ func pagePath(token string) string         { return pathDownloads + token }
 func filePath(token, fileID string) string { return pathDownloads + token + "/files/" + fileID }
 func archivePath(token string) string      { return pathDownloads + token + "/archive" }
 func unlockPath(token string) string       { return pathDownloads + token + "/unlock" }
-func statePath(d *depositEnv, trf string) string {
-	return filepath.Join(d.tenantDir(), storage.StateName(trf)+stateSuffix)
+
+// statePath returns the path of the served range state of the transfer trf
+// of tenant A: for a per-recipient transfer, the state of its only
+// recipient link (each link keeps its own, storage.StateName(linkID)); for
+// a shared transfer, its own. The links are read from the database, so it
+// is called while the transfer row exists.
+func statePath(t *testing.T, d *depositEnv, trf string) string {
+	t.Helper()
+	links, err := d.db.RecipientLinks().ListByTransfer(context.Background(), d.tenantA.ID, trf)
+	if err != nil {
+		t.Fatalf("links of %s: %v", trf, err)
+	}
+	key := trf
+	switch len(links) {
+	case 0:
+	case 1:
+		key = links[0].ID
+	default:
+		t.Fatalf("transfer %s has %d recipient links, want at most one", trf, len(links))
+	}
+	return filepath.Join(d.tenantDir(), storage.StateName(key)+stateSuffix)
 }
 
 // page sends getDownload.

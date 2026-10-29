@@ -12,6 +12,8 @@
 //	                                          admin sessions, admin activations, admin login failures, audit events after 12 months,
 //	                                          usage counters after 13 months
 //	orphans                 24 h              files of the tenant directories that the database proves orphaned
+//	expiry-reminder         15 min            reminder mail to the recipients of a per-recipient transfer expiring within 24 h who have not downloaded
+//	                                          (skips blocklisted addresses; one reminder per link; mark reset when the mail cannot be queued)
 //	backup                  daily, UTC time   copy of a SQLite database (TT_BACKUP_TIME, TT_BACKUP_KEEP)
 //
 // # Scheduling

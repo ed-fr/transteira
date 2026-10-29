@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/crypto"
@@ -21,7 +22,8 @@ type repo interface {
 	setResult(ctx context.Context, tid tenant.ID, fileID string, status store.ScanStatus, signature string, now time.Time) error
 	countAttempt(ctx context.Context, tid tenant.ID, fileID string) (int, error)
 	reject(ctx context.Context, tid tenant.ID, trfID string) error
-	makeAvailable(ctx context.Context, tid tenant.ID, trfID, token string, now time.Time) error
+	makeAvailable(ctx context.Context, tid tenant.ID, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error)
+	recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error)
 	sweep(ctx context.Context) ([]store.TenantTransfer, error)
 }
 
@@ -71,19 +73,45 @@ func (r storeRepo) reject(ctx context.Context, tid tenant.ID, trfID string) erro
 	})
 }
 
-// makeAvailable seals the raw download token with the vault (purpose
-// secret) and makes the transfer available with the SHA-256 of the token
-// and the sealed copy, in one transaction: either both exist or neither.
-// The store restarts the expiry from now.
-func (r storeRepo) makeAvailable(ctx context.Context, tid tenant.ID, trfID, token string, now time.Time) error {
-	return r.tx(ctx, tid, func(tx *store.ScopedTx) error {
-		wkID, err := r.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
-		if err != nil {
-			return err
+// makeAvailable seals each raw download token with the vault (purpose
+// secret) and makes the transfer available with the SHA-256 of each token
+// and its sealed copy, in one transaction: either all exist or none. The
+// store restarts the expiry from now. A shared transfer takes a single
+// token (no link is returned); a transfer with one link per recipient
+// (perRecipient) takes one token per recipient and returns the links
+// created, in position order.
+func (r storeRepo) makeAvailable(ctx context.Context, tid tenant.ID, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error) {
+	var links []store.RecipientLink
+	err := r.tx(ctx, tid, func(tx *store.ScopedTx) error {
+		sealed := make([]store.LinkToken, len(tokens))
+		for i, token := range tokens {
+			wkID, err := r.vault.SealTx(ctx, tx, crypto.PurposeSecret, []byte(token))
+			if err != nil {
+				return err
+			}
+			hash := sha256.Sum256([]byte(token))
+			sealed[i] = store.LinkToken{Hash: hash[:], KeyID: wkID}
 		}
-		hash := sha256.Sum256([]byte(token))
-		return r.db.Transfers().MarkAvailableTx(ctx, tx, trfID, hash[:], wkID, now)
+		if !perRecipient {
+			if len(sealed) != 1 {
+				return fmt.Errorf("scan: a shared transfer takes one token, %d given", len(sealed))
+			}
+			return r.db.Transfers().MarkAvailableTx(ctx, tx, trfID, sealed[0].Hash, sealed[0].KeyID, now)
+		}
+		var err error
+		links, err = r.db.Transfers().MarkAvailableLinksTx(ctx, tx, trfID, sealed, now)
+		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	return links, nil
+}
+
+// recipientLinks returns the links of a transfer with one link per
+// recipient, with their sealed token, in position order.
+func (r storeRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
+	return r.db.RecipientLinks().ListByTransfer(ctx, tid, trfID)
 }
 
 // sweep is the only cross-tenant read of the worker: a system query

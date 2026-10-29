@@ -1,5 +1,6 @@
 // Package download is the recipient side of TransTeira (CLAUDE.md section
-// 10, threat model T-47 to T-57 and T-197, decisions P3, P4, P9 and P23):
+// 10, threat model T-47 to T-57, T-197 and T-199 to T-206, decisions P3,
+// P4, P9, P23, P27 and P38):
 // it resolves the download links, checks the transfer passwords, streams
 // the files with Range support and the ZIP archive, and records the first
 // complete download. It is independent of HTTP: the handlers map its
@@ -207,8 +208,43 @@
 // transfers are the sensitive ones. The HTTP layer picks the label in the
 // language of the request ([Confidentiality.Label]).
 //
+// # Recipient links and verification
+//
+// Since 1.1 each recipient of a transfer gets their own link
+// (store.RecipientLink, decision P27). A token is looked up among the
+// recipient links of the tenant first, then among the shared V1 links, with
+// the same ErrNotFound for both; the shared links keep the 1.0 behavior.
+// Through a recipient link, the grant entries and the transfer password
+// counter are bound to the link (store.LinkFailureKey), so that one
+// recipient cannot lock the others out; the per-IP counter is unchanged.
+// Each link keeps its own range state (storage.StateName(linkID)), its
+// download starts (store.RecipientLinks.ClaimTx, in the transaction of the
+// download count and of the limit, which counts every link together) and
+// its completion: the completion of each item, then of the link, recorded
+// with the first download of the transfer in one transaction. The first
+// download mail names the recipient of the first link completed; the
+// deletion after the first download waits for every link.
+//
+// When the transfer requires the recipient verification, a link opens
+// nothing until the browser holds a valid entry of the stateless
+// VerificationCookieName cookie for it (T-200, T-204): the page is the
+// minimal locked view with the masked address of the link, and the unlock,
+// the files and the archive answer ErrVerificationRequired, before any
+// password attempt. [Service.StartVerification] mails a 6-digit code to the
+// address of the link only (vcode rules: 15 minutes, 2 attempts, 5 codes per
+// link and hour, 20 per client IP and hour shared with the deposit codes),
+// and [Service.ConfirmVerification] checks it by a constant-time MAC
+// comparison and adds an entry to the cookie: the layout of the grant
+// cookie, under VerificationCookiePrefix and the MAC purpose
+// recipient-verification, over the tenant ID, the link ID and the expiry
+// (VerificationTTL). The confirmation names no challenge: the codes of a
+// link are stored under random identifiers, and the newest one of the link
+// (store.Challenges.LatestByLink) is the only one checked, a new code
+// replacing the previous ones. Wrong codes are written to the security log as
+// verification_code_invalid with purpose "recipient" (P38).
+//
 // # Logs
 //
-// Logs hold tenant, transfer and file identifiers only: never a token, a
-// password, an address or a file name.
+// Logs hold tenant, transfer, link and file identifiers only: never a
+// token, a password, a code, an address or a file name.
 package download

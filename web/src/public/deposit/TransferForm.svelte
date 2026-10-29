@@ -42,6 +42,7 @@
     expiryDays: 'tt-deposit-expiry',
     password: 'tt-deposit-password',
     maxDownloads: 'tt-deposit-max-downloads',
+    recipientVerification: 'tt-deposit-recipient-verification',
     files: 'tt-deposit-files',
   };
 
@@ -90,6 +91,7 @@
     })),
   );
   const passwordRequired = $derived(flow.rules?.requirePassword === true);
+  const verificationForced = $derived(flow.rules?.requireRecipientVerification === true);
   const deleteForced = $derived(flow.rules?.forceDeleteAfterFirstDownload === true);
   const downloadsCap = $derived(maxDownloadsCap(flow.rules));
   const expiryOptions = $derived(
@@ -108,6 +110,8 @@
         return t('deposit.form.password.label');
       case 'maxDownloads':
         return t('deposit.form.maxDownloads.label');
+      case 'recipientVerification':
+        return t('deposit.form.recipientVerification.label');
       case 'files':
         return t('deposit.form.files.label');
     }
@@ -245,6 +249,26 @@
       error={say(errors['maxDownloads'])}
       bind:value={flow.form.maxDownloadsText}
     />
+  {/if}
+
+  {#if flow.recipientVerificationOffered}
+    {#if verificationForced}
+      <Checkbox
+        id={ids.recipientVerification}
+        label={t('deposit.form.recipientVerification.label')}
+        hint={t('deposit.form.recipientVerification.forced')}
+        checked={true}
+        disabled
+      />
+    {:else}
+      <Checkbox
+        id={ids.recipientVerification}
+        label={t('deposit.form.recipientVerification.label')}
+        hint={t('deposit.form.recipientVerification.hint')}
+        error={say(errors['recipientVerification'])}
+        bind:checked={flow.form.recipientVerification}
+      />
+    {/if}
   {/if}
 
   {#if deleteForced}

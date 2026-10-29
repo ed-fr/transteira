@@ -105,7 +105,8 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`finalized_at, download_token_hash, download_token_key_id, available_at, expires_at, first_downloaded_at, delete_after, ` +
 	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
 	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
-	`rule_internal_recipients_only, rule_force_delete_after_first_download`
+	`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode, recipient_verification, ` +
+	`expiry_reminder_at`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -119,6 +120,14 @@ const reasonTransferTenantActive = "transfer creation: refuse a tenant whose del
 // the recipient_links policy also restricts it to the tenant.
 const reasonTransferDeleteLinkKeys = "transfer deletion: refuse while a recipient link of the same tenant and transfer keeps its sealed token"
 
+// reasonTransferEndLinkKeys is the review of the statements ending a
+// transfer (qTransferSetStatus, qTransferMarkExpired, qTransferMarkDeleted):
+// the tenant slot filters transfers, and the subquery reads the recipient
+// links of the same tenant and transfer only (l.tenant_id = t.tenant_id);
+// on PostgreSQL the recipient_links policy also restricts it to the
+// tenant.
+const reasonTransferEndLinkKeys = "transfer end: refuse while a recipient link of the same tenant and transfer keeps its sealed token"
+
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
 	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
@@ -127,16 +136,15 @@ const fileColumns = `id, transfer_id, position, name, size, media_type, expected
 // are single-table tenant queries: a transfer and its files are read with
 // separate statements of the same transaction.
 var (
-	// Every transfer still gets the single shared V1 link: the
-	// per-recipient links (link_mode 'per_recipient', the default of the
-	// column since 0014) come with their feature.
+	// The link mode is explicit: the store never relies on the default of
+	// the column (per_recipient since 0014).
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at, sender_ip, api_token_id, max_downloads, confidentiality_level, confidentiality_label,
-		rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification,
-		rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shared')`)
+		created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, confidentiality_level,
+		confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password,
+		rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -186,11 +194,15 @@ var (
 		WHERE tenant_id = ? AND status IN ('uploading', 'scanning', 'available')`)
 	// qTransferSetStatus moves a transfer to a terminal status (every
 	// target but the finalization's) and records when it first ended. The
-	// sealed download token must be destroyed first (T-110); the store
-	// checks the file keys beforehand.
-	qTransferSetStatus = tenantQuery(
-		`UPDATE transfers SET status = ?, ended_at = COALESCE(ended_at, ?)
-		WHERE tenant_id = ? AND id = ? AND status = ? AND download_token_key_id IS NULL`)
+	// sealed download token, and the sealed token of each recipient link,
+	// must be destroyed first (T-110); the store checks the file keys
+	// beforehand.
+	qTransferSetStatus = reviewedTenantQuery(
+		`UPDATE transfers AS t SET status = ?, ended_at = COALESCE(t.ended_at, ?)
+		WHERE t.tenant_id = ? AND t.id = ? AND t.status = ? AND t.download_token_key_id IS NULL
+		AND NOT EXISTS (SELECT 1 FROM recipient_links l
+			WHERE l.tenant_id = t.tenant_id AND l.transfer_id = t.id AND l.token_key_id IS NOT NULL)`,
+		reasonTransferEndLinkKeys)
 	// qTransferFinalize moves an uploading transfer to scanning and sets
 	// its finalization and expiry times (the CAST avoids an INTEGER
 	// overflow of expiry_days * milliseconds on PostgreSQL).
@@ -355,7 +367,34 @@ type Transfer struct {
 	// without level (and required with one). The store only checks that the
 	// rules are well formed: the caller enforces them on the transfer.
 	Rules *ConfidentialityRules
+	// LinkMode is how the recipients get the transfer: LinkModeShared (the
+	// zero value at creation, the single V1 link of DownloadTokenHash) or
+	// LinkModePerRecipient (one [RecipientLink] per recipient, created by
+	// [Transfers.MarkAvailableLinksTx]). The transfer service creates every
+	// new transfer with LinkModePerRecipient (spec 10, D1).
+	LinkMode LinkMode
+	// RecipientVerification requires each recipient to verify their address
+	// by code before downloading (spec 10). It needs LinkModePerRecipient.
+	RecipientVerification bool
+	// ExpiryReminderAt is when the expiry reminder pass of the current
+	// expiry was done ([Transfers.MarkExpiryReminderTx]), or skipped at
+	// availability for a short-lived transfer (ReminderMinLifetime); zero
+	// otherwise.
+	ExpiryReminderAt time.Time
 }
+
+// LinkMode is how the recipients of a transfer get their download link.
+type LinkMode string
+
+// Link modes.
+const (
+	// LinkModeShared is the single V1 link shared by every recipient
+	// (Transfer.DownloadTokenHash).
+	LinkModeShared LinkMode = "shared"
+	// LinkModePerRecipient gives each recipient their own link
+	// ([RecipientLinks]); the transfer has no transfer-level token.
+	LinkModePerRecipient LinkMode = "per_recipient"
+)
 
 // PasswordProtected reports whether the transfer has a password.
 func (t Transfer) PasswordProtected() bool { return t.PasswordHash != "" }
@@ -547,6 +586,15 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("a new transfer cannot be downloaded")
 	case t.MaxDownloads != nil && (*t.MaxDownloads < 1 || *t.MaxDownloads > MaxDownloadsLimit):
 		return Transfer{}, invalid("max downloads must be 1 to %d", MaxDownloadsLimit)
+	case t.LinkMode != "" && t.LinkMode != LinkModeShared && t.LinkMode != LinkModePerRecipient:
+		return Transfer{}, invalid("unknown link mode")
+	case t.RecipientVerification && t.LinkMode != LinkModePerRecipient:
+		return Transfer{}, invalid("recipient verification needs per-recipient links")
+	case !t.ExpiryReminderAt.IsZero():
+		return Transfer{}, invalid("a new transfer cannot be reminded")
+	}
+	if t.LinkMode == "" {
+		t.LinkMode = LinkModeShared
 	}
 	if err := normalizeTransferLevel(&t); err != nil {
 		return Transfer{}, err
@@ -715,7 +763,8 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		t.ID, string(t.Status), t.SenderEmail, string(t.SenderKind),
 		nullText(t.InvitationID), t.Message, t.Language, t.ExpiryDays, nullText(t.PasswordHash),
 		t.DeleteAfterFirstDownload, t.TotalBytes, nullText(t.IdempotencyKey), nullText(t.RequestFingerprint),
-		toMillis(created), senderIP, nullText(t.APITokenID), nullInt(t.MaxDownloads),
+		toMillis(created), senderIP, nullText(t.APITokenID), nullInt(t.MaxDownloads), string(t.LinkMode),
+		t.RecipientVerification,
 	}
 	_, err = tx.Exec(ctx, qTransferInsert, append(args, levelArgs(t)...)...)
 	if err != nil {
@@ -763,11 +812,14 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		downloaded, deleteAfter, ended   sql.NullInt64
 		maxDownloads, mask, maxCap       sql.NullInt64
 		pwdRule, verifRule, intRule, del sql.NullBool
+		linkMode                         string
+		reminded                         sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
 		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
-		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del)
+		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del, &linkMode,
+		&t.RecipientVerification, &reminded)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -788,6 +840,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.DownloadTokenKeyID, t.AvailableAt = tokenKey.String, nullMillis(available)
 	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
 	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
+	t.LinkMode, t.ExpiryReminderAt = LinkMode(linkMode), nullMillis(reminded)
 	return t, nil
 }
 
@@ -1066,14 +1119,15 @@ func probe(ctx context.Context, tx *ScopedTx, count TenantQuery, rowID string, c
 // scanning, and never returns to uploading; it becomes available only
 // through [Transfers.MarkAvailableTx], which records its download link.
 // Any other status may move to expired or deleted, once the data key of
-// every file and the sealed download token (DownloadTokenKeyID) are
-// destroyed (T-110), like [Transfers.MarkExpiredTx]; a rejected transfer
+// every file, the sealed download token (DownloadTokenKeyID) and the
+// sealed token of every recipient link ([RecipientLinks.DestroyKeysTx])
+// are destroyed (T-110), like [Transfers.MarkExpiredTx]; a rejected transfer
 // keeps its file keys until the expiry sweep erases them.
 //
 // It returns ErrInvalid for an unknown or disallowed transition,
 // ErrNotFound when the transfer does not exist or belongs to another
 // tenant, ErrConflict when its status is not from, and [ErrKeysRemain]
-// when a key remains (a file key for expired or deleted, the token key for
+// when a key remains (a file key for expired or deleted, a token key for
 // any terminal target). After an error, the caller must abort the
 // transaction.
 func (r *Transfers) SetStatusTx(ctx context.Context, tx *ScopedTx, trfID string, from, to TransferStatus, now time.Time) error {
@@ -1155,7 +1209,8 @@ func (r *Transfers) FinalizeTx(ctx context.Context, tx *ScopedTx, trfID string, 
 // (by cascade) its recipients and files, inside tx. The data key of every
 // file, and the sealed download token of an available transfer
 // (DownloadTokenKeyID) and of each recipient link, must have been
-// destroyed first in the same transaction ([WrappedKeys.DeleteTx]);
+// destroyed first in the same transaction ([WrappedKeys.DeleteTx],
+// [RecipientLinks.DestroyKeysTx]);
 // otherwise it returns
 // [ErrKeysRemain] and deletes nothing. It returns ErrNotFound when the transfer does not exist
 // or belongs to another tenant. Callers delete the files on disk once the

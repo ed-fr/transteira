@@ -37,6 +37,10 @@ type labels struct {
 	operatorsNotMailed    string
 	waitingSummary        string // %d: transfers, %d: entities
 	waitingUnknown        string
+	verificationNotice    string
+	downloadedBy          string // prefix of the recipient notice
+	downloadLinkIntro     string // intro of the download link in the sender confirmation
+	personalLinks         string // sentence replacing the link when each recipient has a personal one
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -83,6 +87,10 @@ var allLabels = map[string]*labels{
 		operatorsNotMailed:    "Contact the operator of the instance if the situation persists.",
 		waitingSummary:        "Transfers waiting for analysis: %d; entities concerned: %d.",
 		waitingUnknown:        "The number of transfers waiting could not be determined.",
+		verificationNotice:    "Before downloading, you will be asked to confirm your e-mail address with a code sent to this address.",
+		downloadedBy:          "Downloaded by: ",
+		downloadLinkIntro:     "Download link",
+		personalLinks:         "Each recipient received their own personal link.",
 	},
 	i18n.French: {
 		colon:                 " :",
@@ -116,6 +124,10 @@ var allLabels = map[string]*labels{
 		operatorsNotMailed:    "Contactez l'exploitant de l'instance si la situation persiste.",
 		waitingSummary:        "Transferts en attente d'analyse : %d ; entités concernées : %d.", //nolint:misspell // French text
 		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.",   //nolint:misspell // French text
+		verificationNotice:    "Avant de télécharger, il vous sera demandé de confirmer votre adresse e-mail avec un code envoyé à cette adresse.",
+		downloadedBy:          "Téléchargé par : ",
+		downloadLinkIntro:     "Lien de téléchargement",
+		personalLinks:         "Chaque destinataire a reçu son propre lien personnel.",
 	},
 }
 

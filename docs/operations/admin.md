@@ -729,6 +729,18 @@ default and at most 200, then `cursor` from `nextCursor`).
   which is not rotated, so links already received keep working; you never
   see it. At most 5 resends per hour per transfer, whoever the admin (429
   beyond); without SMTP settings for the tenant, nothing is queued (503).
+- **Expiry reminder** (automatic, periodic task `expiry-reminder`, every
+  15 minutes): the day before the expiry (within the last 24 hours) of a
+  transfer with one link per recipient, each recipient who has not started
+  a download through their link gets one reminder mail with that link,
+  once per transfer. A transfer that lives less than 36 hours from its
+  availability (a 1-day transfer) gets none, and neither do the transfers
+  with a single shared link (created before 1.1). A recipient whose
+  address or domain is on the blocklist at that time is skipped. A
+  reminder that could not be queued (mail queue refusal, link not
+  unsealed) is retried at the next run for the recipients concerned only,
+  as long as the transfer is available. Each reminder pass is recorded as
+  `transfer.reminder_sent` in the audit log, with the number of recipients.
 
 ### Invitations
 

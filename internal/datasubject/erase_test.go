@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -387,6 +388,52 @@ func TestEraseTransferOfInvitationFromAnotherSender(t *testing.T) {
 		trfID := ev.transfer(ev.a, dave, invID, []string{alice}, stateAvailable)
 		if rep := ev.erase(ev.a, carol); rep.TransfersDeleted != 1 || rep.InvitationsDeleted != 1 || ev.transferExists(ev.a, trfID) {
 			t.Fatalf("Erase = %+v", rep)
+		}
+	})
+}
+
+// TestEraseRecipientLink crypto-erases the own link of the erased
+// recipient of a transfer with one link per recipient, and keeps the link
+// of the other recipient.
+func TestEraseRecipientLink(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		trfID := ev.transfer(ev.a, alice, "", []string{dave, carol}, stateLinks)
+		before, err := ev.db.RecipientLinks().ListByTransfer(ctx, ev.a.ID, trfID)
+		if err != nil || len(before) != 2 {
+			t.Fatalf("links = %d, %v", len(before), err)
+		}
+		keys := map[string]string{}
+		for _, l := range before {
+			keys[l.Email] = l.TokenKeyID
+		}
+		rep := ev.erase(ev.a, subjectInput)
+		if rep.RecipientEntriesRemoved != 1 || rep.TransfersDeleted != 0 {
+			t.Fatalf("Erase = %+v", rep)
+		}
+		after, err := ev.db.RecipientLinks().ListByTransfer(ctx, ev.a.ID, trfID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range after {
+			if l.Email == carol && l.TokenKeyID != "" {
+				t.Errorf("the link of the erased recipient keeps its key")
+			}
+			if l.Email == dave && l.TokenKeyID != keys[dave] {
+				t.Errorf("the link of the other recipient lost its key")
+			}
+		}
+		// The sealed token itself is gone.
+		if _, err := ev.vault.Open(ctx, ev.a.ID, crypto.PurposeSecret, keys[carol]); err == nil {
+			t.Error("the sealed token of the erased recipient can still be opened")
+		}
+		if _, err := ev.vault.Open(ctx, ev.a.ID, crypto.PurposeSecret, keys[dave]); err != nil {
+			t.Errorf("the sealed token of the other recipient: %v", err)
+		}
+		d, err := ev.db.Transfers().Get(ctx, ev.a.ID, trfID)
+		if err != nil || !slices.Equal(d.Recipients, []string{dave}) {
+			t.Errorf("recipients = %v, %v", d.Recipients, err)
 		}
 	})
 }

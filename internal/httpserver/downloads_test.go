@@ -23,26 +23,45 @@ import (
 // archive responses.
 const attachmentCSP = "default-src 'none'; sandbox; frame-ancestors 'none'"
 
-// fakeDownloads serves one file "0123456789" for the grant "dg_ok".
+// fakeDownloads serves one file "0123456789" for the grant "dg_ok", and
+// verifies the recipient of a link for the code "123456" when the
+// verification cookie is "rv_ok".
 type fakeDownloads struct{}
 
-func (fakeDownloads) Resolve(context.Context, *tenant.Tenant, string, string) (download.View, error) {
+func (fakeDownloads) Resolve(context.Context, *tenant.Tenant, string, download.Cookies) (download.View, error) {
 	return download.View{}, download.ErrNotFound
 }
 
-func (fakeDownloads) Unlock(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (string, error) {
+func (fakeDownloads) Unlock(context.Context, *tenant.Tenant, string, netip.Addr, string, download.Cookies) (string, error) {
 	return "dg_ok", nil
 }
 
-func (fakeDownloads) OpenFile(_ context.Context, _ *tenant.Tenant, _ string, _ netip.Addr, grant, _ string) (public.DownloadFile, error) {
-	if grant != "dg_ok" {
+func (fakeDownloads) OpenFile(_ context.Context, _ *tenant.Tenant, _ string, _ netip.Addr, c download.Cookies, _ string) (public.DownloadFile, error) {
+	if c.Verification == "rv_missing" {
+		return public.DownloadFile{}, download.ErrVerificationRequired
+	}
+	if c.Grant != "dg_ok" {
 		return public.DownloadFile{}, download.ErrDownloadLocked
 	}
 	return public.DownloadFile{Name: "plans.pdf", Content: &content{Reader: bytes.NewReader([]byte("0123456789"))}}, nil
 }
 
-func (fakeDownloads) PrepareArchive(context.Context, *tenant.Tenant, string, netip.Addr, string) (public.DownloadArchive, error) {
+func (fakeDownloads) PrepareArchive(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies) (public.DownloadArchive, error) {
 	return nil, download.ErrGone
+}
+
+func (fakeDownloads) StartVerification(_ context.Context, _ *tenant.Tenant, _ string, _ netip.Addr, _ bool, _, cookie string) (*download.Challenge, error) {
+	if cookie == "rv_ok" {
+		return nil, nil
+	}
+	return &download.Challenge{EmailMasked: "c***@customer.example.net", AttemptsRemaining: 2}, nil
+}
+
+func (fakeDownloads) ConfirmVerification(_ context.Context, _ *tenant.Tenant, _ string, _ netip.Addr, code, _ string) (string, error) {
+	if code != "123456" {
+		return "", &download.WrongCodeError{Remaining: 1}
+	}
+	return "rv_ok", nil
 }
 
 type content struct{ *bytes.Reader }
@@ -80,6 +99,57 @@ func TestDownloadRoutes(t *testing.T) {
 	if rec.Code != http.StatusNoContent || !strings.HasPrefix(rec.Header().Get("Set-Cookie"), download.GrantCookieName+"=dg_ok;") {
 		t.Errorf("unlock: %d %v", rec.Code, rec.Header())
 	}
+
+	// A file of a link awaiting its verification: a plain Problem.
+	rec = e.do(t, http.MethodGet, file, hostA, nil, "Cookie", download.VerificationCookieName+"=rv_missing")
+	decodeProblem(t, rec, http.StatusUnauthorized, problem.CodeRecipientVerificationRequired)
+	if rec.Header().Get("Content-Disposition") != "" {
+		t.Errorf("verification required answered as an attachment: %v", rec.Header())
+	}
+}
+
+// TestRecipientVerificationRoutes checks, through the whole chain, the
+// same-origin and JSON protections of the two recipient verification
+// operations, the cookie read from the request and the cookie set.
+func TestRecipientVerificationRoutes(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, envConfig{api: public.NewServer(public.WithDownloads(fakeDownloads{}))})
+	const (
+		start   = "/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/verification"
+		confirm = start + "/confirm"
+	)
+	for _, tc := range []struct{ path, body string }{
+		{start, `{"purpose":"download"}`},
+		{confirm, `{"code":"123456"}`},
+	} {
+		rec := e.do(t, http.MethodPost, tc.path, hostA, strings.NewReader(tc.body), "Content-Type", "application/json",
+			"Origin", "https://evil.example.net")
+		decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+		rec = e.do(t, http.MethodPost, tc.path, hostA, strings.NewReader(tc.body), "Content-Type", "application/json",
+			"Sec-Fetch-Site", "cross-site")
+		decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+		rec = e.do(t, http.MethodPost, tc.path, hostA, strings.NewReader(tc.body), "Content-Type", "text/plain")
+		decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
+	}
+	same := []string{"Content-Type", "application/json", "Origin", "https://" + hostA, "Sec-Fetch-Site", "same-origin"}
+	rec := e.do(t, http.MethodPost, start, hostA, strings.NewReader(`{}`), same...)
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"emailMasked":"c***@customer.example.net"`) {
+		t.Errorf("start: %d %s", rec.Code, rec.Body)
+	}
+	rec = e.do(t, http.MethodPost, start, hostA, strings.NewReader(`{}`),
+		append(same, "Cookie", download.VerificationCookieName+"=rv_ok")...)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("start when verified: %d %s", rec.Code, rec.Body)
+	}
+	rec = e.do(t, http.MethodPost, confirm, hostA, strings.NewReader(`{"code":"000000"}`), same...)
+	decodeProblem(t, rec, http.StatusUnprocessableEntity, problem.CodeVerificationCodeInvalid)
+	rec = e.do(t, http.MethodPost, confirm, hostA, strings.NewReader(`{"code":"123456"}`), same...)
+	cookie := rec.Header().Get("Set-Cookie")
+	if rec.Code != http.StatusNoContent || !strings.HasPrefix(cookie, download.VerificationCookieName+"=rv_ok;") ||
+		!strings.Contains(cookie, "HttpOnly") || !strings.Contains(cookie, "Secure") ||
+		!strings.Contains(cookie, "SameSite=Strict") || !strings.Contains(cookie, "Path=/") || !strings.Contains(cookie, "Max-Age=3600") {
+		t.Errorf("confirm: %d %q", rec.Code, cookie)
+	}
 }
 
 // stalledContent is a large content recording when it is closed and
@@ -103,7 +173,7 @@ type stalledDownloads struct {
 	content *stalledContent
 }
 
-func (d stalledDownloads) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, string, string) (public.DownloadFile, error) {
+func (d stalledDownloads) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies, string) (public.DownloadFile, error) {
 	return public.DownloadFile{Name: "big.bin", Content: d.content}, nil
 }
 

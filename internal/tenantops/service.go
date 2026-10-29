@@ -47,10 +47,13 @@ type Eraser interface {
 }
 
 // Notifier builds the notification mail of each recipient of a transfer
-// (*notify.Notifier). It returns notify.ErrNoSMTP when the tenant has no
+// (*notify.Notifier): with the shared link of a transfer created before
+// 1.1 (RecipientJobs), or with the own link of each recipient
+// (PerRecipientJobs). It returns notify.ErrNoSMTP when the tenant has no
 // SMTP settings.
 type Notifier interface {
 	RecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, link string) ([]mail.Job, error)
+	PerRecipientJobs(ctx context.Context, t *tenant.Tenant, tr notify.TransferView, links []notify.RecipientLink) ([]mail.Job, error)
 }
 
 // Mailer queues mails without blocking, retrying those the queue refuses

@@ -16,13 +16,13 @@ func TestNewDefaults(t *testing.T) {
 	if s.now == nil || s.logger == nil || s.endedRetention != EndedRetention || s.orphanGrace != OrphanGrace ||
 		s.scanningMaxAge != store.ScanningMaxAge ||
 		s.uploadTTL != 0 || s.backupKeep != DefaultBackupKeep || s.purgeBatch != store.PurgeBatchSize ||
-		s.keyBatch != store.MaxPageSize || s.pageSizes != [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit} {
+		s.keyBatch != store.MaxPageSize || s.reminderPage != store.ReminderSweepLimit || s.pageSizes != [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit} {
 		t.Fatalf("defaults not applied: %+v", s)
 	}
 	want := map[Task]time.Duration{
 		TaskDeleteAfterDownload: DefaultInterval, TaskExpire: DefaultInterval,
 		TaskAbandonedUploads: DefaultAbandonedInterval, TaskTenantDeletions: DefaultTenantDeletionsInterval,
-		TaskPurgeRows: DefaultPurgeInterval, TaskOrphans: DefaultOrphansInterval, TaskBackup: 0,
+		TaskPurgeRows: DefaultPurgeInterval, TaskOrphans: DefaultOrphansInterval, TaskExpiryReminder: DefaultReminderInterval, TaskBackup: 0,
 	}
 	for i, tk := range s.tasks {
 		if tk.name != allTasks[i] || tk.interval != want[tk.name] || tk.atStart != (tk.name != TaskBackup) {
@@ -78,7 +78,7 @@ func TestRunTask(t *testing.T) {
 	if err := ev.s.RunTask(context.Background(), TaskBackup); !errors.Is(err, ErrBackupDisabled) {
 		t.Fatalf("RunTask(backup) without a directory = %v", err)
 	}
-	for _, tk := range allTasks[:6] {
+	for _, tk := range allTasks[:7] {
 		ev.runTask(tk)
 		if !ev.s.LastRun(tk).Equal(ev.clock.Now()) {
 			t.Errorf("LastRun(%s) = %v", tk, ev.s.LastRun(tk))
@@ -144,15 +144,15 @@ func TestStartClose(t *testing.T) {
 			t.Fatalf("second Start = %v, want ErrStarted", err)
 		}
 		// Every task but the backup runs at once, in order.
-		for _, tk := range allTasks[:6] {
+		for _, tk := range allTasks[:7] {
 			if r := next(t, ev, results); r.task != tk || r.err != nil {
 				t.Fatalf("first runs: got %s (%v), want %s", r.task, r.err, tk)
 			}
 		}
 		sqlite := e.Driver == "sqlite"
-		nTimers := 6
+		nTimers := 7
 		if sqlite {
-			nTimers = 7
+			nTimers = 8
 		}
 		created := waitTimers(t, ft, nTimers)
 		if created[TaskBackup] != boolInt(sqlite) {
@@ -199,7 +199,7 @@ func TestStartClose(t *testing.T) {
 		if err := ev.s.Close(context.Background()); err != nil {
 			t.Fatalf("Close: %v", err)
 		}
-		for _, tk := range allTasks[:6] {
+		for _, tk := range allTasks[:7] {
 			if ft.stops(tk) == 0 {
 				t.Errorf("timer of %s not stopped", tk)
 			}
@@ -269,7 +269,7 @@ func TestStartStopsWithContext(t *testing.T) {
 	if err := ev.s.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for _, tk := range allTasks[:6] {
+	for _, tk := range allTasks[:7] {
 		if ft.stops(tk) != 1 {
 			t.Errorf("timer of %s stopped %d times", tk, ft.stops(tk))
 		}

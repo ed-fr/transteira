@@ -15,17 +15,34 @@ import (
 const MaxChallengeAttempts = 2
 
 // challengeColumns is the column list read by the challenge queries.
-const challengeColumns = `id, email, code_mac, attempts_remaining, invitation_id, client_ip, created_at, expires_at, consumed_at`
+const challengeColumns = `id, email, code_mac, attempts_remaining, invitation_id, client_ip, created_at, expires_at, ` +
+	`consumed_at, purpose, recipient_link_id, recipient_intent`
 
 // Statements of the Challenges repository.
 var (
 	qChallengeInsert = tenantQuery(
 		`INSERT INTO verification_challenges (tenant_id, id, email, code_mac, attempts_remaining, invitation_id,
-		client_ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	qChallengeGet = tenantQuery(
 		`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`)
+	// qChallengeCountEmail counts the deposit codes of an address: the
+	// recipient codes have their own budget, per link (D22).
 	qChallengeCountEmail = tenantQuery(
-		`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND email = ? AND created_at >= ?`)
+		`SELECT count(*) FROM verification_challenges
+		WHERE tenant_id = ? AND email = ? AND created_at >= ? AND purpose = 'deposit'`)
+	// qChallengeCountLink counts the recipient codes of a link
+	// (verification_challenges_link_idx).
+	qChallengeCountLink = tenantQuery(
+		`SELECT count(*) FROM verification_challenges
+		WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`)
+	// qChallengeLatestLink reads the newest recipient code of a link
+	// (verification_challenges_link_idx), the only one a code is checked
+	// against.
+	qChallengeLatestLink = tenantQuery(
+		`SELECT ` + challengeColumns + ` FROM verification_challenges
+		WHERE tenant_id = ? AND recipient_link_id = ? AND purpose = 'recipient'
+		ORDER BY created_at DESC, id DESC LIMIT 1`)
 	qChallengeCountIP = tenantQuery(
 		`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND client_ip = ? AND created_at >= ?`)
 	qChallengeDelete = tenantQuery(
@@ -40,6 +57,31 @@ var (
 	qChallengeConsume = tenantQuery(
 		`UPDATE verification_challenges SET consumed_at = ?
 		WHERE tenant_id = ? AND id = ? AND attempts_remaining > 0 AND consumed_at IS NULL AND expires_at > ?`)
+)
+
+// ChallengePurpose is what a verification code proves (D21).
+type ChallengePurpose string
+
+// Challenge purposes.
+const (
+	// ChallengeDeposit verifies a depositor's address (spec 7), the zero
+	// value at creation.
+	ChallengeDeposit ChallengePurpose = "deposit"
+	// ChallengeRecipient verifies the recipient of a recipient link (spec
+	// 10): the code is sent to the address of the link only.
+	ChallengeRecipient ChallengePurpose = "recipient"
+)
+
+// RecipientIntent is what a recipient verifies their address for
+// (OpenAPI RecipientVerificationStart.purpose).
+type RecipientIntent string
+
+// Recipient intents.
+const (
+	// IntentDownload verifies the recipient before a download.
+	IntentDownload RecipientIntent = "download"
+	// IntentReply verifies the recipient before a reply to the transfer.
+	IntentReply RecipientIntent = "reply"
 )
 
 // Challenge is a verification code sent by mail to an address (spec 7). The
@@ -72,6 +114,17 @@ type Challenge struct {
 	ExpiresAt time.Time
 	// ConsumedAt is when the right code was entered, zero while unused.
 	ConsumedAt time.Time
+	// Purpose is what the code proves: ChallengeDeposit (the zero value at
+	// creation) or ChallengeRecipient.
+	Purpose ChallengePurpose
+	// RecipientLinkID is the recipient link ("rcl_" + ULID, same tenant) of
+	// a ChallengeRecipient code, "" for a deposit code. Email must then be
+	// the address of the recipient of the link; deleting the link deletes
+	// the challenge.
+	RecipientLinkID string
+	// RecipientIntent is what a ChallengeRecipient code is for, "" for a
+	// deposit code.
+	RecipientIntent RecipientIntent
 }
 
 // Open reports whether the challenge still accepts a code at now: not
@@ -117,10 +170,12 @@ func (r *Challenges) Create(ctx context.Context, tid tenant.ID, c Challenge) err
 }
 
 // CreateTx stores c for the tenant tx is bound to, inside tx. It returns
-// ErrInvalid for a malformed field, ErrNotFound when the tenant or the
-// invitation does not exist (or the invitation belongs to another tenant)
-// and ErrConflict when the ID is already used. After an error, the caller
-// must abort the transaction.
+// ErrInvalid for a malformed field (a recipient code needs a link and an
+// intent, is sent to the address of the link and has no invitation; a
+// deposit code has neither link nor intent), ErrNotFound when the tenant,
+// the invitation or the recipient link does not exist (or belongs to
+// another tenant) and ErrConflict when the ID is already used. After an
+// error, the caller must abort the transaction.
 func (r *Challenges) CreateTx(ctx context.Context, tx *ScopedTx, c Challenge) error {
 	if err := r.create(ctx, tx, c); err != nil {
 		return wrap("create challenge", err)
@@ -153,9 +208,48 @@ func (r *Challenges) create(ctx context.Context, tx *ScopedTx, c Challenge) erro
 	case !c.ConsumedAt.IsZero():
 		return invalid("a new challenge cannot be consumed")
 	}
+	if c.Purpose == "" {
+		c.Purpose = ChallengeDeposit
+	}
+	if err := checkChallengePurpose(ctx, tx, c, email); err != nil {
+		return err
+	}
 	_, err = tx.Exec(ctx, qChallengeInsert, c.ID, email, c.CodeMAC, c.AttemptsRemaining,
-		nullText(c.InvitationID), ip, toMillis(created), toMillis(c.ExpiresAt))
+		nullText(c.InvitationID), ip, toMillis(created), toMillis(c.ExpiresAt), string(c.Purpose),
+		nullText(c.RecipientLinkID), nullText(string(c.RecipientIntent)))
 	return err
+}
+
+// checkChallengePurpose validates the purpose fields of c, whose address is
+// email (normalized): a recipient code is sent to the address of its link,
+// read in tx.
+func checkChallengePurpose(ctx context.Context, tx *ScopedTx, c Challenge, email string) error {
+	switch c.Purpose {
+	case ChallengeDeposit:
+		if c.RecipientLinkID != "" || c.RecipientIntent != "" {
+			return invalid("a deposit code has no recipient link")
+		}
+		return nil
+	case ChallengeRecipient:
+	default:
+		return invalid("unknown challenge purpose")
+	}
+	switch {
+	case c.InvitationID != "":
+		return invalid("a recipient code has no invitation")
+	case c.RecipientIntent != IntentDownload && c.RecipientIntent != IntentReply:
+		return invalid("unknown recipient intent")
+	case !validLinkID(c.RecipientLinkID):
+		return invalid("malformed recipient link id")
+	}
+	l, err := scanLink(tx.QueryRow(ctx, qLinkGet, c.RecipientLinkID))
+	if err != nil {
+		return err
+	}
+	if l.Email != email {
+		return invalid("a recipient code goes to the address of its link")
+	}
+	return nil
 }
 
 // Get returns the challenge chID of tenant tid in whatever state it is
@@ -168,18 +262,7 @@ func (r *Challenges) Get(ctx context.Context, tid tenant.ID, chID string) (Chall
 	}
 	var c Challenge
 	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
-		var (
-			inv              sql.NullString
-			ip               string
-			created, expires int64
-			consumed         sql.NullInt64
-		)
-		err := tx.QueryRow(ctx, qChallengeGet, chID).Scan(&c.ID, &c.Email, &c.CodeMAC, &c.AttemptsRemaining,
-			&inv, &ip, &created, &expires, &consumed)
-		c.InvitationID = inv.String
-		c.ClientIP = parseIP(ip)
-		c.CreatedAt, c.ExpiresAt = fromMillis(created), fromMillis(expires)
-		c.ConsumedAt = nullMillis(consumed)
+		c, err = scanChallenge(tx.QueryRow(ctx, qChallengeGet, chID))
 		return err
 	})
 	if err != nil {
@@ -188,9 +271,67 @@ func (r *Challenges) Get(ctx context.Context, tid tenant.ID, chID string) (Chall
 	return c, nil
 }
 
-// CountSince returns the number of challenges created for the address email
-// of tenant tid at or after since, consumed or not: the per-address rate
-// limit (5 codes per sliding hour, spec 7). It is a plain read: a caller
+// LatestByLink returns the newest recipient challenge of the recipient link
+// linkID of tenant tid (by creation time, then ID), in whatever state it is:
+// a new code replaces the previous ones, so it is the only one a code is
+// checked against. It returns ErrNotFound when the link has no recipient
+// challenge (including a link of another tenant) and ErrInvalid for a
+// malformed link ID.
+func (r *Challenges) LatestByLink(ctx context.Context, tid tenant.ID, linkID string) (Challenge, error) {
+	s, err := r.db.Scoped(tid)
+	if err != nil {
+		return Challenge{}, err
+	}
+	var c Challenge
+	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
+		c, err = r.LatestByLinkTx(ctx, tx, linkID)
+		return err
+	})
+	if err != nil {
+		return Challenge{}, err
+	}
+	return c, nil
+}
+
+// LatestByLinkTx is [Challenges.LatestByLink] inside tx, for the tenant tx
+// is bound to. After an error, the caller must abort the transaction.
+func (r *Challenges) LatestByLinkTx(ctx context.Context, tx *ScopedTx, linkID string) (Challenge, error) {
+	if !validLinkID(linkID) {
+		return Challenge{}, wrap("latest challenge", invalid("malformed recipient link id"))
+	}
+	c, err := scanChallenge(tx.QueryRow(ctx, qChallengeLatestLink, linkID))
+	if err != nil {
+		return Challenge{}, wrap("latest challenge", err)
+	}
+	return c, nil
+}
+
+// scanChallenge reads one row of challengeColumns.
+func scanChallenge(row interface{ Scan(...any) error }) (Challenge, error) {
+	var (
+		c                 Challenge
+		inv, link, intent sql.NullString
+		ip, purpose       string
+		created, expires  int64
+		consumed          sql.NullInt64
+	)
+	if err := row.Scan(&c.ID, &c.Email, &c.CodeMAC, &c.AttemptsRemaining,
+		&inv, &ip, &created, &expires, &consumed, &purpose, &link, &intent); err != nil {
+		return Challenge{}, err
+	}
+	c.InvitationID, c.Purpose = inv.String, ChallengePurpose(purpose)
+	c.RecipientLinkID, c.RecipientIntent = link.String, RecipientIntent(intent.String)
+	c.ClientIP = parseIP(ip)
+	c.CreatedAt, c.ExpiresAt = fromMillis(created), fromMillis(expires)
+	c.ConsumedAt = nullMillis(consumed)
+	return c, nil
+}
+
+// CountSince returns the number of deposit challenges created for the
+// address email of tenant tid at or after since, consumed or not: the
+// per-address rate limit (5 codes per sliding hour, spec 7). The recipient
+// codes are not counted: they have their own budget per link
+// ([Challenges.CountByLinkSince]). It is a plain read: a caller
 // enforcing the limit counts with [Challenges.CountSinceTx] in the
 // transaction that inserts the challenge.
 func (r *Challenges) CountSince(ctx context.Context, tid tenant.ID, email string, since time.Time) (int, error) {
@@ -202,8 +343,9 @@ func (r *Challenges) CountSince(ctx context.Context, tid tenant.ID, email string
 }
 
 // CountByIPSince returns the number of challenges of tenant tid requested
-// from ip at or after since: the per-IP rate limit (20 codes per sliding
-// hour and per tenant, spec 7). See [Challenges.CountByIPSinceTx] to
+// from ip at or after since, whatever their purpose: the per-IP rate limit
+// (20 codes per sliding hour and per tenant, spec 7, shared by the deposit
+// and the recipient codes). See [Challenges.CountByIPSinceTx] to
 // enforce it.
 func (r *Challenges) CountByIPSince(ctx context.Context, tid tenant.ID, ip netip.Addr, since time.Time) (int, error) {
 	text, err := ipText(ip)
@@ -237,6 +379,29 @@ func (r *Challenges) CountByIPSinceTx(ctx context.Context, tx *ScopedTx, ip neti
 		return 0, err
 	}
 	return countTx(ctx, tx, qChallengeCountIP, text, since, "count challenges")
+}
+
+// CountByLinkSince returns the number of recipient challenges of tenant
+// tid created for the recipient link linkID at or after since, consumed or
+// not: the per-(address, link) rate limit of the recipient codes (5 per
+// sliding hour, D22; a link fixes its address). See
+// [Challenges.CountByLinkSinceTx] to enforce it. It returns ErrInvalid for
+// a malformed link ID.
+func (r *Challenges) CountByLinkSince(ctx context.Context, tid tenant.ID, linkID string, since time.Time) (int, error) {
+	if !validLinkID(linkID) {
+		return 0, invalid("malformed recipient link id")
+	}
+	return r.count(ctx, tid, qChallengeCountLink, linkID, since)
+}
+
+// CountByLinkSinceTx is [Challenges.CountByLinkSince] inside tx, after the
+// tenant lock (see [Challenges.CountSinceTx]). After an error, the caller
+// must abort the transaction.
+func (r *Challenges) CountByLinkSinceTx(ctx context.Context, tx *ScopedTx, linkID string, since time.Time) (int, error) {
+	if !validLinkID(linkID) {
+		return 0, wrap("count challenges", invalid("malformed recipient link id"))
+	}
+	return countTx(ctx, tx, qChallengeCountLink, linkID, since, "count challenges")
 }
 
 // countTx takes the tenant lock, then runs the count q for key and since in

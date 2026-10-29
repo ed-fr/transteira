@@ -423,6 +423,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// that a transfer deleted while it is scanned is never made available.
 	sweeper := lifecycle.New(lifecycle.Deps{
 		DB: db, Vault: vault, Remover: uploads, Files: files, Holder: worker, Audit: auditLog,
+		Notifier: notifier, Mail: mailQueue, Opener: vault,
 	},
 		lifecycleOptions(cfg, &o, logger))
 	admins, err := newAdminService(ctx, cfg, db, adminDeps{
@@ -889,10 +890,12 @@ func newTransferService(cfg *config.Config, db *store.DB, d transferDeps, logger
 
 // downloadBackend is the part of *download.Service the HTTP layer uses.
 type downloadBackend interface {
-	Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (download.View, error)
-	Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error)
-	OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (*download.File, error)
-	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (*download.Archive, error)
+	Resolve(ctx context.Context, t *tenant.Tenant, rawToken string, cookies download.Cookies) (download.View, error)
+	Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password string, cookies download.Cookies) (string, error)
+	OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies, fileID string) (*download.File, error)
+	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies) (*download.Archive, error)
+	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
+	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
 }
 
 // downloadAdapter adapts the download service to public.DownloadService:
@@ -903,18 +906,28 @@ type downloadAdapter struct {
 }
 
 // Resolve implements public.DownloadService.
-func (a downloadAdapter) Resolve(ctx context.Context, t *tenant.Tenant, rawToken, grantCookie string) (download.View, error) {
-	return a.svc.Resolve(ctx, t, rawToken, grantCookie)
+func (a downloadAdapter) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string, cookies download.Cookies) (download.View, error) {
+	return a.svc.Resolve(ctx, t, rawToken, cookies)
 }
 
 // Unlock implements public.DownloadService.
-func (a downloadAdapter) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error) {
-	return a.svc.Unlock(ctx, t, rawToken, clientIP, password, grantCookie)
+func (a downloadAdapter) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password string, cookies download.Cookies) (string, error) {
+	return a.svc.Unlock(ctx, t, rawToken, clientIP, password, cookies)
+}
+
+// StartVerification implements public.DownloadService.
+func (a downloadAdapter) StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error) {
+	return a.svc.StartVerification(ctx, t, rawToken, clientIP, reply, acceptLanguage, verificationCookie)
+}
+
+// ConfirmVerification implements public.DownloadService.
+func (a downloadAdapter) ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error) {
+	return a.svc.ConfirmVerification(ctx, t, rawToken, clientIP, code, verificationCookie)
 }
 
 // OpenFile implements public.DownloadService.
-func (a downloadAdapter) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (public.DownloadFile, error) {
-	f, err := a.svc.OpenFile(ctx, t, rawToken, clientIP, grantCookie, fileID)
+func (a downloadAdapter) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies, fileID string) (public.DownloadFile, error) {
+	f, err := a.svc.OpenFile(ctx, t, rawToken, clientIP, cookies, fileID)
 	if err != nil {
 		return public.DownloadFile{}, err
 	}
@@ -922,8 +935,8 @@ func (a downloadAdapter) OpenFile(ctx context.Context, t *tenant.Tenant, rawToke
 }
 
 // PrepareArchive implements public.DownloadService.
-func (a downloadAdapter) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie string) (public.DownloadArchive, error) {
-	archive, err := a.svc.PrepareArchive(ctx, t, rawToken, clientIP, grantCookie)
+func (a downloadAdapter) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies) (public.DownloadArchive, error) {
+	archive, err := a.svc.PrepareArchive(ctx, t, rawToken, clientIP, cookies)
 	if err != nil {
 		return nil, err
 	}
@@ -1201,7 +1214,8 @@ type busOutputs struct {
 var supervisedTasks = []string{
 	string(lifecycle.TaskExpire), string(lifecycle.TaskDeleteAfterDownload),
 	string(lifecycle.TaskAbandonedUploads), string(lifecycle.TaskTenantDeletions),
-	string(lifecycle.TaskPurgeRows), string(lifecycle.TaskOrphans), string(lifecycle.TaskBackup),
+	string(lifecycle.TaskPurgeRows), string(lifecycle.TaskOrphans), string(lifecycle.TaskExpiryReminder),
+	string(lifecycle.TaskBackup),
 }
 
 // supervisionSources completes src with the bus outputs of b, leaving the

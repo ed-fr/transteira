@@ -233,6 +233,7 @@ export const FIELD_ORDER = [
   'expiryDays',
   'password',
   'maxDownloads',
+  'recipientVerification',
   'files',
 ] as const;
 
@@ -335,6 +336,18 @@ export function effectiveDeleteAfterFirst(chosen: boolean, rules: LevelRules | u
   return chosen || rules?.forceDeleteAfterFirstDownload === true;
 }
 
+/**
+ * Value of the recipient verification option as sent: only when the feature is available,
+ * chosen by the sender or required by the level.
+ */
+export function effectiveRecipientVerification(
+  chosen: boolean,
+  rules: LevelRules | undefined,
+  featureAvailable: boolean,
+): boolean {
+  return featureAvailable && (chosen || rules?.requireRecipientVerification === true);
+}
+
 /** Duration to keep when the offered ones change: the current one when still offered. */
 export function keepExpiry(current: number | undefined, offered: readonly number[]): number | undefined {
   return current !== undefined && offered.includes(current) ? current : defaultExpiry(offered);
@@ -391,9 +404,12 @@ export function mapRuleErrors(errors: readonly ProblemFieldError[] | undefined):
     if (Object.hasOwn(out, field)) {
       continue;
     }
-    const key = `deposit.form.rules.${error.code}`;
+    const key =
+      field === 'recipientVerification' && error.code === 'required'
+        ? 'deposit.form.recipientVerification.requiredByLevel'
+        : `deposit.form.rules.${error.code}`;
     const known = ['required', 'not-allowed', 'internal-only', 'max-exceeded'].includes(error.code);
-    out[field] = { key: known ? key : 'fieldErrors.invalid' };
+    out[field] = { key: known || field === 'recipientVerification' ? key : 'fieldErrors.invalid' };
   }
   return out;
 }

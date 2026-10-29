@@ -111,6 +111,7 @@ func TestTransfersCreateAndRead(t *testing.T) {
 
 		want := tr
 		want.Status, want.SenderEmail, want.CreatedAt = store.TransferUploading, "alice@entity-a.example.com", msNow
+		want.LinkMode = store.LinkModeShared // the zero value at creation
 		if !reflect.DeepEqual(d.Transfer, want) {
 			t.Errorf("Get transfer = %+v, want %+v", d.Transfer, want)
 		}

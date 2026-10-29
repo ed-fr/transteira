@@ -35,11 +35,14 @@ const (
 const startCeilingWindows = 4
 
 // startKey identifies the download starts that count as one within the
-// window: an object (a file ID, or archiveObject) of a transfer, by one
-// client (its IPv4 address, or its IPv6 /64, as the rate limits key it).
+// window: an object (a file ID, or archiveObject) of a transfer, through
+// one recipient link ("" for a shared link), by one client (its IPv4
+// address, or its IPv6 /64, as the rate limits key it). Two recipients
+// behind one address are so counted each through their own link.
 type startKey struct {
 	tid    tenant.ID
 	trf    string
+	link   string
 	object string
 	client string
 }
@@ -260,4 +263,12 @@ func (d *startDedup) len() int {
 // newStartKey returns the deduplication key of a download start.
 func newStartKey(tid tenant.ID, trfID, object string, ip netip.Addr) startKey {
 	return startKey{tid: tid, trf: trfID, object: object, client: store.IPFailureKey(ip).Key}
+}
+
+// linkStartKey is newStartKey through the recipient link linkID ("" for a
+// shared link).
+func linkStartKey(tid tenant.ID, trfID, linkID, object string, ip netip.Addr) startKey {
+	k := newStartKey(tid, trfID, object, ip)
+	k.link = linkID
+	return k
 }

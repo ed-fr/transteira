@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApiClient } from '../../shared/api/client';
+import { invalidFields } from './form';
 import { DepositFlow, type DepositSession, type PublicTenant } from './flow.svelte';
 
 // A minimal fake of the API: a deposit session is open and POST /transfers answers with reply.
@@ -71,7 +72,7 @@ const session: DepositSession = {
   canInvite: true,
 };
 
-function setup(reply: Reply) {
+function setup(reply: Reply, usedTenant: PublicTenant = tenant) {
   const bodies: unknown[] = [];
   let current = reply;
   const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -98,7 +99,7 @@ function setup(reply: Reply) {
     csrfToken: () => undefined,
     onCsrfToken: () => undefined,
   });
-  const flow = new DepositFlow(tenant, undefined, {
+  const flow = new DepositFlow(usedTenant, undefined, {
     api,
     tr: { t: (key: string) => key, has: (key: string) => key.startsWith('errors.') },
     language: () => 'en',
@@ -177,5 +178,69 @@ describe('levels in the deposit flow', () => {
     set(problem(403, 'recipient-domain-refused'));
     await flow.submitTransfer();
     expect(flow.stepError).toBeDefined();
+  });
+});
+
+describe('recipient verification in the deposit flow', () => {
+  const verifying: PublicTenant = {
+    ...tenant,
+    features: { ...tenant.features!, recipientVerification: true },
+    confidentialityLevels: [
+      ...(tenant.confidentialityLevels ?? []),
+      {
+        key: 'verified',
+        label: 'Verified',
+        isDefault: false,
+        rules: { ...rules, requireRecipientVerification: true },
+      },
+    ],
+  };
+
+  it('is not offered, nor sent, when the feature is off', async () => {
+    const { flow, bodies } = setup(problem(500, 'internal-error'));
+    await flow.start();
+    expect(flow.recipientVerificationOffered).toBe(false);
+    flow.form.recipientVerification = true;
+    expect(flow.recipientVerificationEffective).toBe(false);
+    flow.form.recipientsText = 'carol@customer.example.net';
+    flow.addFiles([new File(['x'], 'a.bin', { lastModified: 1 })]);
+    await flow.submitTransfer();
+    expect(bodies[0]).not.toHaveProperty('recipientVerification');
+  });
+
+  it('is sent when chosen, and forced by a level requiring it', async () => {
+    const { flow, bodies } = setup(problem(500, 'internal-error'), verifying);
+    await flow.start();
+    expect(flow.levels.map((l) => l.key)).toContain('verified');
+    expect(flow.recipientVerificationOffered).toBe(true);
+    flow.form.recipientsText = 'carol@customer.example.net';
+    flow.addFiles([new File(['x'], 'a.bin', { lastModified: 1 })]);
+    await flow.submitTransfer();
+    expect(bodies[0]).not.toHaveProperty('recipientVerification');
+    flow.form.recipientVerification = true;
+    await flow.submitTransfer();
+    expect(bodies[1]).toMatchObject({ recipientVerification: true });
+    flow.form.recipientVerification = false;
+    flow.setLevel('verified');
+    expect(flow.recipientVerificationEffective).toBe(true);
+    await flow.submitTransfer();
+    expect(bodies[2]).toMatchObject({ recipientVerification: true, confidentialityLevel: 'verified' });
+  });
+
+  it('maps the 422 field error next to the option', async () => {
+    const { flow } = setup(
+      problem(422, 'confidentiality-rule-violated', {
+        errors: [{ field: '/recipientVerification', code: 'required' }],
+      }),
+      verifying,
+    );
+    await flow.start();
+    flow.form.recipientsText = 'carol@customer.example.net';
+    flow.addFiles([new File(['x'], 'a.bin', { lastModified: 1 })]);
+    await flow.submitTransfer();
+    expect(flow.formErrors).toEqual({
+      recipientVerification: { key: 'deposit.form.recipientVerification.requiredByLevel' },
+    });
+    expect(invalidFields(flow.formErrors)).toEqual(['recipientVerification']);
   });
 });

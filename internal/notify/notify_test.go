@@ -657,3 +657,27 @@ func TestConfidentialityLabel(t *testing.T) {
 		t.Error("label shown without level")
 	}
 }
+
+func TestSenderConfirmationWithoutLink(t *testing.T) {
+	e := newEnv(t)
+	j, err := e.n.SenderConfirmation(context.Background(), e.t, testTransfer(), "")
+	if err != nil {
+		t.Fatalf("no link: %v", err)
+	}
+	if strings.Contains(j.Message.HTML, "href=") || strings.Contains(j.Message.Text, "http") {
+		t.Errorf("a link is shown:\n%s\n%s", j.Message.Text, j.Message.HTML)
+	}
+	if !strings.Contains(j.Message.Text, "propre lien personnel") || !strings.Contains(j.Message.HTML, "propre lien personnel") {
+		t.Errorf("sentence missing:\n%s\n%s", j.Message.Text, j.Message.HTML)
+	}
+	// A malformed link is still refused.
+	if _, err := e.n.SenderConfirmation(context.Background(), e.t, testTransfer(), "ftp://x"); !errors.Is(err, ErrInvalidLink) {
+		t.Errorf("bad link: %v", err)
+	}
+	// An expired transfer is refused without a link too.
+	tr := testTransfer()
+	tr.ExpiresAt = time.Time{}
+	if _, err := e.n.SenderConfirmation(context.Background(), e.t, tr, ""); !errors.Is(err, ErrTransferExpired) {
+		t.Errorf("expired: %v", err)
+	}
+}

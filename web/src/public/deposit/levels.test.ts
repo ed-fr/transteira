@@ -8,6 +8,7 @@ import {
   keepMaxDownloads,
   levelByKey,
   mapRecipientDomainErrors,
+  effectiveRecipientVerification,
   mapRuleErrors,
   selectableLevels,
   maxDownloadsCap,
@@ -106,6 +107,23 @@ describe('confidentiality helpers', () => {
       'recipients.2': { key: 'deposit.form.recipients.domainRefused' },
     });
     expect(invalidFields({ maxDownloads: { key: 'k' } })).toEqual(['maxDownloads']);
+  });
+});
+
+describe('effectiveRecipientVerification', () => {
+  it('needs the feature, then follows the choice or the level', () => {
+    const required = { ...rules, requireRecipientVerification: true };
+    expect(effectiveRecipientVerification(true, undefined, false)).toBe(false);
+    expect(effectiveRecipientVerification(false, required, false)).toBe(false);
+    expect(effectiveRecipientVerification(false, undefined, true)).toBe(false);
+    expect(effectiveRecipientVerification(true, rules, true)).toBe(true);
+    expect(effectiveRecipientVerification(false, required, true)).toBe(true);
+  });
+
+  it('maps the required rule error of the option to its own message', () => {
+    expect(mapRuleErrors([{ field: '/recipientVerification', code: 'required' }])).toEqual({
+      recipientVerification: { key: 'deposit.form.recipientVerification.requiredByLevel' },
+    });
   });
 });
 

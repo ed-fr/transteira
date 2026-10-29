@@ -42,8 +42,10 @@ func checkPassword(pw string) error {
 
 // Unlock checks the password of the protected transfer of the download
 // token rawToken in tenant t (unlockDownload), entered from the client IP
-// clientIP. grantCookie is the raw value of the GrantCookieName cookie, ""
-// when absent.
+// clientIP. cookies are the raw technical cookies of the request; the
+// password of a recipient link that requires the recipient verification is
+// only checked once the verification cookie holds a valid entry of the link
+// (ErrVerificationRequired otherwise, before any attempt is counted).
 //
 // On success it returns the new value of the grant cookie, holding a grant
 // of the transfer valid GrantTTL; the HTTP layer sets it with Max-Age
@@ -51,9 +53,11 @@ func checkPassword(pw string) error {
 // "" (the cookie is left as it is).
 //
 // Two failure counters apply, each locking for store.PasswordLockDuration
-// after store.MaxPasswordFailures wrong passwords: the transfer (all IPs)
-// and the client IP (all transfers of the tenant; an IPv6 client by its
-// /64). The attempt is counted against both before the password is
+// after store.MaxPasswordFailures wrong passwords: the transfer (all IPs),
+// or for a recipient link the link itself, so that one recipient cannot
+// lock the others out; and the client IP (all transfers of the tenant; an
+// IPv6 client by its /64). The grant of a recipient link is bound to the
+// link. The attempt is counted against both before the password is
 // verified, in one transaction with the lock check, so that concurrent
 // attempts can never be verified beyond the limit. A right password clears
 // the transfer counter and refunds the attempt on the IP counter (its
@@ -63,18 +67,21 @@ func checkPassword(pw string) error {
 //
 // It returns ErrPasswordRequired for an empty password, ErrInvalid for a
 // malformed one, ErrNotFound, ErrGone and ErrMaxDownloads
-// as Resolve does, ErrNoClientIP for an invalid clientIP, a *LockedError
+// as Resolve does, ErrVerificationRequired as described above, ErrNoClientIP for an invalid clientIP, a *LockedError
 // (ErrLocked) while locked or when this wrong password sets the lock, and
 // a *WrongPasswordError (ErrWrongPassword) for a wrong password while
 // attempts remain. Every wrong password writes a transfer_password_invalid
 // security event, and every refusal on a lock a rate_limited event.
-func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password, grantCookie string) (string, error) {
+func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, password string, cookies Cookies) (string, error) {
 	if err := checkPassword(password); err != nil {
 		return "", err
 	}
-	a, err := s.resolve(ctx, t, rawToken, grantCookie, true)
+	a, err := s.resolve(ctx, t, rawToken, cookies, true)
 	if err != nil {
 		return "", err
+	}
+	if a.awaiting() {
+		return "", ErrVerificationRequired
 	}
 	if !a.d.PasswordProtected() {
 		return "", nil
@@ -83,6 +90,9 @@ func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string,
 		return "", ErrNoClientIP
 	}
 	trfKey, ipKey := store.TransferFailureKey(a.d.ID), store.IPFailureKey(clientIP)
+	if a.link != nil {
+		trfKey = store.LinkFailureKey(a.link.ID)
+	}
 	keys := []store.FailureKey{trfKey, ipKey}
 	now := s.now()
 	until, out, err := s.repo.reserve(ctx, t.ID, keys, now)
@@ -113,7 +123,7 @@ func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string,
 	if err := s.repo.unlocked(ctx, t.ID, trfKey, ipKey, now); err != nil {
 		return "", fmt.Errorf("download: settle password failures: %w", err)
 	}
-	return s.grant(grantCookie, t.ID, a.d.ID, now)
+	return s.grant(cookies.Grant, t.ID, a.subject(), now)
 }
 
 // logEvent writes a security event about the transfer trfID, which is

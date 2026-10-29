@@ -300,35 +300,53 @@ func TestOperationsDeleteUploading(t *testing.T) {
 }
 
 // TestOperationsResend: the notification is resent to a subset of the
-// original recipients with the existing link, which keeps working; an
-// address that is not a recipient is refused (400), a transfer that is
-// not available too (409), and the sixth resend of the hour is 429. The
-// link never appears in a response, a log or the audit log.
+// original recipients, each with their own existing link (P27), which
+// keeps working; an address that is not a recipient is refused (400), a
+// transfer that is not available too (409), and the sixth resend of the
+// hour is 429. No link appears in a response, a log or the audit log.
 func TestOperationsResend(t *testing.T) {
 	t.Parallel()
 	forEngine(t, func(t *testing.T, e storetest.Engine) {
 		o := startOps(t, e)
 		alice, sender := internalSession(t, o.depositEnv, "alice")
 		r1, r2, r3 := uniqueEmail(t, "rcpt-one", "example.net"), uniqueEmail(t, "rcpt-two", "example.org"), uniqueEmail(t, "rcpt-three", "example.com")
-		tr, token := alice.availableTransfer(t, transferCreate{Recipients: []string{r1, r2, r3}}, uploadedFile{"notice.txt", []byte("resent content")})
-		o.secret(token)
+		tr, _ := alice.availableTransfer(t, transferCreate{Recipients: []string{r1, r2, r3}}, uploadedFile{"notice.txt", []byte("resent content")})
+		links := o.recipientLinks(t, hostA, tr.ID)
+		tokens := map[string]string{}
 		for _, r := range []string{r1, r2, r3} {
+			tokens[r] = tokenOf(t, hostA, links[r])
+			o.secret(tokens[r])
 			o.waitMailSent(t, r)
 		}
+		token := tokens[r2]
 
 		resp := mustStatus(t, "resend to r2", o.sa.resend(t, o.tid, tr.ID, []string{strings.ToUpper(r2)}), http.StatusAccepted)
-		if strings.Contains(string(resp.body), token) || strings.Contains(string(resp.body), "/d/") {
-			t.Errorf("resend answer holds the link: %s", resp.body)
-		}
+		expectNoLink(t, "the resend answer", resp.body)
 		eventually(t, "second notification to r2", func() bool { return len(o.mp.messagesTo(t, r2)) >= 2 })
 		for _, msg := range o.mp.messagesTo(t, r2) {
-			if !strings.Contains(o.mp.detail(t, msg.ID).text(), tr.DownloadURL) {
-				t.Errorf("notification %q to r2 lacks the existing link", msg.Subject)
+			text := o.mp.detail(t, msg.ID).text()
+			if !strings.Contains(text, links[r2]) || strings.Contains(text, tokens[r1]) || strings.Contains(text, tokens[r3]) {
+				t.Errorf("notification %q to r2 does not carry its own existing link only", msg.Subject)
 			}
 		}
 		o.newRecipient(3).mustPage(t, token)
+		// Resending all: each recipient gets their own same link again.
+		mustStatus(t, "resend to all", o.sa.resend(t, o.tid, tr.ID, nil), http.StatusAccepted)
+		eventually(t, "resent notifications", func() bool {
+			return len(o.mp.messagesTo(t, r1)) >= 2 && len(o.mp.messagesTo(t, r3)) >= 2 && len(o.mp.messagesTo(t, r2)) >= 3
+		})
+		for _, r := range []string{r1, r2, r3} {
+			for _, msg := range o.mp.messagesTo(t, r) {
+				if text := o.mp.detail(t, msg.ID).text(); !strings.Contains(text, links[r]) {
+					t.Errorf("notification %q to %s lacks their own link", msg.Subject, r)
+				}
+			}
+		}
+		if again := o.recipientLinks(t, hostA, tr.ID); again[r1] != links[r1] || again[r2] != links[r2] || again[r3] != links[r3] {
+			t.Error("the resend rotated a link")
+		}
 		o.mailBarrier(t, alice)
-		for r, want := range map[string]int{r1: 1, r2: 2, r3: 1} {
+		for r, want := range map[string]int{r1: 2, r2: 3, r3: 2} {
 			if n := len(o.mp.messagesTo(t, r)); n != want {
 				t.Errorf("%d mails to %s, want %d", n, r, want)
 			}
@@ -344,9 +362,9 @@ func TestOperationsResend(t *testing.T) {
 		expectProblem(t, o.sa.resend(t, o.tid, up.ID, nil), http.StatusConflict, "state-conflict")
 		expectProblem(t, o.sa.resend(t, o.tid, id.New(id.Transfer), nil), http.StatusNotFound, "not-found")
 
-		// 5 resends per hour and transfer: 4 more, then 429.
-		for i := range 4 {
-			mustStatus(t, "resend "+strconv.Itoa(i+2), o.sa.resend(t, o.tid, tr.ID, []string{r3}), http.StatusAccepted)
+		// 5 resends per hour and transfer: 3 more, then 429.
+		for i := range 3 {
+			mustStatus(t, "resend "+strconv.Itoa(i+3), o.sa.resend(t, o.tid, tr.ID, []string{r3}), http.StatusAccepted)
 		}
 		limited := o.sa.resend(t, o.tid, tr.ID, []string{r3})
 		expectProblem(t, limited, http.StatusTooManyRequests, "rate-limited")
@@ -358,13 +376,19 @@ func TestOperationsResend(t *testing.T) {
 		if len(resent) != 5 {
 			t.Errorf("%d transfer.notification_resent events, want 5", len(resent))
 		}
+		all := 0
 		for _, ev := range resent {
 			expectEvent(t, ev, o.tid, "admin", superName, adminIP(10), "transfer", tr.ID)
-			if detailNumber(ev, "recipientCount") != 1 || len(ev.Details) != 1 {
-				t.Errorf("resend details = %v, want recipientCount 1 only", ev.Details)
+			if n := detailNumber(ev, "recipientCount"); n == 3 {
+				all++
+			} else if n != 1 || len(ev.Details) != 1 {
+				t.Errorf("resend details = %v, want recipientCount 1 or 3 only", ev.Details)
 			}
 		}
-		noSecretInLogs(t, o.server, token, r1, r2, r3, sender)
+		if all != 1 {
+			t.Errorf("%d resends to all the recipients, want 1", all)
+		}
+		noSecretInLogs(t, o.server, tokens[r1], tokens[r2], tokens[r3], r1, r2, r3, sender)
 		o.expectNoSecrets(t, o.tenantAudit(t, o.tid))
 	})
 }
@@ -875,7 +899,9 @@ func TestOperationsGDPR(t *testing.T) {
 		if got := o.sa.adminTransfer(t, o.tid, t3.ID); got.Status != "available" || !slices.Equal(got.Recipients, []string{r1}) {
 			t.Errorf("transfer with several recipients = %s to %v, want available to [%s]", got.Status, got.Recipients, r1)
 		}
-		rec.mustPage(t, token3)
+		// The link of the erased recipient is gone; the other one works.
+		expectProblem(t, rec.page(t, token3), http.StatusNotFound, "not-found")
+		rec.mustPage(t, tokenOf(t, hostA, o.recipientLink(t, hostA, t3.ID, r1)))
 		resp = o.sa.call(t, http.MethodGet, tenantPath(o.tid, "/transfers/"+t5.ID), nil)
 		if resp.status == http.StatusOK {
 			var got opsTransfer

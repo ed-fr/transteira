@@ -5,8 +5,9 @@
 //   - openDepositSession: identification of a depositor by email code (Mailpit), giving the
 //     deposit session cookie and CSRF token of the session;
 //   - sessionDeposit and createInvitation: a deposit or an invitation within that session;
-//   - createTenantToken and downloadPath: an extra API token of a tenant, and the path of a
-//     download link to open on a tenant origin through Caddy.
+//   - createTenantToken and recipientPath: an extra API token of a tenant, and the path of the
+//     personal download link of a recipient, read in the mail they received (no API answer
+//     carries a download link) to open on a tenant origin through Caddy.
 // Requests go straight to the server (support/api.ts) with the Host header of the tenant and a
 // client IP announced in X-Real-IP (loopback is a trusted proxy in the e2e configuration). Each
 // session uses a fresh random internal IP by default, so the per-IP limit of verification codes
@@ -17,7 +18,7 @@ import { request, type ApiResponse } from './api';
 import { randomInternalIp } from './clientip';
 import { HOSTS } from './env';
 import type { GeneratedFile } from './data';
-import { waitForCode } from './mailpit';
+import { linksOf, waitForCode, waitForMails } from './mailpit';
 import { loadState, superAdminApi } from './state';
 
 /** Terminal states of a finalized transfer (the scan is over). */
@@ -43,6 +44,8 @@ export interface TransferSpec {
   maxDownloads?: number;
   /** Key of the confidentiality level (V1.1; the tenant default when omitted). */
   confidentialityLevel?: string;
+  /** Every recipient proves their address by code before downloading (V1.1). */
+  recipientVerification?: boolean;
   /** Language of the recipients' mails and of the download page default (default "en"). */
   language?: 'en' | 'fr';
 }
@@ -53,8 +56,8 @@ export interface DepositResult {
   id: string;
   /** Final status once the scan is over (normally "available"). */
   status: string;
-  /** Download link of the transfer (absolute URL), see downloadPath. */
-  downloadUrl?: string;
+  /** Instant (ms since the epoch) before the deposit started: recipient mails are searched after it. */
+  startedAt: number;
   /** Last GET /transfers/{id} body. */
   transfer: SenderTransfer;
 }
@@ -65,7 +68,6 @@ export interface SenderTransfer {
   status: string;
   senderEmail: string;
   recipients: string[];
-  downloadUrl?: string;
   files: {
     id: string;
     name: string;
@@ -119,6 +121,7 @@ async function uploadAndFinalize(
   auth: Auth,
   created: SenderTransfer,
   files: GeneratedFile[],
+  startedAt: number,
 ): Promise<DepositResult> {
   for (const [i, file] of created.files.entries()) {
     const content = files[i]!.buffer;
@@ -142,7 +145,7 @@ async function uploadAndFinalize(
       return {
         id: created.id,
         status: res.json.status,
-        downloadUrl: res.json.downloadUrl,
+        startedAt,
         transfer: res.json,
       };
     if (Date.now() > deadline) throw new DepositError('scan still running after 30 s', res);
@@ -163,6 +166,9 @@ function transferBody(spec: TransferSpec, senderEmail?: string): Record<string, 
       : { deleteAfterFirstDownload: spec.deleteAfterFirstDownload }),
     ...(spec.maxDownloads === undefined ? {} : { maxDownloads: spec.maxDownloads }),
     ...(spec.confidentialityLevel === undefined ? {} : { confidentialityLevel: spec.confidentialityLevel }),
+    ...(spec.recipientVerification === undefined
+      ? {}
+      : { recipientVerification: spec.recipientVerification }),
     language: spec.language ?? 'en',
     files: spec.files.map((f) => ({
       name: f.name,
@@ -212,9 +218,10 @@ export async function tokenDeposit(
     host: opts.host ?? HOSTS.a,
     clientIp: opts.clientIp ?? '127.0.0.1',
   };
+  const startedAt = Date.now() - 2000;
   const created = await tokenCreateTransfer(token, senderEmail, spec, opts);
   if (created.status !== 201) throw new DepositError('create transfer', created);
-  return uploadAndFinalize(auth, created.json, spec.files);
+  return uploadAndFinalize(auth, created.json, spec.files, startedAt);
 }
 
 /** A deposit session (cookie value and CSRF token) and where it was opened. */
@@ -277,12 +284,13 @@ function sessionAuth(session: DepositSession): Auth {
 /** Complete deposit within a deposit session (the sender is the session address). */
 export async function sessionDeposit(session: DepositSession, spec: TransferSpec): Promise<DepositResult> {
   const auth = sessionAuth(session);
+  const startedAt = Date.now() - 2000;
   const created = await call<SenderTransfer>(auth, 'POST', '/api/v1/transfers', {
     body: transferBody(spec),
     headers: { 'Idempotency-Key': crypto.randomUUID() },
   });
   if (created.status !== 201) throw new DepositError('create transfer', created);
-  return uploadAndFinalize(auth, created.json, spec.files);
+  return uploadAndFinalize(auth, created.json, spec.files, startedAt);
 }
 
 /** An invitation as returned by POST /invitations. */
@@ -326,4 +334,15 @@ export async function createTenantToken(
 export function downloadPath(downloadUrl: string): string {
   const u = new URL(downloadUrl, 'https://placeholder.localhost');
   return u.pathname + u.search + u.hash;
+}
+
+/**
+ * Path of the personal download link of `recipient`, read in the notification mail they received
+ * for `deposit` (the sender view and the API never return links). Waits for the mail.
+ */
+export async function recipientPath(deposit: { startedAt: number }, recipient: string): Promise<string> {
+  const [mail] = await waitForMails(recipient, { after: deposit.startedAt });
+  const link = linksOf(mail!).find((l) => new URL(l).pathname.startsWith('/d/'));
+  if (!link) throw new Error(`no download link in the mail "${mail!.Subject}" to ${recipient}`);
+  return downloadPath(link);
 }

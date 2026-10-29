@@ -112,7 +112,24 @@
     "notFoundText": "Ce transfert n’existe pas ou n’appartient plus à cette entité.",
     "actionsTitle": "Actions",
     "downloadsOfMax": "{count} sur {max} autorisés",
-    "confidentialityLevel": "Niveau de confidentialité"
+    "confidentialityLevel": "Niveau de confidentialité",
+    "tracking": {
+      "verificationTitle": "Vérification des destinataires",
+      "verificationOn": "Activée : chaque destinataire doit confirmer son adresse par un code avant de télécharger.",
+      "verificationOff": "Désactivée : les destinataires téléchargent avec leur lien personnel, sans code.",
+      "trackingCaption": "Téléchargements par destinataire",
+      "recipient": "Destinataire",
+      "verified": "Vérifié",
+      "firstDl": "Premier téléchargement",
+      "lastDl": "Dernier téléchargement",
+      "downloadsCol": "Fichiers téléchargés",
+      "noVerified": "—",
+      "archive": "Archive ZIP",
+      "downloadLine": "{name} : {count} × (premier {first}, dernier {last})",
+      "noDownloads": "Rien de téléchargé",
+      "trackingNone": "Ce transfert utilise un lien unique partagé : il n’y a pas de suivi par destinataire.",
+      "trackingPending": "Chaque destinataire reçoit un lien personnel lorsque le transfert devient disponible : aucun lien n’existe encore."
+    }
   },
   "resend": {
     "button": "Renvoyer la notification",

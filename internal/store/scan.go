@@ -36,7 +36,17 @@ var (
 	qTransferMarkAvailable = tenantQuery(
 		`UPDATE transfers SET status = 'available', download_token_hash = ?, download_token_key_id = ?, available_at = ?,
 		expires_at = ? + expiry_days * CAST(86400000 AS BIGINT)
-		WHERE tenant_id = ? AND id = ? AND status = 'scanning'`)
+		WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_mode = 'shared'`)
+	// qTransferMarkAvailableLinks is qTransferMarkAvailable for a
+	// per-recipient transfer, which has no transfer-level token. A transfer
+	// whose lifetime is shorter than ReminderMinLifetime gets its expiry
+	// reminder marked as done at once (D16: no reminder for it). Arguments
+	// after the times: the lifetime bound, then the mark.
+	qTransferMarkAvailableLinks = tenantQuery(
+		`UPDATE transfers SET status = 'available', available_at = ?,
+		expires_at = ? + expiry_days * CAST(86400000 AS BIGINT),
+		expiry_reminder_at = (CASE WHEN expiry_days * CAST(86400000 AS BIGINT) < CAST(? AS BIGINT) THEN CAST(? AS BIGINT) ELSE NULL END)
+		WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_mode = 'per_recipient'`)
 	qTransferGetByToken = tenantQuery(
 		`SELECT ` + transferColumns + ` FROM transfers WHERE tenant_id = ? AND download_token_hash = ?`)
 	// qTransferScanningSweep returns identifiers only, oldest finalization
@@ -104,11 +114,14 @@ func (s ScanStatus) Deliverable() bool {
 // tokenKeyID the wrapped key ("wk_" + ULID, purpose KeyPurposeSecret, same
 // tenant) sealing the raw token, created in the same transaction.
 //
-// It returns ErrInvalid for a malformed value or a key that is not a
-// secret, ErrNotFound when the transfer or the key does not exist (or
-// belongs to another tenant), and ErrConflict when the transfer is not
-// scanning or the token hash or the key is already used. After an error,
-// the caller must abort the transaction.
+// It applies to a LinkModeShared transfer only: a LinkModePerRecipient
+// transfer becomes available with [Transfers.MarkAvailableLinksTx].
+//
+// It returns ErrInvalid for a malformed value, a key that is not a secret
+// or a per-recipient transfer, ErrNotFound when the transfer or the key
+// does not exist (or belongs to another tenant), and ErrConflict when the
+// transfer is not scanning or the token hash or the key is already used.
+// After an error, the caller must abort the transaction.
 func (r *Transfers) MarkAvailableTx(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []byte, tokenKeyID string, now time.Time) error {
 	if err := markAvailable(ctx, tx, trfID, tokenHash, tokenKeyID, now); err != nil {
 		return wrap("mark transfer available", err)
@@ -133,16 +146,81 @@ func markAvailable(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []
 		err = expectOne(res)
 	}
 	if errors.Is(err, ErrNotFound) {
-		return probe(ctx, tx, qTransferCount, trfID, ErrConflict)
+		return availableMismatch(ctx, tx, trfID, LinkModeShared)
 	}
 	return err
 }
 
+// availableMismatch explains why a scanning transfer could not be made
+// available with the link mode mode: ErrNotFound when it does not exist,
+// ErrInvalid when it has the other link mode, ErrConflict otherwise (not
+// scanning).
+func availableMismatch(ctx context.Context, tx *ScopedTx, trfID string, mode LinkMode) error {
+	t, err := scanTransfer(tx.QueryRow(ctx, qTransferGet, trfID))
+	switch {
+	case err != nil:
+		return err
+	case t.LinkMode != mode:
+		return invalid("the transfer has %s links", t.LinkMode)
+	default:
+		return ErrConflict
+	}
+}
+
+// ReminderMinLifetime is the shortest lifetime, from availability to
+// expiry, for which the recipients get an expiry reminder (D16): a shorter
+// lived transfer (1 day) gets none, [Transfers.MarkAvailableLinksTx]
+// marking its reminder as done at once.
+const ReminderMinLifetime = 36 * time.Hour
+
+// MarkAvailableLinksTx makes the scanning LinkModePerRecipient transfer
+// trfID of the tenant tx is bound to available at now, inside tx, like
+// [Transfers.MarkAvailableTx], and creates the own link of each of its
+// recipients ([RecipientLinks.CreateTx]): tokens[i] is the link of the
+// recipient at position i, and there must be exactly one per recipient.
+// The transfer gets no transfer-level token. When its lifetime is shorter
+// than ReminderMinLifetime, ExpiryReminderAt is set to now, so that the
+// reminder sweep ([RecipientLinks.DueReminders]) never lists it. It returns
+// the links created, in position order.
+//
+// It returns ErrInvalid for a malformed token, a wrong number of tokens, a
+// key that is not a secret or a shared transfer, ErrNotFound when the
+// transfer or a key does not exist (or belongs to another tenant), and
+// ErrConflict when the transfer is not scanning or a token hash or a key is
+// already used. After an error, the caller must abort the transaction.
+func (r *Transfers) MarkAvailableLinksTx(ctx context.Context, tx *ScopedTx, trfID string, tokens []LinkToken, now time.Time) ([]RecipientLink, error) {
+	links, err := markAvailableLinks(ctx, tx, trfID, tokens, now)
+	if err != nil {
+		return nil, wrap("mark transfer available", err)
+	}
+	return links, nil
+}
+
+// markAvailableLinks implements MarkAvailableLinksTx, returning raw errors.
+func markAvailableLinks(ctx context.Context, tx *ScopedTx, trfID string, tokens []LinkToken, now time.Time) ([]RecipientLink, error) {
+	if err := checkLinkTokens(tokens); err != nil {
+		return nil, err
+	}
+	ms := toMillis(now)
+	res, err := tx.Exec(ctx, qTransferMarkAvailableLinks, ms, ms, ReminderMinLifetime.Milliseconds(), ms, trfID)
+	if err == nil {
+		err = expectOne(res)
+	}
+	if errors.Is(err, ErrNotFound) {
+		return nil, availableMismatch(ctx, tx, trfID, LinkModePerRecipient)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return createLinks(ctx, tx, trfID, tokens, now)
+}
+
 // MarkRejectedTx moves the scanning transfer trfID of the tenant tx is
 // bound to to rejected, inside tx: every file was infected or could not be
-// analyzed. EndedAt is set from the store's clock. It returns ErrNotFound when the transfer does not exist or
-// belongs to another tenant, and ErrConflict when it is not scanning. After
-// an error, the caller must abort the transaction.
+// analyzed. EndedAt is set from the store's clock. It returns ErrNotFound
+// when the transfer does not exist or belongs to another tenant, and
+// ErrConflict when it is not scanning. After an error, the caller must
+// abort the transaction.
 func (r *Transfers) MarkRejectedTx(ctx context.Context, tx *ScopedTx, trfID string) error {
 	if err := setStatus(ctx, tx, trfID, TransferScanning, TransferRejected, r.db.now()); err != nil {
 		return wrap("mark transfer rejected", err)

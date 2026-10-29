@@ -420,6 +420,10 @@ func (ev *env) removeRecipient(tn *tenant.Tenant, trfID, email string) {
 		ev.t.Fatal(err)
 	}
 	if err := s.Tx(ctx, func(tx *store.ScopedTx) error {
+		// The link of the recipient, if any, is crypto-erased first.
+		if _, err := ev.db.RecipientLinks().DestroyRecipientKeyTx(ctx, tx, trfID, email); err != nil {
+			return err
+		}
 		return ev.db.Transfers().RemoveRecipientTx(ctx, tx, trfID, email)
 	}); err != nil {
 		ev.t.Fatal(err)

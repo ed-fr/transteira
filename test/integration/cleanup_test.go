@@ -102,8 +102,25 @@ func expectIntactB(t *testing.T, d *depositEnv, trfID string) {
 	t.Helper()
 	ctx := context.Background()
 	tr, err := d.db.Transfers().Get(ctx, d.tenantB.ID, trfID)
-	if err != nil || tr.Status != store.TransferAvailable || tr.DownloadTokenKeyID == "" {
+	if err != nil || tr.Status != store.TransferAvailable {
 		t.Fatalf("transfer of B: %s, %v", tr.Status, err)
+	}
+	// Its sealed tokens: of its shared link, or of each recipient link.
+	keys := []string{tr.DownloadTokenKeyID}
+	if tr.DownloadTokenKeyID == "" {
+		links, err := d.db.RecipientLinks().ListByTransfer(ctx, d.tenantB.ID, trfID)
+		if err != nil || len(links) == 0 {
+			t.Fatalf("links of the transfer of B: %d, %v", len(links), err)
+		}
+		keys = keys[:0]
+		for _, l := range links {
+			keys = append(keys, l.TokenKeyID)
+		}
+	}
+	for _, k := range keys {
+		if _, err := d.db.WrappedKeys().Get(ctx, d.tenantB.ID, k); k == "" || err != nil {
+			t.Fatalf("token key of B %q: %v", k, err)
+		}
 	}
 	for _, f := range tr.Files {
 		if _, err := d.db.WrappedKeys().Get(ctx, d.tenantB.ID, f.DEKKeyID); err != nil {
@@ -131,10 +148,17 @@ func TestCleanupExpiredTransfer(t *testing.T) {
 		trB, _ := bob.availableTransfer(t, transferCreate{}, uploadedFile{"b.txt", []byte("content of B")})
 		r := d.newRecipient(7)
 		expectFile(t, "a", r.get(t, filePath(token, tr.Files[0].ID), nil), "a.txt", content)
-		eventually(t, "download state written", func() bool { return exists(t, statePath(d, tr.ID)) })
+		state := statePath(t, d, tr.ID)
+		eventually(t, "download state written", func() bool { return exists(t, state) })
 		before := d.transferRow(t, tr.ID)
 		if d.usedBytes(t, d.tenantA.ID) == 0 {
 			t.Fatal("no quota used before the expiry")
+		}
+		// The sealed token of the recipient link (a per-recipient
+		// transfer has no transfer-level token).
+		links, err := d.db.RecipientLinks().ListByTransfer(context.Background(), d.tenantA.ID, tr.ID)
+		if err != nil || len(links) != 1 || links[0].TokenKeyID == "" || before.DownloadTokenKeyID != "" {
+			t.Fatalf("links %+v (%v), transfer-level key %q: want one sealed link token and none", links, err, before.DownloadTokenKeyID)
 		}
 
 		execSystem(t, e, "UPDATE transfers SET expires_at = "+strconv.FormatInt(nowMillis(-time.Second), 10)+
@@ -146,12 +170,12 @@ func TestCleanupExpiredTransfer(t *testing.T) {
 		if after.DownloadTokenKeyID != "" || after.EndedAt.IsZero() {
 			t.Errorf("expired row: token key %q, ended at %v", after.DownloadTokenKeyID, after.EndedAt)
 		}
-		d.expectKeyDestroyed(t, before.DownloadTokenKeyID)
+		d.expectKeyDestroyed(t, links[0].TokenKeyID)
 		for _, f := range before.Files {
 			d.expectKeyDestroyed(t, f.DEKKeyID)
 			expectNoFileOnDisk(t, "the encrypted file", d.encPath(f.StorageName))
 		}
-		expectNoFileOnDisk(t, "the download state", statePath(d, tr.ID))
+		expectNoFileOnDisk(t, "the download state", state)
 		if got := d.usedBytes(t, d.tenantA.ID); got != 0 {
 			t.Errorf("quota used after the expiry = %d, want 0", got)
 		}

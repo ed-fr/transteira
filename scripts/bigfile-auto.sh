@@ -25,7 +25,7 @@ rm -f "$last"
 
 NON_GO_PATHS=(
 	api Dockerfile .dockerignore Makefile deploy integrations/reverse-proxy/caddy
-	scripts/bigfile.sh scripts/lib test/bigfile go.mod go.sum
+	scripts/bigfile.sh scripts/lib test/bigfile test/deploy/docker-compose.bigfile-mail.yml go.mod go.sum
 )
 
 # Directories (relative to the module root) of the module packages the server and the test client

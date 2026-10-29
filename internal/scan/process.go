@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -423,20 +425,57 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 		w.notifyRejected(ctx, k, t, d)
 		return 0
 	}
-	token, err := w.newToken()
-	if err != nil {
-		return w.failed(ctx, k, "generate download token", err)
+	// A shared transfer (created before 1.1) gets one token for every
+	// recipient; a transfer with one link per recipient gets one token per
+	// recipient (P27), each mailed to its recipient only.
+	perRecipient := d.LinkMode == store.LinkModePerRecipient
+	n := 1
+	if perRecipient {
+		n = len(d.Recipients)
+	}
+	tokens := make([]string, n)
+	for i := range tokens {
+		var err error
+		if tokens[i], err = w.newToken(); err != nil {
+			return w.failed(ctx, k, "generate download token", err)
+		}
 	}
 	now := w.now()
-	if err := w.repo.makeAvailable(ctx, k.tid, k.id, token, now); err != nil {
+	links, err := w.repo.makeAvailable(ctx, k.tid, k.id, perRecipient, tokens, now)
+	if err != nil {
 		return w.failed(ctx, k, "make transfer available", err)
 	}
 	w.log(ctx, slog.LevelInfo, "transfer available", k, slog.Int("files", deliverable),
 		slog.Int("infected", infected), slog.Int("scan_error", withheld))
 	// The mails show the expiry the store just set, counted from now.
 	d.ExpiresAt = now.Add(time.Duration(d.ExpiryDays) * 24 * time.Hour)
-	w.notifyAvailable(ctx, k, t, d, id.DownloadURL(t.FQDN, token))
+	if perRecipient {
+		w.notifyAvailable(ctx, k, t, d, "", recipientLinks(t, links, tokens))
+	} else {
+		w.notifyAvailable(ctx, k, t, d, id.DownloadURL(t.FQDN, tokens[0]), nil)
+	}
 	return 0
+}
+
+// recipientLinks pairs the links just created with their raw tokens (by
+// the SHA-256 of the token) and returns the download URL of each
+// recipient, built from the registered FQDN of tenant t, in position order.
+func recipientLinks(t *tenant.Tenant, links []store.RecipientLink, tokens []string) []notify.RecipientLink {
+	byHash := make(map[[sha256.Size]byte]string, len(tokens))
+	for _, tok := range tokens {
+		byHash[sha256.Sum256([]byte(tok))] = tok
+	}
+	out := make([]notify.RecipientLink, 0, len(links))
+	for _, l := range links {
+		var h [sha256.Size]byte
+		if copy(h[:], l.TokenHash) != sha256.Size {
+			continue
+		}
+		if tok, ok := byHash[h]; ok {
+			out = append(out, notify.RecipientLink{Email: l.Email, Link: id.DownloadURL(t.FQDN, tok)})
+		}
+	}
+	return out
 }
 
 // held reports whether k is held.

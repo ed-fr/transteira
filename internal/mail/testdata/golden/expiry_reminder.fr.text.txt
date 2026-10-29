@@ -1,0 +1,27 @@
+Bonjour,
+
+Ceci est un rappel : alice@entity-a.example.com vous a envoyé des fichiers via le service de transfert Entity A & Co et vous ne les avez pas encore téléchargés.
+
+Les fichiers seront supprimés le 20 octobre 2027 à 08:30 UTC.
+
+Pour télécharger les fichiers, ouvrez ce lien :
+
+https://transfer.entity-a.example.com/d/dl_abc123
+
+Niveau de confidentialité : Confidential <b>
+
+Ce transfert est protégé par un mot de passe. Le mot de passe vous sera transmis par un autre canal ; il ne figure jamais dans ce message.
+
+Avant de télécharger, il vous sera demandé de confirmer votre adresse e-mail avec un code envoyé à cette adresse.
+
+Fichiers :
+- <script>alert(1)</script> report.pdf (1,5 Ko)
+- video.mp4 (3,0 Go)
+- secret.zip (4,0 Mo)
+
+Ne transférez pas ce message : ce lien vous est personnel.
+
+Si vous n'attendiez pas ce message, vous pouvez l'ignorer sans risque.
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

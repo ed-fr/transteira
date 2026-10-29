@@ -17,7 +17,7 @@ import type net from 'node:net';
 import path from 'node:path';
 import { request } from '../support/api';
 import { makeFile, textFile, type GeneratedFile } from '../support/data';
-import { createInvitation, downloadPath, openDepositSession, tokenDeposit } from '../support/deposit';
+import { createInvitation, openDepositSession, recipientPath, tokenDeposit } from '../support/deposit';
 import { HOSTS, ORIGINS, RUN_DIR, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
 import { expect, test, type NewContextOptions } from '../support/fixtures';
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
@@ -40,6 +40,8 @@ FIXED_TIME.setSeconds(0, 0);
 const DEPOSITOR: Record<Lang, string> = { en: 'alice@example.com', fr: 'camille@example.com' };
 /** Recipient of the transfers deposited through the screens. */
 const RECIPIENT: Record<Lang, string> = { en: 'dana@example.org', fr: 'dominique@example.org' };
+/** Recipients of the transfers with recipient verification (a code is sent to them). */
+const VERIFIED_RECIPIENT: Record<Lang, string> = { en: 'frank@example.org', fr: 'fabienne@example.org' };
 /** Fixed client addresses (shown in the audit logs): browser contexts per profile, API session. */
 const CLIENT_IP = { public: '10.1.0.10', api: '10.1.0.11', delegate: '10.2.0.20', super: '10.3.0.30' };
 /** Internal sender of the transfers and invitations created through the API. */
@@ -51,6 +53,8 @@ interface ScreenshotData {
   download: Record<Lang, string>;
   /** Identifier of the English transfer (admin detail screen). */
   transferId: string;
+  /** Download page path of a transfer with recipient verification, per language. */
+  downloadVerify: Record<Lang, string>;
   /** Download page path of a password-protected transfer. */
   downloadPassword: string;
   /** Invitation landing path per language. */
@@ -160,8 +164,25 @@ async function createData(): Promise<ScreenshotData> {
       },
       { host: HOSTS.a },
     );
-    download[lang] = downloadPath(t.downloadUrl!);
+    download[lang] = await recipientPath(t, RECIPIENT[lang]);
     if (lang === 'en') transferId = t.id;
+  }
+  // Transfers whose recipient must verify their address by code (V1.1).
+  const downloadVerify = {} as Record<Lang, string>;
+  for (const lang of LANGS) {
+    const t = await tokenDeposit(
+      s.apiTokenA,
+      API_SENDER,
+      {
+        recipients: [VERIFIED_RECIPIENT[lang]],
+        files: apiFiles(lang),
+        message: MESSAGES[lang],
+        language: lang,
+        recipientVerification: true,
+      },
+      { host: HOSTS.a },
+    );
+    downloadVerify[lang] = await recipientPath(t, VERIFIED_RECIPIENT[lang]);
   }
   // A denied recipient domain, for the Recipient domains screen.
   await api.ok('PUT', `/admin/tenants/${a}/recipient-rules`, {
@@ -234,8 +255,9 @@ async function createData(): Promise<ScreenshotData> {
 
   return {
     download,
+    downloadVerify,
     transferId,
-    downloadPassword: downloadPath(protectedTransfer.downloadUrl!),
+    downloadPassword: await recipientPath(protectedTransfer, 'erin@example.net'),
     invitation,
     activation: pathOf(created.activationUrl),
     multiDelegatePassword,
@@ -480,7 +502,9 @@ test.describe('depositor', () => {
       await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
 
       await heading(page, lang, 'deposit.form.title');
-      await page.getByLabel(startsWith(msg(lang, 'deposit.form.recipients.label'))).fill(RECIPIENT[lang]);
+      await page
+        .getByRole('textbox', { name: startsWith(msg(lang, 'deposit.form.recipients.label')) })
+        .fill(RECIPIENT[lang]);
       await page.getByLabel(startsWith(msg(lang, 'deposit.form.message.label'))).fill(MESSAGES[lang]);
       const files =
         lang === 'en'
@@ -502,6 +526,14 @@ test.describe('depositor', () => {
         .getByRole('group', { name: msg(lang, 'deposit.form.level.legend') })
         .evaluate((el) => el.scrollIntoView({ block: 'start' }));
       await shoot(page, lang, 'deposit-form');
+
+      // The recipient verification option, checked (it applies to this transfer too).
+      const verification = page.getByRole('checkbox', {
+        name: startsWith(msg(lang, 'deposit.form.recipientVerification.label')),
+      });
+      await verification.check();
+      await verification.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await shoot(page, lang, 'deposit-form-verification');
 
       await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
       await heading(page, lang, 'deposit.done.title');
@@ -542,6 +574,18 @@ test.describe('recipient', () => {
       await heading(page, lang, 'download.title');
       await expect(page.getByText(apiFiles(lang)[0]!.name).first()).toBeVisible();
       await shoot(page, lang, 'download');
+    }
+  });
+
+  test('recipient verification', async ({ newContext }) => {
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.a}${data.downloadVerify[lang]}`);
+      await heading(page, lang, 'download.verify.title');
+      await shoot(page, lang, 'download-verify');
+      await page.getByRole('button', { name: msg(lang, 'download.verify.send') }).click();
+      await expect(page.getByLabel(startsWith(msg(lang, 'download.verify.label')))).toBeVisible();
+      await shoot(page, lang, 'download-verify-code');
     }
   });
 

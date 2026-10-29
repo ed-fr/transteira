@@ -20,6 +20,22 @@ Open the link in the email, or scan the QR code with your phone's camera. The pa
 
 The page is available in English and French: use the **Language** menu at the bottom of the page to change it. The **Help** link, also at the bottom, opens this guide.
 
+### Personal link and address verification
+
+The sender may have asked each recipient to confirm their email address. In that case your link is **personal**: it was created for your address only. Do not forward it. Someone else who opens it cannot download anything, because they cannot read the code sent to your mailbox.
+
+Before anything else, the page **Confirm your address** shows your address partly hidden, for example `j***@example.com`.
+
+1. Click **Send me a code**. A 6-digit code is sent to your address; check your spam folder if it does not arrive.
+2. Type the code in the **Verification code** field, then click **Verify**. The code is valid for 15 minutes.
+3. The password form appears if the transfer is also protected by a password, otherwise the list of files.
+
+If the code is wrong, the page shows **The code is not correct.** and the number of attempts remaining. You have 2 attempts: after that, or when the code has expired, the page asks you to request a new code with **Send me a code** (or **Send a new code**). The number of codes you can request in an hour is limited: if the page asks you to wait, try again after the countdown.
+
+Once verified, your access lasts about an hour in this browser. After that, the page shows **Your access has expired: confirm your address again with a new code.** and asks for a new code. This is normal.
+
+> **Note** If you have not downloaded the files, you receive a reminder email the day before the transfer expires. It contains your personal link.
+
 <!-- topic: download-password -->
 ### Protected transfer
 

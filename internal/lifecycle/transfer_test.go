@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -443,6 +444,48 @@ func TestEraseTransferWithoutHolder(t *testing.T) {
 			t.Fatal("state kept")
 		}
 	})
+}
+
+// TestEraseLinkStates: the erasure of a per-recipient transfer removes the
+// range state of each of its links too, in both modes; a failure leaves
+// them for a new call, and the states of other transfers stay.
+func TestEraseLinkStates(t *testing.T) {
+	for _, mode := range []EraseMode{MarkDeleted, DeleteRow} {
+		runEach(t, modeName(mode), func(t *testing.T, e storetest.Engine) {
+			ev := newEnv(t, e)
+			fx, links := ev.perRecipient(ev.a, 7, false, dave, erin)
+			other, otherLinks := ev.perRecipient(ev.a, 7, false, dave)
+			names := []string{storage.StateName(fx.id), storage.StateName(links[0].ID), storage.StateName(links[1].ID)}
+			kept := storage.StateName(otherLinks[0].ID)
+			for _, name := range append([]string{kept}, names...) {
+				if err := ev.files.WriteState(ev.a.ID, name, []byte(`{}`)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			stateOf := func(name string) bool {
+				_, err := ev.files.ReadState(ev.a.ID, name)
+				return err == nil
+			}
+			for _, fault := range []string{"linkIDs", "state"} {
+				ev.f.set(fault, 1, nil)
+				if _, err := ev.eraseTransfer(fx, mode); !errors.Is(err, errFault) || !strings.Contains(err.Error(), stepState) {
+					t.Fatalf("%s fault: %v", fault, err)
+				}
+				if !stateOf(names[1]) || !stateOf(names[2]) {
+					t.Fatalf("%s fault: link states removed", fault)
+				}
+			}
+			ev.mustErase(fx, mode, Erased)
+			for _, name := range names {
+				if stateOf(name) {
+					t.Errorf("state %s kept", name)
+				}
+			}
+			if !stateOf(kept) || ev.get(other).Status != store.TransferAvailable {
+				t.Error("state of another transfer removed")
+			}
+		})
+	}
 }
 
 // modeName names mode in the subtest names.

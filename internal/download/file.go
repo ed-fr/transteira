@@ -78,11 +78,13 @@ type Content struct {
 	ip    netip.Addr
 	t     *tenant.Tenant
 	d     store.TransferDetails
+	link  *store.RecipientLink // nil for a shared link
 	files []store.TransferFile
 	file  store.TransferFile
 	osf   *os.File
 	sr    *io.SectionReader
-	// track is set while the transfer has not been downloaded yet.
+	// track is set while the transfer (or the recipient link) has not been
+	// downloaded yet.
 	track bool
 	pos   int64
 	// spans are the credited reads; pending is the last read, not credited
@@ -109,11 +111,12 @@ type Content struct {
 
 // OpenFile opens the deliverable file fileID of the transfer of the
 // download token rawToken in tenant t (downloadFile), for the client
-// clientIP. grantCookie is the raw value of the GrantCookieName cookie, ""
-// when absent.
+// clientIP. cookies are the raw technical cookies of the request.
 //
-// It returns ErrNotFound and ErrGone as Resolve does, ErrDownloadLocked for
-// a password-protected transfer not unlocked by this browser, ErrNotFound
+// It returns ErrNotFound and ErrGone as Resolve does,
+// ErrVerificationRequired for a recipient link awaiting its verification on
+// this browser, ErrDownloadLocked for a password-protected transfer not
+// unlocked by this browser, ErrNotFound
 // for a file that is not a deliverable file of the transfer (a transfer
 // whose download limit is reached is opened: [Content.Begin] decides), a
 // *TooManyStreamsError (ErrTooManyStreams) over the concurrent stream
@@ -130,10 +133,13 @@ type Content struct {
 // of every deliverable file has been served at least once, across
 // requests, the transfer counts as downloaded (see the package
 // documentation).
-func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, grantCookie, fileID string) (*File, error) {
-	a, err := s.resolve(ctx, t, rawToken, grantCookie, false)
+func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies Cookies, fileID string) (*File, error) {
+	a, err := s.resolve(ctx, t, rawToken, cookies, false)
 	if err != nil {
 		return nil, err
+	}
+	if a.awaiting() {
+		return nil, ErrVerificationRequired
 	}
 	if !a.unlocked {
 		return nil, ErrDownloadLocked
@@ -154,8 +160,8 @@ func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken strin
 		return nil, err
 	}
 	c := &Content{
-		svc: s, ctx: ctx, ip: clientIP, t: t, d: a.d, files: a.files, file: f, osf: osf, release: release,
-		sr: io.NewSectionReader(ra, 0, ra.Size()), track: a.d.FirstDownloadedAt.IsZero(), limited: a.d.MaxDownloads != nil,
+		svc: s, ctx: ctx, ip: clientIP, t: t, d: a.d, link: a.link, files: a.files, file: f, osf: osf, release: release,
+		sr: io.NewSectionReader(ra, 0, ra.Size()), track: tracked(a.d, a.link), limited: a.d.MaxDownloads != nil,
 	}
 	return &File{ID: f.ID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, Content: c}, nil
 }
@@ -211,7 +217,7 @@ func (c *Content) Begin(get bool) error {
 		return c.refused
 	}
 	c.begun = true
-	c.claimed, c.refused = c.svc.claimStart(c.ctx, c.t, c.d, c.file.ID, c.ip, get)
+	c.claimed, c.refused = c.svc.claimStart(c.ctx, c.t, c.d, linkIDOf(c.link), c.file.ID, c.ip, get)
 	c.allowed = get && c.refused == nil
 	return c.refused
 }
@@ -268,7 +274,7 @@ func (c *Content) start() {
 		return
 	}
 	c.started = true
-	c.svc.downloadStarted(c.ctx, c.t, c.d.ID, c.file.ID, c.ip)
+	c.svc.downloadStarted(c.ctx, c.t, c.d.ID, linkIDOf(c.link), c.file.ID, c.ip)
 }
 
 // Close releases the stored file and the stream slot, and records the
@@ -285,13 +291,13 @@ func (c *Content) Close(ctx context.Context) error {
 	defer c.release()
 	c.svc.bytesServed(c.t.ID, c.served)
 	if c.allowed && !c.delivered {
-		c.svc.touchStart(c.t.ID, c.d.ID, c.file.ID, c.ip, c.claimed)
+		c.svc.touchStart(c.t.ID, c.d.ID, linkIDOf(c.link), c.file.ID, c.ip, c.claimed)
 	}
 	err := c.osf.Close()
 	if c.track && (len(c.spans) > 0 || (c.file.Size == 0 && c.delivered)) {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.svc.opts.CommitTimeout)
 		defer cancel()
-		c.svc.commit(ctx, c.t, c.d, c.files, c.file, c.spans)
+		c.svc.commit(ctx, c.t, c.d, c.link, c.files, c.file, c.spans)
 	}
 	if err != nil {
 		return fmt.Errorf("download: close stored file: %w", err)

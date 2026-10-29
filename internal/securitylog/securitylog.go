@@ -72,6 +72,19 @@ const (
 	KeyScope = "scope"
 	// KeyHost carries the offending Host header of an UnknownFQDN event.
 	KeyHost = "host"
+	// KeyPurpose qualifies a VerificationCodeInvalid event by the purpose of
+	// the code (since 1.1): PurposeRecipient for the code of a recipient
+	// link. A line without it is a deposit code, as written by 1.0.
+	KeyPurpose = "purpose"
+)
+
+// Well-known values of the purpose field (decision P38).
+const (
+	// PurposeDeposit: the code of a depositor (spec 7).
+	PurposeDeposit = "deposit"
+	// PurposeRecipient: the code of the recipient of a per-recipient link,
+	// before a download or a reply (spec 10).
+	PurposeRecipient = "recipient"
 )
 
 // Well-known values of the reason field.

@@ -11,7 +11,7 @@ import path from 'node:path';
 import { internalEmail, textFile } from '../support/data';
 import { HOSTS, ORIGINS, REPO_ROOT, STORAGE_SUPER } from '../support/env';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
-import { downloadPath, tokenDeposit } from '../support/deposit';
+import { recipientPath, tokenDeposit } from '../support/deposit';
 import { msg } from '../support/i18n';
 
 const LOCALES_DIR = path.join(REPO_ROOT, 'web', 'src', 'locales');
@@ -98,18 +98,19 @@ test.describe('French pass', () => {
 
     test('download page in French', async ({ page, state }) => {
       const file = textFile('rapport-trimestriel.txt', 'contenu du rapport');
+      const recipient = internalEmail('i18n-recipient');
       const transfer = await tokenDeposit(
         state.apiTokenA,
         internalEmail('i18n-sender'),
         {
-          recipients: [internalEmail('i18n-recipient')],
+          recipients: [recipient],
           files: [file],
           message: 'Bonjour, voici le rapport.',
           language: 'fr',
         },
         { host: HOSTS.a },
       );
-      await page.goto(`${state.tenants.a.origin}${downloadPath(transfer.downloadUrl!)}`);
+      await page.goto(`${state.tenants.a.origin}${await recipientPath(transfer, recipient)}`);
       await expectFrenchScreen(page, 'download.title');
       await expect(page.getByRole('table', { name: fr('download.files.caption') })).toBeVisible();
       await expect(page.getByText(file.sha256)).toBeVisible();

@@ -28,12 +28,27 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'deposit-email', screen: 'public / (email step)', profile: 'depositor' },
   { name: 'deposit-code', screen: 'public / (verification code step)', profile: 'depositor' },
   { name: 'deposit-form', screen: 'public / (transfer form, files selected)', profile: 'depositor' },
+  {
+    name: 'deposit-form-verification',
+    screen: 'public / (transfer form, recipient verification option checked)',
+    profile: 'depositor',
+  },
   { name: 'deposit-sent', screen: 'public / (recap: transfer sent)', profile: 'depositor' },
   { name: 'invite', screen: 'public /invite', profile: 'depositor' },
   { name: 'invitation-landing', screen: 'public /i/:token', profile: 'depositor' },
   { name: 'legal-notice', screen: 'public /legal/legal-notice', profile: 'depositor' },
   // Recipient.
   { name: 'download', screen: 'public /d/:token', profile: 'recipient' },
+  {
+    name: 'download-verify',
+    screen: 'public /d/:token (recipient verification: send a code)',
+    profile: 'recipient',
+  },
+  {
+    name: 'download-verify-code',
+    screen: 'public /d/:token (recipient verification: code entry)',
+    profile: 'recipient',
+  },
   { name: 'download-password', screen: 'public /d/:token (password required)', profile: 'recipient' },
   // Delegated admin (admin host, entity A).
   { name: 'admin-login', screen: 'admin /admin/login', profile: 'delegated-admin' },

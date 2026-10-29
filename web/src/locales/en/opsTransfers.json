@@ -112,7 +112,24 @@
     "notFoundText": "This transfer does not exist or no longer belongs to this entity.",
     "actionsTitle": "Actions",
     "downloadsOfMax": "{count} of {max} allowed",
-    "confidentialityLevel": "Confidentiality level"
+    "confidentialityLevel": "Confidentiality level",
+    "tracking": {
+      "verificationTitle": "Recipient verification",
+      "verificationOn": "On: each recipient must confirm their address with a code before downloading.",
+      "verificationOff": "Off: recipients download with their personal link, without a code.",
+      "trackingCaption": "Downloads by recipient",
+      "recipient": "Recipient",
+      "verified": "Verified",
+      "firstDl": "First download",
+      "lastDl": "Last download",
+      "downloadsCol": "Downloaded files",
+      "noVerified": "—",
+      "archive": "ZIP archive",
+      "downloadLine": "{name}: {count} × (first {first}, last {last})",
+      "noDownloads": "Nothing downloaded",
+      "trackingNone": "This transfer uses a single shared link: there is no per-recipient tracking.",
+      "trackingPending": "Each recipient gets a personal link when the transfer becomes available: no link exists yet."
+    }
   },
   "resend": {
     "button": "Resend the notification",

@@ -77,35 +77,49 @@ type fakeDownloads struct {
 	name    string
 	sha     string
 	archive *fakeArchive
+	// challenge is the answer of StartVerification.
+	challenge *download.Challenge
 
-	gotToken, gotGrant, gotPassword, gotFile string
-	gotIP                                    netip.Addr
+	gotToken, gotGrant, gotVerification, gotPassword, gotFile string
+	gotLanguage, gotCode                                      string
+	gotReply                                                  bool
+	gotIP                                                     netip.Addr
 }
 
-func (f *fakeDownloads) Resolve(_ context.Context, _ *tenant.Tenant, token, grant string) (download.View, error) {
-	f.gotToken, f.gotGrant = token, grant
+func (f *fakeDownloads) Resolve(_ context.Context, _ *tenant.Tenant, token string, c download.Cookies) (download.View, error) {
+	f.gotToken, f.gotGrant, f.gotVerification = token, c.Grant, c.Verification
 	return f.view, f.err
 }
 
-func (f *fakeDownloads) Unlock(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, password, grant string) (string, error) {
-	f.gotToken, f.gotIP, f.gotPassword, f.gotGrant = token, ip, password, grant
+func (f *fakeDownloads) Unlock(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, password string, c download.Cookies) (string, error) {
+	f.gotToken, f.gotIP, f.gotPassword, f.gotGrant, f.gotVerification = token, ip, password, c.Grant, c.Verification
 	return f.cookie, f.err
 }
 
-func (f *fakeDownloads) OpenFile(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, grant, fileID string) (DownloadFile, error) {
-	f.gotToken, f.gotIP, f.gotGrant, f.gotFile = token, ip, grant, fileID
+func (f *fakeDownloads) OpenFile(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, c download.Cookies, fileID string) (DownloadFile, error) {
+	f.gotToken, f.gotIP, f.gotGrant, f.gotVerification, f.gotFile = token, ip, c.Grant, c.Verification, fileID
 	if f.err != nil {
 		return DownloadFile{}, f.err
 	}
 	return DownloadFile{Name: f.name, SHA256: f.sha, Content: f.content}, nil
 }
 
-func (f *fakeDownloads) PrepareArchive(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, grant string) (DownloadArchive, error) {
-	f.gotToken, f.gotIP, f.gotGrant = token, ip, grant
+func (f *fakeDownloads) PrepareArchive(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, c download.Cookies) (DownloadArchive, error) {
+	f.gotToken, f.gotIP, f.gotGrant, f.gotVerification = token, ip, c.Grant, c.Verification
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.archive, nil
+}
+
+func (f *fakeDownloads) StartVerification(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, reply bool, lang, cookie string) (*download.Challenge, error) {
+	f.gotToken, f.gotIP, f.gotReply, f.gotLanguage, f.gotVerification = token, ip, reply, lang, cookie
+	return f.challenge, f.err
+}
+
+func (f *fakeDownloads) ConfirmVerification(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, code, cookie string) (string, error) {
+	f.gotToken, f.gotIP, f.gotCode, f.gotVerification = token, ip, code, cookie
+	return f.cookie, f.err
 }
 
 // downloadCtx returns the context of a request r under tenant A (with the
@@ -147,6 +161,14 @@ func TestDownloadOperationsRequireTenantAndService(t *testing.T) {
 		},
 		"archive": func(s *Server, ctx context.Context) error {
 			_, err := s.DownloadArchive(ctx, gen.DownloadArchiveRequestObject{})
+			return err
+		},
+		"start verification": func(s *Server, ctx context.Context) error {
+			_, err := s.StartRecipientVerification(ctx, gen.StartRecipientVerificationRequestObject{})
+			return err
+		},
+		"confirm verification": func(s *Server, ctx context.Context) error {
+			_, err := s.ConfirmRecipientVerification(ctx, gen.ConfirmRecipientVerificationRequestObject{})
 			return err
 		},
 	}
@@ -360,6 +382,29 @@ func TestDownloadError(t *testing.T) {
 		{err: download.ErrDownloadLocked, code: problem.CodeDownloadLocked},
 		{err: download.ErrNoClientIP, code: problem.CodeInternalError},
 		{err: boom, code: problem.CodeInternalError},
+		{err: download.ErrVerificationRequired, code: problem.CodeRecipientVerificationRequired},
+		{err: download.ErrVerificationNotNeeded, code: problem.CodeStateConflict},
+		{err: download.ErrNoChallenge, code: problem.CodeStateConflict},
+		{err: download.ErrVerificationExhausted, code: problem.CodeVerificationExhausted},
+		{err: fmt.Errorf("w: %w", &download.WrongCodeError{Remaining: 1}), code: problem.CodeVerificationCodeInvalid, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.AttemptsRemaining == nil || *p.AttemptsRemaining != 1 {
+				t.Errorf("attemptsRemaining = %v", p.AttemptsRemaining)
+			}
+		}},
+		{err: download.ErrInvalidCode, code: problem.CodeValidationFailed, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.Errors[0].Field != "/code" || p.Errors[0].Code != "invalid-format" {
+				t.Errorf("errors = %+v", p.Errors)
+			}
+		}},
+		{err: &download.RateLimitError{RetryAfter: time.Hour}, code: problem.CodeRateLimited, check: func(t *testing.T, p *problem.Problem) {
+			t.Helper()
+			if p.RetryAfterSeconds == nil || *p.RetryAfterSeconds != 3600 {
+				t.Errorf("retryAfterSeconds = %v", p.RetryAfterSeconds)
+			}
+		}},
+		{err: fmt.Errorf("%w: no smtp", download.ErrMailUnavailable), code: problem.CodeMailUnavailable},
 	}
 	for _, tt := range tests {
 		p := problem.From(downloadError(tt.err))
@@ -706,4 +751,168 @@ func FuzzAttachment(f *testing.F) {
 			t.Fatalf("attachment(%q) parses back to %q, want %q", name, params["filename"], want)
 		}
 	})
+}
+
+// TestGetDownloadVerification checks the verification fields of the
+// download page (since 1.1): the minimal locked view of a link awaiting its
+// verification, and the flags of a verified one.
+func TestGetDownloadVerification(t *testing.T) {
+	t.Parallel()
+	expires := time.Date(2026, 11, 2, 16, 20, 0, 0, time.UTC)
+	f := &fakeDownloads{view: download.View{
+		SenderEmail: "alice@entity-a.example.com", ExpiresAt: expires, PasswordProtected: true, Locked: true,
+		VerificationRequired: true, RecipientEmailMasked: "c***@customer.example.net",
+	}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.AddCookie(&http.Cookie{Name: download.VerificationCookieName, Value: "rv_cookie"})
+	resp, err := NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, r), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	if f.gotVerification != "rv_cookie" {
+		t.Errorf("verification cookie %q", f.gotVerification)
+	}
+	if !got.Locked || got.VerificationRequired == nil || !*got.VerificationRequired || got.Verified == nil || *got.Verified ||
+		got.RecipientEmailMasked == nil || *got.RecipientEmailMasked != "c***@customer.example.net" || !got.PasswordProtected ||
+		got.Files != nil || got.Message != nil || got.ArchiveUrl != nil || got.TotalBytes != nil || got.ConfidentialityLevel != nil ||
+		got.DownloadsRemaining != nil || got.ReplyAllowed != nil {
+		t.Fatalf("awaiting view = %+v", got)
+	}
+	// Verified and open: the flags, never the masked address.
+	f.view = download.View{SenderEmail: "alice@entity-a.example.com", VerificationRequired: true, Verified: true}
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	got = gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	if got.Locked || got.VerificationRequired == nil || !*got.Verified || got.RecipientEmailMasked != nil || got.Files == nil {
+		t.Fatalf("verified view = %+v", got)
+	}
+	// Without the option: no verification field.
+	f.view = download.View{SenderEmail: "alice@entity-a.example.com"}
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	got = gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	if got.VerificationRequired != nil || got.Verified != nil || got.RecipientEmailMasked != nil {
+		t.Fatalf("view without verification = %+v", got)
+	}
+}
+
+func TestStartRecipientVerification(t *testing.T) {
+	t.Parallel()
+	expires := time.Date(2026, 10, 27, 9, 15, 0, 0, time.UTC)
+	f := &fakeDownloads{challenge: &download.Challenge{EmailMasked: "c***@customer.example.net", ExpiresAt: expires, AttemptsRemaining: 2}}
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	r.AddCookie(&http.Cookie{Name: download.VerificationCookieName, Value: "rv_cookie"})
+	lang := "fr-FR"
+	resp, err := NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, r), gen.StartRecipientVerificationRequestObject{
+		LinkToken: linkToken, Params: gen.StartRecipientVerificationParams{AcceptLanguage: &lang},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.(gen.StartRecipientVerification202JSONResponse)
+	if got.EmailMasked != "c***@customer.example.net" || !got.ExpiresAt.Equal(expires) || got.AttemptsRemaining != 2 {
+		t.Errorf("challenge = %+v", got)
+	}
+	if f.gotToken != linkToken || f.gotReply || f.gotLanguage != "fr-FR" || f.gotVerification != "rv_cookie" ||
+		f.gotIP != netip.MustParseAddr("192.0.2.7") {
+		t.Errorf("service called with %+v", f)
+	}
+	purpose := func(p gen.RecipientVerificationStartPurpose) *gen.RecipientVerificationStart {
+		return &gen.RecipientVerificationStart{Purpose: &p}
+	}
+	_, _ = NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{
+		Body: purpose(gen.RecipientVerificationStartPurposeDownload),
+	})
+	if f.gotReply {
+		t.Error("download purpose taken as a reply")
+	}
+	_, _ = NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{
+		Body: purpose(gen.RecipientVerificationStartPurposeReply),
+	})
+	if !f.gotReply {
+		t.Error("reply purpose not passed")
+	}
+	_, err = NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{
+		Body: purpose("other"),
+	})
+	if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != "/purpose" {
+		t.Errorf("errors = %+v", p.Errors)
+	}
+	// The language of the body wins over Accept-Language; an unsupported
+	// one is refused.
+	for _, c := range []struct{ body, want string }{{"en", "en"}, {"fr", "fr"}} {
+		l := gen.Language(c.body)
+		_, err = NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{
+			Params: gen.StartRecipientVerificationParams{AcceptLanguage: &lang}, Body: &gen.RecipientVerificationStart{Language: &l},
+		})
+		if err != nil || f.gotLanguage != c.want {
+			t.Errorf("body language %s: %v, service got %q", c.body, err, f.gotLanguage)
+		}
+	}
+	f.gotLanguage = "unset"
+	de := gen.Language("de")
+	_, err = NewServer(WithDownloads(f)).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{
+		Body: &gen.RecipientVerificationStart{Language: &de},
+	})
+	if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != "/language" || f.gotLanguage != "unset" {
+		t.Errorf("errors = %+v, service got %q", p.Errors, f.gotLanguage)
+	}
+	// Already verified: 204.
+	resp, err = NewServer(WithDownloads(&fakeDownloads{})).StartRecipientVerification(downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{})
+	if _, ok := resp.(gen.StartRecipientVerification204Response); !ok || err != nil {
+		t.Errorf("verified = %T, %v", resp, err)
+	}
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: &download.RateLimitError{RetryAfter: time.Hour}})).StartRecipientVerification(
+		downloadCtx(t, nil), gen.StartRecipientVerificationRequestObject{})
+	wantProblem(t, err, problem.CodeRateLimited)
+}
+
+func TestConfirmRecipientVerification(t *testing.T) {
+	t.Parallel()
+	f := &fakeDownloads{cookie: "rv_new"}
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	r.AddCookie(&http.Cookie{Name: download.VerificationCookieName, Value: "rv_old"})
+	resp, err := NewServer(WithDownloads(f)).ConfirmRecipientVerification(downloadCtx(t, r), gen.ConfirmRecipientVerificationRequestObject{
+		LinkToken: linkToken, Body: &gen.VerificationCode{Code: "482913"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.(gen.ConfirmRecipientVerification204Response)
+	want := "__Host-tt_rv=rv_new; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Strict"
+	if got.Headers.SetCookie == nil || *got.Headers.SetCookie != want {
+		t.Errorf("Set-Cookie = %v, want %q", got.Headers.SetCookie, want)
+	}
+	if f.gotCode != "482913" || f.gotVerification != "rv_old" || f.gotToken != linkToken || f.gotIP != netip.MustParseAddr("192.0.2.7") {
+		t.Errorf("service called with %+v", f)
+	}
+	for _, body := range []*gen.VerificationCode{nil, {}} {
+		_, err = NewServer(WithDownloads(f)).ConfirmRecipientVerification(downloadCtx(t, nil),
+			gen.ConfirmRecipientVerificationRequestObject{Body: body})
+		if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != "/code" || p.Errors[0].Code != "required" {
+			t.Errorf("errors = %+v", p.Errors)
+		}
+	}
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: &download.WrongCodeError{Remaining: 1}})).ConfirmRecipientVerification(
+		downloadCtx(t, nil), gen.ConfirmRecipientVerificationRequestObject{Body: &gen.VerificationCode{Code: "000000"}})
+	if p := problemOf(t, err, problem.CodeVerificationCodeInvalid); p.Status != http.StatusUnprocessableEntity || *p.AttemptsRemaining != 1 {
+		t.Errorf("wrong code = %+v", p)
+	}
+}
+
+// TestVerificationRequiredOnStreams: a file or archive of a link awaiting
+// its verification is the recipient-verification-required Problem.
+func TestVerificationRequiredOnStreams(t *testing.T) {
+	t.Parallel()
+	f := &fakeDownloads{err: download.ErrVerificationRequired}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	_, err := NewServer(WithDownloads(f)).DownloadFile(downloadCtx(t, r), gen.DownloadFileRequestObject{LinkToken: linkToken, FileId: "fil_1"})
+	if p := problemOf(t, err, problem.CodeRecipientVerificationRequired); p.Status != http.StatusUnauthorized {
+		t.Errorf("file = %+v", p)
+	}
+	_, err = NewServer(WithDownloads(f)).DownloadArchive(downloadCtx(t, r), gen.DownloadArchiveRequestObject{LinkToken: linkToken})
+	wantProblem(t, err, problem.CodeRecipientVerificationRequired)
+	_, err = NewServer(WithDownloads(f)).UnlockDownload(downloadCtx(t, nil), gen.UnlockDownloadRequestObject{
+		Body: &gen.TransferPassword{Password: "x"},
+	})
+	wantProblem(t, err, problem.CodeRecipientVerificationRequired)
 }

@@ -37,6 +37,9 @@ const (
 	// TaskOrphans removes the files of the tenant directories that the
 	// database proves orphaned.
 	TaskOrphans Task = "orphans"
+	// TaskExpiryReminder mails the recipients who have not downloaded a
+	// per-recipient transfer that is about to expire (CLAUDE.md section 12.2, V1.1).
+	TaskExpiryReminder Task = "expiry-reminder"
 	// TaskBackup writes the nightly copy of a SQLite database.
 	TaskBackup Task = "backup"
 )
@@ -174,6 +177,13 @@ type Deps struct {
 	// Holder is the antivirus worker, held by [Sweeper.EraseTransfer]; nil
 	// when there is none (tests, tools): nothing is held.
 	Holder Holder
+	// Notifier builds the expiry reminder mails; nil, like Mail and
+	// Opener, disables TaskExpiryReminder (tests, tools).
+	Notifier ReminderNotifier
+	// Mail queues the reminder mails.
+	Mail MailQueue
+	// Opener unseals the download tokens of the recipient links.
+	Opener Opener
 	// Audit is the shared audit writer of the application, which publishes
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
@@ -197,6 +207,9 @@ type Options struct {
 	// OrphansInterval is the delay between two runs of TaskOrphans
 	// (DefaultOrphansInterval).
 	OrphansInterval time.Duration
+	// ReminderInterval is the delay between two runs of TaskExpiryReminder
+	// (DefaultReminderInterval).
+	ReminderInterval time.Duration
 	// EndedRetention replaces the constant EndedRetention (tests).
 	EndedRetention time.Duration
 	// OrphanGrace replaces the constant OrphanGrace (tests).
@@ -251,9 +264,14 @@ type Sweeper struct {
 	remover Remover
 	files   Files
 	holder  Holder
-	fs      backupFS
-	now     func() time.Time
-	logger  *slog.Logger
+	// notifier, mailer and opener send the expiry reminders; nil disables
+	// them.
+	notifier ReminderNotifier
+	mailer   MailQueue
+	opener   Opener
+	fs       backupFS
+	now      func() time.Time
+	logger   *slog.Logger
 
 	endedRetention time.Duration
 	orphanGrace    time.Duration
@@ -278,6 +296,9 @@ type Sweeper struct {
 	// keyBatch is the page size of the listing of a tenant's wrapped keys,
 	// destroyed one transaction per page.
 	keyBatch int
+	// reminderPage is the page size of the listing of the transfers due
+	// for their expiry reminder.
+	reminderPage int
 
 	tasks []*task
 	// newTimer returns a channel receiving once after d, for the next run
@@ -323,6 +344,7 @@ func New(deps Deps, opts Options) *Sweeper {
 	s := &Sweeper{
 		repo:    storeRepo{db: deps.DB, vault: deps.Vault, writer: deps.Audit},
 		remover: deps.Remover, files: deps.Files, holder: holder, fs: osFS(),
+		notifier: deps.Notifier, mailer: deps.Mail, opener: deps.Opener,
 		now: opts.Now, logger: opts.Logger,
 		endedRetention:       orDefault(opts.EndedRetention, EndedRetention),
 		orphanGrace:          orDefault(opts.OrphanGrace, OrphanGrace),
@@ -336,6 +358,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		pageSizes:            [kindCount]int{store.DeletionSweepLimit, store.ExpirySweepLimit, store.AbandonedSweepLimit},
 		purgeBatch:           store.PurgeBatchSize,
 		keyBatch:             store.MaxPageSize,
+		reminderPage:         store.ReminderSweepLimit,
 		newTimer:             realTimer,
 		last:                 make(map[Task]time.Time),
 	}
@@ -348,6 +371,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		{TaskTenantDeletions, orDefault(opts.TenantDeletionsInterval, DefaultTenantDeletionsInterval), true, s.tenantDeletions},
 		{TaskPurgeRows, orDefault(opts.PurgeInterval, DefaultPurgeInterval), true, s.purgeRows},
 		{TaskOrphans, orDefault(opts.OrphansInterval, DefaultOrphansInterval), true, s.orphans},
+		{TaskExpiryReminder, orDefault(opts.ReminderInterval, DefaultReminderInterval), true, s.expiryReminders},
 		{TaskBackup, 0, false, s.backup},
 	}
 	return s
