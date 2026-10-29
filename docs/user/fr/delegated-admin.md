@@ -318,6 +318,7 @@ Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, prem
 
 - **Renvoyer la notification** : choisissez les destinataires et cliquez sur **Renvoyer**. Le mail est renvoyé et chaque destinataire reçoit de nouveau son propre lien personnel, 5 fois par heure au plus. La veille de l’expiration d’un transfert, les destinataires qui n’ont pas encore téléchargé reçoivent automatiquement un mail de rappel (pas pour les transferts valables un jour, ni pour les adresses bloquées).
 - **Supprimer le transfert** : saisissez éventuellement un **Motif (facultatif)**, enregistré dans le journal d’audit, puis confirmez. Les fichiers sont effacés définitivement, y compris des sauvegardes, car leurs clés de chiffrement sont détruites. Le lien de téléchargement cesse de fonctionner.
+- Les expéditeurs peuvent aussi supprimer ou prolonger eux-mêmes leurs transferts depuis la page « Mes envois » du site d’envoi (voir le guide du déposant), sans passer par un administrateur. Ces actions sont tracées dans le [journal d’audit](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 - **Voir le journal d’audit depuis le jour de ce transfert** ouvre le journal d’audit au jour de sa création.
 
 <!-- topic: tenant-invitations -->

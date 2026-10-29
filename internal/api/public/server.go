@@ -36,6 +36,8 @@ type Server struct {
 	uploads UploadService
 	// downloads serves the recipients; nil until WithDownloads.
 	downloads DownloadService
+	// myTransfers serves "my transfers"; nil until WithMyTransfers.
+	myTransfers MyTransfersService
 	// tenants serves the public tenant configuration; nil until
 	// WithTenantService.
 	tenants TenantService

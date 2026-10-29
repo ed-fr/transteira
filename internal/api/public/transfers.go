@@ -213,11 +213,18 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 // senderLevelRef renders the confidentiality level snapshotted on d as the
 // OpenAPI ConfidentialityLevelRef, nil for a transfer without level.
 func senderLevelRef(d transfer.Details) *gen.ConfidentialityLevelRef {
-	if d.ConfidentialityLevel == "" {
+	return levelRef(d.ConfidentialityLevel, d.ConfidentialityLabel, d.Rules)
+}
+
+// levelRef renders a snapshotted confidentiality level (its key, its label
+// in the language of the transfer and its rules) as the OpenAPI
+// ConfidentialityLevelRef, nil without level (empty key).
+func levelRef(key, label string, rules *store.ConfidentialityRules) *gen.ConfidentialityLevelRef {
+	if key == "" {
 		return nil
 	}
-	ref := &gen.ConfidentialityLevelRef{Key: d.ConfidentialityLevel, Label: d.ConfidentialityLabel}
-	if r := d.Rules; r != nil {
+	ref := &gen.ConfidentialityLevelRef{Key: key, Label: label}
+	if r := rules; r != nil {
 		days := r.AllowedExpiryDays()
 		allowed := make([]gen.ExpiryDays, len(days))
 		for i, n := range days {

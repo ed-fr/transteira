@@ -7,6 +7,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- "My transfers" (specification 8.7): a sender whose address is already verified requests a
+  single-use access link (15 minutes) by mail, opens a 1-hour session and lists, inspects
+  (per-recipient tracking), deletes or extends their transfers (durations of the confidentiality
+  level, 90 days maximum lifetime). Same answer for known and unknown addresses; new
+  `access_link_invalid` security log event handled by the fail2ban and CrowdSec rules; user guide
+  and help topic `my-transfers`.
 - Version 1.1 design, validated: OpenAPI specification 1.1.0 (35 new operations, not implemented
   yet), V1.1 data model (`docs/architecture/data-model-v1.1.md`) and threat model 1.1 (threats
   T-178 to T-243, decisions P27 to P46). Specification section 11.1: antivirus disable (instance or

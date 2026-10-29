@@ -29,5 +29,9 @@ Fichiers retenus :
 
 Ces fichiers n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : les destinataires ne peuvent pas les télécharger.
 
+Gérez ce transfert (le supprimer, le prolonger, voir qui l'a téléchargé) dans Mes envois :
+
+https://transfer.entity-a.example.com/me
+
 -- 
 Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

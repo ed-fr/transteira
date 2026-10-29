@@ -243,6 +243,13 @@ func (f *faultRepo) deleteDepositRows(ctx context.Context, tid tenant.ID, email 
 	return f.repo.deleteDepositRows(ctx, tid, email)
 }
 
+func (f *faultRepo) deleteSenderAccess(ctx context.Context, tid tenant.ID, email string, mac []byte) (int64, error) {
+	if err := f.fail("deleteSenderAccess"); err != nil {
+		return 0, err
+	}
+	return f.repo.deleteSenderAccess(ctx, tid, email, mac)
+}
+
 func (f *faultRepo) deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error) {
 	if err := f.fail("deleteVerified"); err != nil {
 		return false, err
@@ -300,6 +307,7 @@ type env struct {
 	logs    *bytes.Buffer
 	sleeps  int
 	clock   *fakeClock
+	keys    *masterkey.Keyring
 	a, b    *tenant.Tenant
 	super   adminauth.Principal
 	adminA  adminauth.Principal
@@ -329,7 +337,7 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = files.Close() })
-	ev := &env{t: t, db: db, vault: vault, files: files, holder: &testHolder{}, logs: &bytes.Buffer{}, clock: clock}
+	ev := &env{t: t, db: db, vault: vault, files: files, holder: &testHolder{}, logs: &bytes.Buffer{}, clock: clock, keys: kr}
 	logger := slog.New(slog.NewTextHandler(ev.logs, nil))
 	ev.sweeper = lifecycle.New(lifecycle.Deps{
 		DB: db, Vault: vault, Remover: upload.New(db, vault, files, upload.Options{}), Files: files, Holder: ev.holder,
@@ -343,7 +351,7 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 		}
 	})
 	ev.eraser = &flakyEraser{inner: ev.sweeper}
-	ev.svc, err = New(db, Options{Eraser: ev.eraser, Holder: ev.holder, Logger: logger, Now: clock.Now})
+	ev.svc, err = New(db, Options{Eraser: ev.eraser, Holder: ev.holder, Logger: logger, Now: clock.Now, Keys: kr})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,12 @@
+Hello,
+
+You asked to access your transfers on Entity A & Co. Use this one-time link to open My transfers:
+
+https://transfer.entity-a.example.com/me#mta_golden
+
+It is valid for 15 minutes and can be used only once.
+
+If you did not ask for it, you can safely ignore this message.
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

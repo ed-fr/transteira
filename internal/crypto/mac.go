@@ -62,12 +62,26 @@ const (
 	// from MACPurposeDownloadGrant, so that a grant entry is never a
 	// verification entry and vice versa.
 	MACPurposeRecipientVerification MACPurpose = "recipient-verification"
+	// MACPurposeAccessRate keys the MAC of a normalized mail address
+	// counted by the rate limit of the "my transfers" access link requests
+	// (since 1.1, access_link_requests.address_mac), so that the address
+	// itself is never stored there. The MAC has exactly one part, the
+	// normalized address (store.NormalizeEmail), for known and unknown
+	// addresses alike: MAC(MACPurposeAccessRate, []byte(address)). The
+	// data-subject erasure recomputes it the same way.
+	MACPurposeAccessRate MACPurpose = "access-rate"
+	// MACPurposeMeCSRF keys the CSRF tokens derived from "my transfers"
+	// session tokens (since 1.1). It is distinct from MACPurposeCSRF and
+	// MACPurposeAdminCSRF, so that a CSRF token of a deposit or an
+	// administrator session is never valid for a "my transfers" session
+	// and vice versa.
+	MACPurposeMeCSRF MACPurpose = "me-csrf"
 )
 
 // macPurposes lists every valid MACPurpose.
 var macPurposes = []MACPurpose{
 	MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant, MACPurposeAdminCSRF,
-	MACPurposeRecipientVerification,
+	MACPurposeRecipientVerification, MACPurposeAccessRate, MACPurposeMeCSRF,
 }
 
 // deriveMACKeys derives the MAC key of every purpose from the master key

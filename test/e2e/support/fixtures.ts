@@ -79,10 +79,12 @@ interface HttpAllowance {
 
 /**
  * Error answers the interfaces provoke by design on every visit, allowed in every test: the
- * public interface and the admin interface ask whether a session exists (401 when anonymous).
+ * public interface (deposit and "my transfers") and the admin interface ask whether a session
+ * exists (401 when anonymous).
  */
 export const DEFAULT_HTTP_ALLOWANCES: readonly HttpAllowance[] = [
   { status: 401, url: /\/api\/v1\/deposit-sessions\/current$/ },
+  { status: 401, url: /\/api\/v1\/me\/sessions\/current$/ },
   { status: 401, url: /\/api\/v1\/admin\/me$/ },
 ];
 

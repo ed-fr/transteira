@@ -264,17 +264,22 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 				t.Fatal(err)
 			}
 			session, csrf, token, ok := depositSecurity(op.Security)
+			me, meCSRF := myTransfersSecurity(op.Security)
 			pattern := method + " " + APIBaseURL + path
 			p, declared := routePolicies[pattern]
 			seen[pattern] = true
 			switch {
 			case !ok:
 				t.Errorf("%s (%s): security alternatives %v are not supported", pattern, op.OperationID, *op.Security)
-			case !session:
-				if declared && (p.depositSession || p.csrf || p.apiToken) {
-					t.Errorf("%s (%s): route policy requires a deposit session or a token, the spec does not", pattern, op.OperationID)
+			case me:
+				if !declared || !p.meSession || p.meCSRF != meCSRF || p.depositSession || p.csrf || p.apiToken {
+					t.Errorf("%s (%s): route policy %+v, want meSession and meCSRF=%v only", pattern, op.OperationID, p, meCSRF)
 				}
-			case !declared || !p.depositSession || p.csrf != csrf || p.apiToken != token:
+			case !session:
+				if declared && (p.depositSession || p.csrf || p.apiToken || p.meSession || p.meCSRF) {
+					t.Errorf("%s (%s): route policy requires a session or a token, the spec does not", pattern, op.OperationID)
+				}
+			case !declared || !p.depositSession || p.csrf != csrf || p.apiToken != token || p.meSession || p.meCSRF:
 				t.Errorf("%s (%s): route policy %+v, want depositSession, csrf=%v and apiToken=%v", pattern, op.OperationID, p, csrf, token)
 			}
 		}
@@ -284,6 +289,24 @@ func TestRoutePoliciesMatchSpecSecurity(t *testing.T) {
 			t.Errorf("route policy %q matches no operation of the spec", pattern)
 		}
 	}
+}
+
+// myTransfersSecurity reads the "my transfers" security requirements of an
+// operation: me is set when myTransfersSession is required, csrf when
+// csrfToken goes with it. depositSecurity refuses no combination holding
+// myTransfersSession, which is never an alternative of the deposit
+// session (checked by the policy test).
+func myTransfersSecurity(security *[]map[string][]string) (me, csrf bool) {
+	if security == nil {
+		return false, false
+	}
+	for _, alt := range *security {
+		if _, ok := alt["myTransfersSession"]; ok {
+			_, c := alt["csrfToken"]
+			return true, c
+		}
+	}
+	return false, false
 }
 
 // depositSecurity reads the security requirements of a public operation:

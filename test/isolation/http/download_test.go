@@ -42,6 +42,14 @@ func (h *harness) availableVerifiedDownloadA(t *testing.T) string {
 // the members of the transfer creation.
 func (h *harness) availableDownload(t *testing.T, extra string) string {
 	t.Helper()
+	_, token := h.availableTransfer(t, extra)
+	return token
+}
+
+// availableTransfer implements availableDownload and returns the
+// identifier of the transfer with its download token.
+func (h *harness) availableTransfer(t *testing.T, extra string) (trfID, token string) {
+	t.Helper()
 	o := h.owner(t)
 	header := http.Header{}
 	for kv := o.headers("Content-Type", "application/json"); len(kv) > 1; kv = kv[2:] {
@@ -71,7 +79,7 @@ func (h *harness) availableDownload(t *testing.T, extra string) string {
 		t.Fatal(err)
 	}
 	vault := masterkey.NewVault(db, kr, nil)
-	token, err := id.NewDownloadToken()
+	token, err = id.NewDownloadToken()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +108,7 @@ func (h *harness) availableDownload(t *testing.T, extra string) string {
 	if err != nil {
 		t.Fatalf("make the transfer available: %v", err)
 	}
-	return token
+	return tr.ID, token
 }
 
 // unlockA unlocks token under tenant A with the right password and returns

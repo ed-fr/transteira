@@ -122,7 +122,7 @@
     tenantName={current.name}
     logoUrl={current.branding.logoUrl}
     backgroundUrl={current.branding.backgroundUrl}
-    wide={match.route.pattern === '/d/:token'}
+    wide={match.route.pattern === '/d/:token' || match.route.pattern === '/me'}
   >
     {#snippet banner()}
       {#if showBanner}

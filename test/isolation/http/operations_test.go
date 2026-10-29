@@ -121,6 +121,19 @@ var isolationCases = map[string]isolationCase{
 	"downloadArchive":              archiveOfForeignDownload,
 	"startRecipientVerification":   startForeignVerification,
 	"confirmRecipientVerification": confirmForeignVerification,
+	// "My transfers" (mytransfers_test.go, since 1.1): an access link or a
+	// session of tenant A is unknown under B's host (410, 401), a session
+	// of the same address in B is unknown under A, and a transfer of A's
+	// sender is never listed, read, deleted nor extended by another sender
+	// of A nor by the same address in B (404), while its sender reaches it.
+	"requestMyTransfersLink":       requestLinkEverywhere,
+	"startMyTransfersSession":      startWithForeignLink,
+	"getCurrentMyTransfersSession": currentWithForeignMeSession,
+	"endMyTransfersSession":        endWithForeignMeSession,
+	"listMyTransfers":              listMyForeignTransfers,
+	"getMyTransfer":                getMyForeignTransfer,
+	"deleteMyTransfer":             deleteMyForeignTransfer,
+	"extendMyTransfer":             extendMyForeignTransfer,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the

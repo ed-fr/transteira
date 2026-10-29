@@ -1,0 +1,12 @@
+Bonjour,
+
+Vous avez demandé l'accès à vos envois sur Entity A & Co. Utilisez ce lien à usage unique pour ouvrir Mes envois :
+
+https://transfer.entity-a.example.com/me#mta_golden
+
+Il est valable 15 minutes et ne peut être utilisé qu'une seule fois.
+
+Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer ce message sans risque.
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

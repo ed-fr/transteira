@@ -71,6 +71,10 @@ const (
 	// (tenant template key "recipient-verification-code", threat T-144);
 	// data: [RecipientVerificationCodeData].
 	TemplateRecipientVerificationCode = "recipient_verification_code"
+	// TemplateMyTransfersLink is the one-time sign-in link to "My transfers"
+	// sent to a sender who asked for it (tenant template key
+	// "my-transfers-link"); data: [MyTransfersLinkData].
+	TemplateMyTransfersLink = "my_transfers_link"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -185,6 +189,9 @@ type TransferConfirmationData struct {
 	// Withheld lists the files that could not be analyzed and are withheld
 	// (never downloadable); SHA256 is not shown.
 	Withheld []FileInfo
+	// MyTransfersLink is the absolute URL of the "My transfers" page of the
+	// entity; empty shows no such line.
+	MyTransfersLink string
 }
 
 // InfectedFile is a file deleted because the antivirus found it infected.
@@ -277,6 +284,17 @@ type RecipientVerificationCodeData struct {
 	// Code is the one-time code (6 digits). It is never logged.
 	Code string
 	// ValidityMinutes is the lifetime of the code (15).
+	ValidityMinutes int
+}
+
+// MyTransfersLinkData is the data of [TemplateMyTransfersLink].
+type MyTransfersLinkData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// Link is the one-time sign-in URL (https://<host>/me#mta_...). It is
+	// a secret: it is never logged.
+	Link string
+	// ValidityMinutes is the lifetime of the link (15).
 	ValidityMinutes int
 }
 

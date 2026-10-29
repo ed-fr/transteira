@@ -1,0 +1,140 @@
+{
+  "title": "My transfers",
+  "homeLink": "My transfers",
+  "notice": {
+    "expiredSession": "Your session has expired. Request a new access link to continue.",
+    "invalidLink": "This link has expired or has already been used. Request a new one."
+  },
+  "request": {
+    "intro": "Enter the email address you send files from. If this address has already been verified on this service, you will receive a link by email to manage your transfers.",
+    "label": "Your email address",
+    "hint": "The link is valid for 15 minutes and can be used only once.",
+    "submit": "Send me a link",
+    "required": "Enter your email address.",
+    "invalid": "Enter a valid email address, for example name@example.com.",
+    "rateLimited": "Too many requests. Please wait before trying again.",
+    "mailUnavailable": "The email could not be sent. Please try again later.",
+    "sentTitle": "Check your mailbox",
+    "sentText": "If this address has already been verified on this service, you will receive a link valid for 15 minutes.",
+    "sentHint": "Nothing arrived? Check your spam folder, or request a link again. The link works once, in the browser where you open it.",
+    "again": "Request another link"
+  },
+  "session": {
+    "as": "Signed in as {email}",
+    "signOut": "Sign out"
+  },
+  "switch": {
+    "title": "Open this link?",
+    "text": "You are signed in as {email}. Open the link and switch?",
+    "hint": "Only open it if you requested this link yourself. Opening it ends your current session.",
+    "confirm": "Open the link and switch",
+    "stay": "Stay signed in as {email}"
+  },
+  "status": {
+    "scanning": "Being analysed",
+    "available": "Available"
+  },
+  "list": {
+    "intro": "Your transfers in progress, most recent first.",
+    "empty": "You have no transfer in progress.",
+    "caption": "Transfers in progress",
+    "recipients": "Recipients",
+    "files": "Files",
+    "status": "Status",
+    "expires": "Available until",
+    "downloadedBy": "Recipients who downloaded",
+    "action": "Action",
+    "open": "Details",
+    "openFor": "of the transfer to {recipients}",
+    "noExpiry": "Not yet defined",
+    "loadMore": "Show more",
+    "loadedMore": {
+      "one": "{count} more transfer loaded.",
+      "other": "{count} more transfers loaded."
+    },
+    "filesValue": {
+      "one": "{count} file, {size}",
+      "other": "{count} files, {size}"
+    }
+  },
+  "scan": {
+    "pending": "Waiting for analysis",
+    "scanning": "Being analysed",
+    "clean": "Analysed, nothing found",
+    "infected": "Virus detected",
+    "not_scanned_too_large": "Not analysed: file too large",
+    "not_scanned_encrypted": "Not analysed: encrypted file",
+    "scan_error": "Analysis failed",
+    "not_scanned_disabled": "Not analysed: antivirus disabled",
+    "unknown": "Unknown"
+  },
+  "detail": {
+    "title": "Transfer details",
+    "back": "Back to my transfers",
+    "created": "Sent on",
+    "total": "Total",
+    "level": "Confidentiality level",
+    "options": "Options",
+    "option": {
+      "password": "Protected by a password",
+      "noPassword": "No password",
+      "verification": "Recipients verify their address by code",
+      "deleteAfterFirst": "Deleted after the first download",
+      "maxDownloads": {
+        "one": "Limited to {count} download",
+        "other": "Limited to {count} downloads"
+      }
+    },
+    "downloads": "Downloads started",
+    "message": "Your message",
+    "filesTitle": "Files",
+    "noFiles": "No file in this transfer.",
+    "file": {
+      "name": "Name",
+      "size": "Size",
+      "sha256": "SHA-256 fingerprint",
+      "scan": "Antivirus"
+    },
+    "trackingTitle": "Downloads by recipient",
+    "trackingNone": "No per-recipient tracking is available for this transfer.",
+    "tracking": {
+      "recipient": "Recipient",
+      "verified": "Address verified",
+      "first": "First download",
+      "last": "Last download",
+      "files": "Files downloaded",
+      "noDownload": "Nothing downloaded yet",
+      "archive": "ZIP archive",
+      "count": {
+        "one": "{count} time, last on {last}",
+        "other": "{count} times, last on {last}"
+      }
+    },
+    "never": "Never",
+    "extend": {
+      "title": "Extend the validity",
+      "legend": "New validity, counted from today",
+      "hint": "The latest possible expiry is {date}.",
+      "days": {
+        "one": "{count} day",
+        "other": "{count} days"
+      },
+      "submit": "Extend",
+      "done": "Validity extended.",
+      "doneUntil": "The transfer is now available until {date}.",
+      "conflict": "This transfer can no longer be extended. Reload the page.",
+      "notAllowed": "This duration is not allowed for this transfer.",
+      "unavailable": "This transfer cannot be extended: it has reached the maximum lifetime allowed or no longer offers a longer duration.",
+      "unavailableState": "This transfer cannot be extended in its current state."
+    },
+    "delete": {
+      "title": "Delete the transfer",
+      "text": "Deleting the transfer makes its links unusable at once. The files are erased and this cannot be undone.",
+      "button": "Delete this transfer",
+      "confirm": "Delete the transfer to {recipients}? The files will be erased and the links will stop working.",
+      "confirmButton": "Delete permanently",
+      "cancel": "Keep the transfer",
+      "done": "Transfer deleted."
+    }
+  }
+}

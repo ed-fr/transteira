@@ -318,6 +318,7 @@ Open a transfer to see its **Transfer details**: status, dates, first download, 
 
 - **Resend the notification**: choose the recipients and click **Resend**. The email is sent again and each recipient receives their own personal link again, at most 5 times per hour. The day before a transfer expires, recipients who have not downloaded yet automatically receive a reminder email (not for transfers valid one day, nor for blocked addresses).
 - **Delete the transfer**: optionally type a **Reason (optional)**, recorded in the audit log, then confirm. The files are erased for good, including from backups, since their encryption keys are destroyed. The download link stops working.
+- Senders can also delete or extend their own transfers themselves from the "My transfers" page of the sending site (see the depositor guide), without an administrator. These actions are recorded in the [audit log](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 - **View the audit log from the day of this transfer** opens the audit log at the creation day.
 
 <!-- topic: tenant-invitations -->

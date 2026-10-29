@@ -23,6 +23,7 @@ type repo interface {
 	verified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	countAudit(ctx context.Context, tid tenant.ID, email string) (int, error)
 	deleteDepositRows(ctx context.Context, tid tenant.ID, email string) error
+	deleteSenderAccess(ctx context.Context, tid tenant.ID, email string, mac []byte) (int64, error)
 	deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error)
 	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error)
@@ -109,6 +110,27 @@ func (r *storeRepo) deleteDepositRows(ctx context.Context, tid tenant.ID, email 
 		_, err := r.db.DepositSessions().DeleteByEmailTx(ctx, tx, email)
 		return err
 	})
+}
+
+// deleteSenderAccess deletes the "my transfers" access links and sessions
+// of email and, when mac is not nil, the access link requests counted for
+// the address MAC mac, in one transaction, and returns how many links and
+// sessions it deleted.
+func (r *storeRepo) deleteSenderAccess(ctx context.Context, tid tenant.ID, email string, mac []byte) (int64, error) {
+	sc, err := r.db.Scoped(tid)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		var err error
+		if n, err = r.db.SenderAccess().DeleteByEmailTx(ctx, tx, email); err != nil || mac == nil {
+			return err
+		}
+		_, err = r.db.SenderAccess().DeleteRequestsByMACTx(ctx, tx, mac)
+		return err
+	})
+	return n, err
 }
 
 func (r *storeRepo) deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error) {

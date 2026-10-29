@@ -297,6 +297,15 @@ func TestSenderMails(t *testing.T) {
 		t.Errorf("confirmation recipients or files:\n%s", j.Message.Text)
 	}
 	build(t, j)
+	if strings.Contains(j.Message.Text, "/me") {
+		t.Error("My transfers link without a tenant host")
+	}
+	withHost := *e.t
+	withHost.FQDN = "transfer.entity-a.example.com"
+	if jh, err := e.n.SenderConfirmation(ctx, &withHost, tr, testLink); err != nil ||
+		!strings.Contains(jh.Message.Text, "in My transfers:\n\nhttps://transfer.entity-a.example.com/me") {
+		t.Errorf("My transfers line: %v\n%s", err, jh.Message.Text)
+	}
 	// Without a withheld file, the confirmation has no such section.
 	clean := tr
 	clean.Files = tr.Files[:3]

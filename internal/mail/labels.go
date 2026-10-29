@@ -41,6 +41,7 @@ type labels struct {
 	downloadedBy          string // prefix of the recipient notice
 	downloadLinkIntro     string // intro of the download link in the sender confirmation
 	personalLinks         string // sentence replacing the link when each recipient has a personal one
+	myTransfersIntro      string // intro of the My transfers link in the sender confirmation
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -91,6 +92,7 @@ var allLabels = map[string]*labels{
 		downloadedBy:          "Downloaded by: ",
 		downloadLinkIntro:     "Download link",
 		personalLinks:         "Each recipient received their own personal link.",
+		myTransfersIntro:      "Manage this transfer (delete it, extend it, see who downloaded it) in My transfers",
 	},
 	i18n.French: {
 		colon:                 " :",
@@ -128,6 +130,7 @@ var allLabels = map[string]*labels{
 		downloadedBy:          "Téléchargé par : ",
 		downloadLinkIntro:     "Lien de téléchargement",
 		personalLinks:         "Chaque destinataire a reçu son propre lien personnel.",
+		myTransfersIntro:      "Gérez ce transfert (le supprimer, le prolonger, voir qui l'a téléchargé) dans Mes envois",
 	},
 }
 

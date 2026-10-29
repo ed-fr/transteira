@@ -292,5 +292,23 @@
     "screen": "public / (maintenance page)",
     "profile": "depositor",
     "path": "{lang}/maintenance.png"
+  },
+  {
+    "name": "my-transfers-detail",
+    "screen": "public /me (transfer details)",
+    "profile": "depositor",
+    "path": "{lang}/my-transfers-detail.png"
+  },
+  {
+    "name": "my-transfers-list",
+    "screen": "public /me (list of transfers)",
+    "profile": "depositor",
+    "path": "{lang}/my-transfers-list.png"
+  },
+  {
+    "name": "my-transfers-request",
+    "screen": "public /me (request a link)",
+    "profile": "depositor",
+    "path": "{lang}/my-transfers-request.png"
   }
 ]

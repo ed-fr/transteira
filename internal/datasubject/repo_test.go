@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -20,6 +21,16 @@ func TestStoreRepoEdges(t *testing.T) {
 		}
 		if err := r.deleteDepositRows(ctx, ev.a.ID, "not an address"); err == nil {
 			t.Error("deleteDepositRows(bad address) succeeded")
+		}
+		mac := make([]byte, store.AddressMACSize)
+		if _, err := r.deleteSenderAccess(ctx, bad, carol, mac); err == nil {
+			t.Error("deleteSenderAccess(bad tenant) succeeded")
+		}
+		if _, err := r.deleteSenderAccess(ctx, ev.a.ID, "not an address", mac); err == nil {
+			t.Error("deleteSenderAccess(bad address) succeeded")
+		}
+		if _, err := r.deleteSenderAccess(ctx, ev.a.ID, carol, mac[:3]); err == nil {
+			t.Error("deleteSenderAccess(bad mac) succeeded")
 		}
 		if _, err := r.removeRecipient(ctx, bad, "trf_x", carol); err == nil {
 			t.Error("removeRecipient(bad tenant) succeeded")

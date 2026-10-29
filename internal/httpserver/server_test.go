@@ -156,6 +156,8 @@ type envConfig struct {
 	opts     []Option
 	trusted  func(netip.Addr) bool
 	sessions DepositSessions
+	// myTransfers is Deps.MyTransfers.
+	myTransfers MyTransfersSessions
 	// tokens is Deps.APITokens.
 	tokens APITokens
 	// adminAPI and adminSessions are Deps.AdminAPI and Deps.AdminSessions;
@@ -200,6 +202,7 @@ func newEnv(t *testing.T, c envConfig) *env {
 		Maintenance:         e.maintenance,
 		API:                 c.api,
 		Sessions:            c.sessions,
+		MyTransfers:         c.myTransfers,
 		APITokens:           c.tokens,
 		AdminHosts:          []string{hostAdmin},
 		AdminAPI:            c.adminAPI,

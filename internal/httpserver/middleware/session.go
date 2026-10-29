@@ -21,12 +21,19 @@ const DepositCookie = "__Host-tt_deposit"
 // tenant FQDN.
 const AdminCookie = "__Host-tt_admin"
 
+// MyTransfersCookie is the name of the "my transfers" session cookie
+// (OpenAPI security scheme myTransfersSession, since 1.1). Like
+// DepositCookie, its __Host- prefix binds it to the exact FQDN of the
+// tenant.
+const MyTransfersCookie = "__Host-tt_me"
+
 // HeaderCSRFToken is the request header carrying the CSRF token (OpenAPI
 // security scheme csrfToken).
 const HeaderCSRFToken = "X-CSRF-Token" //nolint:gosec // G101 false positive: a header name, not a credential.
 
 // SessionResolver resolves a session cookie and checks CSRF tokens. The
-// httpserver package adapts internal/deposit.Service (deposit sessions) and
+// httpserver package adapts internal/deposit.Service (deposit sessions),
+// internal/mytransfers.Service ("my transfers" sessions) and
 // internal/adminauth.Service (admin sessions) to it.
 type SessionResolver interface {
 	// ResolveSession returns the session whose cookie token is rawToken (for
@@ -51,6 +58,9 @@ type sessionKey struct{}
 
 // adminSessionKey is the context key of the admin session.
 type adminSessionKey struct{}
+
+// myTransfersSessionKey is the context key of the "my transfers" session.
+type myTransfersSessionKey struct{}
 
 // cookieSpec describes one cookie-authenticated session scheme.
 type cookieSpec struct {
@@ -96,7 +106,20 @@ func AdminSession(resolver SessionResolver, required func(*http.Request) bool, l
 	return cookieSession(spec, resolver, required, logger)
 }
 
-// cookieSession implements [DepositSession] and [AdminSession].
+// MyTransfersSession authenticates the requests for which required returns
+// true with the "my transfers" session cookie ([MyTransfersCookie]), like
+// [AdminSession]: the session and its raw token are stored in the request
+// context (see [MyTransfersSessionFrom] and [MyTransfersSessionToken]); a
+// missing cookie gets a 401 unauthenticated Problem, and a cookie that
+// resolves to no session (expired after its hour, ended, of another
+// tenant) also gets it, with a Set-Cookie header expiring the cookie.
+func MyTransfersSession(resolver SessionResolver, required func(*http.Request) bool, logger *slog.Logger) func(http.Handler) http.Handler {
+	spec := cookieSpec{cookie: MyTransfersCookie, key: myTransfersSessionKey{}, what: "my transfers", clearInvalid: true}
+	return cookieSession(spec, resolver, required, logger)
+}
+
+// cookieSession implements [DepositSession], [AdminSession] and
+// [MyTransfersSession].
 func cookieSession(spec cookieSpec, resolver SessionResolver, required func(*http.Request) bool, logger *slog.Logger) func(http.Handler) http.Handler {
 	logger = orDiscard(logger)
 	return func(next http.Handler) http.Handler {
@@ -167,6 +190,19 @@ func AdminSessionToken(ctx context.Context) (string, bool) {
 	return sessionToken(ctx, adminSessionKey{})
 }
 
+// MyTransfersSessionFrom returns the "my transfers" session stored by
+// [MyTransfersSession], when there is one of type S.
+func MyTransfersSessionFrom[S any](ctx context.Context) (S, bool) {
+	return sessionFrom[S](ctx, myTransfersSessionKey{})
+}
+
+// MyTransfersSessionToken returns the raw cookie token of the "my
+// transfers" session stored by [MyTransfersSession], or "" and false when
+// there is none.
+func MyTransfersSessionToken(ctx context.Context) (string, bool) {
+	return sessionToken(ctx, myTransfersSessionKey{})
+}
+
 // sessionFrom returns the session of type S stored under key.
 func sessionFrom[S any](ctx context.Context, key any) (S, bool) {
 	v, _ := ctx.Value(key).(sessionValue)
@@ -208,8 +244,15 @@ func AdminCSRF(checker SessionResolver, required func(*http.Request) bool) func(
 	return csrf(AdminSessionToken, checker, required)
 }
 
-// csrf implements [CSRF] and [AdminCSRF]; tokenOf returns the session
-// token of the request.
+// MyTransfersCSRF is [CSRF] for the "my transfers" session: it must run
+// inside [MyTransfersSession] and checks the X-CSRF-Token header against
+// the token of the "my transfers" session in the context.
+func MyTransfersCSRF(checker SessionResolver, required func(*http.Request) bool) func(http.Handler) http.Handler {
+	return csrf(MyTransfersSessionToken, checker, required)
+}
+
+// csrf implements [CSRF], [AdminCSRF] and [MyTransfersCSRF]; tokenOf
+// returns the session token of the request.
 func csrf(tokenOf func(context.Context) (string, bool), checker SessionResolver, required func(*http.Request) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +274,8 @@ func csrf(tokenOf func(context.Context) (string, bool), checker SessionResolver,
 // without any token, to the unsafe requests for which required returns
 // true: operations that need no session but must not be triggered
 // cross-site (the unlock of a download, whose failures count against the
-// client IP). A failure gets a 403 csrf-invalid Problem.
+// client IP; the "my transfers" access link request and session opening).
+// A failure gets a 403 csrf-invalid Problem.
 func SameOrigin(required func(*http.Request) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

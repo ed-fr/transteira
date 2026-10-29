@@ -39,7 +39,7 @@ timestamp.
 
 | Scenario | Events | Trigger (per client IP) |
 |---|---|---|
-| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `metrics_token_invalid`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
+| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `metrics_token_invalid`, `access_link_invalid`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
 | `ed-fr/transteira-fqdn-scan` | `unknown_fqdn` | 10 events in a burst, one leaks every 30 s |
 
 Both carry `remediation: true`: a decision (ban, 4 h by default profile) is

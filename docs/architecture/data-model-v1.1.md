@@ -467,7 +467,7 @@ CREATE TABLE access_link_requests (          -- rate limit of POST /me/access-li
     tenant_id   TEXT    NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
     id          TEXT    NOT NULL,                             -- ULID
     address_mac BLOB    NOT NULL CHECK (length(address_mac) = 32),  -- HMAC-SHA256 of the normalised address
-    client_ip   TEXT    NOT NULL,
+    client_ip   TEXT    NOT NULL,                             -- client key: IPv4 address, or IPv6 /64 prefix
     created_at  INTEGER NOT NULL,
     PRIMARY KEY (tenant_id, id)
 ) STRICT, WITHOUT ROWID;
@@ -501,7 +501,7 @@ CREATE INDEX sender_sessions_email_idx ON sender_sessions (tenant_id, email);
 CREATE INDEX sender_sessions_expires_idx ON sender_sessions (tenant_id, expires_at);
 ```
 
-- **Identical request path (D12):** for every request, known or unknown address, the handler validates the input, counts and inserts one `access_link_requests` row (5 per hour per `address_mac`, 20 per hour per IP, all in one scoped transaction), enqueues a job and answers `202`. The **async worker** then looks up `verified_addresses` and, only for a verified address, inserts the `sender_access_links` row, writes the audit event and mails the link. Timing and writes on the request path therefore do not depend on whether the address exists.
+- **Identical request path (D12):** for every request, known or unknown address, the handler validates the input, counts and inserts one `access_link_requests` row (5 per hour per `address_mac`, 20 per hour per IP or IPv6 /64, all in one scoped transaction; a request refused by the per-IP limit is not inserted, so that a flood costs no write and no budget of the targeted address), enqueues a job and answers `202`. The **async worker** then looks up `verified_addresses` and, only for a verified address, inserts the `sender_access_links` row, writes the audit event and mails the link. Timing and writes on the request path therefore do not depend on whether the address exists.
 - `address_mac` uses a dedicated HMAC key derived from the master key (purpose `access-rate`, the same derivation as the code MAC). The raw address is never stored in this table.
 - No sealed copy of the access token is kept: it is mailed once and never shown again.
 

@@ -50,6 +50,9 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'recipient',
   },
   { name: 'download-password', screen: 'public /d/:token (password required)', profile: 'recipient' },
+  { name: 'my-transfers-request', screen: 'public /me (request a link)', profile: 'depositor' },
+  { name: 'my-transfers-list', screen: 'public /me (list of transfers)', profile: 'depositor' },
+  { name: 'my-transfers-detail', screen: 'public /me (transfer details)', profile: 'depositor' },
   // Delegated admin (admin host, entity A).
   { name: 'admin-login', screen: 'admin /admin/login', profile: 'delegated-admin' },
   { name: 'admin-activation', screen: 'admin /admin/activate', profile: 'delegated-admin' },

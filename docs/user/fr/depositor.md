@@ -120,6 +120,41 @@ Par mail, vous recevez aussi une confirmation d’envoi et un avis de premier t�
 
 > **À savoir** Le lien de téléchargement n’est pas affiché à l’écran : les destinataires le reçoivent par mail, avec un QR code pour l’ouvrir sur un téléphone et les empreintes des fichiers.
 
+<!-- topic: my-transfers -->
+## Mes envois
+
+Sans créer de compte, vous pouvez gérer les transferts que vous avez envoyés : voir où ils en sont, les supprimer ou les garder disponibles plus longtemps.
+
+### Obtenir votre lien d’accès
+
+1. Ouvrez la page **Mes envois** du site d’envoi (l’adresse se termine par `/me` ; le mail de confirmation de chaque transfert contient aussi le lien).
+1. Saisissez votre adresse mail et cliquez sur le bouton pour recevoir un lien.
+
+![Page Mes envois avec le champ Votre adresse mail et le bouton pour recevoir un lien d’accès](../screenshots/fr/my-transfers-request.png)
+
+La page affiche toujours le même message, qu’un lien ait été envoyé ou non. Un lien n’est envoyé que si votre adresse a déjà été vérifiée une première fois par un code, lors d’un envoi de fichiers. Il arrive dans votre boîte mail en quelques minutes.
+
+Si aucun mail n’arrive, regardez dans vos courriers indésirables, puis **attendez une heure** avant de redemander un lien : le nombre de liens par adresse est limité, et les demandes suivantes dans l’heure n’envoient rien.
+
+Le lien est valable **15 minutes** et ne peut être utilisé qu’**une seule fois** : s’il a expiré, ou si vous l’avez déjà ouvert, demandez-en un nouveau. Le lien ouvre une session de **1 heure** ; ensuite, il faut demander un nouveau lien. Si vous ouvrez un lien alors qu’une session Mes envois est déjà ouverte dans votre navigateur, la page vous demande de confirmer avant de changer de session : n’acceptez que si vous avez demandé ce lien vous-même.
+
+### Suivre vos transferts
+
+La liste présente vos transferts avec leur état, leurs destinataires, leur taille, leur date d’expiration et leur niveau de confidentialité.
+
+![Liste des transferts de l’expéditeur avec état, destinataires, taille et date d’expiration](../screenshots/fr/my-transfers-list.png)
+
+Ouvrez un transfert pour en voir le détail : les fichiers avec leur taille et leur empreinte SHA-256 et, pour chaque destinataire, quels fichiers ont été téléchargés et quand (premier et dernier téléchargement). Les liens de téléchargement ne sont jamais affichés ici.
+
+![Détail d’un transfert avec ses fichiers et, pour chaque destinataire, les téléchargements](../screenshots/fr/my-transfers-detail.png)
+
+### Supprimer ou prolonger un transfert
+
+- **Supprimer** : après confirmation, les fichiers sont effacés définitivement et les liens de téléchargement cessent de fonctionner.
+- **Prolonger** : choisissez une nouvelle durée parmi celles que votre organisation autorise pour le niveau de confidentialité du transfert. La nouvelle expiration est comptée à partir d’aujourd’hui et ne peut jamais être antérieure à l’actuelle. Un transfert ne peut pas rester disponible plus de **90 jours** après sa création : au-delà, la page indique la date la plus lointaine possible, et il faut renvoyer les fichiers. Les destinataires qui n’ont pas encore téléchargé reçoivent un nouveau rappel la veille de la nouvelle expiration. Un transfert dont le nombre de téléchargements est atteint ne peut pas être prolongé.
+
+Cliquez sur **Se déconnecter** quand vous avez terminé, surtout sur un ordinateur partagé.
+
 <!-- topic: invite -->
 ## Inviter une personne externe
 

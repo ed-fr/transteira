@@ -100,7 +100,7 @@ func TestPurgeRows(t *testing.T) {
 		if !ev.gone(oldA) || !ev.gone(oldB) || ev.gone(recentA) || ev.gone(rej) {
 			t.Fatalf("purge at the retention: %v %v %v %v", ev.gone(oldA), ev.gone(oldB), ev.gone(recentA), ev.gone(rej))
 		}
-		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 verified_addresses=0 invitations=0") != 1 {
+		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 invitations=0") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		// The token hash no longer resolves: the link answers 404.
@@ -309,7 +309,7 @@ func TestPurgeRowsSystem(t *testing.T) {
 		now := ev.clock.Now()
 		ev.adminRows(now)
 		ev.runTask(TaskPurgeRows)
-		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 verified_addresses=0 invitations=0 "+systemCounts) != 1 {
+		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 invitations=0 "+systemCounts) != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		if ev.f.called("scrub") != 1 {

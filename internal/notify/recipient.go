@@ -164,3 +164,26 @@ func (n *Notifier) FirstDownloadBy(ctx context.Context, t *tenant.Tenant, tr Tra
 	}
 	return n.firstDownload(ctx, t, tr, at, deleteAt, recipient)
 }
+
+// MyTransfersLinkJob builds the my_transfers_link mail: the one-time link
+// that opens "My transfers", sent to the verified address to (the sender who
+// asked for it). link is the absolute URL, https://<host>/me#mta_..., built
+// by the caller from the registered FQDN of the tenant; it is a secret and
+// is never logged. lang is the language of the mail ("" or an unsupported
+// value for the tenant default). The link is valid for validity (shown in
+// whole minutes). It fails with ErrInvalidTransfer for an invalid address or
+// a non-positive validity, and with ErrInvalidLink for an invalid link.
+func (n *Notifier) MyTransfersLinkJob(ctx context.Context, t *tenant.Tenant, lang, to, link string, validity time.Duration) (mail.Job, error) {
+	addr, err := mail.ParseAddress(to)
+	if err != nil {
+		return mail.Job{}, fmt.Errorf("%w: recipient: %w", ErrInvalidTransfer, err)
+	}
+	if err := checkLink(link); err != nil {
+		return mail.Job{}, err
+	}
+	if validity < time.Minute {
+		return mail.Job{}, fmt.Errorf("%w: validity", ErrInvalidTransfer)
+	}
+	data := mail.MyTransfersLinkData{TenantName: t.Name, Link: link, ValidityMinutes: int(validity.Minutes())}
+	return n.senderJob(ctx, t, TransferView{Language: lang}, addr, mail.TemplateMyTransfersLink, data)
+}

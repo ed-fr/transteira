@@ -29,5 +29,9 @@ Withheld files:
 
 These files could not be analyzed by the antivirus and are withheld for safety: the recipients cannot download them.
 
+Manage this transfer (delete it, extend it, see who downloaded it) in My transfers:
+
+https://transfer.entity-a.example.com/me
+
 -- 
 This message was sent automatically by Entity A & Co. Please do not reply to it.

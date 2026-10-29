@@ -47,8 +47,9 @@
 //     operations get 503), API token of the operations accepting one when
 //     the request carries a Bearer Authorization header (401, 403, 429; see
 //     tokenAuth.middleware), otherwise deposit session cookie (401) and
-//     CSRF protection of unsafe methods (403), body limit (413) and JSON
-//     media type (415).
+//     CSRF protection of unsafe methods (403), "my transfers" session
+//     cookie (401) and its CSRF protection (403), body limit (413) and
+//     JSON media type (415).
 //     The admin router has its own chain: deadlines, per-IP limit of the
 //     login steps (429), admin session cookie (401), CSRF and Origin
 //     checks (403), body limit and JSON media type.
@@ -196,6 +197,13 @@ type routePolicy struct {
 	// idleWrite writes the response with an idle write timeout
 	// (idleWriteMiddleware) instead of a deadline.
 	idleWrite bool
+	// meSession requires the "my transfers" session cookie (OpenAPI
+	// security scheme myTransfersSession, since 1.1).
+	meSession bool
+	// meCSRF requires the CSRF checks of the "my transfers" session on
+	// unsafe methods (OpenAPI security schemes myTransfersSession and
+	// csrfToken together); it implies meSession.
+	meCSRF bool
 	// assetBody limits the body to the size limit of the branding image
 	// named by the {asset} path value (5 MiB for a logo, 10 MiB for a
 	// background), bodyLimit for an unknown name.
@@ -210,6 +218,23 @@ var defaultPolicy = routePolicy{bodyLimit: middleware.DefaultJSONBodyLimit, dead
 func sessionPolicy(csrf bool) routePolicy {
 	p := defaultPolicy
 	p.depositSession, p.csrf = true, csrf
+	return p
+}
+
+// mePolicy is defaultPolicy for an operation authenticated by the "my
+// transfers" session cookie, with its CSRF checks when csrf is set.
+func mePolicy(csrf bool) routePolicy {
+	p := defaultPolicy
+	p.meSession, p.meCSRF = true, csrf
+	return p
+}
+
+// sameOriginPolicy is defaultPolicy with the Origin and Sec-Fetch-Site
+// checks, for an unauthenticated operation that must not be triggered
+// cross-site.
+func sameOriginPolicy() routePolicy {
+	p := defaultPolicy
+	p.sameOrigin = true
 	return p
 }
 
@@ -283,9 +308,21 @@ var routePolicies = map[string]routePolicy{
 	http.MethodGet + " " + APIBaseURL + "/tenant/assets/{asset}": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline,
 	},
-	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":    sessionPolicy(false),
-	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current": sessionPolicy(true),
-	http.MethodPost + " " + APIBaseURL + "/invitations":                sessionPolicy(true),
+	// "My transfers" (since 1.1): the access link request and the session
+	// opening need no session, but count against the client IP (and the
+	// address) and must not be triggered cross-site; the other operations
+	// require the "my transfers" session, with its CSRF token when unsafe.
+	http.MethodPost + " " + APIBaseURL + "/me/access-links":                     sameOriginPolicy(),
+	http.MethodPost + " " + APIBaseURL + "/me/sessions":                         sameOriginPolicy(),
+	http.MethodGet + " " + APIBaseURL + "/me/sessions/current":                  mePolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/me/sessions/current":               mePolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/me/transfers":                         mePolicy(false),
+	http.MethodGet + " " + APIBaseURL + "/me/transfers/{transferId}":            mePolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/me/transfers/{transferId}":         mePolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/me/transfers/{transferId}/extension": mePolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":             sessionPolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current":          sessionPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/invitations":                         sessionPolicy(true),
 }
 
 // policyOf returns the policy of the operation matched for r.
@@ -333,6 +370,10 @@ type Deps struct {
 	// Sessions resolves the deposit session cookies and checks the CSRF
 	// tokens (*deposit.Service); nil authenticates no session.
 	Sessions DepositSessions
+	// MyTransfers resolves the "my transfers" session cookies and checks
+	// their CSRF tokens (*mytransfers.Service); nil authenticates no
+	// session.
+	MyTransfers MyTransfersSessions
 	// APITokens authenticates the API tokens of the operations accepting
 	// one (*apitoken.Service); nil refuses every token (401).
 	APITokens APITokens
@@ -475,6 +516,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if deps.Sessions != nil {
 		sessions = sessionResolver{svc: deps.Sessions}
 	}
+	meSessions := middleware.SessionResolver(noSessions{})
+	if deps.MyTransfers != nil {
+		meSessions = myTransfersResolver{svc: deps.MyTransfers}
+	}
 	webFS := deps.WebUI
 	if webFS == nil {
 		webFS = web.Dist()
@@ -501,7 +546,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		// The last middleware is the outermost one: the tus protocol rules,
 		// deadlines, maintenance, API token (which, when it authenticates
 		// the request, turns the session, CSRF and Origin checks off),
-		// deposit session and CSRF, then the body
+		// "my transfers" session, deposit session and CSRF, then the body
 		// limit and the JSON media type check, all before the body is
 		// decoded. The idle read timeout of the tus PATCH is set even
 		// earlier, around the router (idleBodyHandler).
@@ -509,10 +554,15 @@ func New(deps Deps, opts ...Option) http.Handler {
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.CSRF(sessions, func(r *http.Request) bool { return policyOf(r).csrf && !tokenAuthenticated(r) }),
+			middleware.MyTransfersCSRF(meSessions, func(r *http.Request) bool { return policyOf(r).meCSRF }),
 			middleware.SameOrigin(func(r *http.Request) bool { return policyOf(r).sameOrigin && !tokenAuthenticated(r) }),
 			middleware.DepositSession(sessions, func(r *http.Request) bool {
 				p := policyOf(r)
 				return (p.depositSession || p.csrf) && !tokenAuthenticated(r)
+			}, logger),
+			middleware.MyTransfersSession(meSessions, func(r *http.Request) bool {
+				p := policyOf(r)
+				return p.meSession || p.meCSRF
 			}, logger),
 			tokens.middleware,
 			maintenanceMiddleware(maintenance),

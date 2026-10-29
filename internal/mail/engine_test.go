@@ -428,6 +428,7 @@ func TestPreviewAndVariables(t *testing.T) {
 		TemplateFirstDownload:             "download_datetime,deletion_notice",
 		TemplateExpiryReminder:            "download_link,password_notice",
 		TemplateRecipientVerificationCode: "code",
+		TemplateMyTransfersLink:           "my_transfers_link",
 		TemplateQuotaWarning:              "usage_percent",
 		TemplateQuotaReached:              "usage_percent",
 	}

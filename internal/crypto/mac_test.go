@@ -198,3 +198,48 @@ func TestMACConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestMACMyTransfersPurposes checks the purposes of "my transfers" (since
+// 1.1): their wire names are stable, they are valid purposes, and the same
+// parts give a MAC of their own under each of them, so that a deposit or
+// administrator CSRF token is never a "my transfers" CSRF token and an
+// address rate-limit MAC is never a CSRF token.
+func TestMACMyTransfersPurposes(t *testing.T) {
+	t.Parallel()
+	if MACPurposeAccessRate != "access-rate" || MACPurposeMeCSRF != "me-csrf" {
+		t.Fatalf("purpose names changed: %q, %q", MACPurposeAccessRate, MACPurposeMeCSRF)
+	}
+	k := testKey(t)
+	token := []byte("mts_sessiontoken")
+	seen := map[string]MACPurpose{}
+	for _, p := range []MACPurpose{MACPurposeMeCSRF, MACPurposeCSRF, MACPurposeAdminCSRF, MACPurposeAccessRate} {
+		m, err := k.MAC(p, token)
+		if err != nil {
+			t.Fatalf("MAC(%s): %v", p, err)
+		}
+		if other, dup := seen[string(m)]; dup {
+			t.Fatalf("MAC under %s equals MAC under %s", p, other)
+		}
+		seen[string(m)] = p
+	}
+	m, err := k.MAC(MACPurposeMeCSRF, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeMeCSRF, m, token); !ok || err != nil {
+		t.Errorf("VerifyMAC(me-csrf) = %v, %v", ok, err)
+	}
+	for _, p := range []MACPurpose{MACPurposeCSRF, MACPurposeAdminCSRF} {
+		if ok, err := k.VerifyMAC(p, m, token); ok || err != nil {
+			t.Errorf("a me-csrf token verifies under %s: %v, %v", p, ok, err)
+		}
+	}
+	a, err := k.MAC(MACPurposeAccessRate, []byte("alice@entity-a.example.com"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := k.MAC(MACPurposeAccessRate, []byte("alice@entity-a.example.com"))
+	if err != nil || !bytes.Equal(a, b) || len(a) != MACSize {
+		t.Errorf("access-rate MAC is not deterministic: %x, %x, %v", a, b, err)
+	}
+}

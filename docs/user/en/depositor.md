@@ -120,6 +120,41 @@ By email, you also receive a confirmation of sending and a notice of the first d
 
 > **Note** The download link is not shown on the screen: the recipients receive it by email, with a QR code to open it on a phone and the fingerprints of the files.
 
+<!-- topic: my-transfers -->
+## My transfers
+
+Without creating an account, you can manage the transfers you sent: see where they stand, delete them or keep them available longer.
+
+### Getting your access link
+
+1. Open the **My transfers** page of the sending site (the address ends with `/me`; the confirmation email of each transfer also contains the link).
+1. Enter your email address and click the button to receive a link.
+
+![My transfers page with the field Your email address and the button to receive an access link](../screenshots/en/my-transfers-request.png)
+
+The page always shows the same message, whether or not a link was sent. A link is sent only if your address has already been verified once by a code, when you sent files. It reaches your mailbox within a few minutes.
+
+If no email arrives, check your spam folder, then **wait one hour** before asking again: the number of links per address is limited, and further requests within the hour send nothing.
+
+The link is valid for **15 minutes** and can be used **once**: if it has expired, or if you already opened it, ask for a new one. The link opens a session of **1 hour**; after that you are asked to request a new link. If you open a link while a My transfers session is already open in your browser, the page asks you to confirm before switching: only accept if you requested that link yourself.
+
+### Following your transfers
+
+The list shows your transfers with their status, their recipients, their size, their expiry date and their confidentiality level.
+
+![List of the transfers of the sender with status, recipients, size and expiry date](../screenshots/en/my-transfers-list.png)
+
+Open a transfer to see its details: the files with their size and SHA-256 fingerprint and, for each recipient, which files were downloaded and when (first and last download). The download links are never shown here.
+
+![Details of a transfer with its files and, for each recipient, the downloads](../screenshots/en/my-transfers-detail.png)
+
+### Deleting or extending a transfer
+
+- **Delete**: after confirmation, the files are erased for good and the download links stop working.
+- **Extend**: choose a new duration among those your organisation allows for the confidentiality level of the transfer. The new expiry is counted from today and can never be earlier than the current one. A transfer cannot stay available more than **90 days** after it was created: beyond that, the page tells you the latest possible date, and you must send the files again. Recipients who have not downloaded yet receive a new reminder the day before the new expiry. A transfer whose number of downloads is reached cannot be extended.
+
+Use **Sign out** when you have finished, especially on a shared computer.
+
 <!-- topic: invite -->
 ## Inviting an external person
 

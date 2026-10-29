@@ -51,7 +51,10 @@
 // token of one kind of session is never valid for the other), and the
 // entries of the recipient verification cookie
 // (MACPurposeRecipientVerification, over a tenant ID, a recipient link ID
-// and an expiry).
+// and an expiry), the rate-limit key of the "my transfers" access link
+// requests (MACPurposeAccessRate, over a normalized address), and the CSRF
+// tokens derived from "my transfers" session tokens (MACPurposeMeCSRF,
+// distinct from the deposit and administrator CSRF purposes).
 //
 //	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
 //	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))

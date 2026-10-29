@@ -241,3 +241,38 @@ func TestFirstDownloadBy(t *testing.T) {
 		t.Errorf("bad recipient: %v", err)
 	}
 }
+
+func TestMyTransfersLinkJob(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	const link = "https://transfer.entity-a.example.com/me#mta_secretvalue"
+	j, err := e.n.MyTransfersLinkJob(ctx, e.t, "en", "Alice@Entity-A.example.com", link, 15*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Template != mail.TemplateMyTransfersLink || len(j.Message.To) != 1 || j.Message.To[0] != "Alice@entity-a.example.com" ||
+		j.TenantID != "ten_a" || j.Message.Language != "en" {
+		t.Errorf("job %+v", j)
+	}
+	for _, s := range []string{link, "15 minutes"} {
+		if !strings.Contains(j.Message.Text, s) || !strings.Contains(j.Message.HTML, s) {
+			t.Errorf("mail lacks %q:\n%s", s, j.Message.Text)
+		}
+	}
+	build(t, j)
+	if strings.Contains(e.logs.String(), "secretvalue") {
+		t.Error("the link is logged")
+	}
+	if j, err = e.n.MyTransfersLinkJob(ctx, e.t, "", "alice@entity-a.example.com", link, 15*time.Minute); err != nil || j.Message.Language != "fr" {
+		t.Errorf("tenant default language: %v %q", err, j.Message.Language)
+	}
+	if _, err := e.n.MyTransfersLinkJob(ctx, e.t, "en", "nope", link, 15*time.Minute); !errors.Is(err, ErrInvalidTransfer) {
+		t.Errorf("address: %v", err)
+	}
+	if _, err := e.n.MyTransfersLinkJob(ctx, e.t, "en", "alice@entity-a.example.com", link, 0); !errors.Is(err, ErrInvalidTransfer) {
+		t.Errorf("validity: %v", err)
+	}
+	if _, err := e.n.MyTransfersLinkJob(ctx, e.t, "en", "alice@entity-a.example.com", "javascript:x", time.Hour); !errors.Is(err, ErrInvalidLink) {
+		t.Errorf("link: %v", err)
+	}
+}

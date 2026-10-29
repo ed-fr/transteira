@@ -599,7 +599,7 @@ func (s *Server) EraseDataSubject(ctx context.Context, req gen.EraseDataSubjectR
 	return gen.EraseDataSubject200JSONResponse{
 		TransfersDeleted: rep.TransfersDeleted, RecipientEntriesRemoved: rep.RecipientEntriesRemoved,
 		VerifiedAddressDeleted: rep.VerifiedAddressDeleted, InvitationsDeleted: rep.InvitationsDeleted,
-		LogEntriesPseudonymised: rep.LogEntriesPseudonymised,
+		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks,
 	}, nil
 }
 

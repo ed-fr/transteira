@@ -19702,6 +19702,30 @@ func (response DeleteMyTransfer404ApplicationProblemPlusJSONResponse) VisitDelet
 	return err
 }
 
+type DeleteMyTransfer409ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type DeleteMyTransfer409ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers DeleteMyTransfer409ResponseHeaders
+}
+
+func (response DeleteMyTransfer409ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteMyTransfer421ApplicationProblemPlusJSONResponse struct {
 	UnknownTenantApplicationProblemPlusJSONResponse
 }

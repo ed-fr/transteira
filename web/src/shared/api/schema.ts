@@ -1099,7 +1099,9 @@ export interface paths {
          *     destroyed, then the files), exactly like an admin deletion: its links answer
          *     `410 transfer-gone`, the space is freed from the quota, a transfer still being scanned is
          *     withdrawn and never made available. Audited as `transfer.deleted` with the sender as
-         *     actor. A transfer already ended is a no-op answered `204`.
+         *     actor. A transfer already ended is a no-op answered `204`. When an upload (tus `PATCH`) of
+         *     the transfer is in progress, the deletion is refused with `409 state-conflict` and a
+         *     `Retry-After` header: retry after the delay.
          */
         delete: operations["deleteMyTransfer"];
         options?: never;
@@ -7551,6 +7553,25 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["CsrfInvalid"];
             404: components["responses"]["NotFound"];
+            /** @description An upload of the transfer is in progress; retry after `Retry-After`. */
+            409: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict",
+                     *       "title": "Operation not allowed in the current state",
+                     *       "status": 409,
+                     *       "code": "state-conflict",
+                     *       "retryAfterSeconds": 5
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
         };

@@ -7,6 +7,7 @@ import Home from './screens/Home.svelte';
 import InvitationLanding from './screens/InvitationLanding.svelte';
 import Invite from './screens/Invite.svelte';
 import Legal from './screens/Legal.svelte';
+import MyTransfers from './screens/MyTransfers.svelte';
 import NotFound from './screens/NotFound.svelte';
 import type { ScreenComponent } from './screens/types';
 
@@ -21,6 +22,7 @@ export const routes: readonly Route<ScreenComponent>[] = [
     helpTopic: 'invitation',
   },
   { pattern: '/invite', component: Invite, titleKey: 'invitation.invite.title', helpTopic: 'invite' },
+  { pattern: '/me', component: MyTransfers, titleKey: 'myTransfers.title', helpTopic: 'my-transfers' },
   { pattern: '/legal/:document', component: Legal, titleKey: 'legal.title', helpTopic: 'legal' },
   { pattern: '/help', component: Help, titleKey: 'common.help.title' },
   { pattern: '/help/:topic', component: Help, titleKey: 'common.help.title' },

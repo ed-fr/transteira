@@ -35,6 +35,7 @@
     "internal/markup": 100,
     "internal/masterkey": 100,
     "internal/metrics": 100,
+    "internal/mytransfers": 100,
     "internal/netpolicy": 100,
     "internal/notify": 100,
     "internal/quota": 100,

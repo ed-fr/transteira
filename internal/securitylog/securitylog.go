@@ -62,6 +62,9 @@ const (
 	// MetricsTokenInvalid: a wrong monitoring token was presented to
 	// /metrics or /status (since 1.1).
 	MetricsTokenInvalid EventType = "metrics_token_invalid"
+	// AccessLinkInvalid: an unknown, expired or already used "My transfers"
+	// access link was presented (since 1.1, decision P38).
+	AccessLinkInvalid EventType = "access_link_invalid"
 )
 
 // Well-known field keys.

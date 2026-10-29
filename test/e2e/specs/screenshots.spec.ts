@@ -17,7 +17,13 @@ import type net from 'node:net';
 import path from 'node:path';
 import { request } from '../support/api';
 import { makeFile, textFile, type GeneratedFile } from '../support/data';
-import { createInvitation, openDepositSession, recipientPath, tokenDeposit } from '../support/deposit';
+import {
+  createInvitation,
+  openDepositSession,
+  recipientPath,
+  sessionDeposit,
+  tokenDeposit,
+} from '../support/deposit';
 import { HOSTS, ORIGINS, RUN_DIR, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
 import { expect, test, type NewContextOptions } from '../support/fixtures';
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
@@ -595,6 +601,50 @@ test.describe('recipient', () => {
       await page.goto(`${ORIGINS.a}${data.downloadPassword}`);
       await heading(page, lang, 'download.locked.title');
       await shoot(page, lang, 'download-password');
+    }
+  });
+});
+
+test.describe('my transfers', () => {
+  /** Senders of the transfers shown (one per language: the list of an address is private). */
+  const SENDER: Record<Lang, string> = { en: 'gwen@example.com', fr: 'gaelle@example.com' };
+
+  test('request form, list and details', async ({ newContext }) => {
+    test.setTimeout(120_000);
+    for (const lang of LANGS) {
+      const files = apiFiles(lang);
+      const session = await openDepositSession(SENDER[lang], { host: HOSTS.a, clientIp: CLIENT_IP.api });
+      await sessionDeposit(session, {
+        recipients: [RECIPIENT[lang], VERIFIED_RECIPIENT[lang]],
+        files,
+        message: MESSAGES[lang],
+        language: lang,
+        recipientVerification: true,
+        expiryDays: 7,
+      });
+
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.a}/me`);
+      await heading(page, lang, 'myTransfers.title');
+      await shoot(page, lang, 'my-transfers-request');
+
+      const after = Date.now();
+      await page.getByLabel(startsWith(msg(lang, 'myTransfers.request.label'))).fill(SENDER[lang]);
+      await page.getByRole('button', { name: msg(lang, 'myTransfers.request.submit') }).click();
+      await heading(page, lang, 'myTransfers.request.sentTitle');
+      const mail = await waitForMail(SENDER[lang], { after });
+      await page.goto(mailLink(mail, '/me', ORIGINS.a));
+      await expect(page.getByRole('table')).toBeVisible({ timeout: 30_000 });
+      await shoot(page, lang, 'my-transfers-list');
+
+      await page
+        .getByRole('button', { name: new RegExp(`^${msg(lang, 'myTransfers.list.open')}`) })
+        .first()
+        .click();
+      await expect(
+        page.getByRole('heading', { level: 2, name: msg(lang, 'myTransfers.detail.extend.title') }),
+      ).toBeVisible();
+      await shoot(page, lang, 'my-transfers-detail');
     }
   });
 });

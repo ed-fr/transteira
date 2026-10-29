@@ -285,23 +285,11 @@ func (s *Service) DeleteTransfer(ctx context.Context, p adminauth.Principal, tid
 	return nil
 }
 
-// erase runs the Eraser, retrying while an upload holds the transfer. The
-// waits between the attempts stop when ctx is done; the erasure itself
-// runs without cancellation.
+// erase runs the Eraser, retrying while an upload holds the transfer
+// (lifecycle.EraseRetrying). The waits between the attempts stop when ctx
+// is done; the erasure itself runs without cancellation.
 func (s *Service) erase(ctx context.Context, tid tenant.ID, trfID string) (lifecycle.EraseResult, error) {
-	for attempt := 0; ; attempt++ {
-		res, err := s.eraser.EraseTransfer(context.WithoutCancel(ctx), tid, trfID, lifecycle.MarkDeleted)
-		if !errors.Is(err, lifecycle.ErrBusy) || attempt >= s.busyRetries {
-			return res, err
-		}
-		timer := time.NewTimer(s.busyDelay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return 0, ctx.Err()
-		case <-timer.C:
-		}
-	}
+	return lifecycle.EraseRetrying(ctx, s.eraser, tid, trfID, s.busyRetries, s.busyDelay)
 }
 
 // redactReason replaces the mail addresses of reason and cuts it to

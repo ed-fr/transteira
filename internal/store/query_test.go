@@ -646,6 +646,45 @@ var tenantAllowlist = map[string]int{
 	`UPDATE webhooks SET last_delivery_at = ?, last_status = ?, last_http_status = ?, last_duration_ms = ?, ` +
 		`last_error = ?, consecutive_failures = ?, circuit_open_until = ? WHERE tenant_id = ? AND id = ? AND updated_at = ?`: 7,
 	`DELETE FROM webhooks WHERE tenant_id = ? AND id = ? AND url_key_id IS NULL AND secret_key_id IS NULL`: 0,
+	// "My transfers" (senderaccess.go, transfers_sender.go).
+	`INSERT INTO access_link_requests (tenant_id, id, address_mac, client_ip, created_at) VALUES (?, ?, ?, ?, ?)`: 0,
+	`SELECT count(*) FROM access_link_requests WHERE tenant_id = ? AND address_mac = ? AND created_at >= ?`:       0,
+	`SELECT count(*) FROM access_link_requests WHERE tenant_id = ? AND client_ip = ? AND created_at >= ?`:         0,
+	`DELETE FROM access_link_requests WHERE tenant_id = ? AND address_mac = ?`:                                    0,
+	`INSERT INTO sender_access_links (tenant_id, id, token_hash, email, created_at, expires_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?)`: 0,
+	`UPDATE sender_access_links SET consumed_at = ? ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND consumed_at IS NULL AND expires_at > ? ` +
+		`RETURNING ` + senderLinkColumns: 1,
+	`DELETE FROM sender_access_links WHERE tenant_id = ? AND email = ?`:                                                0,
+	`INSERT INTO sender_sessions (tenant_id, id, token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + senderSessionColumns + ` FROM sender_sessions ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND ended_at IS NULL AND expires_at > ?`: 0,
+	`UPDATE sender_sessions SET ended_at = ? ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND ended_at IS NULL AND expires_at > ?`: 1,
+	`DELETE FROM sender_sessions WHERE tenant_id = ? AND email = ?`:                                             0,
+	`SELECT id FROM access_link_requests WHERE tenant_id = ? AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM access_link_requests WHERE tenant_id = ? AND id = ? AND created_at < ?`:                        0,
+	`SELECT id FROM sender_access_links ` +
+		`WHERE tenant_id = ? AND expires_at <= ? AND COALESCE(consumed_at, 0) <= ? AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM sender_access_links ` +
+		`WHERE tenant_id = ? AND id = ? AND expires_at <= ? AND COALESCE(consumed_at, 0) <= ?`: 0,
+	`SELECT id FROM sender_sessions ` +
+		`WHERE tenant_id = ? AND (expires_at <= ? OR ended_at <= ?) AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM sender_sessions WHERE tenant_id = ? AND id = ? AND (expires_at <= ? OR ended_at <= ?)`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND status IN ('scanning', 'available') ` +
+		`AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT ` + transferColumns + ` FROM transfers ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND id = ? AND status IN ('scanning', 'available')`: 0,
+	`SELECT status FROM transfers WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND id = ?`: 0,
+	`UPDATE transfers SET expires_at = ?, extension_count = extension_count + 1, extended_at = ?, ` +
+		`expiry_reminder_at = ? ` +
+		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND id = ? AND status = 'available' ` +
+		`AND delete_after IS NULL AND (max_downloads IS NULL OR download_count < max_downloads) ` +
+		`AND expires_at > ? AND expires_at < ? AND created_at + 7776000000 >= ?`: 3,
+	`UPDATE recipient_links SET reminder_sent_at = NULL WHERE tenant_id = ? AND transfer_id = ?`:                       0,
+	`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND transfer_id = ? AND first_downloaded_at IS NOT NULL`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,

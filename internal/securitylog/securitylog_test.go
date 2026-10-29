@@ -26,6 +26,7 @@ const tenantA = "transfer.entity-a.example.com"
 var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
 	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
+	AccessLinkInvalid,
 }
 
 type goldenCase struct {
@@ -93,6 +94,12 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: MetricsTokenInvalid, IP: netip.MustParseAddr("192.0.2.13")},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.13 tenant=- event=metrics_token_invalid`,
 		banIP: "192.0.2.13",
+	},
+	{
+		name:  "access link invalid",
+		ev:    Event{Type: AccessLinkInvalid, IP: netip.MustParseAddr("192.0.2.14"), Tenant: tenantA},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.14 tenant=transfer.entity-a.example.com event=access_link_invalid`,
+		banIP: "192.0.2.14",
 	},
 	{
 		name:  "unknown fqdn",

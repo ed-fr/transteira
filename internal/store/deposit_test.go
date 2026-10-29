@@ -518,9 +518,31 @@ func TestVerifiedAddresses(t *testing.T) {
 		if got, err := repo.Get(ctx, a.ID, email); err != nil || !got.LastUsedAt.Equal(use2) || !got.FirstVerifiedAt.Equal(msNow) {
 			t.Errorf("Get after uses = %+v, %v", got, err)
 		}
+		// GetTx reads the same row inside the caller's transaction, scoped
+		// to its tenant.
+		err := inTx(t, db, a.ID, func(tx *store.ScopedTx) error {
+			got, err := repo.GetTx(ctx, tx, "ALICE@entity-a.example.com")
+			if err != nil || !got.LastUsedAt.Equal(use2) || got.Email != email {
+				t.Errorf("GetTx = %+v, %v", got, err)
+			}
+			_, err = repo.GetTx(ctx, tx, "not an address")
+			wantErr(t, "GetTx(malformed)", err, store.ErrInvalid)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = inTx(t, db, b.ID, func(tx *store.ScopedTx) error {
+			_, err := repo.GetTx(ctx, tx, email)
+			wantErr(t, "GetTx(other tenant)", err, store.ErrNotFound)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// Isolation: the address is not verified for B, which cannot touch it.
-		_, err := repo.Get(ctx, b.ID, email)
+		_, err = repo.Get(ctx, b.ID, email)
 		wantErr(t, "Get from B", err, store.ErrNotFound)
 		wantErr(t, "Touch from B", repo.Touch(ctx, b.ID, email, use2.Add(time.Hour)), store.ErrNotFound)
 		if got, err := repo.Get(ctx, a.ID, email); err != nil || !got.LastUsedAt.Equal(use2) {

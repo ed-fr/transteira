@@ -16,6 +16,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
@@ -43,6 +44,12 @@ type TransferEraser interface {
 	EraseTransfer(ctx context.Context, tid tenant.ID, trfID string, mode lifecycle.EraseMode) (lifecycle.EraseResult, error)
 }
 
+// Keys computes the MAC of an address for the rate limit of the "my
+// transfers" access link requests (*masterkey.Keyring).
+type Keys interface {
+	MAC(p crypto.MACPurpose, parts ...[]byte) ([]byte, error)
+}
+
 // Options configures a [Service].
 type Options struct {
 	// Eraser crypto-erases the transfers (required).
@@ -59,6 +66,12 @@ type Options struct {
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
 	Audit *audit.Writer
+	// Keys computes the address MAC (crypto.MACPurposeAccessRate) that
+	// finds the "my transfers" access link requests of the address, which
+	// never hold the address itself. With nil, those rows are not erased
+	// by the erasure: they only hold the MAC and a client IP, and the
+	// periodic purge deletes them an hour after their creation.
+	Keys Keys
 }
 
 // Summary counts the data of one tenant linked to an address (schema
@@ -102,6 +115,9 @@ type EraseReport struct {
 	// LogEntriesPseudonymised counts the audit events whose actor was
 	// replaced by the pseudonym.
 	LogEntriesPseudonymised int
+	// AccessLinks counts the "my transfers" access links and sessions of
+	// the address deleted (since 1.1).
+	AccessLinks int
 }
 
 // details returns the audit details of the report: counts only.
@@ -109,7 +125,7 @@ func (r EraseReport) details() map[string]any {
 	return map[string]any{
 		"transfersDeleted": r.TransfersDeleted, "recipientEntriesRemoved": r.RecipientEntriesRemoved,
 		"verifiedAddressDeleted": r.VerifiedAddressDeleted, "invitationsDeleted": r.InvitationsDeleted,
-		"logEntriesPseudonymised": r.LogEntriesPseudonymised,
+		"logEntriesPseudonymised": r.LogEntriesPseudonymised, "accessLinks": r.AccessLinks,
 	}
 }
 
@@ -117,6 +133,7 @@ func (r EraseReport) details() map[string]any {
 // concurrent use; erasures are serialized.
 type Service struct {
 	repo   repo
+	keys   Keys
 	eraser TransferEraser
 	holder lifecycle.Holder
 	logger *slog.Logger
@@ -139,7 +156,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo: newStoreRepo(db, opts.Audit), eraser: opts.Eraser, holder: opts.Holder,
+		repo: newStoreRepo(db, opts.Audit), keys: opts.Keys, eraser: opts.Eraser, holder: opts.Holder,
 		logger: opts.Logger, now: opts.Now, sleep: sleepContext,
 	}
 	if s.holder == nil {
@@ -320,7 +337,10 @@ func (s *Service) Erase(ctx context.Context, p adminauth.Principal, ip netip.Add
 
 // erase runs the steps of the erasure and fills rep as it goes.
 func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym string, rep *EraseReport) error {
-	// 1. No new deposit: codes, sessions and verified address.
+	// 1. No new deposit and no "my transfers" access: codes, sessions,
+	// verified address, then access links and requests. The verified
+	// address goes before the access links, so that a link opened
+	// meanwhile no longer finds an address to open a session for.
 	if err := s.repo.deleteDepositRows(ctx, tid, addr); err != nil {
 		return fmt.Errorf("datasubject: delete codes and sessions: %w", err)
 	}
@@ -329,6 +349,18 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 		return fmt.Errorf("datasubject: delete verified address: %w", err)
 	}
 	rep.VerifiedAddressDeleted = deleted
+	var mac []byte
+	if s.keys != nil {
+		var err error
+		if mac, err = s.keys.MAC(crypto.MACPurposeAccessRate, []byte(addr)); err != nil {
+			return fmt.Errorf("datasubject: compute the address mac: %w", err)
+		}
+	}
+	links, err := s.repo.deleteSenderAccess(ctx, tid, addr, mac)
+	if err != nil {
+		return fmt.Errorf("datasubject: delete my transfers access: %w", err)
+	}
+	rep.AccessLinks = int(links)
 	// 2. Transfers sent, directly or with an invitation of the address.
 	ids, err := s.depositedTransfers(ctx, tid, addr)
 	if err != nil {

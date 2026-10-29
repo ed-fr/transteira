@@ -1,0 +1,140 @@
+{
+  "title": "Mes envois",
+  "homeLink": "Mes envois",
+  "notice": {
+    "expiredSession": "Votre session a expiré. Demandez un nouveau lien d’accès pour continuer.",
+    "invalidLink": "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau."
+  },
+  "request": {
+    "intro": "Saisissez l’adresse e-mail depuis laquelle vous envoyez des fichiers. Si cette adresse a déjà été vérifiée sur ce service, vous recevrez par e-mail un lien pour gérer vos envois.",
+    "label": "Votre adresse e-mail",
+    "hint": "Le lien est valable 15 minutes et ne peut être utilisé qu’une fois.",
+    "submit": "M’envoyer un lien",
+    "required": "Saisissez votre adresse e-mail.",
+    "invalid": "Saisissez une adresse e-mail valide, par exemple nom@exemple.com.",
+    "rateLimited": "Trop de demandes. Patientez avant de réessayer.",
+    "mailUnavailable": "L’e-mail n’a pas pu être envoyé. Réessayez plus tard.",
+    "sentTitle": "Consultez votre messagerie",
+    "sentText": "Si cette adresse a déjà été vérifiée sur ce service, vous allez recevoir un lien valable 15 minutes.",
+    "sentHint": "Rien reçu ? Regardez dans vos courriers indésirables ou demandez un nouveau lien. Le lien ne fonctionne qu’une fois, dans le navigateur où vous l’ouvrez.",
+    "again": "Demander un autre lien"
+  },
+  "session": {
+    "as": "Connecté en tant que {email}",
+    "signOut": "Se déconnecter"
+  },
+  "switch": {
+    "title": "Ouvrir ce lien ?",
+    "text": "Vous êtes connecté en tant que {email}. Ouvrir le lien et changer de session ?",
+    "hint": "Ne l’ouvrez que si vous avez demandé ce lien vous-même. L’ouvrir met fin à votre session actuelle.",
+    "confirm": "Ouvrir le lien et changer",
+    "stay": "Rester connecté en tant que {email}"
+  },
+  "status": {
+    "scanning": "En cours d’analyse",
+    "available": "Disponible"
+  },
+  "list": {
+    "intro": "Vos envois en cours, du plus récent au plus ancien.",
+    "empty": "Vous n’avez aucun envoi en cours.",
+    "caption": "Envois en cours",
+    "recipients": "Destinataires",
+    "files": "Fichiers",
+    "status": "État",
+    "expires": "Disponible jusqu’au",
+    "downloadedBy": "Destinataires ayant téléchargé",
+    "action": "Action",
+    "open": "Détails",
+    "openFor": "de l’envoi à {recipients}",
+    "noExpiry": "Pas encore défini",
+    "loadMore": "Afficher la suite",
+    "loadedMore": {
+      "one": "{count} envoi supplémentaire chargé.",
+      "other": "{count} envois supplémentaires chargés."
+    },
+    "filesValue": {
+      "one": "{count} fichier, {size}",
+      "other": "{count} fichiers, {size}"
+    }
+  },
+  "scan": {
+    "pending": "En attente d’analyse",
+    "scanning": "En cours d’analyse",
+    "clean": "Analysé, rien détecté",
+    "infected": "Virus détecté",
+    "not_scanned_too_large": "Non analysé : fichier trop volumineux",
+    "not_scanned_encrypted": "Non analysé : fichier chiffré",
+    "scan_error": "Échec de l’analyse",
+    "not_scanned_disabled": "Non analysé : antivirus désactivé",
+    "unknown": "Inconnu"
+  },
+  "detail": {
+    "title": "Détails de l’envoi",
+    "back": "Retour à mes envois",
+    "created": "Envoyé le",
+    "total": "Total",
+    "level": "Niveau de confidentialité",
+    "options": "Options",
+    "option": {
+      "password": "Protégé par un mot de passe",
+      "noPassword": "Sans mot de passe",
+      "verification": "Les destinataires vérifient leur adresse par code",
+      "deleteAfterFirst": "Supprimé après le premier téléchargement",
+      "maxDownloads": {
+        "one": "Limité à {count} téléchargement",
+        "other": "Limité à {count} téléchargements"
+      }
+    },
+    "downloads": "Téléchargements démarrés",
+    "message": "Votre message",
+    "filesTitle": "Fichiers",
+    "noFiles": "Aucun fichier dans cet envoi.",
+    "file": {
+      "name": "Nom",
+      "size": "Taille",
+      "sha256": "Empreinte SHA-256",
+      "scan": "Antivirus"
+    },
+    "trackingTitle": "Téléchargements par destinataire",
+    "trackingNone": "Aucun suivi par destinataire n’est disponible pour cet envoi.",
+    "tracking": {
+      "recipient": "Destinataire",
+      "verified": "Adresse vérifiée",
+      "first": "Premier téléchargement",
+      "last": "Dernier téléchargement",
+      "files": "Fichiers téléchargés",
+      "noDownload": "Rien téléchargé pour l’instant",
+      "archive": "Archive ZIP",
+      "count": {
+        "one": "{count} fois, dernière le {last}",
+        "other": "{count} fois, dernière le {last}"
+      }
+    },
+    "never": "Jamais",
+    "extend": {
+      "title": "Prolonger la durée de validité",
+      "legend": "Nouvelle durée de validité, à compter d’aujourd’hui",
+      "hint": "L’échéance la plus lointaine possible est le {date}.",
+      "days": {
+        "one": "{count} jour",
+        "other": "{count} jours"
+      },
+      "submit": "Prolonger",
+      "done": "Durée de validité prolongée.",
+      "doneUntil": "L’envoi est maintenant disponible jusqu’au {date}.",
+      "conflict": "Cet envoi ne peut plus être prolongé. Rechargez la page.",
+      "notAllowed": "Cette durée n’est pas autorisée pour cet envoi.",
+      "unavailable": "Cet envoi ne peut pas être prolongé : il a atteint la durée de vie maximale autorisée ou aucune durée plus longue n’est proposée.",
+      "unavailableState": "Cet envoi ne peut pas être prolongé dans son état actuel."
+    },
+    "delete": {
+      "title": "Supprimer l’envoi",
+      "text": "La suppression rend immédiatement les liens inutilisables. Les fichiers sont effacés et cette action est irréversible.",
+      "button": "Supprimer cet envoi",
+      "confirm": "Supprimer l’envoi à {recipients} ? Les fichiers seront effacés et les liens cesseront de fonctionner.",
+      "confirmButton": "Supprimer définitivement",
+      "cancel": "Conserver l’envoi",
+      "done": "Envoi supprimé."
+    }
+  }
+}

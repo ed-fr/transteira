@@ -261,6 +261,7 @@ type opsEraseReport struct {
 	VerifiedAddressDeleted  bool `json:"verifiedAddressDeleted"`
 	InvitationsDeleted      int  `json:"invitationsDeleted"`
 	LogEntriesPseudonymised int  `json:"logEntriesPseudonymised"`
+	AccessLinks             int  `json:"accessLinks"`
 }
 
 // adminTransfer sends getTenantTransfer and decodes the 200 answer.

@@ -109,27 +109,50 @@ func (r *VerifiedAddresses) Get(ctx context.Context, tid tenant.ID, email string
 	if err != nil {
 		return VerifiedAddress{}, err
 	}
-	if email, err = NormalizeEmail(email); err != nil {
-		return VerifiedAddress{}, err
-	}
 	var v VerifiedAddress
 	err = s.ReadTx(ctx, func(tx *ScopedTx) error {
-		var (
-			ip          string
-			internalIP  sql.NullString
-			internalAt  sql.NullInt64
-			salt        []byte
-			first, last int64
-		)
-		err := tx.QueryRow(ctx, qVerifiedGet, email).Scan(&v.Email, &first, &ip, &internalAt, &internalIP, &salt, &last)
-		copy(v.RecognitionSalt[:], salt)
-		v.FirstVerifiedAt, v.FirstVerifiedIP, v.LastUsedAt = fromMillis(first), parseIP(ip), fromMillis(last)
-		v.InternalVerifiedAt, v.InternalVerifiedIP = nullMillis(internalAt), parseIP(internalIP.String)
+		var err error
+		v, err = getVerified(ctx, tx, email)
 		return err
 	})
 	if err != nil {
 		return VerifiedAddress{}, wrap("get verified address", err)
 	}
+	return v, nil
+}
+
+// GetTx is [VerifiedAddresses.Get] inside tx, for the tenant tx is bound to
+// (for example to check that an address is still verified in the
+// transaction that opens a session for it). After an error, the caller
+// must abort the transaction.
+func (r *VerifiedAddresses) GetTx(ctx context.Context, tx *ScopedTx, email string) (VerifiedAddress, error) {
+	v, err := getVerified(ctx, tx, email)
+	if err != nil {
+		return VerifiedAddress{}, wrap("get verified address", err)
+	}
+	return v, nil
+}
+
+// getVerified implements Get and GetTx, returning raw errors.
+func getVerified(ctx context.Context, tx *ScopedTx, email string) (VerifiedAddress, error) {
+	email, err := NormalizeEmail(email)
+	if err != nil {
+		return VerifiedAddress{}, err
+	}
+	var (
+		v           VerifiedAddress
+		ip          string
+		internalIP  sql.NullString
+		internalAt  sql.NullInt64
+		salt        []byte
+		first, last int64
+	)
+	if err := tx.QueryRow(ctx, qVerifiedGet, email).Scan(&v.Email, &first, &ip, &internalAt, &internalIP, &salt, &last); err != nil {
+		return VerifiedAddress{}, err
+	}
+	copy(v.RecognitionSalt[:], salt)
+	v.FirstVerifiedAt, v.FirstVerifiedIP, v.LastUsedAt = fromMillis(first), parseIP(ip), fromMillis(last)
+	v.InternalVerifiedAt, v.InternalVerifiedIP = nullMillis(internalAt), parseIP(internalIP.String)
 	return v, nil
 }
 

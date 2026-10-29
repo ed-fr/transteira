@@ -106,7 +106,7 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
 	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
 	`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode, recipient_verification, ` +
-	`expiry_reminder_at`
+	`expiry_reminder_at, extension_count, extended_at`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -381,6 +381,13 @@ type Transfer struct {
 	// availability for a short-lived transfer (ReminderMinLifetime); zero
 	// otherwise.
 	ExpiryReminderAt time.Time
+	// ExtensionCount counts the extensions of the expiry made by the sender
+	// through "my transfers" ([Transfers.ExtendTx]); 0 for a new transfer
+	// (ignored at creation).
+	ExtensionCount int
+	// ExtendedAt is the time of the last extension, zero when never
+	// extended (ignored at creation).
+	ExtendedAt time.Time
 }
 
 // LinkMode is how the recipients of a transfer get their download link.
@@ -813,13 +820,13 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		maxDownloads, mask, maxCap       sql.NullInt64
 		pwdRule, verifRule, intRule, del sql.NullBool
 		linkMode                         string
-		reminded                         sql.NullInt64
+		reminded, extended               sql.NullInt64
 	)
 	err := row.Scan(&t.ID, &status, &t.SenderEmail, &kind, &inv, &t.Message, &t.Language, &t.ExpiryDays,
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
 		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
 		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del, &linkMode,
-		&t.RecipientVerification, &reminded)
+		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -841,6 +848,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
 	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
 	t.LinkMode, t.ExpiryReminderAt = LinkMode(linkMode), nullMillis(reminded)
+	t.ExtendedAt = nullMillis(extended)
 	return t, nil
 }
 

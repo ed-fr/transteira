@@ -82,6 +82,16 @@ const (
 	// transfer (since 1.1). It is internal to the administration and "my
 	// transfers" views: the link itself carries a separate "dl_" token.
 	RecipientLink Prefix = "rcl"
+	// SenderAccessLink identifies a one-time "my transfers" access link
+	// record (since 1.1). It is internal: the mailed link carries a
+	// separate "mta_" bearer token.
+	SenderAccessLink Prefix = "sal"
+	// SenderSession identifies a "my transfers" session record (since
+	// 1.1). It is internal: the cookie carries a separate bearer token.
+	SenderSession Prefix = "mts"
+	// AccessLinkRequest identifies a row of the rate limit of the "my
+	// transfers" access link requests (since 1.1). It is internal.
+	AccessLinkRequest Prefix = "alr"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

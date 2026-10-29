@@ -17,8 +17,13 @@
 // so that an interrupted erasure is completed by a new call:
 //
 //  1. the verification codes, the deposit sessions (an open session ends
-//     at once) and the verified address record are deleted first, so that
-//     the address cannot open a new deposit while it is being erased;
+//     at once), the verified address record, then the "my transfers"
+//     access links and sessions and the "my transfers" access link
+//     requests counted for the address (found by its MAC, see
+//     [Options.Keys]) are deleted first, so that the address can neither
+//     open a new deposit nor manage its transfers while it is being erased
+//     (a link opened between two steps finds no verified address and opens
+//     no session);
 //  2. the transfers sent by the address, and those deposited with an
 //     invitation of which it is the invitee, are crypto-erased and their
 //     rows deleted ([lifecycle.Sweeper.EraseTransfer] with

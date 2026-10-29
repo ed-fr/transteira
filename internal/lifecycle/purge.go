@@ -35,6 +35,9 @@ var rowPurges = []rowPurge{
 	{"password_failures", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.PasswordFailures().Purge(ctx, tid, now)
 	}},
+	{"sender_access", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
+		return db.SenderAccess().Purge(ctx, tid, now)
+	}},
 	{"verified_addresses", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.VerifiedAddresses().Purge(ctx, tid, now)
 	}},

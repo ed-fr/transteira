@@ -90,9 +90,14 @@ const (
 	// ActionTransferDownloaded: the download of a file or of the archive
 	// started (never for HEAD requests or resumed ranges).
 	ActionTransferDownloaded Action = "transfer.downloaded"
-	// ActionTransferDeleted: an administrator deleted a transfer before its
-	// expiry (details carry the redacted reason).
+	// ActionTransferDeleted: an administrator (details carry the redacted
+	// reason) or, since 1.1, the sender through "my transfers" deleted a
+	// transfer before its expiry.
 	ActionTransferDeleted Action = "transfer.deleted"
+	// ActionTransferExtended: the sender extended the expiry of a transfer
+	// through "my transfers" (details carry the old and new expiry and the
+	// number of extensions).
+	ActionTransferExtended Action = "transfer.extended"
 	// ActionTransferNotificationResent: an administrator resent the
 	// notification of a transfer to its recipients.
 	ActionTransferNotificationResent Action = "transfer.notification_resent"
@@ -110,6 +115,12 @@ const (
 	ActionInvitationUsed Action = "invitation.used"
 	// ActionInvitationRevoked: an administrator revoked an invitation.
 	ActionInvitationRevoked Action = "invitation.revoked"
+	// ActionMyTransfersLinkRequested: a "my transfers" access link was
+	// mailed to a verified address (recorded only when a link is sent).
+	ActionMyTransfersLinkRequested Action = "my_transfers.link_requested"
+	// ActionMyTransfersSignedIn: an access link opened a "my transfers"
+	// session.
+	ActionMyTransfersSignedIn Action = "my_transfers.signed_in"
 	// ActionAddressVerified: a mail address passed its verification code.
 	ActionAddressVerified Action = "address.verified"
 	// ActionFileInfected: the antivirus found a virus in a file, which was
@@ -219,6 +230,12 @@ const (
 	// ObjectDepositSession is a deposit session (object ID: its session
 	// ID).
 	ObjectDepositSession = "deposit_session"
+	// ObjectAccessLink is a "my transfers" access link (object ID: its
+	// "sal_" ID, never the token).
+	ObjectAccessLink = "access_link"
+	// ObjectSenderSession is a "my transfers" session (object ID: its
+	// "mts_" ID, never the cookie token).
+	ObjectSenderSession = "sender_session"
 	// ObjectAPIToken is an API token (object ID: its "tok_" ID, never the
 	// secret).
 	ObjectAPIToken = "api_token"

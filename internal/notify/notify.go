@@ -13,6 +13,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/i18n"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -340,6 +341,9 @@ func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr 
 		TenantName: t.Name, Link: link, Recipients: recipients, Files: v.files,
 		ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, Withheld: withheldFiles(tr.Files),
 		ConfidentialityLabel: n.levelLabel(t, tr),
+	}
+	if t.FQDN != "" {
+		data.MyTransfersLink = "https://" + t.FQDN + id.MyTransfersPath
 	}
 	return n.senderJob(ctx, t, tr, v.sender, mail.TemplateTransferConfirmation, data)
 }

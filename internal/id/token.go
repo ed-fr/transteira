@@ -37,6 +37,10 @@ const (
 	// DownloadTokenPrefix starts a download link token, which appears in
 	// the download URL of a transfer and is looked up by its SHA-256 hash.
 	DownloadTokenPrefix = "dl"
+	// AccessLinkTokenPrefix starts a "my transfers" access link token
+	// (since 1.1), which appears in the fragment of the mailed link and is
+	// looked up by its SHA-256 hash.
+	AccessLinkTokenPrefix = "mta"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -51,6 +55,9 @@ const (
 	// DownloadTokenBytes is the entropy of a download token (256 bits): it
 	// lives as long as the transfer, up to 30 days.
 	DownloadTokenBytes = 32
+	// AccessLinkTokenBytes is the entropy of an access link token (256
+	// bits): single use, valid 15 minutes.
+	AccessLinkTokenBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
@@ -95,6 +102,12 @@ const DownloadPath = "/d/"
 func DownloadURL(fqdn, token string) string {
 	return "https://" + fqdn + DownloadPath + token
 }
+
+// MyTransfersPath is the path of the web "my transfers" page (spec 8.7):
+// the access link mailed to a sender is
+// "https://" + FQDN + MyTransfersPath + "#" + token, and the transfer
+// confirmation mail links to "https://" + FQDN + MyTransfersPath.
+const MyTransfersPath = "/me"
 
 // base62 is the alphabet produced by big.Int.Text(62).
 const base62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"

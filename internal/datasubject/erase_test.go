@@ -346,7 +346,7 @@ func TestEraseStepFailures(t *testing.T) {
 		ev := newEnv(t, e)
 		ev.seed(ev.a)
 		for _, m := range []string{
-			"deleteDepositRows", "deleteVerified", "senderTransfers", "inviteeInvitations", "invitationTransfers",
+			"deleteDepositRows", "deleteSenderAccess", "deleteVerified", "senderTransfers", "inviteeInvitations", "invitationTransfers",
 			"recipientTransfers", "removeRecipient", "eraseInvitations", "pseudonymiseAudit",
 		} {
 			ev.faults(m)

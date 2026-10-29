@@ -159,7 +159,7 @@ func TestRecipientLinkDriverFaults(t *testing.T) {
 		}
 	}
 	const (
-		getTransfer = "expiry_reminder_at FROM transfers WHERE tenant_id = ? AND id = ?"
+		getTransfer = "extension_count, extended_at FROM transfers WHERE tenant_id = ? AND id = ?"
 		joinLinks   = "FROM recipient_links l JOIN"
 	)
 	steps := []struct {
@@ -277,7 +277,7 @@ func TestFirstDownloadReReadFault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := newTransferFixture(t)
-	f.plan.add(faultQuery, "expiry_reminder_at FROM transfers WHERE tenant_id = ? AND id = ?", 1)
+	f.plan.add(faultQuery, "extension_count, extended_at FROM transfers WHERE tenant_id = ? AND id = ?", 1)
 	err := f.tx(ctx, func(tx *ScopedTx) error {
 		_, err := f.db.Transfers().MarkFirstDownloadTx(ctx, tx, f.trf.ID, time.Now(), time.Time{})
 		return err

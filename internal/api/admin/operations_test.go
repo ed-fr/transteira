@@ -148,6 +148,7 @@ func (f *fakeSubjects) Search(_ context.Context, p adminauth.Principal, ip netip
 func (f *fakeSubjects) Erase(_ context.Context, p adminauth.Principal, ip netip.Addr, tid tenant.ID, email string) (datasubject.EraseReport, error) {
 	return datasubject.EraseReport{
 		TransfersDeleted: 1, RecipientEntriesRemoved: 2, VerifiedAddressDeleted: true, InvitationsDeleted: 3, LogEntriesPseudonymised: 4,
+		AccessLinks: 5,
 	}, f.record("Erase", p.SessionID, ip, tid, email)
 }
 
@@ -766,7 +767,8 @@ func TestDataSubjectOperations(t *testing.T) {
 	}
 	code, out = decode(t, erase)
 	if code != http.StatusOK || out["transfersDeleted"] != float64(1) || out["recipientEntriesRemoved"] != float64(2) ||
-		out["verifiedAddressDeleted"] != true || out["invitationsDeleted"] != float64(3) || out["logEntriesPseudonymised"] != float64(4) {
+		out["verifiedAddressDeleted"] != true || out["invitationsDeleted"] != float64(3) || out["logEntriesPseudonymised"] != float64(4) ||
+		out["accessLinks"] != float64(5) {
 		t.Errorf("report = %d %v", code, out)
 	}
 	if args := d.args["Erase"]; args[1] != clientIP || args[2] != tenant.ID("ten_a") {

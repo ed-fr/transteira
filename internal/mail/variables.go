@@ -161,12 +161,14 @@ var keyDefs = map[string]keyDef{
 			filesVar(false),
 			{"file_count", VarText, false, "Number of delivered files."},
 			{"withheld_files", VarBlock, false, "Files withheld because they could not be analyzed; empty when there is none."},
+			{"my_transfers_notice", VarBlock, false, "Sentence and link to the My transfers page, to manage the transfer; empty when unknown."},
 		},
 		values: confirmationValues,
 		sample: TransferConfirmationData{
 			TenantName: sampleTenant, Link: sampleLink, Recipients: []string{"bob@example.com", "carol@example.org"},
 			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true,
 			ConfidentialityLabel: "Confidential", Withheld: []FileInfo{{Name: "archive.zip", Size: 3 << 20}},
+			MyTransfersLink: "https://transfer.entity-a.example.com/me",
 		},
 	},
 	TemplateFileProblems: {
@@ -234,6 +236,15 @@ var keyDefs = map[string]keyDef{
 		},
 		values: recipientVerificationValues,
 		sample: RecipientVerificationCodeData{TenantName: sampleTenant, Code: "123456", ValidityMinutes: 15},
+	},
+	TemplateMyTransfersLink: {
+		vars: []varSpec{
+			tenantVar,
+			{"my_transfers_link", VarURL, true, "One-time link that opens My transfers."},
+			{"validity_minutes", VarText, false, "Lifetime of the link, in minutes."},
+		},
+		values: myTransfersLinkValues,
+		sample: MyTransfersLinkData{TenantName: sampleTenant, Link: "https://transfer.entity-a.example.com/me#mta_sample", ValidityMinutes: 15},
 	},
 	TemplateQuotaWarning: quotaKeyDef(QuotaWarningPercent, 82),
 	TemplateQuotaReached: quotaKeyDef(QuotaReachedPercent, 100),
@@ -445,7 +456,30 @@ func confirmationValues(l *labels, lang string, data any) (map[string]value, boo
 		"files":                  filesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
 		"withheld_files":         withheldConfirmationBlock(l, lang, d.Withheld),
+		"my_transfers_notice":    myTransfersNoticeBlock(l, d.MyTransfersLink),
 	}, true
+}
+
+func myTransfersLinkValues(_ *labels, _ string, data any) (map[string]value, bool) {
+	d, ok := data.(MyTransfersLinkData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"tenant_name":       textValue(d.TenantName),
+		"my_transfers_link": urlValue(d.Link),
+		"validity_minutes":  textValue(strconv.Itoa(d.ValidityMinutes)),
+	}, true
+}
+
+// myTransfersNoticeBlock is the sentence of the sender confirmation that
+// points to the My transfers page, or nothing when link is empty.
+func myTransfersNoticeBlock(l *labels, link string) value {
+	if link == "" {
+		return blockValue("", "")
+	}
+	h := "<p>" + esc(l.myTransfersIntro+l.colon) + `<br><a href="` + esc(link) + `" style="color:#1a1a1a;word-break:break-all;">` + esc(link) + "</a></p>"
+	return blockValue(trustedHTML(h), l.myTransfersIntro+l.colon+"\n\n"+link)
 }
 
 func problemsValues(l *labels, lang string, data any) (map[string]value, bool) {

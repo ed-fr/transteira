@@ -46,6 +46,7 @@ import (
 	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/metrics"
+	"github.com/ed-fr/transteira/internal/mytransfers"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/quota"
@@ -466,13 +467,22 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
+	// "My transfers" (spec 8.7): its workers mail the access links through
+	// the tenant queue and its deletions go through the sweeper, so it is
+	// closed with them in the first close stage, before the queue drains.
+	senders, err := mytransfers.New(mytransfers.Deps{
+		DB: db, Keys: keys, Notifier: notifier, Mail: mailQueue, SecurityLog: secLog, Eraser: sweeper,
+	}, mytransfers.Options{Logger: logger, Audit: auditLog})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	// Deferred after closeMailQueues, the data directory and the database, so
 	// it runs before them: the workers stop enqueueing mails, touching the
 	// files and counting usage before the queue drains, then the retrier of
 	// the admin mails stops and the usage counters get their final flush,
 	// while the database is still open.
 	defer closeStages(ctx, logger,
-		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations}},
+		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations, senders}},
 		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, busOut.closer}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
@@ -517,6 +527,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err := diskAlerts.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the disk alert monitor: %w", err)
 	}
+	if err := senders.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the my transfers workers: %w", err)
+	}
 	// A change of the system settings, served by the admin API,
 	// re-evaluates the disk alert at once.
 	systemSettings, err := systemsettings.New(db, auditLog, systemsettings.Options{OnChange: diskAlerts.Check})
@@ -529,7 +542,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	subjects, err := datasubject.New(db, datasubject.Options{Eraser: sweeper, Holder: worker, Logger: logger, Audit: auditLog})
+	subjects, err := datasubject.New(db, datasubject.Options{
+		Eraser: sweeper, Holder: worker, Keys: keys, Logger: logger, Audit: auditLog,
+	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -580,10 +595,11 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Maintenance:  maint,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
-			public.WithTenantService(tenants), public.WithMaintenance(maint)),
-		Sessions:   deposits,
-		APITokens:  apiTokens,
-		AdminHosts: cfg.AdminHosts,
+			public.WithTenantService(tenants), public.WithMaintenance(maint), public.WithMyTransfers(senders)),
+		Sessions:    deposits,
+		MyTransfers: senders,
+		APITokens:   apiTokens,
+		AdminHosts:  cfg.AdminHosts,
 		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
 			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),

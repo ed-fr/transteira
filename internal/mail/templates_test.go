@@ -49,6 +49,7 @@ func goldenData() map[string]any {
 			Files:            goldenFiles(),
 			ExpiresAt:        goldenExpiry,
 			PasswordRequired: true,
+			MyTransfersLink:  "https://transfer.entity-a.example.com/me",
 			Withheld:         []FileInfo{{Name: "<i>archive</i>.zip", Size: 3 << 20}},
 		},
 		TemplateFileProblems: FileProblemsData{
@@ -73,6 +74,9 @@ func goldenData() map[string]any {
 			TenantName: "Entity A & Co", SenderEmail: "alice@entity-a.example.com", Link: goldenLink,
 			Files: goldenFiles(), ExpiresAt: goldenExpiry, PasswordRequired: true, VerificationRequired: true,
 			ConfidentialityLabel: "Confidential <b>",
+		},
+		TemplateMyTransfersLink: MyTransfersLinkData{
+			TenantName: "Entity A & Co", Link: "https://transfer.entity-a.example.com/me#mta_golden", ValidityMinutes: 15,
 		},
 		TemplateRecipientVerificationCode: RecipientVerificationCodeData{
 			TenantName: "Entity A & Co", Code: "123456", ValidityMinutes: 15,
@@ -122,7 +126,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
