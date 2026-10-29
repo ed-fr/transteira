@@ -121,6 +121,9 @@ var isolationCases = map[string]isolationCase{
 	"downloadArchive":              archiveOfForeignDownload,
 	"startRecipientVerification":   startForeignVerification,
 	"confirmRecipientVerification": confirmForeignVerification,
+	// The reply to a transfer (reply_test.go, since 1.1): a link of A is
+	// unknown under B and replies need the proof of the address under A.
+	"startTransferReply": startForeignReply,
 	// "My transfers" (mytransfers_test.go, since 1.1): an access link or a
 	// session of tenant A is unknown under B's host (410, 401), a session
 	// of the same address in B is unknown under A, and a transfer of A's

@@ -3010,6 +3010,9 @@ type PublicTransfer struct {
 	// RecipientEmailMasked Since 1.1. Masked address of the recipient the link was issued for (`c***@customer.example.net`), present while the verification is awaited.
 	RecipientEmailMasked *string `json:"recipientEmailMasked,omitempty"`
 
+	// Reply Since 1.1. The transfer is a reply sent from outside the entity by a recipient of an earlier transfer (`startTransferReply`): `senderEmail` was verified by code, but the files come from an external sender. Absent while `locked`; never repliable.
+	Reply *bool `json:"reply,omitempty"`
+
 	// ReplyAllowed Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`.
 	ReplyAllowed *bool `json:"replyAllowed,omitempty"`
 
@@ -18565,9 +18568,7 @@ func (response StartRecipientVerification400ApplicationProblemPlusJSONResponse) 
 	return err
 }
 
-type StartRecipientVerification403ApplicationProblemPlusJSONResponse struct {
-	CsrfInvalidApplicationProblemPlusJSONResponse
-}
+type StartRecipientVerification403ApplicationProblemPlusJSONResponse Problem
 
 func (response StartRecipientVerification403ApplicationProblemPlusJSONResponse) VisitStartRecipientVerificationResponse(w http.ResponseWriter) error {
 
@@ -20628,6 +20629,22 @@ func (response CreateTransfer409ApplicationProblemPlusJSONResponse) VisitCreateT
 	return err
 }
 
+type CreateTransfer410ApplicationProblemPlusJSONResponse struct {
+	TransferGoneApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTransfer410ApplicationProblemPlusJSONResponse) VisitCreateTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateTransfer413ApplicationProblemPlusJSONResponse struct {
 	TransferTooLargeApplicationProblemPlusJSONResponse
 }
@@ -21083,6 +21100,22 @@ func (response FinalizeTransfer409ApplicationProblemPlusJSONResponse) VisitFinal
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type FinalizeTransfer410ApplicationProblemPlusJSONResponse struct {
+	TransferGoneApplicationProblemPlusJSONResponse
+}
+
+func (response FinalizeTransfer410ApplicationProblemPlusJSONResponse) VisitFinalizeTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
 	_, err := buf.WriteTo(w)
 	return err
 }

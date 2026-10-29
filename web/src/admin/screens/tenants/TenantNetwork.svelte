@@ -48,6 +48,12 @@
   let remoteErrors = $state<SummaryError[]>([]);
   const remoteId = `${uid}-remote`;
   const remoteDirty = $derived(remoteSaved !== undefined && remote !== remoteSaved);
+  // Reply to a transfer (version 1.1): another flag of the tenant itself.
+  let replySaved = $state<boolean | undefined>(undefined);
+  let reply = $state(false);
+  let replyErrors = $state<SummaryError[]>([]);
+  const replyId = `${uid}-reply`;
+  const replyDirty = $derived(replySaved !== undefined && reply !== replySaved);
 
   // Parsed here as well, so that the warnings and the body never wait for the editors.
   const cidrs = $derived(parseCidrList(cidrText));
@@ -110,9 +116,12 @@
       }
       remoteSaved = res.data.allowRemoteInternalDeposit === true;
       remote = remoteSaved;
+      replySaved = res.data.allowTransferReply === true;
+      reply = replySaved;
     } catch {
       if (id === tenantId) {
         remoteSaved = undefined;
+        replySaved = undefined;
       }
     }
   }
@@ -120,6 +129,8 @@
   $effect(() => {
     remoteSaved = undefined;
     remote = false;
+    replySaved = undefined;
+    reply = false;
     void load(tenantId);
     void loadRemote(tenantId);
   });
@@ -137,6 +148,24 @@
       remoteSaved = res.data.allowRemoteInternalDeposit === true;
       remote = remoteSaved;
       return { ok: true, message: t('adminTenants.network.remote.saved') };
+    } catch (err) {
+      return { ok: false, message: describeError(i18n, err).message };
+    }
+  }
+
+  async function saveReply(): Promise<SubmitOutcome> {
+    const id = tenantId;
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', {
+        path: { tenantId: id },
+        body: { allowTransferReply: reply },
+      });
+      if (id !== tenantId) {
+        return { ok: true, message: t('adminTenants.network.reply.saved') };
+      }
+      replySaved = res.data.allowTransferReply === true;
+      reply = replySaved;
+      return { ok: true, message: t('adminTenants.network.reply.saved') };
     } catch (err) {
       return { ok: false, message: describeError(i18n, err).message };
     }
@@ -237,6 +266,23 @@
         label={t('adminTenants.network.remote.label')}
         hint={t('adminTenants.network.remote.hint')}
         bind:checked={remote}
+      />
+    </FormSection>
+  {/if}
+  {#if replySaved !== undefined}
+    <FormSection
+      title={t('adminTenants.network.reply.title')}
+      intro={t('adminTenants.network.reply.intro')}
+      dirty={replyDirty}
+      addGuard={(guard) => nav.addGuard(guard)}
+      onsubmit={saveReply}
+      bind:errors={replyErrors}
+    >
+      <Checkbox
+        id={replyId}
+        label={t('adminTenants.network.reply.label')}
+        hint={t('adminTenants.network.reply.hint')}
+        bind:checked={reply}
       />
     </FormSection>
   {/if}

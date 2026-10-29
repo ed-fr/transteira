@@ -95,6 +95,12 @@ type keyDef struct {
 	vars   []varSpec
 	values func(l *labels, lang string, data any) (map[string]value, bool)
 	sample any
+	// forced lists optional block variables whose value, when not empty,
+	// must reach the reader even if a customized template leaves out the
+	// placeholder: a body part (HTML or text) without the placeholder gets
+	// the value prepended (see [compiled.render]). A security warning
+	// belongs here, such as reply_notice (T-223).
+	forced []string
 }
 
 // Common variable declarations.
@@ -139,14 +145,17 @@ var keyDefs = map[string]keyDef{
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Notice that the password comes through another channel; empty without password."},
 			confidentialityVar,
+			{"reply_notice", VarBlock, false, "Warning that the transfer is a reply from an external sender whose address was verified by a code; empty when it is not a reply. Added at the start of a body that leaves it out."},
 			{"qr_code", VarBlock, false, "QR code of the download link (HTML only; empty in the text body)."},
 			filesVar(true),
 			{"file_count", VarText, false, "Number of files."},
 		},
 		values: notificationValues,
+		forced: []string{"reply_notice"},
 		sample: TransferNotificationData{
 			TenantName: sampleTenant, SenderEmail: sampleSender, Message: sampleMessage, Link: sampleLink,
 			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true, QR: true, ConfidentialityLabel: "Confidential",
+			ReplyToCreatedAt: sampleTime.AddDate(0, 0, -2),
 		},
 	},
 	TemplateTransferConfirmation: {
@@ -467,6 +476,7 @@ func notificationValues(l *labels, lang string, data any) (map[string]value, boo
 		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
 		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelRecipient, true),
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
+		"reply_notice":           replyBlock(l, lang, d),
 		"qr_code":                qrBlock(l, d.QR),
 		"files":                  filesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
@@ -787,6 +797,13 @@ var confidentialityVar = varSpec{"confidentiality_notice", VarBlock, false, "Con
 // when label is empty.
 func confidentialityBlock(l *labels, label string) value {
 	return noticeBlock(label != "", l.confidentiality+label, true)
+}
+
+// replyBlock is the warning of a reply from an external sender (T-223), or
+// nothing when d is not a reply.
+func replyBlock(l *labels, lang string, d TransferNotificationData) value {
+	text := fmt.Sprintf(l.replyNotice, i18n.FormatDate(lang, d.ReplyToCreatedAt), d.TenantName, d.SenderEmail)
+	return noticeBlock(!d.ReplyToCreatedAt.IsZero(), text, true)
 }
 
 // paragraphsBlock renders paragraphs, or nothing.

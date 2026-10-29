@@ -518,10 +518,10 @@ func containsKind(kinds []DepositorKind, k DepositorKind) bool {
 // before end, whatever their status: a transfer both created and extended
 // in the window counts once (decision 6 of step 8). kinds restricts the
 // sender kinds counted (nil or empty: every kind), for instance
-// DepositorExternal for the external quota. The window is computed by the
-// caller (a local day of the tenant time zone). It returns ErrInvalid for
-// a malformed address or an empty window. After an error, the caller must
-// abort the transaction.
+// DepositorExternal and DepositorReply for the external quota. The window
+// is computed by the caller (a local day of the tenant time zone). It
+// returns ErrInvalid for a malformed address or an empty window. After an
+// error, the caller must abort the transaction.
 func (r *Transfers) SenderActivityTx(ctx context.Context, tx *ScopedTx, email string, start, end time.Time, kinds []DepositorKind) (int64, int, error) {
 	bytes, count, err := senderActivity(ctx, tx, email, start, end, kinds)
 	if err != nil {

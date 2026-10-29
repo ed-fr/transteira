@@ -178,6 +178,21 @@
 // A session of an external depositor dies with its invitation: [Service.Session]
 // refuses it as soon as the invitation is revoked or expired.
 //
+// # Reply to a transfer
+//
+// [Service.OpenReply] (V1.1, spec 10, threats T-222 to T-225) opens a
+// session of kind KindReply for the recipient of a per-recipient link who
+// sends files back to the sender of the transfer. The download package
+// checks the tenant option, the link, the recipient verification cookie,
+// the original sender and the availability first; the service then refuses
+// a blocklisted replier (ErrForbidden, deposit_refused with reason
+// blocklist) and a source transfer expired or gone (ErrReplyGone). The
+// session carries the source transfer and the link, lives at most until the
+// source expires, never sets a recognition cookie and cannot invite; the
+// store deletes it with its source transfer or link, and [Service.Session]
+// refuses it when the source is gone. Its opening is audited as
+// address.verified with origin reply.
+//
 // # Invitations
 //
 // The invitation link is https://<tenant FQDN>/i/<token>, built from the

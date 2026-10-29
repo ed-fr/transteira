@@ -118,6 +118,12 @@ func FuzzVerificationInputs(f *testing.F) {
 		if _, err := s.StartVerification(ctx, tn, token, ipOne, false, cookie, cookie); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("start %q: %v", token, err)
 		}
+		if _, err := s.StartVerification(ctx, tn, token, ipOne, true, cookie, cookie); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("start reply %q: %v", token, err)
+		}
+		if _, err := s.ReplyAccess(ctx, tn, token, cookie, ipOne); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("reply %q: %v", token, err)
+		}
 		if _, err := s.Resolve(ctx, tn, token, Cookies{Grant: cookie, Verification: cookie}); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("resolve %q: %v", token, err)
 		}

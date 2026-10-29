@@ -56,6 +56,7 @@
       "label": "Destinataires",
       "hint": "Une ou plusieurs adresses électroniques, séparées par des virgules ou des retours à la ligne.",
       "external": "Les fichiers seront envoyés à {invitedBy}, qui vous a invité.",
+      "reply": "Votre réponse sera envoyée à {recipient}.",
       "addressError": "{address} : {message}",
       "tooMany": "Saisissez au plus {max} destinataires.",
       "domainRefused": "Ce service n’autorise pas l’envoi vers le domaine de cette adresse."

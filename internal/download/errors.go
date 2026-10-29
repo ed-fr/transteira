@@ -60,11 +60,22 @@ var (
 	// the recipient verification cookie for the link (401
 	// recipient-verification-required). No password attempt is counted.
 	ErrVerificationRequired = errors.New("download: recipient verification required")
-	// ErrVerificationNotNeeded reports a recipient verification asked on a
-	// link that needs none: a shared V1 link, a transfer without the
-	// option, or a verification before a reply, which comes with the reply
-	// to a transfer (409 state-conflict).
+	// ErrVerificationNotNeeded reports a recipient verification asked or
+	// confirmed for a download on a link that needs none: a shared V1 link
+	// or a transfer without the option, when no reply is possible either
+	// (409 state-conflict).
 	ErrVerificationNotNeeded = errors.New("download: no recipient verification for this link")
+	// ErrReplyNotAllowed reports a reply (or a verification before a reply)
+	// that the link does not allow: the tenant does not allow replies, the
+	// link is a shared V1 link, the transfer was not sent by an internal
+	// depositor (an invited external or a reply: no reply to a reply), or
+	// its sender is now blocklisted or outside the internal domains of the
+	// tenant (403 reply-not-allowed; threat model T-222, T-224, T-225).
+	ErrReplyNotAllowed = errors.New("download: reply not allowed")
+	// ErrRecipientVerificationRequired reports a reply without a valid entry
+	// of the recipient verification cookie for the link, whatever the
+	// options of the transfer (401 recipient-verification-required; P33).
+	ErrRecipientVerificationRequired = errors.New("download: recipient verification required before a reply")
 	// ErrNoChallenge reports a code submitted for a link without a pending
 	// code: never requested, already used, expired, or replaced by a newer
 	// one being exhausted (409 state-conflict).

@@ -270,6 +270,12 @@
     "path": "{lang}/download-password.png"
   },
   {
+    "name": "download-reply",
+    "screen": "public /d/:token (reply to the transfer button)",
+    "profile": "recipient",
+    "path": "{lang}/download-reply.png"
+  },
+  {
     "name": "download-report",
     "screen": "public /d/:token (report an abuse dialog)",
     "profile": "recipient",
@@ -328,5 +334,11 @@
     "screen": "public /me (request a link)",
     "profile": "depositor",
     "path": "{lang}/my-transfers-request.png"
+  },
+  {
+    "name": "reply-form",
+    "screen": "public /d/:token/reply (reply form: the files go to the sender)",
+    "profile": "recipient",
+    "path": "{lang}/reply-form.png"
   }
 ]

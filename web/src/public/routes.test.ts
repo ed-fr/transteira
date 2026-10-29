@@ -6,6 +6,7 @@ describe('public routes', () => {
   it.each([
     ['/', '/'],
     ['/d/dl_abc', '/d/:token'],
+    ['/d/dl_abc/reply', '/d/:token/reply'],
     ['/i/inv_abc', '/i/:token'],
     ['/invite', '/invite'],
     ['/me', '/me'],

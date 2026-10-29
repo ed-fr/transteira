@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiProblem, NetworkError, type Problem } from '../../shared/api/client';
 import {
+  canReply,
   downloadView,
   inviteFailure,
   isNetworkFailure,
@@ -10,6 +11,7 @@ import {
   looksLikeEmail,
   needsVerification,
   normalizeCode,
+  replyFailure,
   unlockFailure,
   verificationConfirmFailure,
   verificationStartFailure,
@@ -235,5 +237,39 @@ describe('shouldRecheck', () => {
     expect(shouldRecheck(1_000, 60_999)).toBe(false);
     expect(shouldRecheck(1_000, 61_000)).toBe(true);
     expect(shouldRecheck(0, 5, 5)).toBe(true);
+  });
+});
+
+describe('reply', () => {
+  const base = transfer();
+
+  it('offers the reply only when allowed, unlocked and not itself a reply', () => {
+    expect(canReply(base)).toBe(false);
+    expect(canReply({ ...base, replyAllowed: true })).toBe(true);
+    expect(canReply({ ...base, replyAllowed: true, locked: true })).toBe(false);
+    expect(canReply({ ...base, replyAllowed: true, reply: true })).toBe(false);
+  });
+
+  it('classifies the opening of a reply session', () => {
+    expect(replyFailure(problem(401, { code: 'recipient-verification-required' }))).toEqual({
+      kind: 'verification-required',
+    });
+    expect(replyFailure(problem(401))).toEqual({ kind: 'error' });
+    expect(replyFailure(problem(403, { code: 'reply-not-allowed' }))).toEqual({ kind: 'not-allowed' });
+    expect(replyFailure(problem(403, { code: 'deposit-not-allowed' }))).toEqual({
+      kind: 'deposit-not-allowed',
+    });
+    expect(replyFailure(problem(404))).toEqual({ kind: 'not-found' });
+    expect(replyFailure(problem(410))).toEqual({ kind: 'gone' });
+    expect(replyFailure(problem(410, { code: 'max-downloads-reached' }))).toEqual({ kind: 'max-downloads' });
+    expect(replyFailure(problem(429))).toEqual({ kind: 'rate-limited' });
+    expect(replyFailure(problem(503, { code: 'maintenance' }))).toEqual({ kind: 'maintenance' });
+    expect(replyFailure(problem(503))).toEqual({ kind: 'error' });
+    expect(replyFailure(problem(500))).toEqual({ kind: 'error' });
+    expect(replyFailure(new Error('x'))).toEqual({ kind: 'error' });
+  });
+
+  it('tells a maintenance from a mail failure when asking for a reply code', () => {
+    expect(verificationStartFailure(problem(503, { code: 'maintenance' }))).toEqual({ kind: 'maintenance' });
   });
 });

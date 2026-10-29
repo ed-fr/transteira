@@ -130,6 +130,32 @@ Your address is recorded with the report only if you validated your address with
 
 > **Note** Reports are used only for the security of the service; they are kept for 12 months, then deleted. You can ask your administrator to erase the data linked to your address.
 
+<!-- topic: download-reply -->
+## Reply to a transfer
+
+If the sender's organization allows it, you can send files back to the sender straight from the download page, without an invitation or an account.
+
+The **Reply** button only appears when all these conditions are met:
+
+- the organization has turned on replying to transfers;
+- you opened your **personal link** (see above); old shared links do not allow replying;
+- the transfer was sent by someone from the organization: you cannot reply to a reply, nor to a transfer sent by an external guest.
+
+To reply:
+
+1. Click **Reply**.
+1. Confirm your address with a 6-digit code received by mail, as described in [Personal link and address verification](topic:download). This code is **always required** to reply, even if the sender did not ask for verification to download. It is valid for 15 minutes, with 2 attempts.
+1. The upload form opens. The only recipient is the original sender: their address is shown ("Your reply goes to" followed by the address) and cannot be changed.
+1. Choose how long the files stay available among the durations offered, add a message and the files, then send, as described in [Send files](topic:deposit).
+
+The usual rules apply to your reply: maximum size per transfer, quotas for external people, antivirus scan (an infected file is deleted and you are told) and abuse detection. Your reply must be finished before the original transfer expires: if it expires or is deleted during the upload, the reply is refused with the message **Transfer no longer available**. It is also refused if the original sender can no longer receive it (blocked address, or no longer part of the organization).
+
+The sender receives your reply by mail, with a warning that it comes from outside and that your address was verified by code.
+
+Replying in a browser ends any upload session already open in that browser: finish your other uploads first.
+
+> **Note** If the **Reply** button does not appear, or a refusal is shown, simply write to the sender by mail.
+
 <!-- topic: download-problems -->
 ## Link not working
 
@@ -140,4 +166,4 @@ This section explains the messages you may see instead of the files, and what to
 - **Maximum number of downloads reached**: the sender allowed a limited number of downloads and it has been used up, by you or by the other recipients. Ask the sender to send the files again.
 - The page shows **Maintenance in progress**: only new transfers are suspended. Downloads remain available, so you can continue normally.
 
-To answer the sender, reply by email: TransTeira does not carry replies.
+To answer the sender, use the **Reply** button if it is offered (see [Reply to a transfer](topic:download-reply)); otherwise, reply by email.

@@ -140,6 +140,46 @@ type TransferView struct {
 	// The notification and confirmation mails show the label in their
 	// language.
 	ConfidentialityLabels map[string]string
+	// ReplyTo is set when the transfer is a reply of an external recipient
+	// to the sender of an earlier transfer (T-223); nil otherwise. [ViewOf]
+	// sets it for every reply transfer, so that each notification of a
+	// reply (availability, resend by an administrator) carries the
+	// warning. The notification mail then warns about the external origin.
+	ReplyTo *ReplyInfo
+}
+
+// ReplyInfo describes the transfer a reply answers.
+type ReplyInfo struct {
+	// OriginalCreatedAt is when the original transfer was created; never
+	// zero for a reply (a zero time would hide the warning of the mail).
+	OriginalCreatedAt time.Time
+}
+
+// replyInfoOf returns the [ReplyInfo] of the reply transfer t, nil when t is
+// not a reply. The creation time of the original transfer is read from its
+// identifier (a ULID carries its creation time, to the millisecond), not
+// from its row: the original may be purged before the reply becomes
+// available (it expires, or is deleted, while the reply is scanned), and
+// the warning must stay. An identifier that does not parse, which the store
+// never accepts, falls back to the creation time of the reply itself.
+func replyInfoOf(t store.Transfer) *ReplyInfo {
+	if t.ReplyToTransferID == "" {
+		return nil
+	}
+	at, err := id.Parse(id.Transfer, t.ReplyToTransferID)
+	if err != nil || at.IsZero() {
+		at = t.CreatedAt
+	}
+	return &ReplyInfo{OriginalCreatedAt: at}
+}
+
+// replyCreatedAt returns the creation time of the original transfer, zero
+// when tr is not a reply.
+func (tr TransferView) replyCreatedAt() time.Time {
+	if tr.ReplyTo == nil {
+		return time.Time{}
+	}
+	return tr.ReplyTo.OriginalCreatedAt
 }
 
 // Vault unseals the wrapped secrets of a tenant. *masterkey.Vault
@@ -296,7 +336,7 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 	data := mail.TransferNotificationData{
 		TenantName: t.Name, SenderEmail: v.sender, Message: v.message, Link: link,
 		Files: v.files, ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, QR: true,
-		ConfidentialityLabel: n.levelLabel(t, tr),
+		ConfidentialityLabel: n.levelLabel(t, tr), ReplyToCreatedAt: tr.replyCreatedAt(),
 	}
 	msg, err := n.render(ctx, t, tr, mail.TemplateTransferNotification, data)
 	if err != nil {
@@ -691,11 +731,12 @@ func oneLine(s string, maxRunes int) string {
 // delivered, left out of the recipient mails and reported to the sender.
 // The signature of an infected file is kept for the sender's alert only.
 // It is the single mapping shared by the antivirus worker and the download
-// service.
+// service. A reply transfer gets its ReplyTo (see [TransferView.ReplyTo]).
 func ViewOf(d store.TransferDetails) TransferView {
 	v := TransferView{
 		ID: d.ID, Language: d.Language, SenderEmail: d.SenderEmail, Recipients: d.Recipients,
 		Message: d.Message, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
+		ReplyTo: replyInfoOf(d.Transfer),
 	}
 	if d.ConfidentialityLevel != "" {
 		v.ConfidentialityLabels = maps.Clone(d.ConfidentialityLabel)

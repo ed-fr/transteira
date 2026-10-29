@@ -22,8 +22,9 @@
 //     threshold. Blocking when the tenant blocks on exceed. Internal
 //     senders only.
 //   - external_quota: the volume or the number of the transfers an external
-//     address deposited during the local day (kind external only: the
-//     replies of section 10 will join it), strictly above the threshold.
+//     address deposited during the local day (kinds external and reply,
+//     counted together: a reply to a transfer, section 10, is an external
+//     deposit), strictly above the threshold.
 //     Blocking when the tenant blocks on exceed.
 //   - unusual_volume (alert only): the volume of the sender for the local
 //     day, divided by its average daily volume over the 30 previous local

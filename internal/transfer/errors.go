@@ -76,6 +76,21 @@ var (
 	// *[AbuseBlockedError] naming the rule. It is a policy refusal: audited
 	// and alerted by the abuse detector, never written to the security log.
 	ErrAbuseBlocked = errors.New("transfer: abuse threshold exceeded")
+	// ErrReplyNotAllowed reports a reply sender (store.DepositorReply) whose
+	// reply is no longer allowed (403 reply-not-allowed, spec 10): the
+	// tenant turned replies off, the original transfer was not sent by an
+	// internal depositor or an API token (an invited external or another
+	// reply), its sender is now blocklisted or outside the internal domains
+	// (T-225), or the replier is no longer one of its recipients. It is a
+	// policy refusal, never written to the security log.
+	ErrReplyNotAllowed = errors.New("transfer: reply not allowed")
+	// ErrOriginalGone reports a reply sender whose original transfer is no
+	// longer available: deleted, purged, expired, past its deletion after
+	// the first download, its download limit reached, or not available at
+	// all (410 transfer-gone). It is checked at creation and again at
+	// finalization, so that a reply whose original disappears during the
+	// upload is never finalized (decision 7).
+	ErrOriginalGone = errors.New("transfer: original transfer no longer available")
 )
 
 // AbuseBlockedError reports a creation refused by the abuse detection. It

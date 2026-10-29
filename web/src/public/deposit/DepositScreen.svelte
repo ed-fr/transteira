@@ -23,6 +23,7 @@
     type DepositFlowDeps,
     type InvitationContext,
     type PublicTenant,
+    type ReplyContext,
     type Step,
   } from './flow.svelte';
   import ResumePrompt from './ResumePrompt.svelte';
@@ -34,6 +35,10 @@
     tenant: PublicTenant;
     /** Invitation the depositor arrived with (external deposit). */
     invitation?: InvitationContext | undefined;
+    /** Reply mode (/d/:token/reply): the recipient is the sender of the original transfer. */
+    reply?: ReplyContext | undefined;
+    /** Reply mode: called when the reply session is gone (expired, ended or invalid). */
+    onreplyended?: (() => void) | undefined;
     /** In-app navigation (router.navigate), used by the "Invite someone" link. */
     onnavigate?: ((path: string) => void) | undefined;
     /** Registers a navigation guard (router.addGuard) and returns its removal. */
@@ -42,9 +47,9 @@
     deps?: DepositFlowDeps | undefined;
   }
 
-  let { tenant, invitation, onnavigate, addGuard, deps }: Props = $props();
+  let { tenant, invitation, reply, onreplyended, onnavigate, addGuard, deps }: Props = $props();
 
-  const flow = untrack(() => new DepositFlow(tenant, invitation, deps ?? browserDeps()));
+  const flow = untrack(() => new DepositFlow(tenant, invitation, deps ?? browserDeps(), reply));
   let container: HTMLElement | undefined = $state();
 
   onMount(() => {
@@ -65,6 +70,12 @@
     previous = step;
     if (!first) {
       void tick().then(() => container?.querySelector<HTMLElement>('h1')?.focus());
+    }
+  });
+
+  $effect(() => {
+    if (flow.replyEnded) {
+      onreplyended?.();
     }
   });
 

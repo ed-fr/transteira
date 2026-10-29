@@ -136,6 +136,15 @@ Si l’option est désactivée, le dépôt depuis l’extérieur est refusé ave
 
 > **À savoir** Pour pouvoir envoyer un jour depuis l’extérieur, utilisez au moins une fois le service depuis le réseau de l’organisation avec la même adresse.
 
+<!-- topic: receive-reply -->
+## Recevoir une réponse
+
+Si votre organisation l’a activé, vos destinataires peuvent vous renvoyer des fichiers depuis la page de téléchargement avec le bouton **Répondre**, sans invitation. Cela ne concerne que les transferts que vous avez envoyés vous-même (page web ou jeton d’API), jamais ceux d’un invité externe, et seulement via le lien personnel de chaque destinataire.
+
+Une réponse arrive comme un transfert ordinaire : vous recevez le mail de notification habituel et la page de téléchargement s’ouvre de la même façon. Elle porte toutefois un **avertissement** : la réponse vient de l’extérieur de l’organisation et l’adresse de son auteur a été vérifiée par un code, mais cela ne garantit pas que les fichiers sont sûrs. Soyez prudent avec les fichiers inattendus, ouvrez-les seulement si vous attendiez cette réponse, et en cas de doute contactez l’auteur par un autre moyen. Le même avertissement figure en haut de la page de téléchargement. Les fichiers sont analysés par l’antivirus comme tous les dépôts ; ceux qui ne peuvent pas l’être sont signalés.
+
+Vous seul recevez la réponse : l’expéditeur d’origine est son unique destinataire. Elle est refusée à son auteur si votre adresse est bloquée ou n’appartient plus à l’organisation, ou si votre transfert d’origine a expiré ou a été supprimé.
+
 <!-- topic: my-transfers -->
 ## Mes envois
 

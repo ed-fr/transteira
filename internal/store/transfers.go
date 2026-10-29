@@ -106,7 +106,7 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
 	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
 	`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode, recipient_verification, ` +
-	`expiry_reminder_at, extension_count, extended_at`
+	`expiry_reminder_at, extension_count, extended_at, reply_to_transfer_id`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -141,10 +141,10 @@ var (
 	qTransferInsert = tenantQuery(
 		`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language,
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
-		created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, confidentiality_level,
-		confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password,
+		created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id,
+		confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password,
 		rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -272,8 +272,14 @@ type Transfer struct {
 	// SenderKind tells how the sender was allowed to deposit.
 	SenderKind DepositorKind
 	// InvitationID is the invitation of an external sender ("inv_" + ULID,
-	// same tenant), "" for an internal one.
+	// same tenant), "" for any other kind.
 	InvitationID string
+	// ReplyToTransferID is the source transfer of a reply (sender kind
+	// DepositorReply): "trf_" + ULID of the same tenant, checked at
+	// creation; "" for any other kind. It has no foreign key: a reply
+	// outlives the purge of its source, and then refers to a transfer that
+	// no longer exists.
+	ReplyToTransferID string
 	// Message is the optional plain-text message (at most
 	// MaxTransferMessageLen characters), sanitized by the caller.
 	Message string
@@ -563,6 +569,12 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("an external sender needs an invitation, an internal one none")
 	case t.InvitationID != "" && !id.Valid(id.Invitation, t.InvitationID):
 		return Transfer{}, invalid("malformed invitation id")
+	case (t.SenderKind == DepositorReply) != (t.ReplyToTransferID != ""):
+		return Transfer{}, invalid("a reply needs its source transfer, another sender kind none")
+	case t.ReplyToTransferID != "" && !id.Valid(id.Transfer, t.ReplyToTransferID):
+		return Transfer{}, invalid("malformed source transfer id")
+	case t.ReplyToTransferID == t.ID:
+		return Transfer{}, invalid("a reply cannot answer itself")
 	case t.APITokenID != "" && !id.Valid(id.APIToken, t.APITokenID):
 		return Transfer{}, invalid("malformed api token id")
 	case t.APITokenID != "" && !t.SenderKind.IsInternal():
@@ -700,7 +712,8 @@ func checkKey(ctx context.Context, tx *ScopedTx, keyID, purpose, msg string) err
 // may be created completed, such as an empty file), ErrNotFound when the
 // tenant is not active (its deletion started: checked under the tenant
 // lock, in the same transaction as the inserts), when the invitation or a
-// data key does not exist (or belongs to another tenant), or when the API
+// data key does not exist (or belongs to another tenant), when the source
+// transfer of a reply does not exist in the tenant, or when the API
 // token does not exist, belongs to another tenant, or is revoked or expired
 // at t.CreatedAt, and ErrConflict when an identifier, an upload identifier,
 // a storage name or a data key is already used, or when the sender (the API
@@ -752,6 +765,17 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 			return err
 		}
 	}
+	if t.ReplyToTransferID != "" {
+		// No foreign key: the tenant-scoped count proves that the source
+		// exists in this tenant.
+		var n int
+		if err := tx.QueryRow(ctx, qTransferCount, t.ReplyToTransferID).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+	}
 	if t.IdempotencyKey != "" {
 		release, owner := qTransferReleaseKey, t.SenderEmail
 		if t.APITokenID != "" {
@@ -771,7 +795,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		nullText(t.InvitationID), t.Message, t.Language, t.ExpiryDays, nullText(t.PasswordHash),
 		t.DeleteAfterFirstDownload, t.TotalBytes, nullText(t.IdempotencyKey), nullText(t.RequestFingerprint),
 		toMillis(created), senderIP, nullText(t.APITokenID), nullInt(t.MaxDownloads), string(t.LinkMode),
-		t.RecipientVerification,
+		t.RecipientVerification, nullText(t.ReplyToTransferID),
 	}
 	_, err = tx.Exec(ctx, qTransferInsert, append(args, levelArgs(t)...)...)
 	if err != nil {
@@ -813,6 +837,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		t                                Transfer
 		status, kind                     string
 		inv, pwd, key, fp, tokenKey, ip  sql.NullString
+		replyTo                          sql.NullString
 		apiToken, level, label           sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
@@ -826,7 +851,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
 		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
 		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del, &linkMode,
-		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended)
+		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended, &replyTo)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -848,7 +873,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.FirstDownloadedAt, t.DeleteAfter, t.EndedAt = nullMillis(downloaded), nullMillis(deleteAfter), nullMillis(ended)
 	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
 	t.LinkMode, t.ExpiryReminderAt = LinkMode(linkMode), nullMillis(reminded)
-	t.ExtendedAt = nullMillis(extended)
+	t.ExtendedAt, t.ReplyToTransferID = nullMillis(extended), replyTo.String
 	return t, nil
 }
 

@@ -42,6 +42,7 @@ type labels struct {
 	downloadLinkIntro     string // intro of the download link in the sender confirmation
 	personalLinks         string // sentence replacing the link when each recipient has a personal one
 	myTransfersIntro      string // intro of the My transfers link in the sender confirmation
+	replyNotice           string // %s: date of the original transfer, entity name, sender address
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -93,6 +94,7 @@ var allLabels = map[string]*labels{
 		downloadLinkIntro:     "Download link",
 		personalLinks:         "Each recipient received their own personal link.",
 		myTransfersIntro:      "Manage this transfer (delete it, extend it, see who downloaded it) in My transfers",
+		replyNotice:           "This is a reply to the transfer you sent on %s. It comes from outside %s: %s proved they own this address with a code, but be careful with files you did not expect.",
 	},
 	i18n.French: {
 		colon:                 " :",
@@ -131,6 +133,7 @@ var allLabels = map[string]*labels{
 		downloadLinkIntro:     "Lien de téléchargement",
 		personalLinks:         "Chaque destinataire a reçu son propre lien personnel.",
 		myTransfersIntro:      "Gérez ce transfert (le supprimer, le prolonger, voir qui l'a téléchargé) dans Mes envois",
+		replyNotice:           "Ceci est une réponse au transfert que vous avez envoyé le %s. Il provient de l'extérieur de %s : %s a prouvé posséder cette adresse par un code, mais restez prudent avec les fichiers que vous n'attendiez pas.",
 	},
 }
 

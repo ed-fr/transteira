@@ -288,7 +288,7 @@ func TestTransfersCreateErrors(t *testing.T) {
 			"id":                    func(tr *store.Transfer) { tr.ID = id.New(id.File) },
 			"status":                func(tr *store.Transfer) { tr.Status = store.TransferScanning },
 			"sender":                func(tr *store.Transfer) { tr.SenderEmail = "nope" },
-			"kind":                  func(tr *store.Transfer) { tr.SenderKind = "reply" },
+			"kind":                  func(tr *store.Transfer) { tr.SenderKind = "robot" },
 			"external no inv":       func(tr *store.Transfer) { tr.SenderKind = store.DepositorExternal },
 			"internal with inv":     func(tr *store.Transfer) { tr.InvitationID = invA.ID },
 			"malformed inv":         func(tr *store.Transfer) { tr.SenderKind, tr.InvitationID = store.DepositorExternal, "inv_x" },

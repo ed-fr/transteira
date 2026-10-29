@@ -15,6 +15,12 @@ func TestDepositorOwns(t *testing.T) {
 		tokenA = "tok_01JAAAAAAAAAAAAAAAAAAAAAAA"
 		tokenB = "tok_01JBBBBBBBBBBBBBBBBBBBBBBB"
 	)
+	const (
+		sourceA = "trf_01JAAAAAAAAAAAAAAAAAAAAAAA"
+		sourceB = "trf_01JBBBBBBBBBBBBBBBBBBBBBBB"
+	)
+	reply := store.Transfer{SenderEmail: "bob@partner.example.org", SenderKind: store.DepositorReply, ReplyToTransferID: sourceA}
+	replier := store.Depositor{Email: "Bob@Partner.example.org", Kind: store.DepositorReply, ReplyToTransferID: sourceA}
 	byTokenA := store.Transfer{SenderEmail: "alice@entity-a.example.com", SenderKind: store.DepositorInternal, APITokenID: tokenA}
 	cases := []struct {
 		name string
@@ -31,6 +37,12 @@ func TestDepositorOwns(t *testing.T) {
 		{"other invitation", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorExternal, InvitationID: "inv_01JBBBBBBBBBBBBBBBBBBBBBBB"}, external, false},
 		{"external without invitation", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorExternal}, external, false},
 		{"internal claiming the external", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorInternal}, external, false},
+		{"reply sender", replier, reply, true},
+		{"reply to another transfer", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorReply, ReplyToTransferID: sourceB}, reply, false},
+		{"reply without source", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorReply}, reply, false},
+		{"internal session of the replier", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorInternal}, reply, false},
+		{"internal claiming the source", store.Depositor{Email: "bob@partner.example.org", Kind: store.DepositorInternal, ReplyToTransferID: sourceA}, reply, false},
+		{"reply session never owns an internal transfer", store.Depositor{Email: "alice@entity-a.example.com", Kind: store.DepositorReply, ReplyToTransferID: sourceA}, internal, false},
 		{"token owns its transfer", store.Depositor{APITokenID: tokenA}, byTokenA, true},
 		{"token owns its transfer whatever the address", store.Depositor{Email: "eve@entity-a.example.com", APITokenID: tokenA}, byTokenA, true},
 		{"other token", store.Depositor{Email: "alice@entity-a.example.com", Kind: store.DepositorInternal, APITokenID: tokenB}, byTokenA, false},

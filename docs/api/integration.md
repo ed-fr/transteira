@@ -276,6 +276,10 @@ POST /api/v1/transfers/{id}/finalize     hand over to the antivirus           ->
 GET  /api/v1/transfers/{id}  (poll)      until status is available            -> 200
 ```
 
+> **Note** Replying to a transfer (the **Reply** button of the download page) is browser-only: it
+> needs the recipient to confirm their address by code, so API tokens cannot start a reply. A
+> transfer sent with a token can still receive replies from its recipients.
+
 ### Step 1: create the transfer
 
 ```bash

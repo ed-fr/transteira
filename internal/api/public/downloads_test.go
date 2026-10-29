@@ -79,6 +79,8 @@ type fakeDownloads struct {
 	archive *fakeArchive
 	// challenge is the answer of StartVerification.
 	challenge *download.Challenge
+	// target is the answer of ReplyAccess.
+	target download.ReplyTarget
 
 	gotToken, gotGrant, gotVerification, gotPassword, gotFile string
 	gotLanguage, gotCode                                      string
@@ -393,6 +395,8 @@ func TestDownloadError(t *testing.T) {
 		{err: download.ErrNoClientIP, code: problem.CodeInternalError},
 		{err: boom, code: problem.CodeInternalError},
 		{err: download.ErrVerificationRequired, code: problem.CodeRecipientVerificationRequired},
+		{err: download.ErrRecipientVerificationRequired, code: problem.CodeRecipientVerificationRequired},
+		{err: download.ErrReplyNotAllowed, code: problem.CodeReplyNotAllowed},
 		{err: download.ErrVerificationNotNeeded, code: problem.CodeStateConflict},
 		{err: download.ErrNoChallenge, code: problem.CodeStateConflict},
 		{err: download.ErrVerificationExhausted, code: problem.CodeVerificationExhausted},

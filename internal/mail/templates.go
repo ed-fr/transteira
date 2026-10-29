@@ -270,7 +270,7 @@ func (t *Templates) RenderOverride(name, lang string, data any, override *Templa
 	if !ok {
 		return Message{}, fmt.Errorf("mail: render %s: unexpected data type %T", name, data)
 	}
-	return c.render(lang, vals), nil
+	return c.render(lang, vals, def.forced), nil
 }
 
 // OverrideLookup returns the customization of template name in lang for a
@@ -333,8 +333,12 @@ const (
 	htmlPageEnd = "\n</div>\n</body>\n</html>\n"
 )
 
-// render renders a compiled template with vals.
-func (c *compiled) render(lang string, vals map[string]value) Message {
+// render renders a compiled template with vals. Each variable of forced
+// whose value is not empty is prepended to a body part (text or HTML) that
+// has no placeholder for it, as its first paragraph: a customized template
+// cannot drop a security warning (T-223). A part that has the placeholder
+// shows the value there only, never twice.
+func (c *compiled) render(lang string, vals map[string]value, forced []string) Message {
 	var subject strings.Builder
 	for _, p := range c.subject {
 		if p.name == "" {
@@ -346,6 +350,11 @@ func (c *compiled) render(lang string, vals map[string]value) Message {
 	s := subjectLine(subject.String())
 
 	var text writer
+	for _, name := range forced {
+		if v := normalizeNewlines(vals[name].text); v != "" && !hasPiece(c.text, name) {
+			text.literal(v + "\n\n")
+		}
+	}
 	for _, p := range c.text {
 		if p.name == "" {
 			text.literal(p.text)
@@ -355,6 +364,11 @@ func (c *compiled) render(lang string, vals map[string]value) Message {
 	}
 
 	var body writer
+	for _, name := range forced {
+		if v := string(vals[name].html); v != "" && !hasSegment(c.html, name) {
+			body.literal(v + "\n")
+		}
+	}
 	for _, seg := range c.html {
 		if seg.Placeholder == "" {
 			body.literal(seg.Literal)
@@ -377,6 +391,26 @@ func (c *compiled) render(lang string, vals map[string]value) Message {
 		HTML:     page,
 		Language: lang,
 	}
+}
+
+// hasPiece reports whether pieces holds a placeholder for name.
+func hasPiece(pieces []tpiece, name string) bool {
+	for _, p := range pieces {
+		if p.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSegment reports whether segs holds a placeholder for name.
+func hasSegment(segs []sanitize.Segment, name string) bool {
+	for _, s := range segs {
+		if s.Placeholder == name {
+			return true
+		}
+	}
+	return false
 }
 
 // writer assembles a body, removing the line breaks after an empty value.

@@ -90,6 +90,17 @@ type repo interface {
 	// and records the audit event ev, in one transaction
 	// (store.AbuseReports.CreateTx), and returns the stored report.
 	report(ctx context.Context, tid tenant.ID, r store.AbuseReport, limits store.AbuseReportLimits, now time.Time, ev audit.Event) (store.AbuseReport, error)
+	// tenant reads the current settings of tenant tid, so that a change of
+	// its options applies at once (store.ErrNotFound for a deleted tenant).
+	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
+	// blocked reports whether the address email or its domain is on the
+	// blocklist of the tenant.
+	blocked(ctx context.Context, tid tenant.ID, email string) (bool, error)
+	// networkRules reads the internal IP ranges and mail domains of the
+	// tenant.
+	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
+	// record writes the audit event ev in its own transaction.
+	record(ctx context.Context, tid tenant.ID, ev audit.Event) error
 }
 
 // errLinkUnclaimed reports the completion of a recipient link whose
@@ -312,4 +323,21 @@ func (r storeRepo) report(ctx context.Context, tid tenant.ID, rep store.AbuseRep
 		return r.audit.RecordScopedTx(ctx, tx, ev)
 	})
 	return out, err
+}
+
+func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	return r.db.Tenants().Get(ctx, tid)
+}
+
+func (r storeRepo) blocked(ctx context.Context, tid tenant.ID, email string) (bool, error) {
+	entries, err := r.db.Blocklist().Match(ctx, tid, email, "")
+	return len(entries) > 0, err
+}
+
+func (r storeRepo) networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error) {
+	return r.db.NetworkRules().Get(ctx, tid)
+}
+
+func (r storeRepo) record(ctx context.Context, tid tenant.ID, ev audit.Event) error {
+	return r.audit.RecordScoped(ctx, tid, ev)
 }

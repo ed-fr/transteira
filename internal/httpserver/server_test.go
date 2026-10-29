@@ -776,6 +776,7 @@ func TestMaintenanceOperationsExist(t *testing.T) {
 		http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize": "FinalizeTransfer",
 		http.MethodPatch + " " + APIBaseURL + "/uploads/{uploadId}":             "AppendUploadChunk",
 		http.MethodPost + " " + APIBaseURL + "/invitations":                     "CreateInvitation",
+		http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/reply":     "StartTransferReply",
 	}
 	if len(ops) != len(maintenanceBlocked) {
 		t.Fatalf("%d blocked patterns, %d expected operations", len(maintenanceBlocked), len(ops))

@@ -144,8 +144,9 @@ func TestRecipientLinkResolution(t *testing.T) {
 	})
 }
 
-// TestVerificationNotNeeded: a shared link, a per-recipient transfer
-// without the option, and a reply get ErrVerificationNotNeeded.
+// TestVerificationNotNeeded: a shared link and a per-recipient transfer
+// without the option get ErrVerificationNotNeeded; a reply verification on
+// a tenant without replies gets ErrReplyNotAllowed.
 func TestVerificationNotNeeded(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e, nil)
@@ -160,7 +161,7 @@ func TestVerificationNotNeeded(t *testing.T) {
 			wantErr(t, err, ErrVerificationNotNeeded)
 		}
 		_, err := ev.svc.StartVerification(ctx, ev.a, withOption.token, ipOne, true, "", "")
-		wantErr(t, err, ErrVerificationNotNeeded)
+		wantErr(t, err, ErrReplyNotAllowed)
 		_, err = ev.svc.StartVerification(ctx, ev.a, "dl_bad", ipOne, false, "", "")
 		wantErr(t, err, ErrNotFound)
 		_, err = ev.svc.ConfirmVerification(ctx, ev.a, withOption.token, ipOne, "12345a", "")
@@ -559,10 +560,9 @@ func TestVerificationFaults(t *testing.T) {
 	})
 }
 
-// TestVerificationIgnoresReplyCodes: only the newest code of the link is
-// checked, and a reply code never verifies a download, even when it is the
-// newest.
-func TestVerificationIgnoresReplyCodes(t *testing.T) {
+// TestVerificationNewestCodeOnly: only the newest code of the link is
+// checked, whatever its intent: an older code no longer verifies.
+func TestVerificationNewestCodeOnly(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e, nil)
 		ctx := context.Background()
@@ -580,8 +580,9 @@ func TestVerificationIgnoresReplyCodes(t *testing.T) {
 		if err := ev.db.Challenges().Create(ctx, ev.a.ID, reply); err != nil {
 			t.Fatal(err)
 		}
+		// The MAC binds the code to the identifier of its challenge.
 		_, err = ev.confirm(p, code)
-		wantErr(t, err, ErrNoChallenge)
+		wantErr(t, err, ErrWrongCode)
 	})
 }
 

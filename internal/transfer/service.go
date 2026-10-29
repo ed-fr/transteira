@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
@@ -115,6 +116,9 @@ const (
 	originInvitation = "invitation"
 	// originAPI is a transfer created with an API token.
 	originAPI = "api"
+	// originReply is a reply of a recipient to the sender of a transfer
+	// (spec 10).
+	originReply = "reply"
 	// deletedBySender tells that the sender canceled the transfer.
 	deletedBySender = "sender"
 )
@@ -172,6 +176,10 @@ type Options struct {
 // layer builds it from the deposit session (deposit.SessionInfo) or the API
 // token of the request, and the real client IP. Its store.Depositor holds
 // the ownership rule shared with the upload engine ([store.Depositor.Owns]).
+//
+// A reply sender (Kind store.DepositorReply, spec 10) has the original
+// transfer in ReplyToTransferID and no invitation; the HTTP layer builds it
+// from a deposit session of kind reply.
 //
 // An API token sender has Kind store.DepositorInternal, no invitation and
 // its APITokenID; its Email is ignored (the sender address of a creation
@@ -259,10 +267,12 @@ func (s *Service) now() time.Time {
 // normalize checks the shape of the sender and returns its normalized
 // address. A malformed sender is a wiring error of the caller (the session
 // holds a normalized address), not a client error. An API token sender
-// without address is valid and gets "".
+// without address is valid and gets "". Only a reply sender has a
+// ReplyToTransferID, always well formed, and never an invitation.
 func normalize(sender Sender) (string, error) {
 	if sender.APITokenID != "" {
-		if !id.Valid(id.APIToken, sender.APITokenID) || sender.Kind != store.DepositorInternal || sender.InvitationID != "" {
+		if !id.Valid(id.APIToken, sender.APITokenID) || sender.Kind != store.DepositorInternal || sender.InvitationID != "" ||
+			sender.ReplyToTransferID != "" {
 			return "", errors.New("transfer: malformed api token sender")
 		}
 		if sender.Email == "" {
@@ -273,10 +283,19 @@ func normalize(sender Sender) (string, error) {
 	if err != nil {
 		return "", errors.New("transfer: malformed sender address")
 	}
-	ok := (sender.Kind.IsInternal() && sender.InvitationID == "") ||
-		(sender.Kind == store.DepositorExternal && id.Valid(id.Invitation, sender.InvitationID))
+	var ok bool
+	switch {
+	case sender.Kind == store.DepositorReply:
+		ok = sender.InvitationID == "" && id.Valid(id.Transfer, sender.ReplyToTransferID)
+	case sender.ReplyToTransferID != "":
+		ok = false
+	case sender.Kind.IsInternal():
+		ok = sender.InvitationID == ""
+	case sender.Kind == store.DepositorExternal:
+		ok = id.Valid(id.Invitation, sender.InvitationID)
+	}
 	if !ok {
-		return "", errors.New("transfer: malformed sender kind or invitation")
+		return "", errors.New("transfer: malformed sender kind, invitation or original transfer")
 	}
 	return email, nil
 }
@@ -290,9 +309,10 @@ func ownerOf(sender Sender, email string) owner {
 	return owner{email: email}
 }
 
-// openCap returns the cap on the unfinished transfers of sender.
+// openCap returns the cap on the unfinished transfers of sender: the
+// external cap for an invited external sender and a reply sender.
 func (s *Service) openCap(sender Sender) int {
-	if sender.Kind == store.DepositorExternal {
+	if sender.Kind.IsExternal() {
 		return MaxOpenTransfersExternal
 	}
 	return s.maxOpen
@@ -331,43 +351,135 @@ func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, r
 // applies at once): the IP part of the internal rule is replaced by the
 // ranges of the token, checked by the HTTP layer. It returns the normalized
 // address and, for an external sender, the invitation (whose inviter is the
-// recipient, T-17). A refusal is logged as deposit_refused with reason
+// recipient, T-17). A reply sender (store.DepositorReply) passes the
+// blocklist check, then the reply rule (see checkReply): the tenant still
+// allows replies and the original transfer can still be replied to,
+// ErrReplyNotAllowed or ErrOriginalGone otherwise. It returns the
+// normalized address and the forced recipient of an external or reply
+// sender: the inviter of the invitation (T-17), or the sender of the
+// original transfer (spec 10); "" for an internal sender, who names its
+// recipients. A refusal is logged as deposit_refused with reason
 // blocklist, ip (outside the ranges, or a remote rule that no longer holds),
 // domain (outside the internal domains, or not an allowed sender of the
 // token) or invitation, and returns ErrForbidden. A token revoked, expired
 // or deleted meanwhile is ErrForbidden too, not logged (the HTTP layer
-// refuses its next request).
-func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (string, store.Invitation, error) {
-	email, err := normalize(sender)
+// refuses its next request). The refusals of the reply rule are policy
+// refusals, never logged.
+func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (email, recipient string, err error) {
+	email, err = normalize(sender)
 	if err != nil {
-		return "", store.Invitation{}, err
+		return "", "", err
 	}
 	if email == "" {
-		return "", store.Invitation{}, errors.New("transfer: api token sender without address")
+		return "", "", errors.New("transfer: api token sender without address")
 	}
 	blocked, err := s.repo.blocked(ctx, t.ID, email, "")
 	if err != nil {
-		return "", store.Invitation{}, fmt.Errorf("transfer: check blocklist: %w", err)
+		return "", "", fmt.Errorf("transfer: check blocklist: %w", err)
 	}
 	if blocked {
-		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonBlocklist)
+		return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonBlocklist)
 	}
-	if sender.Kind.IsInternal() {
-		if err := s.checkInternal(ctx, t, sender, email); err != nil {
-			return "", store.Invitation{}, err
+	switch sender.Kind {
+	case store.DepositorReply:
+		recipient, err = s.checkReply(ctx, t, sender.ReplyToTransferID, email)
+		if err != nil {
+			return "", "", err
 		}
-		return email, store.Invitation{}, nil
+		return email, recipient, nil
+	case store.DepositorExternal:
+		inv, err := s.repo.invitation(ctx, t.ID, sender.InvitationID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+		case err != nil:
+			return "", "", fmt.Errorf("transfer: read invitation: %w", err)
+		case !inv.Active(s.now()) || inv.Email != email:
+			return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+		}
+		return email, inv.InvitedBy, nil
 	}
-	inv, err := s.repo.invitation(ctx, t.ID, sender.InvitationID)
+	if err := s.checkInternal(ctx, t, sender, email); err != nil {
+		return "", "", err
+	}
+	return email, "", nil
+}
+
+// checkReply applies the reply rule of spec 10 to the replier email of
+// tenant t answering the transfer origID (decision 7, T-222 to T-225), and
+// returns the sender of the original transfer, the only recipient of the
+// reply. In order:
+//
+//  1. the tenant still allows replies, read again so that turning the
+//     option off stops the open reply sessions at once: ErrReplyNotAllowed
+//     otherwise (a tenant whose deletion started too);
+//  2. the original transfer exists in the tenant (read tenant-scoped: an
+//     identifier of another tenant is unknown): ErrOriginalGone otherwise;
+//  3. it was sent by an internal depositor or an API token, never by an
+//     invited external or as a reply (T-224), and the replier is still one
+//     of its recipients (an address erased meanwhile is not):
+//     ErrReplyNotAllowed otherwise;
+//  4. its sender is neither blocklisted (address or domain) nor outside
+//     the internal domains of the tenant (T-225): ErrReplyNotAllowed;
+//  5. it is still available: status available, before its expiry and its
+//     deletion after the downloads, with a deliverable file, its download
+//     limit not reached (see replyable): ErrOriginalGone otherwise.
+//
+// The order follows startTransferReply; the rules are those of
+// download.Service.ReplyAccess (see download.replyEligible), applied again
+// when the reply is created and finalized. None of these refusals is written
+// to the security log: they are policy refusals, not signs of attack.
+func (s *Service) checkReply(ctx context.Context, t *tenant.Tenant, origID, email string) (string, error) {
+	cur, err := s.repo.tenant(ctx, t.ID)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+		return "", ErrReplyNotAllowed
 	case err != nil:
-		return "", store.Invitation{}, fmt.Errorf("transfer: read invitation: %w", err)
-	case !inv.Active(s.now()) || inv.Email != email:
-		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+		return "", fmt.Errorf("transfer: read tenant: %w", err)
+	case !cur.AllowTransferReply:
+		return "", ErrReplyNotAllowed
 	}
-	return email, inv, nil
+	orig, err := s.repo.transfer(ctx, t.ID, origID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return "", ErrOriginalGone
+	case err != nil:
+		return "", fmt.Errorf("transfer: read original transfer: %w", err)
+	case !orig.SenderKind.IsInternal() || !slices.Contains(orig.Recipients, email):
+		return "", ErrReplyNotAllowed
+	}
+	blocked, err := s.repo.blocked(ctx, t.ID, orig.SenderEmail, "")
+	if err != nil {
+		return "", fmt.Errorf("transfer: check blocklist: %w", err)
+	}
+	if blocked {
+		return "", ErrReplyNotAllowed
+	}
+	rules, err := s.repo.networkRules(ctx, t.ID)
+	if err != nil {
+		return "", fmt.Errorf("transfer: read network rules: %w", err)
+	}
+	if !netpolicy.DomainInternal(netpolicy.Rules{Domains: rules.Domains}, orig.SenderEmail) {
+		return "", ErrReplyNotAllowed
+	}
+	if !replyable(orig, s.now()) {
+		return "", ErrOriginalGone
+	}
+	return orig.SenderEmail, nil
+}
+
+// replyable reports whether the transfer d can still be replied to at now:
+// available, before its expiry and its deletion after the downloads, with
+// at least one deliverable file, and its download limit not reached (the
+// conditions under which its download page still opens). It must agree
+// with download.deliverable and download.limitReached, which the reply
+// session opening applies (download.Service.ReplyAccess): a reply opened
+// there is then finalized here.
+func replyable(d store.TransferDetails, now time.Time) bool {
+	return d.Status == store.TransferAvailable && now.Before(d.ExpiresAt) &&
+		(d.DeleteAfter.IsZero() || now.Before(d.DeleteAfter)) &&
+		(d.MaxDownloads == nil || d.DownloadCount < int64(*d.MaxDownloads)) &&
+		slices.ContainsFunc(d.Files, func(f store.TransferFile) bool { return f.ScanStatus.Deliverable() })
 }
 
 // checkInternal applies the internal rule (internal sender and API token)
@@ -520,6 +632,8 @@ func origin(sender Sender) string {
 		return originAPI
 	case sender.Kind == store.DepositorExternal:
 		return originInvitation
+	case sender.Kind == store.DepositorReply:
+		return originReply
 	}
 	return originInternal
 }

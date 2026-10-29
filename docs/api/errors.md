@@ -253,8 +253,8 @@ use to ban the client IP.
 ### transfer-gone
 
 - **HTTP status:** 410 Gone
-- **Meaning:** the transfer has expired, been deleted, or been removed after its first download.
-- **Typical endpoints:** `GET /downloads/{linkToken}` and its sub-resources.
+- **Meaning:** the transfer has expired, been deleted, or been removed after its first download. Since 1.1, also: the original transfer of a reply is no longer available (when the reply session is opened, when the reply transfer is created, or when it is finalized).
+- **Typical endpoints:** `GET /downloads/{linkToken}` and its sub-resources, `POST /downloads/{linkToken}/reply`, `POST /transfers` and `POST /transfers/{transferId}/finalize` for a reply.
 - **What to do:** ask the sender to send the files again.
 
 ### download-locked
@@ -547,8 +547,8 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 1.1.
-- **Meaning:** replying to this transfer is not possible: the entity does not allow replies, or the link is a shared link created before version 1.1.
-- **Typical endpoints:** `POST /downloads/{linkToken}/reply`.
+- **Meaning:** replying to this transfer is not possible: the entity does not allow replies, the link is a shared link created before version 1.1, the transfer was not sent by an internal depositor, or it is itself a reply (no reply to a reply). The original sender may also be blocklisted or no longer internal.
+- **Typical endpoints:** `POST /downloads/{linkToken}/reply`, `POST /downloads/{linkToken}/verification` (purpose `reply`), `POST /transfers` and `POST /transfers/{transferId}/finalize` (a reply whose entity disabled replies meanwhile).
 - **What to do:** contact the sender by another means.
 
 ### access-link-invalid

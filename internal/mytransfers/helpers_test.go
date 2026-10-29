@@ -541,6 +541,8 @@ type seedOptions struct {
 	deleteAfter  bool
 	apiToken     bool
 	created      time.Time
+	// replyTo makes the transfer a reply to that transfer of the tenant.
+	replyTo string
 }
 
 // seed stores a transfer of tn with one file to carol and dave, brought to
@@ -600,6 +602,9 @@ func (ev *env) seed(tn *tenant.Tenant, o seedOptions) string {
 			tr.LinkMode = store.LinkModePerRecipient
 		}
 		tr.APITokenID = tokenID
+		if o.replyTo != "" {
+			tr.SenderKind, tr.ReplyToTransferID = store.DepositorReply, o.replyTo
+		}
 		trs := ev.db.Transfers()
 		if err := trs.CreateTx(ctx, tx, tr, []string{carol, dave}, []store.TransferFile{file}); err != nil {
 			return err

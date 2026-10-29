@@ -231,7 +231,7 @@ func adminTransferBody(t tenantops.Transfer) gen.AdminTransfer {
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: optionalTime(t.ExpiresAt), FirstDownloadedAt: optionalTime(t.FirstDownloadedAt),
 		DownloadCount: int(t.DownloadCount), MaxDownloads: t.MaxDownloads, ConfidentialityLevel: transferLevelRef(t),
-		RecipientVerification: new(t.RecipientVerification),
+		RecipientVerification: new(t.RecipientVerification), ReplyToTransferId: optional(t.ReplyToTransferID),
 	}
 }
 
@@ -276,7 +276,7 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 		PasswordProtected: t.PasswordProtected, DeleteAfterFirstDownload: t.DeleteAfterFirstDownload,
 		CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, FirstDownloadedAt: t.FirstDownloadedAt,
 		DownloadCount: t.DownloadCount, MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel,
-		RecipientVerification: t.RecipientVerification,
+		RecipientVerification: t.RecipientVerification, ReplyToTransferId: t.ReplyToTransferId,
 	}
 	if d.SenderIP.IsValid() {
 		ip := d.SenderIP.String()

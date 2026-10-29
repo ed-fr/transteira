@@ -75,6 +75,9 @@ type Details struct {
 	// Rules are the rules of the level as snapshotted at creation, nil
 	// without level. Later changes of the level never affect them.
 	Rules *store.ConfidentialityRules
+	// ReplyToTransferID is, for a reply, the original transfer it answers
+	// ("trf_" + ULID); "" otherwise.
+	ReplyToTransferID string
 }
 
 // File is a file of a transfer as its sender sees it (OpenAPI SenderFile).
@@ -121,7 +124,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		DeleteAfterFirstDownload: d.DeleteAfterFirstDownload, TotalBytes: d.TotalBytes,
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
 		MaxDownloads: d.MaxDownloads, ConfidentialityLevel: d.ConfidentialityLevel, Rules: d.Rules,
-		RecipientVerification: d.RecipientVerification,
+		RecipientVerification: d.RecipientVerification, ReplyToTransferID: d.ReplyToTransferID,
 	}
 	if d.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(d.ConfidentialityLabel, d.Language, t.DefaultLanguage, "en")
@@ -241,7 +244,10 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 // the transfer moves to scanning, with its finalization and expiry times
 // set. Checks, in order:
 //
-//  1. eligibility, checked again (T-25): ErrForbidden;
+//  1. eligibility, checked again (T-25): ErrForbidden; for a reply, the
+//     reply rule too (ErrReplyNotAllowed, ErrOriginalGone: a reply whose
+//     original transfer disappeared or expired during the upload is never
+//     finalized and is purged as abandoned);
 //  2. the transfer exists and belongs to the sender: ErrNotFound (for an
 //     API token sender, this check comes first, and the eligibility of
 //     step 1 applies to the sender address stored on the transfer);

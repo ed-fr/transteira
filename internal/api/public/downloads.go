@@ -14,6 +14,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/i18n"
@@ -31,6 +32,7 @@ type DownloadService interface {
 	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
 	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
 	ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error
+	ReplyAccess(ctx context.Context, t *tenant.Tenant, rawToken, verificationCookie string, clientIP netip.Addr) (download.ReplyTarget, error)
 }
 
 // DownloadFile is a deliverable file opened for download (download.File).
@@ -90,6 +92,7 @@ type requestKey struct{}
 var requestOperations = map[string]bool{
 	"GetDownload": true, "UnlockDownload": true, "DownloadFile": true, "DownloadArchive": true,
 	"StartRecipientVerification": true, "ConfirmRecipientVerification": true, "ReportAbuse": true,
+	"StartTransferReply": true,
 }
 
 // RequestMiddleware is a strict middleware putting the HTTP request in the
@@ -190,6 +193,12 @@ func publicTransfer(token string, v download.View, lang string) gen.PublicTransf
 	if v.Locked {
 		out.ConfidentialityLevel = nil
 		return out
+	}
+	allowed := v.ReplyAllowed
+	out.ReplyAllowed = &allowed
+	if v.Reply {
+		reply := true
+		out.Reply = &reply
 	}
 	del, total := v.DeleteAfterFirstDownload, v.TotalBytes
 	out.Message, out.DeleteAfterFirstDownload, out.TotalBytes = optional(v.Message), &del, &total
@@ -329,6 +338,39 @@ func (s *Server) StartRecipientVerification(ctx context.Context, req gen.StartRe
 	}, nil
 }
 
+// StartTransferReply opens a reply deposit session for the recipient of a
+// link (startTransferReply, 201 with the session cookie): the download
+// service checks the tenant option, the link, the recipient verification
+// and the original sender, then the deposit service opens the session. The
+// body only carries an optional language, validated like the one of a
+// recipient verification; the cross-site protections are those of
+// unlockDownload (see internal/httpserver).
+func (s *Server) StartTransferReply(ctx context.Context, req gen.StartTransferReplyRequestObject) (gen.StartTransferReplyResponseObject, error) {
+	t, err := s.downloadTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.deposit == nil {
+		return nil, errNoDepositService
+	}
+	if req.Body != nil && req.Body.Language != nil && !i18n.IsSupported(string(*req.Body.Language)) {
+		return nil, validationFailed(fieldLanguage, fieldInvalidFormat)
+	}
+	clientIP := middleware.ClientIP(ctx)
+	target, err := s.downloads.ReplyAccess(ctx, t, req.LinkToken, cookieValue(ctx, download.VerificationCookieName), clientIP)
+	if err != nil {
+		return nil, downloadError(err)
+	}
+	sess, err := s.deposit.OpenReply(ctx, t, clientIP, deposit.ReplyTarget{
+		TransferID: target.TransferID, LinkID: target.LinkID, Email: target.Email, Recipient: target.Recipient,
+		TransferExpiresAt: target.TransferExpiresAt,
+	})
+	if err != nil {
+		return nil, depositError(err)
+	}
+	return sessionCreated{body: sessionBody(sess.SessionInfo), cookies: s.sessionCookies(sess)}, nil
+}
+
 // ConfirmRecipientVerification checks the code of the recipient of a link
 // and sets the recipient verification cookie
 // (confirmRecipientVerification, 204).
@@ -380,6 +422,10 @@ func downloadError(err error) error {
 		limited   *download.RateLimitError
 	)
 	switch {
+	case errors.Is(err, download.ErrReplyNotAllowed):
+		return problem.New(problem.CodeReplyNotAllowed)
+	case errors.Is(err, download.ErrRecipientVerificationRequired):
+		return problem.New(problem.CodeRecipientVerificationRequired)
 	case errors.Is(err, download.ErrVerificationRequired):
 		return problem.New(problem.CodeRecipientVerificationRequired)
 	case errors.Is(err, download.ErrVerificationNotNeeded), errors.Is(err, download.ErrNoChallenge):

@@ -57,6 +57,24 @@
     "title": "Maximum number of downloads reached",
     "text": "This transfer has reached its maximum number of downloads and can no longer be downloaded. Ask the sender to send the files again."
   },
+  "reply": {
+    "button": "Reply",
+    "hint": "Send files back to {email}.",
+    "starting": "Opening the reply…",
+    "notice": "This transfer is a reply sent from outside {tenant}: the sender address was verified by a code, but the person is not part of the organisation. Be careful with files you did not expect.",
+    "notAllowed": "Replying to this transfer is not possible.",
+    "depositNotAllowed": "You cannot send files to this address.",
+    "gone": "The transfer you want to reply to is no longer available.",
+    "maintenance": "The service is under maintenance: replies are not possible for now. Please try again later.",
+    "rateLimited": "Too many requests. Please wait a moment and try again.",
+    "page": {
+      "title": "Reply to a transfer",
+      "back": "Back to the download page",
+      "to": "Your reply goes to {recipient}.",
+      "unavailable": "Your reply session has expired or is no longer valid. Start the reply again from the download page.",
+      "doneBack": "Back to the download page"
+    }
+  },
   "verify": {
     "title": "Confirm your address",
     "intro": "To protect this transfer, confirm that you are its recipient: we send a 6-digit code to your email address.",
@@ -79,7 +97,9 @@
     "expired": "Your access has expired: confirm your address again with a new code.",
     "rateLimited": "Too many requests. Please wait before asking for another code.",
     "mailUnavailable": "The code could not be sent. Please try again later.",
-    "conflict": "A code cannot be sent for this link right now. Reload the page and try again."
+    "conflict": "A code cannot be sent for this link right now. Reload the page and try again.",
+    "replyTitle": "Confirm your address to reply",
+    "replyIntro": "To reply, confirm that you are the recipient of this transfer: we send a 6-digit code to your email address."
   },
   "report": {
     "button": "Report an abuse",

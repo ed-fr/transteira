@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store"
 )
 
@@ -61,5 +62,31 @@ func TestViewOf(t *testing.T) {
 		if (f.Signature != "") != (s == store.ScanInfected) {
 			t.Errorf("%s: signature %q", s, f.Signature)
 		}
+	}
+}
+
+// TestViewOfReply marks a reply transfer with the creation time of its
+// original, read from the original identifier so that it survives the
+// purge of the original; a transfer that is not a reply has none.
+func TestViewOfReply(t *testing.T) {
+	created := time.Date(2026, 10, 20, 9, 30, 0, 0, time.UTC)
+	origID := id.NewGenerator(func() time.Time { return created }, nil)
+	orig, err := origID.New(id.Transfer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := ViewOf(store.TransferDetails{}); v.ReplyTo != nil || !v.replyCreatedAt().IsZero() {
+		t.Errorf("not a reply: %+v", v.ReplyTo)
+	}
+	reply := store.Transfer{ID: "trf_r", SenderKind: store.DepositorReply, ReplyToTransferID: orig, CreatedAt: created.AddDate(0, 0, 3)}
+	v := ViewOf(store.TransferDetails{Transfer: reply})
+	if v.ReplyTo == nil || !v.ReplyTo.OriginalCreatedAt.Equal(created) || !v.replyCreatedAt().Equal(created) {
+		t.Errorf("reply view %+v", v.ReplyTo)
+	}
+	// An identifier that does not parse (never stored) keeps the warning,
+	// dated with the reply itself.
+	reply.ReplyToTransferID = "trf_bad"
+	if v := ViewOf(store.TransferDetails{Transfer: reply}); v.ReplyTo == nil || !v.ReplyTo.OriginalCreatedAt.Equal(reply.CreatedAt) {
+		t.Errorf("fallback view %+v", v.ReplyTo)
 	}
 }

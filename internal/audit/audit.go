@@ -84,6 +84,10 @@ const (
 	// refused domains, never an address; audit only, never in the security
 	// log).
 	ActionTransferRecipientRefused Action = "transfer.recipient_refused"
+	// ActionTransferReplyCreated: the recipient of a transfer created a
+	// reply transfer, addressed to the original sender (spec 10), recorded
+	// besides transfer.created (details: replyTo, the original transfer).
+	ActionTransferReplyCreated Action = "transfer.reply_created"
 	// ActionTransferFinalized: a depositor finalized the upload of a
 	// transfer.
 	ActionTransferFinalized Action = "transfer.finalized"

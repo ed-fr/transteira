@@ -61,6 +61,14 @@
 
 <div class="tt-cluster">
   <Button onclick={() => flow.newTransfer()}>{t('deposit.newTransfer')}</Button>
+  {#if flow.reply}
+    <Button
+      variant="secondary"
+      onclick={() => onnavigate?.(`/d/${encodeURIComponent(flow.reply?.token ?? '')}`)}
+    >
+      {t('download.reply.page.doneBack')}
+    </Button>
+  {/if}
   <Button variant="secondary" loading={flow.busy} onclick={() => void flow.endSession()}>
     {t('deposit.session.end')}
   </Button>

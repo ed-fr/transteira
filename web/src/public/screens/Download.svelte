@@ -11,13 +11,16 @@
   import { onDestroy, onMount } from 'svelte';
   import { api } from '../../shared/api/api';
   import { Alert, Button, CopyButton, Spinner, TextField, announce } from '../../shared/components';
-  import { formatBytes, formatDate, t } from '../../shared/i18n/i18n.svelte';
+  import { languageValues } from '../../shared/api/schema';
+  import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import { Countdown } from './countdown.svelte';
   import ErrorPage from './ErrorPage.svelte';
   import NotFound from './NotFound.svelte';
   import ReportAbuse from './ReportAbuse.svelte';
   import VerificationStep from './VerificationStep.svelte';
   import {
+    canReply,
+    replyFailure,
     downloadView,
     isNotScanned,
     downloadLoadFailure,
@@ -36,7 +39,7 @@
     | { kind: 'max-downloads' }
     | { kind: 'error' };
 
-  let { params, nav }: ScreenProps = $props();
+  let { tenant, params, nav }: ScreenProps = $props();
   const token = $derived(params['token'] ?? '');
 
   let view = $state<State>({ kind: 'loading' });
@@ -47,6 +50,10 @@
   let retrying = $state(false);
   // The recipient had access and has to verify again (the one-hour cookie expired).
   let verifyExpired = $state(false);
+  // Reply to the transfer (version 1.1): verification step first when the server asks for it.
+  let replyVerifying = $state(false);
+  let replyBusy = $state(false);
+  let replyError = $state<string | undefined>();
   let passwordInput: HTMLInputElement | undefined = $state();
   const lock = new Countdown({
     ondone: () => {
@@ -104,6 +111,67 @@
     retrying = true;
     await load(token);
     retrying = false;
+  }
+
+  function language(): 'fr' | 'en' {
+    const current = i18n.locale.current;
+    return (languageValues as readonly string[]).includes(current) ? (current as 'fr' | 'en') : 'en';
+  }
+
+  /**
+   * Opens a reply session (the cookie is set by the server) and goes to the reply screen. A
+   * recipient who has not proved their address yet is sent through the verification step, once.
+   */
+  async function reply(afterVerification = false): Promise<void> {
+    if (replyBusy) {
+      return;
+    }
+    replyBusy = true;
+    replyError = undefined;
+    try {
+      await api.post('/downloads/{linkToken}/reply', {
+        path: { linkToken: token },
+        body: { language: language() },
+      });
+      nav.navigate(`/d/${encodeURIComponent(token)}/reply`);
+    } catch (err) {
+      const failure = replyFailure(err);
+      switch (failure.kind) {
+        case 'verification-required':
+          if (afterVerification) {
+            replyError = t('common.error.text');
+          } else {
+            replyVerifying = true;
+          }
+          break;
+        case 'not-found':
+        case 'gone':
+        case 'max-downloads':
+          view = { kind: failure.kind };
+          break;
+        case 'not-allowed':
+          replyError = t('download.reply.notAllowed');
+          break;
+        case 'deposit-not-allowed':
+          replyError = t('download.reply.depositNotAllowed');
+          break;
+        case 'maintenance':
+          replyError = t('download.reply.maintenance');
+          break;
+        case 'rate-limited':
+          replyError = t('download.reply.rateLimited');
+          break;
+        default:
+          replyError = t('common.error.text');
+      }
+    } finally {
+      replyBusy = false;
+    }
+  }
+
+  async function replyVerified(): Promise<void> {
+    replyVerifying = false;
+    await reply(true);
   }
 
   async function unlock(event: SubmitEvent): Promise<void> {
@@ -180,6 +248,19 @@
   />
 {:else if view.kind === 'error'}
   <ErrorPage onretry={() => void retry()} {retrying} />
+{:else if replyVerifying}
+  <VerificationStep
+    {token}
+    purpose="reply"
+    emailMasked={view.kind === 'ready' ? view.transfer.recipientEmailMasked : undefined}
+    onverified={replyVerified}
+    ongone={(kind) => (view = { kind })}
+    onmaintenance={() => {
+      replyVerifying = false;
+      replyError = t('download.reply.maintenance');
+    }}
+    oncancel={() => (replyVerifying = false)}
+  />
 {:else if needsVerification(view.transfer)}
   <VerificationStep
     {token}
@@ -248,6 +329,9 @@
       <dd>{dl.downloadsRemaining}</dd>
     {/if}
   </dl>
+  {#if transfer.reply}
+    <Alert severity="warning" live={false}>{t('download.reply.notice', { tenant: tenant.name })}</Alert>
+  {/if}
   {#if transfer.message}
     <h2 class="tt-text-lg">{t('download.message')}</h2>
     <p class="tt-break message">{transfer.message}</p>
@@ -323,10 +407,28 @@
     </div>
     <p class="tt-text-muted tt-text-sm">{t('download.integrity')}</p>
   {/if}
+  {#if canReply(transfer)}
+    <section class="tt-stack reply" aria-labelledby="tt-reply-title">
+      <h2 id="tt-reply-title" class="tt-text-lg">{t('download.reply.button')}</h2>
+      <p class="tt-mb-0 tt-break">{t('download.reply.hint', { email: transfer.senderEmail })}</p>
+      {#if replyError}
+        <Alert severity="error">{replyError}</Alert>
+      {/if}
+      <div class="tt-cluster">
+        <Button variant="secondary" loading={replyBusy} onclick={() => void reply()}>
+          {t('download.reply.button')}
+        </Button>
+      </div>
+    </section>
+  {/if}
   <ReportAbuse {token} />
 {/if}
 
 <style>
+  .reply {
+    margin: var(--tt-space-4) 0;
+  }
+
   .message {
     white-space: pre-line;
   }

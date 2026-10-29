@@ -136,6 +136,15 @@ If the option is off, a deposit from outside is refused with the same message as
 
 > **Note** To be able to send from outside one day, use the service at least once from the organisation's network with the same address.
 
+<!-- topic: receive-reply -->
+## Receiving a reply
+
+If your organization has turned it on, your recipients can send files back to you from the download page with the **Reply** button, without an invitation. This only concerns transfers you sent yourself (web page or API token), never those of an external guest, and only through each recipient's personal link.
+
+A reply arrives like an ordinary transfer: you receive the usual notification mail and the download page opens the same way. It carries a **warning**, however: the reply comes from outside the organization and its author's address was verified by a code, but that does not guarantee the files are safe. Be careful with unexpected files, open them only if you were expecting this reply, and if in doubt contact the author by another means. The same warning is shown at the top of the download page. The files are scanned by the antivirus like any deposit; those that cannot be scanned are flagged.
+
+Only you receive the reply: the original sender is its only recipient. It is refused to its author if your address is blocked or no longer belongs to the organization, or if your original transfer has expired or been deleted.
+
 <!-- topic: my-transfers -->
 ## My transfers
 

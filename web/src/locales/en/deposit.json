@@ -56,6 +56,7 @@
       "label": "Recipients",
       "hint": "One or more email addresses, separated by commas or line breaks.",
       "external": "The files will be sent to {invitedBy}, who invited you.",
+      "reply": "Your reply goes to {recipient}.",
       "addressError": "{address}: {message}",
       "tooMany": "Enter at most {max} recipients.",
       "domainRefused": "This service does not allow sending to the domain of this address."

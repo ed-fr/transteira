@@ -54,6 +54,16 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     screen: 'public /d/:token (report an abuse dialog)',
     profile: 'recipient',
   },
+  {
+    name: 'download-reply',
+    screen: 'public /d/:token (reply to the transfer button)',
+    profile: 'recipient',
+  },
+  {
+    name: 'reply-form',
+    screen: 'public /d/:token/reply (reply form: the files go to the sender)',
+    profile: 'recipient',
+  },
   { name: 'download-password', screen: 'public /d/:token (password required)', profile: 'recipient' },
   { name: 'my-transfers-request', screen: 'public /me (request a link)', profile: 'depositor' },
   { name: 'my-transfers-list', screen: 'public /me (list of transfers)', profile: 'depositor' },

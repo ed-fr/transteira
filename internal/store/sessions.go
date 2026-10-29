@@ -13,8 +13,8 @@ import (
 // DepositorKind).
 type DepositorKind string
 
-// Depositor kinds. Later versions add others (reply, drop_link), with a
-// migration of the kind constraint.
+// Depositor kinds. Later versions add others (drop_link), with a migration
+// of the kind constraint.
 const (
 	// DepositorInternal is an internal user: internal IP and domain.
 	DepositorInternal DepositorKind = "internal"
@@ -26,6 +26,12 @@ const (
 	// deposit. It has the invariants of an internal depositor (no
 	// invitation; an API token is allowed by the schema).
 	DepositorInternalRemote DepositorKind = "internal_remote"
+	// DepositorReply is the recipient of a transfer sending files back to
+	// its sender through a reply link (spec 10): the address of the
+	// recipient link, verified by code. It follows the rules of an
+	// external depositor (quotas, antivirus, abuse detection), has no
+	// invitation and no API token, and is bound to its source transfer.
+	DepositorReply DepositorKind = "reply"
 )
 
 // IsInternal reports whether k is an internal kind: [DepositorInternal]
@@ -34,20 +40,38 @@ func (k DepositorKind) IsInternal() bool {
 	return k == DepositorInternal || k == DepositorInternalRemote
 }
 
+// IsExternal reports whether k is a kind subject to the external rules
+// and quotas (spec 15.2): [DepositorExternal] or [DepositorReply].
+func (k DepositorKind) IsExternal() bool {
+	return k == DepositorExternal || k == DepositorReply
+}
+
 // validDepositorKind reports whether k is a kind the store accepts for a
 // deposit session or a transfer.
 func validDepositorKind(k DepositorKind) bool {
-	return k.IsInternal() || k == DepositorExternal
+	return k.IsInternal() || k.IsExternal()
 }
 
 // sessionColumns is the column list read by the deposit session queries.
-const sessionColumns = `id, token_hash, email, kind, invitation_id, created_at, expires_at`
+const sessionColumns = `id, token_hash, email, kind, invitation_id, created_at, expires_at, reply_to_transfer_id, ` +
+	`recipient_link_id`
 
 // Statements of the DepositSessions repository.
 var (
 	qSessionInsert = tenantQuery(
-		`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at,
+		reply_to_transfer_id, recipient_link_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	// qSessionReplyLink counts the recipient link of a reply session when
+	// it belongs to the source transfer, in the same tenant: the composite
+	// foreign keys prove the tenant of each, not that they match.
+	qSessionReplyLink = tenantQuery(
+		`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND id = ? AND transfer_id = ?`)
+	// qSessionCountLiveReply counts the reply sessions of a recipient link
+	// that are neither ended nor expired.
+	qSessionCountLiveReply = tenantQuery(
+		`SELECT count(*) FROM deposit_sessions
+		WHERE tenant_id = ? AND recipient_link_id = ? AND ended_at IS NULL AND expires_at > ?`)
 	// qSessionGet only returns a session that is neither ended nor expired.
 	qSessionGet = tenantQuery(
 		`SELECT ` + sessionColumns + ` FROM deposit_sessions
@@ -72,9 +96,18 @@ type DepositSession struct {
 	// Kind is the depositor kind.
 	Kind DepositorKind
 	// InvitationID is the invitation of an external depositor ("inv_" +
-	// ULID, same tenant), "" for an internal (or internal_remote) one. Deleting the invitation
+	// ULID, same tenant), "" for any other kind. Deleting the invitation
 	// deletes the session; revoking it does not end the session.
 	InvitationID string
+	// ReplyToTransferID is the source transfer of a reply session ("trf_" +
+	// ULID, same tenant), "" for any other kind. Deleting the source
+	// transfer row deletes the session.
+	ReplyToTransferID string
+	// RecipientLinkID is the recipient link of the source transfer that
+	// verified the replier ("rcl_" + ULID, same tenant and transfer), ""
+	// unless the session is a reply. Deleting the link deletes the
+	// session.
+	RecipientLinkID string
 	// CreatedAt is the creation time; the store's clock is used when it is
 	// zero.
 	CreatedAt time.Time
@@ -110,10 +143,12 @@ func (r *DepositSessions) Create(ctx context.Context, tid tenant.ID, s DepositSe
 // CreateTx stores s for the tenant tx is bound to, inside tx (with the
 // challenge consumption and the address verification). It returns
 // ErrInvalid for a malformed field (an external session needs an
-// invitation, an internal one must have none), ErrNotFound when the tenant
-// or the invitation does not exist (or the invitation belongs to another
-// tenant) and ErrConflict when the ID or the token hash is already used.
-// After an error, the caller must abort the transaction.
+// invitation, every other kind none; a reply session needs its source
+// transfer and recipient link, every other kind none), ErrNotFound when the
+// tenant, the invitation, the source transfer or the recipient link does
+// not exist (or belongs to another tenant), or when the link is not one of
+// the source transfer, and ErrConflict when the ID or the token hash is
+// already used. After an error, the caller must abort the transaction.
 func (r *DepositSessions) CreateTx(ctx context.Context, tx *ScopedTx, s DepositSession) error {
 	if err := r.create(ctx, tx, s); err != nil {
 		return wrap("create deposit session", err)
@@ -139,14 +174,42 @@ func (r *DepositSessions) create(ctx context.Context, tx *ScopedTx, s DepositSes
 		return invalid("an external session needs an invitation, an internal one none")
 	case s.InvitationID != "" && !id.Valid(id.Invitation, s.InvitationID):
 		return invalid("malformed invitation id")
+	case (s.Kind == DepositorReply) != (s.ReplyToTransferID != "") ||
+		(s.Kind == DepositorReply) != (s.RecipientLinkID != ""):
+		return invalid("a reply session needs its source transfer and recipient link, another kind none")
+	case s.ReplyToTransferID != "" && !id.Valid(id.Transfer, s.ReplyToTransferID):
+		return invalid("malformed source transfer id")
+	case s.RecipientLinkID != "" && !id.Valid(id.RecipientLink, s.RecipientLinkID):
+		return invalid("malformed recipient link id")
 	case !s.ExpiresAt.After(created):
 		return invalid("session must expire after its creation")
 	case !s.EndedAt.IsZero():
 		return invalid("a new session cannot be ended")
 	}
+	if s.Kind == DepositorReply {
+		var n int
+		if err := tx.QueryRow(ctx, qSessionReplyLink, s.RecipientLinkID, s.ReplyToTransferID).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+	}
 	_, err = tx.Exec(ctx, qSessionInsert, s.ID, s.TokenHash, email, string(s.Kind), nullText(s.InvitationID),
-		toMillis(created), toMillis(s.ExpiresAt))
+		toMillis(created), toMillis(s.ExpiresAt), nullText(s.ReplyToTransferID), nullText(s.RecipientLinkID))
 	return err
+}
+
+// CountLiveReplyTx returns the number of reply sessions opened through the
+// recipient link linkID in the tenant tx is bound to that are neither ended
+// nor expired at now: the bound on the reply sessions of a link (threat
+// model P33). Like [Challenges.CountSinceTx], it first takes the tenant
+// lock, so that a count followed by [DepositSessions.CreateTx] in the same
+// transaction is atomic against concurrent openings in the tenant. A link
+// of another tenant counts nothing. After an error, the caller must abort
+// the transaction.
+func (r *DepositSessions) CountLiveReplyTx(ctx context.Context, tx *ScopedTx, linkID string, now time.Time) (int, error) {
+	return countTx(ctx, tx, qSessionCountLiveReply, linkID, now, "count live reply sessions")
 }
 
 // GetByTokenHash returns the session of tenant tid whose cookie token
@@ -166,12 +229,13 @@ func (r *DepositSessions) GetByTokenHash(ctx context.Context, tid tenant.ID, has
 	err = sc.ReadTx(ctx, func(tx *ScopedTx) error {
 		var (
 			kind             string
-			inv              sql.NullString
+			inv, reply, link sql.NullString
 			created, expires int64
 		)
 		err := tx.QueryRow(ctx, qSessionGet, hash, toMillis(now)).Scan(&s.ID, &s.TokenHash, &s.Email, &kind,
-			&inv, &created, &expires)
+			&inv, &created, &expires, &reply, &link)
 		s.Kind, s.InvitationID = DepositorKind(kind), inv.String
+		s.ReplyToTransferID, s.RecipientLinkID = reply.String, link.String
 		s.CreatedAt, s.ExpiresAt = fromMillis(created), fromMillis(expires)
 		return err
 	})

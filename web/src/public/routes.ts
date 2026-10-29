@@ -9,12 +9,19 @@ import Invite from './screens/Invite.svelte';
 import Legal from './screens/Legal.svelte';
 import MyTransfers from './screens/MyTransfers.svelte';
 import NotFound from './screens/NotFound.svelte';
+import ReplyScreen from './screens/ReplyScreen.svelte';
 import type { ScreenComponent } from './screens/types';
 
 /** Routes of the public application. */
 export const routes: readonly Route<ScreenComponent>[] = [
   { pattern: '/', component: Home, titleKey: 'common.home.title', helpTopic: 'deposit' },
   { pattern: '/d/:token', component: Download, titleKey: 'download.title', helpTopic: 'download' },
+  {
+    pattern: '/d/:token/reply',
+    component: ReplyScreen,
+    titleKey: 'download.reply.page.title',
+    helpTopic: 'download',
+  },
   {
     pattern: '/i/:token',
     component: InvitationLanding,

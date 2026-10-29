@@ -218,6 +218,13 @@
       "label": "Allow deposits from outside for already verified internal users",
       "hint": "Off by default. Only for addresses of an internal domain already verified once from the internal network. From outside, a verification code is asked at each deposit, and these deposits are flagged in the audit log. Invitations remain reserved to users connected from the internal network.",
       "saved": "Deposit from outside option saved."
+    },
+    "reply": {
+      "title": "Reply to a transfer",
+      "intro": "Let the recipients of a transfer send files back to its sender from the download page.",
+      "label": "Allow recipients to reply to a transfer",
+      "hint": "Off by default. A reply is only possible for a transfer sent by an internal user to a recipient with a personal link, and the recipient always proves their address by a verification code first. Replies are subject to the quotas and the abuse detection of external users, and to the antivirus. Turning the option off stops new replies at once.",
+      "saved": "Reply option saved."
     }
   },
   "smtp": {
@@ -398,6 +405,7 @@
         "expiry_datetime": "Date and time when the transfer expires.",
         "password_notice": "Notice that the password comes through another channel; empty without password.",
         "confidentiality_notice": "Confidentiality level of the transfer; empty when the transfer has no level.",
+        "reply_notice": "Warning that the transfer is a reply from an external sender whose address was verified by a code; empty when it is not a reply.",
         "qr_code": "QR code of the download link (HTML only; empty in the text body).",
         "files": "List of the files.",
         "file_count": "Number of files.",

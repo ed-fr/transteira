@@ -10,7 +10,9 @@
   "origin": {
     "internal": "Utilisateur interne",
     "external": "Invité externe",
-    "api": "Jeton d’API"
+    "api": "Jeton d’API",
+    "internal_remote": "Interne depuis l’extérieur",
+    "reply": "Réponse"
   },
   "scan": {
     "pending": "En attente d’analyse",

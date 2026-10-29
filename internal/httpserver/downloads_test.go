@@ -252,3 +252,41 @@ func TestDownloadStalledReader(t *testing.T) {
 		t.Error("a cut download was credited as delivered")
 	}
 }
+
+// ReplyAccess answers the replier of the link dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf.
+func (fakeDownloads) ReplyAccess(_ context.Context, _ *tenant.Tenant, token, _ string, _ netip.Addr) (download.ReplyTarget, error) {
+	if token != "dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf" {
+		return download.ReplyTarget{}, download.ErrReplyNotAllowed
+	}
+	return download.ReplyTarget{
+		TransferID: "trf_01JABCD8E3W5Q2Z7K9M4N6P0RS", LinkID: "rcl_01JABCD8E3W5Q2Z7K9M4N6P0RS",
+		Email: "carol@customer.example.net", Recipient: "alice@entity-a.example.com",
+		TransferExpiresAt: time.Now().Add(time.Hour),
+	}, nil
+}
+
+// TestReplyRoute checks, through the whole chain, that the reply is
+// protected like the unlock (same origin, JSON only), answers 201 with the
+// session cookie and is refused during maintenance.
+func TestReplyRoute(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, envConfig{api: public.NewServer(public.WithDownloads(fakeDownloads{}), public.WithDeposit(&fakeDeposit{}))})
+	const reply = "/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/reply"
+	rec := e.do(t, http.MethodPost, reply, hostA, strings.NewReader(`{}`), "Content-Type", "application/json", "Origin", "https://evil.example.net")
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+	rec = e.do(t, http.MethodPost, reply, hostA, strings.NewReader(`{}`), "Content-Type", "application/json", "Sec-Fetch-Site", "cross-site")
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+	rec = e.do(t, http.MethodPost, reply, hostA, strings.NewReader(`{}`), "Content-Type", "text/plain")
+	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
+	same := []string{"Content-Type", "application/json", "Origin", "https://" + hostA, "Sec-Fetch-Site", "same-origin"}
+	rec = e.do(t, http.MethodPost, reply, hostA, strings.NewReader(`{}`), same...)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Header().Get("Set-Cookie"), "ds_reply") ||
+		!strings.Contains(rec.Body.String(), `"kind":"reply"`) {
+		t.Errorf("reply: %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+	rec = e.do(t, http.MethodPost, "/api/v1/downloads/dl_unknown/reply", hostA, strings.NewReader(`{}`), same...)
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeReplyNotAllowed)
+	e.maintenance.Store(true)
+	rec = e.do(t, http.MethodPost, reply, hostA, strings.NewReader(`{}`), same...)
+	decodeProblem(t, rec, http.StatusServiceUnavailable, problem.CodeMaintenance)
+}

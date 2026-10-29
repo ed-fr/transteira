@@ -572,3 +572,123 @@ func TestConfirmationWithoutLink(t *testing.T) {
 		}
 	}
 }
+
+// TestTemplatesReplyNotice checks the warning of a reply from an external
+// sender (T-223): shown only for a reply, localized, and escaped.
+func TestTemplatesReplyNotice(t *testing.T) {
+	data := goldenData()[TemplateTransferNotification].(TransferNotificationData)
+	data.TenantName, data.SenderEmail = "Entity <A>", "eve+<x>@example.org"
+	for lang, tc := range map[string]struct{ text, html string }{
+		"en": {
+			"This is a reply to the transfer you sent on March 5, 2027. It comes from outside Entity <A>: eve+<x>@example.org proved they own this address with a code",
+			"outside Entity &lt;A&gt;: eve+&lt;x&gt;@example.org proved",
+		},
+		"fr": {
+			"réponse au transfert que vous avez envoyé le 5 mars 2027. Il provient de l'extérieur de Entity <A> : eve+<x>@example.org a prouvé posséder",
+			"l'extérieur de Entity &lt;A&gt; : eve+&lt;x&gt;@example.org a prouvé",
+		},
+	} {
+		m, err := Render(TemplateTransferNotification, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(m.Text, tc.text[:20]) || strings.Contains(m.HTML, "a prouvé") || strings.Contains(m.HTML, "proved they") {
+			t.Errorf("%s: reply notice shown for a plain transfer: %q", lang, m.Text)
+		}
+		data.ReplyToCreatedAt = time.Date(2027, time.March, 5, 10, 0, 0, 0, time.UTC)
+		m, err = Render(TemplateTransferNotification, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(m.Text, tc.text) {
+			t.Errorf("%s: text notice missing: %q", lang, m.Text)
+		}
+		if !strings.Contains(m.HTML, tc.html) || strings.Contains(m.HTML, "Entity <A>") {
+			t.Errorf("%s: HTML notice missing or unescaped: %q", lang, m.HTML)
+		}
+		if strings.Contains(m.Text, "\n\n\n") {
+			t.Errorf("%s: blank lines left by empty blocks: %q", lang, m.Text)
+		}
+		data.ReplyToCreatedAt = time.Time{}
+	}
+}
+
+// TestTemplatesReplyNoticeForced checks that a customized template without
+// the reply_notice placeholder still warns of a reply (T-223): the notice
+// is prepended to each body part that leaves it out, escaped, and never
+// added twice to a part that has the placeholder.
+func TestTemplatesReplyNoticeForced(t *testing.T) {
+	data := goldenData()[TemplateTransferNotification].(TransferNotificationData)
+	data.TenantName, data.SenderEmail = "Entity <A>", "eve+<x>@example.org"
+	data.ReplyToCreatedAt = time.Date(2027, time.March, 5, 10, 0, 0, 0, time.UTC)
+	const (
+		html = "<p>Hi</p>\n{{password_notice}}\n<p><a href=\"{{download_link}}\">{{download_link}}</a></p>\n{{files}}"
+		text = "Hi\n\n{{password_notice}}\n\n{{download_link}}\n\n{{files}}"
+	)
+	for lang, tc := range map[string]struct{ text, html string }{
+		"en": {
+			"This is a reply to the transfer you sent on March 5, 2027. It comes from outside Entity <A>: eve+<x>@example.org proved",
+			"<p><strong>This is a reply to the transfer you sent on March 5, 2027. It comes from outside Entity &lt;A&gt;: eve+&lt;x&gt;@example.org proved",
+		},
+		"fr": {
+			"Ceci est une réponse au transfert que vous avez envoyé le 5 mars 2027. Il provient de l'extérieur de Entity <A> : eve+<x>@example.org a prouvé",
+			"<p><strong>Ceci est une réponse au transfert que vous avez envoyé le 5 mars 2027. Il provient de l'extérieur de Entity &lt;A&gt; : eve+&lt;x&gt;@example.org a prouvé",
+		},
+	} {
+		// Neither part has the placeholder: both get the notice first.
+		m, err := RenderOverride(TemplateTransferNotification, lang, data, &TemplateSource{Subject: "S", HTML: html, Text: text})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(m.Text, tc.text) || !strings.Contains(m.Text, "\n\nHi\n\n") {
+			t.Errorf("%s: text notice not first: %q", lang, m.Text)
+		}
+		_, body, ok := strings.Cut(m.HTML, `<div role="main"`)
+		if !ok {
+			t.Fatalf("%s: no main block in %q", lang, m.HTML)
+		}
+		_, body, _ = strings.Cut(body, ">\n")
+		if !strings.HasPrefix(body, tc.html) || strings.Contains(m.HTML, "Entity <A>") {
+			t.Errorf("%s: HTML notice not first or unescaped: %q", lang, body)
+		}
+		// One part has the placeholder: the notice stays there, once; the
+		// other part still gets it first.
+		m, err = RenderOverride(TemplateTransferNotification, lang, data, &TemplateSource{
+			Subject: "S", HTML: html + "\n<p>End</p>\n{{reply_notice}}", Text: text,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(m.HTML, tc.html); n != 1 || strings.HasPrefix(body, "<p>Hi") ||
+			!strings.Contains(m.HTML, "<p>End</p>\n"+tc.html) {
+			t.Errorf("%s: HTML notice count %d or misplaced: %q", lang, n, m.HTML)
+		}
+		if n := strings.Count(m.Text, tc.text); n != 1 || !strings.HasPrefix(m.Text, tc.text) {
+			t.Errorf("%s: text notice count %d: %q", lang, n, m.Text)
+		}
+		m, err = RenderOverride(TemplateTransferNotification, lang, data, &TemplateSource{
+			Subject: "S", HTML: html, Text: "{{reply_notice}}\n\n" + text + "\n\n{{reply_notice}}",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(m.Text, tc.text); n != 2 {
+			t.Errorf("%s: text notice count %d, want the 2 placeholders only: %q", lang, n, m.Text)
+		}
+		// The default templates have the placeholder: one notice per part.
+		m, err = Render(TemplateTransferNotification, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Count(m.Text, tc.text) != 1 || strings.Count(m.HTML, tc.html) != 1 {
+			t.Errorf("%s: default template notice duplicated:\n%s\n%s", lang, m.Text, m.HTML)
+		}
+		// Not a reply: nothing is prepended.
+		plain := data
+		plain.ReplyToCreatedAt = time.Time{}
+		m, err = RenderOverride(TemplateTransferNotification, lang, plain, &TemplateSource{Subject: "S", HTML: html, Text: text})
+		if err != nil || !strings.HasPrefix(m.Text, "Hi\n\n") || !strings.Contains(m.HTML, ">\n<p>Hi</p>") {
+			t.Errorf("%s: plain transfer: %v\n%q\n%q", lang, err, m.Text, m.HTML)
+		}
+	}
+}

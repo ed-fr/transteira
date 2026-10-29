@@ -21,6 +21,8 @@ type linkFixture struct {
 	fileID   string
 	scanning Transfer
 	token    LinkToken
+	// t is the subtest the fixture belongs to.
+	t *testing.T
 }
 
 // newLinkFixture builds a linkFixture.
@@ -28,7 +30,7 @@ func newLinkFixture(t *testing.T) *linkFixture {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
-	f := &linkFixture{transferFixture: newTransferFixture(t)}
+	f := &linkFixture{transferFixture: newTransferFixture(t), t: t}
 	scanning := func(deleteOpt bool) (Transfer, string) {
 		trf := Transfer{
 			ID: id.New(id.Transfer), SenderEmail: fixtureEmail, SenderKind: DepositorInternal, ExpiryDays: 7,
@@ -159,7 +161,7 @@ func TestRecipientLinkDriverFaults(t *testing.T) {
 		}
 	}
 	const (
-		getTransfer = "extension_count, extended_at FROM transfers WHERE tenant_id = ? AND id = ?"
+		getTransfer = "extended_at, reply_to_transfer_id FROM transfers WHERE tenant_id = ? AND id = ?"
 		joinLinks   = "FROM recipient_links l JOIN"
 	)
 	steps := []struct {
@@ -234,6 +236,18 @@ func TestRecipientLinkDriverFaults(t *testing.T) {
 		{"latest link challenge", faultQuery, "ORDER BY created_at DESC, id DESC", func(f *linkFixture) func() error {
 			return func() error { _, err := f.db.Challenges().LatestByLink(ctx, f.tid, f.link.ID); return err }
 		}},
+		{"reply session link probe", faultQuery, "recipient_links WHERE tenant_id = ? AND id = ? AND transfer_id", func(f *linkFixture) func() error {
+			s := DepositSession{
+				ID: id.New(id.DepositSession), TokenHash: hashOf("reply"), Email: "bob@b.example.org", Kind: DepositorReply,
+				ReplyToTransferID: f.avail.ID, RecipientLinkID: f.link.ID, ExpiresAt: time.Now().Add(time.Hour),
+			}
+			return func() error { return f.db.DepositSessions().Create(ctx, f.tid, s) }
+		}},
+		{"reply transfer source probe", faultQuery, "SELECT count(*) FROM transfers WHERE tenant_id = ? AND id", func(f *linkFixture) func() error {
+			trf := Transfer{ID: id.New(id.Transfer), SenderEmail: "bob@b.example.org", SenderKind: DepositorReply, ExpiryDays: 1, ReplyToTransferID: f.avail.ID}
+			fl := f.newFile(ctx, f.t)
+			return func() error { return f.create(ctx, trf, fl) }
+		}},
 		{"count link challenges", faultQuery, "recipient_link_id = ? AND created_at", func(f *linkFixture) func() error {
 			return inTx(f, func(tx *ScopedTx) error {
 				_, err := f.db.Challenges().CountByLinkSinceTx(ctx, tx, f.link.ID, now)
@@ -277,7 +291,7 @@ func TestFirstDownloadReReadFault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := newTransferFixture(t)
-	f.plan.add(faultQuery, "extension_count, extended_at FROM transfers WHERE tenant_id = ? AND id = ?", 1)
+	f.plan.add(faultQuery, "extended_at, reply_to_transfer_id FROM transfers WHERE tenant_id = ? AND id = ?", 1)
 	err := f.tx(ctx, func(tx *ScopedTx) error {
 		_, err := f.db.Transfers().MarkFirstDownloadTx(ctx, tx, f.trf.ID, time.Now(), time.Time{})
 		return err

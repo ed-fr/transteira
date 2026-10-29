@@ -58,6 +58,10 @@ type fakeDeposit struct {
 	gotSessionID string
 	gotRecog     string
 	recognition  string // returned in Session.Recognition by Confirm
+
+	// replySession is the answer of OpenReply, gotTarget what it received.
+	replySession deposit.Session
+	gotTarget    deposit.ReplyTarget
 }
 
 func (f *fakeDeposit) Start(_ context.Context, _ *tenant.Tenant, ip netip.Addr, lang, email, inv, recog string) (deposit.Result, error) {
@@ -545,6 +549,7 @@ func TestDepositError(t *testing.T) {
 		},
 		{name: "unauthenticated", err: deposit.ErrUnauthenticated, code: problem.CodeUnauthenticated},
 		{name: "forbidden", err: deposit.ErrForbidden, code: problem.CodeDepositNotAllowed},
+		{name: "reply gone", err: deposit.ErrReplyGone, code: problem.CodeTransferGone},
 		{name: "not found", err: deposit.ErrNotFound, code: problem.CodeNotFound},
 		{name: "invitation gone", err: deposit.ErrInvitationGone, code: problem.CodeInvitationGone},
 		{name: "challenge gone", err: deposit.ErrChallengeGone, code: problem.CodeVerificationExhausted},

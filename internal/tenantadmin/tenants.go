@@ -39,8 +39,11 @@ type TenantView struct {
 	// AllowRemoteInternalDeposit tells whether verified internal users may
 	// deposit from outside the internal networks (since 1.1).
 	AllowRemoteInternalDeposit bool
-	CreatedAt                  time.Time
-	UpdatedAt                  time.Time
+	// AllowTransferReply tells whether recipients may send files back to
+	// the sender of a transfer (since 1.1).
+	AllowTransferReply bool
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // TenantPage is a page of tenants.
@@ -83,6 +86,9 @@ type TenantUpdate struct {
 	// internal users from outside the internal networks; a delegated admin
 	// may change it.
 	AllowRemoteInternalDeposit *bool
+	// AllowTransferReply turns on or off the replies of recipients to the
+	// sender of a transfer; a delegated admin may change it.
+	AllowTransferReply *bool
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -96,7 +102,8 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		MaxTransferBytes: t.MaxTransferBytes, MaxTransferCeiling: t.MaxTransferCeiling,
 		StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: used, Status: t.Status,
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
-		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -304,6 +311,9 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	if in.AllowRemoteInternalDeposit != nil {
 		next.AllowRemoteInternalDeposit = *in.AllowRemoteInternalDeposit
 	}
+	if in.AllowTransferReply != nil {
+		next.AllowTransferReply = *in.AllowTransferReply
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -349,6 +359,7 @@ func changedFields(a, b *tenant.Tenant) []string {
 	add(a.MaxTransferCeiling != b.MaxTransferCeiling, "maxTransferCeiling")
 	add(a.WebhookIncludeAddresses != b.WebhookIncludeAddresses, "webhookIncludeAddresses")
 	add(a.AllowRemoteInternalDeposit != b.AllowRemoteInternalDeposit, "allowRemoteInternalDeposit")
+	add(a.AllowTransferReply != b.AllowTransferReply, "allowTransferReply")
 	return out
 }
 

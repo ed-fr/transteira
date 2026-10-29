@@ -50,6 +50,8 @@ var maintenanceBlocked = map[string]struct{}{
 	http.MethodPost + " " + APIBaseURL + "/transfers/{transferId}/finalize": {},
 	tusUploadPattern: {},
 	http.MethodPost + " " + APIBaseURL + "/invitations": {},
+	// A reply to a transfer (since 1.1) starts a deposit.
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/reply": {},
 }
 
 // maintenanceMiddleware refuses the deposit operations with 503 and a

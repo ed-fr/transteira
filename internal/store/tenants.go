@@ -23,13 +23,14 @@ const (
 
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
-	`status, primary_color, accent_color, has_logo, has_background, webhook_include_addresses, allow_remote_internal_deposit, created_at, updated_at`
+	`status, primary_color, accent_color, has_logo, has_background, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
+	`created_at, updated_at`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
 var (
 	qTenantInsert = systemQuery(
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -46,7 +47,7 @@ var (
 		`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?,
 			max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?,
 			has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?,
-			updated_at = ?
+			allow_transfer_reply = ?, updated_at = ?
 			WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	qTenantSetStatus = systemQuery(
@@ -134,7 +135,7 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground,
-		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &created, &updated); err != nil {
+		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &created, &updated); err != nil {
 		return nil, err
 	}
 	t.ID = tenant.ID(tid)
@@ -174,6 +175,7 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
+			c.AllowTransferReply,
 			toMillis(now), toMillis(now))
 		if err != nil {
 			return err
@@ -277,7 +279,8 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
 			t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
-			t.HasLogo, t.HasBackground, t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, now, string(t.ID))
+			t.HasLogo, t.HasBackground, t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
+			string(t.ID))
 		if err != nil {
 			return err
 		}

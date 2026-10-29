@@ -107,12 +107,13 @@ type senderTransferJSON struct {
 	FinalizedAt              *time.Time       `json:"finalizedAt"`
 	DownloadURL              string           `json:"downloadUrl"`
 	Files                    []senderFileJSON `json:"files"`
+	ReplyToTransferID        string           `json:"replyToTransferId"`
 }
 
 // Members allowed by the SenderTransfer and SenderFile schemas, and the
 // required ones.
 var (
-	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking"}
+	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking", "replyToTransferId"}
 	transferRequiredMembers = []string{"id", "status", "senderEmail", "recipients", "expiryDays", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "files"}
 	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset"}
 	fileRequiredMembers     = []string{"id", "name", "size", "scanStatus"}

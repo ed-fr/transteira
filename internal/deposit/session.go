@@ -27,6 +27,10 @@ const (
 	// tenant ranges (V1.1, spec 6.4): a code on every deposit, no
 	// recognition cookie, no invitation.
 	KindInternalRemote = store.DepositorInternalRemote
+	// KindReply is the recipient of a transfer sending files back to its
+	// sender (V1.1, spec 10, [Service.OpenReply]): subject to the external
+	// rules, no recognition cookie, no invitation.
+	KindReply = store.DepositorReply
 )
 
 // Limits are the deposit limits shown to a depositor (OpenAPI
@@ -49,6 +53,17 @@ type InvitationInfo struct {
 	ExpiresAt time.Time
 }
 
+// ReplyInfo describes the source transfer of a reply session (OpenAPI
+// DepositSession.reply).
+type ReplyInfo struct {
+	// Recipient is the sender of the source transfer, normalized: the
+	// single recipient of the reply.
+	Recipient string
+	// TransferExpiresAt is the expiry of the source transfer; the session
+	// never outlives it.
+	TransferExpiresAt time.Time
+}
+
 // SessionInfo describes an active deposit session (OpenAPI DepositSession).
 type SessionInfo struct {
 	// ID is the session record ("ds_" + ULID), for the server only.
@@ -66,6 +81,15 @@ type SessionInfo struct {
 	CanInvite bool
 	// Invitation is set for external depositors only.
 	Invitation *InvitationInfo
+	// Reply is set for reply depositors (KindReply) only.
+	Reply *ReplyInfo
+	// ReplyToTransferID is the source transfer of a reply session ("trf_"
+	// + ULID), "" for any other kind. For the server only.
+	ReplyToTransferID string
+	// RecipientLinkID is the recipient link of the source transfer that
+	// opened a reply session ("rcl_" + ULID), "" for any other kind. For
+	// the server only.
+	RecipientLinkID string
 	// CSRFToken is the token the client must send in X-CSRF-Token with
 	// every unsafe request.
 	CSRFToken string
@@ -80,7 +104,7 @@ type Session struct {
 	// (RecognitionCookie) for an internal depositor: the HTTP layer sets it
 	// with Max-Age RecognitionMaxAge. It is "" for an external depositor and
 	// for an internal one depositing from outside, whose cookie is left
-	// unchanged.
+	// unchanged, and for a reply depositor.
 	Recognition string
 	SessionInfo
 }
@@ -99,11 +123,32 @@ func (s *Service) csrfToken(rawToken string) (string, error) {
 	return CSRFPrefix + base64.RawURLEncoding.EncodeToString(mac), nil
 }
 
-// openSession creates a session of kind for email in one transaction with
-// prepare (the challenge consumption and address verification, or the use
-// of an already verified address) and, for an external depositor, the use
-// of the invitation inv (kind is then KindExternal).
-func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email string, kind Kind, inv *store.Invitation, prepare func(txRepo, time.Time) error) (Session, error) {
+// sessionSpec describes the session [Service.openSession] creates.
+type sessionSpec struct {
+	// email is the normalized address of the depositor.
+	email string
+	// kind is the depositor kind.
+	kind Kind
+	// inv is the invitation of an external depositor (kind KindExternal),
+	// nil otherwise.
+	inv *store.Invitation
+	// replyTo and linkID are the source transfer and the recipient link of
+	// a reply depositor (kind KindReply), "" otherwise.
+	replyTo, linkID string
+	// notAfter, when not zero, caps the expiry of the session (the expiry
+	// of the source transfer of a reply): a value not after the opening
+	// time fails with ErrReplyGone.
+	notAfter time.Time
+}
+
+// openSession creates the session described by spec in one transaction
+// with prepare (the challenge consumption and address verification, or the
+// use of an already verified address; nil for none) and, for an external
+// depositor, the use of the invitation spec.inv. For a reply depositor, a
+// source transfer or recipient link that no longer exists in the tenant (or
+// a link of another transfer) fails with ErrReplyGone, and a link that
+// already has MaxLiveReplySessions live reply sessions with errLimited.
+func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, spec sessionSpec, prepare func(txRepo, time.Time) error) (Session, error) {
 	token, err := s.newToken(id.SessionTokenPrefix, id.SessionTokenBytes)
 	if err != nil {
 		return Session{}, fmt.Errorf("deposit: new session token: %w", err)
@@ -118,20 +163,46 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email strin
 	}
 	now := s.now()
 	rec := store.DepositSession{
-		ID: sessionID, TokenHash: tokenHash(token), Email: email, Kind: kind,
+		ID: sessionID, TokenHash: tokenHash(token), Email: spec.email, Kind: spec.kind,
 		CreatedAt: now, ExpiresAt: now.Add(s.sessionTTL),
+		ReplyToTransferID: spec.replyTo, RecipientLinkID: spec.linkID,
 	}
+	if !spec.notAfter.IsZero() {
+		// At the precision of the stored timestamps, as now.
+		notAfter := spec.notAfter.UTC().Truncate(time.Millisecond)
+		if !notAfter.After(now) {
+			return Session{}, ErrReplyGone
+		}
+		if rec.ExpiresAt.After(notAfter) {
+			rec.ExpiresAt = notAfter
+		}
+	}
+	inv := spec.inv
 	if inv != nil {
 		rec.InvitationID = inv.ID
 	}
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
-		if err := prepare(tx, now); err != nil {
-			return err
+		if prepare != nil {
+			if err := prepare(tx, now); err != nil {
+				return err
+			}
 		}
-		if err := tx.createSession(ctx, rec); err != nil {
+		if spec.kind == KindReply {
+			n, err := tx.countLiveReplies(ctx, spec.linkID, now)
+			switch {
+			case err != nil:
+				return fmt.Errorf("deposit: count reply sessions: %w", err)
+			case n >= MaxLiveReplySessions:
+				return errLimited
+			}
+		}
+		err := tx.createSession(ctx, rec)
+		switch {
+		case spec.kind == KindReply && errors.Is(err, store.ErrNotFound):
+			return ErrReplyGone
+		case err != nil:
 			return fmt.Errorf("deposit: create session: %w", err)
-		}
-		if inv == nil {
+		case inv == nil:
 			return nil
 		}
 		if err := tx.touchInvitation(ctx, inv.ID, now); errors.Is(err, store.ErrNotFound) {
@@ -147,6 +218,7 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email strin
 	info := SessionInfo{
 		ID: rec.ID, Email: rec.Email, Kind: rec.Kind, ExpiresAt: rec.ExpiresAt, Limits: limits(t),
 		CanInvite: rec.Kind == KindInternal, CSRFToken: csrf,
+		ReplyToTransferID: rec.ReplyToTransferID, RecipientLinkID: rec.RecipientLinkID,
 	}
 	if inv != nil {
 		// TouchTx moved the expiry to 12 months after this use when later.
@@ -163,7 +235,9 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email strin
 // its CSRF token. It returns ErrUnauthenticated when the token is malformed,
 // unknown in the tenant, ended or expired, and for an external depositor
 // whose invitation is no longer active (a revoked invitation ends its
-// sessions).
+// sessions). For a reply depositor it reads the source transfer to fill
+// Reply, and returns ErrUnauthenticated when it no longer exists (its
+// deletion also deletes the reply sessions).
 func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string) (SessionInfo, error) {
 	if !validToken(id.SessionTokenPrefix, rawToken) {
 		return SessionInfo{}, ErrUnauthenticated
@@ -177,9 +251,11 @@ func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string
 	}
 	info := SessionInfo{
 		ID: rec.ID, Email: rec.Email, Kind: rec.Kind, ExpiresAt: rec.ExpiresAt, Limits: limits(t),
-		CanInvite: rec.Kind == KindInternal,
+		CanInvite: rec.Kind == KindInternal, ReplyToTransferID: rec.ReplyToTransferID,
+		RecipientLinkID: rec.RecipientLinkID,
 	}
-	if rec.Kind == KindExternal {
+	switch rec.Kind {
+	case KindExternal:
 		inv, err := s.activeInvitation(ctx, t.ID, rec.InvitationID)
 		switch {
 		case errors.Is(err, ErrInvitationGone):
@@ -188,6 +264,15 @@ func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string
 			return SessionInfo{}, err
 		}
 		info.Invitation = &InvitationInfo{ID: inv.ID, InvitedBy: inv.InvitedBy, ExpiresAt: inv.ExpiresAt}
+	case KindReply:
+		src, err := s.repo.transfer(ctx, t.ID, rec.ReplyToTransferID)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			return SessionInfo{}, ErrUnauthenticated
+		case err != nil:
+			return SessionInfo{}, fmt.Errorf("deposit: read source transfer: %w", err)
+		}
+		info.Reply = &ReplyInfo{Recipient: src.SenderEmail, TransferExpiresAt: src.ExpiresAt}
 	}
 	if info.CSRFToken, err = s.csrfToken(rawToken); err != nil {
 		return SessionInfo{}, err

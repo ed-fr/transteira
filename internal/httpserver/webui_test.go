@@ -87,6 +87,7 @@ func TestWebUITenantHost(t *testing.T) {
 	}{
 		{"/", 200, publicPage, html, cache, true},
 		{"/d/tok_abc", 200, publicPage, html, cache, true},
+		{"/d/tok_abc/reply", 200, publicPage, html, cache, true},
 		{"/i/inv_abc", 200, publicPage, html, cache, true},
 		{"/legal/privacy", 200, publicPage, html, cache, true},
 		{"/invite", 200, publicPage, html, cache, true},
@@ -516,8 +517,8 @@ func TestEtagMatches(t *testing.T) {
 func TestIsPublicRoute(t *testing.T) {
 	t.Parallel()
 	for p, want := range map[string]bool{
-		"/": true, "/invite": true, "/me": true, "/help": true, "/help/": true, "/help/a/b": true, "/d/x": true, "/i/x": true, "/legal/terms": true,
-		"": false, "/helpx": false, "/invite/": false, "/d/": false, "/d/x/": false, "/d": false, "/legal/a/b": false,
+		"/": true, "/invite": true, "/me": true, "/help": true, "/help/": true, "/help/a/b": true, "/d/x": true, "/d/x/reply": true, "/d/reply": true, "/i/x": true, "/legal/terms": true,
+		"": false, "/helpx": false, "/invite/": false, "/d/": false, "/d/x/": false, "/d": false, "/d//reply": false, "/d/x/reply/": false, "/d/x/other": false, "/d/x/reply/reply": false, "/i/x/reply": false, "/legal/a/b": false,
 		"/admin/": false, "/x": false, "/dx": false, "/me/": false, "/me/x": false,
 	} {
 		if got := isPublicRoute(p); got != want {

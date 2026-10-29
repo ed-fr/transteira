@@ -85,6 +85,16 @@ export interface InvitationContext {
   message?: string | undefined;
 }
 
+/** Reply the depositor is making (/d/:token/reply, after the reply session was opened). */
+export interface ReplyContext {
+  /** Download link token of the transfer replied to. */
+  token: string;
+  /** Sender of the original transfer, single recipient of the reply. */
+  recipient: string;
+  /** Expiry of the original transfer (the session never outlives it). */
+  transferExpiresAt: string;
+}
+
 /** Step of the deposit page. */
 export type Step =
   | 'loading'
@@ -256,6 +266,8 @@ export class DepositFlow {
   maintenanceMessageLanguage = $state<string | undefined>(undefined);
   /** The invitation can no longer be used. */
   invitationGone = $state(false);
+  /** Reply mode: the reply session is gone (expired, ended or never opened). */
+  replyEnded = $state(false);
   /** Deposit form values. */
   form = $state<DepositForm>(emptyForm());
   /** Field errors of the form. */
@@ -281,6 +293,7 @@ export class DepositFlow {
 
   readonly tenant: PublicTenant;
   readonly invitation: InvitationContext | undefined;
+  readonly reply: ReplyContext | undefined;
   readonly #deps: DepositFlowDeps;
   readonly #key: IdempotencyKey;
   readonly #now: () => number;
@@ -293,8 +306,14 @@ export class DepositFlow {
   #finalizeAbort: AbortController | undefined;
   #disposed = false;
 
-  constructor(tenant: PublicTenant, invitation: InvitationContext | undefined, deps: DepositFlowDeps) {
+  constructor(
+    tenant: PublicTenant,
+    invitation: InvitationContext | undefined,
+    deps: DepositFlowDeps,
+    reply?: ReplyContext,
+  ) {
     this.tenant = tenant;
+    this.reply = reply;
     this.form.confidentialityLevel = defaultLevel(this.levels)?.key;
     this.#syncLevel();
     this.invitation = invitation;
@@ -312,6 +331,16 @@ export class DepositFlow {
   /** The depositor is an invited external user: no recipients to choose. */
   get isExternal(): boolean {
     return this.session?.kind === 'external' || (this.session === undefined && this.invitation !== undefined);
+  }
+
+  /** The depositor is replying to a transfer: the only recipient is its sender. */
+  get isReply(): boolean {
+    return this.session?.kind === 'reply' || this.reply !== undefined;
+  }
+
+  /** Recipient of a reply (sender of the original transfer). */
+  get replyRecipient(): string | undefined {
+    return this.session?.reply?.recipient ?? this.reply?.recipient;
   }
 
   /** Recipient of the files of an external depositor. */
@@ -473,6 +502,15 @@ export class DepositFlow {
         return;
       }
     }
+    if (this.reply !== undefined) {
+      // Reply mode: only a reply session fits, else the reply must be started again.
+      if (session !== undefined && session.kind === 'reply') {
+        await this.#afterSession(session);
+      } else {
+        this.replyEnded = true;
+      }
+      return;
+    }
     if (session !== undefined && this.#sessionFits(session)) {
       await this.#afterSession(session);
       return;
@@ -594,7 +632,7 @@ export class DepositFlow {
   async submitTransfer(): Promise<void> {
     const session = this.session;
     if (this.busy || session === undefined) return;
-    const needRecipients = session.kind !== 'external';
+    const needRecipients = session.kind !== 'external' && session.kind !== 'reply';
     const errors = {
       ...validateForm(this.form, { ...session.limits, expiryDays: this.expiryOptions }, needRecipients),
       ...validatePolicy(this.form.password, this.form.maxDownloadsText, this.rules, this.maxDownloadsOffered),
@@ -778,6 +816,7 @@ export class DepositFlow {
     this.session = undefined;
     this.step = 'email';
     this.notice = { key: 'deposit.session.ended' };
+    if (this.reply !== undefined) this.replyEnded = true;
   }
 
   /** Stops background work (page left). */
@@ -913,6 +952,7 @@ export class DepositFlow {
     this.step = 'email';
     this.stepError = undefined;
     this.notice = { key: 'deposit.session.expired' };
+    if (this.reply !== undefined) this.replyEnded = true;
   }
 
   #identificationError(err: unknown): void {

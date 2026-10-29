@@ -274,6 +274,13 @@ func (f faultRepo) endSession(ctx context.Context, tid tenant.ID, hash []byte, n
 	return f.repo.endSession(ctx, tid, hash, now)
 }
 
+func (f faultRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (store.Transfer, error) {
+	if err := f.fail("transfer"); err != nil {
+		return store.Transfer{}, err
+	}
+	return f.repo.transfer(ctx, tid, trfID)
+}
+
 func (f faultRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	return f.repo.tx(ctx, tid, func(tx txRepo) error { return fn(faultTx{txRepo: tx, f: f}) })
 }
@@ -338,6 +345,13 @@ func (t faultTx) createSession(ctx context.Context, s store.DepositSession) erro
 		return err
 	}
 	return t.txRepo.createSession(ctx, s)
+}
+
+func (t faultTx) countLiveReplies(ctx context.Context, linkID string, now time.Time) (int, error) {
+	if err := t.f.fail("countLiveReplies"); err != nil {
+		return 0, err
+	}
+	return t.txRepo.countLiveReplies(ctx, linkID, now)
 }
 
 func (t faultTx) touchInvitation(ctx context.Context, invID string, now time.Time) error {

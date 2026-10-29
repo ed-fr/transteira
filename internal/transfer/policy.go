@@ -124,8 +124,9 @@ func refusedRecipients(recipients []string, set store.RecipientRuleSet) ([]Field
 // applyPolicies applies the confidentiality level and the recipient domain
 // rules of tenant t to the validated request req of sender (normalized
 // address email), whose plan holds the final recipients (the inviter for an
-// external sender: the checks still run, generically, for every kind of
-// sender). Steps, in order:
+// external sender, the original sender for a reply: the level checks still
+// run, generically, for every kind of sender; the recipient domain rules
+// bind the free recipients only). Steps, in order:
 //
 //  1. the level: the default one when req names none, an unknown key is a
 //     *ValidationError (400);
@@ -162,11 +163,13 @@ func (s *Service) applyPolicies(ctx context.Context, t *tenant.Tenant, sender Se
 	if broken := checkLevelRules(level, req, recipients, rules); len(broken) > 0 {
 		return policy{}, &RuleError{Kind: ErrConfidentialityRule, Fields: broken}
 	}
-	if sender.Kind == store.DepositorExternal {
-		// An invited external depositor has no free choice of recipient: the
-		// only one is the inviting internal user. Applying the domain rules
-		// would block every invitation under an allow list that leaves out
-		// the internal domains, so they only bind free recipients.
+	if sender.Kind.IsExternal() {
+		// An invited external depositor or a reply has no free choice of
+		// recipient: the only one is the inviting internal user, or the
+		// internal sender of the original transfer. Applying the domain
+		// rules would block every invitation and every reply under an allow
+		// list that leaves out the internal domains, so they only bind free
+		// recipients.
 		return applyLevel(level, req), nil
 	}
 	set, err := s.repo.recipientRules(ctx, t.ID)

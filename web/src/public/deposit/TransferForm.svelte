@@ -165,7 +165,11 @@
 {/if}
 
 <form class="tt-stack" novalidate onsubmit={submit}>
-  {#if flow.isExternal}
+  {#if flow.isReply}
+    <Alert severity="info" live={false}>
+      {t('deposit.form.recipients.reply', { recipient: flow.replyRecipient ?? '' })}
+    </Alert>
+  {:else if flow.isExternal}
     <Alert severity="info" live={false}>
       {t('deposit.form.recipients.external', { invitedBy: flow.invitedBy ?? '' })}
     </Alert>

@@ -51,6 +51,11 @@ const (
 	// InvitationCreate), after the removal of the control and invisible
 	// characters.
 	MaxMessageRunes = store.MaxInvitationMessageLen
+	// MaxLiveReplySessions bounds the reply sessions open at once through
+	// one recipient link (neither ended nor expired; threat model P33): a
+	// replier who verified the link cannot multiply the sessions, each able
+	// to start reply uploads.
+	MaxLiveReplySessions = 5
 	// DefaultSessionTTL is the session lifetime when Options.SessionTTL is
 	// not set (TT_DEPOSIT_SESSION_TTL).
 	DefaultSessionTTL = 4 * time.Hour
@@ -69,6 +74,7 @@ const (
 	scopeCodesPerAddress = "verification_address"
 	scopeCodesPerIP      = "verification_ip"
 	scopeInvitations     = "invitation"
+	scopeReplySessions   = "reply_session"
 )
 
 // errLimited aborts the transaction of a request over a rate limit.
@@ -112,6 +118,10 @@ const (
 	// originRemote is a verification by an internal depositor from outside
 	// the tenant ranges (V1.1, spec 6.4).
 	originRemote = "remote"
+	// originReply is the opening of a reply session by the recipient of a
+	// transfer, whose address was verified by code on the download page
+	// (V1.1, spec 10).
+	originReply = "reply"
 )
 
 // AbuseDetector supplies the configurable invitation limit of spec 15.2 and

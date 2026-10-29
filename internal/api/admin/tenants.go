@@ -246,13 +246,14 @@ type tenantPatch struct {
 	MaxTransferCeiling         *int64  `json:"maxTransferCeiling"`
 	WebhookIncludeAddresses    *bool   `json:"webhookIncludeAddresses"`
 	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit"`
+	AllowTransferReply         *bool   `json:"allowTransferReply"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
 // their errors are reported.
 var tenantPatchFields = []string{
 	"name", "fqdn", "defaultLanguage", "storageQuotaBytes", "maxTransferBytes", "maxTransferCeiling",
-	"webhookIncludeAddresses", "allowRemoteInternalDeposit",
+	"webhookIncludeAddresses", "allowRemoteInternalDeposit", "allowTransferReply",
 }
 
 // decodeTenantUpdate decodes a tenant merge patch: a JSON object whose
@@ -288,6 +289,7 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 		MaxTransferBytes: b.MaxTransferBytes, MaxTransferCeiling: b.MaxTransferCeiling,
 		WebhookIncludeAddresses:    b.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: b.AllowRemoteInternalDeposit,
+		AllowTransferReply:         b.AllowTransferReply,
 	}, nil
 }
 
@@ -310,7 +312,8 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		Id: string(v.ID), Name: v.Name, Fqdn: v.FQDN, DefaultLanguage: gen.Language(v.DefaultLanguage),
 		MaxTransferBytes: v.MaxTransferBytes, MaxTransferCeiling: v.MaxTransferCeiling,
 		Status: gen.TenantStatus(v.Status), StorageQuotaBytes: v.StorageQuotaBytes, StorageUsedBytes: v.StorageUsedBytes,
-		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
+		AllowTransferReply: &v.AllowTransferReply, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 

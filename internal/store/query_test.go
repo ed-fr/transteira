@@ -434,8 +434,11 @@ var tenantAllowlist = map[string]int{
 		`internal_verified_at, internal_verified_ip, recognition_salt, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE verified_addresses SET recognition_salt = ? WHERE tenant_id = ? AND email = ?`: 1,
 	// Deposit sessions.
-	`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at, ` +
+		`reply_to_transfer_id, recipient_link_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND id = ? AND transfer_id = ?`: 0,
+	`SELECT count(*) FROM deposit_sessions ` +
+		`WHERE tenant_id = ? AND recipient_link_id = ? AND ended_at IS NULL AND expires_at > ?`: 0,
 	`SELECT ` + sessionColumns + ` FROM deposit_sessions ` +
 		`WHERE tenant_id = ? AND token_hash = ? AND ended_at IS NULL AND expires_at > ?`: 0,
 	`UPDATE deposit_sessions SET ended_at = ? ` +
@@ -453,10 +456,10 @@ var tenantAllowlist = map[string]int{
 	// Transfers and recipients.
 	`INSERT INTO transfers (tenant_id, id, status, sender_email, sender_kind, invitation_id, message, language, ` +
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
-		`created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, confidentiality_level, ` +
-		`confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, ` +
+		`created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id, ` +
+		`confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, ` +
 		`rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
@@ -825,11 +828,11 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                          reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
-	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?, allow_transfer_reply = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`DELETE FROM tenants WHERE id = ?`:                             reasonTenantAdmin,
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
 	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,

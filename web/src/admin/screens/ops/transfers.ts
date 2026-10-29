@@ -114,7 +114,7 @@ const SCAN_VARIANTS: Readonly<Record<string, StatusVariant>> = {
   scan_error: 'error',
 };
 
-const ORIGINS: readonly string[] = ['internal', 'external', 'api'];
+const ORIGINS: readonly string[] = ['internal', 'external', 'api', 'internal_remote', 'reply'];
 
 /** Badge of a transfer status; an unknown status shows its raw value with a neutral badge. */
 export function statusView(status: string, t: Translate): BadgeView {

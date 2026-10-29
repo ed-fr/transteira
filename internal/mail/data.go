@@ -171,6 +171,11 @@ type TransferNotificationData struct {
 	// transfer, already localized in the language of the mail; empty shows no
 	// level.
 	ConfidentialityLabel string
+	// ReplyToCreatedAt, when not zero, marks the transfer as a reply from an
+	// external recipient to the transfer created at that time (T-223): the
+	// mail then warns that the sender comes from outside and proved their
+	// address with a code only.
+	ReplyToCreatedAt time.Time
 	// QR shows the QR code of Link, an inline part of Content-ID
 	// [QRContentID] that the caller attaches.
 	QR bool

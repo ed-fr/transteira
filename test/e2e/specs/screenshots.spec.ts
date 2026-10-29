@@ -46,6 +46,8 @@ FIXED_TIME.setSeconds(0, 0);
 const DEPOSITOR: Record<Lang, string> = { en: 'alice@example.com', fr: 'camille@example.com' };
 /** Recipient of the transfers deposited through the screens. */
 const RECIPIENT: Record<Lang, string> = { en: 'dana@example.org', fr: 'dominique@example.org' };
+/** Recipients of the transfers they can reply to (a code is sent to them at the reply). */
+const REPLY_RECIPIENT: Record<Lang, string> = { en: 'grace@example.org', fr: 'gabrielle@example.org' };
 /** Recipients of the transfers with recipient verification (a code is sent to them). */
 const VERIFIED_RECIPIENT: Record<Lang, string> = { en: 'frank@example.org', fr: 'fabienne@example.org' };
 /** Fixed client addresses (shown in the audit logs): browser contexts per profile, API session. */
@@ -613,6 +615,54 @@ test.describe('recipient', () => {
       await page.getByRole('button', { name: msg(lang, 'download.report.button'), exact: true }).click();
       await expect(page.getByRole('dialog', { name: msg(lang, 'download.report.title') })).toBeVisible();
       await shoot(page, lang, 'download-report');
+    }
+  });
+
+  test('reply to a transfer', async ({ newContext, guards }) => {
+    test.setTimeout(120_000);
+    // Asking to reply without a session is answered 401, then the screen starts the verification.
+    guards.allowHttpError(401, /\/downloads\/[^/]+\/reply$/);
+    const s = loadState();
+    const tenantId = s.tenants.a.id;
+    const api = superAdminApi();
+    // The option is on for this test only: the other download pages keep their usual content.
+    await api.ok('PATCH', `/admin/tenants/${tenantId}`, { allowTransferReply: true });
+    try {
+      for (const lang of LANGS) {
+        const t = await tokenDeposit(
+          s.apiTokenA,
+          API_SENDER,
+          {
+            recipients: [REPLY_RECIPIENT[lang]],
+            files: apiFiles(lang),
+            message: MESSAGES[lang],
+            language: lang,
+          },
+          { host: HOSTS.a },
+        );
+        const page = await openPage(newContext, lang);
+        await page.goto(`${ORIGINS.a}${await recipientPath(t, REPLY_RECIPIENT[lang])}`);
+        await heading(page, lang, 'download.title');
+        const reply = page.getByRole('button', { name: msg(lang, 'download.reply.button'), exact: true });
+        await expect(reply).toBeVisible();
+        await shoot(page, lang, 'download-reply');
+
+        await reply.click();
+        await heading(page, lang, 'download.verify.replyTitle');
+        const after = Date.now();
+        await page.getByRole('button', { name: msg(lang, 'download.verify.send') }).click();
+        const input = page.getByLabel(startsWith(msg(lang, 'download.verify.label')));
+        await expect(input).toBeVisible();
+        await input.fill(await waitForCode(REPLY_RECIPIENT[lang], after));
+        await page.getByRole('button', { name: msg(lang, 'download.verify.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.form.title');
+        await expect(
+          page.getByText(msg(lang, 'deposit.form.recipients.reply', { recipient: API_SENDER })),
+        ).toBeVisible();
+        await shoot(page, lang, 'reply-form');
+      }
+    } finally {
+      await api.ok('PATCH', `/admin/tenants/${tenantId}`, { allowTransferReply: false });
     }
   });
 

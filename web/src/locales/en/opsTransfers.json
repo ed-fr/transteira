@@ -10,7 +10,9 @@
   "origin": {
     "internal": "Internal user",
     "external": "External guest",
-    "api": "API token"
+    "api": "API token",
+    "internal_remote": "Internal from outside",
+    "reply": "Reply"
   },
   "scan": {
     "pending": "Waiting for scan",

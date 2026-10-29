@@ -939,15 +939,31 @@ export interface paths {
          *     transfer with `POST /transfers` (its `recipients` are ignored) and uploads with tus as any
          *     depositor. Requirements, checked in this order:
          *
-         *     1. the tenant allows replies (`allowTransferReply`), otherwise `403 reply-not-allowed`;
-         *        a link created before 1.1 (shared by every recipient) cannot be replied to, and a
-         *        reply transfer is never replied to (no reply to a reply);
-         *     2. the recipient proved their address on this browser (`__Host-tt_rv`, see
+         *     1. the link token names a link of this entity (`404 not-found`);
+         *     2. the tenant allows replies (`allowTransferReply`), otherwise `403 reply-not-allowed`;
+         *     3. the recipient proved their address on this browser (`__Host-tt_rv`, see
          *        `startRecipientVerification` with purpose `reply`), whatever the transfer options:
-         *        otherwise `401 recipient-verification-required`;
-         *     3. the recipient address and its domain are not blocklisted
+         *        otherwise `401 recipient-verification-required`. This check comes before the next
+         *        ones so that a client who has not proved the address learns nothing of the original
+         *        sender (internal or not); a link created before 1.1 (shared by every recipient) has
+         *        no such proof and gets `401` too;
+         *     4. the transfer was sent by an internal depositor (or an API token): a reply transfer is
+         *        never replied to (no reply to a reply), nor a transfer of an invited external
+         *        (`403 reply-not-allowed`);
+         *     5. the original sender, and its domain, are not blocklisted and its domain is still an
+         *        internal domain of the entity (`403 reply-not-allowed`, written to the audit log only);
+         *     6. the original transfer is still available, with a deliverable file and below its
+         *        download limit (`410 transfer-gone`);
+         *     7. last, the recipient address and its domain are not blocklisted
          *        (`403 deposit-not-allowed`, reason in the security log);
-         *     4. the original transfer is still available (`410 transfer-gone`).
+         *     8. the link has fewer than 5 reply sessions open (neither ended nor expired), otherwise
+         *        `429 rate-limited` (written to the security log, `Retry-After` the session lifetime).
+         *
+         *     A transfer password is not required to reply: the code sent to the recipient proves the
+         *     mailbox, and the reply reveals nothing of the transfer. `startRecipientVerification` with
+         *     purpose `reply` on a transfer whose download limit is reached answers
+         *     `410 max-downloads-reached`. Opening a reply session replaces any deposit session cookie
+         *     of the browser: an upload session open in this browser ends.
          *
          *     The session lives at most as long as the original transfer, and the reply transfer is
          *     subject to the external depositor rules: the external quotas and the abuse thresholds of
@@ -3449,6 +3465,8 @@ export interface components {
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
             /** @description Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`. */
             replyAllowed?: boolean;
+            /** @description Since 1.1. The transfer is a reply sent from outside the entity by a recipient of an earlier transfer (`startTransferReply`): `senderEmail` was verified by code, but the files come from an external sender. Absent while `locked`; never repliable. */
+            reply?: boolean;
         };
         SetupStatus: {
             setupRequired: boolean;
@@ -6107,7 +6125,8 @@ export interface operations {
              *     to the security log), or the CSRF check of a session request failed (`csrf-invalid`).
              *     Since 1.1: a recipient is refused by the recipient domain rules
              *     (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
-             *     (`abuse-threshold-blocked`).
+             *     (`abuse-threshold-blocked`). A reply is refused (`reply-not-allowed`) when replies are
+             *     disabled or the original sender can no longer be replied to.
              */
             403: {
                 headers: {
@@ -6118,6 +6137,7 @@ export interface operations {
                 };
             };
             409: components["responses"]["StateConflict"];
+            410: components["responses"]["TransferGone"];
             413: components["responses"]["TransferTooLarge"];
             421: components["responses"]["UnknownTenant"];
             /** @description Since 1.1. The transfer breaks a rule of its confidentiality level; each entry of `errors` names the field and the rule. */
@@ -6302,6 +6322,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            410: components["responses"]["TransferGone"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
@@ -6959,7 +6980,18 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["ValidationFailed"];
-            403: components["responses"]["CsrfInvalid"];
+            /**
+             * @description Cross-site request (`csrf-invalid`), or, with purpose `reply`, replies are disabled
+             *     for this entity or impossible on this link (`reply-not-allowed`).
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             404: components["responses"]["NotFound"];
             409: components["responses"]["StateConflict"];
             410: components["responses"]["DownloadGone"];

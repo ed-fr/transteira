@@ -235,6 +235,10 @@ func (b fakeBackend) ConfirmVerification(context.Context, *tenant.Tenant, string
 	return "rv_x", b.err
 }
 
+func (b fakeBackend) ReplyAccess(context.Context, *tenant.Tenant, string, string, netip.Addr) (download.ReplyTarget, error) {
+	return download.ReplyTarget{TransferID: "trf_x"}, b.err
+}
+
 func (b fakeBackend) OpenFile(context.Context, *tenant.Tenant, string, netip.Addr, download.Cookies, string) (*download.File, error) {
 	if b.err != nil {
 		return nil, b.err
@@ -273,6 +277,9 @@ func TestDownloadAdapter(t *testing.T) {
 	}
 	if err := a.ReportAbuse(ctx, tn, "", netip.Addr{}, "", "spam", ""); err != nil {
 		t.Errorf("ReportAbuse = %v", err)
+	}
+	if target, err := a.ReplyAccess(ctx, tn, "", "", netip.Addr{}); err != nil || target.TransferID != "trf_x" {
+		t.Errorf("ReplyAccess = %+v, %v", target, err)
 	}
 	boom := errors.New("boom")
 	a = downloadAdapter{svc: fakeBackend{err: boom}}

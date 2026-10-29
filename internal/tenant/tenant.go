@@ -109,6 +109,11 @@ type Tenant struct {
 	// outside them, with a verification code at every deposit (spec 6.4);
 	// off by default.
 	AllowRemoteInternalDeposit bool
+	// AllowTransferReply lets the recipient of a transfer sent by an
+	// internal user send files back to its sender through a reply link,
+	// without invitation, after verifying their address by code (spec 10);
+	// off by default.
+	AllowTransferReply bool
 	// CreatedAt is the creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the time of the last modification.

@@ -722,7 +722,7 @@ func TestDepositSessions(t *testing.T) {
 			"email":               func(s *store.DepositSession) { s.Email = "nope" },
 			"id":                  func(s *store.DepositSession) { s.ID = id.New(id.Invitation) },
 			"hash":                func(s *store.DepositSession) { s.TokenHash = make([]byte, 31) },
-			"kind":                func(s *store.DepositSession) { s.Kind = "reply" },
+			"kind":                func(s *store.DepositSession) { s.Kind = "robot" },
 			"external no inv":     func(s *store.DepositSession) { s.Kind = store.DepositorExternal },
 			"internal with inv":   func(s *store.DepositSession) { s.InvitationID = invA.ID },
 			"malformed inv":       func(s *store.DepositSession) { s.Kind, s.InvitationID = store.DepositorExternal, "inv_x" },

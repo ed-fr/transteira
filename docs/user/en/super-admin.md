@@ -64,6 +64,7 @@ Click **Create the entity**. The other settings are configured afterwards, in th
 4. [Legal information](topic:tenant-legal): legal notice and privacy policy.
 5. [Email templates](topic:tenant-templates): optional, the default templates work as they are.
 6. [Recipient domains](topic:tenant-recipient-rules) and [Confidentiality levels](topic:tenant-confidentiality): optional; by default, any recipient domain is allowed and the entity has default confidentiality levels. Delegated administrators can adjust them.
+   Replying to transfers, off by default, is set on the [Network](topic:tenant-network) screen: read the risks there (phishing, external quotas, audit) before turning it on.
 7. Attach a delegated administrator to the entity, see [Creating a delegated administrator](topic:admin-create).
 
 <!-- topic: tenant-general-super -->

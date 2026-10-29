@@ -84,6 +84,7 @@ func senderOf(ctx context.Context, info deposit.SessionInfo) transfer.Sender {
 	if info.Invitation != nil {
 		sender.InvitationID = info.Invitation.ID
 	}
+	sender.ReplyToTransferID = info.ReplyToTransferID
 	return sender
 }
 
@@ -186,6 +187,7 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		FinalizedAt: optionalTime(d.FinalizedAt), DownloadUrl: optional(d.DownloadURL),
 		Files: make([]gen.SenderFile, len(d.Files)), MaxDownloads: d.MaxDownloads,
 		ConfidentialityLevel: senderLevelRef(d), RecipientVerification: &d.RecipientVerification,
+		ReplyToTransferId: optional(d.ReplyToTransferID),
 	}
 	// A transfer with one link per recipient never shows a link (P27): the
 	// sender follows the recipients through their tracking only.
@@ -292,6 +294,10 @@ func transferError(err error) error {
 		return problem.New(problem.CodeBlockedFile)
 	case errors.Is(err, transfer.ErrAbuseBlocked): // a policy refusal, never in the security log
 		return problem.New(problem.CodeAbuseThresholdBlocked)
+	case errors.Is(err, transfer.ErrReplyNotAllowed): // a policy refusal, never in the security log
+		return problem.New(problem.CodeReplyNotAllowed)
+	case errors.Is(err, transfer.ErrOriginalGone):
+		return problem.New(problem.CodeTransferGone)
 	case errors.Is(err, transfer.ErrForbidden):
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, transfer.ErrNotFound):

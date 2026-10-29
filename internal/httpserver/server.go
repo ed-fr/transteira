@@ -301,6 +301,11 @@ var routePolicies = map[string]routePolicy{
 	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/abuse-reports": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
 	},
+	// A reply to a transfer (since 1.1) opens a deposit session from the
+	// recipient verification: same protection as the unlock.
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/reply": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
 		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline, assetBody: true,
 	},

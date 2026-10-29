@@ -57,6 +57,24 @@
     "title": "Nombre maximal de téléchargements atteint",
     "text": "Ce transfert a atteint son nombre maximal de téléchargements et ne peut plus être téléchargé. Demandez à l’expéditeur de renvoyer les fichiers."
   },
+  "reply": {
+    "button": "Répondre",
+    "hint": "Renvoyez des fichiers à {email}.",
+    "starting": "Ouverture de la réponse…",
+    "notice": "Ce transfert est une réponse envoyée depuis l’extérieur de {tenant} : l’adresse de l’expéditeur a été vérifiée par un code, mais la personne ne fait pas partie de l’organisation. Soyez prudent avec les fichiers que vous n’attendiez pas.",
+    "notAllowed": "Il n’est pas possible de répondre à ce transfert.",
+    "depositNotAllowed": "Vous ne pouvez pas envoyer de fichiers à cette adresse.",
+    "gone": "Le transfert auquel vous voulez répondre n’est plus disponible.",
+    "maintenance": "Le service est en maintenance : les réponses sont impossibles pour le moment. Réessayez plus tard.",
+    "rateLimited": "Trop de demandes. Patientez un instant puis réessayez.",
+    "page": {
+      "title": "Répondre à un transfert",
+      "back": "Retour à la page de téléchargement",
+      "to": "Votre réponse sera envoyée à {recipient}.",
+      "unavailable": "Votre session de réponse a expiré ou n’est plus valide. Recommencez la réponse depuis la page de téléchargement.",
+      "doneBack": "Retour à la page de téléchargement"
+    }
+  },
   "verify": {
     "title": "Confirmez votre adresse",
     "intro": "Pour protéger ce transfert, confirmez que vous en êtes le destinataire : nous envoyons un code à 6 chiffres à votre adresse mail.",
@@ -79,7 +97,9 @@
     "expired": "Votre accès a expiré : confirmez à nouveau votre adresse avec un nouveau code.",
     "rateLimited": "Trop de demandes. Patientez avant de demander un autre code.",
     "mailUnavailable": "Le code n’a pas pu être envoyé. Réessayez plus tard.",
-    "conflict": "Aucun code ne peut être envoyé pour ce lien pour le moment. Rechargez la page et réessayez."
+    "conflict": "Aucun code ne peut être envoyé pour ce lien pour le moment. Rechargez la page et réessayez.",
+    "replyTitle": "Confirmez votre adresse pour répondre",
+    "replyIntro": "Pour répondre, confirmez que vous êtes le destinataire de ce transfert : nous envoyons un code à 6 chiffres à votre adresse mail."
   },
   "report": {
     "button": "Signaler un abus",

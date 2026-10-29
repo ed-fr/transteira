@@ -222,7 +222,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		want       []problem.FieldError
 	}{
 		{"null name", `{"name": null}`, []problem.FieldError{{Field: "/name", Code: fieldNotNullable}}},
-		{"every null, in order", `{"allowRemoteInternalDeposit":null,"webhookIncludeAddresses":null,"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
+		{"every null, in order", `{"allowTransferReply":null,"allowRemoteInternalDeposit":null,"webhookIncludeAddresses":null,"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
 			{Field: "/name", Code: fieldNotNullable},
 			{Field: "/fqdn", Code: fieldNotNullable},
 			{Field: "/defaultLanguage", Code: fieldNotNullable},
@@ -231,6 +231,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 			{Field: "/maxTransferCeiling", Code: fieldNotNullable},
 			{Field: "/webhookIncludeAddresses", Code: fieldNotNullable},
 			{Field: "/allowRemoteInternalDeposit", Code: fieldNotNullable},
+			{Field: "/allowTransferReply", Code: fieldNotNullable},
 		}},
 		{"null among valid fields", `{"defaultLanguage": "en", "maxTransferBytes": null}`, []problem.FieldError{{Field: "/maxTransferBytes", Code: fieldNotNullable}}},
 		{"null body", `null`, []problem.FieldError{{Field: "", Code: fieldInvalidFormat}}},
@@ -240,6 +241,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		{"object instead of string", `{"name": {"first": "A"}}`, []problem.FieldError{{Field: "/name", Code: fieldInvalidFormat}}},
 		{"string instead of boolean", `{"webhookIncludeAddresses": "yes"}`, []problem.FieldError{{Field: "/webhookIncludeAddresses", Code: fieldInvalidFormat}}},
 		{"string instead of boolean 2", `{"allowRemoteInternalDeposit": "yes"}`, []problem.FieldError{{Field: "/allowRemoteInternalDeposit", Code: fieldInvalidFormat}}},
+		{"string instead of boolean 3", `{"allowTransferReply": "yes"}`, []problem.FieldError{{Field: "/allowTransferReply", Code: fieldInvalidFormat}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -468,7 +470,7 @@ func TestTenantsHandlers(t *testing.T) {
 	wantTenant := gen.Tenant{
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.Active, StorageQuotaBytes: 1 << 40,
-		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), CreatedAt: created, UpdatedAt: now,
+		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), AllowTransferReply: new(false), CreatedAt: created, UpdatedAt: now,
 	}
 
 	cursor, limit := "c1", 10
@@ -490,7 +492,7 @@ func TestTenantsHandlers(t *testing.T) {
 	}
 
 	upd, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(
-		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "unknown": null}`,
+		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "allowTransferReply": true, "unknown": null}`,
 	)})
 	if err != nil || upd.(gen.UpdateTenant200JSONResponse).Id != "ten_a" {
 		t.Fatalf("update %+v %v", upd, err)
@@ -498,14 +500,14 @@ func TestTenantsHandlers(t *testing.T) {
 	in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate)
 	if *in.Name != "Entity A2" || *in.DefaultLanguage != "en" || *in.MaxTransferBytes != 1<<30 || in.FQDN != nil ||
 		in.MaxTransferCeiling != nil || in.StorageQuotaBytes != nil || in.WebhookIncludeAddresses == nil ||
-		*in.WebhookIncludeAddresses || in.AllowRemoteInternalDeposit == nil || !*in.AllowRemoteInternalDeposit || svc.args["UpdateTenant"][3] != clientIP {
+		*in.WebhookIncludeAddresses || in.AllowRemoteInternalDeposit == nil || !*in.AllowRemoteInternalDeposit || in.AllowTransferReply == nil || !*in.AllowTransferReply || svc.args["UpdateTenant"][3] != clientIP {
 		t.Errorf("update input %+v", svc.args["UpdateTenant"])
 	}
 	// No language: left unchanged.
 	if _, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(` { } `)}); err != nil {
 		t.Fatal(err)
 	}
-	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil || in.AllowRemoteInternalDeposit != nil {
+	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil || in.AllowRemoteInternalDeposit != nil || in.AllowTransferReply != nil {
 		t.Errorf("language set: %+v", in)
 	}
 

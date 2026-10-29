@@ -91,6 +91,7 @@ export type VerificationStartFailure =
   | { kind: 'rate-limited'; retryAfterSeconds: number | undefined }
   | { kind: 'mail-unavailable' }
   | { kind: 'conflict' }
+  | { kind: 'maintenance' }
   | { kind: VerificationGone }
   | { kind: 'error' };
 
@@ -109,7 +110,7 @@ export function verificationStartFailure(err: unknown): VerificationStartFailure
     case 429:
       return { kind: 'rate-limited', retryAfterSeconds: err.retryAfterSeconds };
     case 503:
-      return { kind: 'mail-unavailable' };
+      return err.code === 'maintenance' ? { kind: 'maintenance' } : { kind: 'mail-unavailable' };
     default:
       return { kind: 'error' };
   }
@@ -286,4 +287,46 @@ export const INVITATION_MESSAGE_MAX = 2000;
 /** Loose client check of an email address (the server validates for real). */
 export function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+/** The recipient may reply to this transfer (button on the download page). */
+export function canReply(transfer: PublicTransfer): boolean {
+  return transfer.replyAllowed === true && transfer.reply !== true && transfer.locked !== true;
+}
+
+/** Outcome of a failed POST /downloads/{token}/reply. */
+export type ReplyFailure =
+  | { kind: 'verification-required' }
+  | { kind: 'not-allowed' }
+  | { kind: 'deposit-not-allowed' }
+  | { kind: 'maintenance' }
+  | { kind: 'rate-limited' }
+  | { kind: 'not-found' }
+  | { kind: 'gone' }
+  | { kind: 'max-downloads' }
+  | { kind: 'error' };
+
+/** Classifies the error of a request to open a reply session. */
+export function replyFailure(err: unknown): ReplyFailure {
+  if (!(err instanceof ApiProblem)) {
+    return { kind: 'error' };
+  }
+  switch (err.status) {
+    case 401:
+      return err.code === 'recipient-verification-required'
+        ? { kind: 'verification-required' }
+        : { kind: 'error' };
+    case 403:
+      return err.code === 'deposit-not-allowed' ? { kind: 'deposit-not-allowed' } : { kind: 'not-allowed' };
+    case 404:
+      return { kind: 'not-found' };
+    case 410:
+      return err.code === 'max-downloads-reached' ? { kind: 'max-downloads' } : { kind: 'gone' };
+    case 429:
+      return { kind: 'rate-limited' };
+    case 503:
+      return err.code === 'maintenance' ? { kind: 'maintenance' } : { kind: 'error' };
+    default:
+      return { kind: 'error' };
+  }
 }

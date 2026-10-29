@@ -18,6 +18,7 @@ import {
   type DepositSession,
   type FinalizeFn,
   type InvitationContext,
+  type ReplyContext,
   type PublicTenant,
   type ScanStatus,
 } from './flow.svelte';
@@ -216,6 +217,22 @@ const invitation: InvitationContext = {
   invitedBy: 'alice@entity-a.example.com',
 };
 
+const replySession: DepositSession = {
+  email: 'carol@customer.example.net',
+  kind: 'reply',
+  csrfToken: 'csrf_3',
+  expiresAt: '2026-10-23T20:00:00Z',
+  limits: { maxTransferBytes: 1000, expiryDays: [1, 7] },
+  canInvite: false,
+  reply: { recipient: 'alice@entity-a.example.com', transferExpiresAt: '2026-10-25T08:00:00Z' },
+};
+
+const replyContext: ReplyContext = {
+  token: 'dl_0123456789012345678901', // gitleaks:allow (fake download token)
+  recipient: 'alice@entity-a.example.com',
+  transferExpiresAt: '2026-10-25T08:00:00Z',
+};
+
 const challenge = {
   challengeId: 'vch_1',
   email: 'alice@entity-a.example.com',
@@ -258,6 +275,7 @@ function setup(
   options: {
     tenant?: PublicTenant;
     invitation?: InvitationContext;
+    reply?: ReplyContext;
     store?: ReturnType<typeof memoryStore>;
     finalize?: FinalizeFn;
     poll?: FinalizeFn;
@@ -278,27 +296,32 @@ function setup(
   );
   const confirm = vi.fn(options.confirm ?? (() => true));
   const sleeps: number[] = [];
-  const flow = new DepositFlow(options.tenant ?? tenant, options.invitation, {
-    api: fake.api,
-    tr,
-    clearCsrf,
-    resumeStore: store,
-    createEngine: (specs, cancelTransfer) => {
-      const engine = fakeEngine(specs, cancelTransfer);
-      engines.push(engine);
-      return engine;
+  const flow = new DepositFlow(
+    options.tenant ?? tenant,
+    options.invitation,
+    {
+      api: fake.api,
+      tr,
+      clearCsrf,
+      resumeStore: store,
+      createEngine: (specs, cancelTransfer) => {
+        const engine = fakeEngine(specs, cancelTransfer);
+        engines.push(engine);
+        return engine;
+      },
+      finalize,
+      poll,
+      confirm,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      announce,
+      language: () => 'fr',
+      newKey: () => `key-${++keys}`,
+      now: () => 1_000_000,
     },
-    finalize,
-    poll,
-    confirm,
-    sleep: async (ms) => {
-      sleeps.push(ms);
-    },
-    announce,
-    language: () => 'fr',
-    newKey: () => `key-${++keys}`,
-    now: () => 1_000_000,
-  });
+    options.reply,
+  );
   return { flow, ...fake, engines, store, announce, clearCsrf, finalize, poll, confirm, sleeps };
 }
 
@@ -647,6 +670,70 @@ describe('invitation', () => {
     expect(flow.errorText).toBe('deposit.email.invitationGone');
     await flow.submitEmail();
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('reply', () => {
+  it('opens the form with the sender as only recipient and never asks for recipients', async () => {
+    const { flow, calls } = setup(
+      {
+        'GET /deposit-sessions/current': { status: 200, body: replySession },
+        'POST /transfers': { status: 201, body: transfer('uploading') },
+      },
+      { reply: replyContext },
+    );
+    expect(flow.isReply).toBe(true);
+    expect(flow.replyRecipient).toBe('alice@entity-a.example.com');
+    await flow.start();
+    expect(flow.step).toBe('form');
+    expect(flow.canInvite).toBe(false);
+    flow.addFiles([file()]);
+    await flow.submitTransfer();
+    expect(flow.formErrors).toEqual({});
+    expect(calls[1]?.body).not.toHaveProperty('recipients');
+  });
+
+  it('describes a reply session without a context', async () => {
+    const { flow } = setup({ 'GET /deposit-sessions/current': { status: 200, body: replySession } });
+    await flow.start();
+    expect(flow.isReply).toBe(true);
+    expect(flow.replyRecipient).toBe('alice@entity-a.example.com');
+  });
+
+  it.each([
+    ['no session', problem(401, 'unauthenticated')],
+    ['another kind of session', { status: 200, body: internalSession }],
+  ])('flags the reply as ended with %s', async (_name, current) => {
+    const { flow, calls } = setup({ 'GET /deposit-sessions/current': current }, { reply: replyContext });
+    await flow.start();
+    expect(flow.replyEnded).toBe(true);
+    expect(flow.step).toBe('loading');
+    expect(calls).toHaveLength(1);
+  });
+
+  it('flags the reply as ended when the session ends or expires', async () => {
+    const ended = setup(
+      {
+        'GET /deposit-sessions/current': { status: 200, body: replySession },
+        'DELETE /deposit-sessions/current': { status: 204 },
+      },
+      { reply: replyContext },
+    );
+    await ended.flow.start();
+    await ended.flow.endSession();
+    expect(ended.flow.replyEnded).toBe(true);
+
+    const expired = setup(
+      {
+        'GET /deposit-sessions/current': { status: 200, body: replySession },
+        'POST /transfers': problem(401, 'unauthenticated'),
+      },
+      { reply: replyContext },
+    );
+    await expired.flow.start();
+    expired.flow.addFiles([file()]);
+    await expired.flow.submitTransfer();
+    expect(expired.flow.replyEnded).toBe(true);
   });
 });
 

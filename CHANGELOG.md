@@ -7,6 +7,20 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Reply to a transfer (specification section 10): per-tenant option `allowTransferReply`, off by
+  default, in the Network screen settings. On the download page of a personal link of a transfer sent
+  by an internal user or an API token, the recipient sees "Reply", always confirms their address by a
+  6-digit code (15 minutes, 2 attempts, even without sender verification) and gets a reply deposit
+  session that lives at most until the original transfer expires. The only recipient is the original
+  sender (not changeable); external quotas, abuse detection, blocklist, antivirus, size limit and
+  storage quota apply, and recipient domain rules do not. No reply to a reply, to a transfer from an
+  invited external or through an old shared link (`403 reply-not-allowed`); the original transfer is
+  rechecked at creation and finalization (`410 transfer-gone`), as are the option and the blocklist of
+  the replier and of the original sender. The sender gets the usual notification mail with a warning
+  that the reply comes from outside (`PublicTransfer.reply`, same notice on the download page).
+  Audit: `transfer.created` with origin `reply` plus `transfer.reply_created`; the admin transfer
+  list shows the origin "Reply". Maintenance mode refuses new replies. Replaces the former `409`
+  answer of `purpose: reply`. User guides updated; threat model T-222 to T-225 implemented.
 - Deposit from outside for verified internal users (specification section 6.4): per-tenant option
   `allowRemoteInternalDeposit`, off by default, that a delegated administrator switches on the
   Network screen. Only an address of an internal domain already verified once from the internal
@@ -97,8 +111,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   recipient; the sender confirmation no longer contains a link; the first-download receipt names the
   recipient; resending an administrator notification mails each recipient their own link. Security
   log: `verification_code_invalid` gains `purpose` (`deposit` or `recipient`) and `rate_limited` the
-  scopes `verification_link` and `verification_ip`. Replying to a transfer still answers `409` until
-  a later step.
+  scopes `verification_link` and `verification_ip`. Replying to a transfer answered `409` at that step (implemented later, see the reply entry above).
 - `make check-full`: `make check` with the 20 GB test forced, required before every release.
 - `make check` prints the duration of every gate.
 

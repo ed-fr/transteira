@@ -197,3 +197,39 @@ func TestUpdateTenantRemoteDeposit(t *testing.T) {
 		}
 	})
 }
+
+func TestUpdateTenantTransferReply(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		ev := newEnv(t, e)
+		v, err := ev.svc.GetTenant(ctx, ev.adminA, ev.a.ID)
+		mustNoErr(t, "get", err)
+		if v.AllowTransferReply {
+			t.Fatal("on by default")
+		}
+		v, err = ev.svc.UpdateTenant(ctx, ev.adminA, ev.a.ID, TenantUpdate{AllowTransferReply: ptr(true)}, clientIP)
+		mustNoErr(t, "on", err)
+		if !v.AllowTransferReply {
+			t.Fatalf("not stored: %+v", v)
+		}
+		if b, err := ev.db.Tenants().Get(ctx, ev.b.ID); err != nil || b.AllowTransferReply {
+			t.Fatalf("tenant B changed: %+v, %v", b, err)
+		}
+		found := false
+		for _, e := range ev.auditEvents(t, ev.a.ID, ActionTenantUpdated) {
+			var d struct{ Fields []string }
+			mustNoErr(t, "details", json.Unmarshal(e.Details, &d))
+			found = found || slices.Equal(d.Fields, []string{"allowTransferReply"})
+		}
+		if !found {
+			t.Fatal("no audit event naming allowTransferReply")
+		}
+		_, err = ev.svc.UpdateTenant(ctx, ev.adminB, ev.a.ID, TenantUpdate{AllowTransferReply: ptr(false)}, clientIP)
+		wantErr(t, "other tenant", err, ErrNotFound)
+		v, err = ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{AllowTransferReply: ptr(false)}, clientIP)
+		mustNoErr(t, "off", err)
+		if v.AllowTransferReply {
+			t.Fatalf("still on: %+v", v)
+		}
+	})
+}

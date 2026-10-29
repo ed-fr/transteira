@@ -478,22 +478,27 @@ func notAnAddress(err error) bool {
 }
 
 // TestTransferOrigin maps the sender of a stored transfer to its origin,
-// and exposes the API token of a token transfer.
+// and exposes the API token of a token transfer and the original transfer
+// of a reply.
 func TestTransferOrigin(t *testing.T) {
 	t.Parallel()
-	tokID := id.New(id.APIToken)
+	tokID, origID := id.New(id.APIToken), id.New(id.Transfer)
 	for _, c := range []struct {
-		tr    store.Transfer
-		want  Origin
-		token string
+		tr      store.Transfer
+		want    Origin
+		token   string
+		replyTo string
 	}{
-		{store.Transfer{SenderKind: store.DepositorInternal}, OriginInternal, ""},
-		{store.Transfer{SenderKind: store.DepositorExternal, InvitationID: id.New(id.Invitation)}, OriginExternal, ""},
-		{store.Transfer{SenderKind: store.DepositorInternal, APITokenID: tokID}, OriginAPI, tokID},
+		{store.Transfer{SenderKind: store.DepositorInternal}, OriginInternal, "", ""},
+		{store.Transfer{SenderKind: store.DepositorExternal, InvitationID: id.New(id.Invitation)}, OriginExternal, "", ""},
+		{store.Transfer{SenderKind: store.DepositorInternal, APITokenID: tokID}, OriginAPI, tokID, ""},
+		{store.Transfer{SenderKind: store.DepositorReply, ReplyToTransferID: origID}, OriginReply, "", origID},
+		{store.Transfer{SenderKind: store.DepositorInternalRemote}, OriginInternalRemote, "", ""},
 	} {
 		got := transferOf(c.tr, nil, 0, "en")
-		if got.Origin != c.want || got.APITokenID != c.token {
-			t.Errorf("transferOf(%+v) = origin %q token %q, want %q %q", c.tr, got.Origin, got.APITokenID, c.want, c.token)
+		if got.Origin != c.want || got.APITokenID != c.token || got.ReplyToTransferID != c.replyTo {
+			t.Errorf("transferOf(%+v) = origin %q token %q reply to %q, want %q %q %q", c.tr, got.Origin, got.APITokenID,
+				got.ReplyToTransferID, c.want, c.token, c.replyTo)
 		}
 	}
 }

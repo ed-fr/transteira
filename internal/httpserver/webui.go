@@ -293,7 +293,8 @@ func etagMatches(header, etag string) bool {
 }
 
 // isPublicRoute reports whether p is a route of the public application: /,
-// /d/{token}, /i/{token}, /legal/{document}, /invite, /me ("my transfers",
+// /d/{token}, /d/{token}/reply (reply to a transfer, since 1.1), /i/{token},
+// /legal/{document}, /invite, /me ("my transfers",
 // since 1.1; its access token travels in the URL fragment, never in the
 // path), /help and anything under /help/.
 func isPublicRoute(p string) bool {
@@ -302,6 +303,9 @@ func isPublicRoute(p string) bool {
 	}
 	for _, prefix := range []string{"/d/", "/i/", "/legal/"} {
 		if rest, ok := strings.CutPrefix(p, prefix); ok {
+			if prefix == "/d/" {
+				rest = strings.TrimSuffix(rest, "/reply")
+			}
 			return rest != "" && !strings.Contains(rest, "/")
 		}
 	}

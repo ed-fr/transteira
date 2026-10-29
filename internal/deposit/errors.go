@@ -21,6 +21,10 @@ var (
 	// ErrInvitationGone reports an invitation that exists but is expired or
 	// revoked (410 invitation-gone).
 	ErrInvitationGone = errors.New("deposit: invitation expired or revoked")
+	// ErrReplyGone reports that the source transfer of a reply
+	// ([Service.OpenReply]) expired, or that it or the recipient link no
+	// longer exists in the tenant (410 transfer-gone).
+	ErrReplyGone = errors.New("deposit: transfer replied to is gone")
 	// ErrRateLimited reports a rate limit (429). The error is a
 	// *[RateLimitError] carrying a Retry-After hint.
 	ErrRateLimited = errors.New("deposit: rate limited")

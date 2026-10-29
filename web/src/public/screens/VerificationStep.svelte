@@ -28,9 +28,24 @@
     onverified: () => void | Promise<void>;
     /** Called when the transfer is no longer available. */
     ongone: (kind: VerificationGone) => void;
+    /** What the code opens: the download (default) or a reply to the transfer. */
+    purpose?: 'download' | 'reply';
+    /** Reply purpose only: called when the service is under maintenance. */
+    onmaintenance?: (() => void) | undefined;
+    /** Reply purpose only: back to the download page. */
+    oncancel?: (() => void) | undefined;
   }
 
-  let { token, emailMasked, expired = false, onverified, ongone }: Props = $props();
+  let {
+    token,
+    emailMasked,
+    expired = false,
+    onverified,
+    ongone,
+    purpose = 'download',
+    onmaintenance,
+    oncancel,
+  }: Props = $props();
 
   let phase = $state<'start' | 'code'>('start');
   let masked = $state<string | undefined>(undefined);
@@ -66,7 +81,7 @@
     try {
       const res = await api.post('/downloads/{linkToken}/verification', {
         path: { linkToken: token },
-        body: { purpose: 'download', language: language() },
+        body: { purpose, language: language() },
       });
       if (res.status === 204 || !res.data) {
         await onverified();
@@ -93,6 +108,13 @@
           break;
         case 'conflict':
           formError = t('download.verify.conflict');
+          break;
+        case 'maintenance':
+          if (onmaintenance === undefined) {
+            formError = t('download.reply.maintenance');
+          } else {
+            onmaintenance();
+          }
           break;
         case 'not-found':
         case 'gone':
@@ -167,18 +189,20 @@
   }
 </script>
 
-<h1 tabindex="-1">{t('download.verify.title')}</h1>
+<h1 tabindex="-1">{purpose === 'reply' ? t('download.verify.replyTitle') : t('download.verify.title')}</h1>
 
 {#if expired}
   <Alert severity="info">{t('download.verify.expired')}</Alert>
 {/if}
 
 {#if phase === 'start'}
-  <p>{t('download.verify.intro')}</p>
+  <p>{purpose === 'reply' ? t('download.verify.replyIntro') : t('download.verify.intro')}</p>
   {#if shownEmail !== ''}
     <p class="tt-break">{t('download.verify.address', { email: shownEmail })}</p>
   {/if}
-  <p class="tt-text-muted tt-text-sm">{t('download.verify.personal')}</p>
+  {#if purpose === 'download'}
+    <p class="tt-text-muted tt-text-sm">{t('download.verify.personal')}</p>
+  {/if}
   {#if formError}
     <Alert severity="error">{formError}</Alert>
   {/if}
@@ -187,6 +211,9 @@
     <Button loading={busy} disabled={remaining > 0} onclick={() => void send(false)}>
       {t('download.verify.send')}
     </Button>
+    {#if oncancel}
+      <Button variant="secondary" disabled={busy} onclick={oncancel}>{t('download.reply.page.back')}</Button>
+    {/if}
   </div>
 {:else}
   <p class="tt-break">{t('download.verify.sent', { email: shownEmail })}</p>

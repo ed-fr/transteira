@@ -379,6 +379,18 @@ type View struct {
 	// Confidentiality is the confidentiality level of the transfer, as
 	// snapshotted at its creation, nil without level.
 	Confidentiality *Confidentiality
+	// ReplyAllowed is set when the recipient may send files back to the
+	// sender ([Service.ReplyAccess], since 1.1): the tenant allows replies,
+	// the link is a recipient link and the transfer was sent by an internal
+	// depositor (see [Service.replyEligible]). The blocklist and the
+	// availability of the transfer are checked by ReplyAccess only. Never
+	// set while Locked.
+	ReplyAllowed bool
+	// Reply is set when the transfer is itself a reply sent from outside
+	// the tenant (store.DepositorReply, since 1.1): SenderEmail was verified
+	// by code, but the files come from an external sender (threat model
+	// T-223). Never set while Locked.
+	Reply bool
 }
 
 // Confidentiality is the confidentiality level of a transfer, as
@@ -488,6 +500,47 @@ func (s *Service) lookup(ctx context.Context, tid tenant.ID, hash []byte) (store
 	return d, nil, err
 }
 
+// find looks up the download token rawToken in tenant t, whatever the
+// state of its transfer: ErrNotFound for a malformed or unknown token
+// (including one of another tenant). link is nil for a shared V1 link.
+func (s *Service) find(ctx context.Context, t *tenant.Tenant, rawToken string) (store.TransferDetails, *store.RecipientLink, error) {
+	if !id.DownloadTokenValid(rawToken) {
+		return store.TransferDetails{}, nil, ErrNotFound
+	}
+	hash := sha256.Sum256([]byte(rawToken))
+	d, link, err := s.lookup(ctx, t.ID, hash[:])
+	if errors.Is(err, store.ErrNotFound) {
+		return store.TransferDetails{}, nil, ErrNotFound
+	}
+	if err != nil {
+		return store.TransferDetails{}, nil, fmt.Errorf("download: look up token: %w", err)
+	}
+	return d, link, nil
+}
+
+// deliverable returns the deliverable files of d, by position, or ErrGone
+// when d can no longer be downloaded at now: not available, expired, past
+// its deletion after the first download, or without any deliverable file.
+// With [limitReached], it is the availability rule of a reply, which
+// transfer.replyable applies again when the reply is created and
+// finalized: the two must agree.
+func deliverable(d store.TransferDetails, now time.Time) ([]store.TransferFile, error) {
+	if d.Status != store.TransferAvailable || !now.Before(d.ExpiresAt) ||
+		(!d.DeleteAfter.IsZero() && !now.Before(d.DeleteAfter)) {
+		return nil, ErrGone
+	}
+	var files []store.TransferFile
+	for _, f := range d.Files {
+		if f.ScanStatus.Deliverable() {
+			files = append(files, f)
+		}
+	}
+	if len(files) == 0 {
+		return nil, ErrGone
+	}
+	return files, nil
+}
+
 // resolve looks up the download token rawToken in tenant t and checks that
 // its transfer can be downloaded now. cookies are the raw technical cookies
 // of the request. With gate, a transfer whose download limit is reached is
@@ -496,31 +549,16 @@ func (s *Service) lookup(ctx context.Context, tid tenant.ID, hash []byte) (store
 // already counted is still served during the grace period: their start
 // decides ([Content.Begin], [Archive.Begin]).
 func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken string, cookies Cookies, gate bool) (access, error) {
-	if !id.DownloadTokenValid(rawToken) {
-		return access{}, ErrNotFound
-	}
-	hash := sha256.Sum256([]byte(rawToken))
-	d, link, err := s.lookup(ctx, t.ID, hash[:])
-	if errors.Is(err, store.ErrNotFound) {
-		return access{}, ErrNotFound
-	}
+	d, link, err := s.find(ctx, t, rawToken)
 	if err != nil {
-		return access{}, fmt.Errorf("download: look up token: %w", err)
+		return access{}, err
 	}
 	now := s.now()
-	if d.Status != store.TransferAvailable || !now.Before(d.ExpiresAt) ||
-		(!d.DeleteAfter.IsZero() && !now.Before(d.DeleteAfter)) {
-		return access{}, ErrGone
+	files, err := deliverable(d, now)
+	if err != nil {
+		return access{}, err
 	}
-	a := access{d: d, link: link, unlocked: !d.PasswordProtected(), verify: link != nil && d.RecipientVerification}
-	for _, f := range d.Files {
-		if f.ScanStatus.Deliverable() {
-			a.files = append(a.files, f)
-		}
-	}
-	if len(a.files) == 0 {
-		return access{}, ErrGone
-	}
+	a := access{d: d, link: link, files: files, unlocked: !d.PasswordProtected(), verify: link != nil && d.RecipientVerification}
 	if gate && limitReached(d) {
 		return access{}, ErrMaxDownloads
 	}
@@ -550,6 +588,10 @@ func (s *Service) resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 // without a valid verification cookie entry of the link, gets the minimal
 // locked view: the sender, the expiry, the password flag, the verification
 // flags and the masked address of the link, nothing else.
+//
+// An unlocked view tells whether the recipient may reply (ReplyAllowed,
+// read from the current tenant settings) and whether the transfer is itself
+// a reply (Reply).
 func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string, cookies Cookies) (View, error) {
 	a, err := s.resolve(ctx, t, rawToken, cookies, true)
 	if err != nil {
@@ -569,6 +611,10 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 		// keeps the 1.0 set of fields.
 		return v, nil
 	}
+	if v.ReplyAllowed, err = s.replyEligible(ctx, t.ID, a.d, a.link); err != nil {
+		return View{}, err
+	}
+	v.Reply = a.d.SenderKind == store.DepositorReply
 	v.Confidentiality = confidentiality(a.d)
 	v.Message, v.DeleteAfterFirstDownload, v.ArchiveAvailable = a.d.Message, a.d.DeleteAfterFirstDownload, true
 	if m := a.d.MaxDownloads; m != nil {

@@ -79,7 +79,7 @@ func (n *Notifier) PerRecipientJobs(ctx context.Context, t *tenant.Tenant, tr Tr
 		data := mail.TransferNotificationData{
 			TenantName: t.Name, SenderEmail: v.sender, Message: v.message, Link: l.Link,
 			Files: v.files, ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, QR: true,
-			ConfidentialityLabel: label,
+			ConfidentialityLabel: label, ReplyToCreatedAt: tr.replyCreatedAt(),
 		}
 		m, err := n.render(ctx, t, tr, mail.TemplateTransferNotification, data)
 		if err != nil {

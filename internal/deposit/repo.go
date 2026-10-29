@@ -25,6 +25,7 @@ type repo interface {
 	smtp(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error)
 	session(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) (store.DepositSession, error)
 	endSession(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) error
+	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.Transfer, error)
 	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
 }
 
@@ -38,6 +39,7 @@ type txRepo interface {
 	upsertVerified(ctx context.Context, v store.VerifiedAddress) ([store.RecognitionSaltSize]byte, error)
 	touchVerified(ctx context.Context, email string, now time.Time) error
 	createSession(ctx context.Context, s store.DepositSession) error
+	countLiveReplies(ctx context.Context, linkID string, now time.Time) (int, error)
 	touchInvitation(ctx context.Context, invID string, now time.Time) error
 	createInvitation(ctx context.Context, inv store.Invitation) error
 }
@@ -96,6 +98,11 @@ func (r storeRepo) endSession(ctx context.Context, tid tenant.ID, hash []byte, n
 	return r.db.DepositSessions().End(ctx, tid, hash, now)
 }
 
+func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (store.Transfer, error) {
+	d, err := r.db.Transfers().Get(ctx, tid, trfID)
+	return d.Transfer, err
+}
+
 func (r storeRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -140,6 +147,10 @@ func (t storeTx) touchVerified(ctx context.Context, email string, now time.Time)
 
 func (t storeTx) createSession(ctx context.Context, s store.DepositSession) error {
 	return t.db.DepositSessions().CreateTx(ctx, t.tx, s)
+}
+
+func (t storeTx) countLiveReplies(ctx context.Context, linkID string, now time.Time) (int, error) {
+	return t.db.DepositSessions().CountLiveReplyTx(ctx, t.tx, linkID, now)
 }
 
 func (t storeTx) touchInvitation(ctx context.Context, invID string, now time.Time) error {

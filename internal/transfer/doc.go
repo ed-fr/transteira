@@ -12,7 +12,7 @@
 // deposit session and the real client IP. A transfer is visible to the
 // sender who created it only, by the rule shared with the upload engine
 // ([store.Depositor.Owns]: same normalized address and, for an external
-// sender, same invitation). Any other caller, including a sender of another
+// sender, same invitation; for a reply, same original transfer). Any other caller, including a sender of another
 // tenant, gets [ErrNotFound], exactly as for an unknown transfer.
 //
 // The eligibility of the sender is checked again at creation and at
@@ -31,6 +31,21 @@
 // internal network. It is otherwise an internal sender (recipients,
 // policies, open transfer cap); its transfer.created audit event carries
 // details.remote true.
+//
+// A reply sender (store.DepositorReply, spec 10) is the recipient of a
+// transfer answering its sender: the sender of the original transfer is
+// the only recipient (requested recipients are ignored, like T-17), the
+// recipient domain rules do not bind it, the confidentiality levels apply,
+// and it counts as an external sender for the open transfer cap and the
+// abuse detection (external quota). At creation and again at finalization
+// the tenant must still allow replies, the original must have been sent by
+// an internal sender or an API token to this address, its sender must be
+// neither blocklisted nor outside the internal domains
+// ([ErrReplyNotAllowed], 403 reply-not-allowed), and the original must
+// still be available ([ErrOriginalGone], 410 transfer-gone); these policy
+// refusals are never written to the security log. The creation is audited
+// as transfer.created (origin reply) and transfer.reply_created (details
+// replyTo).
 //
 // An external sender cannot choose recipients: the internal user who issued
 // the invitation is the only recipient (T-17). An internal sender names 1
@@ -59,7 +74,7 @@
 // nothing frees the quota held by a transfer that is never uploaded, so the
 // same transaction also caps the unfinished transfers of each sender
 // (Options.MaxOpenTransfers, TT_MAX_OPEN_TRANSFERS, for internal senders;
-// MaxOpenTransfersExternal for external ones): [ErrRateLimited], 429.
+// MaxOpenTransfersExternal for external and reply ones): [ErrRateLimited], 429.
 //
 // # Abuse detection
 //

@@ -26,6 +26,7 @@ type DepositService interface {
 	End(ctx context.Context, t *tenant.Tenant, rawToken string) error
 	Invite(ctx context.Context, t *tenant.Tenant, session deposit.SessionInfo, clientIP netip.Addr, acceptLanguage, email, message, language string) (deposit.Invitation, error)
 	PublicInvitation(ctx context.Context, t *tenant.Tenant, rawToken string) (deposit.PublicInvitation, error)
+	OpenReply(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, target deposit.ReplyTarget) (deposit.Session, error)
 }
 
 // errNoDepositService reports a server built without WithDeposit: a wiring
@@ -78,6 +79,7 @@ type sessionCreated struct {
 var (
 	_ gen.StartDepositSessionResponseObject          = sessionCreated{}
 	_ gen.ConfirmVerificationChallengeResponseObject = sessionCreated{}
+	_ gen.StartTransferReplyResponseObject           = sessionCreated{}
 )
 
 // visit writes the 201 response.
@@ -105,6 +107,12 @@ func (r sessionCreated) VisitStartDepositSessionResponse(w http.ResponseWriter) 
 // VisitConfirmVerificationChallengeResponse implements
 // gen.ConfirmVerificationChallengeResponseObject.
 func (r sessionCreated) VisitConfirmVerificationChallengeResponse(w http.ResponseWriter) error {
+	return r.visit(w)
+}
+
+// VisitStartTransferReplyResponse implements
+// gen.StartTransferReplyResponseObject.
+func (r sessionCreated) VisitStartTransferReplyResponse(w http.ResponseWriter) error {
 	return r.visit(w)
 }
 
@@ -291,6 +299,12 @@ func sessionBody(info deposit.SessionInfo) gen.DepositSession {
 			InvitedBy gen.Email `json:"invitedBy"`
 		}{ExpiresAt: inv.ExpiresAt, InvitedBy: gen.Email(inv.InvitedBy)}
 	}
+	if r := info.Reply; r != nil {
+		body.Reply = &struct {
+			Recipient         gen.Email `json:"recipient"`
+			TransferExpiresAt time.Time `json:"transferExpiresAt"`
+		}{Recipient: gen.Email(r.Recipient), TransferExpiresAt: r.TransferExpiresAt}
+	}
 	return body
 }
 
@@ -321,6 +335,8 @@ func depositError(err error) error {
 		return problem.New(problem.CodeRateLimited, problem.WithRetryAfter(limited.RetryAfter))
 	case errors.Is(err, deposit.ErrUnauthenticated):
 		return problem.New(problem.CodeUnauthenticated)
+	case errors.Is(err, deposit.ErrReplyGone):
+		return problem.New(problem.CodeTransferGone)
 	case errors.Is(err, deposit.ErrForbidden):
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, deposit.ErrNotFound):

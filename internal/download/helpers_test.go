@@ -266,6 +266,34 @@ func (r faultRepo) report(ctx context.Context, tid tenant.ID, rep store.AbuseRep
 	return r.inner.report(ctx, tid, rep, limits, now, ev)
 }
 
+func (r faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	if err := r.f.hit("tenant"); err != nil {
+		return nil, err
+	}
+	return r.inner.tenant(ctx, tid)
+}
+
+func (r faultRepo) blocked(ctx context.Context, tid tenant.ID, email string) (bool, error) {
+	if err := r.f.hit("blocked"); err != nil {
+		return false, err
+	}
+	return r.inner.blocked(ctx, tid, email)
+}
+
+func (r faultRepo) networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error) {
+	if err := r.f.hit("networkRules"); err != nil {
+		return store.NetworkRuleSet{}, err
+	}
+	return r.inner.networkRules(ctx, tid)
+}
+
+func (r faultRepo) record(ctx context.Context, tid tenant.ID, ev audit.Event) error {
+	if err := r.f.hit("record"); err != nil {
+		return err
+	}
+	return r.inner.record(ctx, tid, ev)
+}
+
 // faultVault wraps the vault with the fault "open".
 type faultVault struct {
 	inner *masterkey.Vault
@@ -632,6 +660,9 @@ type spec struct {
 	// perRecipient gives each recipient their own link (since 1.1), and
 	// verify requires the recipient verification on top.
 	perRecipient, verify bool
+	// sender adjusts the transfer record before it is stored (sender kind,
+	// invitation, API token, reply source), nil for an internal sender.
+	sender func(*store.Transfer)
 }
 
 // random returns n random bytes.
@@ -726,6 +757,9 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 			tr.ConfidentialityLevel = "confidential"
 			tr.ConfidentialityLabel = map[string]string{"fr": "Restreint", "en": "Confidential"}
 			tr.Rules = &store.ConfidentialityRules{ExpiryDaysMask: store.ExpiryMaskAll, RequirePassword: true}
+		}
+		if sp.sender != nil {
+			sp.sender(&tr)
 		}
 		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, recipients, files); err != nil {
 			return err

@@ -125,7 +125,9 @@ describe('labels and badges', () => {
 
   it('labels the origins', () => {
     expect(originLabel('api', t)).toBe('opsTransfers.origin.api');
-    expect(originLabel('reply', t)).toBe('reply');
+    expect(originLabel('reply', t)).toBe('opsTransfers.origin.reply');
+    expect(originLabel('internal_remote', t)).toBe('opsTransfers.origin.internal_remote');
+    expect(originLabel('drop_link', t)).toBe('drop_link');
   });
 
   it('summarises the recipients', () => {

@@ -52,7 +52,7 @@ const (
 // Members allowed by the PublicTransfer and PublicFile schemas, the
 // required ones, and the members of a locked page (exactly these).
 var (
-	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files", "confidentialityLevel", "downloadsRemaining"}
+	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files", "confidentialityLevel", "downloadsRemaining", "replyAllowed", "reply"}
 	publicTransferRequired = []string{"senderEmail", "expiresAt", "passwordProtected", "locked"}
 	publicFileMembers      = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "downloadUrl"}
 	publicFileRequired     = []string{"id", "name", "size", "sha256", "scanStatus", "downloadUrl"}
@@ -90,6 +90,9 @@ type recipient struct {
 	host  string
 	ip    string // X-Forwarded-For; "" sends none
 	grant string // __Host-tt_dl value; "" sends none
+	// verification is the __Host-tt_rv value proving the address of a
+	// per-recipient link; "" sends none.
+	verification string
 }
 
 // newRecipient returns a recipient of tenant A from recipientNet+n.
@@ -103,8 +106,15 @@ func (r *recipient) headers(extra http.Header) http.Header {
 	if r.ip != "" {
 		h.Set(hdrXFF, r.ip)
 	}
+	var cookies []string
 	if r.grant != "" {
-		h.Set("Cookie", grantCookieName+"="+r.grant)
+		cookies = append(cookies, grantCookieName+"="+r.grant)
+	}
+	if r.verification != "" {
+		cookies = append(cookies, verificationCookieName+"="+r.verification)
+	}
+	if len(cookies) > 0 {
+		h.Set("Cookie", strings.Join(cookies, "; "))
 	}
 	for k, vs := range extra {
 		h[k] = vs

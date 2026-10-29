@@ -924,6 +924,7 @@ type downloadBackend interface {
 	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
 	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
 	ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error
+	ReplyAccess(ctx context.Context, t *tenant.Tenant, rawToken, verificationCookie string, clientIP netip.Addr) (download.ReplyTarget, error)
 }
 
 // downloadAdapter adapts the download service to public.DownloadService:
@@ -1278,4 +1279,9 @@ func (o outputs) Close(ctx context.Context) error {
 // ReportAbuse implements public.DownloadService.
 func (a downloadAdapter) ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error {
 	return a.svc.ReportAbuse(ctx, t, rawToken, clientIP, verificationCookie, category, message)
+}
+
+// ReplyAccess implements public.DownloadService.
+func (a downloadAdapter) ReplyAccess(ctx context.Context, t *tenant.Tenant, rawToken, verificationCookie string, clientIP netip.Addr) (download.ReplyTarget, error) {
+	return a.svc.ReplyAccess(ctx, t, rawToken, verificationCookie, clientIP)
 }

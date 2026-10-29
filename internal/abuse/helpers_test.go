@@ -294,12 +294,20 @@ func settings(fn func(s *store.AbuseSettings)) store.AbuseSettings {
 	return s
 }
 
+// replySource is the internal sender of the original transfers of the
+// replies stored by [env.transfer]; no test counts its activity.
+const replySource = "olivia@entity-a.example.com"
+
 // transfer stores a transfer of tn by sender of kind, declaring size
-// bytes, created at at, and returns its ID.
+// bytes, created at at, and returns its ID. A reply answers a transfer of
+// replySource stored first, created the day before at.
 func (ev *env) transfer(tn *tenant.Tenant, sender string, kind store.DepositorKind, size int64, at time.Time) string {
 	ev.t.Helper()
 	ctx := context.Background()
 	tr := store.Transfer{ID: id.New(id.Transfer), SenderEmail: sender, SenderKind: kind, ExpiryDays: 7, CreatedAt: at}
+	if kind == store.DepositorReply {
+		tr.ReplyToTransferID = ev.transfer(tn, replySource, store.DepositorInternal, 0, at.Add(-24*time.Hour))
+	}
 	if kind == store.DepositorExternal {
 		h := sha256.Sum256([]byte(randomHex(16)))
 		inv := store.Invitation{ID: id.New(id.Invitation), TokenHash: h[:], Email: sender, InvitedBy: alice, Language: "en"}

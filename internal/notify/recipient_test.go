@@ -276,3 +276,39 @@ func TestMyTransfersLinkJob(t *testing.T) {
 		t.Errorf("link: %v", err)
 	}
 }
+
+// TestReplyNotice checks that a reply transfer (T-223) carries the external
+// origin warning in the shared-link and per-recipient notification mails,
+// and that a plain transfer does not.
+func TestReplyNotice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	const marker = "Ceci est une réponse au transfert que vous avez envoyé le 5 mars 2027"
+	plain := testTransfer()
+	reply := testTransfer()
+	reply.ReplyTo = &ReplyInfo{OriginalCreatedAt: time.Date(2027, time.March, 5, 9, 0, 0, 0, time.UTC)}
+	build := map[string]func(TransferView) ([]mail.Job, error){
+		"shared":        func(tr TransferView) ([]mail.Job, error) { return e.n.RecipientJobs(ctx, e.t, tr, testLink) },
+		"per-recipient": func(tr TransferView) ([]mail.Job, error) { return e.n.PerRecipientJobs(ctx, e.t, tr, testLinks()) },
+	}
+	for name, f := range build {
+		jobs, err := f(reply)
+		if err != nil || len(jobs) == 0 {
+			t.Fatalf("%s reply: %v", name, err)
+		}
+		for _, j := range jobs {
+			if !strings.Contains(j.Message.Text, marker) || !strings.Contains(j.Message.HTML, marker) {
+				t.Errorf("%s: reply notice missing: %q", name, j.Message.Text)
+			}
+		}
+		jobs, err = f(plain)
+		if err != nil {
+			t.Fatalf("%s plain: %v", name, err)
+		}
+		for _, j := range jobs {
+			if strings.Contains(j.Message.Text, "réponse au transfert") || strings.Contains(j.Message.HTML, "réponse au transfert") {
+				t.Errorf("%s: reply notice shown for a plain transfer", name)
+			}
+		}
+	}
+}

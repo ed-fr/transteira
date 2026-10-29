@@ -96,33 +96,62 @@ func MaskEmail(addr string) string {
 // language of the tenant). verificationCookie is the raw value of the
 // VerificationCookieName cookie, "" when absent.
 //
+// A download verification (reply false) is for a recipient link whose
+// transfer has the recipient verification option. A reply verification is
+// for any link the recipient may reply through (see [Service.ReplyAccess]),
+// with or without the option: replying always requires the code (threat
+// model P33). The challenge records the intent; [Service.ConfirmVerification]
+// accepts either, and both give the same cookie entry.
+//
 // The code goes to the address of the link only, never to an address of
 // the request. It is valid vcode.TTL with store.MaxChallengeAttempts
 // attempts; requesting a new code replaces the previous one. The budgets
 // are counted in the transaction that stores the challenge, after the
 // tenant lock: vcode.MaxPerAddress codes per link (so per address and
-// link) and vcode.MaxPerIP codes per client IP, the latter shared with the
-// deposit codes, per vcode.Window. The mail is queued after the commit;
-// when the queue refuses it, the challenge is deleted, best effort, so that
-// a code nobody received neither stays usable nor counts against the
-// budgets.
+// link, whatever the intent) and vcode.MaxPerIP codes per client IP, the
+// latter shared with the deposit codes, per vcode.Window. The mail is queued
+// after the commit; when the queue refuses it, the challenge is deleted,
+// best effort, so that a code nobody received neither stays usable nor
+// counts against the budgets.
 //
 // It returns a nil *Challenge, without error, when the browser already
 // holds a valid entry of the link (nothing is sent). Errors: ErrNotFound,
-// ErrGone and ErrMaxDownloads as Resolve does (no code is sent for a link
-// that cannot start a download any more); ErrVerificationNotNeeded for a shared link, a transfer without the
-// option, or a reply (which comes with the reply to a transfer);
-// ErrNoClientIP for an invalid clientIP; a *RateLimitError (ErrRateLimited)
-// over a budget, written to the security log, or when the mail queue is
-// full; ErrMailUnavailable when the tenant cannot send mail.
+// ErrGone and ErrMaxDownloads as Resolve does, for a reply too (no code is
+// sent for a link that cannot start a download any more: such a transfer
+// cannot be replied to either); ErrVerificationNotNeeded for a download
+// verification on a shared link or a transfer without the option;
+// ErrReplyNotAllowed for a reply verification on a link that cannot be
+// replied to (the blocklist is left to ReplyAccess); ErrNoClientIP for an
+// invalid clientIP; a *RateLimitError (ErrRateLimited) over a budget,
+// written to the security log, or when the mail queue is full;
+// ErrMailUnavailable when the tenant cannot send mail.
 func (s *Service) StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*Challenge, error) {
 	a, err := s.resolve(ctx, t, rawToken, Cookies{Verification: verificationCookie}, true)
-	switch {
-	case err != nil:
+	if err != nil {
 		return nil, err
-	case reply || !a.verify:
+	}
+	intent, held := store.IntentDownload, a.verified
+	switch {
+	case reply:
+		ok, err := s.replyEligible(ctx, t.ID, a.d, a.link)
+		switch {
+		case err != nil:
+			return nil, err
+		case !ok:
+			return nil, ErrReplyNotAllowed
+		}
+		intent = store.IntentReply
+		if !a.verify {
+			// resolve only reads the cookie for a transfer with the option.
+			if held, err = s.holds(verificationSpec, verificationCookie, t.ID, a.link.ID, s.now()); err != nil {
+				return nil, err
+			}
+		}
+	case !a.verify:
 		return nil, ErrVerificationNotNeeded
-	case a.verified:
+	}
+	switch {
+	case held:
 		return nil, nil
 	case !clientIP.IsValid():
 		return nil, ErrNoClientIP
@@ -141,7 +170,7 @@ func (s *Service) StartVerification(ctx context.Context, t *tenant.Tenant, rawTo
 		return nil, fmt.Errorf("download: build verification mail: %w", err)
 	}
 	now := s.now()
-	ch, err := s.storeChallenge(ctx, t, a, clientIP, code, now)
+	ch, err := s.storeChallenge(ctx, t, a, intent, clientIP, code, now)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +183,11 @@ func (s *Service) StartVerification(ctx context.Context, t *tenant.Tenant, rawTo
 	return &Challenge{EmailMasked: MaskEmail(a.link.Email), ExpiresAt: ch.ExpiresAt, AttemptsRemaining: ch.AttemptsRemaining}, nil
 }
 
-// storeChallenge stores the challenge of code for the recipient link of a,
-// requested from clientIP at now, under a new random identifier. Over a
-// budget it writes a rate_limited event and returns a *RateLimitError.
-func (s *Service) storeChallenge(ctx context.Context, t *tenant.Tenant, a access, clientIP netip.Addr, code string, now time.Time) (store.Challenge, error) {
+// storeChallenge stores the challenge of code with intent for the
+// recipient link of a, requested from clientIP at now, under a new random
+// identifier. Over a budget it writes a rate_limited event and returns a
+// *RateLimitError.
+func (s *Service) storeChallenge(ctx context.Context, t *tenant.Tenant, a access, intent store.RecipientIntent, clientIP netip.Addr, code string, now time.Time) (store.Challenge, error) {
 	chID, err := s.newToken(id.ChallengeTokenPrefix, id.ChallengeTokenBytes)
 	if err != nil {
 		return store.Challenge{}, fmt.Errorf("download: new challenge id: %w", err)
@@ -169,7 +199,7 @@ func (s *Service) storeChallenge(ctx context.Context, t *tenant.Tenant, a access
 	ch := store.Challenge{
 		ID: chID, Email: a.link.Email, CodeMAC: mac, AttemptsRemaining: store.MaxChallengeAttempts,
 		ClientIP: clientIP, CreatedAt: now, ExpiresAt: now.Add(vcode.TTL),
-		Purpose: store.ChallengeRecipient, RecipientLinkID: a.link.ID, RecipientIntent: store.IntentDownload,
+		Purpose: store.ChallengeRecipient, RecipientLinkID: a.link.ID, RecipientIntent: intent,
 	}
 	scope, err := s.repo.createChallenge(ctx, t.ID, ch, now.Add(-vcode.Window))
 	switch {
@@ -202,21 +232,27 @@ func (s *Service) enqueue(job mail.Job) error {
 // VerificationCookieName cookie, "" when absent.
 //
 // The code is checked against the most recent code of the link only
-// (store.Challenges.LatestByLink), by a constant-time MAC comparison. On
-// success the code is consumed, the link marked verified and the
-// recipient.verified audit event recorded, in one transaction, so that
-// concurrent confirmations cannot both succeed; it returns the new value
-// of the cookie, with a new entry of the link valid VerificationTTL (the
-// other live entries kept). Every wrong code spends an attempt and writes
-// a verification_code_invalid event with purpose "recipient" to the
-// security log (never the code).
+// (store.Challenges.LatestByLink), by a constant-time MAC comparison,
+// whatever its intent (download or reply): both prove the mailbox of the
+// link and open the page, the files and the reply. On a link whose transfer
+// does not have the recipient verification option, only a reply code is
+// accepted, and only while the link may be replied to. On success the code
+// is consumed, the link marked verified and the recipient.verified audit
+// event recorded (detail intent "reply" for a reply code), in one
+// transaction, so that concurrent confirmations cannot both succeed; it
+// returns the new value of the cookie, with a new entry of the link valid
+// VerificationTTL (the other live entries kept). Every wrong code spends an
+// attempt and writes a verification_code_invalid event with purpose
+// "recipient" to the security log (never the code).
 //
 // Errors: ErrInvalidCode for a code that is not 6 digits and ErrNoClientIP
-// for an invalid clientIP (no attempt spent); ErrNotFound and ErrGone as Resolve does; ErrVerificationNotNeeded
-// for a link without verification; ErrNoChallenge when no code is pending
-// (never requested, used or expired); ErrVerificationExhausted when the
-// code is exhausted, including by this wrong code; a *WrongCodeError
-// (ErrWrongCode) for a wrong code while attempts remain.
+// for an invalid clientIP (no attempt spent); ErrNotFound and ErrGone as
+// Resolve does; ErrVerificationNotNeeded for a shared link, or a link
+// without the option that cannot be replied to; ErrNoChallenge when no code
+// is pending (never requested, used or expired, or a download code on a link
+// without the option); ErrVerificationExhausted when the code is exhausted,
+// including by this wrong code; a *WrongCodeError (ErrWrongCode) for a wrong
+// code while attempts remain.
 func (s *Service) ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error) {
 	if !vcode.Valid(code) {
 		return "", ErrInvalidCode
@@ -228,11 +264,18 @@ func (s *Service) ConfirmVerification(ctx context.Context, t *tenant.Tenant, raw
 	if err != nil {
 		return "", err
 	}
-	if !a.verify {
-		return "", ErrVerificationNotNeeded
+	replyOnly := !a.verify
+	if replyOnly {
+		ok, err := s.replyEligible(ctx, t.ID, a.d, a.link)
+		switch {
+		case err != nil:
+			return "", err
+		case !ok:
+			return "", ErrVerificationNotNeeded
+		}
 	}
 	// The newest code of the link only: a new code replaces the previous
-	// ones, and a reply code never verifies a download.
+	// ones, whatever their intent.
 	ch, err := s.repo.latestChallenge(ctx, t.ID, a.link.ID)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -242,7 +285,7 @@ func (s *Service) ConfirmVerification(ctx context.Context, t *tenant.Tenant, raw
 	}
 	now := s.now()
 	switch {
-	case ch.RecipientIntent != store.IntentDownload || !ch.ConsumedAt.IsZero() || !now.Before(ch.ExpiresAt):
+	case replyOnly && ch.RecipientIntent != store.IntentReply, !ch.ConsumedAt.IsZero(), !now.Before(ch.ExpiresAt):
 		return "", ErrNoChallenge
 	case ch.AttemptsRemaining <= 0:
 		return "", ErrVerificationExhausted
@@ -254,10 +297,14 @@ func (s *Service) ConfirmVerification(ctx context.Context, t *tenant.Tenant, raw
 	if !valid {
 		return "", s.wrongCode(ctx, t, clientIP, a.d.ID, ch.ID, now)
 	}
+	details := map[string]any{"link": a.link.ID}
+	if ch.RecipientIntent == store.IntentReply {
+		details["intent"] = string(store.IntentReply)
+	}
 	ev := audit.Event{
 		ActorKind: store.ActorRecipient, Actor: a.link.Email, IP: clientIP,
 		Action: audit.ActionRecipientVerified, ObjectKind: audit.ObjectTransfer, ObjectID: a.d.ID,
-		Details: map[string]any{"link": a.link.ID},
+		Details: details,
 	}
 	err = s.repo.verified(ctx, t.ID, ch.ID, a.link.ID, now, ev)
 	switch {

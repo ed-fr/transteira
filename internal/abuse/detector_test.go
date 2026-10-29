@@ -656,3 +656,54 @@ func TestReported(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckCreateTxReplies counts the replies of section 10 in the external
+// quota of their address, together with its invited deposits, and never in
+// the per-sender daily rules of an internal address.
+func TestCheckCreateTxReplies(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ev := newEnv(t, e)
+		a := ev.tenant(settings(func(s *store.AbuseSettings) {
+			s.BlockOnExceed = true
+			s.MaxDailyBytesPerSender, s.MaxDailyTransfersPerSender, s.MaxRecipientsPerTransfer = i64p(1000), intp(1), intp(1)
+			s.ExternalMaxDailyBytes, s.ExternalMaxDailyDeposits = i64p(500), intp(2)
+		}))
+		// External quota, bytes: an earlier reply of 300 bytes counts.
+		ev.transfer(a, ext, store.DepositorReply, 300, t0.Add(-time.Hour))
+		reply := Facts{SenderEmail: ext, Kind: store.DepositorReply, Bytes: 200, Recipients: []string{alice}, At: t0}
+		if blk, err := ev.check(a, reply); err != nil || blk != nil {
+			t.Fatalf("reply 500 of 500: %+v %v", blk, err)
+		}
+		reply.Bytes = 201
+		if blk, _ := ev.check(a, reply); blk == nil || blk.Rule != store.AbuseRuleExternalQuota || blk.Value != 501 || !blk.bytes {
+			t.Fatalf("reply bytes: %+v", blk)
+		}
+		// External quota, deposits: an invited deposit and a reply of the
+		// same address count together, whichever kind the new one is.
+		eve := "eve@elsewhere.example"
+		ev.transfer(a, eve, store.DepositorExternal, 0, t0.Add(-time.Hour))
+		ev.transfer(a, eve, store.DepositorReply, 0, t0.Add(-time.Hour))
+		for _, kind := range []store.DepositorKind{store.DepositorReply, store.DepositorExternal} {
+			blk, _ := ev.check(a, Facts{SenderEmail: eve, Kind: kind, Recipients: []string{alice}, At: t0})
+			if blk == nil || blk.Rule != store.AbuseRuleExternalQuota || blk.Value != 3 || blk.Threshold != 2 || blk.bytes {
+				t.Fatalf("%s deposits: %+v", kind, blk)
+			}
+		}
+		// A reply is governed by the external quota alone: the recipients
+		// rule does not apply.
+		many := Facts{SenderEmail: "zoe@elsewhere.example", Kind: store.DepositorReply, Recipients: []string{alice, "b@x.example"}, At: t0}
+		if blk, err := ev.check(a, many); err != nil || blk != nil {
+			t.Fatalf("per-sender rules applied to a reply: %+v %v", blk, err)
+		}
+		// The replies of an internal address never count in its daily
+		// internal activity (2 replies, 4000 bytes: no daily_* block).
+		frank := "frank@entity-a.example.com"
+		ev.transfer(a, frank, store.DepositorReply, 2000, t0.Add(-time.Hour))
+		ev.transfer(a, frank, store.DepositorReply, 2000, t0.Add(-time.Hour))
+		if blk, err := ev.check(a, Facts{SenderEmail: frank, Kind: store.DepositorInternal, Bytes: 10, Recipients: []string{ext}, At: t0}); err != nil || blk != nil {
+			t.Fatalf("replies counted as internal activity: %+v %v", blk, err)
+		}
+	})
+}

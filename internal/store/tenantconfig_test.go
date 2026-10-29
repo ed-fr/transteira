@@ -47,7 +47,7 @@ func TestTenantsConfigFields(t *testing.T) {
 		a := newTenant(t, db, "transfer.entity-a.example.com")
 		if a.MaxTransferCeiling != a.MaxTransferBytes || a.Status != tenant.StatusActive ||
 			a.PrimaryColor != tenant.DefaultPrimaryColor || a.AccentColor != tenant.DefaultAccentColor || a.HasLogo || a.HasBackground ||
-			a.WebhookIncludeAddresses || a.AllowRemoteInternalDeposit {
+			a.WebhookIncludeAddresses || a.AllowRemoteInternalDeposit || a.AllowTransferReply {
 			t.Fatalf("created tenant = %+v", a)
 		}
 		if got, err := repo.Get(ctx, a.ID); err != nil || *got != *a {
@@ -59,14 +59,14 @@ func TestTenantsConfigFields(t *testing.T) {
 			Name: "B", FQDN: "transfer.entity-b.example.com", DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 30, MaxTransferCeiling: tenant.MaxTransferLimit, StorageQuotaBytes: 1 << 40,
 			PrimaryColor: "#000000", AccentColor: "#abcdef", HasLogo: true, HasBackground: true,
-			WebhookIncludeAddresses: true, AllowRemoteInternalDeposit: true,
+			WebhookIncludeAddresses: true, AllowRemoteInternalDeposit: true, AllowTransferReply: true,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got, err := repo.Get(ctx, b.ID); err != nil || *got != *b || got.MaxTransferCeiling != tenant.MaxTransferLimit ||
 			got.AccentColor != "#abcdef" || !got.HasLogo || !got.HasBackground || !got.WebhookIncludeAddresses ||
-			!got.AllowRemoteInternalDeposit {
+			!got.AllowRemoteInternalDeposit || !got.AllowTransferReply {
 			t.Fatalf("Get(B) = %+v, %v", got, err)
 		}
 
@@ -110,16 +110,18 @@ func TestTenantsConfigFields(t *testing.T) {
 		upd.HasLogo, upd.HasBackground = true, false
 		upd.WebhookIncludeAddresses = true
 		upd.AllowRemoteInternalDeposit = true
+		upd.AllowTransferReply = true
 		upd.Status = tenant.StatusDeleting
 		out, err := repo.Update(ctx, upd)
 		if err != nil || out.MaxTransferCeiling != 2<<30 || out.MaxTransferBytes != 2<<30 || out.PrimaryColor != "#111111" ||
 			out.AccentColor != "#222222" || !out.HasLogo || out.HasBackground || !out.WebhookIncludeAddresses ||
-			!out.AllowRemoteInternalDeposit || out.Status != tenant.StatusActive {
+			!out.AllowRemoteInternalDeposit || !out.AllowTransferReply || out.Status != tenant.StatusActive {
 			t.Fatalf("Update = %+v, %v", out, err)
 		}
 		upd = out.Clone()
-		upd.WebhookIncludeAddresses, upd.AllowRemoteInternalDeposit = false, false
-		if out, err := repo.Update(ctx, upd); err != nil || out.WebhookIncludeAddresses || out.AllowRemoteInternalDeposit {
+		upd.WebhookIncludeAddresses, upd.AllowRemoteInternalDeposit, upd.AllowTransferReply = false, false, false
+		if out, err := repo.Update(ctx, upd); err != nil || out.WebhookIncludeAddresses || out.AllowRemoteInternalDeposit ||
+			out.AllowTransferReply {
 			t.Fatalf("Update(webhook addresses off) = %+v, %v", out, err)
 		}
 		upd = out.Clone()

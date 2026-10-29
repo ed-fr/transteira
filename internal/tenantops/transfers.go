@@ -38,6 +38,12 @@ const (
 	OriginExternal Origin = "external"
 	// OriginAPI is an API token.
 	OriginAPI Origin = "api"
+	// OriginInternalRemote is an internal address depositing from outside
+	// the internal network (since 1.1).
+	OriginInternalRemote Origin = "internal_remote"
+	// OriginReply is the recipient of a transfer replying to its sender
+	// (spec 10, since 1.1).
+	OriginReply Origin = "reply"
 )
 
 // Transfer is a transfer as the administration lists it (OpenAPI
@@ -52,7 +58,11 @@ type Transfer struct {
 	InvitationID string
 	// APITokenID is the API token that created the transfer ("tok_" +
 	// ULID), "" for a deposit session transfer.
-	APITokenID               string
+	APITokenID string
+	// ReplyToTransferID is the original transfer of a reply ("trf_" +
+	// ULID), "" for any other origin. The original may have been purged
+	// since.
+	ReplyToTransferID        string
 	FileCount                int
 	TotalBytes               int64
 	PasswordProtected        bool
@@ -137,6 +147,10 @@ func originOf(t store.Transfer) Origin {
 		return OriginAPI
 	case t.SenderKind == store.DepositorExternal:
 		return OriginExternal
+	case t.SenderKind == store.DepositorReply:
+		return OriginReply
+	case t.SenderKind == store.DepositorInternalRemote:
+		return OriginInternalRemote
 	}
 	return OriginInternal
 }
@@ -147,7 +161,7 @@ func transferOf(t store.Transfer, recipients []string, fileCount int, lang strin
 	out := Transfer{
 		ID: t.ID, Status: t.Status, Origin: originOf(t), SenderEmail: t.SenderEmail,
 		Recipients: append([]string{}, recipients...), InvitationID: t.InvitationID, APITokenID: t.APITokenID,
-		FileCount: fileCount, TotalBytes: t.TotalBytes, PasswordProtected: t.PasswordProtected(),
+		ReplyToTransferID: t.ReplyToTransferID, FileCount: fileCount, TotalBytes: t.TotalBytes, PasswordProtected: t.PasswordProtected(),
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
 		MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel, Rules: t.Rules,

@@ -57,7 +57,8 @@ type CreateRequest struct {
 	SenderEmail string
 	// Recipients are the recipient addresses: mandatory for an internal
 	// sender and an API token, ignored for an external one (the inviter is
-	// the recipient).
+	// the recipient) and for a reply (the sender of the original transfer
+	// is the recipient).
 	Recipients []string
 	// Message is the optional plain-text message.
 	Message string
@@ -365,11 +366,15 @@ func fingerprint(p plan, req CreateRequest) string {
 //     option of the tenant still on, address still verified and once
 //     verified from inside, whatever the client IP; spec 6.4), active
 //     invitation for an external one; ErrForbidden, logged as
-//     deposit_refused;
+//     deposit_refused; for a reply sender, after the blocklist, the reply
+//     rule (see checkReply): ErrReplyNotAllowed or ErrOriginalGone, never
+//     logged;
 //  2. validation of every field (*ValidationError): a remote internal
 //     sender names its recipients like an internal one, and the tenant
 //     policies of step 3 apply to it the same way; the recipients of an
-//     external sender are ignored and replaced by the inviter (T-17);
+//     external sender are ignored and replaced by the inviter (T-17), those
+//     of a reply sender by the sender of the original transfer (spec 10;
+//     the recipient domain rules of step 3 bind neither);
 //     for an API token sender, steps 2 and 1 run in that order, since the
 //     eligibility (blocklist, internal domain and allowed senders of the
 //     token, without the IP part, replaced by the ranges of the token)
@@ -393,8 +398,9 @@ func fingerprint(p plan, req CreateRequest) string {
 //  7. in one transaction, under the tenant lock: the cap on the unfinished
 //     transfers of the sender (Options.MaxOpenTransfers for an internal
 //     sender and per API token, MaxOpenTransfersExternal for an external
-//     one; until the cleanup job exists, nothing else frees the quota held
-//     by a transfer that is never uploaded): *RateLimitError, logged as
+//     or reply one; until the cleanup job exists, nothing else frees the
+//     quota held by a transfer that is never uploaded): *RateLimitError,
+//     logged as
 //     rate_limited with scope open_transfers; with Options.Abuse, the
 //     blocking abuse rules (AbuseChecker.CheckCreateTx, counting the
 //     activity of the sender with this transfer; under the tenant lock, so
@@ -410,8 +416,9 @@ func fingerprint(p plan, req CreateRequest) string {
 //
 // After the commit, Options.OnQuota is called (refused false) and the
 // transfer.created audit event is recorded (best effort; details.remote
-// true for a remote internal sender, whose origin stays internal),
-// followed for an
+// true for a remote internal sender, whose origin stays internal; origin
+// reply for a reply, followed by transfer.reply_created whose details name
+// the original transfer in replyTo), followed for an
 // API token by api_token.used, whose actor is the sender address (a
 // depositor, so that the GDPR requests on that address find and
 // pseudonymize it), whose object is the token and whose details hold the
@@ -428,13 +435,14 @@ func fingerprint(p plan, req CreateRequest) string {
 // completes it on the first empty PATCH, and until then the finalization
 // answers ErrIncomplete.
 func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, idempotencyKey string) (Details, error) {
-	email, inv, p, err := s.admit(ctx, t, sender, req, idempotencyKey)
+	email, recipient, p, err := s.admit(ctx, t, sender, req, idempotencyKey)
 	defer clear(p.password) // the paths that return before hashing
 	if err != nil {
 		return Details{}, err
 	}
-	if sender.Kind == store.DepositorExternal {
-		p.recipients = []string{inv.InvitedBy}
+	if sender.Kind.IsExternal() {
+		// The inviter, or the sender of the original transfer of a reply.
+		p.recipients = []string{recipient}
 	}
 	pol, err := s.applyPolicies(ctx, t, sender, email, req, p.recipients)
 	if err != nil {
@@ -473,8 +481,8 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	var block *AbuseBlock
 	rec := store.Transfer{
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
-		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
-		IdempotencyKey: idempotencyKey, RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
+		ReplyToTransferID: sender.ReplyToTransferID, Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays,
+		PasswordHash: hash, IdempotencyKey: idempotencyKey, RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
 		// Every transfer created since 1.1 gives each recipient their own
 		// link (P27), mailed to them only and never shown to the sender.
 		LinkMode: s.linkMode, RecipientVerification: req.RecipientVerification,
@@ -541,6 +549,10 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		// written to the security log.
 		s.abuse.Blocked(context.WithoutCancel(ctx), t, facts, *block)
 		return Details{}, &AbuseBlockedError{Rule: block.Rule}
+	case errors.Is(err, store.ErrNotFound) && sender.Kind == store.DepositorReply:
+		// The original transfer was purged since checkReply (or the
+		// tenant's deletion started): nothing was created.
+		return Details{}, ErrOriginalGone
 	case errors.Is(err, store.ErrNotFound):
 		// The tenant's deletion started after its resolution (or the
 		// invitation was deleted, or the API token revoked or expired,
@@ -558,6 +570,10 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		created["remote"] = true
 	}
 	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID, created)
+	if sender.Kind == store.DepositorReply {
+		s.record(ctx, t, sender, email, audit.ActionTransferReplyCreated, trfID,
+			map[string]any{"replyTo": sender.ReplyToTransferID})
+	}
 	if sender.APITokenID != "" {
 		s.write(ctx, t, audit.Event{
 			ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP, Action: audit.ActionAPITokenUsed,
@@ -578,25 +594,25 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 
 // admit checks the eligibility of sender and validates req (steps 1 and 2
 // of Create, in the order of the sender kind) and returns the normalized
-// sender address, the invitation of an external sender and the plan. The
-// plan is returned with its password even on error, for the caller to
-// clear it.
-func (s *Service) admit(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, key string) (string, store.Invitation, plan, error) {
+// sender address, the forced recipient of an external or reply sender
+// (see checkEligible) and the plan. The plan is returned with its password
+// even on error, for the caller to clear it.
+func (s *Service) admit(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, key string) (string, string, plan, error) {
 	if sender.APITokenID == "" {
-		email, inv, err := s.checkEligible(ctx, t, sender)
+		email, recipient, err := s.checkEligible(ctx, t, sender)
 		if err != nil {
-			return "", store.Invitation{}, plan{}, err
+			return "", "", plan{}, err
 		}
 		p, err := s.validate(req, sender, key)
-		return email, inv, p, err
+		return email, recipient, p, err
 	}
 	p, err := s.validate(req, sender, key)
 	if err != nil {
-		return "", store.Invitation{}, p, err
+		return "", "", p, err
 	}
 	sender.Email = p.sender
 	email, _, err := s.checkEligible(ctx, t, sender)
-	return email, store.Invitation{}, p, err
+	return email, "", p, err
 }
 
 // checkOpenCap refuses a new transfer of sender (normalized address email;

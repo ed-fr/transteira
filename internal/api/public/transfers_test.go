@@ -361,6 +361,8 @@ func TestTransferError(t *testing.T) {
 		{err: &transfer.AbuseBlockedError{Rule: store.AbuseRuleDailyBytes}, code: problem.CodeAbuseThresholdBlocked},
 		{err: fmt.Errorf("w: %w", transfer.ErrAbuseBlocked), code: problem.CodeAbuseThresholdBlocked},
 		{err: transfer.ErrForbidden, code: problem.CodeDepositNotAllowed},
+		{err: transfer.ErrReplyNotAllowed, code: problem.CodeReplyNotAllowed},
+		{err: transfer.ErrOriginalGone, code: problem.CodeTransferGone},
 		{err: transfer.ErrNotFound, code: problem.CodeNotFound},
 		{err: transfer.ErrConflict, code: problem.CodeStateConflict},
 		{err: transfer.ErrBusy, code: problem.CodeStateConflict},

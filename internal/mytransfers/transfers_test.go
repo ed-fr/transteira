@@ -445,3 +445,40 @@ func TestExtendAbuse(t *testing.T) {
 		}
 	})
 }
+
+// TestReplyTransfers lists the replies of an address (spec 10) in its "my
+// transfers" with their original transfer, and extends them like any
+// transfer, the abuse detection told of their reply kind.
+func TestReplyTransfers(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		ev := newEnv(t, e)
+		fake := &fakeAbuse{}
+		ev.svc.abuse = fake
+		orig := ev.seed(ev.a, seedOptions{sender: bob})
+		reply := ev.seed(ev.a, seedOptions{sender: dave, replyTo: orig})
+		sess := ev.mustSession(ev.a, dave).SessionInfo
+
+		page, err := ev.svc.List(ctx, ev.a, sess, "", 0)
+		if err != nil || len(page.Items) != 1 || page.Items[0].ID != reply || page.Items[0].ReplyToTransferID != orig {
+			t.Fatalf("List = %+v, %v", page.Items, err)
+		}
+		got, err := ev.svc.Get(ctx, ev.a, sess, reply)
+		if err != nil || got.ReplyToTransferID != orig || got.SenderKind != store.DepositorReply {
+			t.Fatalf("Get = %+v, %v", got, err)
+		}
+		ev.clock.Advance(day)
+		if _, err := ev.svc.Extend(ctx, ev.a, sess, clientIP, reply, 30); err != nil {
+			t.Fatalf("Extend: %v", err)
+		}
+		if len(fake.facts) != 1 || fake.facts[0].Kind != store.DepositorReply || fake.facts[0].TransferID != reply {
+			t.Errorf("abuse facts = %+v", fake.facts)
+		}
+		// The original stays out of the replier's transfers.
+		if _, err := ev.svc.Get(ctx, ev.a, sess, orig); !errors.Is(err, ErrNotFound) {
+			t.Errorf("Get original: %v", err)
+		}
+	})
+}

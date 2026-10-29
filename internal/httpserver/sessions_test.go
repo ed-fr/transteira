@@ -74,6 +74,13 @@ func (f *fakeDeposit) Start(_ context.Context, _ *tenant.Tenant, _ netip.Addr, _
 	}}, nil
 }
 
+func (f *fakeDeposit) OpenReply(_ context.Context, _ *tenant.Tenant, _ netip.Addr, target deposit.ReplyTarget) (deposit.Session, error) {
+	return deposit.Session{Token: "ds_reply", SessionInfo: deposit.SessionInfo{
+		ID: "ds_secret", Email: target.Email, Kind: deposit.KindReply, ExpiresAt: time.Now().Add(time.Hour),
+		Reply: &deposit.ReplyInfo{Recipient: target.Recipient, TransferExpiresAt: target.TransferExpiresAt},
+	}}, nil
+}
+
 func newSessionEnv(t *testing.T, sessions DepositSessions) (*env, *fakeDeposit) {
 	t.Helper()
 	dep := &fakeDeposit{}

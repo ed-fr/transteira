@@ -142,7 +142,7 @@ func (s *Service) recognized(ctx context.Context, t *tenant.Tenant, email, recog
 	if err != nil {
 		return Session{}, false, err
 	}
-	sess, err = s.openSession(ctx, t, email, KindInternal, nil, func(tx txRepo, now time.Time) error {
+	sess, err = s.openSession(ctx, t, sessionSpec{email: email, kind: KindInternal}, func(tx txRepo, now time.Time) error {
 		if err := tx.touchVerified(ctx, email, now); err != nil {
 			return fmt.Errorf("deposit: touch verified address: %w", err)
 		}
@@ -330,7 +330,7 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 		return Session{}, s.wrongCode(ctx, t, clientIP, ch.ID)
 	}
 	cookie := ""
-	sess, err := s.openSession(ctx, t, ch.Email, kind, inv, func(tx txRepo, now time.Time) error {
+	sess, err := s.openSession(ctx, t, sessionSpec{email: ch.Email, kind: kind, inv: inv}, func(tx txRepo, now time.Time) error {
 		if err := tx.consumeChallenge(ctx, ch.ID, now); errors.Is(err, store.ErrNotFound) {
 			return ErrChallengeGone
 		} else if err != nil {

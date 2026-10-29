@@ -985,7 +985,8 @@ paths:
             to the security log), or the CSRF check of a session request failed (`csrf-invalid`).
             Since 1.1: a recipient is refused by the recipient domain rules
             (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
-            (`abuse-threshold-blocked`).
+            (`abuse-threshold-blocked`). A reply is refused (`reply-not-allowed`) when replies are
+            disabled or the original sender can no longer be replied to.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -1005,6 +1006,12 @@ paths:
                     status: 403
                     code: abuse-threshold-blocked
                     detail: The daily sending limit of this service is reached. Please try again tomorrow.
+                replyNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#reply-not-allowed
+                    title: Reply not allowed
+                    status: 403
+                    code: reply-not-allowed
                 depositNotAllowed:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
@@ -1024,6 +1031,7 @@ paths:
                     status: 403
                     code: csrf-invalid
         '409': { $ref: '#/components/responses/StateConflict' }
+        '410': { $ref: '#/components/responses/TransferGone' }
         '413': { $ref: '#/components/responses/TransferTooLarge' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '422':
@@ -1252,6 +1260,12 @@ paths:
                     status: 403
                     code: blocked-file
                     detail: One of the files is not allowed by the administrators of this service.
+                replyNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#reply-not-allowed
+                    title: Reply not allowed
+                    status: 403
+                    code: reply-not-allowed
                 depositNotAllowed:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
@@ -1300,6 +1314,7 @@ paths:
                     title: Operation not allowed in the current state
                     status: 409
                     code: state-conflict
+        '410': { $ref: '#/components/responses/TransferGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/MaintenanceMode' }
@@ -1918,7 +1933,26 @@ paths:
         '204':
           description: The recipient is already verified on this browser; no code was sent.
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '403':
+          description: |
+            Cross-site request (`csrf-invalid`), or, with purpose `reply`, replies are disabled
+            for this entity or impossible on this link (`reply-not-allowed`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                csrfInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
+                replyNotAllowed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#reply-not-allowed
+                    title: Reply not allowed
+                    status: 403
+                    code: reply-not-allowed
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StateConflict' }
         '410': { $ref: '#/components/responses/DownloadGone' }
@@ -2075,15 +2109,31 @@ paths:
         transfer with `POST /transfers` (its `recipients` are ignored) and uploads with tus as any
         depositor. Requirements, checked in this order:
 
-        1. the tenant allows replies (`allowTransferReply`), otherwise `403 reply-not-allowed`;
-           a link created before 1.1 (shared by every recipient) cannot be replied to, and a
-           reply transfer is never replied to (no reply to a reply);
-        2. the recipient proved their address on this browser (`__Host-tt_rv`, see
+        1. the link token names a link of this entity (`404 not-found`);
+        2. the tenant allows replies (`allowTransferReply`), otherwise `403 reply-not-allowed`;
+        3. the recipient proved their address on this browser (`__Host-tt_rv`, see
            `startRecipientVerification` with purpose `reply`), whatever the transfer options:
-           otherwise `401 recipient-verification-required`;
-        3. the recipient address and its domain are not blocklisted
+           otherwise `401 recipient-verification-required`. This check comes before the next
+           ones so that a client who has not proved the address learns nothing of the original
+           sender (internal or not); a link created before 1.1 (shared by every recipient) has
+           no such proof and gets `401` too;
+        4. the transfer was sent by an internal depositor (or an API token): a reply transfer is
+           never replied to (no reply to a reply), nor a transfer of an invited external
+           (`403 reply-not-allowed`);
+        5. the original sender, and its domain, are not blocklisted and its domain is still an
+           internal domain of the entity (`403 reply-not-allowed`, written to the audit log only);
+        6. the original transfer is still available, with a deliverable file and below its
+           download limit (`410 transfer-gone`);
+        7. last, the recipient address and its domain are not blocklisted
            (`403 deposit-not-allowed`, reason in the security log);
-        4. the original transfer is still available (`410 transfer-gone`).
+        8. the link has fewer than 5 reply sessions open (neither ended nor expired), otherwise
+           `429 rate-limited` (written to the security log, `Retry-After` the session lifetime).
+
+        A transfer password is not required to reply: the code sent to the recipient proves the
+        mailbox, and the reply reveals nothing of the transfer. `startRecipientVerification` with
+        purpose `reply` on a transfer whose download limit is reached answers
+        `410 max-downloads-reached`. Opening a reply session replaces any deposit session cookie
+        of the browser: an upload session open in this browser ends.
 
         The session lives at most as long as the original transfer, and the reply transfer is
         subject to the external depositor rules: the external quotas and the abuse thresholds of
@@ -7154,6 +7204,7 @@ components:
         downloadsRemaining: { type: integer, minimum: 0, description: "Since 1.1. Download starts left before `maxDownloads` is reached; absent without limit or while `locked`." }
         confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef', description: "Since 1.1. Confidentiality level chosen by the sender, absent while `locked`." }
         replyAllowed: { type: boolean, description: "Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`." }
+        reply: { type: boolean, description: "Since 1.1. The transfer is a reply sent from outside the entity by a recipient of an earlier transfer (`startTransferReply`): `senderEmail` was verified by code, but the files come from an external sender. Absent while `locked`; never repliable." }
 
     # --- Admin auth -------------------------------------------------------
     SetupStatus:
