@@ -65,7 +65,7 @@
 # of the public signatures), BIGFILE_TIMEOUT (seconds to wait for a healthy stack, 900),
 # BIGFILE_CLIENT_TIMEOUT (4h), BIGFILE_MIN_DOCKER_MEM (7GiB), BIGFILE_MIN_FREE (disk space
 # required, replaces BIGFILE_BYTES x 1.15 + 5 GiB), BIGFILE_MAX_CLOCK_OFFSET (2s, a Go duration).
-# test/README.md, section "20 GB test", explains them.
+# test/README.md, section "Big-file test", explains them.
 # Debugging the orchestration only: BIGFILE_CLIENT=<shell command> runs that command instead of
 # the Go client, with the same environment (the client is then not compiled).
 set -euo pipefail

@@ -51,7 +51,7 @@ help: ## Show available targets
 # The fast e2e checks (lint, screenshot manifest) run with the other static checks; the browser
 # suite runs after the Go tests. The Docker gates (docker-check, proxy-configs-check,
 # deploy-config-check) are appended to this list in their own sections below, so they run after
-# `e2e`, in that order; bigfile (20 GB through Caddy) is appended last.
+# `e2e`, in that order; bigfile (5 GB through Caddy, 20 GB in check-full) is appended last.
 CHECK_GATES := web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check \
 	env-example-check e2e-lint screenshots-check test cover e2e
 
@@ -130,19 +130,24 @@ deploy-smoke: docker ## End-to-end test of deploy/ behind Caddy with real ClamAV
 	DOCKER='$(DOCKER)' TRANSTEIRA_IMAGE=$(DOCKER_IMAGE):local bash scripts/deploy-smoke.sh $(DEPLOY_SMOKE_DB)
 # --- end of Deployment ---
 
-# --- 20 GB test ---
-# CLAUDE.md section 24.2: a 20 GiB file generated on the fly, uploaded with tus through the
+# --- Big-file test (5 GB, 20 GB before a release) ---
+# CLAUDE.md section 24.2: a 5 GiB file (20 GiB with BIGFILE=1) generated on the fly, uploaded with tus through the
 # reference Caddy to the production stack (real ClamAV), the connection cut and resumed during the
 # upload and the download, the SHA-256 compared, the server memory sampled and checked (peak and
 # trend). Both engines, one after the other, each stack torn down with its volumes before the
-# next. scripts/bigfile.sh lists the steps; test/README.md, section "20 GB test", the
+# next. scripts/bigfile.sh lists the steps; test/README.md, section "Big-file test", the
 # prerequisites (Docker disk of 60 to 80 GB, 7 GiB of memory) and the variables. The LAST gate of
 # `make check`, through bigfile-auto (scripts/bigfile-auto.sh): with the default BIGFILE=auto it
 # runs only when the big-file chain changed since its last green run; `make check-full`
 # (BIGFILE=1) always runs it, before every release; BIGFILE=0 skips it. `make bigfile` alone
-# always runs it unless BIGFILE=0.
+# always runs it unless BIGFILE=0. Size: 5 GiB by default (above the 2 GiB ClamAV limit and the
+# 4 GiB ZIP64 and 32-bit offset boundaries), 20 GiB with BIGFILE=1 (`make check-full`).
 BIGFILE         ?= auto
+ifeq ($(BIGFILE),1)
 BIGFILE_BYTES   ?= 21474836480
+else
+BIGFILE_BYTES   ?= 5368709120
+endif
 BIGFILE_DBS     ?= both
 BIGFILE_KEEP    ?= 0
 BIGFILE_MAX_MEM ?= 256MiB
@@ -150,7 +155,7 @@ CHECK_GATES     += bigfile-auto
 
 .PHONY: bigfile-auto bigfile-clean
 
-bigfile: ## 20 GB upload/download test through Caddy, cut and resumed (BIGFILE=0 skips; BIGFILE_BYTES, BIGFILE_DBS, BIGFILE_KEEP)
+bigfile: ## 5 GB (20 GB with BIGFILE=1) upload/download test through Caddy, cut and resumed (BIGFILE=0 skips; BIGFILE_BYTES, BIGFILE_DBS, BIGFILE_KEEP)
 	@if [ "$(BIGFILE)" = "0" ]; then \
 		echo "bigfile: SKIPPED (BIGFILE=0): never skip the 20 GB test before a release"; \
 	else \
@@ -163,7 +168,7 @@ bigfile: ## 20 GB upload/download test through Caddy, cut and resumed (BIGFILE=0
 		BIGFILE_MAX_CLOCK_OFFSET='$(BIGFILE_MAX_CLOCK_OFFSET)' bash scripts/bigfile.sh; \
 	fi
 
-bigfile-auto: ## Run the 20 GB test when its chain changed since its last green run (BIGFILE=auto|1|0)
+bigfile-auto: ## Run the 5 GB test when its chain changed since its last green run (BIGFILE=auto|1|0)
 	@BIGFILE='$(BIGFILE)' BIGFILE_BYTES='$(BIGFILE_BYTES)' BIGFILE_DBS='$(BIGFILE_DBS)' \
 		BIGFILE_MAX_MEM='$(BIGFILE_MAX_MEM)' BIGFILE_CHUNK='$(BIGFILE_CHUNK)' BIGFILE_CUT_AT='$(BIGFILE_CUT_AT)' \
 		BIGFILE_DL_CUT_AT='$(BIGFILE_DL_CUT_AT)' BIGFILE_SEED='$(BIGFILE_SEED)' \
@@ -173,7 +178,7 @@ bigfile-auto: ## Run the 20 GB test when its chain changed since its last green 
 
 bigfile-clean: ## Remove what a failed BIGFILE_KEEP=1 run of the 20 GB test left (transteira-bigfile-* only)
 	@DOCKER='$(DOCKER)' bash scripts/bigfile.sh clean
-# --- end of 20 GB test ---
+# --- end of big-file test ---
 
 # The gates run in turn through scripts/check.sh, each in its own make invocation, which stops at
 # the first failure (`make -k` does not apply) and prints the duration of every gate. VERSION,
@@ -189,7 +194,7 @@ check: ## Run every quality gate (must be green before each commit; 20 GB test w
 		echo "make check: ALL GREEN"; \
 	fi
 
-check-full: ## make check with the 20 GB test forced (before every release)
+check-full: ## make check with the 20 GB test forced at full size (before every release)
 	@$(MAKE) --no-print-directory check BIGFILE=1
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:

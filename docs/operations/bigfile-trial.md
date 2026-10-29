@@ -5,7 +5,7 @@ reverse proxy**, in a real browser (specification sections 24.2 and 27.4). This 
 the procedure, the expected results, the grid to fill in and what to send back to the developer.
 
 The trial completes the automated 20 GB test (`make bigfile`, the last gate of `make check` when the big-file chain changed, always run by `make check-full`,
-described in [test/README.md](../../test/README.md#20-gb-test-testbigfile-make-bigfile)). The
+described in [test/README.md](../../test/README.md#big-file-test-testbigfile-make-bigfile)). The
 automated test proves the server side with a scripted tus client on the developer's workstation;
 the trial proves what the automated test cannot: the web interface, a real browser, a real network
 with a real cut, the production reverse proxy and the production host.

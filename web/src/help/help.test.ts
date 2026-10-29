@@ -195,7 +195,9 @@ describe('createHelpLoader', () => {
     const adminSet = await loadAdminGuides('de');
     expect(adminSet).toMatchObject({ lang: 'en', app: 'admin' });
     expect(adminSet.guides.map((g) => g.id)).toEqual(ADMIN_GUIDES);
-  });
+    // The generated guide modules are large: their first transform can exceed the default 5 s
+    // on a loaded machine.
+  }, 30_000);
 });
 
 describe('shownTopic', () => {

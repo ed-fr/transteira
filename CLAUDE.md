@@ -554,7 +554,7 @@ Pour chacun, les réglages critiques sont expliqués :
 - **Tests de sécurité** :
   - vérification systématique qu'une entité ne peut jamais accéder aux données d'une autre, pour chaque endpoint ;
   - **fuzzing** (natif Go) sur toutes les entrées utilisateur.
-- **Test de gros fichier automatisé** : génération à la volée d'un fichier aléatoire de **20 Go**, envoi à travers un vrai Caddy lancé dans Docker, **coupure de connexion en cours d'envoi puis reprise**, vérification de l'empreinte du fichier téléchargé par rapport à l'original, et **contrôle que la consommation mémoire reste stable**.
+- **Test de gros fichier automatisé** : génération à la volée d'un fichier aléatoire de **5 Go** dans `make check` (au-delà des seuils de 2 Go de ClamAV et de 4 Go du ZIP64), de **20 Go** dans `make check-full`, envoi à travers un vrai Caddy lancé dans Docker, **coupure de connexion en cours d'envoi puis reprise**, vérification de l'empreinte du fichier téléchargé par rapport à l'original, et **contrôle que la consommation mémoire reste stable**.
 - Tous les tests s'exécutent sur **SQLite et sur PostgreSQL**.
 - Environnement de test local : **Mailpit** pour capturer les mails, domaines en `*.localhost` pour simuler plusieurs entités.
 
@@ -568,7 +568,7 @@ Pour chacun, les réglages critiques sont expliqués :
 
 - **Aucune intégration continue sur GitHub** (pas de GitHub Actions).
 - L'ensemble des contrôles s'exécute **en local**, lancé par **une seule commande** (ex. `make check`) : tests (tous types), `go vet`, linter, **`govulncheck`**, **linter de la spécification OpenAPI** (ex. Spectral, vérifiant notamment que chaque endpoint est décrit et accompagné d'un exemple), mesure de couverture. La commande affiche la **durée de chaque contrôle**.
-- **Test de 20 Go** :
+- **Test de gros fichier** :
   - dans `make check`, il n'est exécuté **que si la chaîne des gros fichiers a changé** depuis son dernier passage au vert (dépôt tus, téléchargement, chiffrement, stockage, ZIP, antivirus, serveur HTTP, image, déploiement, Caddy de référence, le test lui-même) ;
   - **`make check-full`** l'exécute toujours, et elle est **obligatoire avant chaque version**.
 - **Analyse des secrets** (ex. gitleaks) exécutée automatiquement **avant chaque envoi vers GitHub** via un hook git local (pre-push).

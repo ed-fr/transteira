@@ -60,6 +60,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
   never deletes dependent rows.
 - `make check` runs the 20 GB test only when the big-file chain changed since its last green run
   (CLAUDE.md section 24.4).
+- The big-file test of `make check` uses a 5 GiB file, above the 2 GiB ClamAV and 4 GiB ZIP64
+  boundaries; `make check-full` keeps 20 GiB before every release.
 
 ## [1.0.0] - 2026-10-26
 

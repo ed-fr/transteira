@@ -234,10 +234,10 @@ Bash.
 ```sh
 make hooks         # install the pre-push secret scan (gitleaks)
 make check         # every quality gate: web checks and build, format, vet, lint, govulncheck,
-                   # OpenAPI lint, tests, coverage, end-to-end tests, then the 20 GB test when
+                   # OpenAPI lint, tests, coverage, end-to-end tests, then the 5 GB test when
                    # the big-file chain changed; prints the duration of every gate
-make check-full    # make check with the 20 GB test forced (before every release)
-make bigfile       # 20 GB upload and download through Caddy, cut and resumed (both engines)
+make check-full    # make check with the test forced at 20 GB (before every release)
+make bigfile       # 5 GB upload and download through Caddy, cut and resumed (both engines)
 make build         # build the web interface, then the binary that embeds it (bin/)
 make web-install   # install the web dependencies from the lockfile (npm ci --ignore-scripts)
 make web-check     # web gates: generated types, svelte-check, eslint, prettier, vitest, npm audit
@@ -249,8 +249,8 @@ make help          # all targets
 `make check` includes `npm audit`, which needs the npm registry; offline, `make check NPM_AUDIT=0`
 skips that single step explicitly.
 
-The last gate of `make check` is the automated 20 GB test (`make bigfile`, CLAUDE.md sections
-24.2 and 24.4): a 20 GiB file generated on the fly is uploaded with tus through the real Caddy to the
+The last gate of `make check` is the automated big-file test (`make bigfile`, CLAUDE.md sections
+24.2 and 24.4): a 5 GiB file (20 GiB in `make check-full`) generated on the fly is uploaded with tus through the real Caddy to the
 production stack, the connection is cut and resumed during the upload and the download, and every
 SHA-256 and the memory of the server are checked, on SQLite then PostgreSQL. It needs Docker
 Desktop with **60 to 80 GB of disk** and at least 7 GiB of memory, and takes **about 30 minutes**.
@@ -258,7 +258,7 @@ Desktop with **60 to 80 GB of disk** and at least 7 GiB of memory, and takes **a
 scan, HTTP server, image, deployment, reference Caddy, the test itself) changed since its last
 green run; `make check-full` always runs it and is required before every release;
 `make check BIGFILE=0` skips it; `make bigfile BIGFILE_BYTES=1073741824
-BIGFILE_DBS=sqlite` is a quick 1 GiB run. See [test/README.md](test/README.md#20-gb-test-testbigfile-make-bigfile).
+BIGFILE_DBS=sqlite` is a quick 1 GiB run. See [test/README.md](test/README.md#big-file-test-testbigfile-make-bigfile).
 Before the V1 is declared done, an operator also runs the human
 [big file trial](docs/operations/bigfile-trial.md) in a real browser behind the production
 reverse proxy.

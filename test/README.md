@@ -314,9 +314,10 @@ freshclam updates it). `DEPLOY_SMOKE_KEEP_SIGNATURES=0` deletes it at the end.
 | `DEPLOY_SMOKE_KEEP_SIGNATURES` | `1` | `0`: delete the signature cache at the end. |
 | `DEPLOY_SMOKE_TIMEOUT` | `900` | Seconds to wait for a healthy stack. |
 
-## 20 GB test (`test/bigfile`, `make bigfile`)
+## Big-file test (`test/bigfile`, `make bigfile`)
 
-CLAUDE.md section 24.2: a random file of 20 GiB, generated on the fly (never stored on the client),
+CLAUDE.md section 24.2: a random file of 5 GiB (20 GiB with `BIGFILE=1`, so in `make check-full`),
+generated on the fly (never stored on the client),
 is deposited with an API token through tus and the **real reference Caddy** in Docker to the
 **production stack** (`deploy/`, real ClamAV), with the connection cut in the middle of the upload
 and resumed from the offset the server reports; the file is then downloaded in full, and once more
@@ -328,9 +329,9 @@ git-ignored `.cache/bigfile.stamp`); `make check-full` always runs it, before ev
 
 | Command | Effect |
 |---|---|
-| `make bigfile` | Build the image (`make docker`), then run the test on both engines (20 GiB each). |
+| `make bigfile` | Build the image (`make docker`), then run the test on both engines (5 GiB each; 20 GiB with `BIGFILE=1`). |
 | `make bigfile BIGFILE_BYTES=1073741824 BIGFILE_DBS=sqlite` | Quick run: 1 GiB, one engine (about 3 minutes). |
-| `make check-full` | `make check` with the test forced (`BIGFILE=1`). **Required before every release.** |
+| `make check-full` | `make check` with the test forced at 20 GiB (`BIGFILE=1`). **Required before every release.** |
 | `make check BIGFILE=0` | Skip it even if its chain changed (prints a reminder). **Never before a release.** |
 | `make bigfile-clean` | Remove what a failed `BIGFILE_KEEP=1` run left (`transteira-bigfile-*` only). |
 
@@ -464,7 +465,7 @@ the script prints how to inspect it (logs, `docker stats`, the CA and URL) and h
 | Variable | Default | Meaning |
 |---|---|---|
 | `BIGFILE` | `auto` | `auto`: in `make check`, run only when the big-file chain (the module packages the server and the test client depend on, test files aside, plus image, deployment, reference Caddy, scripts, Makefile) or the `BIGFILE_*` settings changed since the last green run of `make check`; `1`: always (`make check-full`); `0`: skip (never before a release). A plain `make bigfile` always runs and does not record its result. |
-| `BIGFILE_BYTES` | `21474836480` | File size (1 MiB to 20 GiB, the largest transfer a tenant may allow). |
+| `BIGFILE_BYTES` | `5368709120` (`21474836480` with `BIGFILE=1`) | File size (1 MiB to 20 GiB, the largest transfer a tenant may allow). |
 | `BIGFILE_DBS` | `both` | `sqlite`, `postgres` or `both` (in that order). |
 | `BIGFILE_KEEP` | `0` | `1`: keep a failed stack for diagnosis. |
 | `BIGFILE_MAX_MEM` | `256MiB` | Largest `anon` + `swap` sample of the server. |
