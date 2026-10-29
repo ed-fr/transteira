@@ -67,6 +67,16 @@ func operations(ev *env, logo []byte) map[string]func(p adminauth.Principal, tid
 			_, err := ev.svc.UpdateRecipientRules(ctx, p, tid, []string{"example.com"}, nil, clientIP)
 			return err
 		},
+		"GetAbuseThresholds": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.AbuseThresholds(ctx, p, tid)
+			return err
+		},
+		"UpdateAbuseThresholds": func(p adminauth.Principal, tid tenant.ID) error {
+			in := store.DefaultAbuseSettings()
+			in.MaxDailyTransfersPerSender = ptr(50)
+			_, err := ev.svc.UpdateAbuseThresholds(ctx, p, tid, in, clientIP)
+			return err
+		},
 		"GetSMTP": func(p adminauth.Principal, tid tenant.ID) error { _, err := ev.svc.GetSMTP(ctx, p, tid); return err },
 		"UpdateSMTP": func(p adminauth.Principal, tid tenant.ID) error {
 			_, err := ev.svc.UpdateSMTP(ctx, p, tid, relay(), clientIP)
@@ -172,6 +182,12 @@ func TestAccessBeforeValidation(t *testing.T) {
 		}{
 			{"UpdateTenant", FieldDefaultLanguage, func(p adminauth.Principal, tid tenant.ID) error {
 				_, err := ev.svc.UpdateTenant(ctx, p, tid, TenantUpdate{DefaultLanguage: ptr("de")}, clientIP)
+				return err
+			}},
+			{"UpdateAbuseThresholds", FieldTimeZone, func(p adminauth.Principal, tid tenant.ID) error {
+				in := store.DefaultAbuseSettings()
+				in.TimeZone = "Not/AZone"
+				_, err := ev.svc.UpdateAbuseThresholds(ctx, p, tid, in, clientIP)
 				return err
 			}},
 			{"UpdateBranding", FieldPrimaryColor, func(p adminauth.Principal, tid tenant.ID) error {

@@ -379,6 +379,7 @@ func TestFaults(t *testing.T) {
 			return err
 		}
 		startVerified := func() error { _, err := ev.svc.Start(ctx, ev.a, internalIP, "", alice, "", ev.known); return err }
+		startRemote := func() error { _, err := ev.svc.Start(ctx, ev.a, externalIP, "", alice, "", ""); return err }
 		startInvited := func() error { _, err := ev.svc.Start(ctx, ev.a, externalIP, "", bob, invToken, ""); return err }
 		confirmInt := func() error { _, err := ev.svc.Confirm(ctx, ev.a, internalIP, chInt.ID, codeInt, ""); return err }
 		confirmWrong := func() error {
@@ -402,10 +403,10 @@ func TestFaults(t *testing.T) {
 		}
 		repoFaults := map[string][]step{
 			"blocked":          {{"Start", startInt, nil}},
-			"networkRules":     {{"Start", startInt, nil}},
+			"networkRules":     {{"Start", startInt, nil}, {"Invite", invite, nil}},
 			"invitationByHash": {{"Start", startInvited, nil}, {"PublicInvitation", public, nil}},
 			"invitation":       {{"Session", extSession, nil}, {"Confirm", confirmExt, nil}},
-			"verified":         {{"Start", startVerified, nil}},
+			"verified":         {{"Start", startVerified, nil}, {"Start(remote)", startRemote, nil}},
 			"countByEmail":     {{"Start", startInt, nil}},
 			"countByIP":        {{"Start", startInt, nil}},
 			"smtp":             {{"Start", startInt, nil}, {"Invite", invite, nil}},

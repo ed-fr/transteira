@@ -120,6 +120,22 @@ Par mail, vous recevez aussi une confirmation d’envoi et un avis de premier t�
 
 > **À savoir** Le lien de téléchargement n’est pas affiché à l’écran : les destinataires le reçoivent par mail, avec un QR code pour l’ouvrir sur un téléphone et les empreintes des fichiers.
 
+<!-- topic: deposit-remote -->
+## Dépôt depuis l’extérieur
+
+Si votre organisation l’a activé, vous pouvez envoyer des fichiers en télétravail, hors du réseau de l’organisation, sans invitation. Cela ne vaut que pour une adresse mail d’un domaine de l’organisation, **déjà vérifiée une première fois depuis le réseau interne**.
+
+Depuis l’extérieur :
+
+- un code est demandé **à chaque dépôt** : le navigateur qui vous reconnaît d’ordinaire ne suffit pas, car seule la possession de votre boîte mail prouve alors votre identité. Si une session ouverte sur le réseau interne est utilisée hors du réseau, elle est refusée : demandez un nouveau code ;
+- vous pouvez envoyer des fichiers, mais **pas inviter** de personnes externes : les invitations restent réservées au réseau interne ;
+- les règles sur les destinataires et les niveaux de confidentialité s’appliquent comme au bureau ;
+- ces dépôts sont signalés dans les journaux de l’organisation et comptés dans la détection des abus.
+
+Si l’option est désactivée, le dépôt depuis l’extérieur est refusé avec le même message que pour toute personne non autorisée. Si l’option est activée mais que votre adresse n’est pas éligible (autre domaine, jamais vérifiée depuis le réseau interne, inactive ou inconnue), le service répond comme pour une adresse éligible (« un code a été envoyé »), mais aucun mail n’est envoyé et tout code saisi est refusé. **Si aucun code n’arrive depuis l’extérieur, votre adresse n’est donc pas éligible** : utilisez d’abord une fois le service depuis le réseau de l’organisation, ou demandez à votre administrateur si l’option est activée.
+
+> **À savoir** Pour pouvoir envoyer un jour depuis l’extérieur, utilisez au moins une fois le service depuis le réseau de l’organisation avec la même adresse.
+
 <!-- topic: my-transfers -->
 ## Mes envois
 

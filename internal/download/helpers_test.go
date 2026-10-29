@@ -259,6 +259,13 @@ func (r faultRepo) verified(ctx context.Context, tid tenant.ID, chID, linkID str
 	return r.inner.verified(ctx, tid, chID, linkID, now, ev)
 }
 
+func (r faultRepo) report(ctx context.Context, tid tenant.ID, rep store.AbuseReport, limits store.AbuseReportLimits, now time.Time, ev audit.Event) (store.AbuseReport, error) {
+	if err := r.f.hit("report"); err != nil {
+		return store.AbuseReport{}, err
+	}
+	return r.inner.report(ctx, tid, rep, limits, now, ev)
+}
+
 // faultVault wraps the vault with the fault "open".
 type faultVault struct {
 	inner *masterkey.Vault

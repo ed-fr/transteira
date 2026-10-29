@@ -1,6 +1,6 @@
 // Package download is the recipient side of TransTeira (CLAUDE.md section
-// 10, threat model T-47 to T-57, T-197 and T-199 to T-206, decisions P3,
-// P4, P9, P23, P27 and P38):
+// 10, threat model T-47 to T-57, T-197, T-199 to T-206 and T-220,
+// decisions P3, P4, P9, P23, P27, P36 and P38):
 // it resolves the download links, checks the transfer passwords, streams
 // the files with Range support and the ZIP archive, and records the first
 // complete download. It is independent of HTTP: the handlers map its
@@ -242,6 +242,25 @@
 // (store.Challenges.LatestByLink) is the only one checked, a new code
 // replacing the previous ones. Wrong codes are written to the security log as
 // verification_code_invalid with purpose "recipient" (P38).
+//
+// # Abuse reports
+//
+// [Service.ReportAbuse] records the "Report an abuse" button of the page
+// (since 1.1, T-220). Any known link of an available transfer may report,
+// without unlock nor verification; a transfer whose download limit is
+// reached stays reportable. The report snapshots the transfer and its
+// sender, the recipient link and the position of its recipient (neither
+// for a shared link), the client IP, a closed category and a message
+// cleaned by textsafe.SanitizeMessage (at most MaxReportMessageRunes
+// characters). The reporter address is recorded only when the
+// verification cookie holds a live entry of this very link; otherwise the
+// report is unverified. The report and its abuse.reported audit event are
+// written in one transaction that first counts 3 reports per link per day
+// and 5 per client IP per hour (store.DefaultAbuseReportLimits); over a
+// budget it answers a *RateLimitError and writes a rate_limited event with
+// scope abuse_report_link or abuse_report_ip. Options.Abuse then alerts
+// the administrators. Nothing happens to the transfer and its sender is
+// never told (P36).
 //
 // # Logs
 //

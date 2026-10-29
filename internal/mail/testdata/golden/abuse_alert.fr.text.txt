@@ -1,0 +1,14 @@
+Bonjour,
+
+La détection des abus de Entity A & Co a levé une alerte concernant l'expéditeur alice@entity-a.example.com (jour : 2027-10-13).
+
+Seuil de volume quotidien dépassé : 120 Go envoyés, seuil 100 Go.
+
+Le transfert a été refusé.
+
+Consultez l'activité dans le journal d'audit de l'administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

@@ -1,0 +1,61 @@
+{
+  "caption": "Abuse reports of the entity",
+  "filters": {
+    "label": "Filter the reports",
+    "status": "Status",
+    "allStatuses": "All statuses"
+  },
+  "loaded": {
+    "one": "{count} report loaded.",
+    "other": "{count} reports loaded."
+  },
+  "loadedMore": {
+    "one": "{count} report loaded, more are available.",
+    "other": "{count} reports loaded, more are available."
+  },
+  "empty": "No report yet.",
+  "emptyFiltered": "No report matches this filter.",
+  "columns": {
+    "reportedAt": "Date",
+    "category": "Reason",
+    "reporter": "Reported by",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "status": {
+    "open": "Open",
+    "closed": "Closed"
+  },
+  "erasedAddress": "Erased address",
+  "reporter": {
+    "verified": "{email} (verified address)",
+    "recipientLink": "Through the link of recipient no. {n}, not verified",
+    "sharedLink": "Through the shared link (transfer created before 1.1), not verified"
+  },
+  "open": {
+    "button": "Details",
+    "buttonFor": "Details of the “{category}” report of {date}"
+  },
+  "detail": {
+    "title": "Abuse report",
+    "status": "Status",
+    "category": "Reason",
+    "reportedAt": "Reported on",
+    "reporter": "Reported by",
+    "sender": "Sender",
+    "transfer": "Transfer",
+    "transferGone": "no longer available",
+    "message": "Message of the report",
+    "noMessage": "No message.",
+    "closedAt": "Closed on",
+    "closedBy": "Closed by",
+    "note": "Note",
+    "noteLabel": "Closing note (optional)",
+    "noteHint": "Closing a report does not act on the transfer: delete it or block the sender from the other screens.",
+    "close": "Close the report",
+    "reopen": "Reopen the report",
+    "cancel": "Close",
+    "closedDone": "Report closed.",
+    "reopenedDone": "Report reopened."
+  }
+}

@@ -1985,7 +1985,9 @@ type ApiTokenUpdate = json.RawMessage
 // `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
 // `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
 // recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
-// (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+// are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
+// it), not `system`, and the details `rule`, `value`, `threshold`, `blocked` and, when known,
+// `transferId`; `abuse.reported` and `abuse.report_closed`
 // name the report; `webhook.*` never carry the URL (host only) nor the secret;
 // `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
 // admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
@@ -2023,7 +2025,9 @@ type AuditEvent struct {
 	// `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
 	// `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
 	// recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
-	// (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+	// are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
+	// it), not `system`, and the details `rule`, `value`, `threshold`, `blocked` and, when known,
+	// `transferId`; `abuse.reported` and `abuse.report_closed`
 	// name the report; `webhook.*` never carry the URL (host only) nor the secret;
 	// `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
 	// admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when

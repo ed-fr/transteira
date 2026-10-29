@@ -271,6 +271,13 @@ func (f *faultRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, 
 	return f.repo.eraseInvitations(ctx, tid, email, pseudonym, now)
 }
 
+func (f *faultRepo) eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error) {
+	if err := f.fail("eraseAbuse"); err != nil {
+		return 0, err
+	}
+	return f.repo.eraseAbuse(ctx, tid, email, pseudonym)
+}
+
 func (f *faultRepo) pseudonymiseAudit(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error) {
 	if err := f.fail("pseudonymiseAudit"); err != nil {
 		return 0, err

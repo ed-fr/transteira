@@ -34,6 +34,7 @@ All V1 conventions still apply. New rules are marked **new**.
 | 0018 | `webhooks` | `webhooks`, `system_webhooks`, the tenant flag `webhook_include_addresses`. Widens the `system_secrets.purpose` check (SQLite rebuild). |
 | 0019 | `my_transfers` | `access_link_requests`, `sender_access_links`, `sender_sessions`. |
 | 0020 | `mail_templates` | Widens the `tenant_email_templates.template_key` check (SQLite rebuild). |
+| 0021 | `abuse_alerts_blocked` | Adds `blocked` (in the primary key) and `attempts` to `abuse_alerts` (SQLite rebuild, PostgreSQL `ALTER`), see §2.5 (D28 revised). |
 
 The grouping departs from the initial sketch for one reason. Every transfer-level change, including the file `path`, the new scan status and the reply column, goes into **one** migration, 0014. That way the large `transfers` table is rebuilt only once. It is also rebuilt **before** any new table references it or `transfer_recipients` (see §2.1).
 
@@ -379,7 +380,21 @@ CREATE TABLE abuse_alerts (                   -- deduplication: one alert per se
 CREATE INDEX abuse_alerts_created_idx ON abuse_alerts (tenant_id, created_at);
 ```
 
-`abuse_alerts` is **only a deduplication table** with short retention (D28). The alerts themselves are the audit events (`abuse.threshold_exceeded`, `abuse.unusual_activity`), kept 12 months. `INSERT ... ON CONFLICT DO NOTHING`: the mail and webhook are sent only when the insert affected a row, while the audit event is written every time.
+`abuse_alerts` is **only a deduplication table** with short retention (D28). The alerts themselves are the audit events (`abuse.threshold_exceeded`, `abuse.unusual_activity`), kept 12 months. The mail and webhook are sent only when the deduplication row is inserted.
+
+**Migration 0021 `abuse_alerts_blocked` (D28 revised).** The table gains two columns:
+
+```sql
+    blocked  INTEGER NOT NULL DEFAULT 0 CHECK (blocked IN (0, 1)),  -- PostgreSQL: BOOLEAN NOT NULL DEFAULT false
+    attempts INTEGER NOT NULL DEFAULT 1 CHECK (attempts >= 1),
+    PRIMARY KEY (tenant_id, sender_email, rule, day, blocked)
+```
+
+- An alert-only finding and a refusal are deduplicated **separately**, so an alert-only alert earlier in the day never masks a refusal.
+- The store increments `attempts` under the tenant lock when the row exists (the query validator refuses `ON CONFLICT`), and inserts it otherwise.
+- **Alert-only** findings are audited every time: each one is a transfer that was created.
+- A **refusal** is audited only when its row is inserted, that is at the first refusal of the day per sender and rule (`details.blocked` true). Later refusals that day only increment `attempts`: no audit event, no mail and no webhook. A sender retrying cannot flood the audit log.
+- SQLite rebuilds the table, which no other table references, with the 0020 pattern, and recreates `abuse_alerts_created_idx`. PostgreSQL alters the table in place, which keeps its row-level security and its `abuse_alerts_isolation` policy. Existing rows become alert-only rows with one attempt.
 
 ```sql
 CREATE TABLE abuse_reports (
@@ -533,7 +548,7 @@ CREATE INDEX sender_sessions_expires_idx ON sender_sessions (tenant_id, expires_
 | `confidentiality_levels` | `ConfidentialityLevels` (`confidentiality.go`, new) | transfer, tenantadmin, public `/tenant` | get list, replace list (one tx) | seed in `Tenants.Create` (system tx) |
 | `recipient_domain_rules` | `RecipientRules` (`recipientrules.go`, new) | transfer, tenantadmin | get, replace | none |
 | `tenant_abuse_settings` | `AbuseSettings` (`abuse.go`, new) | abuse, deposit, tenantadmin | get, put | seed in `Tenants.Create` |
-| `abuse_alerts` | `AbuseAlerts` (`abuse.go`) | abuse | insert-if-absent, purge, erase by email | none |
+| `abuse_alerts` | `AbuseAlerts` (`abuse.go`) | abuse | insert-if-absent (else count the attempt), purge, erase by email | none |
 | `abuse_reports` | `AbuseReports` (`abuse.go`) | download, tenantops | create, rate counts, list, close, purge, erase | super-admin global list (system) |
 | `webhooks` | `Webhooks` (`webhooks.go`, new) | webhook, tenantadmin | CRUD, delivery state | dispatcher loads by `(tenant, id)` in a scoped tx |
 | `system_webhooks` | `SystemWebhooks` (`webhooks.go`) | webhook, systemsettings | none | CRUD and delivery state, reason `"system webhooks"` |
@@ -613,6 +628,7 @@ CREATE POLICY <t>_isolation ON <t>
 | `abuse_alerts` with `sender_email` X | Deleted. |
 | `abuse_reports` with `reporter_email` X | `reporter_email` replaced by the erasure pseudonym (`erased-<16 hex>`). `reporter_verified` stays 1 (D13). |
 | `abuse_reports` with `sender_email` X | `sender_email` replaced by the same pseudonym, as for the audit log (D13). |
+| `abuse_reports` whose `message` or `note` quotes X | Every occurrence of the whole address, whatever its case, replaced by the same pseudonym (text cut to 1000 characters if it grows beyond). |
 | Configuration tables, webhooks | No personal data: untouched. |
 
 `DataSubjectEraseReport` gains `abuseReports` and `accessLinks` counters, as optional fields in the API (D13).
@@ -666,6 +682,7 @@ The open questions of the first draft are settled by the review resolutions (`v1
 | Abuse reports | Verified reporter only through `__Host-tt_rv`, link-keyed limits, spec categories, pseudonymisation on erasure (D13) | §2.5, §5.2 |
 | Default `confidential` level | `internal_recipients_only` on. 1 to 10 levels, key `^[a-z][a-z0-9_-]{0,31}$` (D15). Rules snapshotted on the transfer (D11) | §2.4, §2.2 |
 | Abuse day boundary | Tenant `time_zone`, factor stored as percent (D14). `abuse_alerts` is dedup only (D28) | §2.5 |
+| Repeated refusals (D28 revised, step 8) | `abuse_alerts` gains `blocked` (in the key) and `attempts` (0021). A refusal is audited at its first occurrence of the day only, and later ones are counted. Alert-only findings are still audited every time | §2.5 |
 | Invitation limit | Rolling hour, configurable, default 20 (D29) | §2.5 |
 | `max_downloads` | 1 to 1000 everywhere (D30) | §2.2 |
 | Antivirus disable timing | Frozen at finalization. Engine `none` releases waiting files at startup. No rescan (D8) | §2.2 |

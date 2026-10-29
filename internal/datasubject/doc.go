@@ -36,10 +36,12 @@
 //     rejected) is handled the same way, and no row keeps the address;
 //  4. the invitations of which it is the invitee are deleted; those it
 //     issued are revoked and their issuer replaced by the pseudonym;
-//  5. the address is replaced by the pseudonym wherever it is the actor
+//  5. the abuse alert rows of the address are deleted and the abuse reports
+//     about it or made by it are pseudonymised (since 1.1);
+//  6. the address is replaced by the pseudonym wherever it is the actor
 //     of an audit event of the tenant;
-//  6. the database is scrubbed once (store.DB.ScrubDeleted);
-//  7. the erasure is audited as data_subject.erased, its object being the
+//  7. the database is scrubbed once (store.DB.ScrubDeleted);
+//  8. the erasure is audited as data_subject.erased, its object being the
 //     pseudonym and its details the counts of the report.
 //
 // A transfer held by an upload request is retried a few times, then the

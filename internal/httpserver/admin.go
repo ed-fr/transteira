@@ -186,6 +186,10 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 		BaseRouter: apiMux,
 		// The last middleware is the outermost one.
 		Middlewares: []gen.MiddlewareFunc{
+			// Innermost: after the body limit and the media type checks, it keeps
+			// the raw body of the abuse thresholds update (every member of it is
+			// required, which the generated type cannot tell).
+			admin.CaptureThresholdsBody,
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.AdminCSRF(sessions, adminSessionRequired),

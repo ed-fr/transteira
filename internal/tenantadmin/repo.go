@@ -27,6 +27,8 @@ type repo interface {
 	replaceConfidentialityLevels(ctx context.Context, tid tenant.ID, levels []store.ConfidentialityLevel, by string, now time.Time) ([]store.ConfidentialityLevel, error)
 	recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error)
 	replaceRecipientRules(ctx context.Context, tid tenant.ID, set store.RecipientRuleSet, now time.Time) (store.RecipientRuleSet, error)
+	abuseSettings(ctx context.Context, tid tenant.ID) (store.AbuseSettings, error)
+	putAbuseSettings(ctx context.Context, tid tenant.ID, s store.AbuseSettings) (store.AbuseSettings, error)
 	smtp(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error)
 	putSMTP(ctx context.Context, tid tenant.ID, c store.SMTPConfig, update passwordUpdate) error
 	openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
@@ -228,4 +230,12 @@ func (r *storeRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.Re
 
 func (r *storeRepo) replaceRecipientRules(ctx context.Context, tid tenant.ID, set store.RecipientRuleSet, now time.Time) (store.RecipientRuleSet, error) {
 	return r.db.RecipientRules().Replace(ctx, tid, set, now)
+}
+
+func (r *storeRepo) abuseSettings(ctx context.Context, tid tenant.ID) (store.AbuseSettings, error) {
+	return r.db.AbuseSettings().Get(ctx, tid)
+}
+
+func (r *storeRepo) putAbuseSettings(ctx context.Context, tid tenant.ID, s store.AbuseSettings) (store.AbuseSettings, error) {
+	return r.db.AbuseSettings().Put(ctx, tid, s)
 }

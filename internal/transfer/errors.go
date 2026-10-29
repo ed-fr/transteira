@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ed-fr/transteira/internal/store"
 )
 
 // Errors returned by the [Service]. Callers test them with errors.Is; the
@@ -68,7 +70,30 @@ var (
 	// The error is a *[RuleError] naming every refused recipient. It is a
 	// policy refusal: audited, never written to the security log.
 	ErrRecipientDomainRefused = errors.New("transfer: recipient domain refused")
+	// ErrAbuseBlocked reports a creation refused because it exceeds an
+	// abuse detection threshold of the tenant set to block (403
+	// abuse-threshold-blocked, CLAUDE.md section 15). The error is an
+	// *[AbuseBlockedError] naming the rule. It is a policy refusal: audited
+	// and alerted by the abuse detector, never written to the security log.
+	ErrAbuseBlocked = errors.New("transfer: abuse threshold exceeded")
 )
+
+// AbuseBlockedError reports a creation refused by the abuse detection. It
+// matches [ErrAbuseBlocked]. It names the rule only: the values and
+// thresholds stay with the admins (audit and alerts), never in the answer.
+type AbuseBlockedError struct {
+	// Rule is the exceeded rule (daily_bytes, daily_transfers, recipients
+	// or external_quota).
+	Rule store.AbuseRule
+}
+
+// Error implements error.
+func (e *AbuseBlockedError) Error() string {
+	return "transfer: abuse threshold exceeded (" + string(e.Rule) + ")"
+}
+
+// Is makes errors.Is(err, ErrAbuseBlocked) true.
+func (e *AbuseBlockedError) Is(target error) bool { return target == ErrAbuseBlocked }
 
 // JSON pointers of the request fields named by a [FieldError]. The file
 // fields are indexed: /files/<i>/name and so on, /recipients/<i> likewise.

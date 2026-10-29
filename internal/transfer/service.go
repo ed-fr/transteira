@@ -157,6 +157,10 @@ type Options struct {
 	// Usage counts every finalized transfer, after the commit. nil counts
 	// nothing.
 	Usage UsageRecorder
+	// Abuse is the abuse detection (CLAUDE.md section 15, see Create): the
+	// blocking rules are checked in the creation transaction and every rule
+	// is evaluated after the commit. nil disables it.
+	Abuse AbuseChecker
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the failures that do not fail a request (security
@@ -195,6 +199,7 @@ type Service struct {
 	onQuota       func(tid tenant.ID, refused bool)
 	audit         AuditRecorder
 	usage         UsageRecorder
+	abuse         AbuseChecker
 	clock         func() time.Time
 	newID         func(p id.Prefix) (string, error)
 	newUploadID   func() (string, error)
@@ -238,7 +243,7 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 		repo: storeRepo{db: db, keys: keys}, uploads: uploads, seclog: seclog, hasher: opts.Hasher,
 		logger: opts.Logger, maxRecipients: opts.MaxRecipients, maxOpen: opts.MaxOpenTransfers,
 		uploadMaxAge: opts.UploadMaxAge,
-		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage,
+		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage, abuse: opts.Abuse,
 		clock: opts.Now, newUploadID: id.NewUploadToken, linkMode: store.LinkModePerRecipient,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
@@ -268,7 +273,7 @@ func normalize(sender Sender) (string, error) {
 	if err != nil {
 		return "", errors.New("transfer: malformed sender address")
 	}
-	ok := (sender.Kind == store.DepositorInternal && sender.InvitationID == "") ||
+	ok := (sender.Kind.IsInternal() && sender.InvitationID == "") ||
 		(sender.Kind == store.DepositorExternal && id.Valid(id.Invitation, sender.InvitationID))
 	if !ok {
 		return "", errors.New("transfer: malformed sender kind or invitation")
@@ -312,8 +317,14 @@ func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, r
 // checkEligible checks again that the sender may deposit (threat T-25, the
 // obligation of internal/deposit): neither its address nor its domain is
 // blocklisted; an internal sender still satisfies the internal rule from
-// the current client IP; an external sender's invitation is still active
-// and names the same address. An API token sender (whose Email the caller
+// the current client IP; a remote internal sender
+// (store.DepositorInternalRemote, spec 6.4) still satisfies the remote rule
+// (see checkRemote); an external sender's invitation is still active and
+// names the same address. The kind of a deposit session is never changed
+// here: an internal session used from outside the ranges is refused even
+// when the remote rule would hold (the deposit flow opens a remote session
+// for that), and a remote session needs the remote rule even from inside
+// the ranges. An API token sender (whose Email the caller
 // sets to the sender address) needs an address of an internal domain that
 // the current allowed senders of its token accept
 // ([store.APIToken.AllowsSender], read again on every call so that a change
@@ -321,10 +332,11 @@ func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, r
 // ranges of the token, checked by the HTTP layer. It returns the normalized
 // address and, for an external sender, the invitation (whose inviter is the
 // recipient, T-17). A refusal is logged as deposit_refused with reason
-// blocklist, ip, domain (outside the internal domains, or not an allowed
-// sender of the token) or invitation, and returns ErrForbidden. A token
-// revoked, expired or deleted meanwhile is ErrForbidden too, not logged
-// (the HTTP layer refuses its next request).
+// blocklist, ip (outside the ranges, or a remote rule that no longer holds),
+// domain (outside the internal domains, or not an allowed sender of the
+// token) or invitation, and returns ErrForbidden. A token revoked, expired
+// or deleted meanwhile is ErrForbidden too, not logged (the HTTP layer
+// refuses its next request).
 func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (string, store.Invitation, error) {
 	email, err := normalize(sender)
 	if err != nil {
@@ -340,24 +352,9 @@ func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Se
 	if blocked {
 		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonBlocklist)
 	}
-	if sender.Kind == store.DepositorInternal {
-		rules, err := s.repo.networkRules(ctx, t.ID)
-		if err != nil {
-			return "", store.Invitation{}, fmt.Errorf("transfer: read network rules: %w", err)
-		}
-		v := netpolicy.Evaluate(netpolicy.Rules{CIDRs: rules.CIDRs, Domains: rules.Domains}, sender.ClientIP, email)
-		// The ranges of an API token replace the tenant ranges.
-		v.IPOK = v.IPOK || sender.APITokenID != ""
-		switch {
-		case !v.IPOK:
-			return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonIP)
-		case !v.DomainOK:
-			return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonDomain)
-		}
-		if sender.APITokenID != "" {
-			if err := s.checkTokenSender(ctx, t, sender, email); err != nil {
-				return "", store.Invitation{}, err
-			}
+	if sender.Kind.IsInternal() {
+		if err := s.checkInternal(ctx, t, sender, email); err != nil {
+			return "", store.Invitation{}, err
 		}
 		return email, store.Invitation{}, nil
 	}
@@ -371,6 +368,68 @@ func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Se
 		return "", store.Invitation{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
 	}
 	return email, inv, nil
+}
+
+// checkInternal applies the internal rule (internal sender and API token)
+// or the remote rule (remote internal sender) of checkEligible to sender,
+// whose normalized address is email.
+func (s *Service) checkInternal(ctx context.Context, t *tenant.Tenant, sender Sender, email string) error {
+	rules, err := s.repo.networkRules(ctx, t.ID)
+	if err != nil {
+		return fmt.Errorf("transfer: read network rules: %w", err)
+	}
+	v := netpolicy.Evaluate(netpolicy.Rules{CIDRs: rules.CIDRs, Domains: rules.Domains}, sender.ClientIP, email)
+	switch {
+	case sender.APITokenID != "":
+		// The ranges of an API token replace the tenant ranges.
+		v.IPOK = true
+	case sender.Kind == store.DepositorInternalRemote && !sender.ClientIP.IsValid():
+		// Without a client IP nothing can be traced: fail closed, as the
+		// deposit sessions do.
+		v.IPOK = false
+	case sender.Kind == store.DepositorInternalRemote:
+		// The remote rule replaces the IP part (and only it).
+		if v.IPOK, err = s.checkRemote(ctx, t, email); err != nil {
+			return err
+		}
+	}
+	switch {
+	case !v.IPOK:
+		return s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonIP)
+	case !v.DomainOK:
+		return s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonDomain)
+	}
+	if sender.APITokenID != "" {
+		return s.checkTokenSender(ctx, t, sender, email)
+	}
+	return nil
+}
+
+// checkRemote reports whether the remote rule of spec 6.4 still holds for
+// the address email of tenant t, whatever the client IP: the tenant still
+// allows the deposit from outside (read again, so that turning the option
+// off applies at once to the open sessions), and the address is still
+// verified, active and was verified once from the internal network
+// (internal_verified_at set; an erased or expired address no longer
+// qualifies). The domain part is checked by the caller.
+func (s *Service) checkRemote(ctx context.Context, t *tenant.Tenant, email string) (bool, error) {
+	cur, err := s.repo.tenant(ctx, t.ID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return false, nil // the tenant is being deleted: nothing can be created
+	case err != nil:
+		return false, fmt.Errorf("transfer: read tenant: %w", err)
+	case !cur.AllowRemoteInternalDeposit:
+		return false, nil
+	}
+	va, err := s.repo.verifiedAddress(ctx, t.ID, email)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("transfer: read verified address: %w", err)
+	}
+	return va.Active(s.now()) && !va.InternalVerifiedAt.IsZero(), nil
 }
 
 // checkTokenSender checks that the API token of sender is still usable and

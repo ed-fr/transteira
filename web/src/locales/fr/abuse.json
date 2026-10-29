@@ -1,0 +1,10 @@
+{
+  "category": {
+    "malware": "Virus ou logiciel malveillant",
+    "phishing": "Hameçonnage (fausse page de connexion, arnaque)",
+    "illegal_content": "Contenu illégal",
+    "spam": "Courrier indésirable",
+    "unknown_sender": "Expéditeur inconnu ou inattendu",
+    "other": "Autre motif"
+  }
+}

@@ -557,7 +557,7 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("malformed transfer id")
 	case t.Status != "" && t.Status != TransferUploading:
 		return Transfer{}, invalid("a new transfer must be uploading")
-	case t.SenderKind != DepositorInternal && t.SenderKind != DepositorExternal:
+	case !validDepositorKind(t.SenderKind):
 		return Transfer{}, invalid("unknown sender kind")
 	case (t.SenderKind == DepositorExternal) != (t.InvitationID != ""):
 		return Transfer{}, invalid("an external sender needs an invitation, an internal one none")
@@ -565,7 +565,7 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("malformed invitation id")
 	case t.APITokenID != "" && !id.Valid(id.APIToken, t.APITokenID):
 		return Transfer{}, invalid("malformed api token id")
-	case t.APITokenID != "" && t.SenderKind != DepositorInternal:
+	case t.APITokenID != "" && !t.SenderKind.IsInternal():
 		return Transfer{}, invalid("an api token sender is internal")
 	case !validText(t.Message, MaxTransferMessageLen, false):
 		return Transfer{}, invalid("message must be text of at most %d characters", MaxTransferMessageLen)

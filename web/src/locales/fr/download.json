@@ -80,5 +80,26 @@
     "rateLimited": "Trop de demandes. Patientez avant de demander un autre code.",
     "mailUnavailable": "Le code n’a pas pu être envoyé. Réessayez plus tard.",
     "conflict": "Aucun code ne peut être envoyé pour ce lien pour le moment. Rechargez la page et réessayez."
+  },
+  "report": {
+    "button": "Signaler un abus",
+    "title": "Signaler un abus",
+    "intro": "Ce transfert vous semble suspect ? Prévenez les administrateurs de l’organisation. L’expéditeur ne sera pas informé de votre signalement.",
+    "category": "Motif du signalement",
+    "categoryRequired": "Choisissez un motif.",
+    "message": "Message (facultatif)",
+    "messageHint": "Précisez ce qui vous semble anormal. Texte simple, 1 000 caractères au maximum.",
+    "submit": "Envoyer le signalement",
+    "sending": "Envoi…",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "sent": "Signalement transmis aux administrateurs",
+    "errors": {
+      "rateLimited": "Trop de signalements pour ce lien. Réessayez plus tard.",
+      "notFound": "Ce lien n’existe pas ou n’est plus valide.",
+      "gone": "Ce transfert n’est plus disponible : il a expiré ou a été supprimé.",
+      "invalid": "Le signalement est invalide : vérifiez le motif et la longueur du message.",
+      "error": "Le signalement n’a pas pu être envoyé. Réessayez."
+    }
   }
 }

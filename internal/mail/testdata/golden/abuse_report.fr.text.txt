@@ -1,0 +1,22 @@
+Bonjour,
+
+Un transfert de Entity A & Co a été signalé comme abusif.
+
+Transfert : tr_abc123
+Expéditeur : alice@entity-a.example.com
+Catégorie : Hameçonnage
+
+Signalé via le lien du destinataire n° 2, non vérifié.
+
+Son message :
+
+> Hello <b>Bob</b>,
+> please see https://phishing.example.com/login
+> <a href="https://evil.example">click</a>
+
+Le signalement n'entraîne aucune action automatique : examinez-le dans l'administration.
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

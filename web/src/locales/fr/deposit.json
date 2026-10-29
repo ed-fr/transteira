@@ -19,7 +19,8 @@
     "submit": "Continuer",
     "sending": "Envoi du code…",
     "notAllowed": "Le dépôt n’est possible que depuis le réseau interne avec une adresse de l’organisation. Pour envoyer des fichiers depuis l’extérieur, demandez une invitation à un utilisateur interne.",
-    "invitationGone": "Cette invitation a expiré ou n’est plus valide. Demandez une nouvelle invitation à la personne qui vous a invité."
+    "invitationGone": "Cette invitation a expiré ou n’est plus valide. Demandez une nouvelle invitation à la personne qui vous a invité.",
+    "remoteHint": "Vous travaillez hors du réseau de l’organisation ? Si votre adresse est déjà vérifiée, un code de vérification vous sera demandé à chaque dépôt."
   },
   "code": {
     "title": "Saisissez le code de vérification",
@@ -40,7 +41,8 @@
     "invite": "Inviter une personne à vous envoyer des fichiers",
     "end": "Terminer la session",
     "ended": "Votre session est terminée.",
-    "expired": "Votre session a expiré. Identifiez-vous de nouveau pour continuer."
+    "expired": "Votre session a expiré. Identifiez-vous de nouveau pour continuer.",
+    "remote": "Vous déposez depuis l’extérieur : un code de vérification est demandé à chaque dépôt, et les invitations ne sont pas disponibles."
   },
   "form": {
     "title": "Nouveau transfert",
@@ -116,7 +118,8 @@
       "hint": "Chaque destinataire reçoit un lien personnel et doit saisir un code envoyé à son adresse avant de télécharger. Un lien transféré à quelqu’un d’autre est inutilisable.",
       "forced": "Imposé par le niveau de confidentialité choisi.",
       "requiredByLevel": "Le niveau de confidentialité choisi impose que les destinataires vérifient leur adresse."
-    }
+    },
+    "abuseBlocked": "Ce transfert dépasse une limite fixée par l’organisation (volume, nombre de transferts ou de destinataires) : il est refusé. Réessayez plus tard ou contactez l’administrateur."
   },
   "upload": {
     "overall": "Progression globale",

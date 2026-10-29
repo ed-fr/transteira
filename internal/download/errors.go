@@ -82,13 +82,22 @@ var (
 	// spent.
 	ErrInvalidCode = errors.New("download: malformed verification code")
 	// ErrRateLimited reports a code request over a rate limit, or refused by
-	// a full mail queue (429 rate-limited). The error is a
-	// *[RateLimitError] carrying the Retry-After delay.
-	ErrRateLimited = errors.New("download: too many verification codes")
+	// a full mail queue, or an abuse report over a rate limit (429
+	// rate-limited). The error is a *[RateLimitError] carrying the
+	// Retry-After delay.
+	ErrRateLimited = errors.New("download: rate limit reached")
 	// ErrMailUnavailable reports a code that cannot be sent: no SMTP
 	// settings for the tenant, mail queue shut down or SMTP circuit open
 	// (503 mail-unavailable).
 	ErrMailUnavailable = errors.New("download: verification mail unavailable")
+	// ErrInvalidCategory reports an abuse report whose category is not an
+	// OpenAPI AbuseReportCategory (400 validation-failed, field /category,
+	// code invalid-value).
+	ErrInvalidCategory = errors.New("download: unknown abuse report category")
+	// ErrInvalidMessage reports an abuse report whose message is not UTF-8
+	// or is longer than MaxReportMessageRunes characters once sanitized
+	// (400 validation-failed, field /message, code invalid-format).
+	ErrInvalidMessage = errors.New("download: invalid abuse report message")
 )
 
 // WrongCodeError reports a wrong verification code. It matches
@@ -108,7 +117,8 @@ func (e *WrongCodeError) Error() string {
 func (e *WrongCodeError) Is(target error) bool { return target == ErrWrongCode }
 
 // RateLimitError reports a code request refused by a rate limit or by the
-// mail queue. It matches [ErrRateLimited].
+// mail queue, or an abuse report refused by a rate limit. It matches
+// [ErrRateLimited].
 type RateLimitError struct {
 	// RetryAfter is the Retry-After hint.
 	RetryAfter time.Duration
@@ -116,7 +126,7 @@ type RateLimitError struct {
 
 // Error implements error.
 func (e *RateLimitError) Error() string {
-	return fmt.Sprintf("download: too many verification codes, retry after %s", e.RetryAfter)
+	return fmt.Sprintf("download: rate limit reached, retry after %s", e.RetryAfter)
 }
 
 // Is makes errors.Is(err, ErrRateLimited) true.

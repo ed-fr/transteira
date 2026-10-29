@@ -296,6 +296,11 @@ var routePolicies = map[string]routePolicy{
 	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/verification/confirm": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
 	},
+	// An abuse report (since 1.1) needs no session but counts against the
+	// budgets of the link and of the client IP: same protection.
+	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/abuse-reports": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
 	http.MethodPut + " " + APIBaseURL + "/admin/tenants/{tenantId}/branding/{asset}": {
 		bodyLimit: middleware.ImageBodyLimit, rawBody: true, deadline: ImageDeadline, assetBody: true,
 	},

@@ -7,6 +7,35 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Deposit from outside for verified internal users (specification section 6.4): per-tenant option
+  `allowRemoteInternalDeposit`, off by default, that a delegated administrator switches on the
+  Network screen. Only an address of an internal domain already verified once from the internal
+  network can deposit outside the ranges; a code is required at every deposit (the recognition
+  cookie and an `internal` session opened inside the ranges are never enough), no invitations from
+  outside, recipient rules and confidentiality levels as for an internal sender. Such transfers are
+  flagged `details.remote` in the audit; with the option on, an ineligible address from outside (foreign domain, never
+  verified from the internal network, inactive, unknown) gets the same "a code has been sent"
+  answer without any mail, counted in the code limits, and every code is refused at confirmation
+  (decoy, no oracle); with the option off outsiders get the generic refusal.
+- Abuse detection (specification section 15): per-tenant settings on a new admin screen. Per-sender
+  daily volume, daily transfers and recipients per transfer, with optional blocking
+  (`abuse-threshold-blocked`); unusual volume (factor over the 30-day average), large external
+  transfers and office hours (alert only, internal and remote senders); invitations per inviter per
+  hour; external quotas per address per day. Per-sender limits apply to internal senders only and
+  count every transfer created or extended that day, cancelled drafts included; with blocking, only
+  the first refusal of the day per sender and rule is audited and alerted. Days follow the configured IANA time zone and
+  extensions through "My transfers" count the day of the extension. One alert per sender, rule and
+  day (mail `abuse-alert`, webhooks `abuse.threshold_exceeded` and `abuse.unusual_activity`),
+  audited with the alert, refusals deduplicated separately from alert-only alerts; computed on demand, nothing stored but a de-duplication table purged after
+  2 days.
+- Abuse reports (specification sections 10 and 15.2): "Report abuse" button on the download page
+  (categories, optional 1000-character plain text message), limited to 3 per link per day and 5 per
+  IP per hour (`rate_limited` scopes `abuse_report_link` and `abuse_report_ip`, counted by the
+  fail2ban and CrowdSec rules). The reporter's address is recorded only when the recipient verified it
+  on this browser; no automatic action. Mail `abuse-report` and webhook `abuse.reported` to the
+  delegated administrators, "Reports" admin screen to close (with a note) or reopen, kept 12 months,
+  pseudonymised by the GDPR erasure. User guides for depositors, recipients and delegated
+  administrators.
 - "My transfers" (specification 8.7): a sender whose address is already verified requests a
   single-use access link (15 minutes) by mail, opens a 1-hour session and lists, inspects
   (per-recipient tracking), deletes or extends their transfers (durations of the confidentiality

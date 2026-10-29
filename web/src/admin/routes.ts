@@ -23,6 +23,7 @@ import Help from './screens/Help.svelte';
 import Home from './screens/Home.svelte';
 import NotFound from './screens/NotFound.svelte';
 import AuditLog from './screens/ops/AuditLog.svelte';
+import AbuseReports from './screens/ops/AbuseReports.svelte';
 import Blocklist from './screens/ops/Blocklist.svelte';
 import InvitationList from './screens/ops/InvitationList.svelte';
 import Privacy from './screens/ops/Privacy.svelte';
@@ -43,6 +44,7 @@ import LegalList from './screens/tenants/LegalList.svelte';
 import TemplateEdit from './screens/tenants/TemplateEdit.svelte';
 import TemplateList from './screens/tenants/TemplateList.svelte';
 import TenantConfidentiality from './screens/tenants/TenantConfidentiality.svelte';
+import TenantAbuse from './screens/tenants/TenantAbuse.svelte';
 import TenantBranding from './screens/tenants/TenantBranding.svelte';
 import TenantCreate from './screens/tenants/TenantCreate.svelte';
 import TenantGeneral from './screens/tenants/TenantGeneral.svelte';
@@ -143,6 +145,14 @@ export const routes: readonly AdminRoute[] = [
     tenantNav: true,
   },
   {
+    pattern: '/tenants/:id/abuse',
+    component: TenantAbuse,
+    titleKey: 'adminTenants.abuse.title',
+    access: 'auth',
+    helpTopic: 'tenant-abuse',
+    tenantNav: true,
+  },
+  {
     pattern: '/tenants/:id/confidentiality',
     component: TenantConfidentiality,
     titleKey: 'adminTenants.confidentiality.title',
@@ -220,6 +230,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminOps.blocklist.title',
     access: 'auth',
     helpTopic: 'tenant-blocklist',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/abuse-reports',
+    component: AbuseReports,
+    titleKey: 'adminOps.abuseReports.title',
+    access: 'auth',
+    helpTopic: 'tenant-abuse-reports',
     tenantNav: true,
   },
   {

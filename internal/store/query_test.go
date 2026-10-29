@@ -578,6 +578,51 @@ var tenantAllowlist = map[string]int{
 		`AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
 	`DELETE FROM verification_challenges WHERE tenant_id = ? AND id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) ` +
 		`AND created_at < ?`: 0,
+	// Abuse detection (abuse.go) and abuse reports (abusereports.go).
+	`SELECT ` + abuseSettingsColumns + ` FROM tenant_abuse_settings WHERE tenant_id = ?`: 0,
+	`UPDATE tenant_abuse_settings SET max_daily_bytes_per_sender = ?, max_daily_transfers_per_sender = ?, ` +
+		`max_recipients_per_transfer = ?, block_on_exceed = ?, unusual_volume_pct = ?, unusual_min_history_days = ?, ` +
+		`large_external_transfer_bytes = ?, office_start_minute = ?, office_end_minute = ?, office_weekdays = ?, ` +
+		`time_zone = ?, max_invitations_per_inviter = ?, external_max_daily_bytes = ?, external_max_daily_deposits = ?, ` +
+		`updated_at = ?, updated_by = ? WHERE tenant_id = ?`: 16,
+	`INSERT INTO tenant_abuse_settings (` + abuseSettingsColumns + `, tenant_id) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 16,
+	`UPDATE abuse_alerts SET attempts = attempts + 1 WHERE tenant_id = ? AND sender_email = ? AND rule = ? AND day = ? AND blocked = ?`: 0,
+	`INSERT INTO abuse_alerts (tenant_id, sender_email, rule, day, blocked, created_at) VALUES (?, ?, ?, ?, ?, ?)`:                      0,
+	`DELETE FROM abuse_alerts WHERE tenant_id = ? AND sender_email = ?`:                                                                 0,
+	`DELETE FROM abuse_alerts WHERE tenant_id = ? AND created_at < ?`:                                                                   0,
+	`SELECT sender_kind, CAST(sum(total_bytes) AS BIGINT), count(*) FROM transfers WHERE tenant_id = ? AND sender_email = ? ` +
+		`AND ((created_at >= ? AND created_at < ?) OR (extended_at >= ? AND extended_at < ?)) GROUP BY sender_kind`: 0,
+	`SELECT created_at, total_bytes FROM transfers WHERE tenant_id = ? AND sender_email = ? AND created_at >= ? ` +
+		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`INSERT INTO abuse_reports (tenant_id, id, transfer_id, recipient_link_id, sender_email, recipient_position, ` +
+		`reporter_email, reporter_verified, reporter_ip, category, message, status, note, created_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', '', ?)`: 0,
+	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`: 0,
+	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND recipient_link_id IS NULL AND transfer_id = ? ` +
+		`AND created_at >= ?`: 0,
+	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND reporter_ip = ? AND created_at >= ?`: 0,
+	`SELECT ` + abuseReportColumns + ` FROM abuse_reports WHERE tenant_id = ? AND id = ?`:            0,
+	`SELECT ` + abuseReportColumns + ` FROM abuse_reports WHERE tenant_id = ? AND (created_at, id) < (?, ?) ` +
+		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT ` + abuseReportColumns + ` FROM abuse_reports WHERE tenant_id = ? AND status = ? ` +
+		`AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`UPDATE abuse_reports SET status = 'closed', closed_at = ?, closed_by = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'open'`: 2,
+	`UPDATE abuse_reports SET status = 'closed', closed_at = ?, closed_by = ?, note = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'open'`: 3,
+	`UPDATE abuse_reports SET status = 'open', closed_at = NULL, closed_by = NULL ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'closed'`: 0,
+	`UPDATE abuse_reports SET status = 'open', closed_at = NULL, closed_by = NULL, note = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND status = 'closed'`: 1,
+	`SELECT count(*) FROM abuse_reports WHERE tenant_id = ? AND (sender_email = ? OR reporter_email = ?)`: 0,
+	`UPDATE abuse_reports SET sender_email = ? WHERE tenant_id = ? AND sender_email = ?`:                  1,
+	`UPDATE abuse_reports SET reporter_email = ? WHERE tenant_id = ? AND reporter_email = ?`:              1,
+	`SELECT id, sender_email, reporter_email, message, note FROM abuse_reports WHERE tenant_id = ? AND id > ? ` +
+		`AND (message <> '' OR note <> '') ORDER BY id LIMIT ?`: 0,
+	`UPDATE abuse_reports SET message = ?, note = ? WHERE tenant_id = ? AND id = ?`:                      2,
+	`SELECT id FROM abuse_reports WHERE tenant_id = ? AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM abuse_reports WHERE tenant_id = ? AND id = ? AND created_at < ?`:                        0,
 	`SELECT id FROM deposit_sessions WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) AND id > ? ` +
 		`ORDER BY id LIMIT ?`: 0,
 	`SELECT key FROM password_failures WHERE tenant_id = ? AND scope = ? AND COALESCE(fail_1, 0) <= ? ` +
@@ -780,11 +825,11 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                             reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                          reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
-	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`DELETE FROM tenants WHERE id = ?`:                             reasonTenantAdmin,
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
 	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,

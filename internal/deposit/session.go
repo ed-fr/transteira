@@ -23,6 +23,10 @@ const (
 	KindInternal = store.DepositorInternal
 	// KindExternal is an external user holding an invitation.
 	KindExternal = store.DepositorExternal
+	// KindInternalRemote is an internal user depositing from outside the
+	// tenant ranges (V1.1, spec 6.4): a code on every deposit, no
+	// recognition cookie, no invitation.
+	KindInternalRemote = store.DepositorInternalRemote
 )
 
 // Limits are the deposit limits shown to a depositor (OpenAPI
@@ -57,8 +61,8 @@ type SessionInfo struct {
 	ExpiresAt time.Time
 	// Limits are the deposit limits of the tenant.
 	Limits Limits
-	// CanInvite is true for internal depositors. Invite still checks the
-	// client IP again.
+	// CanInvite is true for internal depositors (KindInternal only, never
+	// KindInternalRemote). Invite still checks the client IP again.
 	CanInvite bool
 	// Invitation is set for external depositors only.
 	Invitation *InvitationInfo
@@ -74,8 +78,9 @@ type Session struct {
 	Token string
 	// Recognition is the new value of the recognition cookie
 	// (RecognitionCookie) for an internal depositor: the HTTP layer sets it
-	// with Max-Age RecognitionMaxAge. It is "" for an external depositor,
-	// whose cookie is left unchanged.
+	// with Max-Age RecognitionMaxAge. It is "" for an external depositor and
+	// for an internal one depositing from outside, whose cookie is left
+	// unchanged.
 	Recognition string
 	SessionInfo
 }
@@ -94,11 +99,11 @@ func (s *Service) csrfToken(rawToken string) (string, error) {
 	return CSRFPrefix + base64.RawURLEncoding.EncodeToString(mac), nil
 }
 
-// openSession creates a session for email in one transaction with prepare
-// (the challenge consumption and address verification, or the use of an
-// already verified address) and, for an external depositor, the use of the
-// invitation inv.
-func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email string, inv *store.Invitation, prepare func(txRepo, time.Time) error) (Session, error) {
+// openSession creates a session of kind for email in one transaction with
+// prepare (the challenge consumption and address verification, or the use
+// of an already verified address) and, for an external depositor, the use
+// of the invitation inv (kind is then KindExternal).
+func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email string, kind Kind, inv *store.Invitation, prepare func(txRepo, time.Time) error) (Session, error) {
 	token, err := s.newToken(id.SessionTokenPrefix, id.SessionTokenBytes)
 	if err != nil {
 		return Session{}, fmt.Errorf("deposit: new session token: %w", err)
@@ -113,11 +118,11 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, email strin
 	}
 	now := s.now()
 	rec := store.DepositSession{
-		ID: sessionID, TokenHash: tokenHash(token), Email: email, Kind: KindInternal,
+		ID: sessionID, TokenHash: tokenHash(token), Email: email, Kind: kind,
 		CreatedAt: now, ExpiresAt: now.Add(s.sessionTTL),
 	}
 	if inv != nil {
-		rec.Kind, rec.InvitationID = KindExternal, inv.ID
+		rec.InvitationID = inv.ID
 	}
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
 		if err := prepare(tx, now); err != nil {

@@ -80,5 +80,26 @@
     "rateLimited": "Too many requests. Please wait before asking for another code.",
     "mailUnavailable": "The code could not be sent. Please try again later.",
     "conflict": "A code cannot be sent for this link right now. Reload the page and try again."
+  },
+  "report": {
+    "button": "Report an abuse",
+    "title": "Report an abuse",
+    "intro": "Does this transfer look suspicious? Warn the administrators of the organisation. The sender will not be told about your report.",
+    "category": "Reason for the report",
+    "categoryRequired": "Choose a reason.",
+    "message": "Message (optional)",
+    "messageHint": "Say what looks wrong. Plain text, 1,000 characters at most.",
+    "submit": "Send the report",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "sent": "Report sent to the administrators",
+    "errors": {
+      "rateLimited": "Too many reports for this link. Try again later.",
+      "notFound": "This link does not exist or is no longer valid.",
+      "gone": "This transfer is no longer available: it expired or was deleted.",
+      "invalid": "The report is invalid: check the reason and the length of the message.",
+      "error": "The report could not be sent. Try again."
+    }
   }
 }

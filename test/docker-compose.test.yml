@@ -32,6 +32,11 @@ services:
       # 100 connections are not enough.
       - -c
       - max_connections=300
+      # Dropping a test schema locks each of its tables and indexes; with the
+      # packages running in parallel the default (64) runs out of lock slots
+      # ("out of shared memory").
+      - -c
+      - max_locks_per_transaction=256
     healthcheck:
       # TCP on purpose: the entrypoint's temporary init server only listens on
       # the Unix socket, so the check turns healthy once init scripts are done.

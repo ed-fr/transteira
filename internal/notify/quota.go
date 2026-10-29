@@ -159,3 +159,35 @@ func normalizeContacts(in []Contact) ([]Contact, error) {
 	}
 	return out, nil
 }
+
+// AbuseAlert builds the abuse_alert mail of every recipient (tenant template
+// key "abuse-alert", CLAUDE.md section 15): one job per recipient, in its
+// language else the tenant default, rendered with the customized template
+// of the tenant when there is one and sent through the SMTP settings of the
+// tenant. Duplicate recipients (ignoring case) get a single mail. An empty
+// data.TenantName is filled with the tenant name.
+//
+// It returns ErrInvalidAlert for an invalid recipient list, ErrInvalidLink
+// when data.AdminLink is not an absolute http or https URL, and ErrNoSMTP
+// when the tenant has no SMTP settings.
+func (n *Notifier) AbuseAlert(ctx context.Context, t *tenant.Tenant, data mail.AbuseAlertData, recipients []Contact) ([]mail.Job, error) {
+	if data.TenantName == "" {
+		data.TenantName = t.Name
+	}
+	return n.adminAlert(ctx, t, mail.TemplateAbuseAlert, data.AdminLink, data, recipients)
+}
+
+// AbuseReport builds the abuse_report mail of every recipient (tenant
+// template key "abuse-report"), like [Notifier.AbuseAlert]. The free text of
+// the reporter is quoted in the text body and escaped in the HTML body, never
+// interpreted.
+//
+// It returns ErrInvalidAlert for an invalid recipient list, ErrInvalidLink
+// when data.AdminLink is not an absolute http or https URL, and ErrNoSMTP
+// when the tenant has no SMTP settings.
+func (n *Notifier) AbuseReport(ctx context.Context, t *tenant.Tenant, data mail.AbuseReportData, recipients []Contact) ([]mail.Job, error) {
+	if data.TenantName == "" {
+		data.TenantName = t.Name
+	}
+	return n.adminAlert(ctx, t, mail.TemplateAbuseReport, data.AdminLink, data, recipients)
+}

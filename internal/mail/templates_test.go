@@ -96,6 +96,14 @@ func goldenData() map[string]any {
 		TemplateAntivirusUnavailable: AntivirusUnavailableData{
 			TenantName: "Entity A & Co", Since: goldenOutage, WaitingTransfers: 4, AdminLink: goldenAdminLink,
 		},
+		TemplateAbuseAlert: AbuseAlertData{
+			TenantName: "Entity A & Co", Rule: AbuseRuleDailyBytes, SenderEmail: "alice@entity-a.example.com",
+			Value: 120 << 30, Threshold: 100 << 30, Blocked: true, Day: "2027-10-13", AdminLink: goldenAdminLink,
+		},
+		TemplateAbuseReport: AbuseReportData{
+			TenantName: "Entity A & Co", TransferID: "tr_abc123", SenderEmail: "alice@entity-a.example.com",
+			Category: AbuseCategoryPhishing, Message: hostileMessage, RecipientIndex: 2, AdminLink: goldenAdminLink,
+		},
 	}
 }
 
@@ -126,7 +134,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {

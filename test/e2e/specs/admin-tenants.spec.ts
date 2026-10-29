@@ -212,6 +212,9 @@ test.describe('tenant configuration', () => {
 
       const cidrs = page.getByRole('textbox', { name: /^Internal IP address ranges/ });
       const domains = page.getByRole('textbox', { name: /^Internal email domains/ });
+      // The first Save button belongs to the ranges and domains form; the second one to the
+      // "Deposit from outside" section below it.
+      const save = page.getByRole('button', { name: 'Save', exact: true }).first();
       await cidrs.fill('192.0.2.0/24\nnot-a-range\n198.51.100.1/24');
       await domains.fill('example.net\nbad domain');
 
@@ -226,7 +229,7 @@ test.describe('tenant configuration', () => {
       await checkA11y(page);
 
       // The save is refused in the browser: error summary, no request.
-      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await save.click();
       await expect(page.getByText('The form contains errors')).toBeVisible();
       expect(puts).toEqual([]);
 
@@ -235,7 +238,7 @@ test.describe('tenant configuration', () => {
       await cidrs.fill('192.0.2.0/24\n2001:DB8::/32\n198.51.100.7');
       await domains.fill('example.net');
       await expect(page.getByText(/^Line \d+:/)).toHaveCount(0);
-      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await save.click();
       await expect(page.getByText('The network settings have been saved.')).toBeVisible();
       await expect(
         page.getByText('The server normalized some values. The lists shown are the saved ones.'),

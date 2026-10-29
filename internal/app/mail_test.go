@@ -271,8 +271,14 @@ func TestDownloadAdapter(t *testing.T) {
 	if ar, err := a.PrepareArchive(ctx, tn, "", netip.Addr{}, download.Cookies{}); err != nil || ar == nil {
 		t.Errorf("PrepareArchive = %v, %v", ar, err)
 	}
+	if err := a.ReportAbuse(ctx, tn, "", netip.Addr{}, "", "spam", ""); err != nil {
+		t.Errorf("ReportAbuse = %v", err)
+	}
 	boom := errors.New("boom")
 	a = downloadAdapter{svc: fakeBackend{err: boom}}
+	if err := a.ReportAbuse(ctx, tn, "", netip.Addr{}, "", "spam", ""); !errors.Is(err, boom) {
+		t.Errorf("ReportAbuse error = %v", err)
+	}
 	if _, err := a.OpenFile(ctx, tn, "", netip.Addr{}, download.Cookies{}, ""); !errors.Is(err, boom) {
 		t.Errorf("OpenFile error = %v", err)
 	}
@@ -346,4 +352,8 @@ func TestAssetStore(t *testing.T) {
 	if err := a.Delete(tid, unknown); !errors.Is(err, errUnknownAsset) {
 		t.Errorf("delete unknown: %v", err)
 	}
+}
+
+func (b fakeBackend) ReportAbuse(context.Context, *tenant.Tenant, string, netip.Addr, string, string, string) error {
+	return b.err
 }

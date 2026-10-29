@@ -86,6 +86,10 @@ type repo interface {
 	// verified and records the audit event ev, in one transaction
 	// (store.ErrNotFound when the challenge is no longer open).
 	verified(ctx context.Context, tid tenant.ID, chID, linkID string, now time.Time, ev audit.Event) error
+	// report stores the abuse report r under the rate limits limits at now
+	// and records the audit event ev, in one transaction
+	// (store.AbuseReports.CreateTx), and returns the stored report.
+	report(ctx context.Context, tid tenant.ID, r store.AbuseReport, limits store.AbuseReportLimits, now time.Time, ev audit.Event) (store.AbuseReport, error)
 }
 
 // errLinkUnclaimed reports the completion of a recipient link whose
@@ -296,4 +300,16 @@ func (r storeRepo) verified(ctx context.Context, tid tenant.ID, chID, linkID str
 		}
 		return r.audit.RecordScopedTx(ctx, tx, ev)
 	})
+}
+
+func (r storeRepo) report(ctx context.Context, tid tenant.ID, rep store.AbuseReport, limits store.AbuseReportLimits, now time.Time, ev audit.Event) (store.AbuseReport, error) {
+	var out store.AbuseReport
+	err := r.tx(ctx, tid, func(tx *store.ScopedTx) error {
+		var err error
+		if out, err = r.db.AbuseReports().CreateTx(ctx, tx, rep, limits, now); err != nil {
+			return err
+		}
+		return r.audit.RecordScopedTx(ctx, tx, ev)
+	})
+	return out, err
 }

@@ -24,6 +24,14 @@
 // generic [ErrForbidden] and a deposit_refused line in the security log
 // with the reason only.
 //
+// A remote internal sender (store.DepositorInternalRemote, spec 6.4)
+// deposits from outside the IP ranges: instead of the IP part of the
+// internal rule, the tenant must still allow the deposit from outside and
+// its address must still be verified and have been verified once from the
+// internal network. It is otherwise an internal sender (recipients,
+// policies, open transfer cap); its transfer.created audit event carries
+// details.remote true.
+//
 // An external sender cannot choose recipients: the internal user who issued
 // the invitation is the only recipient (T-17). An internal sender names 1
 // to Options.MaxRecipients recipients (TT_MAX_RECIPIENTS, decision P15).
@@ -52,6 +60,15 @@
 // same transaction also caps the unfinished transfers of each sender
 // (Options.MaxOpenTransfers, TT_MAX_OPEN_TRANSFERS, for internal senders;
 // MaxOpenTransfersExternal for external ones): [ErrRateLimited], 429.
+//
+// # Abuse detection
+//
+// With Options.Abuse, the blocking abuse rules of the tenant (CLAUDE.md
+// section 15) are checked in the same transaction, before the quota
+// ([ErrAbuseBlocked], 403, audited and alerted by the detector, never in
+// the security log), and every rule is evaluated after the commit. The
+// interface [AbuseChecker] uses types of this package: the application
+// adapts *abuse.Detector to it.
 //
 // # Idempotency
 //
@@ -82,6 +99,7 @@
 //
 // The errors map to HTTP as follows: [ErrInvalid] (*ValidationError) 400
 // validation-failed; [ErrForbidden] 403 deposit-not-allowed;
+// [ErrAbuseBlocked] (*AbuseBlockedError) 403 abuse-threshold-blocked;
 // [ErrBlockedFile] 403 blocked-file; [ErrNotFound] 404 not-found;
 // [ErrConflict], [ErrBusy] and [ErrIdempotencyMismatch] 409 state-conflict; [ErrIncomplete]
 // (*FilesError) 409 upload-incomplete; [ErrChecksumMismatch] (*FilesError)

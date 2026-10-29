@@ -81,6 +81,8 @@ export const ACTION_PATTERN = /^[a-z_]+\.[a-z_]+$/;
 export type TransferStatus = components['schemas']['TransferStatus'];
 /** Status of an invitation. */
 export type InvitationStatus = components['schemas']['InvitationStatus'];
+/** Status of an abuse report. */
+export type AbuseReportStatus = components['schemas']['AbuseReportStatus'];
 /** Kind of a blocklist entry. */
 export type BlocklistKind = components['schemas']['BlocklistKind'];
 
@@ -95,6 +97,8 @@ export const TRANSFER_STATUSES: readonly TransferStatus[] = [
 ];
 /** Values of InvitationStatus. */
 export const INVITATION_STATUSES: readonly InvitationStatus[] = ['pending', 'used', 'expired', 'revoked'];
+/** Values of AbuseReportStatus. */
+export const ABUSE_REPORT_STATUSES: readonly AbuseReportStatus[] = ['open', 'closed'];
 /** Values of BlocklistKind. */
 export const BLOCKLIST_KINDS: readonly BlocklistKind[] = ['email', 'domain', 'sha256'];
 
@@ -108,6 +112,11 @@ export const TRANSFER_FILTERS = {
 /** Filters of listTenantInvitations. */
 export const INVITATION_FILTERS = {
   status: { kind: 'enum', values: INVITATION_STATUSES } as EnumFilter<InvitationStatus>,
+} satisfies FilterSpec;
+
+/** Filters of listAbuseReports. */
+export const ABUSE_REPORT_FILTERS = {
+  status: { kind: 'enum', values: ABUSE_REPORT_STATUSES } as EnumFilter<AbuseReportStatus>,
 } satisfies FilterSpec;
 
 /** Filters of listBlocklist. */

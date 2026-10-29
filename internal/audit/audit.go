@@ -210,8 +210,33 @@ const (
 	ActionWebhookTested Action = "webhook.tested"
 )
 
+// Actions of the abuse report handling (since 1.1).
+const (
+	// ActionAbuseReportClosed: an administrator closed an abuse report.
+	ActionAbuseReportClosed Action = "abuse.report_closed"
+	// ActionAbuseReportReopened: an administrator reopened an abuse report.
+	ActionAbuseReportReopened Action = "abuse.report_reopened"
+	// ActionAbuseReported: a recipient reported an abuse from a download
+	// page (object: the abuse report).
+	ActionAbuseReported Action = "abuse.reported"
+	// ActionAbuseThresholdExceeded: a sender exceeded a per-sender abuse
+	// threshold (daily volume or transfers, recipients, external quota,
+	// invitations); recorded at every occurrence, the mail and webhook
+	// being sent once per sender, rule and day. The sender is the actor
+	// (never in the details); details carry the rule, the value, the
+	// threshold, whether the creation was refused and the transfer.
+	ActionAbuseThresholdExceeded Action = "abuse.threshold_exceeded"
+	// ActionAbuseUnusualActivity: a sender behaved unusually (unusual
+	// volume, large transfer to external addresses, off hours), with the
+	// same actor and details as ActionAbuseThresholdExceeded.
+	ActionAbuseUnusualActivity Action = "abuse.unusual_activity"
+)
+
 // Object kinds.
 const (
+	// ObjectAbuseReport is an abuse report (object ID: its "abr_" ID).
+	ObjectAbuseReport = "abuse_report"
+
 	// ObjectAdmin is an administrator account (object ID: its "adm_" ID).
 	ObjectAdmin = "admin"
 	// ObjectTenant is a tenant (object ID: its tenant ID).

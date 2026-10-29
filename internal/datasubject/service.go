@@ -118,6 +118,10 @@ type EraseReport struct {
 	// AccessLinks counts the "my transfers" access links and sessions of
 	// the address deleted (since 1.1).
 	AccessLinks int
+	// AbuseReports counts the abuse reports made by the address or about
+	// its transfers, whose address was replaced by the pseudonym (since
+	// 1.1).
+	AbuseReports int
 }
 
 // details returns the audit details of the report: counts only.
@@ -126,6 +130,7 @@ func (r EraseReport) details() map[string]any {
 		"transfersDeleted": r.TransfersDeleted, "recipientEntriesRemoved": r.RecipientEntriesRemoved,
 		"verifiedAddressDeleted": r.VerifiedAddressDeleted, "invitationsDeleted": r.InvitationsDeleted,
 		"logEntriesPseudonymised": r.LogEntriesPseudonymised, "accessLinks": r.AccessLinks,
+		"abuseReports": r.AbuseReports,
 	}
 }
 
@@ -391,7 +396,13 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 		return fmt.Errorf("datasubject: erase invitations: %w", err)
 	}
 	rep.InvitationsDeleted = int(n)
-	// 5. Audit log.
+	// 5. Abuse alerts and reports (since 1.1).
+	ab, err := s.repo.eraseAbuse(ctx, tid, addr, pseudonym)
+	if err != nil {
+		return fmt.Errorf("datasubject: erase abuse data: %w", err)
+	}
+	rep.AbuseReports = int(ab)
+	// 6. Audit log.
 	m, err := s.repo.pseudonymiseAudit(ctx, tid, addr, pseudonym)
 	if err != nil {
 		return fmt.Errorf("datasubject: pseudonymise audit events: %w", err)

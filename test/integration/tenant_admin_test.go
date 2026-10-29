@@ -177,6 +177,38 @@ func TestTenantAdminLifecycle(t *testing.T) {
 		expectProblem(t, dc.call(t, http.MethodPut, tenantPath(c.ID, "/recipient-rules"),
 			map[string][]string{"allowedDomains": {"a@b.example"}, "deniedDomains": {}}), http.StatusBadRequest, "validation-failed")
 
+		// The abuse thresholds (since 1.1): the defaults, a full replacement,
+		// then the refusal of a body that forgets a member (which would
+		// silently disable its rule) and of a bad time zone.
+		resp = mustStatus(t, "getAbuseThresholds", dc.call(t, http.MethodGet, tenantPath(c.ID, "/abuse-thresholds"), nil), http.StatusOK)
+		var thresholds map[string]any
+		mustJSON(t, resp.body, &thresholds)
+		thresholds["maxDailyTransfersPerSender"] = 40
+		thresholds["blockOnExceed"] = true
+		thresholds["unusualVolumeFactor"] = 4.5
+		thresholds["officeHours"] = map[string]any{"start": "08:30", "end": "24:00", "weekdays": []int{1, 2, 3, 4, 5}}
+		resp = mustStatus(t, "updateAbuseThresholds", dc.call(t, http.MethodPut, tenantPath(c.ID, "/abuse-thresholds"), thresholds), http.StatusOK)
+		var stored struct {
+			MaxTransfers *int     `json:"maxDailyTransfersPerSender"`
+			Block        bool     `json:"blockOnExceed"`
+			Factor       *float64 `json:"unusualVolumeFactor"`
+			Office       *struct {
+				Start, End string
+				Weekdays   []int
+			} `json:"officeHours"`
+		}
+		mustJSON(t, resp.body, &stored)
+		if stored.MaxTransfers == nil || *stored.MaxTransfers != 40 || !stored.Block || stored.Factor == nil || *stored.Factor != 4.5 ||
+			stored.Office == nil || stored.Office.Start != "08:30" || stored.Office.End != "24:00" ||
+			!slices.Equal(stored.Office.Weekdays, []int{1, 2, 3, 4, 5}) {
+			t.Errorf("abuse thresholds = %s", resp.body)
+		}
+		delete(thresholds, "externalMaxDailyBytes")
+		expectProblem(t, dc.call(t, http.MethodPut, tenantPath(c.ID, "/abuse-thresholds"), thresholds), http.StatusBadRequest, "validation-failed")
+		thresholds["externalMaxDailyBytes"] = nil
+		thresholds["timeZone"] = "Mars/Olympus"
+		expectProblem(t, dc.call(t, http.MethodPut, tenantPath(c.ID, "/abuse-thresholds"), thresholds), http.StatusBadRequest, "validation-failed")
+
 		// SMTP to Mailpit, then the test mail.
 		resp = mustStatus(t, "updateSmtpSettings", dc.call(t, http.MethodPut, tenantPath(c.ID, "/smtp"), map[string]any{
 			"host": a.mp.host, "port": a.mp.port, "security": "none", "fromAddress": "noreply@" + domainC, "fromName": nameC,

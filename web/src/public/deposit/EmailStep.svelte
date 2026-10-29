@@ -27,6 +27,10 @@
   <p>{t('deposit.email.intro')}</p>
 {/if}
 
+{#if flow.remoteDepositAllowed && !flow.invitation}
+  <p class="tt-text-muted tt-text-sm">{t('deposit.email.remoteHint')}</p>
+{/if}
+
 {#if flow.notice}
   <Alert severity="info">{t(flow.notice.key, flow.notice.params)}</Alert>
 {/if}

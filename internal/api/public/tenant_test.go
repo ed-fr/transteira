@@ -212,6 +212,9 @@ func TestGetPublicTenantOptions(t *testing.T) {
 	if b.Features == nil || !b.Features.MaxDownloads || !b.Features.RecipientVerification || !b.Features.RecipientRestrictions {
 		t.Errorf("features %+v", b.Features)
 	}
+	if b.Features.RemoteInternalDeposit {
+		t.Errorf("remote deposit announced for a tenant that does not allow it: %+v", b.Features)
+	}
 	svc.restricted = false
 	resp, err = s.GetPublicTenant(brandedCtx(false), gen.GetPublicTenantRequestObject{})
 	if err != nil {
@@ -340,4 +343,19 @@ func (f *fakeMaintenance) Message(lang, tenantDefault string) (msg, msgLang stri
 		return "", ""
 	}
 	return f.message, f.messageLang
+}
+
+func TestGetPublicTenantRemoteFeature(t *testing.T) {
+	t.Parallel()
+	ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{
+		ID: "ten_x", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+		MaxTransferBytes: 5 << 30, PrimaryColor: "#0B5FFF", AccentColor: "#00875A", AllowRemoteInternalDeposit: true,
+	})
+	resp, err := NewServer(WithTenantService(&fakeTenantConfig{})).GetPublicTenant(ctx, gen.GetPublicTenantRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features == nil || !b.Features.RemoteInternalDeposit {
+		t.Errorf("features %+v", b.Features)
+	}
 }

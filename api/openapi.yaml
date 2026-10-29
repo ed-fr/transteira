@@ -634,8 +634,12 @@ paths:
         without invitation, provided the address was already verified once from the internal
         network: a code is then required on **every** deposit (the recognition cookie is neither
         honoured nor set), and the session kind is `internal_remote`. Such deposits are flagged in
-        the audit log and counted by the abuse detection. Any other address outside the ranges
-        gets the same generic `403 deposit-not-allowed`.
+        the audit log and counted by the abuse detection. While the option is on, any other
+        address outside the ranges (not blocklisted) gets the same `202` and challenge, counted in
+        the rate limits, but no mail is sent and every code is then refused as wrong
+        (`422 verification-code-invalid`, then `410`), so that the answer never tells which addresses are
+        eligible. With the option off, every address outside the ranges gets the generic
+        `403 deposit-not-allowed`.
 
         Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
         Refused deposits are written to the security log.
@@ -7813,7 +7817,9 @@ components:
         `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
         `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
         recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
-        (actor `system`) name the rule and the sender; `abuse.reported` and `abuse.report_closed`
+        are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
+        it), not `system`, and the details `rule`, `value`, `threshold`, `blocked` and, when known,
+        `transferId`; `abuse.reported` and `abuse.report_closed`
         name the report; `webhook.*` never carry the URL (host only) nor the secret;
         `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
         admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when

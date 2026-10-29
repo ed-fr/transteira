@@ -39,8 +39,9 @@ const (
 	// full.
 	QueueFullRetryAfter = vcode.QueueFullRetryAfter
 	// MaxInvitationsPerInviter bounds the invitations one internal address
-	// may issue per RateWindow in a tenant (threats T-12, T-89; the configurable
-	// per-inviter quota of spec 15.2 comes with V1.1).
+	// may issue per RateWindow in a tenant (threats T-12, T-89) when the
+	// service has no Options.Abuse; otherwise the tenant setting of spec
+	// 15.2 applies.
 	MaxInvitationsPerInviter = 20
 	// VerifiedRetentionMonths is how long an unused verified address stays
 	// verified (spec 7); the cleanup job purges it, and until then the
@@ -108,7 +109,21 @@ const (
 	originInternal = "internal"
 	// originInvitation is a verification through an invitation.
 	originInvitation = "invitation"
+	// originRemote is a verification by an internal depositor from outside
+	// the tenant ranges (V1.1, spec 6.4).
+	originRemote = "remote"
 )
+
+// AbuseDetector supplies the configurable invitation limit of spec 15.2 and
+// raises its alert. *abuse.Detector implements it.
+type AbuseDetector interface {
+	// InvitationLimit returns the maximum number of invitations one inviter
+	// may issue per RateWindow in tenant tid.
+	InvitationLimit(ctx context.Context, tid tenant.ID) (int, error)
+	// InvitationLimitReached alerts the administrators of t that inviter
+	// reached limit. It is best effort and never fails.
+	InvitationLimitReached(ctx context.Context, t *tenant.Tenant, inviter string, limit int)
+}
 
 // Options tunes a [Service].
 type Options struct {
@@ -130,6 +145,11 @@ type Options struct {
 	// created and first used), best effort after the commit: a failure is
 	// logged, never returned. nil records nothing.
 	Audit AuditRecorder
+	// Abuse supplies the per-inviter invitation limit of each tenant
+	// (maxInvitationsPerInviter of its abuse settings) and alerts when it
+	// is reached (V1.1, spec 15.2). nil applies MaxInvitationsPerInviter
+	// everywhere, without alert.
+	Abuse AbuseDetector
 }
 
 // Service identifies depositors. It is safe for concurrent use.
@@ -144,6 +164,7 @@ type Service struct {
 	clock      func() time.Time
 	overrides  mail.OverrideLookup
 	audit      AuditRecorder
+	abuse      AbuseDetector
 	// Mail rendering and random sources, replaced by the tests.
 	render   func(ctx context.Context, lookup mail.OverrideLookup, tenantID, name, lang string, data any) (mail.Message, error)
 	rand     io.Reader
@@ -167,7 +188,7 @@ func New(db *store.DB, keys Keys, secrets Secrets, queue MailQueue, seclog Secur
 	s := &Service{
 		repo: storeRepo{db: db}, keys: keys, secrets: secrets, queue: queue, seclog: seclog,
 		logger: opts.Logger, sessionTTL: opts.SessionTTL, clock: opts.Now, overrides: opts.Overrides,
-		audit: opts.Audit, render: mail.DefaultTemplates().RenderFor, rand: rand.Reader, newToken: id.NewToken,
+		audit: opts.Audit, abuse: opts.Abuse, render: mail.DefaultTemplates().RenderFor, rand: rand.Reader, newToken: id.NewToken,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s

@@ -36,8 +36,11 @@ type TenantView struct {
 	// WebhookIncludeAddresses tells whether the tenant webhooks receive the
 	// addresses concerned by an event.
 	WebhookIncludeAddresses bool
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	// AllowRemoteInternalDeposit tells whether verified internal users may
+	// deposit from outside the internal networks (since 1.1).
+	AllowRemoteInternalDeposit bool
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 // TenantPage is a page of tenants.
@@ -76,6 +79,10 @@ type TenantUpdate struct {
 	// WebhookIncludeAddresses turns on or off the addresses in the payloads
 	// of the tenant webhooks; a delegated admin may change it.
 	WebhookIncludeAddresses *bool
+	// AllowRemoteInternalDeposit turns on or off the deposits of verified
+	// internal users from outside the internal networks; a delegated admin
+	// may change it.
+	AllowRemoteInternalDeposit *bool
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -88,7 +95,8 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		ID: t.ID, Name: t.Name, FQDN: t.FQDN, DefaultLanguage: t.DefaultLanguage,
 		MaxTransferBytes: t.MaxTransferBytes, MaxTransferCeiling: t.MaxTransferCeiling,
 		StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: used, Status: t.Status,
-		WebhookIncludeAddresses: t.WebhookIncludeAddresses, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
+		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -231,7 +239,7 @@ func createLimits(in TenantCreate) (limit, ceiling int64, err error) {
 // may change every field; when it sets the transfer limit above the
 // ceiling without a new ceiling, the ceiling rises with it, and a ceiling
 // below the limit lowers the limit. A delegated admin may only change the
-// default language and the webhook address option, and set the transfer
+// default language, the webhook address option and the remote deposit option, and set the transfer
 // limit at most to the ceiling:
 // another changed field, or a limit above the ceiling, is ErrForbidden.
 // The audit event names the changed fields.
@@ -293,6 +301,9 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	if in.WebhookIncludeAddresses != nil {
 		next.WebhookIncludeAddresses = *in.WebhookIncludeAddresses
 	}
+	if in.AllowRemoteInternalDeposit != nil {
+		next.AllowRemoteInternalDeposit = *in.AllowRemoteInternalDeposit
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -337,6 +348,7 @@ func changedFields(a, b *tenant.Tenant) []string {
 	add(a.MaxTransferBytes != b.MaxTransferBytes, "maxTransferBytes")
 	add(a.MaxTransferCeiling != b.MaxTransferCeiling, "maxTransferCeiling")
 	add(a.WebhookIncludeAddresses != b.WebhookIncludeAddresses, "webhookIncludeAddresses")
+	add(a.AllowRemoteInternalDeposit != b.AllowRemoteInternalDeposit, "allowRemoteInternalDeposit")
 	return out
 }
 

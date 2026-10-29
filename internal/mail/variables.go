@@ -246,6 +246,39 @@ var keyDefs = map[string]keyDef{
 		values: myTransfersLinkValues,
 		sample: MyTransfersLinkData{TenantName: sampleTenant, Link: "https://transfer.entity-a.example.com/me#mta_sample", ValidityMinutes: 15},
 	},
+	TemplateAbuseAlert: {
+		vars: []varSpec{
+			tenantVar,
+			{"sender_email", VarText, false, "Address of the sender concerned."},
+			{"rule_summary", VarText, true, "Sentence describing the rule that fired, with the measured value and the threshold."},
+			{"day", VarText, false, "Day concerned (YYYY-MM-DD)."},
+			{"blocked_notice", VarBlock, false, "Whether the transfer was refused or only reported."},
+			adminLinkVar,
+		},
+		values: abuseAlertValues,
+		sample: AbuseAlertData{
+			TenantName: sampleTenant, Rule: AbuseRuleDailyBytes, SenderEmail: sampleSender,
+			Value: 120 << 30, Threshold: 100 << 30, Blocked: true, Day: "2026-10-21",
+			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
+	TemplateAbuseReport: {
+		vars: []varSpec{
+			tenantVar,
+			{"transfer_id", VarText, false, "Identifier of the reported transfer."},
+			{"sender_email", VarText, false, "Address of the sender of the transfer."},
+			{"category", VarText, true, "Category chosen by the reporter."},
+			{"reporter_notice", VarText, false, "Who reported: the verified address, or the recipient number of the link, unverified."},
+			{"reporter_message", VarBlock, false, "Message of the reporter, quoted; empty when there is none."},
+			adminLinkVar,
+		},
+		values: abuseReportValues,
+		sample: AbuseReportData{
+			TenantName: sampleTenant, TransferID: "tr_sample", SenderEmail: sampleSender,
+			Category: AbuseCategoryPhishing, Message: "This message asks for my password.",
+			RecipientIndex: 2, AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
 	TemplateQuotaWarning: quotaKeyDef(QuotaWarningPercent, 82),
 	TemplateQuotaReached: quotaKeyDef(QuotaReachedPercent, 100),
 	TemplateDiskAlert: {

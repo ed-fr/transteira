@@ -75,6 +75,15 @@ const (
 	// sent to a sender who asked for it (tenant template key
 	// "my-transfers-link"); data: [MyTransfersLinkData].
 	TemplateMyTransfersLink = "my_transfers_link"
+	// TemplateAbuseAlert warns the delegated administrators that an abuse
+	// detection threshold was exceeded or an unusual activity was seen
+	// (CLAUDE.md section 15; tenant template key "abuse-alert"); data:
+	// [AbuseAlertData].
+	TemplateAbuseAlert = "abuse_alert"
+	// TemplateAbuseReport tells the delegated administrators that a
+	// recipient reported a transfer as abusive (tenant template key
+	// "abuse-report"); data: [AbuseReportData].
+	TemplateAbuseReport = "abuse_report"
 )
 
 // QRContentID is the Content-ID of the QR code of the download link, the
@@ -375,5 +384,100 @@ type AntivirusUnavailableData struct {
 	// AdminLink is the absolute URL of the administration console, built
 	// from the configured admin host, never from a request Host. It carries
 	// no token.
+	AdminLink string
+}
+
+// Abuse detection rules reported by [TemplateAbuseAlert] (CLAUDE.md section
+// 15), the values of [AbuseAlertData.Rule].
+const (
+	// AbuseRuleDailyBytes: a sender exceeded the daily volume (Value and
+	// Threshold are sizes in bytes).
+	AbuseRuleDailyBytes = "daily_bytes"
+	// AbuseRuleDailyTransfers: a sender exceeded the daily number of
+	// transfers.
+	AbuseRuleDailyTransfers = "daily_transfers"
+	// AbuseRuleRecipients: a transfer has more recipients than allowed.
+	AbuseRuleRecipients = "recipients"
+	// AbuseRuleUnusualVolume: the volume of a sender is far above its
+	// habits (Value is the factor).
+	AbuseRuleUnusualVolume = "unusual_volume"
+	// AbuseRuleLargeExternal: a large transfer to external addresses (Value
+	// and Threshold are sizes in bytes).
+	AbuseRuleLargeExternal = "large_external"
+	// AbuseRuleOffHours: a transfer sent outside office hours (At is the
+	// time).
+	AbuseRuleOffHours = "off_hours"
+	// AbuseRuleInvitations: an internal user reached its invitation limit.
+	AbuseRuleInvitations = "invitations"
+	// AbuseRuleExternalQuota: the deposit quota of the external users was
+	// reached (counts, or sizes in bytes when AbuseAlertData.Bytes is set).
+	AbuseRuleExternalQuota = "external_quota"
+)
+
+// Categories of an abuse report, the values of [AbuseReportData.Category].
+const (
+	AbuseCategoryMalware        = "malware"
+	AbuseCategoryPhishing       = "phishing"
+	AbuseCategoryIllegalContent = "illegal_content"
+	AbuseCategorySpam           = "spam"
+	AbuseCategoryUnknownSender  = "unknown_sender"
+	AbuseCategoryOther          = "other"
+)
+
+// AbuseAlertData is the data of [TemplateAbuseAlert]. It holds the address
+// of the sender concerned and no other personal data.
+type AbuseAlertData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// Rule is the rule that fired, one of the AbuseRule constants. An
+	// unknown rule gets a generic sentence.
+	Rule string
+	// SenderEmail is the verified address of the sender (or inviter)
+	// concerned.
+	SenderEmail string
+	// Value is the measured value: a size in bytes, a count, or the factor
+	// of [AbuseRuleUnusualVolume].
+	Value float64
+	// Threshold is the configured threshold, in the unit of Value (unused by
+	// [AbuseRuleUnusualVolume] and [AbuseRuleOffHours]).
+	Threshold float64
+	// Bytes tells that Value and Threshold of [AbuseRuleExternalQuota] are
+	// sizes in bytes rather than counts.
+	Bytes bool
+	// Blocked tells whether the transfer was refused or only reported.
+	Blocked bool
+	// Day is the day concerned, as YYYY-MM-DD.
+	Day string
+	// At is when the event happened; shown by [AbuseRuleOffHours] when set,
+	// formatted with [FormatDateTime].
+	At time.Time
+	// AdminLink is the absolute URL of the audit page of the administration
+	// console, built from the configured admin host, never from a request
+	// Host. It carries no token.
+	AdminLink string
+}
+
+// AbuseReportData is the data of [TemplateAbuseReport].
+type AbuseReportData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// TransferID is the identifier of the reported transfer.
+	TransferID string
+	// SenderEmail is the address of the sender of the transfer.
+	SenderEmail string
+	// Category is one of the AbuseCategory constants; an unknown value is
+	// shown as "other".
+	Category string
+	// Message is the free text of the reporter, as plain text. It is never
+	// interpreted: it is quoted in the text body and HTML-escaped in the
+	// HTML body, line breaks preserved.
+	Message string
+	// ReporterEmail is the address of the reporter, "" when unverified.
+	ReporterEmail string
+	// RecipientIndex is the 1-based number of the recipient whose personal
+	// link was used, 0 for a shared link.
+	RecipientIndex int
+	// AdminLink is the absolute URL of the abuse reports page of the
+	// administration console. It carries no token.
 	AdminLink string
 }

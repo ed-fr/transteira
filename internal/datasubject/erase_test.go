@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -45,7 +46,70 @@ func (ev *env) seed(tn *tenant.Tenant) seeded {
 	s.daveSession = ev.depositRows(tn, dave, s.invAsInviter)
 	ev.auditActor(tn, carol, 3)
 	ev.auditActor(tn, dave, 2)
+	ev.abuse(tn, carol, s.sent)
+	ev.abuse(tn, dave, s.viaInvitation)
 	return s
+}
+
+// abuse stores an abuse alert row of sender and a report about its
+// transfer trfID in tn.
+func (ev *env) abuse(tn *tenant.Tenant, sender, trfID string) {
+	ev.t.Helper()
+	ctx := context.Background()
+	sc, err := ev.db.Scoped(tn.ID)
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		_, err := ev.db.AbuseAlerts().TryInsertTx(ctx, tx, sender, store.AbuseRuleDailyBytes, "2026-10-22", false, time.Now())
+		return err
+	})
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	_, err = ev.db.AbuseReports().Create(ctx, tn.ID, store.AbuseReport{
+		TransferID: trfID, SenderEmail: sender, Category: store.AbuseCategorySpam, Message: "suspicious",
+		ReporterIP: netip.MustParseAddr("192.0.2.10"),
+	}, store.AbuseReportLimits{PerLinkPerDay: 100, PerIPPerHour: 100}, time.Now())
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+}
+
+// alertPresent reports whether the abuse alert row of sender exists in
+// tn: inserting it again reports false when it does (it is removed again
+// afterwards).
+func (ev *env) alertPresent(tn *tenant.Tenant, sender string) bool {
+	ev.t.Helper()
+	ctx := context.Background()
+	sc, err := ev.db.Scoped(tn.ID)
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	var inserted bool
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		var err error
+		inserted, err = ev.db.AbuseAlerts().TryInsertTx(ctx, tx, sender, store.AbuseRuleDailyBytes, "2026-10-22", false, time.Now())
+		return err
+	})
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	return !inserted
+}
+
+// reportSenders returns the senders of the abuse reports of tn.
+func (ev *env) reportSenders(tn *tenant.Tenant) []string {
+	ev.t.Helper()
+	page, err := ev.db.AbuseReports().List(context.Background(), tn.ID, "", store.MaxPageSize, "")
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	var out []string
+	for _, r := range page.Items {
+		out = append(out, r.SenderEmail)
+	}
+	return out
 }
 
 func TestEraseEveryRole(t *testing.T) {
@@ -68,7 +132,7 @@ func TestEraseEveryRole(t *testing.T) {
 		rep := ev.erase(ev.a, subjectInput)
 		wantRep := EraseReport{
 			TransfersDeleted: 3, RecipientEntriesRemoved: 4, VerifiedAddressDeleted: true,
-			InvitationsDeleted: 1, LogEntriesPseudonymised: 3,
+			InvitationsDeleted: 1, LogEntriesPseudonymised: 3, AbuseReports: 1,
 		}
 		if rep != wantRep {
 			t.Fatalf("Erase = %+v, want %+v", rep, wantRep)
@@ -118,6 +182,19 @@ func TestEraseEveryRole(t *testing.T) {
 		pseudonym := inv.InvitedBy
 		if !store.IsPseudonym(pseudonym) || inv.RevokedAt.IsZero() || inv.Email != dave {
 			t.Errorf("invitation as inviter = %+v", inv)
+		}
+
+		// Abuse data: carol's alert row is gone and her report is
+		// pseudonymised; dave's alert and report are untouched, and so is
+		// tenant B.
+		if ev.alertPresent(ev.a, carol) || !ev.alertPresent(ev.a, dave) || !ev.alertPresent(ev.b, carol) {
+			t.Error("abuse alert rows after the erasure")
+		}
+		if got := ev.reportSenders(ev.a); !slices.Equal(sortedCopy(got), sortedCopy([]string{pseudonym, dave})) {
+			t.Errorf("report senders = %v", got)
+		}
+		if got := ev.reportSenders(ev.b); !slices.Contains(got, carol) {
+			t.Errorf("tenant B reports = %v", got)
 		}
 
 		// Deposit rows: carol's gone, dave's kept.
@@ -347,7 +424,7 @@ func TestEraseStepFailures(t *testing.T) {
 		ev.seed(ev.a)
 		for _, m := range []string{
 			"deleteDepositRows", "deleteSenderAccess", "deleteVerified", "senderTransfers", "inviteeInvitations", "invitationTransfers",
-			"recipientTransfers", "removeRecipient", "eraseInvitations", "pseudonymiseAudit",
+			"recipientTransfers", "removeRecipient", "eraseInvitations", "eraseAbuse", "pseudonymiseAudit",
 		} {
 			ev.faults(m)
 			_, err := ev.svc.Erase(context.Background(), ev.super, clientIP, ev.a.ID, carol)
@@ -436,4 +513,11 @@ func TestEraseRecipientLink(t *testing.T) {
 			t.Errorf("recipients = %v, %v", d.Recipients, err)
 		}
 	})
+}
+
+// sortedCopy returns a sorted copy of l.
+func sortedCopy(l []string) []string {
+	c := slices.Clone(l)
+	slices.Sort(c)
+	return c
 }

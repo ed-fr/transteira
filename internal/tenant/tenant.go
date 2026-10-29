@@ -104,6 +104,11 @@ type Tenant struct {
 	// sender and recipient addresses concerned by an event; off by default
 	// (minimal payloads, decision P31).
 	WebhookIncludeAddresses bool
+	// AllowRemoteInternalDeposit lets an internal user whose address was
+	// already verified once from the tenant's IP ranges deposit from
+	// outside them, with a verification code at every deposit (spec 6.4);
+	// off by default.
+	AllowRemoteInternalDeposit bool
 	// CreatedAt is the creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the time of the last modification.

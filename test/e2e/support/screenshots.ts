@@ -49,6 +49,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     screen: 'public /d/:token (recipient verification: code entry)',
     profile: 'recipient',
   },
+  {
+    name: 'download-report',
+    screen: 'public /d/:token (report an abuse dialog)',
+    profile: 'recipient',
+  },
   { name: 'download-password', screen: 'public /d/:token (password required)', profile: 'recipient' },
   { name: 'my-transfers-request', screen: 'public /me (request a link)', profile: 'depositor' },
   { name: 'my-transfers-list', screen: 'public /me (list of transfers)', profile: 'depositor' },
@@ -68,6 +73,12 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   {
     name: 'admin-tenant-recipient-rules',
     screen: 'admin /admin/tenants/:id/recipient-rules',
+    profile: 'delegated-admin',
+  },
+  { name: 'admin-tenant-abuse', screen: 'admin /admin/tenants/:id/abuse', profile: 'delegated-admin' },
+  {
+    name: 'admin-abuse-reports',
+    screen: 'admin /admin/tenants/:id/abuse-reports',
     profile: 'delegated-admin',
   },
   { name: 'admin-tenant-smtp', screen: 'admin /admin/tenants/:id/smtp', profile: 'delegated-admin' },

@@ -1,0 +1,96 @@
+{
+  "thresholds": {
+    "title": "Abuse detection",
+    "intro": "Set the thresholds that raise an alert to the administrators of the entity (mail and webhooks). Untick a rule to disable it. Daily counters are computed per day of the chosen time zone, from the transfers of the entity.",
+    "form": {
+      "title": "Detection thresholds"
+    },
+    "saved": "Abuse detection settings saved.",
+    "enable": "Enable the rule: {rule}",
+    "groups": {
+      "sender": "Limits per sender",
+      "senderHint": "An overrun raises an alert, once per sender, rule and day.",
+      "unusual": "Unusual behaviour",
+      "unusualHint": "These rules only alert: they never block a transfer.",
+      "time": "Time zone and office hours",
+      "external": "Invitations and external people",
+      "externalHint": "External quotas apply to invited addresses and to recipients replying to a transfer."
+    },
+    "maxDailyBytesPerSender": {
+      "label": "Maximum volume per sender per day",
+      "hint": "Total size of the files sent by one sender in the day."
+    },
+    "maxDailyTransfersPerSender": {
+      "label": "Maximum transfers per sender per day",
+      "hint": "A whole number, at least 1."
+    },
+    "maxRecipientsPerTransfer": {
+      "label": "Maximum recipients per transfer",
+      "hint": "Between {min} and {max}."
+    },
+    "blockOnExceed": {
+      "label": "Block instead of only alerting",
+      "hint": "When ticked, a transfer that would exceed a per-sender limit or an external quota is refused (the sender sees an explicit message). Otherwise only an alert is sent. The “unusual behaviour” rules never block a transfer."
+    },
+    "unusualVolumeFactor": {
+      "label": "Unusual volume factor",
+      "hint": "Alert when the daily volume exceeds this multiple of the average daily volume over the last 30 days. Between {min} and {max}, one decimal."
+    },
+    "unusualMinHistoryDays": {
+      "label": "Minimum days of history",
+      "hint": "Days of activity needed before the rule applies to a sender ({min} to {max})."
+    },
+    "largeExternalTransferBytes": {
+      "label": "Large transfer to an external address",
+      "hint": "Alert for a transfer at least this large with a recipient outside the internal domains."
+    },
+    "timeZone": {
+      "label": "Time zone",
+      "hint": "IANA name, for example Europe/Paris. It sets the start of the day of the counters and the office hours."
+    },
+    "officeHours": {
+      "label": "Office hours",
+      "enable": "Alert outside office hours",
+      "hint": "A transfer created outside these hours raises an alert.",
+      "start": "Start (HH:MM)",
+      "end": "End (HH:MM)",
+      "endHint": "After the start; 24:00 for the end of the day.",
+      "weekdays": "Working days"
+    },
+    "weekday": {
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday",
+      "7": "Sunday"
+    },
+    "maxInvitationsPerInviter": {
+      "label": "Invitations per internal user per hour",
+      "hint": "Between {min} and {max}."
+    },
+    "externalMaxDailyBytes": {
+      "label": "Maximum external volume per address per day",
+      "hint": "Volume an external address may deposit in the day."
+    },
+    "externalMaxDailyDeposits": {
+      "label": "Maximum external deposits per address per day",
+      "hint": "Transfers an external address may create in the day."
+    },
+    "errors": {
+      "required": "Enter a value or untick the rule.",
+      "integerMin": "Enter a whole number of at least {min}.",
+      "integerRange": "Enter a whole number between {min} and {max}.",
+      "factor": "Enter a number between {min} and {max}, with at most one decimal.",
+      "size": "Enter a valid size.",
+      "timeZone": "This time zone is unknown. Use an IANA name, for example Europe/Paris or UTC.",
+      "office": {
+        "start": "The start time must be HH:MM, for example 08:00.",
+        "end": "The end time must be HH:MM (or 24:00), for example 19:00.",
+        "order": "The end time must be after the start time.",
+        "weekdays": "Choose at least one working day."
+      }
+    }
+  }
+}

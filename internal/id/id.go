@@ -92,6 +92,9 @@ const (
 	// AccessLinkRequest identifies a row of the rate limit of the "my
 	// transfers" access link requests (since 1.1). It is internal.
 	AccessLinkRequest Prefix = "alr"
+	// AbuseReport identifies an abuse report filed from a download page
+	// (since 1.1, OpenAPI AbuseReportId).
+	AbuseReport Prefix = "abr"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

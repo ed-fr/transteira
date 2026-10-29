@@ -18,6 +18,7 @@ type repo interface {
 	confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error)
 	recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error)
 	invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error)
+	verifiedAddress(ctx context.Context, tid tenant.ID, email string) (store.VerifiedAddress, error)
 	apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error)
 	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
@@ -38,6 +39,9 @@ type txRepo interface {
 	createTransfer(ctx context.Context, t store.Transfer, recipients []string, files []store.TransferFile) error
 	finalize(ctx context.Context, trfID string, now time.Time) error
 	deleteTransfer(ctx context.Context, trfID string) error
+	// checkAbuse runs the abuse checker a inside the transaction (see
+	// [AbuseChecker.CheckCreateTx]).
+	checkAbuse(ctx context.Context, a AbuseChecker, t *tenant.Tenant, f AbuseFacts) (*AbuseBlock, error)
 }
 
 // owner names whose transfers the open transfer cap and the idempotency
@@ -74,6 +78,10 @@ func (r storeRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.Rec
 
 func (r storeRepo) invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error) {
 	return r.db.Invitations().Get(ctx, tid, invID)
+}
+
+func (r storeRepo) verifiedAddress(ctx context.Context, tid tenant.ID, email string) (store.VerifiedAddress, error) {
+	return r.db.VerifiedAddresses().Get(ctx, tid, email)
 }
 
 func (r storeRepo) apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error) {
@@ -158,4 +166,8 @@ func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time) erro
 
 func (t storeTx) deleteTransfer(ctx context.Context, trfID string) error {
 	return t.db.Transfers().DeleteTx(ctx, t.tx, trfID)
+}
+
+func (t storeTx) checkAbuse(ctx context.Context, a AbuseChecker, tn *tenant.Tenant, f AbuseFacts) (*AbuseBlock, error) {
+	return a.CheckCreateTx(ctx, t.tx, tn, f)
 }

@@ -1,0 +1,61 @@
+{
+  "caption": "Signalements d’abus de l’entité",
+  "filters": {
+    "label": "Filtrer les signalements",
+    "status": "Statut",
+    "allStatuses": "Tous les statuts"
+  },
+  "loaded": {
+    "one": "{count} signalement chargé.",
+    "other": "{count} signalements chargés."
+  },
+  "loadedMore": {
+    "one": "{count} signalement chargé, d’autres sont disponibles.",
+    "other": "{count} signalements chargés, d’autres sont disponibles."
+  },
+  "empty": "Aucun signalement pour le moment.",
+  "emptyFiltered": "Aucun signalement ne correspond à ce filtre.",
+  "columns": {
+    "reportedAt": "Date",
+    "category": "Motif",
+    "reporter": "Signalé par",
+    "status": "Statut",
+    "actions": "Actions"
+  },
+  "status": {
+    "open": "Ouvert",
+    "closed": "Clos"
+  },
+  "erasedAddress": "Adresse effacée",
+  "reporter": {
+    "verified": "{email} (adresse vérifiée)",
+    "recipientLink": "Via le lien du destinataire n° {n}, non vérifié",
+    "sharedLink": "Via le lien partagé (transfert antérieur à la version 1.1), non vérifié"
+  },
+  "open": {
+    "button": "Détails",
+    "buttonFor": "Détails du signalement « {category} » du {date}"
+  },
+  "detail": {
+    "title": "Signalement d’abus",
+    "status": "Statut",
+    "category": "Motif",
+    "reportedAt": "Signalé le",
+    "reporter": "Signalé par",
+    "sender": "Expéditeur",
+    "transfer": "Transfert",
+    "transferGone": "n’est plus disponible",
+    "message": "Message du signalement",
+    "noMessage": "Aucun message.",
+    "closedAt": "Clos le",
+    "closedBy": "Clos par",
+    "note": "Note",
+    "noteLabel": "Note de clôture (facultative)",
+    "noteHint": "Clore un signalement n’agit pas sur le transfert : supprimez-le ou bloquez l’expéditeur depuis les autres écrans.",
+    "close": "Clore le signalement",
+    "reopen": "Rouvrir le signalement",
+    "cancel": "Fermer",
+    "closedDone": "Signalement clos.",
+    "reopenedDone": "Signalement rouvert."
+  }
+}

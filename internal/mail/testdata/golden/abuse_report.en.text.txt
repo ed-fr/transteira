@@ -1,0 +1,22 @@
+Hello,
+
+A transfer of Entity A & Co was reported as abusive.
+
+Transfer: tr_abc123
+Sender: alice@entity-a.example.com
+Category: Phishing
+
+Reported via the link of recipient #2, unverified.
+
+Their message:
+
+> Hello <b>Bob</b>,
+> please see https://phishing.example.com/login
+> <a href="https://evil.example">click</a>
+
+The report is not acted upon automatically: review it in the administration.
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

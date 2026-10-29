@@ -15,6 +15,7 @@
   import { Countdown } from './countdown.svelte';
   import ErrorPage from './ErrorPage.svelte';
   import NotFound from './NotFound.svelte';
+  import ReportAbuse from './ReportAbuse.svelte';
   import VerificationStep from './VerificationStep.svelte';
   import {
     downloadView,
@@ -190,6 +191,7 @@
     }}
     ongone={(kind) => (view = { kind })}
   />
+  <ReportAbuse {token} />
 {:else if view.transfer.locked}
   {@const transfer = view.transfer}
   <h1 tabindex="-1">{t('download.locked.title')}</h1>
@@ -225,6 +227,7 @@
     />
     <Button type="submit" loading={unlocking} disabled={lock.active}>{t('download.locked.submit')}</Button>
   </form>
+  <ReportAbuse {token} />
 {:else}
   {@const transfer = view.transfer}
   {@const dl = downloadView(transfer)}
@@ -320,6 +323,7 @@
     </div>
     <p class="tt-text-muted tt-text-sm">{t('download.integrity')}</p>
   {/if}
+  <ReportAbuse {token} />
 {/if}
 
 <style>

@@ -19,7 +19,8 @@
     "submit": "Continue",
     "sending": "Sending the code…",
     "notAllowed": "Deposits are only possible from the internal network with an address of the organisation. To send files from outside, ask an internal user to invite you.",
-    "invitationGone": "This invitation has expired or is no longer valid. Ask the person who invited you for a new invitation."
+    "invitationGone": "This invitation has expired or is no longer valid. Ask the person who invited you for a new invitation.",
+    "remoteHint": "Working outside the organisation’s network? If your address is already verified, a verification code is asked at each deposit."
   },
   "code": {
     "title": "Enter the verification code",
@@ -40,7 +41,8 @@
     "invite": "Invite someone to send you files",
     "end": "End session",
     "ended": "Your session has ended.",
-    "expired": "Your session has expired. Identify yourself again to continue."
+    "expired": "Your session has expired. Identify yourself again to continue.",
+    "remote": "You are depositing from outside: a verification code is asked at each deposit, and invitations are not available."
   },
   "form": {
     "title": "New transfer",
@@ -116,7 +118,8 @@
       "hint": "Each recipient receives a personal link and must enter a code sent to their address before downloading. A forwarded link cannot be used.",
       "forced": "Required by the chosen confidentiality level.",
       "requiredByLevel": "The chosen confidentiality level requires the recipients to verify their address."
-    }
+    },
+    "abuseBlocked": "This transfer exceeds a limit set by the organisation (volume, number of transfers or recipients): it is refused. Try again later or contact the administrator."
   },
   "upload": {
     "overall": "Overall progress",

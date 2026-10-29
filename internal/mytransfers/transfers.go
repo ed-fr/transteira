@@ -171,7 +171,8 @@ func (s *Service) Delete(ctx context.Context, t *tenant.Tenant, sess SessionInfo
 // ErrExtensionLimit; a transfer that is not one of the sender in progress
 // is ErrNotFound. The extension re-arms the expiry reminder and is
 // audited as transfer.extended with the old and new expiry and the number
-// of extensions.
+// of extensions. Once committed, the abuse notifier (when set) evaluates
+// the daily rules of the sender, which may alert but never fails the call.
 func (s *Service) Extend(ctx context.Context, t *tenant.Tenant, sess SessionInfo, ip netip.Addr, trfID string, days int) (TransferDetail, error) {
 	now := s.now()
 	var allowed []int
@@ -202,5 +203,11 @@ func (s *Service) Extend(ctx context.Context, t *tenant.Tenant, sess SessionInfo
 		"expiresAt":         x.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		"extensionCount":    x.Count,
 	})
+	if s.abuse != nil {
+		s.abuse.AfterExtend(context.WithoutCancel(ctx), t, AbuseFacts{
+			TransferID: trfID, SenderEmail: d.SenderEmail, Kind: d.SenderKind, Bytes: d.TotalBytes,
+			Recipients: slices.Clone(d.Recipients), At: now, ClientIP: ip,
+		})
+	}
 	return s.detail(t, d), nil
 }

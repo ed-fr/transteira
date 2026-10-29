@@ -120,6 +120,22 @@ By email, you also receive a confirmation of sending and a notice of the first d
 
 > **Note** The download link is not shown on the screen: the recipients receive it by email, with a QR code to open it on a phone and the fingerprints of the files.
 
+<!-- topic: deposit-remote -->
+## Depositing from outside
+
+If your organisation has turned it on, you can send files when working remotely, outside the organisation's network, without an invitation. This only applies to an email address of an organisation domain that was **already verified once from the internal network**.
+
+From outside:
+
+- a code is asked **at every deposit**: the browser that normally recognises you is not enough, because only the possession of your mailbox then proves your identity. If a session opened on the internal network is used outside the network, it is refused: ask for a new code;
+- you can send files but **cannot invite** external people: invitations remain reserved to the internal network;
+- the rules on recipients and confidentiality levels apply as at the office;
+- these deposits are flagged in the organisation's logs and counted by the abuse detection.
+
+If the option is off, a deposit from outside is refused with the same message as for any person who is not allowed. If the option is on but your address is not eligible (another domain, never verified from the internal network, inactive or unknown), the service answers as for an eligible address ("a code has been sent"), but no email is sent and any code you type is refused. **If no code arrives from outside, your address is therefore not eligible**: first use the service once from the organisation's network, or ask your administrator whether the option is on.
+
+> **Note** To be able to send from outside one day, use the service at least once from the organisation's network with the same address.
+
 <!-- topic: my-transfers -->
 ## My transfers
 

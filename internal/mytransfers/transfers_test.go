@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -387,4 +388,60 @@ func TestExtendableTo(t *testing.T) {
 	if AllowedExpiryDays(base)[0] != 1 {
 		t.Error("AllowedExpiryDays shares its slice")
 	}
+}
+
+// fakeAbuse records the extensions it is told of.
+type fakeAbuse struct {
+	mu         sync.Mutex
+	tenants    []tenant.ID
+	facts      []AbuseFacts
+	cancelable []bool
+}
+
+func (a *fakeAbuse) AfterExtend(ctx context.Context, t *tenant.Tenant, f AbuseFacts) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.tenants = append(a.tenants, t.ID)
+	a.facts = append(a.facts, f)
+	a.cancelable = append(a.cancelable, ctx.Done() != nil)
+}
+
+// TestExtendAbuse tells the abuse notifier once per successful extension,
+// with the facts of the transfer, and never on a refused one.
+func TestExtendAbuse(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		f := newFixture(t, e)
+		fake := &fakeAbuse{}
+		f.svc.abuse = fake
+		f.clock.Advance(day)
+		now := f.clock.Now()
+		before := f.transfer(f.a, f.available)
+
+		// The notifier gets a context that cannot be canceled.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		if _, err := f.svc.Extend(ctx, f.a, f.sess, clientIP, f.available, 30); err != nil {
+			t.Fatalf("Extend: %v", err)
+		}
+		if len(fake.facts) != 1 || fake.tenants[0] != f.a.ID || fake.cancelable[0] {
+			t.Fatalf("calls = %+v (cancelable %v)", fake.facts, fake.cancelable)
+		}
+		got := fake.facts[0]
+		if got.TransferID != f.available || got.SenderEmail != aliceNorm || got.Kind != before.SenderKind ||
+			got.Bytes != before.TotalBytes || !slices.Equal(got.Recipients, before.Recipients) ||
+			!got.At.Equal(now) || got.ClientIP != clientIP {
+			t.Errorf("facts = %+v, want the transfer %+v", got, before)
+		}
+
+		// A refused extension tells nothing.
+		_, err := f.svc.Extend(context.Background(), f.a, f.sess, clientIP, f.available, 7)
+		wantErr(t, "shortening", err, ErrNotAllowed)
+		_, err = f.svc.Extend(context.Background(), f.a, f.sess, clientIP, f.ofBob, 30)
+		wantErr(t, "other sender", err, ErrNotFound)
+		if len(fake.facts) != 1 {
+			t.Errorf("calls after refusals = %d", len(fake.facts))
+		}
+	})
 }

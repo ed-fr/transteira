@@ -135,6 +135,25 @@ func (f *fakeOps) ListGlobalAuditEvents(_ context.Context, p adminauth.Principal
 	return store.Page[store.AuditEvent]{Items: f.events, NextCursor: f.next}, f.record("ListGlobalAuditEvents", p.SessionID, fl)
 }
 
+var sampleReport = store.AbuseReport{
+	ID: "abr_01", TransferID: "trf_01", RecipientLinkID: "rcl_01", RecipientPosition: new(0), SenderEmail: "alice@entity-a.example.com",
+	Category: store.AbuseCategoryPhishing, Message: "looks like phishing", Status: store.AbuseReportOpen, CreatedAt: now,
+}
+
+func (f *fakeOps) ListAbuseReports(_ context.Context, p adminauth.Principal, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error) {
+	return store.Page[store.AbuseReport]{Items: []store.AbuseReport{sampleReport}, NextCursor: f.next}, f.record("ListAbuseReports", p.SessionID, tid, status, limit, cursor)
+}
+
+func (f *fakeOps) GetAbuseReport(_ context.Context, p adminauth.Principal, tid tenant.ID, repID string) (store.AbuseReport, error) {
+	return sampleReport, f.record("GetAbuseReport", p.SessionID, tid, repID)
+}
+
+func (f *fakeOps) UpdateAbuseReport(_ context.Context, p adminauth.Principal, tid tenant.ID, repID string, status store.AbuseReportStatus, note *string, ip netip.Addr) (store.AbuseReport, error) {
+	r := sampleReport
+	r.Status = status
+	return r, f.record("UpdateAbuseReport", p.SessionID, tid, repID, status, note, ip)
+}
+
 // fakeSubjects is a fake DataSubjectService.
 type fakeSubjects struct {
 	recorder
@@ -215,6 +234,12 @@ func operationCalls(ctx context.Context, s *Server) map[string]error {
 	out["ListGlobalAuditEvents"] = err
 	_, err = s.GetTenantStats(ctx, gen.GetTenantStatsRequestObject{TenantId: "ten_a"})
 	out["TenantStats"] = err
+	_, err = s.ListAbuseReports(ctx, gen.ListAbuseReportsRequestObject{TenantId: "ten_a"})
+	out["ListAbuseReports"] = err
+	_, err = s.GetAbuseReport(ctx, gen.GetAbuseReportRequestObject{TenantId: "ten_a", ReportId: "abr_01"})
+	out["GetAbuseReport"] = err
+	_, err = s.UpdateAbuseReport(ctx, gen.UpdateAbuseReportRequestObject{TenantId: "ten_a", ReportId: "abr_01", Body: &gen.AbuseReportUpdate{Status: gen.Closed}})
+	out["UpdateAbuseReport"] = err
 	_, err = s.GetGlobalStats(ctx, gen.GetGlobalStatsRequestObject{})
 	out["GlobalStats"] = err
 	_, err = s.SearchDataSubject(ctx, gen.SearchDataSubjectRequestObject{TenantId: "ten_a", Body: &gen.DataSubjectRequest{Email: "carol@customer.example.net"}})
@@ -232,13 +257,14 @@ func TestOperationsWiring(t *testing.T) {
 		"RevokeInvitation": errNoOperationsService, "ListBlocklist": errNoOperationsService,
 		"CreateBlocklistEntry": errNoOperationsService, "DeleteBlocklistEntry": errNoOperationsService,
 		"ListAuditEvents": errNoOperationsService, "ListGlobalAuditEvents": errNoOperationsService,
+		"ListAbuseReports": errNoOperationsService, "GetAbuseReport": errNoOperationsService, "UpdateAbuseReport": errNoOperationsService,
 		"TenantStats": errNoStatsService, "GlobalStats": errNoStatsService,
 		"Search": errNoDataSubjectService, "Erase": errNoDataSubjectService,
 	}
 	// Without services: 500 (wiring error), whatever the session.
 	ops := operationCalls(ctxWith(store.SessionAuthenticated, superRoot), NewServer())
-	if len(ops) != 15 {
-		t.Fatalf("%d operations, want 15", len(ops))
+	if len(ops) != 18 {
+		t.Fatalf("%d operations, want 18", len(ops))
 	}
 	for name, err := range ops {
 		if !errors.Is(err, wiring[name]) {

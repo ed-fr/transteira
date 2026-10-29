@@ -358,6 +358,8 @@ func TestTransferError(t *testing.T) {
 		{err: transfer.ErrIncomplete, code: problem.CodeUploadIncomplete},
 		{err: transfer.ErrChecksumMismatch, code: problem.CodeChecksumMismatch},
 		{err: transfer.ErrBlockedFile, code: problem.CodeBlockedFile},
+		{err: &transfer.AbuseBlockedError{Rule: store.AbuseRuleDailyBytes}, code: problem.CodeAbuseThresholdBlocked},
+		{err: fmt.Errorf("w: %w", transfer.ErrAbuseBlocked), code: problem.CodeAbuseThresholdBlocked},
 		{err: transfer.ErrForbidden, code: problem.CodeDepositNotAllowed},
 		{err: transfer.ErrNotFound, code: problem.CodeNotFound},
 		{err: transfer.ErrConflict, code: problem.CodeStateConflict},
@@ -580,3 +582,18 @@ func TestTerminateUpload(t *testing.T) {
 
 // stringsReader returns a reader over s.
 func stringsReader(s string) io.Reader { return strings.NewReader(s) }
+
+func TestCreateTransferRemoteSender(t *testing.T) {
+	t.Parallel()
+	info := internalInfo()
+	info.Kind = deposit.KindInternalRemote
+	f := &fakeTransfers{details: uploadingDetails()}
+	if _, err := NewServer(WithTransfers(f)).CreateTransfer(depositCtx(t, &info), gen.CreateTransferRequestObject{
+		Body: &gen.TransferCreate{ExpiryDays: 1, Files: []gen.FileDeclaration{{Name: "a", Size: 1}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.sender.Kind != deposit.KindInternalRemote || f.sender.Email != info.Email {
+		t.Errorf("sender = %+v", f.sender)
+	}
+}

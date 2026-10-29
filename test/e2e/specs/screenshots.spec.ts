@@ -173,6 +173,16 @@ async function createData(): Promise<ScreenshotData> {
     download[lang] = await recipientPath(t, RECIPIENT[lang]);
     if (lang === 'en') transferId = t.id;
   }
+  // An abuse report on the English download link, for the Abuse reports screen (V1.1).
+  const reportedToken = /\/d\/([^/?#]+)/.exec(download.en)?.[1];
+  if (reportedToken === undefined) throw new Error('no download token');
+  const reported = await request(s.serverPort, 'POST', `/api/v1/downloads/${reportedToken}/abuse-reports`, {
+    host: HOSTS.a,
+    body: { category: 'phishing', message: 'The archive contains a fake login page.' },
+    headers: { Origin: ORIGINS.a, 'Sec-Fetch-Site': 'same-origin' },
+  });
+  if (reported.status !== 202)
+    throw new Error(`abuse report -> ${reported.status} ${reported.text.slice(0, 300)}`);
   // Transfers whose recipient must verify their address by code (V1.1).
   const downloadVerify = {} as Record<Lang, string>;
   for (const lang of LANGS) {
@@ -595,6 +605,17 @@ test.describe('recipient', () => {
     }
   });
 
+  test('report an abuse dialog', async ({ newContext }) => {
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.a}${data.download[lang]}`);
+      await heading(page, lang, 'download.title');
+      await page.getByRole('button', { name: msg(lang, 'download.report.button'), exact: true }).click();
+      await expect(page.getByRole('dialog', { name: msg(lang, 'download.report.title') })).toBeVisible();
+      await shoot(page, lang, 'download-report');
+    }
+  });
+
   test('password-protected download page', async ({ newContext }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);
@@ -675,6 +696,8 @@ test.describe('delegated admin', () => {
     ['admin-tenant-network', () => 'network', 'adminTenants.network.title'],
     ['admin-tenant-confidentiality', () => 'confidentiality', 'adminTenants.confidentiality.title'],
     ['admin-tenant-recipient-rules', () => 'recipient-rules', 'adminTenants.recipientRules.title'],
+    ['admin-tenant-abuse', () => 'abuse', 'adminTenants.abuse.title'],
+    ['admin-abuse-reports', () => 'abuse-reports', 'adminOps.abuseReports.title'],
     ['admin-tenant-smtp', () => 'smtp', 'adminTenants.smtp.title'],
     ['admin-tenant-templates', () => 'templates', 'adminTenants.templates.title'],
     ['admin-tenant-template-editor', (lang) => `templates/transfer-notification/${lang}`],

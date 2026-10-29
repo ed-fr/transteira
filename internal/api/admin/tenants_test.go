@@ -134,6 +134,14 @@ func (f *fakeTenantService) UpdateConfidentialityLevels(_ context.Context, p adm
 	return levels, f.record("UpdateConfidentialityLevels", p.SessionID, tid, levels, ip)
 }
 
+func (f *fakeTenantService) AbuseThresholds(_ context.Context, p adminauth.Principal, tid tenant.ID) (store.AbuseSettings, error) {
+	return store.DefaultAbuseSettings(), f.record("AbuseThresholds", p.SessionID, tid)
+}
+
+func (f *fakeTenantService) UpdateAbuseThresholds(_ context.Context, p adminauth.Principal, tid tenant.ID, in store.AbuseSettings, ip netip.Addr) (store.AbuseSettings, error) {
+	return in, f.record("UpdateAbuseThresholds", p.SessionID, tid, in, ip)
+}
+
 func (f *fakeTenantService) GetRecipientRules(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.RecipientRules, error) {
 	return tenantadmin.RecipientRules{}, f.record("GetRecipientRules", p.SessionID, tid)
 }
@@ -214,7 +222,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		want       []problem.FieldError
 	}{
 		{"null name", `{"name": null}`, []problem.FieldError{{Field: "/name", Code: fieldNotNullable}}},
-		{"every null, in order", `{"webhookIncludeAddresses":null,"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
+		{"every null, in order", `{"allowRemoteInternalDeposit":null,"webhookIncludeAddresses":null,"maxTransferCeiling":null,"maxTransferBytes":null,"storageQuotaBytes":null,"defaultLanguage":null,"fqdn":null,"name":null}`, []problem.FieldError{
 			{Field: "/name", Code: fieldNotNullable},
 			{Field: "/fqdn", Code: fieldNotNullable},
 			{Field: "/defaultLanguage", Code: fieldNotNullable},
@@ -222,6 +230,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 			{Field: "/maxTransferBytes", Code: fieldNotNullable},
 			{Field: "/maxTransferCeiling", Code: fieldNotNullable},
 			{Field: "/webhookIncludeAddresses", Code: fieldNotNullable},
+			{Field: "/allowRemoteInternalDeposit", Code: fieldNotNullable},
 		}},
 		{"null among valid fields", `{"defaultLanguage": "en", "maxTransferBytes": null}`, []problem.FieldError{{Field: "/maxTransferBytes", Code: fieldNotNullable}}},
 		{"null body", `null`, []problem.FieldError{{Field: "", Code: fieldInvalidFormat}}},
@@ -230,6 +239,7 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		{"wrong type", `{"storageQuotaBytes": "big"}`, []problem.FieldError{{Field: "/storageQuotaBytes", Code: fieldInvalidFormat}}},
 		{"object instead of string", `{"name": {"first": "A"}}`, []problem.FieldError{{Field: "/name", Code: fieldInvalidFormat}}},
 		{"string instead of boolean", `{"webhookIncludeAddresses": "yes"}`, []problem.FieldError{{Field: "/webhookIncludeAddresses", Code: fieldInvalidFormat}}},
+		{"string instead of boolean 2", `{"allowRemoteInternalDeposit": "yes"}`, []problem.FieldError{{Field: "/allowRemoteInternalDeposit", Code: fieldInvalidFormat}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -284,6 +294,10 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("GetRecipientRules", err)
 	_, err = s.UpdateRecipientRules(ctx, gen.UpdateRecipientRulesRequestObject{TenantId: "ten_a", Body: &gen.RecipientRules{}})
 	call("UpdateRecipientRules", err)
+	_, err = s.GetAbuseThresholds(ctx, gen.GetAbuseThresholdsRequestObject{TenantId: "ten_a"})
+	call("AbuseThresholds", err)
+	_, err = s.UpdateAbuseThresholds(context.WithValue(ctx, rawBodyKey{}, []byte(validThresholdsJSON)), gen.UpdateAbuseThresholdsRequestObject{TenantId: "ten_a", Body: &gen.AbuseThresholds{}})
+	call("UpdateAbuseThresholds", err)
 	_, err = s.GetSmtpSettings(ctx, gen.GetSmtpSettingsRequestObject{TenantId: "ten_a"})
 	call("GetSMTP", err)
 	_, err = s.UpdateSmtpSettings(ctx, gen.UpdateSmtpSettingsRequestObject{TenantId: "ten_a", Body: &gen.SmtpSettingsUpdate{}})
@@ -337,8 +351,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 27 {
-		t.Fatalf("%d operations, want 27", len(ops))
+	if len(ops) != 29 {
+		t.Fatalf("%d operations, want 29", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)
@@ -454,7 +468,7 @@ func TestTenantsHandlers(t *testing.T) {
 	wantTenant := gen.Tenant{
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.Active, StorageQuotaBytes: 1 << 40,
-		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), CreatedAt: created, UpdatedAt: now,
+		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), CreatedAt: created, UpdatedAt: now,
 	}
 
 	cursor, limit := "c1", 10
@@ -476,7 +490,7 @@ func TestTenantsHandlers(t *testing.T) {
 	}
 
 	upd, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(
-		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "unknown": null}`,
+		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "unknown": null}`,
 	)})
 	if err != nil || upd.(gen.UpdateTenant200JSONResponse).Id != "ten_a" {
 		t.Fatalf("update %+v %v", upd, err)
@@ -484,14 +498,14 @@ func TestTenantsHandlers(t *testing.T) {
 	in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate)
 	if *in.Name != "Entity A2" || *in.DefaultLanguage != "en" || *in.MaxTransferBytes != 1<<30 || in.FQDN != nil ||
 		in.MaxTransferCeiling != nil || in.StorageQuotaBytes != nil || in.WebhookIncludeAddresses == nil ||
-		*in.WebhookIncludeAddresses || svc.args["UpdateTenant"][3] != clientIP {
+		*in.WebhookIncludeAddresses || in.AllowRemoteInternalDeposit == nil || !*in.AllowRemoteInternalDeposit || svc.args["UpdateTenant"][3] != clientIP {
 		t.Errorf("update input %+v", svc.args["UpdateTenant"])
 	}
 	// No language: left unchanged.
 	if _, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(` { } `)}); err != nil {
 		t.Fatal(err)
 	}
-	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil {
+	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil || in.AllowRemoteInternalDeposit != nil {
 		t.Errorf("language set: %+v", in)
 	}
 

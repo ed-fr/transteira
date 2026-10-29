@@ -27,6 +27,7 @@ type repo interface {
 	deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error)
 	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error)
+	eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
 	pseudonymiseAudit(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
 	scrub(ctx context.Context) error
 	audit(ctx context.Context, tid tenant.ID, ev audit.Event) error
@@ -191,6 +192,26 @@ func (r *storeRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, 
 			return err
 		}
 		_, err = r.db.Invitations().PseudonymiseInviterTx(ctx, tx, email, pseudonym, now)
+		return err
+	})
+	return n, err
+}
+
+// eraseAbuse deletes the abuse alert deduplication rows of email and
+// pseudonymises the abuse reports about it or made by it, in one
+// transaction, and returns how many reports it pseudonymised.
+func (r *storeRepo) eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error) {
+	sc, err := r.db.Scoped(tid)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		if _, err := r.db.AbuseAlerts().DeleteByEmailTx(ctx, tx, email); err != nil {
+			return err
+		}
+		var err error
+		n, err = r.db.AbuseReports().PseudonymiseTx(ctx, tx, email, pseudonym)
 		return err
 	})
 	return n, err

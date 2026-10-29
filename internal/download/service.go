@@ -157,6 +157,9 @@ type Options struct {
 	// Rand is the random source of the verification codes
 	// (crypto/rand.Reader when nil).
 	Rand io.Reader
+	// Abuse alerts the administrators of a new abuse report (since 1.1);
+	// nil alerts nobody.
+	Abuse AbuseAlerter
 }
 
 // key identifies a transfer and its tenant and, for the range state of a

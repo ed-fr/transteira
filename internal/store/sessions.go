@@ -13,14 +13,32 @@ import (
 // DepositorKind).
 type DepositorKind string
 
-// Depositor kinds. V1.1 and V2 add others (internal_remote, reply,
-// drop_link), with a migration of the kind constraint.
+// Depositor kinds. Later versions add others (reply, drop_link), with a
+// migration of the kind constraint.
 const (
 	// DepositorInternal is an internal user: internal IP and domain.
 	DepositorInternal DepositorKind = "internal"
 	// DepositorExternal is an external user holding an invitation.
 	DepositorExternal DepositorKind = "external"
+	// DepositorInternalRemote is an internal user depositing from outside
+	// the tenant's IP ranges (spec 6.4): an address of an allowed domain,
+	// already verified once from inside, proving it again by code at every
+	// deposit. It has the invariants of an internal depositor (no
+	// invitation; an API token is allowed by the schema).
+	DepositorInternalRemote DepositorKind = "internal_remote"
 )
+
+// IsInternal reports whether k is an internal kind: [DepositorInternal]
+// or [DepositorInternalRemote].
+func (k DepositorKind) IsInternal() bool {
+	return k == DepositorInternal || k == DepositorInternalRemote
+}
+
+// validDepositorKind reports whether k is a kind the store accepts for a
+// deposit session or a transfer.
+func validDepositorKind(k DepositorKind) bool {
+	return k.IsInternal() || k == DepositorExternal
+}
 
 // sessionColumns is the column list read by the deposit session queries.
 const sessionColumns = `id, token_hash, email, kind, invitation_id, created_at, expires_at`
@@ -54,7 +72,7 @@ type DepositSession struct {
 	// Kind is the depositor kind.
 	Kind DepositorKind
 	// InvitationID is the invitation of an external depositor ("inv_" +
-	// ULID, same tenant), "" for an internal one. Deleting the invitation
+	// ULID, same tenant), "" for an internal (or internal_remote) one. Deleting the invitation
 	// deletes the session; revoking it does not end the session.
 	InvitationID string
 	// CreatedAt is the creation time; the store's clock is used when it is
@@ -115,7 +133,7 @@ func (r *DepositSessions) create(ctx context.Context, tx *ScopedTx, s DepositSes
 		return invalid("malformed deposit session id")
 	case !validTokenHash(s.TokenHash):
 		return invalid("token hash must hold %d bytes", TokenHashSize)
-	case s.Kind != DepositorInternal && s.Kind != DepositorExternal:
+	case !validDepositorKind(s.Kind):
 		return invalid("unknown depositor kind")
 	case (s.Kind == DepositorExternal) != (s.InvitationID != ""):
 		return invalid("an external session needs an invitation, an internal one none")

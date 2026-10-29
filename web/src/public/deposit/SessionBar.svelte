@@ -39,4 +39,7 @@
       </Button>
     </div>
   </div>
+  {#if flow.isRemoteSession}
+    <p class="tt-text-muted tt-text-sm">{t('deposit.session.remote')}</p>
+  {/if}
 {/if}

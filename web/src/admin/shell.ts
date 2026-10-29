@@ -68,6 +68,7 @@ export const TENANT_CONFIG_SECTIONS = [
   'branding',
   'network',
   'recipientRules',
+  'abuse',
   'confidentiality',
   'smtp',
   'templates',
@@ -79,6 +80,7 @@ export const TENANT_OPS_SECTIONS = [
   'transfers',
   'invitations',
   'blocklist',
+  'abuseReports',
   'tokens',
   'webhooks',
   'audit',
@@ -127,6 +129,7 @@ export interface TenantLinkGroup {
 /** Path segment of the sections whose segment differs from their name. */
 const TENANT_SEGMENTS: Partial<Record<TenantSection, string>> = {
   recipientRules: 'recipient-rules',
+  abuseReports: 'abuse-reports',
 };
 
 /** Application path of a section of a tenant (the id is percent-encoded). */

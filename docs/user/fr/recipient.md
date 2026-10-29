@@ -113,6 +113,23 @@ Ces fichiers sont tout de même transmis, car ils peuvent être parfaitement lé
 
 > **Note** Si l’expéditeur a limité le nombre de téléchargements, chaque début de téléchargement compte, quelle que soit la personne qui télécharge. Quand la page affiche **Nombre maximal de téléchargements atteint**, le transfert ne peut plus être téléchargé : demandez à l’expéditeur de renvoyer les fichiers.
 
+<!-- topic: download-report -->
+## Signaler un abus
+
+Si ce transfert vous paraît suspect (fichier malveillant, hameçonnage, contenu illégal, courrier indésirable, expéditeur inconnu), cliquez sur **Signaler un abus** en bas de la page de téléchargement.
+
+1. Choisissez la catégorie : **Logiciel malveillant**, **Hameçonnage**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu** ou **Autre**.
+1. Ajoutez si vous le souhaitez un message de 1 000 caractères au plus, en texte simple.
+1. Envoyez le signalement.
+
+![La fenêtre Signaler un abus : liste des catégories, champ du message facultatif avec son compteur de caractères et bouton Envoyer](../screenshots/fr/download-report.png)
+
+Les administrateurs de l’entité sont alertés et décident de la suite : **le signalement ne supprime ni ne bloque rien automatiquement**. Ne vous servez pas du bouton pour demander la suppression d’un transfert légitime : contactez plutôt l’expéditeur.
+
+Votre adresse n’est enregistrée avec le signalement que si vous avez validé votre adresse par un code sur ce navigateur pour ce lien. Sinon, le signalement est enregistré comme « via le lien du destinataire n° n, non vérifié ». Il est limité à 3 signalements par jour pour un même lien et à 5 par heure depuis une même adresse réseau.
+
+> **À savoir** Les signalements ne servent qu’à la sécurité du service ; ils sont conservés 12 mois, puis supprimés. Vous pouvez demander à votre administrateur l’effacement des données liées à votre adresse.
+
 <!-- topic: download-problems -->
 ## Le lien ne fonctionne pas
 

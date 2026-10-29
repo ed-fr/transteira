@@ -13,18 +13,77 @@
 //     active and name the same address; the depositor is then external;
 //  4. otherwise the internal rule (spec 6.2, package netpolicy): the client
 //     IP is in one of the tenant CIDR ranges AND the mail domain is one of
-//     the tenant domains.
+//     the tenant domains;
+//  5. failing the IP condition only, the remote rule (V1.1, spec 6.4): the
+//     tenant allows the deposit from outside
+//     (tenant.Tenant.AllowRemoteInternalDeposit, off by default) and the
+//     address is verified, still active and its first internal
+//     verification is recorded (store.VerifiedAddress.InternalVerifiedAt,
+//     set only by a code confirmed through the internal rule). The
+//     depositor is then KindInternalRemote.
 //
-// Every refusal answers the same generic error ([ErrForbidden]), except an
-// expired or revoked invitation presented with a valid token
+// # Deposit from outside (internal_remote)
+//
+// An internal user depositing from outside (threats T-212 to T-215) always
+// gets a code: the recognition cookie is neither honored nor renewed, since
+// only the mailbox proves the identity there. Confirming the code opens a
+// session of kind KindInternalRemote that cannot invite (CanInvite false,
+// [Service.Invite] refuses it), refreshes the last use of the address but
+// never records an internal verification, and is audited as
+// address.verified with origin remote. The kind of a challenge without
+// invitation is not stored: it is computed again from the client IP when
+// the code is confirmed, so that a code requested at the office and entered
+// from outside opens an internal_remote session when the remote rule holds,
+// and fails otherwise (see the decoy below). A session keeps its kind for its whole life:
+// one opened from outside never becomes internal.
+//
+// Decoy (threat T-215). With the tenant option off, every depositor from
+// outside without invitation is refused alike (ErrForbidden,
+// deposit_refused with reason ip): the option is public anyway
+// (features.remoteInternalDeposit). With the option on, a 403 for the
+// non-eligible addresses only would let anyone test which addresses of the
+// tenant domains were verified at the office, and the 202 would mail a
+// genuine code to the owner of every probed address. So a depositor from
+// outside who fails the remote rule (foreign domain, address unknown,
+// inactive or never verified internally), after the address syntax and the
+// blocklist checks that answer as before, gets a decoy:
+//
+//   - [Service.Start] answers exactly as for an eligible address: a real
+//     challenge row is created by the same transaction, so that both rate
+//     limits count it (a mix of decoy and genuine requests reaches 429
+//     together), with the MAC of a random code that is never stored nor
+//     sent; the mail is prepared (ErrMailUnavailable without SMTP settings,
+//     as for the genuine path) but not queued; the verified address is read
+//     in both cases, and the queueing of a genuine mail is asynchronous, so
+//     the cost does not differ in kind. deposit_refused with reason ip is
+//     still written to the security log, which the client never sees.
+//   - [Service.Confirm], for a challenge without invitation confirmed from
+//     outside by an address failing the remote rule, logs deposit_refused
+//     and answers as for a wrong code (an attempt spent, WrongCodeError,
+//     then ErrChallengeGone), whatever the code, after the same MAC
+//     verification. A decoy is not marked in the database: its code is known
+//     to nobody, and no path opens a session without a matching code, so it
+//     stays unusable even if its address becomes eligible before it
+//     expires. A genuine code requested at the office and entered from
+//     outside by an address not eligible to the remote rule gets the same
+//     wrong-code outcome (no oracle); it still works at the office while
+//     attempts remain.
+//
+// Residual difference: transient failures of the mail path at queueing
+// time, a full mail queue (429) or an open SMTP circuit (503), affect only
+// a genuine request, since a decoy is never queued.
+//
+// Every refusal answers the same generic error ([ErrForbidden]), except the
+// decoy above and an expired or revoked invitation presented with a valid token
 // ([ErrInvitationGone], decision P9), and writes a deposit_refused line to
 // the security log with the reason only (never the address, the token or a
 // code).
 //
 // An internal depositor's eligibility is checked again whenever an action
-// relies on it: confirming a code and creating an invitation re-run the
-// blocklist and the internal rule, so that a session opened at the office
-// does not allow inviting from outside. Step 6 (transfers) MUST do the
+// relies on it: confirming a code re-runs the blocklist and the internal
+// and remote rules; creating an invitation re-runs the blocklist and the
+// internal rule only, so that a session opened at the office does not
+// allow inviting from outside. Step 6 (transfers) MUST do the
 // same at transfer creation: re-check BOTH the tenant blocklist (the
 // depositor address and its domain) AND, for an internal session, the
 // internal IP rule (netpolicy.Evaluate on the current client IP and the
@@ -45,8 +104,10 @@
 // the tenant lock, so concurrent requests cannot exceed them (threat T-12);
 // the store opens its PostgreSQL transactions READ COMMITTED whatever the
 // server default, which this lock-then-count pattern requires.
-// The invitations are limited the same way: MaxInvitationsPerInviter per
-// inviter address and tenant over the same hour.
+// The invitations are limited the same way per inviter address and tenant
+// over the same hour: the tenant setting maxInvitationsPerInviter (spec
+// 15.2) read through Options.Abuse, which also alerts the administrators
+// when the limit is reached, or MaxInvitationsPerInviter without it.
 //
 // Retention: since the limits count rows by creation time, a challenge row
 // (and an invitation row) must be kept at least until created_at +
@@ -97,7 +158,7 @@
 // the address on every browser. Start and Confirm receive the raw cookie
 // value, parsed defensively (bounded length, at most RecognitionMaxEntries
 // entries, junk ignored), and return in Session.Recognition the new value
-// for internal depositors: a new entry of this address issued today, then
+// for internal depositors inside the tenant ranges (never from outside): a new entry of this address issued today, then
 // the other fresh entries without the older ones of this address, capped;
 // the HTTP layer sets it for RecognitionMaxAge. The shortcut also requires
 // the address to be verified and active for the tenant. Finishing a master
@@ -125,7 +186,6 @@
 // reads the token and calls getInvitation. The token is "inv_" followed by
 // 256 bits in base62 (OpenAPI pattern ^inv_[A-Za-z0-9]{22,43}$); only its
 // SHA-256 is stored. The message of the inviter is stripped of control and
-// invisible formatting characters before it is stored (threats T-18, T-81). The
-// configurable per-inviter quota and the external deposit quotas are part
-// of V1.1 (spec 15.2).
+// invisible formatting characters before it is stored (threats T-18, T-81).
+// Only a KindInternal session from an internal IP may invite.
 package deposit

@@ -9,7 +9,8 @@
     "webhooks": "Webhooks",
     "audit": "Audit log",
     "stats": "Statistics",
-    "privacy": "Personal data"
+    "privacy": "Personal data",
+    "abuseReports": "Abuse reports"
   },
   "transfers": {
     "title": "Transfers",
@@ -44,5 +45,9 @@
   "privacy": {
     "title": "Personal data",
     "intro": "Search for an email address to see the data linked to it in this entity, then erase it if needed (data subject rights, GDPR)."
+  },
+  "abuseReports": {
+    "title": "Abuse reports",
+    "intro": "Reports made by recipients from the download page. The message is plain text, to be read with caution."
   }
 }

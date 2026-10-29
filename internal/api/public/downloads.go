@@ -30,6 +30,7 @@ type DownloadService interface {
 	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies) (DownloadArchive, error)
 	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
 	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
+	ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error
 }
 
 // DownloadFile is a deliverable file opened for download (download.File).
@@ -88,7 +89,7 @@ type requestKey struct{}
 // RequestMiddleware (strict handler operation names).
 var requestOperations = map[string]bool{
 	"GetDownload": true, "UnlockDownload": true, "DownloadFile": true, "DownloadArchive": true,
-	"StartRecipientVerification": true, "ConfirmRecipientVerification": true,
+	"StartRecipientVerification": true, "ConfirmRecipientVerification": true, "ReportAbuse": true,
 }
 
 // RequestMiddleware is a strict middleware putting the HTTP request in the
@@ -362,6 +363,9 @@ const (
 	// fieldLanguage is the JSON pointer of the language of a recipient
 	// verification mail.
 	fieldLanguage = "/language"
+	// fieldCategory and fieldMessage are the JSON pointers of an abuse report.
+	fieldCategory = "/category"
+	fieldMessage  = "/message"
 )
 
 // downloadError maps an error of the download service to the error the
@@ -400,6 +404,10 @@ func downloadError(err error) error {
 		return problem.New(problem.CodeTransferLocked, problem.WithRetryAfter(locked.RetryAfter))
 	case errors.Is(err, download.ErrInvalid):
 		return validationFailed(fieldPassword, fieldInvalidFormat)
+	case errors.Is(err, download.ErrInvalidCategory):
+		return validationFailed(fieldCategory, fieldInvalidFormat)
+	case errors.Is(err, download.ErrInvalidMessage):
+		return validationFailed(fieldMessage, fieldInvalidFormat)
 	case errors.Is(err, download.ErrNotFound):
 		return problem.New(problem.CodeNotFound)
 	case errors.Is(err, download.ErrGone):
@@ -628,4 +636,24 @@ func isAttrChar(b byte) bool {
 		return true
 	}
 	return strings.IndexByte("!#$&+-.^_`|~", b) >= 0
+}
+
+// ReportAbuse records an abuse report on the transfer of a link
+// (reportAbuse, 202). The recipient verification cookie is passed as is:
+// the service ignores it unless it proves the reporter. The cross-site
+// protections are those of unlockDownload (see internal/httpserver).
+func (s *Server) ReportAbuse(ctx context.Context, req gen.ReportAbuseRequestObject) (gen.ReportAbuseResponseObject, error) {
+	t, err := s.downloadTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil || req.Body.Category == "" {
+		return nil, validationFailed(fieldCategory, fieldRequired)
+	}
+	err = s.downloads.ReportAbuse(ctx, t, req.LinkToken, middleware.ClientIP(ctx),
+		cookieValue(ctx, download.VerificationCookieName), string(req.Body.Category), deref(req.Body.Message))
+	if err != nil {
+		return nil, downloadError(err)
+	}
+	return gen.ReportAbuse202Response{}, nil
 }

@@ -187,6 +187,8 @@ A user is internal when **both** conditions are met: their IP address belongs to
 
 Errors are reported line by line, sometimes with a suggested correction you can apply. Repeated lines are ignored, and the server normalizes the values it saves (the lists shown after saving are the saved ones). Click **Save**.
 
+**Allow deposits from outside for verified internal users**: off by default. When on, an address of an internal domain **already verified from the internal network** can deposit outside the ranges, without an invitation, with a code at every deposit (see the depositor guide, section "Depositing from outside"). Invitations remain reserved to the internal network, and these deposits are flagged in the [audit log](topic:tenant-audit) and counted by the [abuse detection](topic:tenant-abuse). A compromised mailbox would then allow deposits from the Internet: turn the option on only after assessment. The option itself is public in the entity configuration. When it is on, a code request from outside for an address that is not eligible (another domain, never verified from the internal network, inactive, unknown) gets the same answer as an eligible address, with no email sent: the attempt counts in the code limits and every code is refused at confirmation. If a user reports that no code arrives from outside, check their eligibility. With the option off, outsiders get the generic refusal. Blocklisted addresses are still refused.
+
 Watch the warnings:
 
 - an empty list of ranges or of domains means that nobody is internal: only invitations will allow deposits;
@@ -419,6 +421,36 @@ Choose the **Period**: **Last 7 days**, **Last 30 days** or **Last 12 months**. 
 ![Statistics of an entity with the key figures, the storage and the charts](../screenshots/en/admin-stats.png)
 
 The storage quota is set by the super administrator. When the entity reaches 80 % of its quota, the delegated administrators receive an alert email; when it reaches 100 %, they receive another one and new deposits are refused until space is freed by expiry or deletion. Each alert is sent once per crossing of the threshold.
+
+<!-- topic: tenant-abuse -->
+### Abuse detection
+
+The Abuse detection screen sets the thresholds that raise an alert on an internal data leak or on a misuse of the service by external people. All thresholds belong to the entity; an empty or zero value turns the threshold off.
+
+![The Abuse detection screen: per-sender limits with their enable box, blocking on exceed, unusual behaviour, office hours, invitations and external quotas](../screenshots/en/admin-tenant-abuse.png)
+
+- **Per-sender limits**: maximum volume per day, maximum number of transfers per day, maximum number of recipients per transfer. They apply to **internal** senders only (inside the network, from outside and by API token); invited externals are governed only by the external quotas. The daily counters count every transfer created (or extended) that day whatever its later status, cancelled drafts included. A day is a calendar day of the **time zone** set on the screen. An extension from "My transfers" counts in the volume and the transfers of the day of the extension (alert only).
+- **Block when exceeded**: off by default. When on, a transfer that would exceed a limit is refused and the sender is told; otherwise only an alert is raised.
+- **Unusual behaviour** (alert only, for internal senders, including from outside): a volume above a **factor** times the daily average of the previous 30 days (a minimum number of active days is needed), a large transfer to a recipient outside the internal domains from a given size, a transfer outside **office hours** (time zone, start and end time, days of the week).
+- **Invitations**: maximum number of invitations per internal user per rolling hour (20 by default). Beyond it, the invitation is refused and an alert is raised.
+- **External quotas**: volume and number of deposits per day and per external address, blocking if blocking is on.
+
+An alert is raised at most once per sender, per rule and per day. For a refusal (blocking), only the first refusal of the day for a sender and a rule is audited and alerted; later refusals the same day are only counted, with no new audit line, email or webhook. An alert-only alert raised earlier the same day does not hide a later refusal: email to the administrators of the entity and [webhooks](topic:tenant-webhooks) (`abuse.threshold_exceeded`, `abuse.unusual_activity`). Every alerted excess is written to the [audit log](topic:tenant-audit), with the sender as actor. Changes to the thresholds are audited too.
+
+> **Note** Information of the people (GDPR): these checks have security as their only purpose. They are computed on demand from the existing transfers, with no stored user profile; alerts are kept for 12 months in the audit log, and the de-duplication data is purged after 2 days. Tell your users that these checks exist.
+
+<!-- topic: tenant-abuse-reports -->
+### Reports
+
+The Reports screen lists the reports made by recipients with the **Report abuse** button of the download page.
+
+![The Reports screen: status filter and list of reports with their date, category, transfer and reporter](../screenshots/en/admin-abuse-reports.png)
+
+Each row shows the date, the category (**Malware**, **Phishing**, **Illegal content**, **Spam**, **Unknown sender**, **Other**), the reporter's message (shown as text), the transfer concerned and the reporter: their address if the recipient had validated their address on this browser, otherwise "via the link of recipient #n, unverified".
+
+A report triggers **no automatic action**: examine the transfer (see [Transfers](topic:tenant-transfers)), delete it or block the sender if needed (see [Blocklist](topic:tenant-blocklist)), then click **Close** and add a note. You can **Reopen** a closed report. Openings, closings and reopenings are written to the [audit log](topic:tenant-audit). Reports are kept for 12 months; the erasure of the data of an address pseudonymises the reporter and the sender concerned (see [Personal data (GDPR)](topic:tenant-privacy)).
+
+New reports are sent by email to the delegated administrators of the entity (to the super admins if there are none) and by webhook (`abuse.reported`).
 
 <!-- topic: tenant-privacy -->
 ### Personal data (GDPR)

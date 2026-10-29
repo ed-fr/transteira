@@ -610,6 +610,20 @@ func (f *faultRepo) replaceConfidentialityLevels(ctx context.Context, tid tenant
 	return f.repo.replaceConfidentialityLevels(ctx, tid, l, by, now)
 }
 
+func (f *faultRepo) abuseSettings(ctx context.Context, tid tenant.ID) (store.AbuseSettings, error) {
+	if err := f.fail("abuseSettings"); err != nil {
+		return store.AbuseSettings{}, err
+	}
+	return f.repo.abuseSettings(ctx, tid)
+}
+
+func (f *faultRepo) putAbuseSettings(ctx context.Context, tid tenant.ID, in store.AbuseSettings) (store.AbuseSettings, error) {
+	if err := f.fail("putAbuseSettings"); err != nil {
+		return store.AbuseSettings{}, err
+	}
+	return f.repo.putAbuseSettings(ctx, tid, in)
+}
+
 func (f *faultRepo) recipientRules(ctx context.Context, tid tenant.ID) (store.RecipientRuleSet, error) {
 	if err := f.fail("recipientRules"); err != nil {
 		return store.RecipientRuleSet{}, err

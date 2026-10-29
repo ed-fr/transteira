@@ -100,7 +100,7 @@ func TestPurgeRows(t *testing.T) {
 		if !ev.gone(oldA) || !ev.gone(oldB) || ev.gone(recentA) || ev.gone(rej) {
 			t.Fatalf("purge at the retention: %v %v %v %v", ev.gone(oldA), ev.gone(oldB), ev.gone(recentA), ev.gone(rej))
 		}
-		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 invitations=0") != 1 {
+		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 invitations=0") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		// The token hash no longer resolves: the link answers 404.
@@ -309,7 +309,7 @@ func TestPurgeRowsSystem(t *testing.T) {
 		now := ev.clock.Now()
 		ev.adminRows(now)
 		ev.runTask(TaskPurgeRows)
-		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 invitations=0 "+systemCounts) != 1 {
+		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 invitations=0 "+systemCounts) != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		if ev.f.called("scrub") != 1 {
@@ -369,6 +369,66 @@ func TestPurgeRowsUsageCounters(t *testing.T) {
 			if len(got) != want || (want == 1 && !got[0].Day.Equal(cutoff)) {
 				t.Fatalf("%s keeps %v, want %d day(s) from %v", tn.FQDN, got, want, cutoff)
 			}
+		}
+	})
+}
+
+// TestPurgeAbuseRows purges the abuse alert rows after their retention and
+// the abuse reports after twelve months, of every tenant.
+func TestPurgeAbuseRows(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		start := ev.clock.Now()
+		sender := "sender@entity-a.example.com"
+		limits := store.AbuseReportLimits{PerLinkPerDay: 100, PerIPPerHour: 100}
+		report := func(tn *tenant.Tenant, at time.Time) store.AbuseReport {
+			r, err := ev.db.AbuseReports().Create(ctx, tn.ID, store.AbuseReport{
+				TransferID: id.New(id.Transfer), SenderEmail: sender, Category: store.AbuseCategorySpam,
+				ReporterIP: netip.MustParseAddr("192.0.2.10"),
+			}, limits, at)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return r
+		}
+		for _, tn := range []*tenant.Tenant{ev.a, ev.b} {
+			ev.tx(tn, func(tx *store.ScopedTx) error {
+				_, err := ev.db.AbuseAlerts().TryInsertTx(ctx, tx, sender, store.AbuseRuleDailyBytes, "2026-10-22", false, start)
+				return err
+			})
+		}
+		oldA, oldB := report(ev.a, start), report(ev.b, start)
+		recent := report(ev.a, start.AddDate(0, 6, 0))
+
+		// Before the retentions: nothing.
+		ev.clock.set(start.Add(store.AbuseAlertRetention - time.Second))
+		ev.runTask(TaskPurgeRows)
+		if _, err := ev.db.AbuseReports().Get(ctx, ev.a.ID, oldA.ID); err != nil {
+			t.Fatalf("report purged early: %v", err)
+		}
+		// The alert rows go once 48 hours have passed, the reports stay.
+		ev.clock.set(start.Add(store.AbuseAlertRetention + time.Second))
+		ev.runTask(TaskPurgeRows)
+		if ev.logs.count("abuse_alerts=2 abuse_reports=0") != 1 {
+			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		// Twelve months later, the old reports go in every tenant.
+		ev.clock.set(start.AddDate(1, 0, 1))
+		ev.runTask(TaskPurgeRows)
+		if ev.logs.count("abuse_alerts=0 abuse_reports=2") != 1 {
+			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		for _, r := range []struct {
+			tn *tenant.Tenant
+			id string
+		}{{ev.a, oldA.ID}, {ev.b, oldB.ID}} {
+			if _, err := ev.db.AbuseReports().Get(ctx, r.tn.ID, r.id); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("old report kept: %v", err)
+			}
+		}
+		if _, err := ev.db.AbuseReports().Get(ctx, ev.a.ID, recent.ID); err != nil {
+			t.Errorf("recent report purged: %v", err)
 		}
 	})
 }

@@ -23,6 +23,9 @@ type repo interface {
 	getBlocklistEntry(ctx context.Context, tid tenant.ID, entryID string) (store.BlocklistEntry, error)
 	createBlocklistEntry(ctx context.Context, tid tenant.ID, e store.BlocklistEntry) (store.BlocklistEntry, error)
 	deleteBlocklistEntry(ctx context.Context, tid tenant.ID, entryID string) error
+	listAbuseReports(ctx context.Context, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error)
+	getAbuseReport(ctx context.Context, tid tenant.ID, repID string) (store.AbuseReport, error)
+	setAbuseReportStatus(ctx context.Context, tid tenant.ID, repID string, status store.AbuseReportStatus, by string, note *string, now time.Time) (store.AbuseReport, bool, error)
 	listAudit(ctx context.Context, f store.AuditFilter) (store.Page[store.AuditEvent], error)
 	recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error)
 	tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error)
@@ -108,4 +111,16 @@ func (r *storeRepo) openSecret(ctx context.Context, tid tenant.ID, wkID string) 
 
 func (r *storeRepo) audit(ctx context.Context, tid tenant.ID, ev audit.Event) error {
 	return r.writer.RecordScoped(ctx, tid, ev)
+}
+
+func (r *storeRepo) listAbuseReports(ctx context.Context, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error) {
+	return r.db.AbuseReports().List(ctx, tid, status, limit, cursor)
+}
+
+func (r *storeRepo) getAbuseReport(ctx context.Context, tid tenant.ID, repID string) (store.AbuseReport, error) {
+	return r.db.AbuseReports().Get(ctx, tid, repID)
+}
+
+func (r *storeRepo) setAbuseReportStatus(ctx context.Context, tid tenant.ID, repID string, status store.AbuseReportStatus, by string, note *string, now time.Time) (store.AbuseReport, bool, error) {
+	return r.db.AbuseReports().SetStatus(ctx, tid, repID, status, by, note, now)
 }

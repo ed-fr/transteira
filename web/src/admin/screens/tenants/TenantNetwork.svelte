@@ -9,7 +9,7 @@
   // - the lists then show the values saved by the server, which normalises them again.
   // The tenant sub-navigation is rendered by App.svelte.
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, HelpIcon, Spinner } from '../../../shared/components';
+  import { Alert, Checkbox, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -42,6 +42,12 @@
   let domainText = $state('');
   let errors = $state<SummaryError[]>([]);
   let normalizedNotice = $state(false);
+  // Deposit from outside (version 1.1): a flag of the tenant itself (PATCH /admin/tenants/{id}).
+  let remoteSaved = $state<boolean | undefined>(undefined);
+  let remote = $state(false);
+  let remoteErrors = $state<SummaryError[]>([]);
+  const remoteId = `${uid}-remote`;
+  const remoteDirty = $derived(remoteSaved !== undefined && remote !== remoteSaved);
 
   // Parsed here as well, so that the warnings and the body never wait for the editors.
   const cidrs = $derived(parseCidrList(cidrText));
@@ -80,17 +86,61 @@
     loadError = '';
     try {
       const res = await adminApi.get('/admin/tenants/{tenantId}/network', { path: { tenantId: id } });
-      show(res.data);
+      // A slow answer for a tenant we have navigated away from must not fill the current form.
+      if (id === tenantId) {
+        show(res.data);
+      }
     } catch (err) {
-      loadError = describeError(i18n, err).message;
+      if (id === tenantId) {
+        loadError = describeError(i18n, err).message;
+      }
     } finally {
-      loading = false;
+      if (id === tenantId) {
+        loading = false;
+      }
+    }
+  }
+
+  async function loadRemote(id: string): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/tenants/{tenantId}', { path: { tenantId: id } });
+      // A slow answer for a tenant we have navigated away from must not overwrite the current one.
+      if (id !== tenantId) {
+        return;
+      }
+      remoteSaved = res.data.allowRemoteInternalDeposit === true;
+      remote = remoteSaved;
+    } catch {
+      if (id === tenantId) {
+        remoteSaved = undefined;
+      }
     }
   }
 
   $effect(() => {
+    remoteSaved = undefined;
+    remote = false;
     void load(tenantId);
+    void loadRemote(tenantId);
   });
+
+  async function saveRemote(): Promise<SubmitOutcome> {
+    const id = tenantId;
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', {
+        path: { tenantId: id },
+        body: { allowRemoteInternalDeposit: remote },
+      });
+      if (id !== tenantId) {
+        return { ok: true, message: t('adminTenants.network.remote.saved') };
+      }
+      remoteSaved = res.data.allowRemoteInternalDeposit === true;
+      remote = remoteSaved;
+      return { ok: true, message: t('adminTenants.network.remote.saved') };
+    } catch (err) {
+      return { ok: false, message: describeError(i18n, err).message };
+    }
+  }
 
   async function save(): Promise<SubmitOutcome> {
     const typedCidrs = cidrText;
@@ -173,6 +223,23 @@
       <Alert severity="info">{t('adminTenants.network.normalized')}</Alert>
     {/if}
   </FormSection>
+  {#if remoteSaved !== undefined}
+    <FormSection
+      title={t('adminTenants.network.remote.title')}
+      intro={t('adminTenants.network.remote.intro')}
+      dirty={remoteDirty}
+      addGuard={(guard) => nav.addGuard(guard)}
+      onsubmit={saveRemote}
+      bind:errors={remoteErrors}
+    >
+      <Checkbox
+        id={remoteId}
+        label={t('adminTenants.network.remote.label')}
+        hint={t('adminTenants.network.remote.hint')}
+        bind:checked={remote}
+      />
+    </FormSection>
+  {/if}
 {/if}
 
 <style>

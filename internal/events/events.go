@@ -272,6 +272,12 @@ func AdminPathTenantAudit(tid string) string {
 	return "/admin/tenants/" + tid + "/audit"
 }
 
+// AdminPathTenantAbuseReports returns the path of the abuse reports page of
+// tenant tid.
+func AdminPathTenantAbuseReports(tid string) string {
+	return "/admin/tenants/" + tid + "/abuse-reports"
+}
+
 // Defaults.
 const (
 	// DefaultBuffer is the queue length of a subscriber registered with a

@@ -53,7 +53,26 @@ type Result struct {
 // browser presents the recognition cookie entry of that address: the
 // session then opens at once and Session.Recognition carries the renewed
 // cookie value. An invitation-based depositor always gets a code, even when
-// verified, so that a forwarded invitation link opens nothing by itself.
+// verified, so that a forwarded invitation link opens nothing by itself,
+// and so does an internal user depositing from outside (V1.1, spec 6.4, see
+// [Service.checkDepositor]): only the mailbox proves the identity there, so
+// the recognition cookie is neither honored nor renewed.
+//
+// Decoy (threat T-215): when the tenant allows the deposit from outside, a
+// depositor from outside without invitation who is not eligible to it
+// (foreign domain, address unknown, inactive or never verified at the
+// office; see [Service.checkDepositor]) gets the same answer as an
+// eligible one: a real challenge row is created through the same
+// transaction (so it counts against both rate limits, and the 6th request
+// of an address or the 21st of an IP answers *RateLimitError whatever the
+// mix of decoy and genuine requests), with the MAC of a random code that
+// is neither stored nor sent, and the same Challenge (expiry, attempts).
+// The code mail is prepared as usual (a tenant without SMTP settings
+// answers ErrMailUnavailable in both cases) but never queued; the security
+// log still records deposit_refused with reason ip, server side only. Such
+// a challenge cannot be confirmed, since nobody knows its code. The
+// blocklist and an invalid address are checked first and answered as
+// before; with the option off every outsider gets ErrForbidden.
 //
 // Errors: *InvalidError (ErrInvalid) for a malformed address; ErrForbidden
 // when the depositor is not eligible; ErrInvitationGone for an expired or
@@ -74,17 +93,21 @@ func (s *Service) Start(ctx context.Context, t *tenant.Tenant, clientIP netip.Ad
 		return Result{}, err
 	}
 	var inv *store.Invitation
+	kind := KindExternal
+	decoy := false
 	if invitationToken != "" {
 		found, err := s.checkInvitation(ctx, t, clientIP, invitationToken, addr.normalized)
 		if err != nil {
 			return Result{}, err
 		}
 		inv = &found
-	} else if err := s.checkInternal(ctx, t, clientIP, addr.normalized); err != nil {
+	} else if kind, err = s.checkDepositor(ctx, t, clientIP, addr.normalized); errors.Is(err, errDecoy) {
+		decoy = true
+	} else if err != nil {
 		return Result{}, err
 	}
 
-	if inv == nil {
+	if kind == KindInternal {
 		sess, ok, err := s.recognized(ctx, t, addr.normalized, recognition)
 		if err != nil {
 			return Result{}, err
@@ -93,7 +116,7 @@ func (s *Service) Start(ctx context.Context, t *tenant.Tenant, clientIP netip.Ad
 			return Result{Session: &sess}, nil
 		}
 	}
-	ch, err := s.sendCode(ctx, t, clientIP, acceptLanguage, addr, inv)
+	ch, err := s.sendCode(ctx, t, clientIP, acceptLanguage, addr, inv, decoy)
 	if err != nil {
 		return Result{}, err
 	}
@@ -119,7 +142,7 @@ func (s *Service) recognized(ctx context.Context, t *tenant.Tenant, email, recog
 	if err != nil {
 		return Session{}, false, err
 	}
-	sess, err = s.openSession(ctx, t, email, nil, func(tx txRepo, now time.Time) error {
+	sess, err = s.openSession(ctx, t, email, KindInternal, nil, func(tx txRepo, now time.Time) error {
 		if err := tx.touchVerified(ctx, email, now); err != nil {
 			return fmt.Errorf("deposit: touch verified address: %w", err)
 		}
@@ -155,7 +178,11 @@ func (s *Service) verifiedAddress(ctx context.Context, tid tenant.ID, email stri
 // the queue refuses it, the challenge is deleted, best effort, so that a
 // code nobody received neither stays usable nor counts against the limits
 // (see the package documentation for the remaining corner case).
-func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage string, addr address, inv *store.Invitation) (Challenge, error) {
+//
+// With decoy true (see [Service.Start]) everything runs the same, the code
+// included, except that the mail is not queued: the code, drawn at random
+// and kept only as its MAC, is then known to nobody.
+func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage string, addr address, inv *store.Invitation, decoy bool) (Challenge, error) {
 	chID, err := s.newToken(id.ChallengeTokenPrefix, id.ChallengeTokenBytes)
 	if err != nil {
 		return Challenge{}, fmt.Errorf("deposit: new challenge id: %w", err)
@@ -216,6 +243,10 @@ func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip
 		return Challenge{}, err
 	}
 
+	if decoy {
+		// The decoy mail is dropped: the code it carries is lost.
+		return Challenge{ID: rec.ID, Email: rec.Email, ExpiresAt: rec.ExpiresAt, AttemptsRemaining: rec.AttemptsRemaining}, nil
+	}
 	if err := s.enqueue(job); err != nil {
 		if derr := s.repo.deleteChallenge(context.WithoutCancel(ctx), t.ID, rec.ID); derr != nil {
 			s.logger.ErrorContext(ctx, "deposit: discarding an unsent verification challenge failed",
@@ -235,12 +266,34 @@ func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip
 // Session.Recognition is that value with the entry of the address added in
 // front (see [Service.Start]).
 //
-// The depositor kind comes from the challenge: external when it was created
-// with an invitation, internal otherwise. Eligibility is checked again before
-// the code: blocklist, then the network rule for an internal depositor or
-// the invitation for an external one. A code confirmed by an internal
-// depositor records the internal verification of the address (V1.1, spec
-// 6.4) when it has none yet.
+// The depositor kind is external when the challenge was created with an
+// invitation. Otherwise it is computed again from clientIP, like at
+// [Service.Start] (see [Service.checkDepositor]): a code requested at the
+// office and entered from outside opens an internal_remote session when the
+// remote rule holds, and is refused otherwise. Eligibility is checked again
+// before the code: blocklist, then the network rules for a depositor
+// without invitation or the invitation for an external one.
+//
+// Decoy (threat T-215): when the tenant allows the deposit from outside and
+// a challenge without invitation is confirmed from outside by an address
+// that fails the remote rule, the refusal (still logged as deposit_refused
+// with reason ip) is answered as a wrong code: an attempt is spent and
+// *WrongCodeError, then ErrChallengeGone, is returned, whatever the code.
+// This covers the decoy challenges of [Service.Start], whose code nobody
+// knows, and also a genuine challenge requested at the office and entered
+// from outside by an address not eligible to the remote rule: even with
+// the right code it gets the wrong-code outcome rather than ErrForbidden,
+// so that the answer never tells an eligible address from another one (it
+// can still be entered at the office while attempts remain). The code MAC
+// is verified in every case, so that both outcomes cost the same; no path
+// opens a session without a matching code, so a decoy challenge stays
+// unusable even if its address becomes eligible before it expires. A
+// blocklisted address is still refused with ErrForbidden, and with the
+// option off the refusal stays ErrForbidden, with no attempt spent. A code
+// confirmed by an internal depositor records the internal verification of
+// the address (V1.1, spec 6.4) when it has none yet; a code confirmed from
+// outside only refreshes the last use of the address, never records an
+// internal verification and never sets the recognition cookie.
 //
 // Errors: *InvalidError (ErrInvalid) for a code that is not 6 digits;
 // ErrNotFound for an unknown challenge (or one of another tenant);
@@ -264,33 +317,37 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 	case !ch.Open(s.now()):
 		return Session{}, ErrChallengeGone
 	}
-	inv, err := s.recheck(ctx, t, clientIP, ch)
-	if err != nil {
+	kind, inv, err := s.recheck(ctx, t, clientIP, ch)
+	decoy := errors.Is(err, errDecoy)
+	if err != nil && !decoy {
 		return Session{}, err
 	}
 	ok, err := s.keys.VerifyMAC(crypto.MACPurposeOTP, ch.CodeMAC, []byte(ch.ID), []byte(code))
 	if err != nil {
 		return Session{}, fmt.Errorf("deposit: verify code: %w", err)
 	}
-	if !ok {
+	if !ok || decoy {
 		return Session{}, s.wrongCode(ctx, t, clientIP, ch.ID)
 	}
 	cookie := ""
-	sess, err := s.openSession(ctx, t, ch.Email, inv, func(tx txRepo, now time.Time) error {
+	sess, err := s.openSession(ctx, t, ch.Email, kind, inv, func(tx txRepo, now time.Time) error {
 		if err := tx.consumeChallenge(ctx, ch.ID, now); errors.Is(err, store.ErrNotFound) {
 			return ErrChallengeGone
 		} else if err != nil {
 			return fmt.Errorf("deposit: consume challenge: %w", err)
 		}
+		// From outside the address is verified and active (checkDepositor):
+		// the upsert only refreshes its last use and keeps its internal
+		// verification details, which a remote code never sets.
 		v := store.VerifiedAddress{Email: ch.Email, FirstVerifiedAt: now, FirstVerifiedIP: clientIP, LastUsedAt: now}
-		if inv == nil {
+		if kind == KindInternal {
 			v.InternalVerifiedAt, v.InternalVerifiedIP = now, clientIP
 		}
 		salt, err := tx.upsertVerified(ctx, v)
 		if err != nil {
 			return fmt.Errorf("deposit: record verified address: %w", err)
 		}
-		if inv == nil {
+		if kind == KindInternal {
 			// In the transaction: a failure here never consumes the code.
 			cookie, err = s.remember(parseRecognition(recognition), t.ID, ch.Email, salt)
 		}
@@ -300,18 +357,21 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 		return Session{}, err
 	}
 	sess.Recognition = cookie
-	s.recordConfirmed(ctx, t, clientIP, ch.Email, sess.ID, inv)
+	s.recordConfirmed(ctx, t, clientIP, ch.Email, sess.ID, kind, inv)
 	return sess, nil
 }
 
 // recordConfirmed records the audit events of a confirmed code: the
-// verification of the address, then the first use of the invitation of an
-// external depositor (its LastUsedAt was zero when the challenge was
-// checked).
-func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, email, sessionID string, inv *store.Invitation) {
+// verification of the address (origin internal, remote or invitation after
+// the depositor kind), then the first use of the invitation of an external
+// depositor (its LastUsedAt was zero when the challenge was checked).
+func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, email, sessionID string, kind Kind, inv *store.Invitation) {
 	origin := originInternal
-	if inv != nil {
+	switch kind {
+	case KindExternal:
 		origin = originInvitation
+	case KindInternalRemote:
+		origin = originRemote
 	}
 	s.record(ctx, t, clientIP, email, audit.ActionAddressVerified, audit.ObjectDepositSession, sessionID,
 		map[string]any{"origin": origin})
@@ -322,26 +382,30 @@ func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientI
 }
 
 // recheck verifies that the depositor of challenge ch is still eligible
-// and returns the invitation of an external depositor (nil for an internal
-// one).
-func (s *Service) recheck(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, ch store.Challenge) (*store.Invitation, error) {
+// and returns its kind (computed again from clientIP for a challenge
+// without invitation) and the invitation of an external depositor (nil
+// otherwise). For a challenge without invitation it returns errDecoy when
+// [Service.checkDepositor] does (outside, option on, remote rule failed):
+// [Service.Confirm] turns it into the wrong-code outcome.
+func (s *Service) recheck(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, ch store.Challenge) (Kind, *store.Invitation, error) {
 	if !clientIP.IsValid() {
-		return nil, s.refuse(ctx, t, clientIP, securitylog.ReasonIP)
+		return "", nil, s.refuse(ctx, t, clientIP, securitylog.ReasonIP)
 	}
 	if err := s.checkBlocklist(ctx, t, clientIP, ch.Email); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if ch.InvitationID == "" {
-		return nil, s.checkInternal(ctx, t, clientIP, ch.Email)
+		kind, err := s.checkDepositor(ctx, t, clientIP, ch.Email)
+		return kind, nil, err
 	}
 	inv, err := s.activeInvitation(ctx, t.ID, ch.InvitationID)
 	if errors.Is(err, ErrInvitationGone) {
 		_ = s.refuse(ctx, t, clientIP, securitylog.ReasonInvitation)
 	}
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return &inv, nil
+	return KindExternal, &inv, nil
 }
 
 // wrongCode spends one attempt of the challenge chID, logs the failure

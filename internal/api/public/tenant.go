@@ -146,10 +146,11 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	body.Limits.ExpiryDays = append([]gen.ExpiryDays{}, expiryDays...)
 	body.ConfidentialityLevels = publicLevels(levels)
 	// The features announce what the server really offers. The options
-	// of later steps (replies, folders, remote deposit, antivirus switch)
+	// of later steps (replies, folders, antivirus switch)
 	// stay off or at their default until they exist.
 	body.Features = &gen.TenantFeatures{
 		MaxDownloads:          true,
+		RemoteInternalDeposit: t.AllowRemoteInternalDeposit,
 		RecipientVerification: true,
 		RecipientRestrictions: restricted,
 		Antivirus:             gen.Enabled,

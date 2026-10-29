@@ -38,6 +38,9 @@ type OperationsService interface {
 	DeleteBlocklistEntry(ctx context.Context, p adminauth.Principal, tid tenant.ID, entryID string, ip netip.Addr) error
 	ListAuditEvents(ctx context.Context, p adminauth.Principal, tid tenant.ID, f tenantops.AuditFilter) (store.Page[store.AuditEvent], error)
 	ListGlobalAuditEvents(ctx context.Context, p adminauth.Principal, f tenantops.GlobalAuditFilter) (store.Page[store.AuditEvent], error)
+	ListAbuseReports(ctx context.Context, p adminauth.Principal, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error)
+	GetAbuseReport(ctx context.Context, p adminauth.Principal, tid tenant.ID, repID string) (store.AbuseReport, error)
+	UpdateAbuseReport(ctx context.Context, p adminauth.Principal, tid tenant.ID, repID string, status store.AbuseReportStatus, note *string, ip netip.Addr) (store.AbuseReport, error)
 }
 
 // DataSubjectService serves the rights of the data subjects
@@ -599,7 +602,7 @@ func (s *Server) EraseDataSubject(ctx context.Context, req gen.EraseDataSubjectR
 	return gen.EraseDataSubject200JSONResponse{
 		TransfersDeleted: rep.TransfersDeleted, RecipientEntriesRemoved: rep.RecipientEntriesRemoved,
 		VerifiedAddressDeleted: rep.VerifiedAddressDeleted, InvitationsDeleted: rep.InvitationsDeleted,
-		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks,
+		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks, AbuseReports: &rep.AbuseReports,
 	}, nil
 }
 

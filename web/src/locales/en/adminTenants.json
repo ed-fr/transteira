@@ -29,7 +29,8 @@
     "templates": "Email templates",
     "legal": "Legal information",
     "recipientRules": "Recipient domains",
-    "confidentiality": "Confidentiality levels"
+    "confidentiality": "Confidentiality levels",
+    "abuse": "Abuse detection"
   },
   "fields": {
     "name": {
@@ -210,6 +211,13 @@
     "normalized": "The server normalized some values. The lists shown are the saved ones.",
     "form": {
       "title": "Internal ranges and domains"
+    },
+    "remote": {
+      "title": "Deposit from outside",
+      "intro": "To ease remote work, let internal users deposit from outside the IP ranges of the entity.",
+      "label": "Allow deposits from outside for already verified internal users",
+      "hint": "Off by default. Only for addresses of an internal domain already verified once from the internal network. From outside, a verification code is asked at each deposit, and these deposits are flagged in the audit log. Invitations remain reserved to users connected from the internal network.",
+      "saved": "Deposit from outside option saved."
     }
   },
   "smtp": {
@@ -569,5 +577,8 @@
       "daysRequired": "Allow at least one duration.",
       "capInvalid": "Enter a whole number between 1 and {max}, or leave the field empty."
     }
+  },
+  "abuse": {
+    "title": "Abuse detection"
   }
 }

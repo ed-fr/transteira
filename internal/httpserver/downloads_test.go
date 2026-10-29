@@ -64,6 +64,18 @@ func (fakeDownloads) ConfirmVerification(_ context.Context, _ *tenant.Tenant, _ 
 	return "rv_ok", nil
 }
 
+// ReportAbuse accepts the reports of the link that answers (dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf) and
+// refuses the others.
+func (fakeDownloads) ReportAbuse(_ context.Context, _ *tenant.Tenant, token string, _ netip.Addr, _, category, _ string) error {
+	if category == "" || category == "bad" {
+		return download.ErrInvalidCategory
+	}
+	if token != "dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf" {
+		return download.ErrNotFound
+	}
+	return nil
+}
+
 type content struct{ *bytes.Reader }
 
 func (*content) Begin(bool) error            { return nil }
@@ -150,6 +162,30 @@ func TestRecipientVerificationRoutes(t *testing.T) {
 		!strings.Contains(cookie, "SameSite=Strict") || !strings.Contains(cookie, "Path=/") || !strings.Contains(cookie, "Max-Age=3600") {
 		t.Errorf("confirm: %d %q", rec.Code, cookie)
 	}
+}
+
+// TestAbuseReportRoute checks, through the whole chain, that the abuse report is
+// protected like the unlock: same origin, JSON only.
+func TestAbuseReportRoute(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, envConfig{api: public.NewServer(public.WithDownloads(fakeDownloads{}))})
+	const report = "/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/abuse-reports"
+	body := `{"category":"spam","message":"unsolicited"}`
+	rec := e.do(t, http.MethodPost, report, hostA, strings.NewReader(body), "Content-Type", "application/json", "Origin", "https://evil.example.net")
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+	rec = e.do(t, http.MethodPost, report, hostA, strings.NewReader(body), "Content-Type", "application/json", "Sec-Fetch-Site", "cross-site")
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+	rec = e.do(t, http.MethodPost, report, hostA, strings.NewReader(body), "Content-Type", "text/plain")
+	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
+	same := []string{"Content-Type", "application/json", "Origin", "https://" + hostA, "Sec-Fetch-Site", "same-origin"}
+	rec = e.do(t, http.MethodPost, report, hostA, strings.NewReader(body), same...)
+	if rec.Code != http.StatusAccepted || rec.Body.Len() != 0 {
+		t.Errorf("report: %d %q", rec.Code, rec.Body)
+	}
+	rec = e.do(t, http.MethodPost, report, hostA, strings.NewReader(`{"category":"bad"}`), same...)
+	decodeProblem(t, rec, http.StatusBadRequest, problem.CodeValidationFailed)
+	rec = e.do(t, http.MethodPost, "/api/v1/downloads/dl_unknown/abuse-reports", hostA, strings.NewReader(body), same...)
+	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 }
 
 // stalledContent is a large content recording when it is closed and

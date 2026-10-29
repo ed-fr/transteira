@@ -458,3 +458,10 @@ func TestPublishDefaultsCounts(t *testing.T) {
 		t.Fatalf("counts = %+v", got)
 	}
 }
+
+func TestAdminPathTenantAbuseReports(t *testing.T) {
+	t.Parallel()
+	if got := AdminPathTenantAbuseReports("ten_1"); got != "/admin/tenants/ten_1/abuse-reports" {
+		t.Fatalf("AdminPathTenantAbuseReports = %q", got)
+	}
+}

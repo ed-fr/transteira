@@ -9,7 +9,8 @@
     "webhooks": "Webhooks",
     "audit": "Journal d’audit",
     "stats": "Statistiques",
-    "privacy": "Données personnelles"
+    "privacy": "Données personnelles",
+    "abuseReports": "Signalements"
   },
   "transfers": {
     "title": "Transferts",
@@ -44,5 +45,9 @@
   "privacy": {
     "title": "Données personnelles",
     "intro": "Recherchez une adresse mail pour voir les données qui y sont liées dans cette entité, puis effacez-les si nécessaire (exercice des droits, RGPD)."
+  },
+  "abuseReports": {
+    "title": "Signalements d’abus",
+    "intro": "Signalements faits par les destinataires depuis la page de téléchargement. Le message est un simple texte, à lire avec prudence."
   }
 }

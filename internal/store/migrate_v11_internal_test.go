@@ -157,7 +157,7 @@ func rowCounts(ctx context.Context, t *testing.T, db *DB) map[string]int64 {
 	return out
 }
 
-// TestMigrationV11Upgrade applies the V1.1 migrations (0014 to 0020) on a
+// TestMigrationV11Upgrade applies the V1.1 migrations (0014 to 0021) on a
 // database at 0013 holding V1 data: no row is lost (in particular no
 // cascade from the rebuilt transfers and system_secrets tables), the
 // columns keep their values, the backfills are right, the foreign keys,
@@ -179,7 +179,7 @@ func TestMigrationV11Upgrade(t *testing.T) {
 		before := rowCounts(ctx, t, db)
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 7 {
+		if n, err := db.Migrate(ctx); err != nil || n != 8 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -487,7 +487,7 @@ func openFaultEmpty(ctx context.Context, t *testing.T, fsys fstest.MapFS) (*DB, 
 // TestMigrationV11FailureKeepsData makes the recording of 0014 fail after
 // its body ran (sqlite-fault driver): the whole migration rolls back, the
 // V1 data is intact, and the writer connection enforces foreign keys again.
-// The retry then applies 0014 to 0020.
+// The retry then applies 0014 to 0021.
 func TestMigrationV11FailureKeepsData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -513,7 +513,7 @@ func TestMigrationV11FailureKeepsData(t *testing.T) {
 	if n := rawInt(ctx, t, db, `SELECT count(*) FROM pragma_table_info('transfers') WHERE name = 'link_mode'`); n != 0 {
 		t.Error("the failed 0014 left its columns behind")
 	}
-	if n, err := db.Migrate(ctx); err != nil || n != 7 {
+	if n, err := db.Migrate(ctx); err != nil || n != 8 {
 		t.Fatalf("retry = %d, %v", n, err)
 	}
 	if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -698,4 +698,80 @@ func TestLiveIndexesMatch(t *testing.T) {
 	if pg, ok := sets["postgres"]; ok && !slices.Equal(pg, sets["sqlite"]) {
 		t.Errorf("indexes differ:\nsqlite   %v\npostgres %v", sets["sqlite"], pg)
 	}
+}
+
+// TestMigration0021Upgrade applies 0021_abuse_alerts_blocked on a database
+// at 0020 holding deduplication rows: they are kept as alert-only rows of
+// one attempt, a refusal of the same sender, rule and day gets its own
+// row, the new checks hold, and the table keeps its index (and, on
+// PostgreSQL, its row-level security policy).
+func TestMigration0021Upgrade(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openEngine(t, e)
+		db.migrationsFS = migrationsUpTo(t, 20)
+		if n, err := db.Migrate(ctx); err != nil || n != 20 {
+			t.Fatalf("Migrate to 0020 = %d, %v", n, err)
+		}
+		a := newTestTenant(ctx, t, db, "a.example.com")
+		b := newTestTenant(ctx, t, db, "b.example.com")
+		ins := `INSERT INTO abuse_alerts (tenant_id, sender_email, rule, day, created_at) VALUES (?, ?, ?, ?, ?)`
+		for _, args := range [][]any{
+			{string(a), "alice@a.example.com", "daily_bytes", "2026-10-19", 5},
+			{string(a), "alice@a.example.com", "off_hours", "2026-10-19", 6},
+			{string(b), "alice@a.example.com", "daily_bytes", "2026-10-19", 7},
+		} {
+			if err := rawExecArgs(ctx, t, db, ins, args...); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		db.migrationsFS = migrationFiles
+		if n, err := db.Migrate(ctx); err != nil || n != 1 {
+			t.Fatalf("Migrate to the latest = %d, %v", n, err)
+		}
+		if e.Driver == "sqlite" {
+			checkSQLiteIntegrity(ctx, t, db)
+			if n := rawInt(ctx, t, db, `SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'abuse_alerts_created_idx'`); n != 1 {
+				t.Error("abuse_alerts_created_idx lost by the rebuild")
+			}
+		} else {
+			if n := rawInt(ctx, t, db, `SELECT count(*) FROM pg_policies WHERE schemaname = current_schema()
+				AND tablename = 'abuse_alerts' AND policyname = 'abuse_alerts_isolation'`); n != 1 {
+				t.Error("abuse_alerts_isolation policy lost")
+			}
+			if n := rawInt(ctx, t, db, `SELECT count(*) FROM pg_class WHERE oid = 'abuse_alerts'::regclass
+				AND relrowsecurity AND relforcerowsecurity`); n != 1 {
+				t.Error("abuse_alerts row-level security lost")
+			}
+		}
+		if n := rawInt(ctx, t, db, `SELECT count(*) FROM abuse_alerts WHERE blocked = false AND attempts = 1
+			AND sender_email = 'alice@a.example.com' AND day = '2026-10-19' AND created_at BETWEEN 5 AND 7`); n != 3 {
+			t.Errorf("kept rows = %d, want 3", n)
+		}
+		withKind := `INSERT INTO abuse_alerts (tenant_id, sender_email, rule, day, created_at, blocked, attempts) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		for name, c := range map[string]struct {
+			args []any
+			ok   bool
+		}{
+			"refusal of an alerted day": {[]any{string(a), "alice@a.example.com", "daily_bytes", "2026-10-19", 8, true, 1}, true},
+			"second alert-only row":     {[]any{string(a), "alice@a.example.com", "off_hours", "2026-10-19", 8, false, 1}, false},
+			"no attempt":                {[]any{string(a), "bob@a.example.com", "daily_bytes", "2026-10-19", 8, false, 0}, false},
+		} {
+			err := rawExecArgs(ctx, t, db, withKind, c.args...)
+			if c.ok && err != nil {
+				t.Errorf("%s rejected: %v", name, err)
+			}
+			if !c.ok && err == nil {
+				t.Errorf("%s accepted", name)
+			}
+		}
+		if e.Driver == "sqlite" {
+			if err := rawExecArgs(ctx, t, db, withKind, string(a), "carol@a.example.com", "daily_bytes", "2026-10-19", 8, 2, 1); err == nil {
+				t.Error("blocked = 2 accepted")
+			}
+		}
+	})
 }

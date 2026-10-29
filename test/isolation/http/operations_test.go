@@ -213,6 +213,16 @@ var isolationCases = map[string]isolationCase{
 	"getTenantStats":             adminOperation,
 	"searchDataSubject":          adminOperation,
 	"eraseDataSubject":           adminOperation,
+	// Abuse detection (abuse_test.go, since 1.1): the thresholds follow the
+	// tenant configuration cases, the reports the operations of a tenant.
+	"getAbuseThresholds":    adminTenantOp,
+	"updateAbuseThresholds": adminTenantOp,
+	"listAbuseReports":      adminOperation,
+	"getAbuseReport":        adminOperation,
+	"updateAbuseReport":     adminOperation,
+	// The report of a download link (abuse_test.go): a link of A is unknown
+	// under B, and its report reaches A only.
+	"reportAbuse": reportForeignAbuse,
 	// Instance-wide operations (tenantops_test.go): reserved to the super
 	// admin, 403 forbidden for a delegated admin, without data of any
 	// tenant.

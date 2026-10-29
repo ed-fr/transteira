@@ -113,6 +113,23 @@ These files are delivered anyway, because they may be perfectly legitimate. Befo
 
 > **Note** If the sender has limited the number of downloads, every start of a download counts, whoever downloads. When the page shows **Maximum number of downloads reached**, the transfer can no longer be downloaded: ask the sender to send the files again.
 
+<!-- topic: download-report -->
+## Reporting abuse
+
+If this transfer looks suspicious to you (malicious file, phishing, illegal content, spam, unknown sender), click **Report abuse** at the bottom of the download page.
+
+1. Choose the category: **Malware**, **Phishing**, **Illegal content**, **Spam**, **Unknown sender** or **Other**.
+1. Optionally add a message of at most 1,000 characters, in plain text.
+1. Send the report.
+
+![The Report abuse dialog: list of categories, optional message field with its character counter and Send button](../screenshots/en/download-report.png)
+
+The administrators of the entity are alerted and decide what to do: **a report does not delete or block anything automatically**. Do not use the button to ask for the deletion of a legitimate transfer: contact the sender instead.
+
+Your address is recorded with the report only if you validated your address with a code on this browser for this link. Otherwise the report is recorded as "via the link of recipient #n, unverified". Reports are limited to 3 per day for one link and to 5 per hour from one network address.
+
+> **Note** Reports are used only for the security of the service; they are kept for 12 months, then deleted. You can ask your administrator to erase the data linked to your address.
+
 <!-- topic: download-problems -->
 ## Link not working
 

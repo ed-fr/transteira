@@ -284,6 +284,41 @@ func (f *faultRepo) deleteBlocklistEntry(ctx context.Context, tid tenant.ID, ent
 	return f.repo.deleteBlocklistEntry(ctx, tid, entryID)
 }
 
+func (f *faultRepo) listAbuseReports(ctx context.Context, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error) {
+	if err := f.fail("listAbuseReports"); err != nil {
+		return store.Page[store.AbuseReport]{}, err
+	}
+	return f.repo.listAbuseReports(ctx, tid, status, limit, cursor)
+}
+
+func (f *faultRepo) getAbuseReport(ctx context.Context, tid tenant.ID, repID string) (store.AbuseReport, error) {
+	if err := f.fail("getAbuseReport"); err != nil {
+		return store.AbuseReport{}, err
+	}
+	return f.repo.getAbuseReport(ctx, tid, repID)
+}
+
+func (f *faultRepo) setAbuseReportStatus(ctx context.Context, tid tenant.ID, repID string, status store.AbuseReportStatus, by string, note *string, now time.Time) (store.AbuseReport, bool, error) {
+	if err := f.fail("setAbuseReportStatus"); err != nil {
+		return store.AbuseReport{}, false, err
+	}
+	return f.repo.setAbuseReportStatus(ctx, tid, repID, status, by, note, now)
+}
+
+// seedReport stores an open abuse report of tenant tn on a fresh transfer.
+func (ev *env) seedReport(tn *tenant.Tenant) store.AbuseReport {
+	ev.t.Helper()
+	trf := ev.seed(tn, store.TransferAvailable, carol)
+	r, err := ev.db.AbuseReports().Create(context.Background(), tn.ID, store.AbuseReport{
+		TransferID: trf.id, SenderEmail: alice, Category: store.AbuseCategorySpam, Message: "suspicious",
+		ReporterIP: clientIP,
+	}, store.AbuseReportLimits{PerLinkPerDay: 1000, PerIPPerHour: 1000}, ev.clock.Now())
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	return r
+}
+
 func (f *faultRepo) listAudit(ctx context.Context, fl store.AuditFilter) (store.Page[store.AuditEvent], error) {
 	if err := f.fail("listAudit"); err != nil {
 		return store.Page[store.AuditEvent]{}, err

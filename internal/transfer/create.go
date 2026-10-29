@@ -153,7 +153,7 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 		}
 		p.sender = email
 	}
-	if sender.Kind == store.DepositorInternal {
+	if sender.Kind.IsInternal() {
 		p.recipients = s.validateRecipients(&v, req.Recipients)
 	}
 	switch {
@@ -361,9 +361,14 @@ func fingerprint(p plan, req CreateRequest) string {
 //
 //  1. eligibility, checked again (threat T-25): blocklist (address and
 //     domain), internal rule from the current client IP for an internal
-//     sender, active invitation for an external one; ErrForbidden, logged
-//     as deposit_refused;
-//  2. validation of every field (*ValidationError): the recipients of an
+//     sender, remote rule for a remote internal sender (internal domain,
+//     option of the tenant still on, address still verified and once
+//     verified from inside, whatever the client IP; spec 6.4), active
+//     invitation for an external one; ErrForbidden, logged as
+//     deposit_refused;
+//  2. validation of every field (*ValidationError): a remote internal
+//     sender names its recipients like an internal one, and the tenant
+//     policies of step 3 apply to it the same way; the recipients of an
 //     external sender are ignored and replaced by the inviter (T-17);
 //     for an API token sender, steps 2 and 1 run in that order, since the
 //     eligibility (blocklist, internal domain and allowed senders of the
@@ -390,17 +395,30 @@ func fingerprint(p plan, req CreateRequest) string {
 //     sender and per API token, MaxOpenTransfersExternal for an external
 //     one; until the cleanup job exists, nothing else frees the quota held
 //     by a transfer that is never uploaded): *RateLimitError, logged as
-//     rate_limited with scope open_transfers; the quota check (a total
+//     rate_limited with scope open_transfers; with Options.Abuse, the
+//     blocking abuse rules (AbuseChecker.CheckCreateTx, counting the
+//     activity of the sender with this transfer; under the tenant lock, so
+//     that concurrent creations cannot all pass a limit): a block rolls
+//     back, calls AbuseChecker.Blocked (best effort, after the rollback)
+//     and returns an *AbuseBlockedError matching ErrAbuseBlocked, a policy
+//     refusal never written to the security log; the quota check (a total
 //     exactly at the quota fits; ErrQuotaExceeded otherwise, T-124); a
-//     data key per file (decision P6); the rows.
+//     data key per file (decision P6); the rows. The abuse rules run
+//     before the quota so that a blocked sender neither fills nor raises
+//     the quota alerts of the tenant (Options.OnQuota), and after the
+//     open transfer cap, a cheap rate limit that needs no daily count.
 //
 // After the commit, Options.OnQuota is called (refused false) and the
-// transfer.created audit event is recorded (best effort), followed for an
+// transfer.created audit event is recorded (best effort; details.remote
+// true for a remote internal sender, whose origin stays internal),
+// followed for an
 // API token by api_token.used, whose actor is the sender address (a
 // depositor, so that the GDPR requests on that address find and
 // pseudonymize it), whose object is the token and whose details hold the
-// transfer identifier; a quota refusal calls Options.OnQuota with refused
-// true. A replayed request does none of this. The client IP is stored as
+// transfer identifier; then AbuseChecker.AfterCreate evaluates every rule
+// (best effort). A quota refusal calls Options.OnQuota with refused
+// true. A replayed request does none of this, and is never blocked by the
+// abuse rules: it returns the transfer already created. The client IP is stored as
 // the sender IP of the transfer, and the API token on a token transfer.
 //
 // A zero-length file is completed after the commit: the upload engine
@@ -449,6 +467,10 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		return Details{}, err
 	}
 	now := s.now()
+	facts := AbuseFacts{
+		SenderEmail: email, Kind: sender.Kind, Bytes: p.total, Recipients: p.recipients, At: now, ClientIP: sender.ClientIP,
+	}
+	var block *AbuseBlock
 	rec := store.Transfer{
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
 		Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays, PasswordHash: hash,
@@ -472,6 +494,14 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		if err := s.checkOpenCap(ctx, t.ID, tx, sender, email, now); err != nil {
 			return err
 		}
+		if s.abuse != nil {
+			if block, err = tx.checkAbuse(ctx, s.abuse, t, facts); err != nil {
+				return fmt.Errorf("check abuse thresholds: %w", err)
+			}
+			if block != nil {
+				return errAbuse
+			}
+		}
 		if p.total > limits.StorageQuotaBytes-used {
 			return errQuota
 		}
@@ -489,7 +519,11 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	// identifier, upload identifier or storage name collision, of
 	// probability about 2^-128) falls through to the internal error below
 	// and answers 500: intended, the client simply retries.
-	if errors.Is(err, store.ErrConflict) && idempotencyKey != "" {
+	//
+	// With a key, an abuse block may also come from a concurrent request with
+	// the same key that committed first and is now counted: it is replayed
+	// rather than refused.
+	if (errors.Is(err, store.ErrConflict) || errors.Is(err, errAbuse)) && idempotencyKey != "" {
 		if d, ok, rerr := s.replay(ctx, t, sender, email, idempotencyKey, fp); ok || rerr != nil {
 			return d, rerr
 		}
@@ -502,6 +536,11 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	case errors.Is(err, errQuota):
 		s.onQuota(t.ID, true)
 		return Details{}, ErrQuotaExceeded
+	case errors.Is(err, errAbuse):
+		// A policy refusal: recorded and alerted by the detector, never
+		// written to the security log.
+		s.abuse.Blocked(context.WithoutCancel(ctx), t, facts, *block)
+		return Details{}, &AbuseBlockedError{Rule: block.Rule}
 	case errors.Is(err, store.ErrNotFound):
 		// The tenant's deletion started after its resolution (or the
 		// invitation was deleted, or the API token revoked or expired,
@@ -515,12 +554,19 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	if pol.level != nil {
 		created["confidentialityLevel"] = pol.level.Key
 	}
+	if sender.Kind == store.DepositorInternalRemote {
+		created["remote"] = true
+	}
 	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID, created)
 	if sender.APITokenID != "" {
 		s.write(ctx, t, audit.Event{
 			ActorKind: store.ActorDepositor, Actor: email, IP: sender.ClientIP, Action: audit.ActionAPITokenUsed,
 			ObjectKind: audit.ObjectAPIToken, ObjectID: sender.APITokenID, Details: map[string]any{"transferId": trfID},
 		})
+	}
+	if s.abuse != nil {
+		facts.TransferID = trfID
+		s.abuse.AfterCreate(context.WithoutCancel(ctx), t, facts)
 	}
 	s.completeEmpty(ctx, t, p.files, deks, now)
 	d, err := s.repo.transfer(ctx, t.ID, trfID)

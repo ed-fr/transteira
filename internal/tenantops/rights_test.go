@@ -29,6 +29,10 @@ func operations(ev *env) map[string]func(p adminauth.Principal, tid tenant.ID) e
 		entries = append(entries, e.ID)
 	}
 	n := 0
+	var reports []string
+	for range 6 {
+		reports = append(reports, ev.seedReport(ev.a).ID)
+	}
 	return map[string]func(adminauth.Principal, tenant.ID) error{
 		"ListTransfers": func(p adminauth.Principal, tid tenant.ID) error {
 			_, err := ev.svc.ListTransfers(ctx, p, tid, TransferFilter{})
@@ -66,6 +70,18 @@ func operations(ev *env) map[string]func(p adminauth.Principal, tid tenant.ID) e
 			entry := entries[0]
 			entries = entries[1:]
 			return ev.svc.DeleteBlocklistEntry(ctx, p, tid, entry, clientIP)
+		},
+		"ListAbuseReports": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.ListAbuseReports(ctx, p, tid, "", 0, "")
+			return err
+		},
+		"GetAbuseReport": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.GetAbuseReport(ctx, p, tid, reports[0])
+			return err
+		},
+		"UpdateAbuseReport": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.UpdateAbuseReport(ctx, p, tid, reports[0], store.AbuseReportClosed, nil, clientIP)
+			return err
 		},
 		"ListAuditEvents": func(p adminauth.Principal, tid tenant.ID) error {
 			_, err := ev.svc.ListAuditEvents(ctx, p, tid, AuditFilter{})
@@ -129,8 +145,13 @@ func TestObjectsOfAnotherTenant(t *testing.T) {
 		invB := ev.invite(ev.b)
 		blkB, err := ev.db.Blocklist().Create(ctx, ev.b.ID, store.BlocklistEntry{Kind: store.BlockDomain, Value: "spam.example.net"})
 		mustNoErr(t, "blocklist", err)
+		repB := ev.seedReport(ev.b)
 		for _, p := range []adminauth.Principal{ev.adminA, ev.super} {
-			_, err := ev.svc.GetTransfer(ctx, p, ev.a.ID, trfB.id)
+			_, err := ev.svc.GetAbuseReport(ctx, p, ev.a.ID, repB.ID)
+			wantErr(t, "GetAbuseReport", err, ErrNotFound)
+			_, err = ev.svc.UpdateAbuseReport(ctx, p, ev.a.ID, repB.ID, store.AbuseReportClosed, nil, clientIP)
+			wantErr(t, "UpdateAbuseReport", err, ErrNotFound)
+			_, err = ev.svc.GetTransfer(ctx, p, ev.a.ID, trfB.id)
 			wantErr(t, "GetTransfer", err, ErrNotFound)
 			wantErr(t, "DeleteTransfer", ev.svc.DeleteTransfer(ctx, p, ev.a.ID, trfB.id, "", clientIP), ErrNotFound)
 			wantErr(t, "ResendNotification", ev.svc.ResendNotification(ctx, p, ev.a.ID, trfB.id, nil, clientIP), ErrNotFound)

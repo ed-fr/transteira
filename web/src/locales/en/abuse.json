@@ -1,0 +1,10 @@
+{
+  "category": {
+    "malware": "Virus or malicious software",
+    "phishing": "Phishing (fake login page, scam)",
+    "illegal_content": "Illegal content",
+    "spam": "Spam",
+    "unknown_sender": "Unknown or unexpected sender",
+    "other": "Other reason"
+  }
+}

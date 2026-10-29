@@ -1,0 +1,96 @@
+{
+  "thresholds": {
+    "title": "Détection des abus",
+    "intro": "Réglez les seuils qui déclenchent une alerte aux administrateurs de l’entité (mail et webhooks). Décochez une règle pour la désactiver. Les compteurs journaliers sont calculés par jour du fuseau horaire choisi, à partir des transferts de l’entité.",
+    "form": {
+      "title": "Seuils de détection"
+    },
+    "saved": "Réglages de détection des abus enregistrés.",
+    "enable": "Activer la règle : {rule}",
+    "groups": {
+      "sender": "Limites par expéditeur",
+      "senderHint": "Un dépassement déclenche une alerte, une fois par expéditeur, règle et jour.",
+      "unusual": "Comportements inhabituels",
+      "unusualHint": "Ces règles ne font qu’alerter : elles ne bloquent jamais un envoi.",
+      "time": "Fuseau horaire et heures de bureau",
+      "external": "Invitations et personnes externes",
+      "externalHint": "Les quotas externes s’appliquent aux adresses invitées et aux destinataires qui répondent à un transfert."
+    },
+    "maxDailyBytesPerSender": {
+      "label": "Volume maximal par expéditeur et par jour",
+      "hint": "Total des fichiers envoyés par un même expéditeur dans la journée."
+    },
+    "maxDailyTransfersPerSender": {
+      "label": "Nombre maximal de transferts par expéditeur et par jour",
+      "hint": "Un nombre entier, au moins 1."
+    },
+    "maxRecipientsPerTransfer": {
+      "label": "Nombre maximal de destinataires par transfert",
+      "hint": "Entre {min} et {max}."
+    },
+    "blockOnExceed": {
+      "label": "Bloquer au lieu d’alerter seulement",
+      "hint": "Lorsque cette case est cochée, un transfert qui dépasserait une limite par expéditeur ou un quota externe est refusé (l’expéditeur voit un message explicite). Sinon, seule une alerte est envoyée. Les règles « comportements inhabituels » n’empêchent jamais un envoi."
+    },
+    "unusualVolumeFactor": {
+      "label": "Facteur de volume inhabituel",
+      "hint": "Alerte lorsque le volume du jour dépasse ce multiple de la moyenne journalière des 30 derniers jours. Entre {min} et {max}, un chiffre après la virgule."
+    },
+    "unusualMinHistoryDays": {
+      "label": "Jours d’historique minimum",
+      "hint": "Nombre de jours d’activité nécessaires avant d’appliquer la règle à un expéditeur ({min} à {max})."
+    },
+    "largeExternalTransferBytes": {
+      "label": "Gros envoi vers une adresse externe",
+      "hint": "Alerte pour un transfert au moins aussi gros, avec un destinataire hors des domaines internes."
+    },
+    "timeZone": {
+      "label": "Fuseau horaire",
+      "hint": "Nom IANA, par exemple Europe/Paris. Il fixe le début de la journée des compteurs et les heures de bureau."
+    },
+    "officeHours": {
+      "label": "Heures de bureau",
+      "enable": "Alerter en dehors des heures de bureau",
+      "hint": "Un transfert créé en dehors de ces horaires déclenche une alerte.",
+      "start": "Début (HH:MM)",
+      "end": "Fin (HH:MM)",
+      "endHint": "Après le début ; 24:00 pour la fin de journée.",
+      "weekdays": "Jours travaillés"
+    },
+    "weekday": {
+      "1": "Lundi",
+      "2": "Mardi",
+      "3": "Mercredi",
+      "4": "Jeudi",
+      "5": "Vendredi",
+      "6": "Samedi",
+      "7": "Dimanche"
+    },
+    "maxInvitationsPerInviter": {
+      "label": "Invitations par utilisateur interne et par heure",
+      "hint": "Entre {min} et {max}."
+    },
+    "externalMaxDailyBytes": {
+      "label": "Volume externe maximal par adresse et par jour",
+      "hint": "Volume qu’une adresse externe peut déposer dans la journée."
+    },
+    "externalMaxDailyDeposits": {
+      "label": "Dépôts externes maximaux par adresse et par jour",
+      "hint": "Nombre de transferts qu’une adresse externe peut créer dans la journée."
+    },
+    "errors": {
+      "required": "Saisissez une valeur ou décochez la règle.",
+      "integerMin": "Saisissez un nombre entier d’au moins {min}.",
+      "integerRange": "Saisissez un nombre entier entre {min} et {max}.",
+      "factor": "Saisissez un nombre entre {min} et {max}, avec au plus un chiffre après la virgule.",
+      "size": "Saisissez une taille valide.",
+      "timeZone": "Ce fuseau horaire est inconnu. Utilisez un nom IANA, par exemple Europe/Paris ou UTC.",
+      "office": {
+        "start": "L’heure de début doit être au format HH:MM, par exemple 08:00.",
+        "end": "L’heure de fin doit être au format HH:MM (ou 24:00), par exemple 19:00.",
+        "order": "L’heure de fin doit être après l’heure de début.",
+        "weekdays": "Choisissez au moins un jour travaillé."
+      }
+    }
+  }
+}

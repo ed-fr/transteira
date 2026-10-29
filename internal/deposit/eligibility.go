@@ -58,13 +58,14 @@ func (s *Service) checkBlocklist(ctx context.Context, t *tenant.Tenant, ip netip
 // checkInternal applies the internal rule (spec 6.2, package netpolicy):
 // ip in one of the tenant CIDR ranges and the domain of email among the
 // tenant domains. A failure is logged as deposit_refused with reason ip
-// (checked first) or domain, and returns ErrForbidden.
+// (checked first) or domain, and returns ErrForbidden. It never accepts a
+// depositor from outside: the actions reserved to the internal network
+// (invitations, threat T-213) use it rather than [Service.checkDepositor].
 func (s *Service) checkInternal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, email string) error {
-	rules, err := s.repo.networkRules(ctx, t.ID)
+	v, err := s.evaluate(ctx, t, ip, email)
 	if err != nil {
-		return fmt.Errorf("deposit: read network rules: %w", err)
+		return err
 	}
-	v := netpolicy.Evaluate(netpolicy.Rules{CIDRs: rules.CIDRs, Domains: rules.Domains}, ip, email)
 	switch {
 	case !v.IPOK:
 		return s.refuse(ctx, t, ip, securitylog.ReasonIP)
@@ -72,6 +73,68 @@ func (s *Service) checkInternal(ctx context.Context, t *tenant.Tenant, ip netip.
 		return s.refuse(ctx, t, ip, securitylog.ReasonDomain)
 	}
 	return nil
+}
+
+// checkDepositor returns the kind of a depositor without invitation (the
+// caller checked the blocklist first):
+//
+//   - KindInternal when the internal rule holds (spec 6.2);
+//   - KindInternalRemote when the client IP is outside the tenant ranges
+//     but the domain of email is one of the tenant domains, the tenant
+//     allows the deposit from outside (spec 6.4,
+//     tenant.Tenant.AllowRemoteInternalDeposit) and email is a verified,
+//     still active address whose internal verification is recorded.
+//
+// A depositor inside the ranges whose domain is not a tenant domain is
+// refused (deposit_refused with reason domain, ErrForbidden). A depositor
+// from outside who fails the remote rule, whatever the reason (foreign
+// domain, address unknown, inactive or never verified internally), gets
+// deposit_refused with reason ip and then:
+//
+//   - ErrForbidden when the tenant option is off: every outsider is refused
+//     alike, which reveals nothing the public features.remoteInternalDeposit
+//     flag does not already say;
+//   - errDecoy when the option is on (threat T-215): the caller answers as
+//     for an eligible depositor, with a decoy challenge whose code is never
+//     sent (see [Service.Start] and [Service.Confirm]), so that the answer
+//     does not tell which addresses are eligible and no genuine code mail
+//     reaches the owner of a probed address.
+//
+// The verified address is read for every depositor from outside, whatever
+// its domain and even when the option is off, so that the eligible and the
+// decoy cases cost the same.
+func (s *Service) checkDepositor(ctx context.Context, t *tenant.Tenant, ip netip.Addr, email string) (Kind, error) {
+	v, err := s.evaluate(ctx, t, ip, email)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case v.IPOK && v.DomainOK:
+		return KindInternal, nil
+	case v.IPOK:
+		return "", s.refuse(ctx, t, ip, securitylog.ReasonDomain)
+	}
+	addr, active, err := s.verifiedAddress(ctx, t.ID, email)
+	if err != nil {
+		return "", err
+	}
+	if !v.DomainOK || !t.AllowRemoteInternalDeposit || !active || addr.InternalVerifiedAt.IsZero() {
+		err := s.refuse(ctx, t, ip, securitylog.ReasonIP)
+		if t.AllowRemoteInternalDeposit {
+			return "", errDecoy
+		}
+		return "", err
+	}
+	return KindInternalRemote, nil
+}
+
+// evaluate applies the network rules of tenant t to ip and email.
+func (s *Service) evaluate(ctx context.Context, t *tenant.Tenant, ip netip.Addr, email string) (netpolicy.Verdict, error) {
+	rules, err := s.repo.networkRules(ctx, t.ID)
+	if err != nil {
+		return netpolicy.Verdict{}, fmt.Errorf("deposit: read network rules: %w", err)
+	}
+	return netpolicy.Evaluate(netpolicy.Rules{CIDRs: rules.CIDRs, Domains: rules.Domains}, ip, email), nil
 }
 
 // checkInvitation returns the invitation whose link token is rawToken,

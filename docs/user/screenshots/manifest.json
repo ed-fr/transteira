@@ -1,5 +1,11 @@
 [
   {
+    "name": "admin-abuse-reports",
+    "screen": "admin /admin/tenants/:id/abuse-reports",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-abuse-reports.png"
+  },
+  {
     "name": "admin-account",
     "screen": "admin /admin/account",
     "profile": "delegated-admin",
@@ -112,6 +118,12 @@
     "screen": "admin /admin/system/webhooks",
     "profile": "super-admin",
     "path": "{lang}/admin-system-webhooks.png"
+  },
+  {
+    "name": "admin-tenant-abuse",
+    "screen": "admin /admin/tenants/:id/abuse",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-tenant-abuse.png"
   },
   {
     "name": "admin-tenant-branding",
@@ -256,6 +268,12 @@
     "screen": "public /d/:token (password required)",
     "profile": "recipient",
     "path": "{lang}/download-password.png"
+  },
+  {
+    "name": "download-report",
+    "screen": "public /d/:token (report an abuse dialog)",
+    "profile": "recipient",
+    "path": "{lang}/download-report.png"
   },
   {
     "name": "download-verify",

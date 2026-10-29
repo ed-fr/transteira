@@ -108,6 +108,31 @@ type AuditRecorder interface {
 	RecordScoped(ctx context.Context, tid tenant.ID, ev audit.Event) error
 }
 
+// AbuseFacts describe an extended transfer for the abuse rules; the fields
+// match those of abuse.Facts, which the wiring adapts.
+type AbuseFacts struct {
+	// TransferID is the extended transfer.
+	TransferID string
+	// SenderEmail is the normalized sender address.
+	SenderEmail string
+	// Kind tells how the sender was allowed to deposit.
+	Kind store.DepositorKind
+	// Bytes is the total size of the transfer.
+	Bytes int64
+	// Recipients are the normalized recipient addresses.
+	Recipients []string
+	// At is the time of the extension.
+	At time.Time
+	// ClientIP is the address of the client; invalid when unknown.
+	ClientIP netip.Addr
+}
+
+// AbuseNotifier evaluates the abuse rules after an extension (alert only,
+// threat model T-210). *abuse.Detector implements it through an adapter.
+type AbuseNotifier interface {
+	AfterExtend(ctx context.Context, t *tenant.Tenant, f AbuseFacts)
+}
+
 // Failures counts the invalid access links per client and locks a client
 // out. *ratelimit.Window implements it.
 type Failures interface {
@@ -136,6 +161,9 @@ type Options struct {
 	// JobTimeout bounds the processing of one request (DefaultJobTimeout
 	// when <= 0).
 	JobTimeout time.Duration
+	// Abuse is told of every extension, best effort; nil disables the
+	// abuse rules.
+	Abuse AbuseNotifier
 	// Failures counts the invalid access links per client; nil uses a
 	// window of SessionFailureLimit failures per SessionFailureWindow with
 	// a SessionLockout lockout.
@@ -191,6 +219,7 @@ type Service struct {
 	seclog   SecurityLog
 	eraser   lifecycle.TransferEraser
 	audit    AuditRecorder
+	abuse    AbuseNotifier
 	logger   *slog.Logger
 	clock    func() time.Time
 	failures Failures
@@ -250,7 +279,7 @@ func New(deps Deps, opts Options) (*Service, error) {
 	}
 	s := &Service{
 		repo: storeRepo{db: deps.DB}, keys: deps.Keys, notifier: deps.Notifier, queue: deps.Mail,
-		seclog: deps.SecurityLog, eraser: deps.Eraser, audit: opts.Audit, logger: opts.Logger, clock: opts.Now,
+		seclog: deps.SecurityLog, eraser: deps.Eraser, audit: opts.Audit, abuse: opts.Abuse, logger: opts.Logger, clock: opts.Now,
 		failures: opts.Failures, workers: opts.Workers, jobTimeout: opts.JobTimeout,
 		busyRetries: opts.BusyRetries, busyDelay: opts.BusyDelay, busyRetryAfter: opts.BusyRetryAfter,
 		newToken: id.NewToken, jobs: make(chan linkJob, opts.QueueSize), done: make(chan struct{}),

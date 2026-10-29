@@ -290,6 +290,13 @@ func (r *faultRepo) invitation(ctx context.Context, tid tenant.ID, invID string)
 	return r.inner.invitation(ctx, tid, invID)
 }
 
+func (r *faultRepo) verifiedAddress(ctx context.Context, tid tenant.ID, email string) (store.VerifiedAddress, error) {
+	if err := r.check("verifiedAddress"); err != nil {
+		return store.VerifiedAddress{}, err
+	}
+	return r.inner.verifiedAddress(ctx, tid, email)
+}
+
 func (r *faultRepo) apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error) {
 	if err := r.check("apiToken"); err != nil {
 		return store.APIToken{}, err
@@ -403,6 +410,13 @@ func (t faultTx) deleteTransfer(ctx context.Context, trfID string) error {
 		return err
 	}
 	return t.inner.deleteTransfer(ctx, trfID)
+}
+
+func (t faultTx) checkAbuse(ctx context.Context, a AbuseChecker, tn *tenant.Tenant, f AbuseFacts) (*AbuseBlock, error) {
+	if err := t.r.check("checkAbuse"); err != nil {
+		return nil, err
+	}
+	return t.inner.checkAbuse(ctx, a, tn, f)
 }
 
 // env is a service over a migrated database with tenants A and B sharing

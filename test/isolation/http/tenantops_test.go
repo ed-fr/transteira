@@ -42,6 +42,9 @@ type opsFixtures struct {
 	entryA, entryB string
 	// auditB is an audit event of tenant B, by auditActorB.
 	auditB string
+	// reportA and reportB are open abuse reports of tenants A and B (the
+	// latter with the message reportMarkerB).
+	reportA, reportB string
 	// superToken is the cookie token of an authenticated session of the
 	// super admin.
 	superToken string
@@ -87,6 +90,7 @@ func seedOperations(t *testing.T, db *store.DB, a, b tenant.ID) opsFixtures {
 	})
 	must(err)
 	f.auditB = ev.ID
+	f.reportA, f.reportB = seedAbuseReport(t, db, a, "report of A"), seedAbuseReport(t, db, b, reportMarkerB)
 
 	pw, err := crypto.NewPasswordHasher(1).HashPassword(ctx, []byte("a-long-passphrase-for-the-root"))
 	must(err)
@@ -187,7 +191,7 @@ func (h *harness) transferOfB(t *testing.T, op operation, trID, recipient string
 // included.
 func (h *harness) leaksB(extra ...string) []string {
 	return append([]string{
-		nameB, hostB, string(h.tenantB.ID), legalMarkerB, colorB, insiderB, invitedB, blockedB, auditActorB,
+		nameB, hostB, string(h.tenantB.ID), legalMarkerB, colorB, insiderB, invitedB, blockedB, auditActorB, reportMarkerB,
 		h.ops.invitationB, h.ops.entryB, h.ops.auditB,
 	}, extra...)
 }
@@ -268,6 +272,9 @@ var opsChecks = map[string]func(t *testing.T, h *harness, op operation, sess adm
 	"getTenantStats":             checkTenantStats,
 	"searchDataSubject":          checkSearchDataSubject,
 	"eraseDataSubject":           checkEraseDataSubject,
+	"listAbuseReports":           checkListAbuseReports,
+	"getAbuseReport":             checkGetAbuseReport,
+	"updateAbuseReport":          checkUpdateAbuseReport,
 }
 
 // checkListTransfers: A's list holds A's transfer, never B's, even

@@ -187,6 +187,8 @@ Un utilisateur est interne lorsque les **deux** conditions sont réunies : son a
 
 Les erreurs sont signalées ligne par ligne, parfois avec une correction proposée que vous pouvez appliquer. Les lignes répétées sont ignorées, et le serveur normalise les valeurs qu’il enregistre (les listes affichées après l’enregistrement sont celles enregistrées). Cliquez sur **Enregistrer**.
 
+**Autoriser le dépôt depuis l’extérieur pour les internes vérifiés** : option désactivée par défaut. Activée, une adresse d’un domaine interne **déjà vérifiée depuis le réseau interne** peut déposer hors des plages, sans invitation, avec un code à chaque dépôt (voir le guide du déposant, section « Dépôt depuis l’extérieur »). Les invitations restent réservées au réseau interne, et ces dépôts sont signalés dans le [journal d’audit](topic:tenant-audit) et comptés par la [détection des abus](topic:tenant-abuse). Une boîte mail compromise permettrait alors de déposer depuis Internet : n’activez l’option qu’après évaluation. L’option est publique dans la configuration de l’entité. Lorsqu’elle est activée, une demande de code venant de l’extérieur pour une adresse non éligible (autre domaine, jamais vérifiée depuis le réseau interne, inactive, inconnue) reçoit la même réponse qu’une adresse éligible, sans mail envoyé : la tentative compte dans les limites de codes et tout code est refusé à la confirmation. Si un utilisateur dit ne recevoir aucun code depuis l’extérieur, vérifiez son éligibilité. Option désactivée, les personnes extérieures reçoivent le refus générique. Les adresses de la liste de blocage restent refusées.
+
 Soyez attentif aux avertissements :
 
 - une liste de plages ou de domaines vide signifie que personne n’est interne : seules les invitations permettront de déposer ;
@@ -419,6 +421,36 @@ Choisissez la **Période** : **7 derniers jours**, **30 derniers jours** ou **12
 ![Statistiques d’une entité avec les chiffres clés, le stockage et les graphiques](../screenshots/fr/admin-stats.png)
 
 Le quota de stockage est fixé par le super administrateur. Lorsque l’entité atteint 80 % de son quota, les administrateurs délégués reçoivent un mail d’alerte ; à 100 %, ils en reçoivent un autre et les nouveaux dépôts sont refusés jusqu’à ce que de l’espace soit libéré par expiration ou suppression. Chaque alerte n’est envoyée qu’une fois par franchissement du seuil.
+
+<!-- topic: tenant-abuse -->
+### Détection des abus
+
+L’écran Détection des abus règle les seuils qui alertent sur une fuite de données interne ou sur un détournement du service par des externes. Tous les seuils sont propres à l’entité ; une valeur vide ou nulle désactive le seuil.
+
+![L’écran Détection des abus : limites par expéditeur avec leur case d’activation, blocage en cas de dépassement, comportements inhabituels, heures de bureau, invitations et quotas des externes](../screenshots/fr/admin-tenant-abuse.png)
+
+- **Limites par expéditeur** : volume maximal par jour, nombre maximal de transferts par jour, nombre maximal de destinataires par envoi. Elles s’appliquent aux expéditeurs **internes** uniquement (dans le réseau, depuis l’extérieur et par jeton d’API) ; les invités externes ne sont soumis qu’aux quotas des externes. Les compteurs du jour comptent chaque transfert créé (ou prolongé) ce jour-là, quel que soit son état ultérieur, brouillons annulés compris. Un jour est un jour calendaire du **fuseau horaire** réglé sur l’écran. Une prolongation depuis « Mes envois » compte dans le volume et les transferts du jour de la prolongation (alerte seulement).
+- **Blocage en cas de dépassement** : désactivé par défaut. Activé, l’envoi qui dépasserait une limite est refusé et l’expéditeur est prévenu ; sinon, seule une alerte est émise.
+- **Comportements inhabituels** (alerte seulement, pour les expéditeurs internes, y compris depuis l’extérieur) : volume supérieur à un **facteur** multiplié par la moyenne journalière des 30 jours précédents (il faut un nombre minimal de jours d’activité), gros envoi vers un destinataire hors des domaines internes à partir d’une taille donnée, envoi hors des **heures de bureau** (fuseau, heure de début et de fin, jours de la semaine).
+- **Invitations** : nombre maximal d’invitations par interne et par heure glissante (20 par défaut). Au-delà, l’invitation est refusée et une alerte est émise.
+- **Quotas des externes** : volume et nombre de dépôts par jour et par adresse externe, bloquants si le blocage est activé.
+
+Une alerte est émise au plus une fois par expéditeur, par règle et par jour. Pour un refus (blocage), seul le premier refus du jour pour un expéditeur et une règle est audité et alerté ; les suivants le même jour sont seulement comptés, sans nouvelle ligne d’audit, mail ni webhook. Une alerte « alerte seulement » émise plus tôt le même jour ne masque pas un refus ultérieur : mail aux administrateurs de l’entité et [webhooks](topic:tenant-webhooks) (`abuse.threshold_exceeded`, `abuse.unusual_activity`). Chaque dépassement alerté est inscrit dans le [journal d’audit](topic:tenant-audit), l’expéditeur étant l’acteur. Les modifications des seuils sont aussi auditées.
+
+> **À savoir** Information des personnes (RGPD) : ces contrôles ont pour seule finalité la sécurité. Ils sont calculés à la demande à partir des transferts existants, sans profil d’utilisateur enregistré ; les alertes sont conservées 12 mois dans le journal d’audit, et les données de dédoublonnage sont purgées après 2 jours. Informez vos utilisateurs de l’existence de ces contrôles.
+
+<!-- topic: tenant-abuse-reports -->
+### Signalements
+
+L’écran Signalements liste les signalements faits par des destinataires avec le bouton **Signaler un abus** de la page de téléchargement.
+
+![L’écran Signalements : filtre par état et liste des signalements avec leur date, leur catégorie, le transfert concerné et le signalant](../screenshots/fr/admin-abuse-reports.png)
+
+Chaque ligne indique la date, la catégorie (**Logiciel malveillant**, **Hameçonnage**, **Contenu illégal**, **Courrier indésirable**, **Expéditeur inconnu**, **Autre**), le message du signalant (affiché comme du texte), le transfert concerné et le signalant : son adresse si le destinataire avait validé son adresse sur ce navigateur, sinon « via le lien du destinataire n° n, non vérifié ».
+
+Un signalement ne déclenche **aucune action automatique** : examinez le transfert (voir [Transferts](topic:tenant-transfers)), supprimez-le ou bloquez l’expéditeur si nécessaire (voir [Liste de blocage](topic:tenant-blocklist)), puis cliquez sur **Clore** en ajoutant une note. Vous pouvez **Rouvrir** un signalement clos. Les ouvertures, clôtures et réouvertures sont inscrites dans le [journal d’audit](topic:tenant-audit). Les signalements sont conservés 12 mois ; l’effacement des données d’une adresse pseudonymise le signalant et l’expéditeur concernés (voir [Données personnelles (RGPD)](topic:tenant-privacy)).
+
+Les nouveaux signalements sont envoyés par mail aux administrateurs délégués de l’entité (aux super admins s’il n’y en a aucun) et par webhook (`abuse.reported`).
 
 <!-- topic: tenant-privacy -->
 ### Données personnelles (RGPD)

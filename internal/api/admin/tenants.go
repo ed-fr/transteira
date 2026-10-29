@@ -43,6 +43,8 @@ type TenantService interface {
 	UpdateConfidentialityLevels(ctx context.Context, p adminauth.Principal, tid tenant.ID, levels []tenantadmin.ConfidentialityLevel, ip netip.Addr) ([]tenantadmin.ConfidentialityLevel, error)
 	GetRecipientRules(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.RecipientRules, error)
 	UpdateRecipientRules(ctx context.Context, p adminauth.Principal, tid tenant.ID, allowed, denied []string, ip netip.Addr) (tenantadmin.RecipientRules, error)
+	AbuseThresholds(ctx context.Context, p adminauth.Principal, tid tenant.ID) (store.AbuseSettings, error)
+	UpdateAbuseThresholds(ctx context.Context, p adminauth.Principal, tid tenant.ID, in store.AbuseSettings, ip netip.Addr) (store.AbuseSettings, error)
 	GetSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SMTPView, error)
 	UpdateSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SMTPUpdate, ip netip.Addr) (tenantadmin.SMTPView, error)
 	TestSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID, to string, ip netip.Addr) (tenantadmin.SMTPTestResult, error)
@@ -236,20 +238,21 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 // (the generated type is raw JSON) so that a null field can be told from
 // an absent one.
 type tenantPatch struct {
-	Name                    *string `json:"name"`
-	FQDN                    *string `json:"fqdn"`
-	DefaultLanguage         *string `json:"defaultLanguage"`
-	StorageQuotaBytes       *int64  `json:"storageQuotaBytes"`
-	MaxTransferBytes        *int64  `json:"maxTransferBytes"`
-	MaxTransferCeiling      *int64  `json:"maxTransferCeiling"`
-	WebhookIncludeAddresses *bool   `json:"webhookIncludeAddresses"`
+	Name                       *string `json:"name"`
+	FQDN                       *string `json:"fqdn"`
+	DefaultLanguage            *string `json:"defaultLanguage"`
+	StorageQuotaBytes          *int64  `json:"storageQuotaBytes"`
+	MaxTransferBytes           *int64  `json:"maxTransferBytes"`
+	MaxTransferCeiling         *int64  `json:"maxTransferCeiling"`
+	WebhookIncludeAddresses    *bool   `json:"webhookIncludeAddresses"`
+	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
 // their errors are reported.
 var tenantPatchFields = []string{
 	"name", "fqdn", "defaultLanguage", "storageQuotaBytes", "maxTransferBytes", "maxTransferCeiling",
-	"webhookIncludeAddresses",
+	"webhookIncludeAddresses", "allowRemoteInternalDeposit",
 }
 
 // decodeTenantUpdate decodes a tenant merge patch: a JSON object whose
@@ -283,7 +286,8 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 	return tenantadmin.TenantUpdate{
 		Name: b.Name, FQDN: b.FQDN, DefaultLanguage: b.DefaultLanguage, StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: b.MaxTransferBytes, MaxTransferCeiling: b.MaxTransferCeiling,
-		WebhookIncludeAddresses: b.WebhookIncludeAddresses,
+		WebhookIncludeAddresses:    b.WebhookIncludeAddresses,
+		AllowRemoteInternalDeposit: b.AllowRemoteInternalDeposit,
 	}, nil
 }
 
@@ -306,7 +310,7 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		Id: string(v.ID), Name: v.Name, Fqdn: v.FQDN, DefaultLanguage: gen.Language(v.DefaultLanguage),
 		MaxTransferBytes: v.MaxTransferBytes, MaxTransferCeiling: v.MaxTransferCeiling,
 		Status: gen.TenantStatus(v.Status), StorageQuotaBytes: v.StorageQuotaBytes, StorageUsedBytes: v.StorageUsedBytes,
-		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 

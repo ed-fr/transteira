@@ -27,6 +27,8 @@ const (
 	EmailTemplateQuotaWarning         = "quota-warning"
 	EmailTemplateQuotaReached         = "quota-reached"
 	EmailTemplateAntivirusUnavailable = "antivirus-unavailable"
+	EmailTemplateAbuseAlert           = "abuse-alert"
+	EmailTemplateAbuseReport          = "abuse-report"
 )
 
 // Legal documents of a tenant (OpenAPI LegalDocumentPath), as stored in
@@ -49,7 +51,7 @@ const (
 
 // emailTemplateKeys lists the known template keys, sorted.
 var emailTemplateKeys = []string{
-	EmailTemplateAntivirusUnavailable, EmailTemplateFileNotScanned,
+	EmailTemplateAbuseAlert, EmailTemplateAbuseReport, EmailTemplateAntivirusUnavailable, EmailTemplateFileNotScanned,
 	EmailTemplateFileProblems, EmailTemplateFirstDownload, EmailTemplateInvitation,
 	EmailTemplateQuotaReached, EmailTemplateQuotaWarning, EmailTemplateTransferConfirmation,
 	EmailTemplateTransferNotification, EmailTemplateVerificationCode,

@@ -1,0 +1,14 @@
+Hello,
+
+The abuse detection of Entity A & Co raised an alert about the sender alice@entity-a.example.com (day: 2027-10-13).
+
+Daily volume threshold exceeded: 120 GB sent, threshold 100 GB.
+
+The transfer was refused.
+
+Review the activity in the audit log of the administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by Entity A & Co. Please do not reply to it.

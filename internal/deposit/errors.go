@@ -42,6 +42,14 @@ var (
 	ErrUnauthenticated = errors.New("deposit: no valid deposit session")
 )
 
+// errDecoy reports, inside the package only, a depositor from outside who
+// fails the remote rule while the tenant allows the deposit from outside
+// (see [Service.checkDepositor]). [Service.Start] answers it with a decoy
+// challenge and [Service.Confirm] with the wrong-code outcome; it never
+// reaches the caller. It wraps ErrForbidden so that, were it ever to leak,
+// it would still be answered as a refusal.
+var errDecoy = fmt.Errorf("%w: decoy challenge", ErrForbidden)
+
 // Fields named by an [InvalidError], as JSON pointers of the request
 // bodies.
 const (

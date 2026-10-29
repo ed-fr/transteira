@@ -324,6 +324,16 @@ export class DepositFlow {
     return this.session?.kind === 'internal' && this.session.canInvite;
   }
 
+  /** The tenant lets verified internal addresses deposit from outside (a code at each deposit). */
+  get remoteDepositAllowed(): boolean {
+    return this.tenant.features?.remoteInternalDeposit === true;
+  }
+
+  /** The session is an internal address depositing from outside the network. */
+  get isRemoteSession(): boolean {
+    return this.session?.kind === 'internal_remote';
+  }
+
   /** Confidentiality levels the sender can use, in display order (see selectableLevels). */
   get levels(): readonly PublicLevel[] {
     return selectableLevels(
@@ -939,6 +949,8 @@ export class DepositFlow {
     } else if (isProblem(err, 'transfer-too-large')) {
       this.formErrors = { files: { key: 'deposit.form.files.tooLarge' } };
       this.formRefusals++;
+    } else if (isProblem(err, 'abuse-threshold-blocked')) {
+      this.stepError = { message: { key: 'deposit.form.abuseBlocked' } };
     } else if (isProblem(err, 'deposit-not-allowed')) {
       this.stepError = { message: { key: 'deposit.email.notAllowed' } };
     } else {

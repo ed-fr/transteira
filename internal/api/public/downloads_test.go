@@ -82,6 +82,7 @@ type fakeDownloads struct {
 
 	gotToken, gotGrant, gotVerification, gotPassword, gotFile string
 	gotLanguage, gotCode                                      string
+	gotCategory, gotMessage                                   string
 	gotReply                                                  bool
 	gotIP                                                     netip.Addr
 }
@@ -120,6 +121,11 @@ func (f *fakeDownloads) StartVerification(_ context.Context, _ *tenant.Tenant, t
 func (f *fakeDownloads) ConfirmVerification(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, code, cookie string) (string, error) {
 	f.gotToken, f.gotIP, f.gotCode, f.gotVerification = token, ip, code, cookie
 	return f.cookie, f.err
+}
+
+func (f *fakeDownloads) ReportAbuse(_ context.Context, _ *tenant.Tenant, token string, ip netip.Addr, cookie, category, message string) error {
+	f.gotToken, f.gotIP, f.gotVerification, f.gotCategory, f.gotMessage = token, ip, cookie, category, message
+	return f.err
 }
 
 // downloadCtx returns the context of a request r under tenant A (with the
@@ -169,6 +175,10 @@ func TestDownloadOperationsRequireTenantAndService(t *testing.T) {
 		},
 		"confirm verification": func(s *Server, ctx context.Context) error {
 			_, err := s.ConfirmRecipientVerification(ctx, gen.ConfirmRecipientVerificationRequestObject{})
+			return err
+		},
+		"report abuse": func(s *Server, ctx context.Context) error {
+			_, err := s.ReportAbuse(ctx, gen.ReportAbuseRequestObject{})
 			return err
 		},
 	}
@@ -915,4 +925,64 @@ func TestVerificationRequiredOnStreams(t *testing.T) {
 		Body: &gen.TransferPassword{Password: "x"},
 	})
 	wantProblem(t, err, problem.CodeRecipientVerificationRequired)
+}
+
+func TestReportAbuse(t *testing.T) {
+	t.Parallel()
+	f := &fakeDownloads{}
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	r.AddCookie(&http.Cookie{Name: download.VerificationCookieName, Value: "rv_raw"})
+	msg := "this is a phishing mail"
+	resp, err := NewServer(WithDownloads(f)).ReportAbuse(downloadCtx(t, r), gen.ReportAbuseRequestObject{
+		LinkToken: linkToken, Body: &gen.AbuseReportCreate{Category: gen.Phishing, Message: &msg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := resp.(gen.ReportAbuse202Response); !ok {
+		t.Errorf("response = %T", resp)
+	}
+	if f.gotToken != linkToken || f.gotVerification != "rv_raw" || f.gotCategory != "phishing" || f.gotMessage != msg ||
+		f.gotIP != netip.MustParseAddr("192.0.2.7") {
+		t.Errorf("service called with %+v", f)
+	}
+	// The message is optional.
+	f = &fakeDownloads{}
+	if _, err := NewServer(WithDownloads(f)).ReportAbuse(downloadCtx(t, nil), gen.ReportAbuseRequestObject{
+		LinkToken: linkToken, Body: &gen.AbuseReportCreate{Category: gen.Spam},
+	}); err != nil || f.gotMessage != "" || f.gotCategory != "spam" {
+		t.Errorf("without message: %v %+v", err, f)
+	}
+	for name, body := range map[string]*gen.AbuseReportCreate{"no body": nil, "no category": {}} {
+		_, err = NewServer(WithDownloads(f)).ReportAbuse(downloadCtx(t, nil), gen.ReportAbuseRequestObject{Body: body})
+		if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != "/category" || p.Errors[0].Code != "required" {
+			t.Errorf("%s: errors = %+v", name, p.Errors)
+		}
+	}
+}
+
+func TestReportAbuseErrors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		err   error
+		code  problem.Code
+		field string
+	}{
+		{download.ErrInvalidCategory, problem.CodeValidationFailed, "/category"},
+		{download.ErrInvalidMessage, problem.CodeValidationFailed, "/message"},
+		{download.ErrNotFound, problem.CodeNotFound, ""},
+		{download.ErrGone, problem.CodeTransferGone, ""},
+		{&download.RateLimitError{RetryAfter: 30 * time.Second}, problem.CodeRateLimited, ""},
+	} {
+		_, err := NewServer(WithDownloads(&fakeDownloads{err: tc.err})).ReportAbuse(downloadCtx(t, nil), gen.ReportAbuseRequestObject{
+			LinkToken: linkToken, Body: &gen.AbuseReportCreate{Category: gen.Other},
+		})
+		p := problemOf(t, err, tc.code)
+		if tc.field != "" && p.Errors[0].Field != tc.field {
+			t.Errorf("%v: errors = %+v", tc.err, p.Errors)
+		}
+		if tc.code == problem.CodeRateLimited && (p.RetryAfterSeconds == nil || *p.RetryAfterSeconds != 30) {
+			t.Errorf("retry after = %v", p.RetryAfterSeconds)
+		}
+	}
 }

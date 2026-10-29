@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/api"
+	"github.com/ed-fr/transteira/internal/abuse"
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/api/admin"
@@ -381,9 +382,6 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// recorder and the HTTP server.
 	counters := metrics.NewCounters()
 	usageCounts := usage.New(db, usage.Options{Logger: logger, Sink: counters})
-	deposits := deposit.New(db, keys, vault, mailQueue, secLog, deposit.Options{
-		SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides, Audit: auditLog,
-	})
 	files, err := storage.New(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -403,6 +401,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// notifications are queued through one retrier, so that a full queue
 	// delays them instead of dropping them.
 	opsMails := mail.NewRetrier(mailQueue, mail.RetryOptions{Logger: logger})
+	// The abuse detector (spec 15) alerts like the quota monitor: through the
+	// tenant queue, to the delegated administrators.
+	detector, err := abuse.New(db, notifier, opsMails, auditLog, abuse.Options{
+		AdminLink: adminBaseURL(cfg) + "/admin", Logger: logger, Events: bus,
+	})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	deposits := deposit.New(db, keys, vault, mailQueue, secLog, deposit.Options{
+		SessionTTL: cfg.DepositSessionTTL, Logger: logger, Overrides: overrides, Audit: auditLog, Abuse: detector,
+	})
 	// The antivirus alert follows the outages the worker reports (decision
 	// P10): the super admins by system mail, the administrators of the
 	// tenants with transfers waiting through the tenant queue.
@@ -419,7 +428,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	downloads := download.New(download.Deps{
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
 		SecurityLog: secLog, Usage: usageCounts, Audit: auditLog,
-	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger})
+	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger, Abuse: detector})
 	// The sweeper holds the antivirus worker before erasing a transfer, so
 	// that a transfer deleted while it is scanned is never made available.
 	sweeper := lifecycle.New(lifecycle.Deps{
@@ -472,7 +481,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// closed with them in the first close stage, before the queue drains.
 	senders, err := mytransfers.New(mytransfers.Deps{
 		DB: db, Keys: keys, Notifier: notifier, Mail: mailQueue, SecurityLog: secLog, Eraser: sweeper,
-	}, mytransfers.Options{Logger: logger, Audit: auditLog})
+	}, mytransfers.Options{Logger: logger, Audit: auditLog, Abuse: extendAbuse{detector}})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -486,7 +495,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, busOut.closer}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
-		onQuota: quotas.Check, audit: auditLog, usage: usageCounts,
+		onQuota: quotas.Check, audit: auditLog, usage: usageCounts, abuse: createAbuse{detector},
 	}, logger)
 	// The resolver of the HTTP tenant middleware is invalidated by the
 	// tenant configuration after every change of a tenant row.
@@ -890,6 +899,8 @@ type transferDeps struct {
 	onQuota func(tenant.ID, bool)
 	audit   transfer.AuditRecorder
 	usage   transfer.UsageRecorder
+	// abuse checks the abuse thresholds of the creations (nil: none).
+	abuse transfer.AbuseChecker
 }
 
 // newTransferService builds the transfer service over the tus upload
@@ -899,7 +910,7 @@ type transferDeps struct {
 func newTransferService(cfg *config.Config, db *store.DB, d transferDeps, logger *slog.Logger) *transfer.Service {
 	return transfer.New(db, d.vault, d.uploads, d.secLog, transfer.Options{
 		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
-		Hasher: d.passwords, OnFinalized: d.onFinalized, OnQuota: d.onQuota, Audit: d.audit, Usage: d.usage,
+		Hasher: d.passwords, OnFinalized: d.onFinalized, OnQuota: d.onQuota, Audit: d.audit, Usage: d.usage, Abuse: d.abuse,
 		Logger: logger,
 	})
 }
@@ -912,6 +923,7 @@ type downloadBackend interface {
 	PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies download.Cookies) (*download.Archive, error)
 	StartVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, reply bool, acceptLanguage, verificationCookie string) (*download.Challenge, error)
 	ConfirmVerification(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, code, verificationCookie string) (string, error)
+	ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error
 }
 
 // downloadAdapter adapts the download service to public.DownloadService:
@@ -1261,4 +1273,9 @@ func (o outputs) Close(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// ReportAbuse implements public.DownloadService.
+func (a downloadAdapter) ReportAbuse(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, verificationCookie, category, message string) error {
+	return a.svc.ReportAbuse(ctx, t, rawToken, clientIP, verificationCookie, category, message)
 }

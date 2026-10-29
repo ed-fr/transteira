@@ -70,9 +70,13 @@ type PublicInvitation struct {
 // Checks, in order: the session is internal; the address, message and
 // language are well formed; neither the inviter nor the invited address
 // (nor their domains) is blocklisted; the inviter still satisfies the
-// internal rule from clientIP; the inviter issued fewer than
-// MaxInvitationsPerInviter invitations in the tenant over the last
-// RateWindow (counted in the transaction that creates the invitation).
+// internal rule from clientIP (an internal user depositing from outside
+// never invites, threat T-213); the inviter issued fewer invitations in the
+// tenant over the last RateWindow than the limit (counted in the
+// transaction that creates the invitation). The limit is the tenant
+// setting read through Options.Abuse, MaxInvitationsPerInviter without it;
+// reaching it also raises the abuse alert, best effort, after the
+// transaction.
 // The mail is prepared before the transaction (a tenant without SMTP
 // settings gets ErrMailUnavailable with nothing written) and queued after
 // the commit; when the queue refuses it, the invitation is deleted, best
@@ -133,12 +137,18 @@ func (s *Service) Invite(ctx context.Context, t *tenant.Tenant, session SessionI
 	if err != nil {
 		return Invitation{}, err
 	}
+	limit := MaxInvitationsPerInviter
+	if s.abuse != nil {
+		if limit, err = s.abuse.InvitationLimit(ctx, t.ID); err != nil {
+			return Invitation{}, fmt.Errorf("deposit: read invitation limit: %w", err)
+		}
+	}
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
 		n, err := tx.countInvitations(ctx, session.Email, now.Add(-RateWindow))
 		if err != nil {
 			return fmt.Errorf("deposit: count invitations: %w", err)
 		}
-		if n >= MaxInvitationsPerInviter {
+		if n >= limit {
 			return errLimited
 		}
 		if err := tx.createInvitation(ctx, rec); err != nil {
@@ -148,6 +158,9 @@ func (s *Service) Invite(ctx context.Context, t *tenant.Tenant, session SessionI
 	})
 	if errors.Is(err, errLimited) {
 		s.logEvent(ctx, t, clientIP, securitylog.RateLimited, securitylog.Field{Key: securitylog.KeyScope, Value: scopeInvitations})
+		if s.abuse != nil {
+			s.abuse.InvitationLimitReached(context.WithoutCancel(ctx), t, session.Email, limit)
+		}
 		return Invitation{}, &RateLimitError{RetryAfter: RateWindow}
 	}
 	if err != nil {

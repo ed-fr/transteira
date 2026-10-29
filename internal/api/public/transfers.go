@@ -290,6 +290,8 @@ func transferError(err error) error {
 		return problem.New(problem.CodeChecksumMismatch)
 	case errors.Is(err, transfer.ErrBlockedFile):
 		return problem.New(problem.CodeBlockedFile)
+	case errors.Is(err, transfer.ErrAbuseBlocked): // a policy refusal, never in the security log
+		return problem.New(problem.CodeAbuseThresholdBlocked)
 	case errors.Is(err, transfer.ErrForbidden):
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, transfer.ErrNotFound):

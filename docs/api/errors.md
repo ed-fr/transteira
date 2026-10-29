@@ -316,6 +316,7 @@ use to ban the client IP.
   `POST /transfers/{transferId}/finalize`,
   `DELETE /admin/tenants/{tenantId}/transfers/{transferId}`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`,
+  `POST /downloads/{linkToken}/abuse-reports`,
   `POST /admin/tenants/{tenantId}/data-subjects/erase`,
   `PUT /admin/system/maintenance`, `POST /admin/system/master-key/rotations`,
   `PATCH /admin/admins/{adminId}`,
@@ -416,7 +417,8 @@ use to ban the client IP.
   the sign-in steps (setup, password, second factor, TOTP enrollment confirmation, activation:
   20 at once, then one every 3 seconds), the SMTP tests of an entity (5 per administrator
   and entity within 10 minutes), and the notification resends of a transfer (5 per hour per
-  transfer, whoever the administrator).
+  transfer, whoever the administrator), and abuse reports (3 per day per recipient link,
+  5 per hour per client IP).
 - **Typical endpoints:** any endpoint, mainly `POST /deposit-sessions`, `POST /invitations`,
   `POST /transfers`, `GET /downloads/{linkToken}/files/{fileId}`,
   `GET /downloads/{linkToken}/archive`, `POST /admin/auth/login`, `POST /admin/auth/totp`,
@@ -521,9 +523,9 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 1.1.
-- **Meaning:** the abuse detection of the entity is set to block and the transfer would exceed a daily limit of the sender (volume, number of transfers, recipients per transfer) or an external quota. The administrators are alerted.
+- **Meaning:** the abuse detection of the entity is set to block and the transfer would exceed a daily limit of an internal sender (volume, number of transfers, recipients per transfer; these limits never apply to invited externals) or an external quota. Only the first refusal of the day per sender and rule is audited and alerted. The administrators are alerted.
 - **Typical endpoints:** `POST /transfers`.
-- **What to do:** try again the next day (UTC), or ask the administrators of the entity.
+- **What to do:** try again the next day (calendar day of the time zone configured for the entity), or ask the administrators of the entity.
 
 ### recipient-verification-required
 

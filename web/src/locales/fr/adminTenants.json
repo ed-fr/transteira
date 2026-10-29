@@ -29,7 +29,8 @@
     "templates": "Modèles de mails",
     "legal": "Mentions légales",
     "recipientRules": "Domaines destinataires",
-    "confidentiality": "Niveaux de confidentialité"
+    "confidentiality": "Niveaux de confidentialité",
+    "abuse": "Détection des abus"
   },
   "fields": {
     "name": {
@@ -210,6 +211,13 @@
     "normalized": "Le serveur a normalisé certaines valeurs. Les listes affichées sont celles enregistrées.",
     "form": {
       "title": "Plages et domaines internes"
+    },
+    "remote": {
+      "title": "Dépôt depuis l’extérieur",
+      "intro": "Pour faciliter le télétravail, autorisez les utilisateurs internes à déposer hors des plages IP de l’entité.",
+      "label": "Autoriser le dépôt depuis l’extérieur pour les internes déjà vérifiés",
+      "hint": "Option désactivée par défaut. Ne concerne que les adresses d’un domaine interne déjà vérifiées une première fois depuis le réseau interne. Depuis l’extérieur, un code de vérification est demandé à chaque dépôt, et ces dépôts sont signalés dans le journal d’audit. Les invitations restent réservées aux utilisateurs connectés depuis le réseau interne.",
+      "saved": "Option de dépôt depuis l’extérieur enregistrée."
     }
   },
   "smtp": {
@@ -569,5 +577,8 @@
       "daysRequired": "Autorisez au moins une durée.",
       "capInvalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide."
     }
+  },
+  "abuse": {
+    "title": "Détection des abus"
   }
 }
