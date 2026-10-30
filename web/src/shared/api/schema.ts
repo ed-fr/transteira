@@ -1488,8 +1488,10 @@ export interface paths {
         /**
          * Update colours
          * @description Colours are always saved; the response contains contrast diagnostics (`level: fail` when
-         *     below RGAA/WCAG AA 4.5:1) so that the UI can warn the admin. The `contrast` array is
-         *     designed to also cover the V1.1 dark theme (pairs `*-on-dark`).
+         *     below RGAA/WCAG AA 4.5:1) so that the UI can warn the admin. Since 1.1 the `contrast`
+         *     array also covers the dark theme (pairs `*-on-dark`, checked against `#111827`). A `fail`
+         *     on a `*-on-dark` pair is informative, not a defect: the dark theme then keeps its own
+         *     accessible link and focus colours, and the accent is only decorative.
          */
         put: operations["updateBranding"];
         post?: never;
@@ -8378,13 +8380,28 @@ export interface operations {
                      *       "contrast": [
                      *         {
                      *           "pair": "primary-on-light",
-                     *           "ratio": 5.1,
+                     *           "ratio": 5.12,
                      *           "level": "AA"
                      *         },
                      *         {
                      *           "pair": "accent-on-light",
-                     *           "ratio": 4.6,
+                     *           "ratio": 4.55,
                      *           "level": "AA"
+                     *         },
+                     *         {
+                     *           "pair": "text-on-primary",
+                     *           "ratio": 5.12,
+                     *           "level": "AA"
+                     *         },
+                     *         {
+                     *           "pair": "primary-on-dark",
+                     *           "ratio": 3.45,
+                     *           "level": "fail"
+                     *         },
+                     *         {
+                     *           "pair": "accent-on-dark",
+                     *           "ratio": 3.89,
+                     *           "level": "fail"
                      *         }
                      *       ]
                      *     }
@@ -8437,13 +8454,28 @@ export interface operations {
                      *       "contrast": [
                      *         {
                      *           "pair": "primary-on-light",
-                     *           "ratio": 2.2,
+                     *           "ratio": 2.14,
                      *           "level": "fail"
                      *         },
                      *         {
                      *           "pair": "accent-on-light",
-                     *           "ratio": 4.6,
+                     *           "ratio": 4.55,
                      *           "level": "AA"
+                     *         },
+                     *         {
+                     *           "pair": "text-on-primary",
+                     *           "ratio": 2.14,
+                     *           "level": "fail"
+                     *         },
+                     *         {
+                     *           "pair": "primary-on-dark",
+                     *           "ratio": 8.27,
+                     *           "level": "AAA"
+                     *         },
+                     *         {
+                     *           "pair": "accent-on-dark",
+                     *           "ratio": 3.89,
+                     *           "level": "fail"
                      *         }
                      *       ]
                      *     }

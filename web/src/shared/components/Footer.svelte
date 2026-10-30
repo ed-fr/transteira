@@ -1,11 +1,13 @@
 <script lang="ts">
   // Page footer (contentinfo landmark): legal links (snippet, e.g. router links to
-  // /legal/legal-notice), help link and language switch. Pass it to PageLayout's footer snippet.
+  // /legal/legal-notice), help link, language switch and theme switch (always shown). Pass it to
+  // PageLayout's footer snippet.
   import type { Snippet } from 'svelte';
   import { t } from '../i18n/i18n.svelte';
   import type { Router } from '../router/router.svelte';
   import HelpLink from './HelpLink.svelte';
   import LanguageSwitch from './LanguageSwitch.svelte';
+  import ThemeSwitch from './ThemeSwitch.svelte';
 
   interface Props {
     /** Legal links, rendered as list items (<li><a ...></a></li>) of the legal navigation. */
@@ -55,6 +57,7 @@
     {#if onlanguagechange}
       <LanguageSwitch {languages} current={currentLanguage} onchange={onlanguagechange} />
     {/if}
+    <ThemeSwitch />
     {#if children}{@render children()}{/if}
   </div>
 </footer>

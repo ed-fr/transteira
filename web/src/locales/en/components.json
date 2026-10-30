@@ -74,6 +74,11 @@
   "languageSwitch": {
     "label": "Language"
   },
+  "themeSwitch": {
+    "label": "Dark theme",
+    "on": "Dark theme on.",
+    "off": "Light theme on."
+  },
   "copy": {
     "label": "Copy",
     "copied": "Copied to the clipboard",

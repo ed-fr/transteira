@@ -159,6 +159,10 @@ Replying in a browser ends any upload session already open in that browser: fini
 > **Note** If the **Reply** button does not appear, or a refusal is shown, simply write to the sender by mail.
 
 <!-- topic: download-problems -->
+## Dark theme
+
+The download page follows the light or dark setting of your device. The **Dark theme** button in the footer switches the theme; your choice is remembered for a year by a strictly technical cookie (`tt_theme`), set only when you pick a theme different from your device's. Choosing your device's theme again deletes the cookie.
+
 ## Link not working
 
 This section explains the messages you may see instead of the files, and what to do.

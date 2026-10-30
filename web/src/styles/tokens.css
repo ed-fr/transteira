@@ -1,23 +1,41 @@
 /*
  * Design tokens. Every colour, spacing and radius of the interface goes through these
- * variables. Tenant colours (--tt-primary, --tt-on-primary, --tt-accent, --tt-link, --tt-focus)
- * are overridden at runtime by src/shared/theme/theme.ts through the CSSOM (style.setProperty),
- * never through an inline style attribute (blocked by the CSP), after strict #RRGGBB validation.
+ * variables; components never use literal colours (TotpEnroll keeps a white background behind
+ * its QR code on purpose, for the scanners).
  *
- * Components only use these variables, never literal colours, so that the V1.1 dark theme
- * (CLAUDE.md section 13.1) is a matter of redefining them under [data-theme='dark'].
- * Every text colour below reaches WCAG AA (4.5:1) on --tt-surface; --tt-border and --tt-focus
- * reach 3:1 (WCAG 1.4.11, RGAA 3.3).
+ * Two colour palettes (CLAUDE.md section 13.1): light on :root and [data-theme='light'], dark on
+ * [data-theme='dark']. web/static/theme-init.js sets data-theme on <html> before the first paint
+ * (stored choice, else prefers-color-scheme); the admin brand preview sets it on its two mock
+ * pages. Every colour token is declared in both palettes, including the aliases: a custom
+ * property inherits its computed value, so a container with its own data-theme must redeclare
+ * them to resolve against its own palette.
+ *
+ * Tenant colours: src/shared/theme/theme.ts writes intermediate properties (--tt-brand-primary,
+ * --tt-brand-on-primary, --tt-brand-accent, --tt-brand-link-light|dark,
+ * --tt-brand-focus-light|dark) through the CSSOM (style.setProperty, never an inline style
+ * attribute, blocked by the CSP), after strict #RRGGBB validation, and only when they reach the
+ * required contrast on the background of the theme concerned; each palette maps them below with
+ * its own accessible default. The status colours (success, warning, danger, info) are never
+ * overridden by a tenant, so that security warnings stay readable (threat model T-230).
+ *
+ * In both palettes every text colour reaches WCAG AA (4.5:1) on --tt-surface (and the status
+ * colours on their -bg tint); --tt-border, --tt-focus and --tt-graphic reach 3:1 (WCAG 1.4.11,
+ * RGAA 3.3). src/styles/tokens.test.ts checks it.
  */
-:root {
+:root,
+[data-theme='light'] {
   color-scheme: light;
 
-  /* Tenant colours (defaults, overridden per tenant by theme.ts). */
-  --tt-primary: #1d4ed8;
-  --tt-on-primary: #ffffff;
-  --tt-accent: #0f766e;
+  /* Tenant colours (theme.ts), with their defaults. */
+  --tt-primary: var(--tt-brand-primary, #1d4ed8);
+  --tt-on-primary: var(--tt-brand-on-primary, #ffffff);
+  --tt-accent: var(--tt-brand-accent, #0f766e);
   /* Link colour: the primary when it reaches AA on --tt-surface, else this default. */
-  --tt-link: #1d4ed8;
+  --tt-link: var(--tt-brand-link-light, #1d4ed8);
+  /* Focus indicator: the primary when it reaches 3:1 on --tt-surface, else this default. */
+  --tt-focus: var(--tt-brand-focus-light, #1d4ed8);
+  /* Graphical objects (progress bars, charts): same rule as the focus indicator. */
+  --tt-graphic: var(--tt-brand-focus-light, #1d4ed8);
 
   /* Surfaces and text. */
   --tt-surface: #ffffff;
@@ -26,13 +44,15 @@
   --tt-muted: #4b5563;
   --tt-text-muted: var(--tt-muted);
   --tt-border: #6b7280;
-  --tt-focus: #1d4ed8;
   --tt-focus-ring: #ffffff;
+  /* Box behind the tenant logo (or name) in the page header: logos are drawn for light backgrounds. */
+  --tt-logo-surface: #ffffff;
+  --tt-logo-text: #111827;
   /* Veil over the background image, behind the card (CLAUDE.md section 13). */
   --tt-veil: rgb(17 24 39 / 55%);
   --tt-shadow: 0 0.5rem 1.5rem rgb(17 24 39 / 25%);
 
-  /* Status colours (text AA on --tt-surface and on their -bg tint). */
+  /* Status colours (text AA on --tt-surface and on their -bg tint), never tenant colours. */
   --tt-success: #166534;
   --tt-success-bg: #f0fdf4;
   --tt-warning: #92400e;
@@ -42,7 +62,50 @@
   --tt-on-danger: #ffffff;
   --tt-info: #1e40af;
   --tt-info-bg: #eff6ff;
+}
 
+/*
+ * Dark palette (CLAUDE.md section 13.1), same contrast requirements. The tenant primary keeps
+ * its computed text colour (--tt-brand-on-primary); links and focus use the primary only when it
+ * reaches the contrast on the dark surface (--tt-brand-link-dark, --tt-brand-focus-dark), else
+ * light blue defaults. The veil is more opaque, so that the card stands out of any image.
+ */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --tt-primary: var(--tt-brand-primary, #1d4ed8);
+  --tt-on-primary: var(--tt-brand-on-primary, #ffffff);
+  --tt-accent: var(--tt-brand-accent, #0f766e);
+  --tt-link: var(--tt-brand-link-dark, #93c5fd);
+  --tt-focus: var(--tt-brand-focus-dark, #60a5fa);
+  --tt-graphic: var(--tt-brand-focus-dark, #60a5fa);
+
+  --tt-surface: #111827;
+  --tt-surface-muted: #1f2937;
+  --tt-text: #f9fafb;
+  --tt-muted: #9ca3af;
+  --tt-text-muted: var(--tt-muted);
+  --tt-border: #6b7280;
+  /* Dark gap between the element and its focus outline (base.css). */
+  --tt-focus-ring: #111827;
+  /* The logo box stays light: a dark logo would vanish on the dark surface. */
+  --tt-logo-surface: #ffffff;
+  --tt-logo-text: #111827;
+  --tt-veil: rgb(0 0 0 / 70%);
+  --tt-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 60%);
+
+  --tt-success: #86efac;
+  --tt-success-bg: #052e16;
+  --tt-warning: #fcd34d;
+  --tt-warning-bg: #451a03;
+  --tt-danger: #fca5a5;
+  --tt-danger-bg: #450a0a;
+  --tt-on-danger: #111827;
+  --tt-info: #93c5fd;
+  --tt-info-bg: #172554;
+}
+
+:root {
   /* Spacing scale. */
   --tt-space-1: 0.25rem;
   --tt-space-2: 0.5rem;
@@ -78,14 +141,4 @@
   --tt-card-width: 36rem;
   --tt-content-width: 72rem;
   --tt-control-height: 2.75rem;
-}
-
-/*
- * [V1.1] Dark mode (CLAUDE.md section 13.1): redefine the variables above with dark values
- * reaching the same RGAA contrast requirements, set color-scheme: dark, and adapt --tt-veil.
- * The theme follows prefers-color-scheme by default, with a manual switch stored in a technical
- * cookie that sets data-theme on <html>.
- */
-:root[data-theme='dark'] {
-  /* Intentionally empty in V1. */
 }

@@ -104,7 +104,8 @@ type webUI struct {
 	// assets are the files of the assets directory, by name.
 	assets map[string]docsFile
 	// root are the files at the root of the build (favicon.svg,
-	// robots.txt), by name.
+	// robots.txt, theme-init.js), by name, served at the root of both kinds
+	// of host.
 	root map[string]docsFile
 }
 

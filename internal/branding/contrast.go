@@ -17,8 +17,12 @@ type Color struct {
 }
 
 // LightBackground is the page background of the light theme, against which
-// the tenant colors are checked. V1.1 adds the dark theme background.
+// the tenant colors are checked.
 var LightBackground = Color{R: 0xFF, G: 0xFF, B: 0xFF}
+
+// DarkBackground is the surface color (#111827) of the dark theme, against
+// which the tenant colors are also checked.
+var DarkBackground = Color{R: 0x11, G: 0x18, B: 0x27}
 
 // TextOnPrimary is the color of text written on the primary color (buttons).
 var TextOnPrimary = Color{R: 0xFF, G: 0xFF, B: 0xFF}
@@ -97,12 +101,13 @@ func LevelFor(ratio float64) Level {
 // Pair names a checked foreground / background combination.
 type Pair string
 
-// Checked pairs, matching the ContrastResult schema of the API. V1.1 adds
-// the *-on-dark pairs.
+// Checked pairs, matching the ContrastResult schema of the API.
 const (
 	PairPrimaryOnLight Pair = "primary-on-light"
 	PairAccentOnLight  Pair = "accent-on-light"
 	PairTextOnPrimary  Pair = "text-on-primary"
+	PairPrimaryOnDark  Pair = "primary-on-dark"
+	PairAccentOnDark   Pair = "accent-on-dark"
 )
 
 // ContrastResult is the contrast check of one pair.
@@ -117,13 +122,18 @@ type ContrastResult struct {
 }
 
 // Check returns the contrast of the tenant colors for each pair of the API:
-// primary and accent on the light background, and text on the primary
-// color. A failing pair is a warning to show the admin, not a refusal.
+// primary and accent on the light background, text on the primary color, then
+// primary and accent on the dark background. A failing light pair is a
+// warning to show the admin, not a refusal. A failing *-on-dark pair is only
+// informative: the dark theme then keeps its own accessible link and focus
+// colors, and uses the accent for decoration only.
 func Check(primary, accent Color) []ContrastResult {
 	return []ContrastResult{
 		result(PairPrimaryOnLight, primary, LightBackground),
 		result(PairAccentOnLight, accent, LightBackground),
 		result(PairTextOnPrimary, TextOnPrimary, primary),
+		result(PairPrimaryOnDark, primary, DarkBackground),
+		result(PairAccentOnDark, accent, DarkBackground),
 	}
 }
 

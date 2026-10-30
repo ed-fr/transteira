@@ -161,7 +161,7 @@ The Branding screen sets the logo, the colors and the background image of the pu
 
 **Colors**: choose the **Primary color** (buttons and active elements) and the **Accent color** (links and secondary elements) with the color picker, or type their code in the #RRGGBB format, for example #1A5FB4. Click **Save**.
 
-The **Contrast** section checks each pair of colors used by the interface. The ratio must reach at least 4.5:1 (level AA) for texts to stay readable. A pair marked **Insufficient** is a warning: you can still save, but fix it to meet the accessibility requirements (RGAA). The **Preview of the public page** shows the result before you save.
+The **Contrast** section checks each pair of colors used by the interface. The ratio must reach at least 4.5:1 (level AA) for texts to stay readable. A pair marked **Insufficient** is a warning: you can still save, but fix it to meet the accessibility requirements (RGAA). The check covers both themes: the **Primary color on dark background** and **Accent color on dark background** pairs are informational and never trigger the warning. When a color is not readable enough on the dark background, links and focus indicators use the accessible default colors of the dark theme instead, and the accent color stays purely decorative. The **Preview of the public page** shows the light and the dark themes side by side before you save.
 
 ![Branding screen with the colors, the contrast check and the preview of the public page](../screenshots/en/admin-tenant-branding.png)
 

@@ -15,8 +15,8 @@ import (
 var dist embed.FS
 
 // Dist returns the built interface rooted at dist/: public/index.html, admin/index.html,
-// assets/* and the root files (favicon.svg, robots.txt). It only holds .gitkeep when the web
-// interface has not been built.
+// assets/* and the root files (favicon.svg, robots.txt, theme-init.js). It only holds .gitkeep
+// when the web interface has not been built.
 func Dist() fs.FS {
 	return mustSub(dist, "dist")
 }

@@ -19,5 +19,6 @@ export { default as RadioGroup } from './RadioGroup.svelte';
 export { default as Spinner } from './Spinner.svelte';
 export { default as TextArea } from './TextArea.svelte';
 export { default as TextField } from './TextField.svelte';
+export { default as ThemeSwitch } from './ThemeSwitch.svelte';
 export { announce, announcer, type Politeness } from './announce.svelte';
 export { copyText, describedBy, helpHref, languageName, percentOf, totalBytes } from './helpers';

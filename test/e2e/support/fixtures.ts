@@ -223,13 +223,36 @@ export interface A11yOptions {
 }
 
 /**
- * Runs axe-core (WCAG 2.0 / 2.1, levels A and AA) on the current page and fails on any
- * violation. axe is injected from node_modules through the DevTools protocol (no CDN, no CSP
- * exception needed on the server).
+ * Runs axe-core (WCAG 2.0 / 2.1, levels A and AA) on the current page, in the current theme and
+ * then in the other one (the data-theme attribute of the root element is switched, then
+ * restored), and fails on any violation; messages are prefixed with the theme. axe is injected
+ * from node_modules through the DevTools protocol (no CDN, no CSP exception needed on the
+ * server).
  */
 export async function checkA11y(page: Page, opts: A11yOptions = {}): Promise<void> {
   await page.evaluate(axeSource);
-  const violations = await page.evaluate(
+  const original = await page.evaluate(() => document.documentElement.dataset.theme ?? 'light');
+  const other = original === 'dark' ? 'light' : 'dark';
+  const violations: string[] = [];
+  try {
+    for (const theme of [original, other]) {
+      await page.evaluate((t) => {
+        document.documentElement.dataset.theme = t;
+      }, theme);
+      const found = await runAxe(page, opts);
+      violations.push(...found.map((v) => `[${theme} theme] ${v}`));
+    }
+  } finally {
+    await page.evaluate((t) => {
+      document.documentElement.dataset.theme = t;
+    }, original);
+  }
+  expect(violations, `axe violations on ${page.url()}`).toEqual([]);
+}
+
+/** One axe-core run on the page in its current state; returns one message per violation. */
+async function runAxe(page: Page, opts: A11yOptions): Promise<string[]> {
+  return page.evaluate(
     async ({ exclude, disableRules }) => {
       const axe = (window as unknown as { axe: { run: (ctx: unknown, o: unknown) => Promise<AxeResults> } })
         .axe;
@@ -257,7 +280,6 @@ export async function checkA11y(page: Page, opts: A11yOptions = {}): Promise<voi
     },
     { exclude: opts.exclude ?? [], disableRules: opts.disableRules ?? [] },
   );
-  expect(violations, `axe violations on ${page.url()}`).toEqual([]);
 }
 
 /**

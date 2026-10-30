@@ -74,6 +74,11 @@
   "languageSwitch": {
     "label": "Langue"
   },
+  "themeSwitch": {
+    "label": "Thème sombre",
+    "on": "Thème sombre activé.",
+    "off": "Thème clair activé."
+  },
   "copy": {
     "label": "Copier",
     "copied": "Copié dans le presse-papiers",

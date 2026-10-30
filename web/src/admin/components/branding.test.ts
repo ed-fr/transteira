@@ -62,6 +62,7 @@ describe('colour helpers', () => {
       { pair: 'primary-on-light', ratio: 2.1, level: 'fail', source: 'server' },
       { pair: 'accent-on-light', ratio: 5, level: 'AA', source: 'server' },
       { pair: 'text-on-primary', ratio: 2.1, level: 'fail', source: 'live' },
+      { pair: 'primary-on-dark', ratio: 1.2, level: 'fail', source: 'server' },
     ];
     expect(rowsForPairs(rows, ['primary-on-light', 'text-on-primary']).map((r) => r.pair)).toEqual([
       'primary-on-light',

@@ -1,7 +1,11 @@
 // Tenant theme: applies the tenant colours to the design tokens of src/styles/tokens.css.
 // Values are written through the CSSOM (style.setProperty), which the CSP style-src 'self' does
 // not govern, and only after strict #RRGGBB validation: an invalid colour keeps the default.
+// They go to intermediate --tt-brand-* properties, which each palette of tokens.css (light and
+// dark) maps to its tokens with its own accessible defaults: the link and focus colours exist
+// once per theme, since a primary readable on white may not be on the dark background.
 import {
+  DARK_BACKGROUND,
   LIGHT_BACKGROUND,
   MIN_RATIO_AA,
   MIN_RATIO_NON_TEXT,
@@ -28,11 +32,13 @@ export const DARK_TEXT: Readonly<Rgb> = { r: 0x11, g: 0x18, b: 0x27 };
 
 /** Custom properties written by applyTenantTheme and removed by resetTenantTheme. */
 export const THEME_PROPERTIES = [
-  '--tt-primary',
-  '--tt-on-primary',
-  '--tt-accent',
-  '--tt-link',
-  '--tt-focus',
+  '--tt-brand-primary',
+  '--tt-brand-on-primary',
+  '--tt-brand-accent',
+  '--tt-brand-link-light',
+  '--tt-brand-link-dark',
+  '--tt-brand-focus-light',
+  '--tt-brand-focus-dark',
 ] as const;
 
 /** Name of a custom property managed by the tenant theme. */
@@ -55,29 +61,36 @@ export function textColorOn(background: Readonly<Rgb>): Readonly<Rgb> {
 }
 
 /**
- * Computes the theme of a tenant. Invalid colours yield null (default kept). The primary colour
- * is also used for links when it reaches AA on the light background, and for the focus
- * indicator when it reaches 3:1 (WCAG 1.4.11); otherwise the accessible defaults stay.
+ * Computes the theme of a tenant. Invalid colours yield null (default kept). In each theme, the
+ * primary colour is also used for links when it reaches AA on the background of that theme, and
+ * for the focus indicator when it reaches 3:1 (WCAG 1.4.11); otherwise the accessible defaults
+ * of the theme stay.
  */
 export function computeTenantTheme(colors: TenantColors): TenantTheme {
   const primary = parseHexColor(colors.primaryColor);
   const accent = parseHexColor(colors.accentColor);
   const theme: TenantTheme = {
-    '--tt-primary': null,
-    '--tt-on-primary': null,
-    '--tt-accent': null,
-    '--tt-link': null,
-    '--tt-focus': null,
+    '--tt-brand-primary': null,
+    '--tt-brand-on-primary': null,
+    '--tt-brand-accent': null,
+    '--tt-brand-link-light': null,
+    '--tt-brand-link-dark': null,
+    '--tt-brand-focus-light': null,
+    '--tt-brand-focus-dark': null,
   };
   if (primary !== null) {
-    const ratio = contrastRatio(primary, LIGHT_BACKGROUND);
-    theme['--tt-primary'] = toHex(primary);
-    theme['--tt-on-primary'] = toHex(textColorOn(primary));
-    theme['--tt-link'] = ratio >= MIN_RATIO_AA ? toHex(primary) : null;
-    theme['--tt-focus'] = ratio >= MIN_RATIO_NON_TEXT ? toHex(primary) : null;
+    const hex = toHex(primary);
+    const light = contrastRatio(primary, LIGHT_BACKGROUND);
+    const dark = contrastRatio(primary, DARK_BACKGROUND);
+    theme['--tt-brand-primary'] = hex;
+    theme['--tt-brand-on-primary'] = toHex(textColorOn(primary));
+    theme['--tt-brand-link-light'] = light >= MIN_RATIO_AA ? hex : null;
+    theme['--tt-brand-link-dark'] = dark >= MIN_RATIO_AA ? hex : null;
+    theme['--tt-brand-focus-light'] = light >= MIN_RATIO_NON_TEXT ? hex : null;
+    theme['--tt-brand-focus-dark'] = dark >= MIN_RATIO_NON_TEXT ? hex : null;
   }
   if (accent !== null) {
-    theme['--tt-accent'] = toHex(accent);
+    theme['--tt-brand-accent'] = toHex(accent);
   }
   return theme;
 }

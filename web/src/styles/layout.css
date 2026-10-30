@@ -47,8 +47,8 @@
   gap: var(--tt-space-3);
   padding: var(--tt-space-2) var(--tt-space-3);
   border-radius: var(--tt-radius);
-  background: var(--tt-surface);
-  color: var(--tt-text);
+  background: var(--tt-logo-surface);
+  color: var(--tt-logo-text);
   font-size: var(--tt-font-size-lg);
   font-weight: var(--tt-font-weight-bold);
   text-decoration: none;

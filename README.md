@@ -37,6 +37,8 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   deletion and notification resend, invitations and blocklist, audit log, statistics dashboard,
   storage quota alerts; for the super admin, maintenance mode with per-language messages, disk
   space alert and master key rotation from the console with TOTP re-confirmation.
+- **Accessible**: RGAA-minded interface in French and English, light and dark themes (following the
+  system, switchable, remembered by a technical cookie).
 - **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
   pseudonymised), technical cookies only.
 

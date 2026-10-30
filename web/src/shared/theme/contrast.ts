@@ -11,8 +11,11 @@ export interface Rgb {
 /** Pattern of a tenant colour, matching the HexColor schema of the API. */
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-/** Page background of the light theme (branding.LightBackground). V1.1 adds the dark one. */
+/** Page background of the light theme (branding.LightBackground, --tt-surface). */
 export const LIGHT_BACKGROUND: Readonly<Rgb> = { r: 0xff, g: 0xff, b: 0xff };
+
+/** Page background of the dark theme (branding.DarkBackground, --tt-surface of the dark palette). */
+export const DARK_BACKGROUND: Readonly<Rgb> = { r: 0x11, g: 0x18, b: 0x27 };
 
 /** Colour of text written on the primary colour (branding.TextOnPrimary). */
 export const TEXT_ON_PRIMARY: Readonly<Rgb> = { r: 0xff, g: 0xff, b: 0xff };
@@ -28,7 +31,8 @@ export const MIN_RATIO_NON_TEXT = 3.0;
 export type ContrastLevel = 'AAA' | 'AA' | 'fail';
 
 /** Checked foreground / background pairs, matching the ContrastResult schema. */
-export type ContrastPair = 'primary-on-light' | 'accent-on-light' | 'text-on-primary';
+export type ContrastPair =
+  'primary-on-light' | 'accent-on-light' | 'text-on-primary' | 'primary-on-dark' | 'accent-on-dark';
 
 /** Contrast check of one pair. */
 export interface ContrastResult {
@@ -102,12 +106,15 @@ function result(pair: ContrastPair, fg: Readonly<Rgb>, bg: Readonly<Rgb>): Contr
 
 /**
  * Returns the contrast of the tenant colours for each pair checked by the API (branding.Check):
- * primary and accent on the light background, and text on the primary colour.
+ * primary and accent on the light background, text on the primary colour, then primary and
+ * accent on the dark background.
  */
 export function checkContrast(primary: Readonly<Rgb>, accent: Readonly<Rgb>): ContrastResult[] {
   return [
     result('primary-on-light', primary, LIGHT_BACKGROUND),
     result('accent-on-light', accent, LIGHT_BACKGROUND),
     result('text-on-primary', TEXT_ON_PRIMARY, primary),
+    result('primary-on-dark', primary, DARK_BACKGROUND),
+    result('accent-on-dark', accent, DARK_BACKGROUND),
   ];
 }

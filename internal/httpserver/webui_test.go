@@ -16,9 +16,10 @@ import (
 
 // Bodies of the test build.
 const (
-	publicPage = "<!doctype html><title>public</title>"
-	adminPage  = "<!doctype html><title>admin</title>"
-	assetJS    = "console.log(1)"
+	publicPage  = "<!doctype html><title>public</title>"
+	adminPage   = "<!doctype html><title>admin</title>"
+	assetJS     = "console.log(1)"
+	themeInitJS = "document.documentElement.dataset.theme = 'light'"
 )
 
 // testWebUI is a build of the web interface with, besides the expected
@@ -37,6 +38,7 @@ func testWebUI() fstest.MapFS {
 		"assets/.hidden.js":     {Data: []byte("hidden")},
 		"favicon.svg":           {Data: []byte("<svg/>")},
 		"robots.txt":            {Data: []byte("User-agent: *\nDisallow: /\n")},
+		"theme-init.js":         {Data: []byte(themeInitJS)},
 		"index.html":            {Data: []byte("root html")},
 		".gitkeep":              {Data: nil},
 		".hidden.txt":           {Data: []byte("hidden")},
@@ -102,6 +104,8 @@ func TestWebUITenantHost(t *testing.T) {
 		{"/assets/icon-abc.ico", 200, "ico", "image/x-icon", AssetCacheControl, true},
 		{"/favicon.svg", 200, "<svg/>", "image/svg+xml", cache, true},
 		{"/robots.txt", 200, "User-agent: *\nDisallow: /\n", "text/plain; charset=utf-8", cache, true},
+		// The theme script of the entry pages, revalidated like the page.
+		{"/theme-init.js", 200, themeInitJS, jsContentType, cache, true},
 		// Any other path is the public application with 404, never the
 		// admin one nor an unlisted build file.
 		{"/nope", 404, publicPage, html, cache, false},
@@ -155,6 +159,9 @@ func TestWebUIAdminHost(t *testing.T) {
 		// The fingerprinted assets override the no-store of the admin host.
 		{"/assets/public-abc.js", 200, assetJS, jsContentType, AssetCacheControl, true},
 		{"/favicon.svg", 200, "<svg/>", "image/svg+xml", cache, true},
+		// Root files are served at the root of the admin host too (the admin
+		// entry page, under /admin/, loads /theme-init.js).
+		{"/theme-init.js", 200, themeInitJS, jsContentType, cache, true},
 		{"/nope", 404, adminPage, html, cache, false},
 		{"/d/tok_abc", 404, adminPage, html, cache, false},
 		{"/invite", 404, adminPage, html, cache, false},
@@ -467,9 +474,9 @@ func TestNewWebUILoadErrors(t *testing.T) {
 		// assets and root are the numbers of files loaded.
 		assets, root int
 	}{
-		{"unreadable asset", []string{"assets/public-abc.js"}, 3, 2},
-		{"unreadable assets directory", []string{"assets"}, 0, 2},
-		{"unreadable root file", []string{"robots.txt"}, 4, 1},
+		{"unreadable asset", []string{"assets/public-abc.js"}, 3, 3},
+		{"unreadable assets directory", []string{"assets"}, 0, 3},
+		{"unreadable root file", []string{"robots.txt"}, 4, 2},
 		{"unreadable root directory", []string{"."}, 4, 0},
 	}
 	for _, tt := range tests {
@@ -492,11 +499,11 @@ func TestNewWebUILoadErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ui.assets) != 4 || len(ui.root) != 2 {
+	if len(ui.assets) != 4 || len(ui.root) != 3 {
 		t.Errorf("loaded %v assets, %v root files", len(ui.assets), len(ui.root))
 	}
 	for name := range ui.root {
-		if name != "favicon.svg" && name != "robots.txt" {
+		if name != "favicon.svg" && name != "robots.txt" && name != "theme-init.js" {
 			t.Errorf("unexpected root file %q", name)
 		}
 	}

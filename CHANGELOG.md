@@ -7,6 +7,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Dark mode (specification section 13.1): the interfaces follow `prefers-color-scheme` by default,
+  live; a "Dark theme" button in the footer of both applications switches the theme and remembers
+  it in the technical cookie `tt_theme` (`light` or `dark`, one year, `SameSite=Lax`, no `Domain`,
+  never read by the server; any other value is ignored; choosing the system value again deletes it).
+  The theme is applied before the first paint by the static script `/theme-init.js` (no inline
+  script, CSP unchanged). Palette and tokens for both themes (`--tt-graphic`, `--tt-logo-*`), checked
+  by a test (text 4.5:1, borders and focus 3:1 in each theme); entity colors are applied per theme,
+  with accessible defaults when a color is not readable on the dark background; state colors are
+  never overridden. The contrast check adds the `primary-on-dark` and `accent-on-dark` pairs, which
+  are deliberately informational (no warning: no primary color can satisfy both text-on-primary and
+  primary-on-dark; the dark theme keeps its own accessible link and focus defaults, the accent is
+  decorative). The branding preview shows both themes. End-to-end accessibility checks (axe) now run
+  in both themes on every screen; new `public-theme.spec.ts`. Threat model T-230, T-231 implemented.
 - Folder upload (specification section 8.2), web side: a folder dropped on the file area (read
   recursively with `webkitGetAsEntry`) or chosen with the new "Add a folder" button (real
   `<input webkitdirectory>`, keyboard path) keeps its tree. Operating system files (`.DS_Store`,

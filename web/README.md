@@ -12,21 +12,21 @@ There is no SvelteKit, no component library and no CDN. The applications only ta
 
 ## Layout
 
-| Path                                             | Content                                                                        |
-| ------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens        |
-| `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens            |
-| `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store    |
-| `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, `safeApiHref`                 |
-| `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                          |
-| `src/shared/validation/`                         | client-side checks shared by both applications (`isEmail`, `EMAIL_MAX_LENGTH`) |
-| `src/shared/components/`                         | accessible components shared by both applications                              |
-| `src/styles/`                                    | design tokens (CSS variables) and base styles                                  |
-| `src/locales/`                                   | `<lang>/<area>.json`, mounted under the area name (`upload.json`: `upload.*`)  |
-| `src/help/`                                      | integrated help: guide build, loaders, help screen (see "Integrated help")     |
-| `static/`                                        | files copied as is to the root of `dist/` (`favicon.svg`, `robots.txt`)        |
-| `scripts/`                                       | `gen-types.mjs`, `build-help.mjs`, `check-dist.mjs`, `keep-dist.mjs`           |
-| `dist/`                                          | build output, embedded by `embed.go`; only `dist/.gitkeep` is committed        |
+| Path                                             | Content                                                                                      |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens                      |
+| `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens                          |
+| `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store                  |
+| `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, dark mode (`mode.svelte.ts`), `safeApiHref` |
+| `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                                        |
+| `src/shared/validation/`                         | client-side checks shared by both applications (`isEmail`, `EMAIL_MAX_LENGTH`)               |
+| `src/shared/components/`                         | accessible components shared by both applications                                            |
+| `src/styles/`                                    | design tokens (CSS variables) and base styles                                                |
+| `src/locales/`                                   | `<lang>/<area>.json`, mounted under the area name (`upload.json`: `upload.*`)                |
+| `src/help/`                                      | integrated help: guide build, loaders, help screen (see "Integrated help")                   |
+| `static/`                                        | files copied as is to the root of `dist/` (`favicon.svg`, `robots.txt`, `theme-init.js`)     |
+| `scripts/`                                       | `gen-types.mjs`, `build-help.mjs`, `check-dist.mjs`, `keep-dist.mjs`                         |
+| `dist/`                                          | build output, embedded by `embed.go`; only `dist/.gitkeep` is committed                      |
 
 ## Prerequisites
 
@@ -418,3 +418,14 @@ and by `scripts/check-dist.mjs` on the build output:
   `@import`, and their `url(...)` only target `/assets/` or relative same-origin paths.
 - **Only served file types in the build**: `check-dist` refuses any file whose extension is not
   served by `internal/httpserver/webui.go` (`.html .js .css .svg .png .ico .txt`).
+
+## Dark mode
+
+The theme lives in `document.documentElement.dataset.theme` (`light` or `dark`). The classic script
+`static/theme-init.js`, loaded synchronously in the `<head>` of both pages (no inline script, CSP
+unchanged), sets it before the first paint from the closed-list cookie `tt_theme` or from
+`prefers-color-scheme`; `src/shared/theme/mode.svelte.ts` then manages it (system changes, the footer
+`ThemeSwitch` button, cookie write or deletion). `src/styles/tokens.css` holds both palettes plus the
+tokens `--tt-graphic`, `--tt-logo-surface` and `--tt-logo-text`; `tokens.test.ts` checks every
+text/background pair (4.5:1) and border/focus pair (3:1) in both themes. Entity colors are applied per
+theme (`--tt-brand-*`), `check-dist` only accepts the allowlisted root script `/theme-init.js`.

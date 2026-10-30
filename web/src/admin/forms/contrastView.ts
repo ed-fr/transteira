@@ -9,7 +9,7 @@ import {
   type ContrastResult,
 } from '../../shared/theme/contrast';
 
-/** A pair checked by the server; V1.1 adds dark-theme pairs unknown to this version. */
+/** A pair checked by the server; a later version may add pairs unknown to this client. */
 export interface ServerContrastResult {
   pair: string;
   ratio: number;
@@ -69,7 +69,26 @@ export function contrastView(edited: ColorPair, saved?: SavedBranding | null): C
   return rows;
 }
 
-/** Reports whether a row fails the AA level, which the form shows as a non-blocking warning. */
+/**
+ * Reports whether pair is checked against the dark background (*-on-dark). Below AA, such a pair
+ * is not a readability problem: the dark theme then keeps its accessible link and focus colours
+ * (theme.ts), so the form shows an informational note instead of the warning.
+ */
+export function isDarkPair(pair: string): boolean {
+  return pair.endsWith('-on-dark');
+}
+
+/** Rows of the light theme that fail the AA level, shown as a non-blocking warning. */
+export function contrastFailures(rows: readonly ContrastRow[]): ContrastRow[] {
+  return rows.filter((r) => r.level === 'fail' && !isDarkPair(r.pair));
+}
+
+/** Reports whether a light-theme row fails the AA level (dark pairs never count). */
 export function hasContrastFailure(rows: readonly ContrastRow[]): boolean {
-  return rows.some((r) => r.level === 'fail');
+  return contrastFailures(rows).length > 0;
+}
+
+/** Dark-theme rows below AA, for which the dark theme falls back to its default colours. */
+export function darkFallbacks(rows: readonly ContrastRow[]): ContrastRow[] {
+  return rows.filter((r) => r.level === 'fail' && isDarkPair(r.pair));
 }

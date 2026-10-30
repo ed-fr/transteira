@@ -71,7 +71,7 @@
     border: var(--tt-border-width) solid var(--tt-border);
     border-radius: var(--tt-radius);
     background: var(--tt-surface-muted);
-    accent-color: var(--tt-primary);
+    accent-color: var(--tt-graphic);
     appearance: none;
     overflow: hidden;
   }
@@ -81,10 +81,10 @@
   }
 
   .tt-progress__bar::-webkit-progress-value {
-    background: var(--tt-primary);
+    background: var(--tt-graphic);
   }
 
   .tt-progress__bar::-moz-progress-bar {
-    background: var(--tt-primary);
+    background: var(--tt-graphic);
   }
 </style>

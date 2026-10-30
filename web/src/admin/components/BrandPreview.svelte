@@ -1,11 +1,15 @@
 <script lang="ts">
-  // Preview of the public page with the edited colours: a header, a text, a link and a button
+  // Preview of the public page with the edited colours, in the light and dark themes side by side
+  // (stacked on narrow screens, CLAUDE.md section 13.1): a header, a text, a link and a button
   // drawn with the tenant tokens (--tt-primary, --tt-on-primary, --tt-link, --tt-accent,
-  // --tt-focus). The colours are applied to the container only, through the CSSOM
-  // (applyTenantTheme, style.setProperty; never a style attribute, which the CSP would block),
-  // and with the same rules as the public pages: an invalid colour keeps the default, a primary
-  // colour without enough contrast is not used for links. The mock is not interactive: the link
-  // and the button are plain text, so that keyboard users do not land on fake controls.
+  // --tt-focus). Each mock page carries its own data-theme, so that the palette of tokens.css
+  // applies to it whatever the theme of the administration, and receives the tenant colours
+  // through the CSSOM (applyTenantTheme, style.setProperty; never a style attribute, which the
+  // CSP would block): the --tt-brand-* properties are declared on the element matching
+  // [data-theme], where the palette maps them. Same rules as the public pages: an invalid colour
+  // keeps the default, a primary colour without enough contrast on the background of a theme is
+  // not used for links there. The mocks are not interactive: the link and the button are plain
+  // text, so that keyboard users do not land on fake controls.
   import { t } from '../../shared/i18n/i18n.svelte';
   import { applyTenantTheme } from '../../shared/theme/theme';
 
@@ -20,32 +24,46 @@
 
   let { primaryColor, accentColor, logoUrl = null }: Props = $props();
 
-  let container: HTMLDivElement | undefined = $state();
+  const THEMES = ['light', 'dark'] as const;
+  let containers: Partial<Record<(typeof THEMES)[number], HTMLDivElement>> = $state({});
 
   $effect(() => {
-    if (container !== undefined) {
-      applyTenantTheme({ primaryColor: primaryColor.trim(), accentColor: accentColor.trim() }, container);
+    const colors = { primaryColor: primaryColor.trim(), accentColor: accentColor.trim() };
+    for (const theme of THEMES) {
+      const container = containers[theme];
+      if (container !== undefined) {
+        applyTenantTheme(colors, container);
+      }
     }
   });
 </script>
 
 <figure class="tt-preview">
   <figcaption class="tt-preview__caption">{t('adminTenants.branding.preview.label')}</figcaption>
-  <div class="tt-preview__page" bind:this={container}>
-    <div class="tt-preview__header">
-      {#if logoUrl}
-        <img class="tt-preview__logo" src={logoUrl} alt={t('adminTenants.branding.logo.alt')} />
-      {/if}
-      <span class="tt-preview__heading">{t('adminTenants.branding.preview.heading')}</span>
-    </div>
-    <div class="tt-preview__body">
-      <p class="tt-preview__text">{t('adminTenants.branding.preview.text')}</p>
-      <p class="tt-preview__text">
-        <span class="tt-preview__link">{t('adminTenants.branding.preview.link')}</span>
-      </p>
-      <span class="tt-preview__button">{t('adminTenants.branding.preview.button')}</span>
-    </div>
-    <div class="tt-preview__accent" aria-hidden="true"></div>
+  <div class="tt-preview__themes">
+    {#each THEMES as theme (theme)}
+      <figure class="tt-preview__theme">
+        <figcaption class="tt-preview__theme-caption">
+          {t(`adminTenants.branding.preview.${theme}`)}
+        </figcaption>
+        <div class="tt-preview__page" data-theme={theme} bind:this={containers[theme]}>
+          <div class="tt-preview__header">
+            {#if logoUrl}
+              <img class="tt-preview__logo" src={logoUrl} alt={t('adminTenants.branding.logo.alt')} />
+            {/if}
+            <span class="tt-preview__heading">{t('adminTenants.branding.preview.heading')}</span>
+          </div>
+          <div class="tt-preview__body">
+            <p class="tt-preview__text">{t('adminTenants.branding.preview.text')}</p>
+            <p class="tt-preview__text">
+              <span class="tt-preview__link">{t('adminTenants.branding.preview.link')}</span>
+            </p>
+            <span class="tt-preview__button">{t('adminTenants.branding.preview.button')}</span>
+          </div>
+          <div class="tt-preview__accent" aria-hidden="true"></div>
+        </div>
+      </figure>
+    {/each}
   </div>
 </figure>
 
@@ -57,6 +75,23 @@
   .tt-preview__caption {
     margin-bottom: var(--tt-space-2);
     font-weight: var(--tt-font-weight-bold);
+  }
+
+  .tt-preview__themes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--tt-space-4);
+  }
+
+  .tt-preview__theme {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .tt-preview__theme-caption {
+    margin-bottom: var(--tt-space-1);
+    color: var(--tt-muted);
+    font-size: var(--tt-font-size-sm);
   }
 
   .tt-preview__page {

@@ -6,7 +6,7 @@
   // the text is not a colour, it keeps the last valid one.
   //
   //   <ColorField id="primary" label={text} hint={text} bind:value={primary}
-  //               rows={rowsForPairs(rows, ['primary-on-light', 'text-on-primary'])} />
+  //               rows={rowsForPairs(rows, ['primary-on-light', 'primary-on-dark', 'text-on-primary'])} />
   import TextField from '../../shared/components/TextField.svelte';
   import { formatNumber, t } from '../../shared/i18n/i18n.svelte';
   import type { ContrastRow } from '../forms/contrastView';

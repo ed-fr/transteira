@@ -3,7 +3,9 @@
   // the public page, then the logo and the background image.
   // - Contrast: computed live while editing (contrast.ts), then replaced by the results of the
   //   server for the saved colours, which are authoritative (contrastView). An insufficient
-  //   contrast is a warning, never a blocking error: the colours can still be saved.
+  //   contrast in the light theme is a warning, never a blocking error: the colours can still be
+  //   saved. A dark pair (*-on-dark) below AA only gives an informational note: the dark theme
+  //   then keeps its accessible default link and focus colours.
   // - The tenant sub-navigation (TenantNav) is rendered by App.svelte above this screen.
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Spinner } from '../../../shared/components';
@@ -15,7 +17,13 @@
   import ImageUpload from '../../components/ImageUpload.svelte';
   import { colorChanged, colorError, rowsForPairs, serverFailures } from '../../components/branding';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
-  import { contrastView, type ContrastRow, type SavedBranding } from '../../forms/contrastView';
+  import {
+    contrastFailures,
+    contrastView,
+    darkFallbacks,
+    type ContrastRow,
+    type SavedBranding,
+  } from '../../forms/contrastView';
   import type { AdminScreenProps } from '../types';
 
   const { params, nav }: AdminScreenProps = $props();
@@ -36,7 +44,8 @@
 
   const edited = $derived({ primaryColor: primary.trim(), accentColor: accent.trim() });
   const rows = $derived(contrastView(edited, saved));
-  const failing = $derived(rows.filter((r) => r.level === 'fail'));
+  const failing = $derived(contrastFailures(rows));
+  const fallbacks = $derived(darkFallbacks(rows));
   const fromServer = $derived(rows.length > 0 && rows.every((r) => r.source === 'server'));
   const dirty = $derived(
     saved !== null && (colorChanged(primary, saved.primaryColor) || colorChanged(accent, saved.accentColor)),
@@ -155,7 +164,7 @@
         label={fieldLabels.primary}
         hint={t('adminTenants.branding.colors.primary.hint')}
         bind:value={primary}
-        rows={rowsForPairs(rows, ['primary-on-light', 'text-on-primary'])}
+        rows={rowsForPairs(rows, ['primary-on-light', 'primary-on-dark', 'text-on-primary'])}
         error={errorFor(errors, hexId(ids.primary))}
       />
       <ColorField
@@ -163,7 +172,7 @@
         label={fieldLabels.accent}
         hint={t('adminTenants.branding.colors.accent.hint')}
         bind:value={accent}
-        rows={rowsForPairs(rows, ['accent-on-light'])}
+        rows={rowsForPairs(rows, ['accent-on-light', 'accent-on-dark'])}
         error={errorFor(errors, hexId(ids.accent))}
       />
 
@@ -182,6 +191,11 @@
               {/each}
             </ul>
           </Alert>
+        {/if}
+        {#if fallbacks.length > 0}
+          <p class="tt-branding__note tt-branding__dark-note">
+            {t('adminTenants.branding.contrast.darkNote')}
+          </p>
         {/if}
       </section>
 

@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Stylesheets are emptied by default; tokens.test.ts reads the design tokens (?raw).
+    css: { include: [/tokens\.css/] },
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'text'],

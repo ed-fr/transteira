@@ -261,4 +261,8 @@ En bas de page, les liens **Mentions légales** et **Politique de confidentialit
 
 ![Page Mentions légales de l’entité, avec en bas les liens Mentions légales et Aide et la liste Langue](../screenshots/fr/legal-notice.png)
 
-Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. Le bas de page contient aussi la liste **Langue** et un lien **Aide** vers l’aide de l’écran en cours.
+Le service n’utilise que des cookies techniques, sans aucune mesure d’audience. Le bas de page contient aussi la liste **Langue**, le bouton **Thème sombre** et un lien **Aide** vers l’aide de l’écran en cours.
+
+### Thème sombre
+
+Les pages suivent par défaut le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème à tout moment. Votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement lorsque vous choisissez un thème différent de celui de votre appareil. Si vous rechoisissez le thème de votre appareil, le cookie est supprimé : les pages suivent de nouveau votre appareil. Les deux thèmes respectent les mêmes exigences d’accessibilité (RGAA).

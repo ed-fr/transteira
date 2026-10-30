@@ -155,7 +155,7 @@
   }
 
   .tt-chart__bar {
-    fill: var(--tt-primary);
+    fill: var(--tt-graphic);
   }
 
   .tt-chart__grid {

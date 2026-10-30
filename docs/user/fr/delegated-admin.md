@@ -161,7 +161,7 @@ L’écran Habillage règle le logo, les couleurs et l’image de fond des pages
 
 **Couleurs** : choisissez la **Couleur principale** (boutons et éléments actifs) et la **Couleur d’accent** (liens et éléments secondaires) avec le sélecteur, ou saisissez leur code au format #RRGGBB, par exemple #1A5FB4. Cliquez sur **Enregistrer**.
 
-La section **Contraste** contrôle chaque paire de couleurs utilisée par l’interface. Le rapport doit atteindre au moins 4,5:1 (niveau AA) pour que les textes restent lisibles. Une paire marquée **Insuffisant** est un avertissement : l’enregistrement reste possible, mais corrigez-la pour respecter les exigences d’accessibilité (RGAA). L’**Aperçu de la page publique** montre le résultat avant l’enregistrement.
+La section **Contraste** contrôle chaque paire de couleurs utilisée par l’interface. Le rapport doit atteindre au moins 4,5:1 (niveau AA) pour que les textes restent lisibles. Une paire marquée **Insuffisant** est un avertissement : l’enregistrement reste possible, mais corrigez-la pour respecter les exigences d’accessibilité (RGAA). Le contrôle porte sur les deux thèmes : les paires **Couleur principale sur fond sombre** et **Couleur d’accent sur fond sombre** sont informatives et ne déclenchent jamais l’avertissement. Lorsqu’une couleur n’est pas assez lisible sur fond sombre, les liens et les indicateurs de focus utilisent les couleurs par défaut accessibles du thème sombre, et la couleur d’accent reste purement décorative. L’**Aperçu de la page publique** montre les thèmes clair et sombre côte à côte avant l’enregistrement.
 
 ![Écran Habillage avec les couleurs, le contrôle de contraste et l’aperçu de la page publique](../screenshots/fr/admin-tenant-branding.png)
 

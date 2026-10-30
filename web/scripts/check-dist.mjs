@@ -2,8 +2,9 @@
 // internal/httpserver/webui.go (threat model T-91, T-95):
 //
 //   - both entry pages exist and every asset they reference (transitively) exists;
-//   - no inline <script> (every <script> has a same-origin src), no <style> element, no inline
-//     event handler attribute (onclick=...) in the HTML;
+//   - no inline <script> (every <script> has a same-origin src: a fingerprinted /assets/ file,
+//     or an allowlisted root file of the build, ROOT_SCRIPTS, copied from static/), no <style>
+//     element, no inline event handler attribute (onclick=...) in the HTML;
 //   - no style= attribute anywhere, including in the HTML templates compiled into the JS
 //     (Svelte builds the DOM from template strings, an inline style would be blocked);
 //   - no absolute http(s):// URL except XML namespaces (w3.org) and the Svelte error
@@ -30,6 +31,8 @@ const URL_ALLOW = [
   /^https?:\/\/www\.w3\.org\//, // XML namespaces (SVG, XLink, MathML)
   /^https:\/\/svelte\.dev\/e\//, // Svelte runtime error documentation links (text only)
 ];
+// Root scripts the entry pages may load besides /assets/: adding one is a deliberate change here.
+const ROOT_SCRIPTS = new Set(['/theme-init.js']);
 
 const violations = [];
 const report = (file, message) => violations.push(`${file}: ${message}`);
@@ -104,6 +107,8 @@ for (const [file, text] of contents) {
       const src = /\ssrc\s*=\s*"([^"]*)"/i.exec(match[1] ?? '');
       if (src === null) {
         report(file, 'inline <script> (no src)');
+      } else if (ROOT_SCRIPTS.has(src[1])) {
+        if (!files.includes(src[1].slice(1))) report(file, `references missing root script ${src[1]}`);
       } else if (!src[1].startsWith('/assets/')) {
         report(file, `<script> src outside /assets/: ${src[1]}`);
       }

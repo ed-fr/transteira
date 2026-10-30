@@ -261,4 +261,8 @@ At the bottom of the page, the links **Legal notice** and **Privacy policy** ope
 
 ![Legal notice page of the entity, with the footer links Legal notice and Help and the Language list](../screenshots/en/legal-notice.png)
 
-The service uses only technical cookies, with no audience measurement. The footer also holds the **Language** list and a **Help** link to the help of the current screen.
+The service uses only technical cookies, with no audience measurement. The footer also holds the **Language** list, the **Dark theme** button and a **Help** link to the help of the current screen.
+
+### Dark theme
+
+The pages follow the light or dark setting of your device by default. The **Dark theme** button in the footer switches the theme at any time. Your choice is remembered for a year by a strictly technical cookie (`tt_theme`), which is only set when you pick a theme different from the one of your device. Choose again the theme of your device and the cookie is deleted: the pages follow your device again. Both themes meet the same accessibility requirements (RGAA).

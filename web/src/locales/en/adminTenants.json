@@ -123,7 +123,9 @@
       "pair": {
         "primary-on-light": "Primary color on light background",
         "accent-on-light": "Accent color on light background",
-        "text-on-primary": "Text on the primary color"
+        "text-on-primary": "Text on the primary color",
+        "primary-on-dark": "Primary color on dark background",
+        "accent-on-dark": "Accent color on dark background"
       },
       "level": {
         "AAA": "AAA (excellent)",
@@ -133,6 +135,7 @@
       "ratio": "{ratio}:1",
       "result": "{pair}: {ratio}:1, {level}",
       "warning": "At least one color does not offer sufficient contrast. The texts may be hard to read. You can still save.",
+      "darkNote": "In the dark theme, a color that does not reach the required contrast on the dark background is not used for links or the focus indicator: the accessible default colors of the dark theme replace it, and the accent color is only decorative, so readability is preserved.",
       "serverNote": "The server check, shown after saving, is authoritative."
     },
     "preview": {
@@ -140,7 +143,9 @@
       "heading": "Send files",
       "text": "Drop your files and share them securely.",
       "link": "Sample link",
-      "button": "Send"
+      "button": "Send",
+      "light": "Light theme",
+      "dark": "Dark theme"
     },
     "image": {
       "current": "Saved image",

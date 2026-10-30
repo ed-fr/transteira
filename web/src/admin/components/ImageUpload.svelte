@@ -279,6 +279,8 @@
 
   .tt-image__img--logo {
     max-height: 6rem;
+    /* Shown on the same light box as in the page header, in both themes. */
+    background: var(--tt-logo-surface);
   }
 
   .tt-image__img--background {

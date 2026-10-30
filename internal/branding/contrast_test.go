@@ -91,6 +91,8 @@ func TestCheck(t *testing.T) {
 		{Pair: PairPrimaryOnLight, Ratio: 21, Level: LevelAAA},
 		{Pair: PairAccentOnLight, Ratio: 4.47, Level: LevelFail}, // truncated, never rounded up to AA
 		{Pair: PairTextOnPrimary, Ratio: 21, Level: LevelAAA},
+		{Pair: PairPrimaryOnDark, Ratio: 1.18, Level: LevelFail},
+		{Pair: PairAccentOnDark, Ratio: 3.96, Level: LevelFail},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Check = %v", got)
@@ -102,7 +104,7 @@ func TestCheck(t *testing.T) {
 	}
 	// A mid-tone primary: white text on it is AA, the primary on white is AA.
 	mid := Check(mustColor(t, "#767676"), mustColor(t, "#FFFFFF"))
-	if mid[0].Level != LevelAA || mid[1].Level != LevelFail || mid[1].Ratio != 1 || mid[2].Level != LevelAA {
+	if mid[0].Level != LevelAA || mid[1].Level != LevelFail || mid[1].Ratio != 1 || mid[2].Level != LevelAA || len(mid) != 5 {
 		t.Errorf("Check(#767676, #FFFFFF) = %+v", mid)
 	}
 }

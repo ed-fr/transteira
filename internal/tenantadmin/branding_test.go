@@ -34,7 +34,7 @@ func TestBranding(t *testing.T) {
 		ev := newEnv(t, e)
 		b, err := ev.svc.GetBranding(ctx, ev.adminA, ev.a.ID)
 		mustNoErr(t, "get", err)
-		if b.PrimaryColor == "" || len(b.Contrast) != 3 || b.HasLogo || b.HasBackground {
+		if b.PrimaryColor == "" || len(b.Contrast) != 5 || b.HasLogo || b.HasBackground {
 			t.Fatalf("branding: %+v", b)
 		}
 		// A poor contrast is saved, with a failing diagnostic.

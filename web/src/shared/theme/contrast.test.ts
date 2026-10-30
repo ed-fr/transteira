@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DARK_BACKGROUND,
   LIGHT_BACKGROUND,
   MIN_RATIO_AA,
   MIN_RATIO_AAA,
@@ -26,6 +27,7 @@ function color(hex: string): Rgb {
 describe('contrast (mirror of internal/branding)', () => {
   it('uses the same constants as the Go package', () => {
     expect(LIGHT_BACKGROUND).toEqual({ r: 255, g: 255, b: 255 });
+    expect(DARK_BACKGROUND).toEqual({ r: 0x11, g: 0x18, b: 0x27 });
     expect(TEXT_ON_PRIMARY).toEqual({ r: 255, g: 255, b: 255 });
     expect(MIN_RATIO_AAA).toBe(7);
     expect(MIN_RATIO_AA).toBe(4.5);
@@ -93,10 +95,14 @@ describe('contrast (mirror of internal/branding)', () => {
       { pair: 'primary-on-light', ratio: 21, level: 'AAA' },
       { pair: 'accent-on-light', ratio: 4.47, level: 'fail' },
       { pair: 'text-on-primary', ratio: 21, level: 'AAA' },
+      { pair: 'primary-on-dark', ratio: 1.18, level: 'fail' },
+      { pair: 'accent-on-dark', ratio: 3.96, level: 'fail' },
     ]);
     const mid = checkContrast(color('#767676'), color('#FFFFFF'));
     expect(mid[0]).toEqual({ pair: 'primary-on-light', ratio: 4.54, level: 'AA' });
     expect(mid[1]).toEqual({ pair: 'accent-on-light', ratio: 1, level: 'fail' });
     expect(mid[2]).toEqual({ pair: 'text-on-primary', ratio: 4.54, level: 'AA' });
+    expect(mid[3]).toEqual({ pair: 'primary-on-dark', ratio: 3.9, level: 'fail' });
+    expect(mid[4]).toEqual({ pair: 'accent-on-dark', ratio: 17.73, level: 'AAA' });
   });
 });

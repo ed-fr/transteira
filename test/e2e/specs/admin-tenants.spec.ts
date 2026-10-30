@@ -175,6 +175,12 @@ test.describe('tenant configuration', () => {
       await expect(logo.getByRole('button', { name: 'Delete the image' })).toBeVisible();
       await checkA11y(page);
 
+      // The preview shows the public page in both themes.
+      const preview = page.locator('.tt-preview__page');
+      await expect(preview).toHaveCount(2);
+      await expect(preview.nth(0)).toHaveAttribute('data-theme', 'light');
+      await expect(preview.nth(1)).toHaveAttribute('data-theme', 'dark');
+
       // A low-contrast primary colour: warned, but still saved.
       const colors = page.getByRole('region', { name: 'Colors' });
       await expect(colors.getByText(/At least one color does not offer sufficient contrast/)).toHaveCount(0);
@@ -184,6 +190,8 @@ test.describe('tenant configuration', () => {
       await expect(
         colors.getByText(/Primary color on light background: [\d.]+:1, Insufficient/).first(),
       ).toBeVisible();
+      // The dark pairs are listed too, as information.
+      await expect(page.getByText('Primary color on dark background', { exact: true })).toBeVisible();
       await colors.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(page.getByText('The colors have been saved.')).toBeVisible();
 

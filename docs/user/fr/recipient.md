@@ -159,6 +159,10 @@ Répondre depuis un navigateur met fin à tout envoi de fichiers déjà ouvert d
 > **Note** Si le bouton **Répondre** n’apparaît pas, ou si un refus s’affiche, écrivez simplement à l’expéditeur par mail.
 
 <!-- topic: download-problems -->
+## Thème sombre
+
+La page de téléchargement suit le réglage clair ou sombre de votre appareil. Le bouton **Thème sombre** du bas de page change le thème ; votre choix est mémorisé pendant un an par un cookie strictement technique (`tt_theme`), posé uniquement si vous choisissez un thème différent de celui de votre appareil. Rechoisir le thème de votre appareil supprime le cookie.
+
 ## Le lien ne fonctionne pas
 
 Cette section explique les messages que vous pouvez voir à la place des fichiers, et ce qu’il faut faire.

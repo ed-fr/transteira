@@ -58,29 +58,40 @@ describe('textColorOn', () => {
 });
 
 describe('computeTenantTheme', () => {
-  it('derives every property from a dark primary', () => {
+  it('derives every light property from a dark primary, and keeps the dark defaults', () => {
+    // #1D4ED8: 6.70:1 on white, 2.65:1 on the dark background.
     expect(computeTenantTheme({ primaryColor: '#1d4ed8', accentColor: '#0f766e' })).toEqual({
-      '--tt-primary': '#1D4ED8',
-      '--tt-on-primary': '#FFFFFF',
-      '--tt-accent': '#0F766E',
-      '--tt-link': '#1D4ED8',
-      '--tt-focus': '#1D4ED8',
+      '--tt-brand-primary': '#1D4ED8',
+      '--tt-brand-on-primary': '#FFFFFF',
+      '--tt-brand-accent': '#0F766E',
+      '--tt-brand-link-light': '#1D4ED8',
+      '--tt-brand-link-dark': null,
+      '--tt-brand-focus-light': '#1D4ED8',
+      '--tt-brand-focus-dark': null,
     });
   });
 
-  it('keeps the default link and focus colours for a pale primary', () => {
+  it('uses a pale primary for the dark theme only', () => {
     const theme = computeTenantTheme({ primaryColor: '#FFD700', accentColor: '#000000' });
-    expect(theme['--tt-primary']).toBe('#FFD700');
-    expect(theme['--tt-on-primary']).toBe('#111827');
-    expect(theme['--tt-link']).toBeNull();
-    expect(theme['--tt-focus']).toBeNull();
+    expect(theme['--tt-brand-primary']).toBe('#FFD700');
+    expect(theme['--tt-brand-on-primary']).toBe('#111827');
+    expect(theme['--tt-brand-link-light']).toBeNull();
+    expect(theme['--tt-brand-focus-light']).toBeNull();
+    expect(theme['--tt-brand-link-dark']).toBe('#FFD700');
+    expect(theme['--tt-brand-focus-dark']).toBe('#FFD700');
   });
 
   it('uses the primary for focus but not for links between 3:1 and 4.5:1', () => {
-    // #888888 on white: about 3.54:1.
-    const theme = computeTenantTheme({ primaryColor: '#888888', accentColor: '#000000' });
-    expect(theme['--tt-link']).toBeNull();
-    expect(theme['--tt-focus']).toBe('#888888');
+    // #888888: about 3.54:1 on white, 5.00:1 on the dark background.
+    const light = computeTenantTheme({ primaryColor: '#888888', accentColor: '#000000' });
+    expect(light['--tt-brand-link-light']).toBeNull();
+    expect(light['--tt-brand-focus-light']).toBe('#888888');
+    expect(light['--tt-brand-link-dark']).toBe('#888888');
+    // #5A6B8C: about 5.36:1 on white, 3.31:1 on the dark background.
+    const dark = computeTenantTheme({ primaryColor: '#5A6B8C', accentColor: '#000000' });
+    expect(dark['--tt-brand-link-light']).toBe('#5A6B8C');
+    expect(dark['--tt-brand-link-dark']).toBeNull();
+    expect(dark['--tt-brand-focus-dark']).toBe('#5A6B8C');
   });
 
   it.each(['red', '#FFF', 'url(x)', '#123456;color:red', ''])('ignores the invalid colour %j', (bad) => {
@@ -96,11 +107,11 @@ describe('applyTenantTheme', () => {
     const root = fakeRoot();
     applyTenantTheme({ primaryColor: '#1d4ed8', accentColor: '#0f766e' }, root);
     expect(Object.fromEntries(root.props)).toEqual({
-      '--tt-primary': '#1D4ED8',
-      '--tt-on-primary': '#FFFFFF',
-      '--tt-accent': '#0F766E',
-      '--tt-link': '#1D4ED8',
-      '--tt-focus': '#1D4ED8',
+      '--tt-brand-primary': '#1D4ED8',
+      '--tt-brand-on-primary': '#FFFFFF',
+      '--tt-brand-accent': '#0F766E',
+      '--tt-brand-link-light': '#1D4ED8',
+      '--tt-brand-focus-light': '#1D4ED8',
     });
   });
 
@@ -108,17 +119,18 @@ describe('applyTenantTheme', () => {
     const root = fakeRoot();
     applyTenantTheme({ primaryColor: '#1d4ed8', accentColor: '#0f766e' }, root);
     applyTenantTheme({ primaryColor: '#FFD700', accentColor: 'nope' }, root);
-    expect(root.props.has('--tt-link')).toBe(false);
-    expect(root.props.has('--tt-focus')).toBe(false);
-    expect(root.props.has('--tt-accent')).toBe(false);
-    expect(root.props.get('--tt-primary')).toBe('#FFD700');
+    expect(root.props.has('--tt-brand-link-light')).toBe(false);
+    expect(root.props.has('--tt-brand-focus-light')).toBe(false);
+    expect(root.props.has('--tt-brand-accent')).toBe(false);
+    expect(root.props.get('--tt-brand-primary')).toBe('#FFD700');
+    expect(root.props.get('--tt-brand-link-dark')).toBe('#FFD700');
   });
 
   it('defaults to document.documentElement', () => {
     const root = fakeRoot();
     vi.stubGlobal('document', { documentElement: root });
     applyTenantTheme({ primaryColor: '#000000', accentColor: '#000000' });
-    expect(root.props.get('--tt-primary')).toBe('#000000');
+    expect(root.props.get('--tt-brand-primary')).toBe('#000000');
     resetTenantTheme();
     expect(root.props.size).toBe(0);
   });

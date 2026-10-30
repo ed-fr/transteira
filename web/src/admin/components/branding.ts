@@ -6,7 +6,7 @@
 import { ApiProblem } from '../../shared/api/client';
 import { fieldMessage, problemMessage, type Translator } from '../../shared/api/problem';
 import { HEX_COLOR } from '../../shared/theme/contrast';
-import type { ContrastRow } from '../forms/contrastView';
+import { contrastFailures, type ContrastRow } from '../forms/contrastView';
 
 // ---- Colours -------------------------------------------------------------------------------
 
@@ -54,9 +54,12 @@ export function rowsForPairs(rows: readonly ContrastRow[], pairs: readonly strin
   return rows.filter((r) => pairs.includes(r.pair));
 }
 
-/** Contrast rows that fail the AA level and come from the server (authoritative warnings). */
+/**
+ * Light-theme contrast rows that fail the AA level and come from the server (authoritative
+ * warnings); the dark pairs never warn (contrastFailures).
+ */
 export function serverFailures(rows: readonly ContrastRow[]): ContrastRow[] {
-  return rows.filter((r) => r.source === 'server' && r.level === 'fail');
+  return contrastFailures(rows).filter((r) => r.source === 'server');
 }
 
 // ---- Images --------------------------------------------------------------------------------
