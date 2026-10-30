@@ -21,6 +21,7 @@
     "infected": "Infected, file erased",
     "not_scanned_too_large": "Not scanned: too large",
     "not_scanned_encrypted": "Not scanned: encrypted",
+    "not_scanned_disabled": "Not scanned: antivirus disabled",
     "scan_error": "Scan failed, file withheld"
   },
   "wait": {

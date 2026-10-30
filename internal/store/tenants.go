@@ -24,13 +24,13 @@ const (
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
 	`status, primary_color, accent_color, has_logo, has_background, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
-	`created_at, updated_at`
+	`antivirus_enabled, created_at, updated_at`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
 var (
 	qTenantInsert = systemQuery(
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -49,6 +49,11 @@ var (
 			has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?,
 			allow_transfer_reply = ?, updated_at = ?
 			WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantSetAntivirus switches the antivirus of an active tenant (super
+	// admin only, decision D8).
+	qTenantSetAntivirus = systemQuery(
+		`UPDATE tenants SET antivirus_enabled = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	qTenantSetStatus = systemQuery(
 		`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`,
@@ -135,7 +140,8 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground,
-		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &created, &updated); err != nil {
+		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
+		&created, &updated); err != nil {
 		return nil, err
 	}
 	t.ID = tenant.ID(tid)
@@ -149,10 +155,13 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // with its default configuration rows in the same transaction (the default
 // confidentiality levels and abuse settings). Unset settings take their
 // defaults ([tenant.Tenant.WithDefaults]): the ceiling is the transfer
-// limit, the colors are the default ones and the status is active. It returns the stored tenant, ErrInvalid for invalid
-// fields (including a preset ID, a status other than active, or a transfer
-// limit above the ceiling, the ceiling being at most
-// [tenant.MaxTransferLimit]) and ErrConflict when the FQDN is already used.
+// limit, the colors are the default ones and the status is active. A new
+// tenant always starts with its antivirus enabled, whatever
+// t.AntivirusEnabled ([Tenants.SetAntivirusEnabled] changes it). It
+// returns the stored tenant, ErrInvalid for invalid fields (including a
+// preset ID, a status other than active, or a transfer limit above the
+// ceiling, the ceiling being at most [tenant.MaxTransferLimit]) and
+// ErrConflict when the FQDN is already used.
 func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	if !t.ID.IsZero() {
 		return nil, invalid("tenant id is assigned by the store")
@@ -169,13 +178,14 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 		return nil, wrap("create tenant", err)
 	}
 	c.ID = tenant.ID(newID)
+	c.AntivirusEnabled = true
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
 	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
-			c.AllowTransferReply,
+			c.AllowTransferReply, c.AntivirusEnabled,
 			toMillis(now), toMillis(now))
 		if err != nil {
 			return err
@@ -259,39 +269,85 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 
 // Update stores the modifiable fields of t (name, FQDN, language, limits,
 // colors, asset flags, webhook address option, remote internal deposit
-// option) and refreshes UpdatedAt; the status only changes
-// with [Tenants.SetStatus], so t.Status must merely be valid. The transfer
-// limit must not exceed the ceiling, itself at most
+// and reply options) and refreshes UpdatedAt. The status only changes with
+// [Tenants.SetStatus] and the antivirus switch with
+// [Tenants.UpdateWithAntivirus] or [Tenants.SetAntivirusEnabled]
+// (t.AntivirusEnabled is ignored here), so t.Status must merely be valid.
+// The transfer limit must not exceed the ceiling, itself at most
 // [tenant.MaxTransferLimit]; who may change which field is the caller's
 // rule. It returns the stored tenant, ErrInvalid for invalid fields,
 // ErrNotFound when the tenant does not exist or is being deleted, and
 // ErrConflict when the new FQDN is already used. Callers must invalidate
 // the tenant.Resolver cache for the old and new FQDN.
 func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
+	return r.update(ctx, t, true, false, "update tenant")
+}
+
+// UpdateWithAntivirus is [Tenants.Update] when general is set, and also
+// stores t.AntivirusEnabled when antivirus is set, in one transaction: a
+// failure stores nothing. The antivirus switch is the super admin's only
+// (callers check the caller's scope); it applies to the transfers
+// finalized afterwards (decision D8).
+func (r *Tenants) UpdateWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error) {
+	return r.update(ctx, t, general, antivirus, "update tenant")
+}
+
+// SetAntivirusEnabled turns the antivirus analysis of the active tenant
+// tid on or off and refreshes UpdatedAt (super admin only: callers check
+// the caller's scope). It applies to the transfers finalized afterwards
+// (decision D8): files already waiting for the engine keep waiting, and
+// turning it back on never rescans past files. It returns the stored
+// tenant, and ErrNotFound when the tenant does not exist or is being
+// deleted. Callers must invalidate the tenant.Resolver cache of its FQDN.
+func (r *Tenants) SetAntivirusEnabled(ctx context.Context, tid tenant.ID, enabled bool) (*tenant.Tenant, error) {
+	if err := tid.Validate(); err != nil {
+		return nil, fmt.Errorf("store: set tenant antivirus: %w", ErrNotFound)
+	}
+	return r.update(ctx, &tenant.Tenant{ID: tid, AntivirusEnabled: enabled}, false, true, "set tenant antivirus")
+}
+
+// update implements Update, UpdateWithAntivirus and SetAntivirusEnabled:
+// the general fields of t when general is set, its antivirus switch when
+// antivirus is set, in one transaction.
+func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, general, antivirus bool, op string) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
 		return nil, invalid("tenant id is required")
 	}
-	if err := t.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+	if general {
+		if err := t.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
 	}
 	now := toMillis(r.db.now())
 	var out *tenant.Tenant
 	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
-		res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
-			t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
-			t.HasLogo, t.HasBackground, t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
-			string(t.ID))
-		if err != nil {
-			return err
+		if general {
+			res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
+				t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
+				t.HasLogo, t.HasBackground, t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
+				string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
 		}
-		if err := expectOne(res); err != nil {
-			return err
+		if antivirus {
+			res, err := tx.Exec(ctx, qTenantSetAntivirus, t.AntivirusEnabled, now, string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
 		}
+		var err error
 		out, err = scanTenant(tx.QueryRow(ctx, qTenantGet, string(t.ID)))
 		return err
 	})
 	if err != nil {
-		return nil, wrap("update tenant", err)
+		return nil, wrap(op, err)
 	}
 	return out, nil
 }

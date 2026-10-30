@@ -243,6 +243,21 @@ pour attribuer le volume des signatures à l’utilisateur `clamav`, puis
 se termine. clamd n’a pas accès à Internet ; les mises à jour des signatures s’exécutent dans le conteneur
 séparé `clamav-update` ([Antivirus](../../operations/antivirus.md#signatures)).
 
+### Désactiver l’antivirus (facultatif)
+
+Pour fonctionner sans ClamAV, ajoutez en dernier la surcharge `docker-compose.no-antivirus.yml` :
+
+```sh
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.no-antivirus.yml up -d
+```
+
+(avec PostgreSQL : `-f deploy/docker-compose.yml -f deploy/docker-compose.postgres.yml -f deploy/docker-compose.no-antivirus.yml`).
+Elle fixe `TT_ANTIVIRUS_ENGINE=none` et ne démarre pas les conteneurs ClamAV. Chaque fichier est alors
+remis sans analyse et signalé, `/healthz` ne vérifie plus l’antivirus, et un avertissement (WARN) est écrit
+au démarrage. **Avertissement de sécurité** : l’instance peut alors distribuer des logiciels malveillants
+(modèle de menaces T-236) ; ne le faites que par un choix explicite. Conséquences et interrupteur par entité :
+[Antivirus](../../operations/antivirus.md#disabling-the-antivirus).
+
 ## 9. Premier lancement : le super administrateur
 
 Tant qu’aucun administrateur n’existe, TransTeira écrit un **jeton d’initialisation** dans son

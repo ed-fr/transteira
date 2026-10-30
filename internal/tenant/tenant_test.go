@@ -166,3 +166,20 @@ func TestWithDefaults(t *testing.T) {
 		t.Fatalf("WithDefaults changed set fields: %+v", got)
 	}
 }
+
+func TestAntivirusEffective(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		enabled, instanceDisabled, want bool
+	}{
+		{true, false, true},
+		{true, true, false},
+		{false, false, false},
+		{false, true, false},
+	} {
+		tn := Tenant{AntivirusEnabled: c.enabled}
+		if got := tn.AntivirusEffective(c.instanceDisabled); got != c.want {
+			t.Errorf("AntivirusEffective(enabled %v, instance disabled %v) = %v", c.enabled, c.instanceDisabled, got)
+		}
+	}
+}

@@ -104,6 +104,40 @@ and files are erased, it becomes `expired`, and a warning naming the tenant
 and transfer identifiers is logged. Its sender gets no mail: watch the
 health check and the logs so that an outage never lasts that long.
 
+## Disabling the antivirus
+
+Specification section 11.1. Two independent levels:
+
+- **Instance**: `TT_ANTIVIRUS_ENGINE=none` (default `clamd`). With the Docker
+  deployment, use the overlay
+  [`deploy/docker-compose.no-antivirus.yml`](../../deploy/docker-compose.no-antivirus.yml)
+  (`docker compose -f docker-compose.yml -f docker-compose.no-antivirus.yml up -d`, added
+  last when combined with the PostgreSQL overlay): no ClamAV container is needed. Other
+  engines (ICAP, HTTP API) are planned.
+- **Entity**: the `antivirusEnabled` switch of the entity, changed by the super admin only
+  (a delegated admin sees it read-only), audited as `tenant.antivirus_disabled` and
+  `tenant.antivirus_enabled`.
+
+Behaviour:
+
+- With the engine `none`, a WARN is logged at startup. Files still waiting for analysis at
+  startup are released as `not_scanned_disabled` (audit event `antivirus.scans_released`,
+  system actor).
+- The status is **frozen at finalization**: a file finalized while the antivirus is
+  disabled (instance or entity) is delivered unscanned with the status
+  `not_scanned_disabled`; the sender receives the "file not scanned" mail with the reason
+  "antivirus disabled" and the download page says so. Files already waiting when an entity
+  is switched off keep waiting for the engine. Re-enabling never rescans past files.
+- `/healthz` no longer probes the antivirus when the engine is `none`, and never shows the
+  engine. The engine name is shown read-only in the super admin system settings and in
+  `/status`.
+- The blocklist by SHA-256, the abuse detection and the forced download stay in force.
+
+**Security warning** (threat model T-236): with no analysis, the instance, or the entity,
+can be used to distribute malware. This is accepted only as an explicit operator or super
+admin choice; consider compensating measures (restricted recipient domains, confidentiality
+levels).
+
 ## Size limits
 
 ClamAV limits how much data it accepts and scans. Align its configuration

@@ -375,9 +375,13 @@
                 {#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}
                 {#if isNotScanned(file.scanStatus)}
                   <span class="scan-warning tt-text-sm">
-                    {file.scanStatus === 'not_scanned_encrypted'
-                      ? t('download.scan.notScannedEncrypted')
-                      : t('download.scan.notScannedTooLarge')}
+                    {#if file.scanStatus === 'not_scanned_encrypted'}
+                      {t('download.scan.notScannedEncrypted')}
+                    {:else if file.scanStatus === 'not_scanned_disabled'}
+                      {t('download.scan.notScannedDisabled')}
+                    {:else}
+                      {t('download.scan.notScannedTooLarge')}
+                    {/if}
                   </span>
                 {/if}
               </th>

@@ -276,8 +276,9 @@ func TestSystemSettings(t *testing.T) {
 		resp := mustStatus(t, "getSystemSettings", sa.call(t, http.MethodGet, pathSystemSettings, nil), http.StatusOK)
 		var members map[string]json.RawMessage
 		mustJSON(t, resp.body, &members)
-		if string(members["alertEmail"]) != "null" || string(members["diskAlertThreshold"]) != "0.85" || len(members) != 2 {
-			t.Errorf("default settings = %s, want threshold 0.85 and alertEmail null", resp.body)
+		if string(members["alertEmail"]) != "null" || string(members["diskAlertThreshold"]) != "0.85" ||
+			string(members["antivirusEngine"]) != `"clamd"` || len(members) != 3 {
+			t.Errorf("default settings = %s, want threshold 0.85, alertEmail null and engine clamd", resp.body)
 		}
 
 		alert := uniqueEmail(t, "it-admin", "example.com")

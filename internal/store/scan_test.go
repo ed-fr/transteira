@@ -414,7 +414,7 @@ func TestScanStatusDeliverable(t *testing.T) {
 	t.Parallel()
 	for s, want := range map[store.ScanStatus]bool{
 		store.ScanPending: false, store.ScanScanning: false, store.ScanClean: true, store.ScanInfected: false,
-		store.ScanNotScannedTooLarge: true, store.ScanNotScannedEncrypted: true, store.ScanError: false, "bogus": false,
+		store.ScanNotScannedTooLarge: true, store.ScanNotScannedEncrypted: true, store.ScanNotScannedDisabled: true, store.ScanError: false, "bogus": false,
 	} {
 		if got := s.Deliverable(); got != want {
 			t.Errorf("%q.Deliverable() = %v, want %v", s, got, want)

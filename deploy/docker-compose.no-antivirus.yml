@@ -1,0 +1,41 @@
+# TransTeira - "no antivirus" overlay, applied on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.no-antivirus.yml up -d
+#   (with PostgreSQL: -f docker-compose.yml -f docker-compose.postgres.yml
+#    -f docker-compose.no-antivirus.yml; the order of the last two does not
+#    matter. Or set COMPOSE_FILE in deploy/.env.)
+#
+# What it does (docs/operations/antivirus.md, "Disabling the antivirus"):
+#   - sets TT_ANTIVIRUS_ENGINE=none on transteira: no file is analysed, every
+#     file is delivered flagged "not analysed: antivirus disabled", /healthz no
+#     longer probes the antivirus, a WARN is logged at startup;
+#   - removes only the dependency of transteira on clamav (the dependencies
+#     added by the PostgreSQL overlay are kept);
+#   - moves clamav, clamav-update and clamav-init to the inactive profile
+#     "clamav", so that those containers are not started.
+#
+# SECURITY WARNING: with no analysis, the instance can be used to distribute
+# malware (threat model T-236). Only do this as an explicit operator choice.
+# To switch back, drop this file from the command line and run `up -d` again;
+# files delivered in the meantime are never analysed afterwards.
+#
+# Containers already created by a previous `up` stay in place: stop them with
+# `docker compose ... --profile clamav down` or remove them with
+# `docker compose ... rm -sf clamav clamav-update clamav-init`.
+
+services:
+  transteira:
+    environment:
+      TT_ANTIVIRUS_ENGINE: none
+    depends_on:
+      # Removes this one entry from the merged configuration.
+      clamav: !reset null
+
+  clamav:
+    profiles: ["clamav"]
+
+  clamav-update:
+    profiles: ["clamav"]
+
+  clamav-init:
+    profiles: ["clamav"]

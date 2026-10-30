@@ -25,5 +25,17 @@
     "text": "Les mails d’alerte partent par le serveur SMTP système de l’instance, configuré par variables d’environnement ({host}, {from} et les variables associées du fichier .env). Sans lui, aucun mail d’alerte n’est envoyé : l’alerte disque n’est visible que dans la vue d’ensemble du système, dans le journal d’audit et dans le journal applicatif."
   },
   "overviewLink": "Voir l’occupation du disque dans la vue d’ensemble du système",
-  "saved": "Réglages système enregistrés."
+  "saved": "Réglages système enregistrés.",
+  "antivirus": {
+    "title": "Antivirus",
+    "engineLabel": "Moteur",
+    "hint": "Choisi par la variable d’environnement TT_ANTIVIRUS_ENGINE : il ne peut pas être modifié ici.",
+    "disabledWarning": "L’antivirus est désactivé pour toute l’instance : aucun fichier n’est analysé, quel que soit le réglage de chaque entité. Les fichiers sont remis sans analyse et signalés comme tels.",
+    "engine": {
+      "clamd": "ClamAV (clamd)",
+      "icap": "ICAP",
+      "http": "API HTTP",
+      "none": "Désactivé"
+    }
+  }
 }

@@ -121,8 +121,27 @@ func TestNew(t *testing.T) {
 		t.Fatalf("New: %v %+v", err, s)
 	}
 	s.onChange() // the default hook is a no-op
+	s, err = New(db, audit.New(db), Options{AntivirusEngine: "none"})
+	if err != nil || s.engine != "none" {
+		t.Fatalf("New with engine: %v %+v", err, s)
+	}
 	if MinThreshold != 0.5 || MaxThreshold != 0.99 || DefaultThreshold != 0.85 {
 		t.Fatalf("bounds %v %v %v", MinThreshold, MaxThreshold, DefaultThreshold)
+	}
+}
+
+func TestAntivirusEngine(t *testing.T) {
+	ctx := context.Background()
+	ev := newEnv(t, storetest.SQLite(t))
+	ev.svc.engine = "clamd"
+	p := principal(store.RoleSuperAdmin, "en")
+	got, err := ev.svc.Get(ctx, p)
+	if err != nil || got.AntivirusEngine != "clamd" {
+		t.Fatalf("Get = %+v, %v", got, err)
+	}
+	got, err = ev.svc.Update(ctx, p, Patch{Threshold: ptr(0.9)}, netip.Addr{})
+	if err != nil || got.AntivirusEngine != "clamd" {
+		t.Fatalf("Update = %+v, %v", got, err)
 	}
 }
 

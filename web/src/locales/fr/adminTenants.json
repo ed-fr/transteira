@@ -100,6 +100,22 @@
       },
       "save": "Enregistrer le réglage des webhooks",
       "saved": "Réglage des webhooks enregistré."
+    },
+    "antivirus": {
+      "title": "Analyse antivirus",
+      "statusEnabled": "Les fichiers de cette entité sont analysés par l’antivirus.",
+      "statusDisabled": "L’analyse antivirus est désactivée pour cette entité : les fichiers finalisés à partir de maintenant sont remis sans analyse et signalés comme tels.",
+      "statusDisabledDelegated": "L’analyse antivirus est désactivée pour cette entité par le super admin : les fichiers sont remis sans analyse et signalés comme tels. Seul le super admin peut le modifier.",
+      "statusEnabledDelegated": "L’analyse antivirus est activée pour cette entité. Seul le super admin peut le modifier.",
+      "instanceNote": "L’antivirus est désactivé pour toute l’instance par l’exploitant (TT_ANTIVIRUS_ENGINE=none) : aucun fichier n’est analysé, quel que soit ce réglage.",
+      "disable": "Désactiver l’analyse antivirus",
+      "enable": "Activer l’analyse antivirus",
+      "confirmTitle": "Désactiver l’analyse antivirus pour {name} ?",
+      "confirmText": "Les fichiers finalisés à partir de maintenant sont remis sans analyse et signalés « non analysé : antivirus désactivé » à l’expéditeur et aux destinataires. Les fichiers déjà en attente d’analyse continuent d’attendre. Réactiver l’antivirus ne réanalyse jamais les fichiers passés.",
+      "confirmAction": "Désactiver l’antivirus",
+      "busy": "Enregistrement…",
+      "disabledDone": "Analyse antivirus désactivée.",
+      "enabledDone": "Analyse antivirus activée."
     }
   },
   "branding": {

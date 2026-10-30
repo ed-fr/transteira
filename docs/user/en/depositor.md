@@ -133,6 +133,7 @@ Each file gets one of these antivirus results:
 - **no threat found**: the file is delivered;
 - **threat detected, file deleted**: the file is not delivered and you receive an alert by email;
 - **not analysed (file too large)** or **not analysed (encrypted archive)**: the file is delivered, you are told by email and the recipients are warned on the download page;
+- **not analysed (antivirus disabled)**: the antivirus is turned off for your entity (or for the whole service), so the file is delivered without being checked; you are told by email (reason "antivirus disabled") and the recipients are warned on the download page;
 - **analysis failed, file withheld**: the file is not delivered.
 
 If no file at all can be delivered, the page shows **Transfer refused** and the recipients are not notified.

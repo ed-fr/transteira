@@ -6,6 +6,7 @@ Files:
 - <script>alert(1)</script> report.pdf (1.5 KB)
 - video.mp4 (3.0 GB)
 - secret.zip (4.0 MB)
+- notes.txt (2.0 KB)
 
 As you requested, the transfer is deleted after its first download: it will be permanently erased on October 14, 2027 at 16:20 UTC.
 

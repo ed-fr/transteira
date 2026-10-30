@@ -149,6 +149,7 @@
     "infected": "threat detected, file deleted",
     "not_scanned_too_large": "not analysed (file too large)",
     "not_scanned_encrypted": "not analysed (encrypted archive)",
+    "not_scanned_disabled": "not analysed: antivirus disabled",
     "scan_error": "analysis failed, file withheld",
     "other": "status unknown"
   },

@@ -114,10 +114,24 @@ type Tenant struct {
 	// without invitation, after verifying their address by code (spec 10);
 	// off by default.
 	AllowTransferReply bool
+	// AntivirusEnabled tells whether the files of the tenant are analyzed
+	// by the antivirus (on for every new tenant; only the super admin
+	// turns it off). The analysis really happens only when the instance
+	// engine is not "none" as well (antivirusEffective). It is read at
+	// finalization (decision D8).
+	AntivirusEnabled bool
 	// CreatedAt is the creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the time of the last modification.
 	UpdatedAt time.Time
+}
+
+// AntivirusEffective reports whether the files of t finalized now are
+// analyzed by the antivirus: its switch is on and the instance engine is
+// not "none" (instanceDisabled false). It is the rule of the OpenAPI
+// Tenant.antivirusEffective and TenantFeatures.antivirus.
+func (t *Tenant) AntivirusEffective(instanceDisabled bool) bool {
+	return t.AntivirusEnabled && !instanceDisabled
 }
 
 // Clone returns an independent copy of t, or nil when t is nil.

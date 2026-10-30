@@ -54,6 +54,10 @@ const (
 	ActionTenantConfidentialityUpdated audit.Action = "tenant.confidentiality_updated"
 	// ActionTenantRecipientRulesUpdated records the replacement of the recipient domain rules.
 	ActionTenantRecipientRulesUpdated audit.Action = "tenant.recipient_rules_updated"
+	// ActionTenantAntivirusDisabled records the super admin turning off the antivirus of a tenant.
+	ActionTenantAntivirusDisabled audit.Action = "tenant.antivirus_disabled"
+	// ActionTenantAntivirusEnabled records the super admin turning the antivirus of a tenant back on.
+	ActionTenantAntivirusEnabled audit.Action = "tenant.antivirus_enabled"
 	// ActionTenantAbuseSettingsUpdated records a change of the abuse detection settings.
 	ActionTenantAbuseSettingsUpdated audit.Action = "tenant.abuse_settings_updated"
 )
@@ -134,6 +138,10 @@ type Options struct {
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
 	Audit *audit.Writer
+	// AntivirusDisabled is set when the instance antivirus engine is
+	// "none": no tenant then has its antivirus effective
+	// (TenantView.AntivirusEffective).
+	AntivirusDisabled bool
 }
 
 // Service is the tenant configuration service. It is safe for concurrent
@@ -151,6 +159,8 @@ type Service struct {
 	now        func() time.Time
 	dnsTimeout time.Duration
 	smtpTests  *ratelimit.Window
+	// avDisabled is Options.AntivirusDisabled.
+	avDisabled bool
 
 	// mu serializes the read-modify-write cycles of the tenant rows, so
 	// that two concurrent changes of different fields do not lose one.
@@ -177,6 +187,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		logger:     opts.Logger,
 		now:        opts.Now,
 		dnsTimeout: opts.DNSTimeout,
+		avDisabled: opts.AntivirusDisabled,
 	}
 	for _, h := range opts.AdminHosts {
 		if n, err := tenant.NormalizeHost(h); err == nil {

@@ -330,6 +330,13 @@ func (f *faultRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant
 	return f.repo.updateTenant(ctx, t)
 }
 
+func (f *faultRepo) updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error) {
+	if err := f.fail("updateTenantWithAntivirus"); err != nil {
+		return nil, err
+	}
+	return f.repo.updateTenantWithAntivirus(ctx, t, general, antivirus)
+}
+
 func (f *faultRepo) setTenantStatus(ctx context.Context, tid tenant.ID, st tenant.Status) error {
 	if err := f.fail("setTenantStatus"); err != nil {
 		return err

@@ -14,6 +14,11 @@ import (
 // transfers waiting for the antivirus across tenants.
 const reasonAntivirusSweep = "antivirus sweep"
 
+// reasonAntivirusRelease is the reason of the system statement releasing,
+// at start-up with the antivirus engine "none", the files waiting for an
+// analysis across tenants (decision D8).
+const reasonAntivirusRelease = "antivirus disabled for the instance: release the files waiting for a scan"
+
 // reasonAntivirusAlert is the reason of the system query counting the
 // transfers waiting for the antivirus per tenant, for the antivirus alert.
 const reasonAntivirusAlert = "antivirus alert"
@@ -67,10 +72,47 @@ var (
 	qFileSetScanResult = tenantQuery(
 		`UPDATE transfer_files SET scan_status = ?, scan_signature = ?, scanned_at = ?
 		WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`)
+	// qFileReleaseDisabled freezes the pending files of a transfer being
+	// finalized while the antivirus is not effective (FinalizeUnscannedTx).
+	qFileReleaseDisabled = tenantQuery(
+		`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ?
+		WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending'`)
+	// qFileReleaseAllDisabled releases, across tenants, the files of the
+	// scanning transfers still waiting for an analysis, when the instance
+	// starts with the antivirus engine "none". The tenant of each file is
+	// the tenant of its transfer.
+	qFileReleaseAllDisabled = systemQuery(
+		`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ?
+		WHERE uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')
+		AND EXISTS (SELECT 1 FROM transfers t WHERE t.tenant_id = transfer_files.tenant_id
+		AND t.id = transfer_files.transfer_id AND t.status = 'scanning')`,
+		reasonAntivirusRelease)
 	qFileScanAttempt = tenantQuery(
 		`UPDATE transfer_files SET scan_attempts = scan_attempts + 1
 		WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`)
 )
+
+// ReleaseAllUnscanned is run at start-up when the instance antivirus
+// engine is "none" (decision D8): across tenants, every uploaded file of a
+// scanning transfer still pending or scanning gets
+// [ScanNotScannedDisabled] with ScannedAt = now, so that the worker
+// concludes those transfers without any engine. It returns the number of
+// files released; the caller audits it (antivirus.scans_released).
+func (r *TransferFiles) ReleaseAllUnscanned(ctx context.Context) (int, error) {
+	var n int64
+	err := r.db.systemScope(reasonAntivirusRelease).Tx(ctx, func(tx *SystemTx) error {
+		res, err := tx.Exec(ctx, qFileReleaseAllDisabled, toMillis(r.db.now()))
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, wrap("release unscanned files", err)
+	}
+	return int(n), nil
+}
 
 // TenantTransfer identifies a transfer and its tenant, as returned by the
 // cross-tenant sweeps ([Transfers.ScanningSweep] and the cleanup sweeps):
@@ -92,14 +134,14 @@ func (s ScanStatus) final() bool {
 }
 
 // Deliverable reports whether a file with the scan status s may be
-// downloaded: ScanClean, ScanNotScannedTooLarge or ScanNotScannedEncrypted
-// (the last two flagged as not scanned). Every other status is withheld:
-// pending or scanning (not analyzed yet), infected (erased) and scan_error.
-// It is the single rule shared by the antivirus worker, the mails and the
-// download endpoints.
+// downloaded: ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted
+// or ScanNotScannedDisabled (the last three flagged as not scanned). Every
+// other status is withheld: pending or scanning (not analyzed yet),
+// infected (erased) and scan_error. It is the single rule shared by the
+// antivirus worker, the mails and the download endpoints.
 func (s ScanStatus) Deliverable() bool {
 	switch s {
-	case ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted:
+	case ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted, ScanNotScannedDisabled:
 		return true
 	}
 	return false

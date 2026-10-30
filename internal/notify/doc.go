@@ -4,9 +4,9 @@
 //   - transfer_notification, to each recipient, with the download link, the
 //     QR code of that link as an inline PNG (CID, never a remote image:
 //     threat T-87), the files with their size, SHA-256 digest and "not
-//     scanned" flag (too large or too complex, or encrypted archive), the
-//     expiry and, for a protected transfer, the notice that the password
-//     comes through another channel (T-88);
+//     scanned" flag (too large or too complex, encrypted archive, or
+//     antivirus disabled), the expiry and, for a protected transfer, the
+//     notice that the password comes through another channel (T-88);
 //   - transfer_confirmation (listing the withheld files), file_problems
 //     (infected files deleted, files that could not be analyzed withheld)
 //     and file_not_scanned, to the sender;

@@ -132,6 +132,9 @@ const (
 	// NotScannedEncrypted is an encrypted archive, whose content the
 	// antivirus cannot read.
 	NotScannedEncrypted NotScannedReason = "encrypted"
+	// NotScannedDisabled is a file finalized while the antivirus was
+	// disabled (instance engine "none" or tenant flag off).
+	NotScannedDisabled NotScannedReason = "disabled"
 )
 
 // FileInfo describes one file of a transfer in the transfer mails.

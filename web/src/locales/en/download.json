@@ -29,7 +29,8 @@
   "scan": {
     "summary": "Some files could not be analysed by the antivirus. Open them only if you trust the sender.",
     "notScannedTooLarge": "Not analysed by the antivirus: this file is too large to be analysed.",
-    "notScannedEncrypted": "Not analysed by the antivirus: this file is encrypted or protected by a password."
+    "notScannedEncrypted": "Not analysed by the antivirus: this file is encrypted or protected by a password.",
+    "notScannedDisabled": "Not analysed by the antivirus: antivirus analysis is disabled."
   },
   "locked": {
     "title": "Password required",

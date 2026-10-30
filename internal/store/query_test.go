@@ -526,6 +526,8 @@ var tenantAllowlist = map[string]int{
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 0,
 	`UPDATE transfer_files SET scan_status = ?, scan_signature = ?, scanned_at = ? ` +
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 3,
+	`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ? ` +
+		`WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending'`: 1,
 	`UPDATE transfer_files SET scan_attempts = scan_attempts + 1 ` +
 		`WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`: 0,
 	// First download and deletion after it.
@@ -828,15 +830,16 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                       reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                                    reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
 	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?, allow_transfer_reply = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
-	`DELETE FROM tenants WHERE id = ?`:                             reasonTenantAdmin,
-	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:   reasonTenantAdmin,
-	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`: reasonTenantResume,
-	`SELECT count(*) FROM wrapped_keys WHERE tenant_id = ?`:        reasonTenantErase,
+	`DELETE FROM tenants WHERE id = ?`:                                                            reasonTenantAdmin,
+	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:                                  reasonTenantAdmin,
+	`UPDATE tenants SET antivirus_enabled = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`SELECT id FROM tenants WHERE status = 'deleting' ORDER BY id`:                                reasonTenantResume,
+	`SELECT count(*) FROM wrapped_keys WHERE tenant_id = ?`:                                       reasonTenantErase,
 	`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, is_default, require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`: reasonTenantSeed,
 	`INSERT INTO tenant_abuse_settings (tenant_id, updated_at) VALUES (?, 0)`: reasonTenantSeed,
 	// Master keys (startup check and rotation).
@@ -859,6 +862,12 @@ var systemAllowlist = map[string]string{
 	`UPDATE key_rotations SET status = ?, completed_at = ?, error = ? WHERE id = ? AND status = 'running'`:                                        reasonKeyRotation,
 	// Antivirus worker start-up sweep (identifiers only).
 	`SELECT tenant_id, id FROM transfers WHERE status = 'scanning' ORDER BY finalized_at, id LIMIT ?`: reasonAntivirusSweep,
+	// Antivirus disabled for the instance: start-up release of the files
+	// waiting for a scan (decision D8).
+	`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ? ` +
+		`WHERE uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning') ` +
+		`AND EXISTS (SELECT 1 FROM transfers t WHERE t.tenant_id = transfer_files.tenant_id ` +
+		`AND t.id = transfer_files.transfer_id AND t.status = 'scanning')`: reasonAntivirusRelease,
 	// Antivirus alert: transfers waiting per tenant (identifiers and counts
 	// only).
 	`SELECT tenant_id, COUNT(*) FROM transfers WHERE status = 'scanning' GROUP BY tenant_id ORDER BY tenant_id`: reasonAntivirusAlert,

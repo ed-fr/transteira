@@ -25,5 +25,17 @@
     "text": "Alert mails are sent through the system SMTP server of the instance, configured by environment variables ({host}, {from} and the related variables of the .env file). Without it, no alert mail is sent: the disk alert is only visible in the system overview, in the audit log and in the application log."
   },
   "overviewLink": "View the disk usage in the system overview",
-  "saved": "System settings saved."
+  "saved": "System settings saved.",
+  "antivirus": {
+    "title": "Antivirus",
+    "engineLabel": "Engine",
+    "hint": "Selected by the TT_ANTIVIRUS_ENGINE environment variable: it cannot be changed here.",
+    "disabledWarning": "The antivirus is disabled for the whole instance: no file is analysed, whatever the setting of each entity. Files are delivered unscanned and flagged as such.",
+    "engine": {
+      "clamd": "ClamAV (clamd)",
+      "icap": "ICAP",
+      "http": "HTTP API",
+      "none": "Disabled"
+    }
+  }
 }

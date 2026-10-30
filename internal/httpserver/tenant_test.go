@@ -32,6 +32,8 @@ func (noLogoTenants) HasRecipientRules(context.Context, *tenant.Tenant) (bool, e
 	return false, nil
 }
 
+func (noLogoTenants) AntivirusEffective(t *tenant.Tenant) bool { return t.AntivirusEnabled }
+
 func (noLogoTenants) LegalDocuments(context.Context, *tenant.Tenant) ([]string, error) {
 	return nil, nil
 }

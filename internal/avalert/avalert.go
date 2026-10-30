@@ -129,7 +129,7 @@ const (
 // actor is the audit actor of the alerts (actor kind system); objectID is
 // their audit object ID (object kind system).
 const (
-	actor    = "antivirus"
+	actor    = audit.ActorAntivirus
 	objectID = "antivirus"
 )
 

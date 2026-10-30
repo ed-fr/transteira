@@ -20,6 +20,7 @@ func TestViewOf(t *testing.T) {
 		store.ScanInfected:            ScanInfected,
 		store.ScanNotScannedTooLarge:  ScanTooLarge,
 		store.ScanNotScannedEncrypted: ScanEncrypted,
+		store.ScanNotScannedDisabled:  ScanDisabled,
 		store.ScanError:               ScanWithheld,
 	}
 	exp := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)

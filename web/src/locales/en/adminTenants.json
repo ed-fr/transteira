@@ -100,6 +100,22 @@
       },
       "save": "Save the webhook setting",
       "saved": "Webhook setting saved."
+    },
+    "antivirus": {
+      "title": "Antivirus analysis",
+      "statusEnabled": "Files of this entity are analysed by the antivirus.",
+      "statusDisabled": "The antivirus analysis is disabled for this entity: files finalised now are delivered unscanned and flagged as such.",
+      "statusDisabledDelegated": "The antivirus analysis is disabled for this entity by the super admin: files are delivered unscanned and flagged as such. Only the super admin can change this.",
+      "statusEnabledDelegated": "The antivirus analysis is enabled for this entity. Only the super admin can change this.",
+      "instanceNote": "The antivirus is disabled for the whole instance by the operator (TT_ANTIVIRUS_ENGINE=none): no file is analysed, whatever this setting.",
+      "disable": "Disable the antivirus analysis",
+      "enable": "Enable the antivirus analysis",
+      "confirmTitle": "Disable the antivirus analysis for {name}?",
+      "confirmText": "Files finalised from now on are delivered without analysis and flagged \"not analysed: antivirus disabled\" for the sender and the recipients. Files already waiting for the analysis keep waiting. Enabling the antivirus again never rescans past files.",
+      "confirmAction": "Disable the antivirus",
+      "busy": "Saving...",
+      "disabledDone": "Antivirus analysis disabled.",
+      "enabledDone": "Antivirus analysis enabled."
     }
   },
   "branding": {

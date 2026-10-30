@@ -64,6 +64,7 @@
     "infected": "Virus détecté",
     "not_scanned_too_large": "Non analysé : fichier trop volumineux",
     "not_scanned_encrypted": "Non analysé : fichier chiffré",
+    "not_scanned_disabled": "Non analysé : antivirus désactivé",
     "scan_error": "Échec de l’analyse",
     "not_scanned_disabled": "Non analysé : antivirus désactivé",
     "unknown": "Inconnu"

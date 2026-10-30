@@ -37,7 +37,11 @@ type txRepo interface {
 	listFiles(ctx context.Context, trfID string) ([]store.TransferFile, error)
 	newDEK(ctx context.Context) (wkID string, dek []byte, err error)
 	createTransfer(ctx context.Context, t store.Transfer, recipients []string, files []store.TransferFile) error
-	finalize(ctx context.Context, trfID string, now time.Time) error
+	// finalize moves the transfer to scanning; with unscanned set (the
+	// antivirus is not effective), its pending files get
+	// not_scanned_disabled in the same transaction, and their number is
+	// returned.
+	finalize(ctx context.Context, trfID string, now time.Time, unscanned bool) (int, error)
 	deleteTransfer(ctx context.Context, trfID string) error
 	// checkAbuse runs the abuse checker a inside the transaction (see
 	// [AbuseChecker.CheckCreateTx]).
@@ -160,8 +164,11 @@ func (t storeTx) createTransfer(ctx context.Context, tr store.Transfer, recipien
 	return t.db.Transfers().CreateTx(ctx, t.tx, tr, recipients, files)
 }
 
-func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time) error {
-	return t.db.Transfers().FinalizeTx(ctx, t.tx, trfID, now)
+func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time, unscanned bool) (int, error) {
+	if unscanned {
+		return t.db.Transfers().FinalizeUnscannedTx(ctx, t.tx, trfID, now)
+	}
+	return 0, t.db.Transfers().FinalizeTx(ctx, t.tx, trfID, now)
 }
 
 func (t storeTx) deleteTransfer(ctx context.Context, trfID string) error {

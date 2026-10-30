@@ -20,6 +20,7 @@ type repo interface {
 	createTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
 	updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
 	setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error
+	updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error)
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
 	replaceNetworkRules(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (store.NetworkRuleSet, error)
@@ -106,6 +107,10 @@ func (r *storeRepo) createTenant(ctx context.Context, t *tenant.Tenant) (*tenant
 
 func (r *storeRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	return r.db.Tenants().Update(ctx, t)
+}
+
+func (r *storeRepo) updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error) {
+	return r.db.Tenants().UpdateWithAntivirus(ctx, t, general, antivirus)
 }
 
 func (r *storeRepo) setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error {

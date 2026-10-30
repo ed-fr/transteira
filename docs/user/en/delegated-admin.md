@@ -149,6 +149,7 @@ At the top, the status of the entity and the line **Storage used** give the occu
 
 - **Default language**: used on the public pages when the language of the visitor's browser is not available, and for the emails.
 - **Maximum size per transfer**: total of the files of one transfer. You can choose any value up to the ceiling set by the super administrator, itself at most 20 GB. Lower it if your users should not send very large transfers.
+- **Antivirus analysis** (read-only): shows whether files of the entity are analysed. Only the super administrator can change it. When it is off, every file deposited is delivered **without analysis**, flagged "not analysed: antivirus disabled": senders are told by email and recipients are warned on the download page. The blocklist by fingerprint and the abuse detection still apply. When the operator disabled the antivirus for the whole service, an information note says that no file is analysed, whatever this setting. Turning it off or on is recorded in the [audit log](topic:tenant-audit).
 
 Click **Save** to apply.
 

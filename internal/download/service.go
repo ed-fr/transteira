@@ -328,8 +328,9 @@ type FileView struct {
 	// SHA256 is the lowercase hexadecimal SHA-256 of the clear file.
 	SHA256 string
 	// ScanStatus is the antivirus status: store.ScanClean,
-	// store.ScanNotScannedTooLarge or store.ScanNotScannedEncrypted (the
-	// last two flagged as not scanned on the page).
+	// store.ScanNotScannedTooLarge, store.ScanNotScannedEncrypted or
+	// store.ScanNotScannedDisabled (the last three flagged as not scanned
+	// on the page).
 	ScanStatus store.ScanStatus
 }
 

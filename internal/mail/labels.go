@@ -20,6 +20,9 @@ type labels struct {
 	encryptedText         string
 	reasonTooLarge        string
 	reasonEncrypted       string
+	disabledLabel         string
+	disabledText          string
+	reasonDisabled        string
 	infectedIntro         string
 	threat                string
 	withheldIntro         string
@@ -52,6 +55,8 @@ func (l *labels) statusFor(r NotScannedReason) (label, text string) {
 		return l.tooLargeLabel, l.tooLargeText
 	case NotScannedEncrypted:
 		return l.encryptedLabel, l.encryptedText
+	case NotScannedDisabled:
+		return l.disabledLabel, l.disabledText
 	}
 	return "", ""
 }
@@ -72,6 +77,9 @@ var allLabels = map[string]*labels{
 		encryptedText:         " encrypted archive.",
 		reasonTooLarge:        "Reason: the file is too large or too complex to be fully analyzed.",
 		reasonEncrypted:       "Reason: encrypted archive, whose content the antivirus cannot read.",
+		disabledLabel:         "Not scanned:",
+		disabledText:          " antivirus disabled.",
+		reasonDisabled:        "Reason: the antivirus is disabled, so the file was not analyzed.",
 		infectedIntro:         "The antivirus found a threat in the following files of your transfer. They have been deleted.",
 		threat:                "Detected threat: ",
 		withheldIntro:         "The following files could not be analyzed by the antivirus and are withheld for safety: they cannot be downloaded.",
@@ -111,6 +119,9 @@ var allLabels = map[string]*labels{
 		encryptedText:         " archive chiffrée.",
 		reasonTooLarge:        "Motif : le fichier est trop volumineux ou trop complexe pour être entièrement analysé.",
 		reasonEncrypted:       "Motif : archive chiffrée, dont l'antivirus ne peut pas lire le contenu.",
+		disabledLabel:         "Non analysé :",
+		disabledText:          " antivirus désactivé.",
+		reasonDisabled:        "Motif : l'antivirus est désactivé, le fichier n'a donc pas été analysé.",
 		infectedIntro:         "L'antivirus a détecté une menace dans les fichiers suivants de votre transfert. Ils ont été supprimés.",
 		threat:                "Menace détectée : ",
 		withheldIntro:         "Les fichiers suivants n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : ils ne peuvent pas être téléchargés.",

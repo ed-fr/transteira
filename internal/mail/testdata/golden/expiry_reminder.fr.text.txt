@@ -18,6 +18,7 @@ Fichiers :
 - <script>alert(1)</script> report.pdf (1,5 Ko)
 - video.mp4 (3,0 Go)
 - secret.zip (4,0 Mo)
+- notes.txt (2,0 Ko)
 
 Ne transférez pas ce message : ce lien vous est personnel.
 

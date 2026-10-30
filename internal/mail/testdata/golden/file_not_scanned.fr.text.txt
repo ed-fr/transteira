@@ -8,6 +8,9 @@ L'antivirus n'a pas pu analyser les fichiers suivants de votre transfert. Ils on
 - secret.zip (4,0 Mo)
   SHA-256 : e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
   Motif : archive chiffrée, dont l'antivirus ne peut pas lire le contenu.
+- notes.txt (2,0 Ko)
+  SHA-256 : d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4
+  Motif : l'antivirus est désactivé, le fichier n'a donc pas été analysé.
 
 -- 
 Ce message a été envoyé automatiquement par Entity A & Co. Merci de ne pas y répondre.

@@ -3,7 +3,7 @@
 # and without any real secret. Run by `make deploy-config-check`.
 #
 #   1. `docker compose config` accepts docker-compose.yml alone and with the
-#      PostgreSQL overlay, using deploy/.env.example as .env and dummy secret
+#      PostgreSQL overlay, each also with the no-antivirus overlay, using deploy/.env.example as .env and dummy secret
 #      files in a temporary folder;
 #   2. in both renderings, no service publishes a port and the long-running
 #      services run read-only, without capabilities and without privilege
@@ -11,7 +11,9 @@
 #      volume mounted on it and TT_SCAN_WORKERS is 1 (threat model T-44); the
 #      internal and db networks have fixed subnets, all listed in
 #      TT_SMTP_DENY_NETWORKS with the proxy subnet (T-176); db-backup uses
-#      the read-only role transteira_backup (T-119);
+#      the read-only role transteira_backup (T-119); with the no-antivirus
+#      overlay, no ClamAV service is left, TT_ANTIVIRUS_ENGINE is none and
+#      the PostgreSQL dependencies are kept (T-236);
 #   3. clamconf (from the pinned ClamAV image) parses clamav/clamd.conf and
 #      clamav/freshclam.conf without error, with the limits equal to the
 #      default TT_CLAMAV_MAX_SCAN_BYTES and the mandatory alerts enabled
@@ -41,7 +43,7 @@ native() {
 
 # --- 1. Compose files --------------------------------------------------------
 
-for f in docker-compose.yml docker-compose.postgres.yml .env.example clamav/clamd.conf \
+for f in docker-compose.yml docker-compose.postgres.yml docker-compose.no-antivirus.yml .env.example clamav/clamd.conf \
 	clamav/freshclam.conf postgres/initdb/10-transteira-roles.sql postgres/initdb/20-transteira-hba.sh \
 	init-secrets.sh; do
 	[ -f "$deploy/$f" ] || fail "deploy/$f is missing"
@@ -68,6 +70,8 @@ render() {
 }
 render sqlite docker-compose.yml
 render postgres docker-compose.yml docker-compose.postgres.yml
+render sqlite-noav docker-compose.yml docker-compose.no-antivirus.yml
+render postgres-noav docker-compose.yml docker-compose.postgres.yml docker-compose.no-antivirus.yml
 
 # --- 2. Hardening invariants -------------------------------------------------
 
@@ -97,8 +101,20 @@ else {
 }
 if (cfg.networks?.internal?.internal !== true) problems.push("network internal must be internal: true");
 if (cfg.networks?.proxy?.external !== true) problems.push("network proxy must be external");
+// The no-antivirus overlay leaves no ClamAV service and no dependency on it.
+const noAV = name.endsWith("-noav");
+const clamSvcs = ["clamav", "clamav-init", "clamav-update"].filter((x) => cfg.services?.[x]);
+if (noAV) {
+  if (clamSvcs.length) problems.push(`no-antivirus: ClamAV services still started: ${clamSvcs}`);
+  if (tt?.environment?.TT_ANTIVIRUS_ENGINE !== "none") problems.push("no-antivirus: TT_ANTIVIRUS_ENGINE must be none");
+  if (tt?.depends_on?.clamav) problems.push("no-antivirus: transteira still depends on clamav");
+  if (name.startsWith("postgres") && !tt?.depends_on?.postgres) problems.push("no-antivirus: the postgres dependency must be kept");
+} else {
+  if (clamSvcs.length !== 3) problems.push(`ClamAV services missing, got ${clamSvcs}`);
+  if (tt?.environment?.TT_ANTIVIRUS_ENGINE !== undefined && tt.environment.TT_ANTIVIRUS_ENGINE !== "clamd") problems.push("TT_ANTIVIRUS_ENGINE must be clamd or unset");
+}
 const clamNets = Object.keys(cfg.services?.clamav?.networks ?? {});
-if (clamNets.join() !== "internal") problems.push(`clamav must be on the internal network only, got ${clamNets}`);
+if (!noAV && clamNets.join() !== "internal") problems.push(`clamav must be on the internal network only, got ${clamNets}`);
 for (const v of ["transteira_data", "transteira_db", "transteira_backups", "transteira_logs"]) {
   if (cfg.volumes?.[v]?.name !== v) problems.push(`volume ${v} must have the fixed name ${v}`);
 }
@@ -106,7 +122,9 @@ for (const v of ["transteira_data", "transteira_db", "transteira_backups", "tran
 const spool = "/var/tmp/clamav";
 const clam = cfg.services?.clamav ?? {};
 const spoolTmpfs = (clam.tmpfs ?? []).filter((t) => t.split(":")[0] === spool);
-if (spoolTmpfs.length !== 1) problems.push(`clamav: ${spool} must be a tmpfs`);
+if (noAV) {
+  // No clamd, no spool.
+} else if (spoolTmpfs.length !== 1) problems.push(`clamav: ${spool} must be a tmpfs`);
 else {
   if (!/(:|,)mode=0?700(,|$)/.test(spoolTmpfs[0])) problems.push(`clamav: the ${spool} tmpfs must have mode 0700`);
   if (!/(:|,)size=\d+[kmg]?(,|$)/.test(spoolTmpfs[0])) problems.push(`clamav: the ${spool} tmpfs must have a size`);
@@ -146,6 +164,8 @@ JS
 }
 check_rendering sqlite
 check_rendering postgres
+check_rendering sqlite-noav
+check_rendering postgres-noav
 
 # --- 3. ClamAV configuration -------------------------------------------------
 

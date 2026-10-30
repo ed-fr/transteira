@@ -14,6 +14,7 @@
   import { EMAIL_MAX_LENGTH } from '../../../shared/validation/email';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
+  import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import { systemPath } from '../../shell';
   import type { AdminScreenProps } from '../types';
@@ -22,6 +23,8 @@
     MAX_THRESHOLD_PERCENT,
     MIN_THRESHOLD_PERCENT,
     decimalSeparator,
+    engineDisabled,
+    engineLabel,
     emailChanged,
     emailRemoved,
     formFromSettings,
@@ -174,6 +177,25 @@
       <Alert severity="info" live={false}>{t('sysSettings.email.removing')}</Alert>
     {/if}
   </FormSection>
+
+  {#if settings.antivirusEngine !== undefined}
+    <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-engine">
+      <h2 id="{uid}-antivirus">{t('sysSettings.antivirus.title')}</h2>
+      <dl class="tt-dl">
+        <dt>{t('sysSettings.antivirus.engineLabel')}</dt>
+        <dd>
+          <StatusBadge
+            variant={engineDisabled(settings.antivirusEngine) ? 'warning' : 'ok'}
+            label={engineLabel(settings.antivirusEngine, t)}
+          />
+        </dd>
+      </dl>
+      <p class="tt-text-muted">{t('sysSettings.antivirus.hint')}</p>
+      {#if engineDisabled(settings.antivirusEngine)}
+        <Alert severity="warning" live={false}>{t('sysSettings.antivirus.disabledWarning')}</Alert>
+      {/if}
+    </section>
+  {/if}
 
   <section aria-labelledby="{uid}-smtp">
     <h2 id="{uid}-smtp">{t('sysSettings.smtp.title')}</h2>

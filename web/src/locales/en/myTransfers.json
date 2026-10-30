@@ -64,6 +64,7 @@
     "infected": "Virus detected",
     "not_scanned_too_large": "Not analysed: file too large",
     "not_scanned_encrypted": "Not analysed: encrypted file",
+    "not_scanned_disabled": "Not analysed: antivirus disabled",
     "scan_error": "Analysis failed",
     "not_scanned_disabled": "Not analysed: antivirus disabled",
     "unknown": "Unknown"

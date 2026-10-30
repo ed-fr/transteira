@@ -6,6 +6,7 @@ Fichiers :
 - <script>alert(1)</script> report.pdf (1,5 Ko)
 - video.mp4 (3,0 Go)
 - secret.zip (4,0 Mo)
+- notes.txt (2,0 Ko)
 
 Comme vous l'avez demandé, le transfert est supprimé après son premier téléchargement : il sera définitivement effacé le 14 octobre 2027 à 16:20 UTC.
 

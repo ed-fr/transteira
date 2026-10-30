@@ -79,13 +79,18 @@ const (
 	// ScanEncrypted is an encrypted archive the antivirus could not look
 	// into: delivered, flagged as not analyzed.
 	ScanEncrypted
+	// ScanDisabled is a file finalized while the antivirus was disabled
+	// (instance engine "none" or tenant flag off): delivered, flagged as
+	// not analyzed.
+	ScanDisabled
 )
 
 // Delivered reports whether a file with this result is downloadable.
 //
-// It matches store.ScanStatus.Deliverable: clean, too large or encrypted.
+// It matches store.ScanStatus.Deliverable: clean, too large, encrypted or
+// antivirus disabled.
 func (r ScanResult) Delivered() bool {
-	return r == ScanClean || r == ScanTooLarge || r == ScanEncrypted
+	return r == ScanClean || r == ScanTooLarge || r == ScanEncrypted || r == ScanDisabled
 }
 
 // notScanned returns why the antivirus could not analyze a delivered file,
@@ -96,6 +101,8 @@ func (r ScanResult) notScanned() mail.NotScannedReason {
 		return mail.NotScannedTooLarge
 	case ScanEncrypted:
 		return mail.NotScannedEncrypted
+	case ScanDisabled:
+		return mail.NotScannedDisabled
 	}
 	return ""
 }
@@ -428,8 +435,8 @@ func (n *Notifier) FileProblems(ctx context.Context, t *tenant.Tenant, tr Transf
 
 // FileNotScanned builds the file_not_scanned mail to the sender, listing the
 // delivered files the antivirus could not analyze, each with its reason (too
-// large, or encrypted archive). It fails with ErrInvalidTransfer when there
-// is none.
+// large, encrypted archive, or antivirus disabled). It fails with
+// ErrInvalidTransfer when there is none.
 func (n *Notifier) FileNotScanned(ctx context.Context, t *tenant.Tenant, tr TransferView) (mail.Job, error) {
 	sender, err := mail.ParseAddress(tr.SenderEmail)
 	if err != nil {
@@ -653,7 +660,7 @@ func normalizeRecipients(in []string) ([]string, error) {
 // checkScans refuses a file without a known scan result.
 func checkScans(files []FileView) error {
 	for _, f := range files {
-		if f.Scan < ScanClean || f.Scan > ScanEncrypted {
+		if f.Scan < ScanClean || f.Scan > ScanDisabled {
 			return fmt.Errorf("%w: file without a scan result", ErrInvalidTransfer)
 		}
 	}
@@ -766,6 +773,8 @@ func ViewOf(d store.TransferDetails) TransferView {
 			fv.Scan = ScanTooLarge
 		case store.ScanNotScannedEncrypted:
 			fv.Scan = ScanEncrypted
+		case store.ScanNotScannedDisabled:
+			fv.Scan = ScanDisabled
 		case store.ScanInfected:
 			fv.Scan, fv.Signature = ScanInfected, f.ScanSignature
 		default:

@@ -3,6 +3,8 @@ import type { ErrorView } from '../../../shared/api/problem';
 import type { AdminMe } from '../../auth/machine';
 import { MAX_TRANSFER_BYTES } from '../../forms/bytes';
 import {
+  antivirusPatch,
+  antivirusState,
   TENANT_FIELDS,
   appendPage,
   canManageTenants,
@@ -466,5 +468,19 @@ describe('limitFollowsCeiling', () => {
     ).toBe(false);
     expect(limitFollowsCeiling(tenant, form({ maxTransferCeiling: 12 * GiB }), 'super_admin')).toBe(false);
     expect(limitFollowsCeiling(tenant, form(), 'super_admin')).toBe(false);
+  });
+});
+
+describe('antivirus', () => {
+  it('derives the state from the tenant flag and the instance engine', () => {
+    expect(antivirusState({})).toBe('enabled');
+    expect(antivirusState({ antivirusEnabled: true, antivirusEffective: true })).toBe('enabled');
+    expect(antivirusState({ antivirusEnabled: false, antivirusEffective: false })).toBe('disabled');
+    expect(antivirusState({ antivirusEnabled: true, antivirusEffective: false })).toBe('instance_disabled');
+  });
+
+  it('builds the merge patch of the switch', () => {
+    expect(antivirusPatch(false)).toEqual({ antivirusEnabled: false });
+    expect(antivirusPatch(true)).toEqual({ antivirusEnabled: true });
   });
 });

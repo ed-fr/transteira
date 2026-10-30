@@ -68,6 +68,11 @@ type CheckerFunc func(ctx context.Context) error
 // Check calls f(ctx).
 func (f CheckerFunc) Check(ctx context.Context) error { return f(ctx) }
 
+// Disabled is the Checker of a component turned off by the configuration,
+// which is therefore never probed and always reported available: the
+// antivirus with TT_ANTIVIRUS_ENGINE=none.
+var Disabled Checker = CheckerFunc(func(context.Context) error { return nil })
+
 // Check is a Checker with its own timeout.
 type Check struct {
 	// Checker performs the check. A nil Checker is reported unavailable.

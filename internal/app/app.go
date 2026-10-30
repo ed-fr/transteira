@@ -415,8 +415,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// The antivirus alert follows the outages the worker reports (decision
 	// P10): the super admins by system mail, the administrators of the
 	// tenants with transfers waiting through the tenant queue.
+	// With the engine "none", clamd is never contacted: no pinger, and the
+	// worker never reports an outage.
+	avDisabled := cfg.AntivirusEngine == config.EngineNone
+	var avPinger avalert.Pinger = clamd
+	if avDisabled {
+		avPinger = nil
+		logger.WarnContext(ctx, "antivirus disabled for the whole instance (TT_ANTIVIRUS_ENGINE=none): "+
+			"deposited files are delivered without any analysis")
+	}
 	avAlerts, err := avalert.New(db, auditLog, antivirusAlertOptions(cfg, &o, sysMail, avalert.Options{
-		Notifier: notifier, TenantMailer: opsMails, Pinger: clamd, Logger: logger, Events: bus,
+		Notifier: notifier, TenantMailer: opsMails, Pinger: avPinger, Logger: logger, Events: bus,
 	}))
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -503,7 +512,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	tenants, err := tenantadmin.New(db, tenantadmin.Options{
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
-		Logger: logger, Audit: auditLog,
+		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -520,6 +529,11 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// find is followed at once (a report made earlier is kept anyway).
 	if err := avAlerts.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus alert monitor: %w", err)
+	}
+	if avDisabled {
+		if err := releaseUnscanned(ctx, db.TransferFiles(), auditLog, logger); err != nil {
+			return err
+		}
 	}
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)
@@ -541,7 +555,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	}
 	// A change of the system settings, served by the admin API,
 	// re-evaluates the disk alert at once.
-	systemSettings, err := systemsettings.New(db, auditLog, systemsettings.Options{OnChange: diskAlerts.Check})
+	systemSettings, err := systemsettings.New(db, auditLog, systemsettings.Options{
+		OnChange: diskAlerts.Check, AntivirusEngine: antivirusEngine(cfg),
+	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
@@ -573,7 +589,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 
 	healthChecks := &health.Service{
 		Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
-		Antivirus: health.Check{Checker: health.CheckerFunc(clamd.Ping)},
+		Antivirus: health.Check{Checker: antivirusHealth(cfg, clamd)},
 		Storage:   health.Check{Checker: health.StorageCheck(cfg.DataDir)},
 		Logger:    logger,
 	}
@@ -585,7 +601,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		State: statistics, Health: healthChecks.Run, Antivirus: worker, AVAlert: avAlerts,
 		Maintenance: maint, Mail: mailQueues(mailQueue, sysMail.queue), Bus: bus,
 		LastRun: func(task string) time.Time { return sweeper.LastRun(lifecycle.Task(task)) },
-		Tasks:   supervisedTasks, AntivirusEngine: "clamd",
+		Tasks:   supervisedTasks, AntivirusEngine: antivirusEngine(cfg),
 	}), counters, metrics.WithStartTime(processStart), metrics.WithLogger(logger))
 	if err := collector.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the supervision collector: %w", err)
@@ -911,7 +927,7 @@ func newTransferService(cfg *config.Config, db *store.DB, d transferDeps, logger
 	return transfer.New(db, d.vault, d.uploads, d.secLog, transfer.Options{
 		MaxRecipients: cfg.MaxRecipients, MaxOpenTransfers: cfg.MaxOpenTransfers, UploadMaxAge: cfg.UploadMaxAge,
 		Hasher: d.passwords, OnFinalized: d.onFinalized, OnQuota: d.onQuota, Audit: d.audit, Usage: d.usage, Abuse: d.abuse,
-		Logger: logger,
+		AntivirusDisabled: cfg.AntivirusEngine == config.EngineNone, Logger: logger,
 	})
 }
 
@@ -992,11 +1008,63 @@ func lifecycleOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) li
 // scanOptions returns the options of the antivirus worker: the configured
 // number of workers, edited by WithScanOptions when given.
 func scanOptions(cfg *config.Config, o *runOptions, logger *slog.Logger) scan.Options {
-	opts := scan.Options{Workers: cfg.ScanWorkers, Logger: logger}
+	opts := scan.Options{Workers: cfg.ScanWorkers, Disabled: cfg.AntivirusEngine == config.EngineNone, Logger: logger}
 	if o.scanOptions != nil {
 		o.scanOptions(&opts)
 	}
 	return opts
+}
+
+// antivirusEngine returns the name of the antivirus engine of cfg, clamd
+// when unset (a configuration not built by config.Load).
+func antivirusEngine(cfg *config.Config) string {
+	if cfg.AntivirusEngine == "" {
+		return string(config.EngineClamd)
+	}
+	return string(cfg.AntivirusEngine)
+}
+
+// antivirusHealth returns the antivirus check of /healthz: a ping of clamd,
+// or nothing to probe (always available) with the engine "none".
+func antivirusHealth(cfg *config.Config, clamd *antivirus.Client) health.Checker {
+	if cfg.AntivirusEngine == config.EngineNone {
+		return health.Disabled
+	}
+	return health.CheckerFunc(clamd.Ping)
+}
+
+// unscannedReleaser releases the files waiting for a scan
+// (*store.TransferFiles).
+type unscannedReleaser interface {
+	ReleaseAllUnscanned(ctx context.Context) (int, error)
+}
+
+// eventRecorder records a global audit event (*audit.Writer).
+type eventRecorder interface {
+	Record(ctx context.Context, ev audit.Event) error
+}
+
+// releaseUnscanned runs at start-up with the antivirus engine "none",
+// before the worker starts: the files still waiting for a scan are released
+// as not_scanned_disabled (decision D8), then the release is audited
+// (antivirus.scans_released, a global event) when there was any.
+func releaseUnscanned(ctx context.Context, files unscannedReleaser, auditLog eventRecorder, logger *slog.Logger) error {
+	n, err := files.ReleaseAllUnscanned(ctx)
+	if err != nil {
+		return fmt.Errorf("app: release the files waiting for the antivirus: %w", err)
+	}
+	if n == 0 {
+		return nil
+	}
+	logger.WarnContext(ctx, "antivirus disabled: files waiting for a scan released without analysis", slog.Int("files", n))
+	if err := auditLog.Record(ctx, audit.Event{
+		ActorKind: store.ActorSystem, Actor: audit.ActorAntivirus, Action: audit.ActionAntivirusScansReleased,
+		ObjectKind: audit.ObjectSystem, ObjectID: "antivirus", Details: map[string]any{"files": n},
+	}); err != nil {
+		logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(audit.ActionAntivirusScansReleased)),
+			slog.Any("error", err))
+	}
+	return nil
 }
 
 // rotationOptions returns the options of the master key rotation service,

@@ -111,6 +111,7 @@ const SCAN_VARIANTS: Readonly<Record<string, StatusVariant>> = {
   infected: 'error',
   not_scanned_too_large: 'warning',
   not_scanned_encrypted: 'warning',
+  not_scanned_disabled: 'warning',
   scan_error: 'error',
 };
 

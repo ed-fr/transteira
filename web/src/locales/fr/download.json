@@ -29,7 +29,8 @@
   "scan": {
     "summary": "Certains fichiers n’ont pas pu être analysés par l’antivirus. Ne les ouvrez que si vous faites confiance à l’expéditeur.",
     "notScannedTooLarge": "Non analysé par l’antivirus : ce fichier est trop volumineux pour être analysé.",
-    "notScannedEncrypted": "Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe."
+    "notScannedEncrypted": "Non analysé par l’antivirus : ce fichier est chiffré ou protégé par un mot de passe.",
+    "notScannedDisabled": "Non analysé par l’antivirus : l’analyse antivirus est désactivée."
   },
   "locked": {
     "title": "Mot de passe requis",

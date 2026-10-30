@@ -560,6 +560,9 @@ func TestLoadInvalid(t *testing.T) {
 		{"admin host invalid", map[string]string{EnvAdminHosts: "ok.example.com,-bad.example.com"}, []string{EnvAdminHosts}},
 		{"admin host IP", map[string]string{EnvAdminHosts: "192.0.2.1"}, []string{EnvAdminHosts}},
 		{"admin host with port", map[string]string{EnvAdminHosts: "admin.example.com:443"}, []string{EnvAdminHosts}},
+		{"antivirus engine unknown", map[string]string{EnvAntivirusEngine: "sophos"}, []string{EnvAntivirusEngine}},
+		{"antivirus engine icap not yet", map[string]string{EnvAntivirusEngine: "icap"}, []string{EnvAntivirusEngine}},
+		{"antivirus engine http not yet", map[string]string{EnvAntivirusEngine: "http"}, []string{EnvAntivirusEngine}},
 		{"clamav no host", map[string]string{EnvClamAVAddr: ":3310"}, []string{EnvClamAVAddr}},
 		{"clamav port too big", map[string]string{EnvClamAVAddr: "clamav:65536"}, []string{EnvClamAVAddr}},
 		{"clamav relative socket", map[string]string{EnvClamAVAddr: "unix:clamd.sock"}, []string{EnvClamAVAddr}},
@@ -857,6 +860,20 @@ func TestFromEnvironment(t *testing.T) {
 	}
 	if c.LogLevel != slog.LevelWarn {
 		t.Errorf("LogLevel = %v, want warn", c.LogLevel)
+	}
+}
+
+func TestAntivirusEngine(t *testing.T) {
+	t.Parallel()
+	if c := mustLoad(t, nil); c.AntivirusEngine != EngineClamd {
+		t.Errorf("default engine = %q, want clamd", c.AntivirusEngine)
+	}
+	if c := mustLoad(t, map[string]string{EnvAntivirusEngine: "None"}); c.AntivirusEngine != EngineNone {
+		t.Errorf("engine = %q, want none", c.AntivirusEngine)
+	}
+	_, err := Load(envFunc(map[string]string{EnvAntivirusEngine: "icap"}))
+	if err == nil || !strings.Contains(err.Error(), "later version") {
+		t.Errorf("icap error = %v, want a later version notice", err)
 	}
 }
 

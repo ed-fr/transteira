@@ -21,6 +21,7 @@
     "infected": "Infecté, fichier effacé",
     "not_scanned_too_large": "Non analysé : trop gros",
     "not_scanned_encrypted": "Non analysé : chiffré",
+    "not_scanned_disabled": "Non analysé : antivirus désactivé",
     "scan_error": "Échec de l’analyse, fichier retenu"
   },
   "wait": {

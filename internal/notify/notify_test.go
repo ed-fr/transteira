@@ -367,6 +367,18 @@ func TestSenderMails(t *testing.T) {
 	if err != nil || !strings.Contains(j.Message.Text, "Reason: encrypted archive") || strings.Contains(j.Message.Text, "too large") {
 		t.Errorf("encrypted only: %v\n%s", err, j.Message.Text)
 	}
+	// Only files delivered while the antivirus was disabled.
+	off := tr
+	off.Files = []FileView{{Name: "notes.txt", Size: 2048, SHA256: strings.Repeat("d4", 32), Scan: ScanDisabled}}
+	j, err = e.n.FileNotScanned(ctx, e.t, off)
+	if err != nil || !strings.Contains(j.Message.Text, "Reason: the antivirus is disabled, so the file was not analyzed.") ||
+		strings.Contains(j.Message.Text, "too large") {
+		t.Errorf("disabled only: %v\n%s", err, j.Message.Text)
+	}
+	offJobs, err := e.n.RecipientJobs(ctx, e.t, off, testLink)
+	if err != nil || !strings.Contains(offJobs[0].Message.Text, "\n  Not scanned: antivirus disabled.") {
+		t.Errorf("disabled recipient mail: %v\n%s", err, offJobs[0].Message.Text)
+	}
 	// Recipients are told, per file, which reason applies.
 	enc.Files = tr.Files[:2]
 	enc.Files = append(enc.Files, tr.Files[4])

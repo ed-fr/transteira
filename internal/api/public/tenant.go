@@ -39,6 +39,9 @@ type TenantService interface {
 	LegalDocuments(ctx context.Context, t *tenant.Tenant) ([]string, error)
 	PublicConfidentialityLevels(ctx context.Context, t *tenant.Tenant, lang string) ([]tenantadmin.PublicConfidentialityLevel, error)
 	HasRecipientRules(ctx context.Context, t *tenant.Tenant) (bool, error)
+	// AntivirusEffective reports whether the files of t are analyzed: its
+	// antivirus switch is on and the instance engine is not "none".
+	AntivirusEffective(t *tenant.Tenant) bool
 }
 
 // Compile-time check that the tenant configuration service fits.
@@ -145,9 +148,11 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	body.Limits.MaxTransferBytes = t.MaxTransferBytes
 	body.Limits.ExpiryDays = append([]gen.ExpiryDays{}, expiryDays...)
 	body.ConfidentialityLevels = publicLevels(levels)
-	// The features announce what the server really offers. The options
-	// of later steps (antivirus switch) stay at their default until they
-	// exist.
+	// The features announce what the server really offers.
+	antivirus := gen.Enabled
+	if !svc.AntivirusEffective(t) {
+		antivirus = gen.Disabled
+	}
 	body.Features = &gen.TenantFeatures{
 		MaxDownloads:          true,
 		Folders:               true,
@@ -155,7 +160,7 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		TransferReply:         t.AllowTransferReply,
 		RecipientVerification: true,
 		RecipientRestrictions: restricted,
-		Antivirus:             gen.Enabled,
+		Antivirus:             antivirus,
 	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},

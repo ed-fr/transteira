@@ -243,6 +243,21 @@ capabilities only, to give the signature volume to the `clamav` user, then
 exits. clamd has no Internet access; signature updates run in the separate
 `clamav-update` container ([Antivirus](../operations/antivirus.md#signatures)).
 
+### Disabling the antivirus (optional)
+
+To run without ClamAV, add the `docker-compose.no-antivirus.yml` overlay last:
+
+```sh
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.no-antivirus.yml up -d
+```
+
+(with PostgreSQL: `-f deploy/docker-compose.yml -f deploy/docker-compose.postgres.yml -f deploy/docker-compose.no-antivirus.yml`).
+It sets `TT_ANTIVIRUS_ENGINE=none` and does not start the ClamAV containers. Every file is then
+delivered unscanned and flagged, `/healthz` no longer checks the antivirus, and a WARN is logged at
+startup. **Security warning**: the instance can then distribute malware (threat model T-236); do it
+only as an explicit choice. Consequences and the per-entity switch:
+[Antivirus](../operations/antivirus.md#disabling-the-antivirus).
+
 ## 9. First run: the super admin
 
 While no administrator exists, TransTeira prints a **setup token** in its

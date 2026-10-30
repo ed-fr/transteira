@@ -106,6 +106,7 @@ Some files, however, cannot be analysed. In that case the page shows the warning
 
 - **Not analysed by the antivirus: this file is too large to be analysed.** The file is larger than the size the antivirus can check.
 - **Not analysed by the antivirus: this file is encrypted or protected by a password.** The antivirus cannot look inside an encrypted file or archive.
+- **Not analysed by the antivirus: antivirus analysis is disabled.** The antivirus was turned off for the entity or for the whole service when the file was deposited, so it was not checked. The same precautions apply, with more care.
 
 These files are delivered anyway, because they may be perfectly legitimate. Before opening one:
 

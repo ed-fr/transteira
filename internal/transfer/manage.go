@@ -270,6 +270,11 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 //     transfer stays uploading and is never made available; the sender may
 //     cancel it, and the cleanup purges it after the upload TTL.
 //
+// When the antivirus is not effective for t ([Service.AntivirusEffective]),
+// the files get not_scanned_disabled in the finalization transaction
+// (decision D8), and a file.not_scanned event with reason disabled is
+// recorded for each of them.
+//
 // After the commit, Options.OnFinalized and Options.Usage are called and
 // the transfer.finalized audit event is recorded (best effort).
 func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) (Details, error) {
@@ -319,7 +324,11 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 		return Details{}, err
 	}
 	now := s.now()
-	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error { return tx.finalize(ctx, trfID, now) })
+	unscanned := !s.AntivirusEffective(t)
+	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
+		_, err := tx.finalize(ctx, trfID, now, unscanned)
+		return err
+	})
 	if err != nil {
 		return Details{}, storeError("finalize transfer", err)
 	}
@@ -329,10 +338,33 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	}
 	s.record(ctx, t, sender, email, audit.ActionTransferFinalized, trfID,
 		map[string]any{"fileCount": len(d.Files), "totalBytes": total})
+	if unscanned {
+		s.recordUnscanned(ctx, t, trfID, d.Files)
+	}
 	if d, err = s.load(ctx, t.ID, sender, trfID); err != nil {
 		return Details{}, err
 	}
 	return s.details(ctx, t, d)
+}
+
+// AntivirusEffective reports whether the files of the tenant t finalized
+// now are analyzed: the tenant flag is on and the instance engine is not
+// "none" (OpenAPI Tenant.antivirusEffective).
+func (s *Service) AntivirusEffective(t *tenant.Tenant) bool {
+	return t.AntivirusEffective(s.avDisabled)
+}
+
+// recordUnscanned records file.not_scanned, reason disabled, for each file
+// of the transfer trfID finalized while the antivirus was not effective,
+// as the antivirus worker does for the files it cannot analyze.
+func (s *Service) recordUnscanned(ctx context.Context, t *tenant.Tenant, trfID string, files []store.TransferFile) {
+	for _, f := range files {
+		s.write(ctx, t, audit.Event{
+			ActorKind: store.ActorSystem, Actor: audit.ActorAntivirus,
+			Action: audit.ActionFileNotScanned, ObjectKind: audit.ObjectFile, ObjectID: f.ID,
+			Details: map[string]any{"transferId": trfID, "reason": audit.NotScannedDisabled},
+		})
+	}
 }
 
 // checkBlockedFiles refuses files whose SHA-256 is on the blocklist of t.

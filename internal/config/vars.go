@@ -37,6 +37,7 @@ const (
 	EnvDownloadIdleTimeout      = "TT_DOWNLOAD_IDLE_TIMEOUT"
 	EnvMaxRecipients            = "TT_MAX_RECIPIENTS"
 	EnvMaxOpenTransfers         = "TT_MAX_OPEN_TRANSFERS"
+	EnvAntivirusEngine          = "TT_ANTIVIRUS_ENGINE"
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
 	EnvClamAVMaxScanBytes       = "TT_CLAMAV_MAX_SCAN_BYTES"
 	EnvClamAVTimeout            = "TT_CLAMAV_TIMEOUT"
@@ -86,6 +87,7 @@ const (
 	DefaultDownloadIdleTimeout      = "60s"
 	DefaultMaxRecipients            = "50"
 	DefaultMaxOpenTransfers         = "10"
+	DefaultAntivirusEngine          = string(EngineClamd)
 	DefaultClamAVAddr               = "clamav:3310"
 	DefaultClamAVMaxScanBytes       = "2147483648"
 	DefaultClamAVTimeout            = "10m"
@@ -240,6 +242,15 @@ func Variables() []Var {
 			Name: EnvAdminSessionMaxAge, Group: "Administration", Default: DefaultAdminSessionMaxAge,
 			Description: "Longest life of an admin session after sign-in, whatever its activity " +
 				"(Go duration, between 1h and 168h, and at least " + EnvAdminSessionIdleTimeout + ").",
+		},
+		{
+			Name: EnvAntivirusEngine, Group: "Antivirus", Default: DefaultAntivirusEngine,
+			Description: "Antivirus engine of the instance: clamd (analysis by the ClamAV " +
+				"daemon) or none (no analysis at all: no ClamAV container is needed, every " +
+				"deposited file is marked \"not scanned: antivirus disabled\", the sender and the " +
+				"download page say so, and the health check no longer checks the antivirus). " +
+				"Files still waiting for an analysis when the instance starts with none are " +
+				"released without analysis. The icap and http engines arrive in a later version.",
 		},
 		{
 			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,

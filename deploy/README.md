@@ -8,6 +8,7 @@ page is the short version.
 |---|---|
 | `docker-compose.yml` | TransTeira with SQLite (default), clamd, signature updates |
 | `docker-compose.postgres.yml` | Overlay: PostgreSQL, one-shot migrations, nightly `pg_dump` |
+| `docker-compose.no-antivirus.yml` | Overlay: no antivirus (`TT_ANTIVIRUS_ENGINE=none`), ClamAV containers not started ([Disabling the antivirus](#disabling-the-antivirus)) |
 | `.env.example` | Deployment settings (copy to `.env`); every variable is in the root `.env.example` |
 | `clamav/clamd.conf`, `clamav/freshclam.conf` | ClamAV configuration, aligned with `TT_CLAMAV_*` ([antivirus](../docs/operations/antivirus.md)) |
 | `postgres/initdb/` | Creates the database and its owner, runtime and backup roles, and rejects the superuser over TCP ([PostgreSQL roles](../docs/install/postgresql.md)) |
@@ -124,6 +125,38 @@ the `transteira_backups` volume and keeps `TT_BACKUP_KEEP` dumps
 ([backup](../docs/operations/backup.md)); it connects with the read-only
 `transteira_backup` role. The `postgres` superuser is rejected over TCP:
 use `docker exec -it -u postgres transteira-postgres psql` for maintenance.
+
+## Disabling the antivirus
+
+By default every file is analysed by ClamAV. An operator can turn the analysis
+off for the whole instance (specification section 11.1) by adding the
+`docker-compose.no-antivirus.yml` overlay, last:
+
+```sh
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.no-antivirus.yml up -d
+# with PostgreSQL:
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.postgres.yml \
+  -f deploy/docker-compose.no-antivirus.yml up -d
+```
+
+It sets `TT_ANTIVIRUS_ENGINE=none` on `transteira`, removes its dependency on
+`clamav` (the PostgreSQL dependencies are kept) and puts `clamav`,
+`clamav-update` and `clamav-init` in the inactive profile `clamav`: they are
+not started. Containers created by an earlier `up` are not removed
+automatically: run `docker compose ... rm -sf clamav clamav-update clamav-init`.
+
+Consequences: a WARN is logged at startup; files still waiting for analysis at
+startup are released as "not analysed: antivirus disabled" (audit event
+`antivirus.scans_released`); every file deposited afterwards is delivered
+unscanned and flagged (the sender is told by email, the download page says so);
+`/healthz` no longer probes the antivirus; the engine name is shown read-only
+to the super admin and in `/status`. The blocklist by SHA-256, the abuse
+detection and the forced download stay in force. To go back, drop the overlay
+and run `up -d`; files delivered meanwhile are never analysed afterwards.
+
+**Security warning**: with no analysis, the instance can distribute malware
+(threat model T-236). Choose it only knowingly. Details:
+[Antivirus](../docs/operations/antivirus.md#disabling-the-antivirus).
 
 ## Checking the files
 

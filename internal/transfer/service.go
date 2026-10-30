@@ -165,6 +165,10 @@ type Options struct {
 	// blocking rules are checked in the creation transaction and every rule
 	// is evaluated after the commit. nil disables it.
 	Abuse AbuseChecker
+	// AntivirusDisabled is set when the instance antivirus engine is
+	// "none" (TT_ANTIVIRUS_ENGINE): every finalized file is then delivered
+	// unscanned, as for a tenant whose antivirus is off (decision D8).
+	AntivirusDisabled bool
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the failures that do not fail a request (security
@@ -208,9 +212,11 @@ type Service struct {
 	audit         AuditRecorder
 	usage         UsageRecorder
 	abuse         AbuseChecker
-	clock         func() time.Time
-	newID         func(p id.Prefix) (string, error)
-	newUploadID   func() (string, error)
+	// avDisabled is Options.AntivirusDisabled.
+	avDisabled  bool
+	clock       func() time.Time
+	newID       func(p id.Prefix) (string, error)
+	newUploadID func() (string, error)
 	// linkMode is the link mode of the created transfers: always
 	// store.LinkModePerRecipient since 1.1 (P27). Only the tests of this
 	// package replace it, with store.LinkModeShared, to exercise the
@@ -252,7 +258,7 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 		logger: opts.Logger, maxRecipients: opts.MaxRecipients, maxOpen: opts.MaxOpenTransfers,
 		uploadMaxAge: opts.UploadMaxAge,
 		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage, abuse: opts.Abuse,
-		clock: opts.Now, newUploadID: id.NewUploadToken, linkMode: store.LinkModePerRecipient,
+		avDisabled: opts.AntivirusDisabled, clock: opts.Now, newUploadID: id.NewUploadToken, linkMode: store.LinkModePerRecipient,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s

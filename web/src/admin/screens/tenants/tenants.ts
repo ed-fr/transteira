@@ -370,3 +370,27 @@ export function deletionResumes(view: Pick<ErrorView, 'status'>): boolean {
 export function changesProfile(patch: TenantUpdateBody): boolean {
   return patch.name !== undefined || patch.fqdn !== undefined;
 }
+
+// ---- Antivirus (since 1.1) -------------------------------------------------------------------
+
+/**
+ * Antivirus state of a tenant: `disabled` when its own switch is off, `instance_disabled` when
+ * the switch is on but the operator disabled the engine of the whole instance
+ * (`antivirusEffective` false), else `enabled`. A missing flag counts as on (the default).
+ */
+export type AntivirusState = 'enabled' | 'disabled' | 'instance_disabled';
+
+/** Antivirus state of a tenant, as described by AntivirusState. */
+export function antivirusState(
+  tenant: Pick<Tenant, 'antivirusEnabled' | 'antivirusEffective'>,
+): AntivirusState {
+  if (tenant.antivirusEnabled === false) {
+    return 'disabled';
+  }
+  return tenant.antivirusEffective === false ? 'instance_disabled' : 'enabled';
+}
+
+/** Merge patch that switches the antivirus analysis of a tenant on or off. */
+export function antivirusPatch(enabled: boolean): TenantUpdateBody {
+  return { antivirusEnabled: enabled };
+}

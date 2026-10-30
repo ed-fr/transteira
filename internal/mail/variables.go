@@ -885,8 +885,11 @@ func notScannedBlock(l *labels, lang string, files []FileInfo) value {
 		th, tt := fileTitle(lang, f)
 		dh, dt := fileDigest(l, f)
 		reason := l.reasonTooLarge
-		if f.NotScanned == NotScannedEncrypted {
+		switch f.NotScanned {
+		case NotScannedEncrypted:
 			reason = l.reasonEncrypted
+		case NotScannedDisabled:
+			reason = l.reasonDisabled
 		}
 		hs[i] = itemOpen + th + "<br>\n" + dh + "<br>\n" + smallSpanOpen + esc(reason) + "</span></li>"
 		ts[i] = tt + "\n" + dt + "\n  " + reason

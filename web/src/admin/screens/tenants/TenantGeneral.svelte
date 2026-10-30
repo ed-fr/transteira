@@ -42,6 +42,8 @@
   import type { AdminScreenProps } from '../types';
   import {
     TENANT_LANGUAGES,
+    antivirusPatch,
+    antivirusState,
     changesProfile,
     deletionResumes,
     editableFields,
@@ -91,6 +93,12 @@
   let inputs: Partial<Record<SizeField, HTMLInputElement>> = $state({});
   // Webhook payloads: include the addresses concerned.
   let includeAddresses = $state(false);
+
+  // Antivirus analysis (since 1.1, super admin): disabling asks for a confirmation.
+  let avConfirmOpen = $state(false);
+  let avMessage = $state('');
+  let avError = $state('');
+  const avState = $derived(tenant === undefined ? 'enabled' : antivirusState(tenant));
 
   // Deletion.
   let deleteOpen = $state(false);
@@ -229,6 +237,30 @@
       return { ok: true, message: t('adminTenants.general.webhooks.saved') };
     } catch (err) {
       return { ok: false, message: describeError(i18n, err).message };
+    }
+  }
+
+  /** Switches the antivirus analysis of the tenant; a returned string is an error message. */
+  async function setAntivirus(enabled: boolean): Promise<string | void> {
+    avMessage = '';
+    avError = '';
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', {
+        path: { tenantId },
+        body: antivirusPatch(enabled),
+      });
+      // Only the tenant: the general settings being edited are kept.
+      tenant = res.data;
+      avMessage = t(
+        enabled
+          ? 'adminTenants.general.antivirus.enabledDone'
+          : 'adminTenants.general.antivirus.disabledDone',
+      );
+      announce(avMessage);
+    } catch (err) {
+      const message = describeError(i18n, err).message;
+      avError = message;
+      return message;
     }
   }
 
@@ -417,6 +449,60 @@
         bind:checked={includeAddresses}
       />
     </FormSection>
+
+    <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-section">
+      <h2 id="{uid}-antivirus">{t('adminTenants.general.antivirus.title')}</h2>
+      {#if isSuper}
+        <p>
+          {avState === 'disabled'
+            ? t('adminTenants.general.antivirus.statusDisabled')
+            : t('adminTenants.general.antivirus.statusEnabled')}
+        </p>
+      {:else}
+        <p>
+          {avState === 'disabled'
+            ? t('adminTenants.general.antivirus.statusDisabledDelegated')
+            : t('adminTenants.general.antivirus.statusEnabledDelegated')}
+        </p>
+      {/if}
+      {#if avState === 'instance_disabled'}
+        <Alert severity="info" live={false}>{t('adminTenants.general.antivirus.instanceNote')}</Alert>
+      {/if}
+      {#if avMessage !== ''}
+        <p role="status">{avMessage}</p>
+      {/if}
+      {#if avError !== ''}
+        <Alert severity="error">{avError}</Alert>
+      {/if}
+      {#if isSuper}
+        {#if avState === 'disabled'}
+          <Button disabled={deleting} onclick={() => void setAntivirus(true)}>
+            {t('adminTenants.general.antivirus.enable')}
+          </Button>
+        {:else}
+          <Button
+            variant="secondary"
+            disabled={deleting}
+            onclick={() => {
+              avConfirmOpen = true;
+            }}
+          >
+            {t('adminTenants.general.antivirus.disable')}
+          </Button>
+        {/if}
+      {/if}
+    </section>
+    {#if isSuper}
+      <ConfirmDialog
+        bind:open={avConfirmOpen}
+        title={t('adminTenants.general.antivirus.confirmTitle', { name: tenant.name })}
+        text={t('adminTenants.general.antivirus.confirmText')}
+        danger
+        confirmLabel={t('adminTenants.general.antivirus.confirmAction')}
+        busyLabel={t('adminTenants.general.antivirus.busy')}
+        onconfirm={() => setAntivirus(false)}
+      />
+    {/if}
 
     {#if isSuper}
       <section aria-labelledby="{uid}-delete">

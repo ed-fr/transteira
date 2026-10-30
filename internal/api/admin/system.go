@@ -355,7 +355,12 @@ func isNull(members map[string]json.RawMessage, name string) bool {
 // settingsBody renders v as the OpenAPI SystemSettings: alertEmail null
 // when none.
 func settingsBody(v systemsettings.Settings) gen.SystemSettings {
-	return gen.SystemSettings{DiskAlertThreshold: float32(v.DiskAlertThreshold), AlertEmail: optional(v.AlertEmail)}
+	body := gen.SystemSettings{DiskAlertThreshold: float32(v.DiskAlertThreshold), AlertEmail: optional(v.AlertEmail)}
+	if v.AntivirusEngine != "" {
+		engine := gen.AntivirusEngine(v.AntivirusEngine)
+		body.AntivirusEngine = &engine
+	}
+	return body
 }
 
 // --- Master key ----------------------------------------------------------------

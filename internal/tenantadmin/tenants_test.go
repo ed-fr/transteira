@@ -351,10 +351,10 @@ func TestUpdateTenantValidation(t *testing.T) {
 		_, err := ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, tc.in, clientIP)
 		wantInvalid(t, name, err, tc.field)
 	}
-	f := ev.faults("updateTenant")
+	f := ev.faults("updateTenantWithAntivirus")
 	_, err := ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{Name: ptr("Z")}, clientIP)
 	wantErr(t, "store failure", err, errBoom)
-	f.errs["updateTenant"] = store.ErrNotFound
+	f.errs["updateTenantWithAntivirus"] = store.ErrNotFound
 	_, err = ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{Name: ptr("Z")}, clientIP)
 	wantErr(t, "gone", err, ErrNotFound)
 	ev.faults("getTenant")

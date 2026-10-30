@@ -7,6 +7,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Disabling the antivirus (specification section 11.1), instance and entity: `TT_ANTIVIRUS_ENGINE`
+  (`clamd` by default, `none` to disable the analysis for the whole instance, no ClamAV container
+  needed) and the per-entity switch `antivirusEnabled`, changed by the super administrator only
+  (read-only for delegated administrators) and audited (`tenant.antivirus_disabled`,
+  `tenant.antivirus_enabled`). Files finalized while disabled are delivered unscanned with the new
+  status `not_scanned_disabled`, frozen at finalization (files already waiting keep waiting for the
+  engine, re-enabling never rescans): the sender receives the "file not scanned" mail with the
+  reason "antivirus disabled" and the download page says so. With the engine `none`, a warning is
+  logged at startup, files still waiting are released (audit event `antivirus.scans_released`),
+  `/healthz` no longer probes the antivirus, and the engine name is shown read-only in the system
+  settings and in `/status`. New overlay `deploy/docker-compose.no-antivirus.yml`; installation,
+  operations and user guides updated (FR/EN). The blocklist by SHA-256, the abuse detection and the
+  forced download stay in force. Threat model T-236, T-237, T-243 and P43 implemented.
 - Per-entity user documentation and printable version (specification section 4.2): the public help on
   an entity address shows the entity name, logo, colours and real rules (maximum size, durations,
   options, confidentiality levels) through the new guide directives `<!-- rules: summary|limits|levels -->`

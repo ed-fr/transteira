@@ -199,3 +199,18 @@ func TestStorageCheckCleanupFailure(t *testing.T) {
 		t.Fatalf("probe name = %q", probe)
 	}
 }
+
+func TestDisabledChecker(t *testing.T) {
+	t.Parallel()
+	if err := Disabled.Check(context.Background()); err != nil {
+		t.Fatalf("Disabled.Check() = %v", err)
+	}
+	s := &Service{
+		Database:  Check{Checker: Disabled},
+		Antivirus: Check{Checker: Disabled},
+		Storage:   Check{Checker: Disabled},
+	}
+	if r := s.Run(context.Background()); !r.Healthy() || r.Antivirus != StatusOK {
+		t.Fatalf("report %+v", r)
+	}
+}

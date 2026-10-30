@@ -232,3 +232,32 @@ export function settingsFailure(view: ErrorView, refs: SettingsFieldRefs, t: Tra
   }
   return { ok: false, message: view.message, errors };
 }
+
+// ---- Antivirus engine (since 1.1) ------------------------------------------------------------
+
+/** Antivirus engine of the instance (read only, TT_ANTIVIRUS_ENGINE). */
+export type AntivirusEngine = components['schemas']['AntivirusEngine'];
+
+/** Translation key of the label of an engine; an unknown engine is shown as its raw value. */
+export function engineLabelKey(engine: string): string | undefined {
+  switch (engine) {
+    case 'clamd':
+    case 'icap':
+    case 'http':
+    case 'none':
+      return `sysSettings.antivirus.engine.${engine}`;
+    default:
+      return undefined;
+  }
+}
+
+/** Label of an engine, or its raw value when this version does not know it. */
+export function engineLabel(engine: string, t: Translate): string {
+  const key = engineLabelKey(engine);
+  return key === undefined ? engine : t(key);
+}
+
+/** Reports whether the engine means that no file of the instance is analysed. */
+export function engineDisabled(engine: string | undefined): boolean {
+  return engine === 'none';
+}

@@ -149,6 +149,7 @@
     "infected": "menace détectée, fichier supprimé",
     "not_scanned_too_large": "non analysé (fichier trop volumineux)",
     "not_scanned_encrypted": "non analysé (archive chiffrée)",
+    "not_scanned_disabled": "non analysé : antivirus désactivé",
     "scan_error": "échec de l’analyse, fichier retenu",
     "other": "statut inconnu"
   },

@@ -247,13 +247,14 @@ type tenantPatch struct {
 	WebhookIncludeAddresses    *bool   `json:"webhookIncludeAddresses"`
 	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit"`
 	AllowTransferReply         *bool   `json:"allowTransferReply"`
+	AntivirusEnabled           *bool   `json:"antivirusEnabled"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
 // their errors are reported.
 var tenantPatchFields = []string{
 	"name", "fqdn", "defaultLanguage", "storageQuotaBytes", "maxTransferBytes", "maxTransferCeiling",
-	"webhookIncludeAddresses", "allowRemoteInternalDeposit", "allowTransferReply",
+	"webhookIncludeAddresses", "allowRemoteInternalDeposit", "allowTransferReply", "antivirusEnabled",
 }
 
 // decodeTenantUpdate decodes a tenant merge patch: a JSON object whose
@@ -290,6 +291,7 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 		WebhookIncludeAddresses:    b.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: b.AllowRemoteInternalDeposit,
 		AllowTransferReply:         b.AllowTransferReply,
+		AntivirusEnabled:           b.AntivirusEnabled,
 	}, nil
 }
 
@@ -313,7 +315,8 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		MaxTransferBytes: v.MaxTransferBytes, MaxTransferCeiling: v.MaxTransferCeiling,
 		Status: gen.TenantStatus(v.Status), StorageQuotaBytes: v.StorageQuotaBytes, StorageUsedBytes: v.StorageUsedBytes,
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
-		AllowTransferReply: &v.AllowTransferReply, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
+		AntivirusEffective: &v.AntivirusEffective, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 

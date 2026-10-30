@@ -406,6 +406,15 @@ func TestSystemSettingsOperations(t *testing.T) {
 		t.Errorf("get = %d %s", rec.Code, rec.Body)
 	}
 
+	st.settings = systemsettings.Settings{DiskAlertThreshold: 0.85, AntivirusEngine: "none"}
+	resp, err = s.GetSystemSettings(ctx, gen.GetSystemSettingsRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := visit(t, resp); strings.TrimSpace(rec.Body.String()) != `{"alertEmail":null,"antivirusEngine":"none","diskAlertThreshold":0.85}` {
+		t.Errorf("get with engine = %s", rec.Body)
+	}
+
 	st.settings = systemsettings.Settings{DiskAlertThreshold: 0.9, AlertEmail: "it-admin@example.com", AlertEmailLanguage: "fr"}
 	upd, err := s.UpdateSystemSettings(ctx, gen.UpdateSystemSettingsRequestObject{Body: settingsPatch(`{"diskAlertThreshold":0.9,"alertEmail":"it-admin@example.com"}`)})
 	if err != nil {

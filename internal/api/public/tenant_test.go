@@ -28,6 +28,13 @@ type fakeTenantConfig struct {
 	// language the levels were asked in.
 	restricted bool
 	levelsLang string
+	// avOff makes AntivirusEffective false whatever the tenant flag
+	// (instance engine "none").
+	avOff bool
+}
+
+func (f *fakeTenantConfig) AntivirusEffective(t *tenant.Tenant) bool {
+	return t.AntivirusEnabled && !f.avOff
 }
 
 func (f *fakeTenantConfig) PublicConfidentialityLevels(_ context.Context, t *tenant.Tenant, lang string) ([]tenantadmin.PublicConfidentialityLevel, error) {
@@ -223,6 +230,35 @@ func TestGetPublicTenantOptions(t *testing.T) {
 	}
 	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features.RecipientRestrictions || svc.levelsLang != "fr" {
 		t.Errorf("unrestricted: %+v (levels asked in %q)", b.Features, svc.levelsLang)
+	}
+}
+
+func TestGetPublicTenantAntivirusFeature(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		avOff   bool
+		want    gen.TenantFeaturesAntivirus
+	}{
+		{"enabled", true, false, gen.Enabled},
+		{"tenant switch off", false, false, gen.Disabled},
+		{"instance engine none", true, true, gen.Disabled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{
+				ID: "ten_x", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+				MaxTransferBytes: 5 << 30, PrimaryColor: "#0B5FFF", AccentColor: "#00875A", AntivirusEnabled: tc.enabled,
+			})
+			resp, err := NewServer(WithTenantService(&fakeTenantConfig{avOff: tc.avOff})).GetPublicTenant(ctx, gen.GetPublicTenantRequestObject{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features == nil || b.Features.Antivirus != tc.want {
+				t.Errorf("features %+v, want antivirus %q", b.Features, tc.want)
+			}
+		})
 	}
 }
 

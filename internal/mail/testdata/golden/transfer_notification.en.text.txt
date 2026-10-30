@@ -25,6 +25,9 @@ Files:
 - secret.zip (4.0 MB)
   SHA-256: e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
   Could not be analyzed by the antivirus: encrypted archive.
+- notes.txt (2.0 KB)
+  SHA-256: d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4
+  Not scanned: antivirus disabled.
 
 The SHA-256 fingerprint of each file lets you check that the downloaded file is intact.
 

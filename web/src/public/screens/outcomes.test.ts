@@ -217,6 +217,7 @@ describe('downloadView', () => {
 describe('isNotScanned', () => {
   it('flags the files delivered without analysis', () => {
     expect(isNotScanned('not_scanned_too_large')).toBe(true);
+    expect(isNotScanned('not_scanned_disabled')).toBe(true);
     expect(isNotScanned('not_scanned_encrypted')).toBe(true);
     expect(isNotScanned('clean')).toBe(false);
   });

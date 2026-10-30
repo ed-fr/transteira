@@ -215,6 +215,7 @@ export function scanWarningKey(status: ScanStatus): string | undefined {
       return 'deposit.done.warning.infected';
     case 'not_scanned_too_large':
     case 'not_scanned_encrypted':
+    case 'not_scanned_disabled':
       return 'deposit.done.warning.notScanned';
     case 'scan_error':
       return 'deposit.done.warning.scanError';

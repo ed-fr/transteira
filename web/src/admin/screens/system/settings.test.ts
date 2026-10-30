@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ErrorView } from '../../../shared/api/problem';
 import {
+  engineDisabled,
+  engineLabel,
+  engineLabelKey,
   decimalSeparator,
   emailChanged,
   emailRemoved,
@@ -254,5 +257,21 @@ describe('validation and errors', () => {
       ok: false,
       message: 'general',
     });
+  });
+});
+
+describe('antivirus engine', () => {
+  it('labels the known engines and keeps an unknown one raw', () => {
+    expect(engineLabelKey('clamd')).toBe('sysSettings.antivirus.engine.clamd');
+    expect(engineLabelKey('none')).toBe('sysSettings.antivirus.engine.none');
+    expect(engineLabelKey('other')).toBeUndefined();
+    expect(engineLabel('icap', t)).toBe('sysSettings.antivirus.engine.icap');
+    expect(engineLabel('other', t)).toBe('other');
+  });
+
+  it('flags only the disabled engine', () => {
+    expect(engineDisabled('none')).toBe(true);
+    expect(engineDisabled('clamd')).toBe(false);
+    expect(engineDisabled(undefined)).toBe(false);
   });
 });

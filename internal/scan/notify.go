@@ -49,7 +49,7 @@ func (w *Worker) notifyAvailable(ctx context.Context, k key, t *tenant.Tenant, d
 	if count(v, notify.ScanInfected)+count(v, notify.ScanWithheld) > 0 {
 		builders = append(builders, w.problemsBuilder(ctx, t, v))
 	}
-	if count(v, notify.ScanTooLarge)+count(v, notify.ScanEncrypted) > 0 {
+	if count(v, notify.ScanTooLarge)+count(v, notify.ScanEncrypted)+count(v, notify.ScanDisabled) > 0 {
 		builders = append(builders, builder{mail.TemplateFileNotScanned, func() ([]mail.Job, error) {
 			return one(w.notifier.FileNotScanned(ctx, t, v))
 		}})

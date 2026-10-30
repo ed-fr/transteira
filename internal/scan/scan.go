@@ -33,6 +33,15 @@
 // inside), or scan_error. The deliverable statuses are those of
 // store.ScanStatus.Deliverable.
 //
+// # Antivirus disabled
+//
+// A file finalized while the antivirus is not effective (instance engine
+// "none" or tenant flag off) already has not_scanned_disabled when the
+// worker sees it (decision D8): the worker only concludes its transfer.
+// With Options.Disabled (engine "none"), the worker never contacts an
+// engine nor reports an outage: a file still waiting is recorded
+// not_scanned_disabled at once.
+//
 // # Failures
 //
 // The antivirus is fail-closed (P10). When clamd cannot be reached, the
@@ -219,10 +228,10 @@ type OutageObserver interface {
 
 // SystemActor is the actor (store.ActorSystem) of the audit events the
 // worker records.
-const SystemActor = "antivirus"
+const SystemActor = audit.ActorAntivirus
 
 // Deps are the components the worker relies on. Every field is required,
-// except Audit, Usage and Outage.
+// except Audit, Usage and Outage (and Scanner with Options.Disabled).
 type Deps struct {
 	// DB stores the transfers.
 	DB *store.DB
@@ -230,7 +239,8 @@ type Deps struct {
 	Vault Vault
 	// Files gives access to the encrypted files.
 	Files Files
-	// Scanner is the clamd client.
+	// Scanner is the clamd client; it may be nil when Options.Disabled is
+	// set.
 	Scanner Scanner
 	// Remover erases the infected files.
 	Remover Remover
@@ -262,6 +272,11 @@ type Options struct {
 	// MaxFileErrors is the number of file-specific failures giving
 	// scan_error (DefaultMaxFileErrors).
 	MaxFileErrors int
+	// Disabled is set when the instance antivirus engine is "none": the
+	// worker never contacts an engine (Deps.Scanner may be nil) nor reports
+	// an outage, and any file still waiting is recorded
+	// not_scanned_disabled at once.
+	Disabled bool
 	// MailRetryFor is how long mails refused by the queue are retried
 	// (mail.DefaultRetryFor when <= 0). They are retried with the
 	// RetryMin and RetryMax backoff.

@@ -122,13 +122,14 @@ var goldenExpiry = time.Date(2027, time.October, 20, 8, 30, 0, 0, time.UTC)
 var goldenOutage = time.Date(2027, time.October, 13, 9, 45, 0, 0, time.UTC)
 
 // goldenFiles returns the files of the transfer golden tests: a hostile
-// name, then a file too large or complex to be scanned and an encrypted
-// archive.
+// name, then a file too large or complex to be scanned, an encrypted
+// archive and a file delivered while the antivirus was disabled.
 func goldenFiles() []FileInfo {
 	return []FileInfo{
 		{Name: "<script>alert(1)</script> report.pdf", Size: 1536, SHA256: strings.Repeat("ab", 32)},
 		{Name: "video.mp4", Size: 3 << 30, SHA256: strings.Repeat("0f", 32), NotScanned: NotScannedTooLarge},
 		{Name: "secret.zip", Size: 4 << 20, SHA256: strings.Repeat("e1", 32), NotScanned: NotScannedEncrypted},
+		{Name: "notes.txt", Size: 2048, SHA256: strings.Repeat("d4", 32), NotScanned: NotScannedDisabled},
 	}
 }
 

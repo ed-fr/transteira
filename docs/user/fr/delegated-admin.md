@@ -149,6 +149,7 @@ En haut, le statut de l’entité et la ligne **Stockage utilisé** indiquent l�
 
 - **Langue par défaut** : utilisée sur les pages publiques lorsque la langue du navigateur du visiteur n’est pas disponible, et pour les mails.
 - **Taille maximale par envoi** : somme des fichiers d’un envoi. Vous pouvez choisir toute valeur jusqu’au plafond fixé par le super administrateur, lui-même de 20 Go au plus. Abaissez-la si vos utilisateurs ne doivent pas envoyer de très gros transferts.
+- **Analyse antivirus** (lecture seule) : indique si les fichiers de l’entité sont analysés. Seul le super administrateur peut la modifier. Lorsqu’elle est désactivée, chaque fichier déposé est remis **sans analyse**, avec la mention « non analysé : antivirus désactivé » : les expéditeurs sont prévenus par mail et les destinataires avertis sur la page de téléchargement. La liste de blocage par empreinte et la détection des abus s’appliquent toujours. Lorsque l’exploitant a désactivé l’antivirus pour tout le service, une note d’information indique qu’aucun fichier n’est analysé, quel que soit ce réglage. Sa désactivation ou sa réactivation est enregistrée dans le [journal d’audit](topic:tenant-audit).
 
 Cliquez sur **Enregistrer** pour appliquer.
 

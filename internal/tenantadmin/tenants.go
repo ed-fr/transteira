@@ -42,6 +42,12 @@ type TenantView struct {
 	// AllowTransferReply tells whether recipients may send files back to
 	// the sender of a transfer (since 1.1).
 	AllowTransferReply bool
+	// AntivirusEnabled tells whether the files of the tenant are to be
+	// analyzed (since 1.1, changed by the super admin only).
+	AntivirusEnabled bool
+	// AntivirusEffective tells whether they really are: AntivirusEnabled
+	// and an instance engine other than "none" (read only).
+	AntivirusEffective bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
@@ -89,6 +95,9 @@ type TenantUpdate struct {
 	// AllowTransferReply turns on or off the replies of recipients to the
 	// sender of a transfer; a delegated admin may change it.
 	AllowTransferReply *bool
+	// AntivirusEnabled turns on or off the antivirus analysis of the files
+	// of the tenant, super admin only (decision D8).
+	AntivirusEnabled *bool
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -103,8 +112,16 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: used, Status: t.Status,
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
+		AntivirusEnabled: t.AntivirusEnabled, AntivirusEffective: s.AntivirusEffective(t),
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
+}
+
+// AntivirusEffective reports whether the files of tenant t are analyzed by
+// the antivirus: its switch is on and the instance engine is not "none"
+// (OpenAPI Tenant.antivirusEffective, TenantFeatures.antivirus).
+func (s *Service) AntivirusEffective(t *tenant.Tenant) bool {
+	return t.AntivirusEffective(s.avDisabled)
 }
 
 // ListTenants returns the tenants visible to p: every tenant, page by page,
@@ -248,8 +265,11 @@ func createLimits(in TenantCreate) (limit, ceiling int64, err error) {
 // below the limit lowers the limit. A delegated admin may only change the
 // default language, the webhook address option and the remote deposit option, and set the transfer
 // limit at most to the ceiling:
-// another changed field, or a limit above the ceiling, is ErrForbidden.
-// The audit event names the changed fields.
+// another changed field (including the antivirus switch), or a limit above
+// the ceiling, is ErrForbidden and changes nothing.
+// The tenant.updated audit event names the changed fields; a change of the
+// antivirus switch is recorded apart, as tenant.antivirus_disabled or
+// tenant.antivirus_enabled, only when its value really changes.
 func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, in TenantUpdate, ip netip.Addr) (TenantView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -262,21 +282,39 @@ func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid t
 		return TenantView{}, err
 	}
 	changed := changedFields(cur, next)
-	if len(changed) == 0 {
+	avChanged := next.AntivirusEnabled != cur.AntivirusEnabled
+	if len(changed) == 0 && !avChanged {
 		return s.view(ctx, cur)
 	}
-	t, err := s.repo.updateTenant(ctx, next)
-	switch {
-	case errors.Is(err, store.ErrConflict):
-		return TenantView{}, ErrAlreadyExists
-	case errors.Is(err, store.ErrNotFound):
-		return TenantView{}, ErrNotFound
-	case err != nil:
-		return TenantView{}, fmt.Errorf("tenantadmin: update tenant: %w", err)
+	// One transaction: a failure stores nothing, and the events are
+	// recorded only once both changes are committed.
+	t, err := s.repo.updateTenantWithAntivirus(ctx, next, len(changed) > 0, avChanged)
+	if err != nil {
+		return TenantView{}, updateError("update tenant", err)
 	}
 	s.invalidate(t.ID, cur.FQDN, t.FQDN)
-	s.record(ctx, p, ip, t.ID, ActionTenantUpdated, map[string]any{"fields": changed})
+	if len(changed) > 0 {
+		s.record(ctx, p, ip, t.ID, ActionTenantUpdated, map[string]any{"fields": changed})
+	}
+	if avChanged {
+		action := ActionTenantAntivirusDisabled
+		if t.AntivirusEnabled {
+			action = ActionTenantAntivirusEnabled
+		}
+		s.record(ctx, p, ip, t.ID, action, nil)
+	}
 	return s.view(ctx, t)
+}
+
+// updateError maps an error of a tenant row update.
+func updateError(op string, err error) error {
+	switch {
+	case errors.Is(err, store.ErrConflict):
+		return ErrAlreadyExists
+	case errors.Is(err, store.ErrNotFound):
+		return ErrNotFound
+	}
+	return fmt.Errorf("tenantadmin: %s: %w", op, err)
 }
 
 // applyUpdate validates in against cur and returns the updated tenant.
@@ -314,6 +352,9 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	if in.AllowTransferReply != nil {
 		next.AllowTransferReply = *in.AllowTransferReply
 	}
+	if in.AntivirusEnabled != nil {
+		next.AntivirusEnabled = *in.AntivirusEnabled
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -337,13 +378,15 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 		}
 	}
 	if !super && (next.Name != cur.Name || next.FQDN != cur.FQDN ||
-		next.StorageQuotaBytes != cur.StorageQuotaBytes || next.MaxTransferCeiling != cur.MaxTransferCeiling) {
+		next.StorageQuotaBytes != cur.StorageQuotaBytes || next.MaxTransferCeiling != cur.MaxTransferCeiling ||
+		next.AntivirusEnabled != cur.AntivirusEnabled) {
 		return nil, ErrForbidden
 	}
 	return next, nil
 }
 
-// changedFields returns the API names of the fields that differ.
+// changedFields returns the API names of the fields that differ, except
+// the antivirus switch, which has audit events of its own.
 func changedFields(a, b *tenant.Tenant) []string {
 	var out []string
 	add := func(diff bool, name string) {

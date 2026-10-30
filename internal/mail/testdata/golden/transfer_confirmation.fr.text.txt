@@ -23,6 +23,9 @@ Fichiers :
 - secret.zip (4,0 Mo)
   SHA-256 : e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1
   N'a pas pu être analysé par l'antivirus : archive chiffrée.
+- notes.txt (2,0 Ko)
+  SHA-256 : d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4
+  Non analysé : antivirus désactivé.
 
 Fichiers retenus :
 - <i>archive</i>.zip (3,0 Mo)

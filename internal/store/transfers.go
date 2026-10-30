@@ -66,6 +66,10 @@ const (
 	// ScanNotScannedEncrypted is a file the antivirus could not look
 	// inside (encrypted archive), accepted and flagged.
 	ScanNotScannedEncrypted ScanStatus = "not_scanned_encrypted"
+	// ScanNotScannedDisabled is a file finalized while the antivirus was
+	// disabled (instance engine "none" or tenant flag off), accepted and
+	// flagged; it is decided at finalization (decision D8).
+	ScanNotScannedDisabled ScanStatus = "not_scanned_disabled"
 	// ScanError is a file that could not be analyzed (withheld).
 	ScanError ScanStatus = "scan_error"
 )
@@ -1257,6 +1261,27 @@ func (r *Transfers) FinalizeTx(ctx context.Context, tx *ScopedTx, trfID string, 
 		return wrap("finalize transfer", err)
 	}
 	return nil
+}
+
+// FinalizeUnscannedTx is [Transfers.FinalizeTx] for a transfer finalized
+// while the antivirus is not effective for its tenant (decision D8): in
+// the same transaction, every uploaded file of the transfer still pending
+// gets [ScanNotScannedDisabled] with ScannedAt = now, so that the worker
+// concludes the transfer without contacting any engine. It returns the
+// number of files released.
+func (r *Transfers) FinalizeUnscannedTx(ctx context.Context, tx *ScopedTx, trfID string, now time.Time) (int, error) {
+	if err := setStatus(ctx, tx, trfID, TransferUploading, TransferScanning, now); err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	res, err := tx.Exec(ctx, qFileReleaseDisabled, toMillis(now), trfID)
+	if err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	return int(n), nil
 }
 
 // DeleteTx deletes the transfer trfID of the tenant tx is bound to, with

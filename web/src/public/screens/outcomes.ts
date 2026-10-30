@@ -214,7 +214,11 @@ export function isNetworkFailure(err: unknown): boolean {
 }
 
 /** Statuses of files delivered without antivirus analysis. */
-export const NOT_SCANNED: readonly ScanStatus[] = ['not_scanned_too_large', 'not_scanned_encrypted'];
+export const NOT_SCANNED: readonly ScanStatus[] = [
+  'not_scanned_too_large',
+  'not_scanned_encrypted',
+  'not_scanned_disabled',
+];
 
 /** Reports whether a file was delivered without antivirus analysis. */
 export function isNotScanned(status: ScanStatus): boolean {

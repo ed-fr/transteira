@@ -108,6 +108,9 @@ func TestScanOptions(t *testing.T) {
 	if got := scanOptions(cfg, &o, nil); got.Workers != 3 || got.RetryMin != time.Second || got.RetryMax != 2*time.Second {
 		t.Errorf("edited scan options = %+v", got)
 	}
+	if got := scanOptions(&config.Config{ScanWorkers: 1, AntivirusEngine: config.EngineNone}, &runOptions{}, nil); !got.Disabled {
+		t.Errorf("scan options with the engine none = %+v", got)
+	}
 }
 
 // slowCloser never stops before its context ends.

@@ -97,8 +97,13 @@ func (w *Worker) failed(ctx context.Context, k key, op string, err error) time.D
 }
 
 // scanFile analyzes the file f of the transfer k, sent by sender, and
-// records its final status.
+// records its final status. When the instance antivirus is disabled
+// (Options.Disabled), no engine is contacted: the file is recorded
+// not_scanned_disabled at once.
 func (w *Worker) scanFile(ctx context.Context, k key, f store.TransferFile, sender string) (fileOutcome, time.Duration) {
+	if w.opts.Disabled {
+		return w.record(context.WithoutCancel(ctx), k, f, store.ScanNotScannedDisabled, "", "")
+	}
 	if err := w.repo.setScanning(ctx, k.tid, f.ID); err != nil {
 		return w.dbFailure(ctx, k, "set file scanning", err)
 	}
@@ -228,8 +233,9 @@ func (w *Worker) record(ctx context.Context, k key, f store.TransferFile, status
 
 // notScannedReasons are the reasons of file.not_scanned, by status.
 var notScannedReasons = map[store.ScanStatus]string{
-	store.ScanNotScannedTooLarge:  "too_large",
-	store.ScanNotScannedEncrypted: "encrypted",
+	store.ScanNotScannedTooLarge:  audit.NotScannedTooLarge,
+	store.ScanNotScannedEncrypted: audit.NotScannedEncrypted,
+	store.ScanNotScannedDisabled:  audit.NotScannedDisabled,
 }
 
 // recorded follows the final status of the file f once committed: an

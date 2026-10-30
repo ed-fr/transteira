@@ -98,6 +98,9 @@ type Settings struct {
 	// AlertEmailLanguage is the language of the mails sent to AlertEmail,
 	// "" without it.
 	AlertEmailLanguage string
+	// AntivirusEngine is the antivirus engine of the instance
+	// (TT_ANTIVIRUS_ENGINE), read only: Options.AntivirusEngine.
+	AntivirusEngine string
 }
 
 // Field is an optional member of a JSON Merge Patch: Set tells whether the
@@ -137,6 +140,9 @@ type Options struct {
 	// not block: the application passes the non-blocking
 	// diskalert.Monitor.Check.
 	OnChange func()
+	// AntivirusEngine is the antivirus engine of the instance, reported
+	// read only in the settings ("" leaves it out).
+	AntivirusEngine string
 }
 
 // Service reads and changes the instance settings. It is safe for
@@ -145,6 +151,7 @@ type Service struct {
 	repo     repo
 	auditor  Auditor
 	onChange func()
+	engine   string
 }
 
 // New returns the service over db, recording the changes with auditor.
@@ -157,7 +164,7 @@ func New(db *store.DB, auditor Auditor, opts Options) (*Service, error) {
 
 // newService returns the service over r.
 func newService(r repo, auditor Auditor, opts Options) *Service {
-	s := &Service{repo: r, auditor: auditor, onChange: opts.OnChange}
+	s := &Service{repo: r, auditor: auditor, onChange: opts.OnChange, engine: opts.AntivirusEngine}
 	if s.onChange == nil {
 		s.onChange = func() {}
 	}
@@ -175,7 +182,7 @@ func (s *Service) Get(ctx context.Context, p adminauth.Principal) (Settings, err
 	if err != nil {
 		return Settings{}, fmt.Errorf("systemsettings: %w", err)
 	}
-	return fromRow(row), nil
+	return s.fromRow(row), nil
 }
 
 // Update applies patch for p, from client ip, and returns the settings as
@@ -243,7 +250,7 @@ func (s *Service) Update(ctx context.Context, p adminauth.Principal, patch Patch
 	if changed {
 		s.onChange()
 	}
-	return fromRow(row), nil
+	return s.fromRow(row), nil
 }
 
 // errUnchanged rolls back an update that changes nothing.
@@ -284,10 +291,11 @@ func parseEmail(raw string) (string, error) {
 }
 
 // fromRow returns the settings of row.
-func fromRow(row store.SystemSettingsRow) Settings {
+func (s *Service) fromRow(row store.SystemSettingsRow) Settings {
 	return Settings{
 		DiskAlertThreshold: float64(row.DiskAlertThresholdBP) / basisPoints,
 		AlertEmail:         row.AlertEmail,
 		AlertEmailLanguage: row.AlertEmailLanguage,
+		AntivirusEngine:    s.engine,
 	}
 }

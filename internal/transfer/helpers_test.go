@@ -398,11 +398,11 @@ func (t faultTx) createTransfer(ctx context.Context, tr store.Transfer, rcpts []
 	return t.inner.createTransfer(ctx, tr, rcpts, files)
 }
 
-func (t faultTx) finalize(ctx context.Context, trfID string, now time.Time) error {
+func (t faultTx) finalize(ctx context.Context, trfID string, now time.Time, unscanned bool) (int, error) {
 	if err := t.r.check("finalize"); err != nil {
-		return err
+		return 0, err
 	}
-	return t.inner.finalize(ctx, trfID, now)
+	return t.inner.finalize(ctx, trfID, now, unscanned)
 }
 
 func (t faultTx) deleteTransfer(ctx context.Context, trfID string) error {

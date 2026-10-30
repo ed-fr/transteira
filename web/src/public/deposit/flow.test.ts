@@ -363,6 +363,7 @@ describe('helpers', () => {
     expect(scanWarningKey('clean')).toBeUndefined();
     expect(scanWarningKey('infected')).toBe('deposit.done.warning.infected');
     expect(scanWarningKey('not_scanned_too_large')).toBe('deposit.done.warning.notScanned');
+    expect(scanWarningKey('not_scanned_disabled')).toBe('deposit.done.warning.notScanned');
     expect(scanWarningKey('not_scanned_encrypted')).toBe('deposit.done.warning.notScanned');
     expect(scanWarningKey('scan_error')).toBe('deposit.done.warning.scanError');
   });

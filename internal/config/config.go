@@ -115,6 +115,23 @@ const (
 	maxBackupKeep = 90
 )
 
+// AntivirusEngine names the antivirus engine of the instance
+// (TT_ANTIVIRUS_ENGINE).
+type AntivirusEngine string
+
+// Antivirus engines. EngineICAP and EngineHTTP are reserved names refused by
+// [Load] until their implementation lands.
+const (
+	// EngineClamd analyzes files with the ClamAV daemon (default).
+	EngineClamd AntivirusEngine = "clamd"
+	// EngineNone disables the analysis for the whole instance.
+	EngineNone AntivirusEngine = "none"
+	// EngineICAP is an ICAP server (RFC 3507), not available yet.
+	EngineICAP AntivirusEngine = "icap"
+	// EngineHTTP is a generic HTTP scanning API, not available yet.
+	EngineHTTP AntivirusEngine = "http"
+)
+
 // unixPrefix introduces a Unix socket address in TT_CLAMAV_ADDR.
 const unixPrefix = "unix:"
 
@@ -214,6 +231,9 @@ type Config struct {
 	// internal sender.
 	MaxOpenTransfers int
 
+	// AntivirusEngine is the antivirus engine of the instance; with
+	// EngineNone no file is ever analyzed.
+	AntivirusEngine AntivirusEngine
 	// ClamAV is the clamd address.
 	ClamAV ClamAVAddr
 	// ClamAVMaxScanBytes is the largest file size sent to clamd; larger
@@ -794,9 +814,17 @@ func (l *loader) loadMail(c *Config) {
 	c.SMTPDenyNetworks = deny
 }
 
-// loadAntivirus reads the scan size limit, the scan timeout and the number
-// of scan workers.
+// loadAntivirus reads the antivirus engine, the scan size limit, the scan
+// timeout and the number of scan workers.
 func (l *loader) loadAntivirus(c *Config) {
+	switch e := AntivirusEngine(strings.ToLower(l.getOr(EnvAntivirusEngine, DefaultAntivirusEngine))); e {
+	case EngineClamd, EngineNone:
+		c.AntivirusEngine = e
+	case EngineICAP, EngineHTTP:
+		l.fail(EnvAntivirusEngine, "engine %q is not available in this version yet (it arrives in a later version); use %q or %q", string(e), string(EngineClamd), string(EngineNone))
+	default:
+		l.fail(EnvAntivirusEngine, "unknown engine %q (want %q or %q)", string(e), string(EngineClamd), string(EngineNone))
+	}
 	n, err := parseInt64(l.getOr(EnvClamAVMaxScanBytes, DefaultClamAVMaxScanBytes),
 		minClamAVMaxScanBytes, maxClamAVMaxScanBytes)
 	if err != nil {

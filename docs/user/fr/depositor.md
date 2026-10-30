@@ -133,6 +133,7 @@ Chaque fichier reçoit l’un des résultats suivants :
 - **aucune menace détectée** : le fichier est remis ;
 - **menace détectée, fichier supprimé** : le fichier n’est pas remis et vous recevez une alerte par mail ;
 - **non analysé (fichier trop volumineux)** ou **non analysé (archive chiffrée)** : le fichier est remis, vous en êtes informé par mail et les destinataires sont avertis sur la page de téléchargement ;
+- **non analysé (antivirus désactivé)** : l’antivirus est désactivé pour votre entité (ou pour tout le service), le fichier est donc remis sans contrôle ; vous en êtes informé par mail (motif « antivirus désactivé ») et les destinataires sont avertis sur la page de téléchargement ;
 - **échec de l’analyse, fichier retenu** : le fichier n’est pas remis.
 
 Si aucun fichier ne peut être remis, la page affiche **Transfert refusé** et les destinataires ne sont pas prévenus.

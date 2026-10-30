@@ -130,8 +130,8 @@ const (
 	// ActionFileInfected: the antivirus found a virus in a file, which was
 	// deleted.
 	ActionFileInfected Action = "file.infected"
-	// ActionFileNotScanned: a file could not be scanned (size) and was
-	// accepted.
+	// ActionFileNotScanned: a file was accepted without analysis (details:
+	// reason too_large, encrypted or disabled).
 	ActionFileNotScanned Action = "file.not_scanned"
 	// ActionQuotaWarning: a tenant reached 80 % of its storage quota.
 	ActionQuotaWarning Action = "quota.warning"
@@ -197,6 +197,10 @@ const (
 	// ActionAntivirusAlertCleared: clamd answered again after a raised
 	// antivirus alert.
 	ActionAntivirusAlertCleared Action = "antivirus.alert_cleared"
+	// ActionAntivirusScansReleased: the instance started with the antivirus
+	// engine "none" and released the files still waiting for a scan as
+	// not_scanned_disabled (details: the number of files).
+	ActionAntivirusScansReleased Action = "antivirus.scans_released"
 )
 
 // Actions of the webhooks (tenant and instance-wide), each listed in the
@@ -234,6 +238,22 @@ const (
 	// volume, large transfer to external addresses, off hours), with the
 	// same actor and details as ActionAbuseThresholdExceeded.
 	ActionAbuseUnusualActivity Action = "abuse.unusual_activity"
+)
+
+// ActorAntivirus is the system actor (store.ActorSystem) of the events of
+// the antivirus: the worker's file events, the finalization of files
+// while the antivirus is disabled, the alerts and the start-up release.
+const ActorAntivirus = "antivirus"
+
+// Reasons of the file.not_scanned event (details "reason").
+const (
+	// NotScannedTooLarge: the file is above the antivirus limits.
+	NotScannedTooLarge = "too_large"
+	// NotScannedEncrypted: an encrypted archive the antivirus cannot read.
+	NotScannedEncrypted = "encrypted"
+	// NotScannedDisabled: the antivirus was disabled (instance engine
+	// "none" or tenant switch off) when the file was finalized.
+	NotScannedDisabled = "disabled"
 )
 
 // Object kinds.
