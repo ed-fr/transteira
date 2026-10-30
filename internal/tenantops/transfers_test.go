@@ -150,8 +150,11 @@ func TestGetTransfer(t *testing.T) {
 		}
 		f := d.Files[0]
 		if !id.Valid(id.File, f.ID) || f.Name != "plans-0.pdf" || f.Size != 1000 || f.MediaType != "application/pdf" ||
-			len(f.SHA256) != 64 || f.ScanStatus != store.ScanClean {
+			len(f.SHA256) != 64 || f.ScanStatus != store.ScanClean || f.Path != "" {
 			t.Errorf("file = %+v", f)
+		}
+		if d.Files[1].Path != "site-a/2026" {
+			t.Errorf("file 1 path = %q", d.Files[1].Path)
 		}
 		_, err = ev.svc.GetTransfer(ctx, ev.adminA, ev.a.ID, "not-an-id")
 		wantErr(t, "malformed id", err, ErrNotFound)

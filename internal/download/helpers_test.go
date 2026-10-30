@@ -646,6 +646,8 @@ type spec struct {
 	// "file-<i>.bin" and clean.
 	contents [][]byte
 	names    []string
+	// paths are the folders of the files (since 1.1), the root by default.
+	paths    []string
 	statuses []store.ScanStatus
 	// sizes override the recorded sizes (0 keeps the content length).
 	sizes       map[int]int64
@@ -733,6 +735,9 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 			f.Name = fmt.Sprintf("file-%d.bin", i)
 			if i < len(sp.names) {
 				f.Name = sp.names[i]
+			}
+			if i < len(sp.paths) {
+				f.Path = sp.paths[i]
 			}
 			if sz, ok := sp.sizes[i]; ok {
 				f.Size = sz

@@ -216,6 +216,10 @@ func publicTransfer(token string, v download.View, lang string) gen.PublicTransf
 			Id: f.ID, Name: f.Name, Size: f.Size, MediaType: optional(f.MediaType), Sha256: f.SHA256,
 			ScanStatus: gen.ScanStatus(f.ScanStatus), DownloadUrl: downloadPath + token + "/files/" + f.ID,
 		}
+		if f.Path != "" {
+			p := gen.FilePath(f.Path)
+			files[i].Path = &p
+		}
 	}
 	out.Files = &files
 	return out

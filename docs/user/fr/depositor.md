@@ -74,7 +74,15 @@ Remplissez les champs :
 
 Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu fixer une limite plus basse. L’indication sous **Fichiers à envoyer** donne les limites réelles (taille totale et nombre de fichiers).
 
-> **À savoir** Un dossier ne peut pas être envoyé tel quel. Sélectionnez les fichiers qu’il contient, ou compressez vous-même le dossier en fichier ZIP et envoyez ce fichier.
+Pour envoyer un dossier entier, faites-le glisser sur la zone, ou cliquez sur **Ajouter un dossier** (le chemin accessible au clavier) et choisissez-le. L’arborescence est conservée : la liste affiche le dossier avant chaque nom de fichier (par exemple `photos/2026/`), et les destinataires retrouvent la même arborescence dans l’archive ZIP. Avant d’envoyer, vérifiez la liste :
+
+- les fichiers système (`.DS_Store`, `Thumbs.db`, `desktop.ini`) sont écartés automatiquement, et le formulaire indique combien ;
+- les autres fichiers cachés et les fichiers placés dans des dossiers cachés (dont le nom commence par un point, comme `.env` ou `.git`) sont conservés mais signalés **Caché** : retirez avec le bouton de retrait ceux que vous ne voulez pas envoyer ;
+- les dossiers vides sont ignorés ;
+- un fichier dont le nom ou le dossier n’est pas accepté (caractères interdits comme `\` ou `:`, nom réservé par Windows, chemin de dossier trop long ou imbriqué sur plus de 16 niveaux) n’est pas ajouté, et le formulaire le liste avec la raison : renommez-le, puis ajoutez-le de nouveau ;
+- les limites de nombre de fichiers et de taille totale s’appliquent à l’ensemble des fichiers des dossiers.
+
+Si votre organisation ne propose pas les dossiers, le bouton **Ajouter un dossier** n’est pas affiché : sélectionnez les fichiers, ou compressez le dossier en fichier ZIP et envoyez ce fichier.
 
 Quand tout est prêt, cliquez sur **Envoyer**. Deux messages peuvent refuser le transfert :
 

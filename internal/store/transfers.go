@@ -82,6 +82,8 @@ const (
 	MaxTransferFiles = 1000
 	// MaxFileNameBytes bounds the original name of a file, in bytes.
 	MaxFileNameBytes = 255
+	// MaxFilePathBytes bounds the folder path of a file, in bytes.
+	MaxFilePathBytes = 1024
 	// MaxMediaTypeLen bounds the informational media type of a file, in
 	// characters.
 	MaxMediaTypeLen = 255
@@ -129,7 +131,7 @@ const reasonTransferDeleteLinkKeys = "transfer deletion: refuse while a recipien
 const reasonTransferEndLinkKeys = "transfer end: refuse while a recipient link of the same tenant and transfer keeps its sealed token"
 
 // fileColumns is the column list read by the file queries.
-const fileColumns = `id, transfer_id, position, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
+const fileColumns = `id, transfer_id, position, path, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
 	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
 
 // Statements of the Transfers and TransferFiles repositories. All of them
@@ -235,9 +237,9 @@ var (
 		`SELECT email FROM transfer_recipients WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`)
 
 	qFileInsert = tenantQuery(
-		`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, name, size, media_type, expected_sha256,
+		`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, path, name, size, media_type, expected_sha256,
 		sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	qFileList = tenantQuery(
 		`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`)
 	qFileGetByUpload = tenantQuery(
@@ -422,6 +424,11 @@ type TransferFile struct {
 	// Position is the rank of the file in the transfer, from 0;
 	// [Transfers.CreateTx] assigns it from the order of the files.
 	Position int
+	// Path is the folder of the file inside the transfer ("a/b", at most
+	// MaxFilePathBytes bytes of UTF-8 without control characters and
+	// without a leading or trailing "/"), validated by the caller; "" at
+	// the root. It is never used on disk.
+	Path string
 	// Name is the original name (1 to MaxFileNameBytes bytes of UTF-8,
 	// without control characters), sanitized by the caller. It is never
 	// used on disk.
@@ -545,6 +552,17 @@ func validFileName(s string) bool {
 	return s != "" && len(s) <= MaxFileNameBytes && utf8.ValidString(s) && !strings.ContainsFunc(s, isLineBreakOrControl)
 }
 
+// validFilePath is the store's cheap guard on the folder path of a file
+// ("" at the root): the caller validates each segment (normalization,
+// bidirectional and invisible characters, "." and "..", reserved names).
+func validFilePath(s string) bool {
+	if s == "" {
+		return true
+	}
+	return len(s) <= MaxFilePathBytes && utf8.ValidString(s) && !strings.ContainsFunc(s, isLineBreakOrControl) &&
+		!strings.HasPrefix(s, "/") && !strings.HasSuffix(s, "/")
+}
+
 // validExpiryDays reports whether d is an allowed validity (spec 8.2).
 func validExpiryDays(d int) bool {
 	return d == 1 || d == 7 || d == 30
@@ -656,6 +674,9 @@ func normalizeFile(f TransferFile, trfID string, pos int) (TransferFile, error) 
 		return TransferFile{}, invalid("file belongs to another transfer")
 	case !validFileName(f.Name):
 		return TransferFile{}, invalid("file name must hold 1 to %d bytes of text without control characters", MaxFileNameBytes)
+	case !validFilePath(f.Path):
+		return TransferFile{}, invalid("file path must hold at most %d bytes of text without control characters "+
+			"or outer slashes", MaxFilePathBytes)
 	case f.Size < 0:
 		return TransferFile{}, invalid("file size must not be negative")
 	case !validText(f.MediaType, MaxMediaTypeLen, true):
@@ -821,7 +842,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		if f.Completed() {
 			uploaded, ctSize = toMillis(f.UploadedAt), f.CiphertextSize
 		}
-		_, err := tx.Exec(ctx, qFileInsert, f.ID, f.TransferID, f.Position, f.Name, f.Size, f.MediaType,
+		_, err := tx.Exec(ctx, qFileInsert, f.ID, f.TransferID, f.Position, f.Path, f.Name, f.Size, f.MediaType,
 			nullText(f.ExpectedSHA256), nullText(f.SHA256), f.DEKKeyID, f.StorageName, f.UploadID, ctSize,
 			uploaded, string(f.ScanStatus))
 		if err != nil {
@@ -885,7 +906,7 @@ func scanFile(row interface{ Scan(...any) error }) (TransferFile, error) {
 		ctSize, uploaded, scanned       sql.NullInt64
 		scan                            string
 	)
-	err := row.Scan(&f.ID, &f.TransferID, &f.Position, &f.Name, &f.Size, &f.MediaType, &expected, &sum, &keyID,
+	err := row.Scan(&f.ID, &f.TransferID, &f.Position, &f.Path, &f.Name, &f.Size, &f.MediaType, &expected, &sum, &keyID,
 		&f.StorageName, &f.UploadID, &ctSize, &uploaded, &scanned, &signature, &f.ScanAttempts, &scan)
 	if err != nil {
 		return TransferFile{}, err

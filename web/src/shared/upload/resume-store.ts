@@ -1,5 +1,5 @@
 // Resume after a page reload (threat model T-160): sessionStorage keeps only the transfer id
-// and the fingerprints of its files (name, size, last modification), never their content or
+// and the fingerprints of its files (name, folder, size, last modification), never their content or
 // the CSRF token. The browser cannot reopen a file by itself: the user selects the same files
 // again and matchFiles pairs them with the transfer's files.
 
@@ -8,6 +8,8 @@ export interface FileFingerprint {
   name: string;
   size: number;
   lastModified: number;
+  /** Relative folder inside the transfer ('' for the root). */
+  path?: string | undefined;
 }
 
 /** What is kept between reloads. */
@@ -32,11 +34,13 @@ export interface FileLike {
   name: string;
   size: number;
   lastModified: number;
+  /** Relative folder inside the transfer; absent for the root. */
+  path?: string | undefined;
 }
 
 /** Fingerprint of a file. */
 export function fingerprint(file: FileLike): FileFingerprint {
-  return { name: file.name, size: file.size, lastModified: file.lastModified };
+  return { name: file.name, size: file.size, lastModified: file.lastModified, path: file.path ?? '' };
 }
 
 function isFingerprint(value: unknown): value is FileFingerprint {
@@ -44,6 +48,7 @@ function isFingerprint(value: unknown): value is FileFingerprint {
   const v = value as Record<string, unknown>;
   return (
     typeof v.name === 'string' &&
+    (v.path === undefined || typeof v.path === 'string') &&
     Number.isSafeInteger(v.size) &&
     (v.size as number) >= 0 &&
     typeof v.lastModified === 'number' &&
@@ -85,7 +90,9 @@ export function createResumeStore(
         const raw = storage()?.getItem(key);
         if (raw === null || raw === undefined) return undefined;
         const parsed: unknown = JSON.parse(raw);
-        return isResumeRecord(parsed) ? parsed : undefined;
+        if (!isResumeRecord(parsed)) return undefined;
+        // Records saved before folders existed have no path: the root.
+        return { ...parsed, files: parsed.files.map((fp) => ({ ...fp, path: fp.path ?? '' })) };
       } catch {
         return undefined;
       }
@@ -111,7 +118,7 @@ export interface FileMatch<F extends FileLike> {
 }
 
 /**
- * Pairs reselected files with the record's fingerprints (same name, size and last modification;
+ * Pairs reselected files with the record's fingerprints (same folder, name, size and last modification;
  * each selected file is used once).
  */
 export function matchFiles<F extends FileLike>(record: ResumeRecord, selected: readonly F[]): FileMatch<F> {
@@ -120,7 +127,11 @@ export function matchFiles<F extends FileLike>(record: ResumeRecord, selected: r
   const missing: FileFingerprint[] = [];
   for (const fp of record.files) {
     const i = available.findIndex(
-      (f) => f.name === fp.name && f.size === fp.size && f.lastModified === fp.lastModified,
+      (f) =>
+        (f.path ?? '') === (fp.path ?? '') &&
+        f.name === fp.name &&
+        f.size === fp.size &&
+        f.lastModified === fp.lastModified,
     );
     if (i === -1) {
       files.push(undefined);

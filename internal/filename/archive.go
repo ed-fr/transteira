@@ -13,54 +13,136 @@ import (
 const Fallback = "file"
 
 // archiveUnsafe are characters that Validate accepts but that Windows refuses
-// in a file name; ArchiveName replaces each of them with an underscore so that
-// the archive extracts everywhere.
+// in a file name; ArchiveEntries replaces each of them with an underscore, in
+// the names and in the folders, so that the archive extracts everywhere.
 const archiveUnsafe = `<>"|?*`
 
-// ArchiveName returns the name of a file inside the download ZIP archive.
+// ArchiveFile is a file to place in the download ZIP archive.
+type ArchiveFile struct {
+	// Path is the relative folder of the file as stored ("" for the root,
+	// otherwise segments separated by "/", see ValidatePath).
+	Path string
+	// Name is the original file name.
+	Name string
+}
+
+// ArchiveEntries returns the entry name of each file inside the download
+// ZIP archive, in the order of files (decision D25, threats T-51, T-52 and
+// T-227).
 //
-// The name is first validated (Validate); a name that does not pass is
-// replaced by Fallback. The characters < > " | ? * are replaced with "_".
-// Names are then made unique within the archive, case-insensitively: the
-// second "a.txt" (or "A.TXT") becomes "a (2).txt", the third "a (3).txt",
-// keeping the extension (the part from the last dot) and shortening the stem
-// when needed so that the result stays within MaxBytes bytes.
+// A name that does not pass Validate is replaced by Fallback; a path that
+// does not pass ValidatePath is replaced by the root. The characters
+// < > " | ? * are replaced with "_" in the name and in each folder.
+// Folders are then merged case-insensitively (after NFC normalization): the
+// first spelling met wins for the whole folder, so that "Plans/a.pdf" and
+// "PLANS/b.pdf" land in the same "Plans" folder. Within a folder, names are
+// made unique case-insensitively: the second "a.txt" (or "A.TXT") becomes
+// "a (2).txt", the third "a (3).txt", keeping the extension (the part from
+// the last dot) and shortening the stem when needed so that it stays within
+// MaxBytes bytes. A file whose name equals a folder of the same level is
+// suffixed the same way, whatever their order: the folder keeps its name.
 //
-// seen holds the state of one archive: pass the same non-nil map for every
-// file of the archive, in order. The result always passes Validate.
-func ArchiveName(name string, seen map[string]int) string {
-	n, err := Validate(name)
-	if err != nil {
-		n = Fallback
+// Every result is a relative path whose segments pass Validate, joined by
+// "/"; no two results are equal case-insensitively, and no result equals a
+// folder of the archive.
+func ArchiveEntries(files []ArchiveFile) []string {
+	// First pass: the sanitized folder and name of each file, the spelling
+	// of each folder (by folded full path) and the set of folders.
+	dirs := make([]string, len(files))
+	names := make([]string, len(files))
+	folders := map[string]string{}
+	for i, f := range files {
+		dirs[i] = archiveFolder(f.Path, folders)
+		n, err := Validate(f.Name)
+		if err != nil {
+			n = Fallback
+		}
+		names[i] = archiveSafe(n)
 	}
-	n = strings.Map(func(r rune) rune {
+	// Second pass: unique entry names, never equal to a folder.
+	seen := map[string]int{}
+	out := make([]string, len(files))
+	for i := range files {
+		out[i] = uniqueEntry(dirs[i], names[i], folders, seen)
+	}
+	return out
+}
+
+// archiveFolder returns the archive folder of path, "" for the root, with
+// the spelling recorded in folders for each of its levels (keyed by the
+// folded full path of the level), recording the levels met for the first
+// time.
+func archiveFolder(path string, folders map[string]string) string {
+	p, err := ValidatePath(path)
+	if err != nil || p == "" {
+		return ""
+	}
+	dir, key := "", ""
+	for seg := range strings.SplitSeq(archiveSafe(p), "/") {
+		if key != "" {
+			key += "/"
+		}
+		key += foldKey(seg)
+		spelling, known := folders[key]
+		if !known {
+			spelling = seg
+			if dir != "" {
+				spelling = dir + "/" + seg
+			}
+			folders[key] = spelling
+		}
+		dir = spelling
+	}
+	return dir
+}
+
+// uniqueEntry returns the entry name of the file name in the folder dir,
+// numbered when its folded form is taken by an earlier file (seen) or by a
+// folder, and records it in seen.
+func uniqueEntry(dir, name string, folders map[string]string, seen map[string]int) string {
+	prefix := ""
+	if dir != "" {
+		prefix = dir + "/"
+	}
+	taken := func(n string) bool {
+		k := foldKey(prefix + n)
+		_, file := seen[k]
+		_, folder := folders[k]
+		return file || folder
+	}
+	key := foldKey(prefix + name)
+	if !taken(name) {
+		seen[key] = 1
+		return prefix + name
+	}
+	stem, ext := splitExt(name)
+	for i := max(seen[key], 1) + 1; ; i++ {
+		candidate := numbered(stem, ext, i)
+		if taken(candidate) {
+			continue
+		}
+		seen[foldKey(prefix+candidate)] = 1
+		seen[key] = i
+		return prefix + candidate
+	}
+}
+
+// archiveSafe replaces the characters of archiveUnsafe with "_".
+func archiveSafe(s string) string {
+	return strings.Map(func(r rune) rune {
 		if strings.ContainsRune(archiveUnsafe, r) {
 			return '_'
 		}
 		return r
-	}, n)
-	key := foldKey(n)
-	count, taken := seen[key]
-	if !taken {
-		seen[key] = 1
-		return n
-	}
-	stem, ext := splitExt(n)
-	for i := count + 1; ; i++ {
-		candidate := numbered(stem, ext, i)
-		ck := foldKey(candidate)
-		if _, dup := seen[ck]; dup {
-			continue
-		}
-		seen[ck] = 1
-		seen[key] = i
-		return candidate
-	}
+	}, s)
 }
 
-// foldKey is the case-insensitive comparison key of a name.
+// foldKey is the case-insensitive comparison key of a name. Changing the
+// case of an NFC string may leave it denormalized ("ǰ" upper-cases to
+// "J̌"), so the key is normalized again: names that only match after
+// both foldings would otherwise collide on extraction (macOS, threat T-227).
 func foldKey(s string) string {
-	return strings.ToLower(strings.ToUpper(s))
+	return norm.NFC.String(strings.ToLower(strings.ToUpper(s)))
 }
 
 // splitExt splits a validated name into stem and extension (from the last

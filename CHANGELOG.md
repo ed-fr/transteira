@@ -7,6 +7,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Folder upload (specification section 8.2), web side: a folder dropped on the file area (read
+  recursively with `webkitGetAsEntry`) or chosen with the new "Add a folder" button (real
+  `<input webkitdirectory>`, keyboard path) keeps its tree. Operating system files (`.DS_Store`,
+  `Thumbs.db`, `desktop.ini`) are left out with a count; other hidden files and folders are kept and
+  flagged "Hidden" (removable); empty folders are ignored; a file whose name or folder the server
+  would refuse (client mirror of the `FilePath` rules, NFC) is set aside with the reason; the 1000
+  file cap is unchanged. Each file declaration carries `path`; the list before sending, the resume
+  fingerprint (a stored record without path is the root), the download page, the administration
+  transfer detail and "My transfers" show the folder; the reply screen accepts folders too. User
+  guides updated (the ZIP keeps the tree, duplicate names get " (2)").
 - Reply to a transfer (specification section 10): per-tenant option `allowTransferReply`, off by
   default, in the Network screen settings. On the download page of a personal link of a transfer sent
   by an internal user or an API token, the recipient sees "Reply", always confirms their address by a

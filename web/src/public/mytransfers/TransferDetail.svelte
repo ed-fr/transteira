@@ -6,6 +6,7 @@
   import { ApiProblem } from '../../shared/api/client';
   import { problemMessage } from '../../shared/api/problem';
   import { Alert, Button, Dialog, RadioGroup, Spinner, announce } from '../../shared/components';
+  import { fullName } from '../../shared/components/folders';
   import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import {
     extendFailure,
@@ -43,7 +44,7 @@
     transfer === undefined ? [] : extensionOptions(Date.now(), transfer.expiresAt, transfer.extendableTo),
   );
   const canExtend = $derived(transfer?.status === 'available' && options.length > 0);
-  const fileNames = $derived(new Map((transfer?.files ?? []).map((f) => [f.id, f.name])));
+  const fileNames = $derived(new Map((transfer?.files ?? []).map((f) => [f.id, fullName(f.path, f.name)])));
 
   function pickDefault(): void {
     extendDays = options.includes(7) ? 7 : options[0];
@@ -241,7 +242,9 @@
         <tbody>
           {#each transfer.files as file (file.id)}
             <tr>
-              <th scope="row" class="tt-break plain">{file.path ? `${file.path}/` : ''}{file.name}</th>
+              <th scope="row" class="tt-break plain"
+                >{#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}</th
+              >
               <td class="nowrap">{formatBytes(file.size)}</td>
               <td>
                 {#if file.sha256}<code class="tt-mono tt-break">{file.sha256}</code>{/if}

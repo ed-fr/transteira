@@ -500,9 +500,9 @@ var tenantAllowlist = map[string]int{
 	`UPDATE api_tokens SET last_used_at = ? ` +
 		`WHERE tenant_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: 1,
 	// Transfer files.
-	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, name, size, media_type, expected_sha256, ` +
+	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, path, name, size, media_type, expected_sha256, ` +
 		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
 	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND upload_id = ?`:                     0,
 	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND id = ?`:                                       0,

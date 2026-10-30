@@ -501,6 +501,7 @@ func (ev *env) seedMode(tn *tenant.Tenant, mode store.LinkMode, status store.Tra
 				CiphertextSize: 1100, UploadedAt: now,
 			}
 		}
+		files[1].Path = "site-a/2026" // the second file is in a folder
 		tr := store.Transfer{
 			ID: out.id, SenderEmail: alice, SenderKind: store.DepositorInternal, ExpiryDays: 7,
 			Message: "Here are the plans", SenderIP: netip.MustParseAddr("10.10.4.21"), LinkMode: mode,

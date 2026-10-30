@@ -30,6 +30,7 @@ import {
   type FinalizeOutcome,
   type SenderTransfer,
 } from '../../shared/upload/finalize';
+import { withPath, type AcceptedFile } from '../../shared/components/folders';
 import {
   fingerprint,
   matchFiles,
@@ -46,6 +47,7 @@ import {
   effectiveExpiryDays,
   invalidFields,
   isEmail,
+  MAX_FILES,
   keepExpiry,
   keepMaxDownloads,
   levelByKey,
@@ -112,6 +114,10 @@ export type Step =
 export interface DepositFile extends Blob {
   readonly name: string;
   readonly lastModified: number;
+  /** Relative folder inside the transfer, absent for the root (set from a picked folder). */
+  path?: string | undefined;
+  /** The file or one of its folders starts with a dot (flagged in the list). */
+  hidden?: boolean | undefined;
 }
 
 /** Values of the deposit form, bound by the form screen. */
@@ -622,6 +628,21 @@ export class DepositFlow {
     this.#clearFileErrors();
   }
 
+  /** Adds picked files with their relative folder (see FileDrop folders mode). */
+  addPicked(files: readonly AcceptedFile<DepositFile>[]): void {
+    this.addFiles(files.map(withPath));
+  }
+
+  /** Tenant feature: folders can be sent. */
+  get foldersEnabled(): boolean {
+    return this.tenant.features?.folders === true;
+  }
+
+  /** Number of files that can still be added to the transfer. */
+  get fileRoom(): number {
+    return Math.max(0, MAX_FILES - this.form.files.length);
+  }
+
   /** Removes the file at index. */
   removeFile(index: number): void {
     this.form.files = this.form.files.filter((_f, i) => i !== index);
@@ -649,9 +670,12 @@ export class DepositFlow {
     const body: TransferCreate = {
       expiryDays: this.form.expiryDays as TransferCreate['expiryDays'],
       deleteAfterFirstDownload: this.deleteAfterFirstEffective,
-      files: files.map((f) =>
-        f.type === '' ? { name: f.name, size: f.size } : { name: f.name, size: f.size, mediaType: f.type },
-      ),
+      files: files.map((f) => {
+        const declared: TransferCreate['files'][number] = { name: f.name, size: f.size };
+        if (f.path !== undefined && f.path !== '') declared.path = f.path;
+        if (f.type !== '') declared.mediaType = f.type;
+        return declared;
+      }),
     };
     if (needRecipients) body.recipients = parseRecipients(this.form.recipientsText);
     if (this.form.message.trim() !== '') body.message = this.form.message;
@@ -741,6 +765,11 @@ export class DepositFlow {
   /** Adds reselected files on the resume step. */
   addResumeFiles(files: readonly DepositFile[]): void {
     this.resumeFiles = addFiles(this.resumeFiles, files);
+  }
+
+  /** Adds reselected files with their relative folder on the resume step. */
+  addResumePicked(files: readonly AcceptedFile<DepositFile>[]): void {
+    this.addResumeFiles(files.map(withPath));
   }
 
   /** Continues the interrupted upload with the reselected files. */

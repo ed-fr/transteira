@@ -53,7 +53,9 @@ use to ban the client IP.
   accepted values (for example `expiryDays` with `allowed: [1, 7, 30]`). Since 1.1, on
   transfer creation: `maxDownloads` outside 1 to 1000 and `recipientVerification: true` (not
   offered until per-recipient links are available) are reported as `not-allowed`, a malformed
-  `confidentialityLevel` as `invalid-format` and an unknown one as `not-allowed`. A mail address that
+  `confidentialityLevel` as `invalid-format` and an unknown one as `not-allowed`. A file name
+  refused by the file name policy is reported as `invalid-file-name` on `/files/<n>/name` and,
+  since 1.1, a refused folder `path` as `invalid-file-path` on `/files/<n>/path`. A mail address that
   is not a bare address (`user@entity-a.example.com`; a display-name form such as
   `Name <user@entity-a.example.com>` is refused, never rewritten) is reported with the code
   `invalid-email` on its field: `/email` (deposit session, invitation, data subject search or

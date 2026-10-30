@@ -299,6 +299,9 @@
     required
     error={filesError}
     onfiles={(files) => flow.addFiles(files)}
+    folders={flow.foldersEnabled}
+    onpicked={(files) => flow.addPicked(files)}
+    room={flow.fileRoom}
   />
 
   <FileList

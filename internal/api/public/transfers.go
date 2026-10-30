@@ -170,6 +170,7 @@ func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 	for i, f := range b.Files {
 		req.Files[i] = transfer.FileDeclaration{
 			Name: f.Name, Size: f.Size, MediaType: deref(f.MediaType), ExpectedSHA256: deref(f.ExpectedSha256),
+			Path: deref(f.Path),
 		}
 	}
 	return req
@@ -200,8 +201,8 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 	}
 	for i, f := range d.Files {
 		file := gen.SenderFile{
-			Id: f.ID, Name: f.Name, Size: f.Size, MediaType: optional(f.MediaType), Sha256: optional(f.SHA256),
-			ScanStatus: gen.ScanStatus(f.ScanStatus), ScanSignature: optional(f.ScanSignature),
+			Id: f.ID, Path: optional(f.Path), Name: f.Name, Size: f.Size, MediaType: optional(f.MediaType),
+			Sha256: optional(f.SHA256), ScanStatus: gen.ScanStatus(f.ScanStatus), ScanSignature: optional(f.ScanSignature),
 		}
 		if f.UploadID != "" {
 			url, offset := uploadPath+f.UploadID, f.UploadOffset

@@ -34,6 +34,10 @@ type File struct {
 	// Content-Disposition from it (sanitized ASCII fallback and RFC 5987
 	// filename*); it is never logged.
 	Name string
+	// Path is the folder of the file inside the transfer, "" at the root
+	// (since 1.1). It is informational: a single file is saved under its
+	// name alone.
+	Path string
 	// Size is the size of the clear file in bytes.
 	Size int64
 	// SHA256 is the lowercase hexadecimal SHA-256 of the clear file.
@@ -163,7 +167,7 @@ func (s *Service) OpenFile(ctx context.Context, t *tenant.Tenant, rawToken strin
 		svc: s, ctx: ctx, ip: clientIP, t: t, d: a.d, link: a.link, files: a.files, file: f, osf: osf, release: release,
 		sr: io.NewSectionReader(ra, 0, ra.Size()), track: tracked(a.d, a.link), limited: a.d.MaxDownloads != nil,
 	}
-	return &File{ID: f.ID, Name: f.Name, Size: f.Size, SHA256: f.SHA256, Content: c}, nil
+	return &File{ID: f.ID, Name: f.Name, Path: f.Path, Size: f.Size, SHA256: f.SHA256, Content: c}, nil
 }
 
 // openAt opens the stored file of f for random access.

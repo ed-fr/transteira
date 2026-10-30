@@ -1745,11 +1745,13 @@ type AdminTransferDetail struct {
 		// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 		// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 		// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-		// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-		// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-		// NFC normalisation and case-insensitively: two files with the same name in the same
-		// folder, or a file whose name equals a folder of the same level, are told apart by
-		// suffixing the file (`name (2).ext`) in the lists and in the archive.
+		// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+		// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+		// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+		// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+		// case-insensitively: two files with the same name in the same folder, or a file whose name
+		// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+		// in the archive only; the file lists show the stored path and name.
 		Path *FilePath `json:"path,omitempty"`
 
 		// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
@@ -2383,11 +2385,13 @@ type FileDeclaration struct {
 	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-	// NFC normalisation and case-insensitively: two files with the same name in the same
-	// folder, or a file whose name equals a folder of the same level, are told apart by
-	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+	// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+	// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+	// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+	// case-insensitively: two files with the same name in the same folder, or a file whose name
+	// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+	// in the archive only; the file lists show the stored path and name.
 	Path *FilePath `json:"path,omitempty"`
 	Size ByteSize  `json:"size"`
 }
@@ -2395,11 +2399,13 @@ type FileDeclaration struct {
 // FilePath Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 // browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 // segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-// NFC normalisation and case-insensitively: two files with the same name in the same
-// folder, or a file whose name equals a folder of the same level, are told apart by
-// suffixing the file (`name (2).ext`) in the lists and in the archive.
+// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+// case-insensitively: two files with the same name in the same folder, or a file whose name
+// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+// in the archive only; the file lists show the stored path and name.
 type FilePath = string
 
 // Fqdn defines model for Fqdn.
@@ -2733,11 +2739,13 @@ type MyTransferDetail struct {
 		// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 		// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 		// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-		// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-		// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-		// NFC normalisation and case-insensitively: two files with the same name in the same
-		// folder, or a file whose name equals a folder of the same level, are told apart by
-		// suffixing the file (`name (2).ext`) in the lists and in the archive.
+		// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+		// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+		// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+		// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+		// case-insensitively: two files with the same name in the same folder, or a file whose name
+		// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+		// in the archive only; the file lists show the stored path and name.
 		Path *FilePath `json:"path,omitempty"`
 
 		// ScanStatus `pending`: not analyzed yet. `scanning`: being analyzed (or waiting for ClamAV to come
@@ -2906,11 +2914,13 @@ type PublicFile struct {
 	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-	// NFC normalisation and case-insensitively: two files with the same name in the same
-	// folder, or a file whose name equals a folder of the same level, are told apart by
-	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+	// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+	// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+	// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+	// case-insensitively: two files with the same name in the same folder, or a file whose name
+	// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+	// in the archive only; the file lists show the stored path and name.
 	Path *FilePath `json:"path,omitempty"`
 
 	// ScanStatus `clean`, or `not_scanned_too_large` / `not_scanned_encrypted` / `not_scanned_disabled` (since 1.1; delivered unscanned: the page must say so).
@@ -3111,11 +3121,13 @@ type SenderFile struct {
 	// Path Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
 	// browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
 	// segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-	// or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-	// lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-	// NFC normalisation and case-insensitively: two files with the same name in the same
-	// folder, or a file whose name equals a folder of the same level, are told apart by
-	// suffixing the file (`name (2).ext`) in the lists and in the archive.
+	// or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+	// `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+	// Absent for a file at the root. Shown in the file lists and used as the folder inside the
+	// ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+	// case-insensitively: two files with the same name in the same folder, or a file whose name
+	// equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+	// in the archive only; the file lists show the stored path and name.
 	Path *FilePath `json:"path,omitempty"`
 
 	// ScanSignature Name of the signature ClamAV detected in an `infected` file; absent otherwise. Shown to

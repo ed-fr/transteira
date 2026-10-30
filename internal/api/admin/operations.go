@@ -287,6 +287,7 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 		out := &resp.Files[i]
 		out.Id, out.Name, out.Size, out.MediaType = f.ID, f.Name, f.Size, optional(f.MediaType)
 		out.Sha256, out.ScanStatus = optional(f.SHA256), gen.ScanStatus(f.ScanStatus)
+		out.Path = optional(f.Path)
 	}
 	if d.RecipientTracking != nil {
 		tracking := apiutil.RecipientTracking(d.RecipientTracking)

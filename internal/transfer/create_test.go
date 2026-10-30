@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/filename"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
@@ -29,7 +30,7 @@ func TestCreateInternal(t *testing.T) {
 			ExpiryDays: 30, Password: &pw, DeleteAfterFirstDownload: true, Language: "fr",
 			Files: []FileDeclaration{
 				{Name: "cafe\u0301.txt", Size: 10, MediaType: "text/plain", ExpectedSHA256: strings.ToUpper(emptySHA)},
-				{Name: "empty.bin", Size: 0},
+				{Name: "empty.bin", Size: 0, Path: "plans/résumé"},
 			},
 		}
 		d, err := ev.svc.Create(ctx, ev.a, internalSender(), req, "")
@@ -56,6 +57,9 @@ func TestCreateInternal(t *testing.T) {
 			f0.ScanStatus != store.ScanPending || f0.UploadOffset != 0 || !strings.HasPrefix(f0.UploadID, "upl_") {
 			t.Errorf("file 0 = %+v", f0)
 		}
+		if f0.Path != "" || f1.Path != "plans/résumé" {
+			t.Errorf("paths = %q, %q", f0.Path, f1.Path)
+		}
 		if f1.SHA256 != emptySHA || f1.UploadOffset != 0 || f1.UploadID == "" || f1.UploadID == f0.UploadID {
 			t.Errorf("file 1 = %+v", f1)
 		}
@@ -65,7 +69,8 @@ func TestCreateInternal(t *testing.T) {
 		}
 		if stored.Language != "fr" || stored.PasswordHash != "$fake$636f727265637420686f727365" ||
 			stored.Files[0].ExpectedSHA256 != emptySHA || stored.Files[0].DEKKeyID == "" ||
-			stored.Files[0].DEKKeyID == stored.Files[1].DEKKeyID || !stored.Files[1].Completed() {
+			stored.Files[0].DEKKeyID == stored.Files[1].DEKKeyID || !stored.Files[1].Completed() ||
+			stored.Files[1].Path != "plans/résumé" {
 			t.Errorf("stored = %+v", stored)
 		}
 		// The DEK handed to WriteEmpty is cleared after use.
@@ -158,6 +163,24 @@ func TestCreateValidation(t *testing.T) {
 			{Pointer: "/files/1/expectedSha256", Code: CodeInvalidFormat},
 			{Pointer: "/files/2/name", Code: CodeInvalidFileName},
 			{Pointer: "/files/2/mediaType", Code: CodeInvalidFormat},
+		}},
+		{"file paths", "", func(r *CreateRequest) {
+			r.Files = []FileDeclaration{
+				{Name: "a.txt", Path: "plans/../etc"},
+				{Name: "b.txt", Path: "/plans"},
+				{Name: "c.txt", Path: "plans//2026"},
+				{Name: "d.txt", Path: "plans/CON"},
+				{Name: "e.txt", Path: strings.Repeat("a/", filename.MaxPathSegments) + "a"},
+				{Name: "f.txt", Path: "ok/folder"},
+				{Name: "g.txt", Path: "bad\x00"},
+			}
+		}, []FieldError{
+			{Pointer: "/files/0/path", Code: CodeInvalidFilePath},
+			{Pointer: "/files/1/path", Code: CodeInvalidFilePath},
+			{Pointer: "/files/2/path", Code: CodeInvalidFilePath},
+			{Pointer: "/files/3/path", Code: CodeInvalidFilePath},
+			{Pointer: "/files/4/path", Code: CodeInvalidFilePath},
+			{Pointer: "/files/6/path", Code: CodeInvalidFilePath},
 		}},
 	}
 	for _, tc := range tests {

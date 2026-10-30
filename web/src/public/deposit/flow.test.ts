@@ -764,6 +764,28 @@ describe('transfer', () => {
     expect(flow.formErrors).toEqual({ message: { key: 'z' } });
   });
 
+  it('declares the folder of picked files and keeps same-named files of other folders', async () => {
+    const { flow, calls } = await readyForm({
+      'POST /transfers': { status: 201, body: transfer('uploading') },
+    });
+    const a = file('a.txt');
+    const b = file('a.txt');
+    flow.addPicked([
+      { file: a, path: 'docs/sub', hidden: false },
+      { file: b, path: '', hidden: true },
+    ]);
+    expect(flow.form.files).toHaveLength(2);
+    expect(flow.fileRoom).toBe(998);
+    expect(flow.foldersEnabled).toBe(false);
+    flow.form.recipientsText = 'carol@customer.example.net';
+    await flow.submitTransfer();
+    const files = (calls[1]?.body as { files: unknown[] }).files;
+    expect(files).toEqual([
+      { name: 'a.txt', size: 3, path: 'docs/sub', mediaType: 'text/plain' },
+      { name: 'a.txt', size: 3, mediaType: 'text/plain' },
+    ]);
+  });
+
   it('creates the transfer, uploads, finalizes and shows the recap', async () => {
     const { flow, calls, engines, store, finalize, announce } = await readyForm({
       'POST /transfers': { status: 201, body: transfer('uploading') },
@@ -788,7 +810,7 @@ describe('transfer', () => {
     expect(flow.form.password).toBe('');
     expect(store.value).toEqual({
       transferId: 'trf_1',
-      files: [{ name: 'a.txt', size: 3, lastModified: 1 }],
+      files: [{ name: 'a.txt', size: 3, lastModified: 1, path: '' }],
     });
     expect(flow.step).toBe('upload');
     const engine = engines[0] as FakeEngine;

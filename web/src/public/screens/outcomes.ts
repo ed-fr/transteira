@@ -225,6 +225,8 @@ export function isNotScanned(status: ScanStatus): boolean {
 export interface FileRow {
   id: string;
   name: string;
+  /** Relative folder of the file in the transfer; absent for the root. */
+  path?: string | undefined;
   size: number;
   sha256: string;
   scanStatus: ScanStatus;
@@ -252,6 +254,7 @@ export function downloadView(transfer: PublicTransfer): DownloadView {
   const files: FileRow[] = (transfer.files ?? []).map((f) => ({
     id: f.id,
     name: f.name,
+    ...(f.path === undefined ? {} : { path: f.path }),
     size: f.size,
     sha256: f.sha256,
     scanStatus: f.scanStatus,

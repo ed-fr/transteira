@@ -63,6 +63,8 @@ You can download the files one by one, or all of them in a single archive.
 
 The ZIP archive is not compressed: its size is close to the total size of the files. It is built while you download it, so the download starts immediately, even for very large transfers. Once it is on your computer, open or extract it as usual.
 
+If the sender sent folders, the ZIP archive keeps the folder tree, and the download page shows the folder before each file name. When a folder contains several files with the same name, the archive adds a number to the later ones (`report (2).pdf`) so that none is overwritten when you extract it. A file downloaded on its own is saved under its name only, without its folder: the folder tree is kept only in the ZIP archive.
+
 Files are always saved to your computer: they never open directly in the browser. Your browser shows the progress in its downloads list.
 
 For large files, prefer a stable connection (a cable or a good Wi-Fi network) and keep the page and the computer awake until the download ends. If a download stops, start it again from the page while the transfer is still available.

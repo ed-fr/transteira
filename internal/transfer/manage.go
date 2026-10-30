@@ -84,6 +84,9 @@ type Details struct {
 type File struct {
 	// ID is the file identifier ("fil_" + ULID).
 	ID string
+	// Path is the folder of the file inside the transfer (NFC), "" at the
+	// root.
+	Path string
 	// Name is the original name (NFC).
 	Name string
 	// Size is the declared size, in bytes.
@@ -144,7 +147,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 	}
 	for i, f := range d.Files {
 		file := File{
-			ID: f.ID, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+			ID: f.ID, Path: f.Path, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
 			ScanSignature: f.ScanSignature,
 		}
 		if uploading {

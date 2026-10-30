@@ -141,6 +141,9 @@ const (
 	// CodeInvalidFileName: the file name is refused by the file name policy
 	// (decision P8).
 	CodeInvalidFileName = "invalid-file-name"
+	// CodeInvalidFilePath: the folder path of a file is refused by the
+	// path policy (filename.ValidatePath).
+	CodeInvalidFilePath = "invalid-file-path"
 	// CodeNotAllowed: the value is not one of the accepted values (a
 	// maxDownloads outside 1 to store.MaxDownloadsLimit included), or the
 	// field is not accepted in this context (senderEmail with a session).

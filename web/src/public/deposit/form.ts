@@ -84,14 +84,23 @@ export interface FileIdentity {
   name: string;
   size: number;
   lastModified: number;
+  /** Relative folder inside the transfer; absent or '' for the root. */
+  path?: string | undefined;
 }
 
-/** Appends files to a selection, skipping those already selected (same name, size and date). */
+/**
+ * Appends files to a selection, skipping those already selected (same folder, name, size and
+ * date).
+ */
 export function addFiles<F extends FileIdentity>(current: readonly F[], added: readonly F[]): F[] {
   const out = [...current];
   for (const file of added) {
     const duplicate = out.some(
-      (f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified,
+      (f) =>
+        (f.path ?? '') === (file.path ?? '') &&
+        f.name === file.name &&
+        f.size === file.size &&
+        f.lastModified === file.lastModified,
     );
     if (!duplicate) {
       out.push(file);
@@ -214,11 +223,11 @@ export function recipientIssues(errors: FormErrors, recipients: readonly string[
   return out;
 }
 
-/** Errors of individual file names ("files.<n>.name" or "files.<n>"), by file index. */
+/** Errors of individual file names or folders ("files.<n>.name", ".path" or "files.<n>"), by file index. */
 export function fileIssues(errors: FormErrors, count: number): Map<number, Message> {
   const out = new Map<number, Message>();
   for (let i = 0; i < count; i++) {
-    const message = errors[`files.${i}.name`] ?? errors[`files.${i}`];
+    const message = errors[`files.${i}.name`] ?? errors[`files.${i}.path`] ?? errors[`files.${i}`];
     if (message !== undefined) {
       out.set(i, message);
     }

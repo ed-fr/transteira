@@ -11,6 +11,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { api } from '../../shared/api/api';
   import { Alert, Button, CopyButton, Spinner, TextField, announce } from '../../shared/components';
+  import { fullName } from '../../shared/components/folders';
   import { languageValues } from '../../shared/api/schema';
   import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import { Countdown } from './countdown.svelte';
@@ -371,7 +372,7 @@
           {#each dl.files as file (file.id)}
             <tr>
               <th scope="row" class="tt-break file-name">
-                {file.name}
+                {#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}
                 {#if isNotScanned(file.scanStatus)}
                   <span class="scan-warning tt-text-sm">
                     {file.scanStatus === 'not_scanned_encrypted'
@@ -386,14 +387,14 @@
                 <CopyButton
                   small
                   text={file.sha256}
-                  ariaLabel={t('download.files.copySha', { name: file.name })}
+                  ariaLabel={t('download.files.copySha', { name: fullName(file.path, file.name) })}
                 />
               </td>
               <td>
                 {#if file.href}
                   <a class="link-button" href={file.href} download>
                     {t('download.files.download')}<span class="visually-hidden">
-                      {t('download.files.downloadName', { name: file.name })}</span
+                      {t('download.files.downloadName', { name: fullName(file.path, file.name) })}</span
                     >
                   </a>
                 {:else}

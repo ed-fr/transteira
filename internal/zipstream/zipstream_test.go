@@ -8,10 +8,15 @@ import (
 	"hash/crc32"
 	"io"
 	"math"
+	"os"
+	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ed-fr/transteira/internal/filename"
 )
 
 // pattern is a reader of size bytes repeating a short pattern that depends on
@@ -701,4 +706,72 @@ func FuzzSize(f *testing.F) {
 			return patternBytes(byte(i), entries[i].Size)
 		})
 	})
+}
+
+// TestFolderExtraction streams an archive of files dropped as folders, named
+// by filename.ArchiveEntries, then extracts it under a confined root (threat
+// T-227): folders merged by case and NFC, duplicate names and a file named as
+// a folder all land in distinct files, even on a case-insensitive file
+// system.
+func TestFolderExtraction(t *testing.T) {
+	files := []filename.ArchiveFile{
+		{Path: "Plans/2026", Name: "a.pdf"},
+		{Path: "PLANS/2026", Name: "A.PDF"},
+		{Path: "été", Name: "x.txt"},
+		{Path: "ÉTÉ", Name: "X.TXT"},
+		{Path: "", Name: "plans"},
+		{Path: "Plans", Name: "2026"},
+		{Path: "../../etc", Name: "passwd"},
+		{Path: "%2e%2e", Name: "lit"},
+	}
+	names := filename.ArchiveEntries(files)
+	want := []string{
+		"Plans/2026/a.pdf", "Plans/2026/A (2).PDF", "été/x.txt", "été/X (2).TXT",
+		"plans (2)", "Plans/2026 (2)", "passwd", "%2e%2e/lit",
+	}
+	entries := make([]Entry, len(names))
+	for i, n := range names {
+		if n != want[i] {
+			t.Fatalf("entry %d: %q, want %q", i, n, want[i])
+		}
+		entries[i] = Entry{Name: n, Size: int64(100 + i), Modified: stamp}
+	}
+	data := build(t, Format{}, entries)
+	content := func(i int) []byte { return patternBytes(byte(i), entries[i].Size) }
+	zr := readBack(t, bytes.NewReader(data), int64(len(data)), entries, content)
+
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	for _, zf := range zr.File {
+		if !filepath.IsLocal(zf.Name) {
+			t.Fatalf("entry %q escapes the extraction folder", zf.Name)
+		}
+		if dir := path.Dir(zf.Name); dir != "." {
+			if err := root.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("mkdir %q: %v", dir, err)
+			}
+		}
+		w, err := root.OpenFile(zf.Name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			t.Fatalf("create %q: %v", zf.Name, err)
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = io.Copy(w, rc)
+		_ = rc.Close()
+		if cerr := w.Close(); err != nil || cerr != nil {
+			t.Fatalf("extract %q: %v %v", zf.Name, err, cerr)
+		}
+	}
+	for i, e := range entries {
+		got, err := root.ReadFile(e.Name)
+		if err != nil || !bytes.Equal(got, content(i)) {
+			t.Errorf("extracted %q differs (%v)", e.Name, err)
+		}
+	}
 }

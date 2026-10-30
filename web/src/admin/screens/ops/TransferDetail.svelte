@@ -29,6 +29,7 @@
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import { fullName } from '../../../shared/components/folders';
   import { formatBytes as formatBinaryBytes } from '../../forms/bytes';
   import { tenantPath } from '../../shell';
   import type { AdminScreenProps } from '../types';
@@ -206,7 +207,9 @@
 </script>
 
 {#snippet nameCell(file: TransferFile)}
-  <span class="tt-break">{file.name}</span>
+  <span class="tt-break"
+    >{#if file.path}<span class="tt-text-muted">{file.path}/</span>{/if}{file.name}</span
+  >
 {/snippet}
 
 {#snippet sizeCell(file: TransferFile)}
@@ -224,7 +227,7 @@
       <CopyButton
         small
         text={file.sha256}
-        ariaLabel={t('opsTransfers.detail.copySha256', { name: file.name })}
+        ariaLabel={t('opsTransfers.detail.copySha256', { name: fullName(file.path, file.name) })}
       />
     </span>
   {:else}

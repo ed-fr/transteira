@@ -110,7 +110,9 @@ type TransferDetail struct {
 // File is a file of a transfer: metadata, fingerprint and antivirus
 // result.
 type File struct {
-	ID         string
+	ID string
+	// Path is the folder of the file inside the transfer, "" at the root.
+	Path       string
 	Name       string
 	Size       int64
 	MediaType  string
@@ -244,7 +246,8 @@ func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid te
 	}
 	for i, f := range d.Files {
 		out.Files[i] = File{
-			ID: f.ID, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+			ID: f.ID, Path: f.Path, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256,
+			ScanStatus: f.ScanStatus,
 		}
 	}
 	if d.LinkMode == store.LinkModePerRecipient {

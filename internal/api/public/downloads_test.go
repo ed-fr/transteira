@@ -211,7 +211,7 @@ func TestGetDownload(t *testing.T) {
 		PasswordProtected: true, TotalBytes: 30, ArchiveAvailable: true,
 		Files: []download.FileView{
 			{ID: "fil_1", Name: "plans.pdf", Size: 10, MediaType: "application/pdf", SHA256: "aa", ScanStatus: store.ScanClean},
-			{ID: "fil_2", Name: "big.bin", Size: 20, SHA256: "bb", ScanStatus: store.ScanNotScannedEncrypted},
+			{ID: "fil_2", Name: "big.bin", Path: "plans/2026", Size: 20, SHA256: "bb", ScanStatus: store.ScanNotScannedEncrypted},
 		},
 	}
 	f := &fakeDownloads{view: unlocked}
@@ -231,7 +231,7 @@ func TestGetDownload(t *testing.T) {
 	}
 	f1, f2 := (*got.Files)[0], (*got.Files)[1]
 	if f1.DownloadUrl != "/api/v1/downloads/"+linkToken+"/files/fil_1" || f1.MediaType == nil || f1.ScanStatus != "clean" ||
-		f2.MediaType != nil || f2.ScanStatus != "not_scanned_encrypted" {
+		f1.Path != nil || f2.MediaType != nil || f2.ScanStatus != "not_scanned_encrypted" || f2.Path == nil || *f2.Path != "plans/2026" {
 		t.Errorf("files = %+v", *got.Files)
 	}
 

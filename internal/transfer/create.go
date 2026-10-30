@@ -99,6 +99,9 @@ type FileDeclaration struct {
 	// ExpectedSHA256 is the optional SHA-256 announced by the sender, in
 	// hexadecimal (either case).
 	ExpectedSHA256 string
+	// Path is the folder of the file inside the transfer ("a/b"), "" at
+	// the root (OpenAPI FilePath).
+	Path string
 }
 
 // plan is a validated creation request.
@@ -255,6 +258,10 @@ func validateFiles(v *validator, decls []FileDeclaration) ([]store.TransferFile,
 		if err != nil {
 			v.add(pointer+"name", CodeInvalidFileName)
 		}
+		path, err := filename.ValidatePath(d.Path)
+		if err != nil {
+			v.add(pointer+"path", CodeInvalidFilePath)
+		}
 		if d.Size < 0 {
 			v.add(pointer+"size", CodeInvalidFormat)
 		} else {
@@ -267,7 +274,7 @@ func validateFiles(v *validator, decls []FileDeclaration) ([]store.TransferFile,
 		if sum != "" && (len(sum) != sha256HexLen || strings.Trim(sum, "0123456789abcdef") != "") {
 			v.add(pointer+"expectedSha256", CodeInvalidFormat)
 		}
-		files[i] = store.TransferFile{Name: name, Size: d.Size, MediaType: d.MediaType, ExpectedSHA256: sum}
+		files[i] = store.TransferFile{Path: path, Name: name, Size: d.Size, MediaType: d.MediaType, ExpectedSHA256: sum}
 	}
 	return files, total
 }
@@ -324,6 +331,8 @@ func fingerprint(p plan, req CreateRequest) string {
 		Size      int64  `json:"s"`
 		MediaType string `json:"m"`
 		SHA256    string `json:"h"`
+		// Path (1.1) is omitted at the root, like the options below.
+		Path string `json:"p,omitempty"`
 	}
 	canonical := struct {
 		Sender     string   `json:"s,omitempty"`
@@ -347,7 +356,7 @@ func fingerprint(p plan, req CreateRequest) string {
 		Verification: req.RecipientVerification,
 	}
 	for i, f := range p.files {
-		canonical.Files[i] = file{Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256}
+		canonical.Files[i] = file{Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256, Path: f.Path}
 	}
 	b, _ := json.Marshal(canonical) //nolint:errchkjson // strings, integers and booleans only: it cannot fail
 	sum := sha256.Sum256(b)

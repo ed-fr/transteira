@@ -392,7 +392,7 @@ export interface paths {
          *       a reply, the external quotas gets `403 abuse-threshold-blocked`; without blocking, the
          *       transfer is created and the admins are alerted;
          *     - a file may carry a relative folder `path` (folders dropped in the browser), kept in the
-         *       file lists and in the ZIP archive;
+         *       file lists and in the ZIP archive (`invalid-file-path` when refused);
          *     - a session of kind `reply` addresses the transfer to the original sender (its
          *       `recipients` are ignored) and sets `replyToTransferId`; the original transfer must
          *       still be available, here and again at finalization (`410 transfer-gone`);
@@ -3279,11 +3279,13 @@ export interface components {
          * @description Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
          *     browser), segments separated by `/`: no leading or trailing `/`, no empty, `.` or `..`
          *     segment, at most 16 segments, each validated like a file name (1 to 255 bytes, no control
-         *     or bidirectional character, no `\`). Absent for a file at the root. Shown in the file
-         *     lists and used as the folder inside the ZIP archive. Names are compared after Unicode
-         *     NFC normalisation and case-insensitively: two files with the same name in the same
-         *     folder, or a file whose name equals a folder of the same level, are told apart by
-         *     suffixing the file (`name (2).ext`) in the lists and in the archive.
+         *     or bidirectional character, no `\`); stored normalised to Unicode NFC. A refused path gets
+         *     `400 validation-failed` with the code `invalid-file-path` on `/files/<index>/path`.
+         *     Absent for a file at the root. Shown in the file lists and used as the folder inside the
+         *     ZIP archive. Inside the archive, names are compared after Unicode NFC normalisation and
+         *     case-insensitively: two files with the same name in the same folder, or a file whose name
+         *     equals a folder of the same level, are told apart by suffixing the file (`name (2).ext`)
+         *     in the archive only; the file lists show the stored path and name.
          * @example plans/2026/site-a
          */
         FilePath: string;

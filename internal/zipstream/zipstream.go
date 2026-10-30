@@ -48,8 +48,8 @@
 //
 // # Names
 //
-// Entry names are expected to come from filename.ArchiveName (threats T-51
-// and T-52). They are nevertheless validated again: valid UTF-8, at most
+// Entry names are expected to come from filename.ArchiveEntries (threats
+// T-51, T-52 and T-227). They are nevertheless validated again: valid UTF-8, at most
 // 65535 bytes, no control character, no backslash, no colon (drive letters,
 // NTFS alternate streams), components separated by "/" that are neither
 // empty (no leading or trailing "/") nor "." or "..", and no two names equal

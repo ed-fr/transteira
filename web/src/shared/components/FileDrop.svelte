@@ -4,6 +4,14 @@
   // mouse users. Dropped and chosen files both go to onfiles.
   import { t } from '../i18n/i18n.svelte';
   import { describedBy, dropTarget, filesOf } from './helpers';
+  import {
+    pickedFromInput,
+    summarizePick,
+    supportsFolderPicker,
+    type AcceptedFile,
+    type PickedFile,
+    type PickNotice,
+  } from './folders';
 
   interface Props {
     /** Visible label of the field (e.g. "Files to send"). */
@@ -24,6 +32,17 @@
     id?: string;
     /** Called with the chosen or dropped files (never empty). */
     onfiles: (files: File[]) => void;
+    /**
+     * Accepts folders (drag and drop, and the "Add a folder" button). Picked files then go to
+     * onpicked, with their relative folder, instead of onfiles.
+     */
+    folders?: boolean;
+    /** Called with the picked files kept after filtering (folders mode; never empty). */
+    onpicked?: (files: AcceptedFile[]) => void;
+    /** Number of files that can still be added (folders mode; 1000 by default). */
+    room?: number;
+    /** Whether the browser can pick a folder (feature detection; injectable for tests). */
+    folderPicker?: boolean;
     /** The input element, for focus management. */
     element?: HTMLInputElement | undefined;
     class?: string;
@@ -39,6 +58,10 @@
     required = false,
     id,
     onfiles,
+    folders = false,
+    onpicked,
+    room,
+    folderPicker = supportsFolderPicker(),
     element = $bindable(),
     class: className = '',
   }: Props = $props();
@@ -48,20 +71,46 @@
   const hintId = $derived(`${inputId}-hint`);
   const errorId = $derived(`${inputId}-error`);
   const invalid = $derived(error !== undefined && error !== '');
+  const foldersOn = $derived(folders && onpicked !== undefined);
   let active = $state(false);
+  let folderInput: HTMLInputElement | undefined = $state();
+  let notice: PickNotice | undefined = $state();
+
+  /** Filters what was picked, reports what was left out, and hands the rest over. */
+  function deliver(picked: readonly PickedFile[]): void {
+    const result = summarizePick(picked, room);
+    notice = result.notice;
+    if (result.accepted.length > 0) {
+      onpicked?.(result.accepted);
+    }
+  }
 
   function handleChange(event: Event & { currentTarget: HTMLInputElement }): void {
     const input = event.currentTarget;
     const files = filesOf(input.files);
     // Reset, so that choosing the same file again (after removing it) fires change again.
     input.value = '';
-    if (files.length > 0) {
+    if (files.length === 0) {
+      return;
+    }
+    if (foldersOn) {
+      deliver(files.map((file) => ({ file, path: '' })));
+    } else {
       onfiles(files);
     }
   }
 
+  function handleFolder(event: Event & { currentTarget: HTMLInputElement }): void {
+    const input = event.currentTarget;
+    const picked = pickedFromInput(input.files);
+    input.value = '';
+    deliver(picked);
+  }
+
   const drop = dropTarget({
     onfiles: (files) => onfiles(multiple ? files : files.slice(0, 1)),
+    onpicked: (promise) => void promise.then(deliver),
+    folders: () => foldersOn,
     onactive: (value) => {
       active = value;
     },
@@ -101,6 +150,48 @@
       <span class="tt-drop__browse">{t('components.fileDrop.browse')}</span>
     {/if}
   </label>
+  {#if foldersOn && folderPicker}
+    <input
+      bind:this={folderInput}
+      type="file"
+      class="tt-drop__folder-input"
+      tabindex="-1"
+      aria-hidden="true"
+      multiple
+      webkitdirectory
+      {disabled}
+      onchange={handleFolder}
+    />
+    <button type="button" class="tt-drop__folder-button" {disabled} onclick={() => folderInput?.click()}>
+      {t('components.fileDrop.addFolder')}
+    </button>
+  {/if}
+  <div class="tt-drop__notice" role="status">
+    {#if notice}
+      {#if notice.empty}
+        <p>{t('components.fileDrop.emptyFolder')}</p>
+      {/if}
+      {#if notice.excluded > 0}
+        <p>{t('components.fileDrop.excluded', { count: notice.excluded })}</p>
+      {/if}
+      {#if notice.rejected.length > 0}
+        <p>{t('components.fileDrop.rejected', { count: notice.rejected.length })}</p>
+        <ul>
+          {#each notice.rejected.slice(0, 5) as item, i (i)}
+            <li class="tt-break">
+              {t('components.fileDrop.rejectedItem', {
+                name: item.display,
+                reason: t(`components.fileDrop.reason.${item.reason}`),
+              })}
+            </li>
+          {/each}
+        </ul>
+        {#if notice.rejected.length > 5}
+          <p>{t('components.fileDrop.rejectedMore', { count: notice.rejected.length - 5 })}</p>
+        {/if}
+      {/if}
+    {/if}
+  </div>
   {#if invalid}
     <p class="tt-drop__error" id={errorId}>
       <span class="visually-hidden">{t('components.field.errorPrefix')}</span>
@@ -170,6 +261,41 @@
 
   .tt-drop--invalid .tt-drop__zone {
     border-color: var(--tt-danger);
+  }
+
+  .tt-drop__folder-input {
+    display: none;
+  }
+
+  .tt-drop__folder-button {
+    margin-top: var(--tt-space-2);
+    padding: var(--tt-space-1) var(--tt-space-3);
+    border: var(--tt-border-width) solid var(--tt-border);
+    border-radius: var(--tt-radius);
+    background: var(--tt-surface);
+    color: var(--tt-link);
+    font: inherit;
+    font-weight: var(--tt-font-weight-bold);
+    cursor: pointer;
+  }
+
+  .tt-drop__folder-button:focus-visible {
+    outline: var(--tt-focus-width) solid var(--tt-focus);
+    outline-offset: 2px;
+  }
+
+  .tt-drop__folder-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+
+  .tt-drop__notice {
+    margin-top: var(--tt-space-2);
+    font-size: var(--tt-font-size-sm);
+  }
+
+  .tt-drop__notice p {
+    margin: 0 0 var(--tt-space-1);
   }
 
   .tt-drop__error {

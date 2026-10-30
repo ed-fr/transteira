@@ -105,6 +105,7 @@ func TestTransfersCreateAndRead(t *testing.T) {
 		tr.TotalBytes = 1010
 		big := newFile(t, db, a.ID, "Rapport annuel é.pdf", 1010)
 		big.ExpectedSHA256 = sha1111
+		big.Path = strings.Repeat("é", 100) + "/Projets 2026/sous-dossier" // multi-byte, nested
 		empty := newFile(t, db, a.ID, "empty.txt", 0)
 		empty.MediaType, empty.SHA256, empty.CiphertextSize, empty.UploadedAt = "", emptySHA, 40, fixedNow
 		d := mustTransfer(t, db, a.ID, tr, big, empty)
@@ -333,6 +334,13 @@ func TestTransfersCreateErrors(t *testing.T) {
 			"long name":            func(f *store.TransferFile) { f.Name = strings.Repeat("é", 128) },
 			"control in name":      func(f *store.TransferFile) { f.Name = "a\nb" },
 			"name not utf8":        func(f *store.TransferFile) { f.Name = "\xff" },
+			"long path":            func(f *store.TransferFile) { f.Path = strings.Repeat("é", store.MaxFilePathBytes/2) + "a" },
+			"control in path":      func(f *store.TransferFile) { f.Path = "a\tb/c" },
+			"line break in path":   func(f *store.TransferFile) { f.Path = "a/b c" },
+			"path not utf8":        func(f *store.TransferFile) { f.Path = "a/\xff" },
+			"leading slash":        func(f *store.TransferFile) { f.Path = "/a" },
+			"trailing slash":       func(f *store.TransferFile) { f.Path = "a/" },
+			"slash path":           func(f *store.TransferFile) { f.Path = "/" },
 			"size":                 func(f *store.TransferFile) { f.Size = -1 },
 			"media type":           func(f *store.TransferFile) { f.MediaType = "text/plain\r\nX: y" },
 			"long media type":      func(f *store.TransferFile) { f.MediaType = strings.Repeat("a", store.MaxMediaTypeLen+1) },

@@ -3,6 +3,7 @@
   // depositor selects the same files again; they are matched by name, size and modification
   // date, then the upload continues where it stopped.
   import { Alert, Button, FileDrop, FileList } from '../../shared/components';
+  import { fullName } from '../../shared/components/folders';
   import { t } from '../../shared/i18n/i18n.svelte';
   import type { DepositFlow } from './flow.svelte';
 
@@ -22,12 +23,17 @@
 
 <FileList files={expected} label={t('deposit.resume.expected')} />
 
-<FileDrop label={t('deposit.resume.select')} onfiles={(files) => flow.addResumeFiles(files)} />
+<FileDrop
+  label={t('deposit.resume.select')}
+  onfiles={(files) => flow.addResumeFiles(files)}
+  folders={flow.foldersEnabled}
+  onpicked={(files) => flow.addResumePicked(files)}
+/>
 
 {#if missing.length > 0}
   <Alert severity="info" live={false}>
     <span class="tt-break"
-      >{t('upload.resume.missing', { names: missing.map((f) => f.name).join(', ') })}</span
+      >{t('upload.resume.missing', { names: missing.map((f) => fullName(f.path, f.name)).join(', ') })}</span
     >
   </Alert>
 {:else}

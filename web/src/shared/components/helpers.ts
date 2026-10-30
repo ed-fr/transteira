@@ -1,5 +1,6 @@
 // Logic of the shared components, kept out of the .svelte files so that it is unit tested in
 // Node (no DOM): the browser objects it needs (clipboard, document, elements) are injected.
+import { collectDrop, type ItemLike, type PickedFile } from './folders';
 
 /** Anything with a byte size (File, or a file description from the API). */
 export interface Sized {
@@ -25,6 +26,8 @@ export function describedBy(...ids: (string | false | null | undefined)[]): stri
 export interface DropData {
   readonly types: readonly string[];
   readonly files?: ArrayLike<File> | null;
+  /** Items of the drop, from which dropped folders are read (webkitGetAsEntry). */
+  readonly items?: ArrayLike<ItemLike> | null;
 }
 
 /** Reports whether a drag operation carries files (not text or links). */
@@ -41,6 +44,13 @@ export function filesOf(list: ArrayLike<File> | null | undefined): File[] {
 export interface DropHandlers {
   /** Called with the dropped files (never with an empty list). */
   onfiles: (files: File[]) => void;
+  /**
+   * When set and folders() is true, drops go here instead of onfiles: the promise resolves to the
+   * dropped files with their relative folder (dropped folders walked recursively).
+   */
+  onpicked?: (picked: Promise<PickedFile[]>) => void;
+  /** Reports whether dropped folders are accepted. */
+  folders?: () => boolean;
   /** Called when the drag-over state changes (to toggle the drag-over class). */
   onactive: (active: boolean) => void;
   /** When it returns true, drops are ignored. */
@@ -95,9 +105,22 @@ export function dropTarget(handlers: DropHandlers): (element: DropElement) => ()
       event.preventDefault();
       handlers.onactive(false);
       const files = filesOf(event.dataTransfer?.files);
-      if (!isDisabled() && files.length > 0) {
-        handlers.onfiles(files);
+      if (isDisabled()) {
+        return;
       }
+      if (files.length === 0) {
+        // An empty or unreadable folder: in folders mode, let the zone tell the user.
+        if (handlers.onpicked !== undefined && handlers.folders?.() === true) {
+          handlers.onpicked(Promise.resolve([]));
+        }
+        return;
+      }
+      if (handlers.onpicked !== undefined && handlers.folders?.() === true) {
+        // The entries are taken now, synchronously: the browser empties the items after the event.
+        handlers.onpicked(collectDrop(event.dataTransfer?.items, event.dataTransfer?.files, true));
+        return;
+      }
+      handlers.onfiles(files);
     };
     element.addEventListener('dragenter', over);
     element.addEventListener('dragover', over);

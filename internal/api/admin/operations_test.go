@@ -54,7 +54,10 @@ var (
 	sampleDetail = tenantops.TransferDetail{
 		Transfer: sampleTransfer, SenderIP: netip.MustParseAddr("10.10.4.21"),
 		Files: []tenantops.File{
-			{ID: "fil_01", Name: "plans.pdf", Size: 2048, MediaType: "application/pdf", SHA256: strings.Repeat("a", 64), ScanStatus: store.ScanClean},
+			{
+				ID: "fil_01", Path: "site-a/2026", Name: "plans.pdf", Size: 2048, MediaType: "application/pdf",
+				SHA256: strings.Repeat("a", 64), ScanStatus: store.ScanClean,
+			},
 			{ID: "fil_02", Name: "big.bin", Size: 1, ScanStatus: store.ScanPending},
 		},
 	}
@@ -427,7 +430,8 @@ func TestTransferOperations(t *testing.T) {
 	files := body["files"].([]any)
 	f0, f1 := files[0].(map[string]any), files[1].(map[string]any)
 	if code != http.StatusOK || body["senderIp"] != "10.10.4.21" || len(files) != 2 || f0["sha256"] != strings.Repeat("a", 64) ||
-		f0["mediaType"] != "application/pdf" || f0["scanStatus"] != "clean" || body["fileCount"] != float64(1) {
+		f0["mediaType"] != "application/pdf" || f0["scanStatus"] != "clean" || body["fileCount"] != float64(1) ||
+		f0["path"] != "site-a/2026" {
 		t.Errorf("detail = %d %v", code, body)
 	}
 	if _, ok := f1["sha256"]; ok {
@@ -435,6 +439,9 @@ func TestTransferOperations(t *testing.T) {
 	}
 	if _, ok := f1["mediaType"]; ok {
 		t.Errorf("empty media type rendered: %v", f1)
+	}
+	if _, ok := f1["path"]; ok {
+		t.Errorf("root path rendered: %v", f1)
 	}
 	o.detail.SenderIP = netip.Addr{}
 	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})

@@ -106,6 +106,24 @@ describe('dropTarget', () => {
     expect(el.listeners.size).toBe(0);
   });
 
+  it('hands drops to onpicked when folders are accepted, otherwise to onfiles', async () => {
+    const onfiles = vi.fn();
+    const onpicked = vi.fn();
+    let folders = true;
+    const el = fakeElement();
+    dropTarget({ onfiles, onpicked, folders: () => folders, onactive: vi.fn() })(el);
+    const a = file('a');
+    const drop = { ...dragEvent(['Files'], [a]) };
+    (drop.dataTransfer as Record<string, unknown>).items = [];
+    el.fire('drop', drop);
+    expect(onfiles).not.toHaveBeenCalled();
+    expect(await (onpicked.mock.calls[0]?.[0] as Promise<unknown>)).toEqual([{ file: a, path: '' }]);
+
+    folders = false;
+    el.fire('drop', dragEvent(['Files'], [a]));
+    expect(onfiles).toHaveBeenCalledWith([a]);
+  });
+
   it('ignores drags without files', () => {
     const onfiles = vi.fn();
     const onactive = vi.fn();
@@ -125,6 +143,16 @@ describe('dropTarget', () => {
     dropTarget({ onfiles, onactive: vi.fn() })(el);
     el.fire('drop', dragEvent(['Files'], []));
     expect(onfiles).not.toHaveBeenCalled();
+  });
+
+  it('reports an empty drop to onpicked in folders mode', async () => {
+    const onfiles = vi.fn();
+    const onpicked = vi.fn();
+    const el = fakeElement();
+    dropTarget({ onfiles, onpicked, folders: () => true, onactive: vi.fn() })(el);
+    el.fire('drop', dragEvent(['Files'], []));
+    expect(onfiles).not.toHaveBeenCalled();
+    expect(await (onpicked.mock.calls[0]?.[0] as Promise<unknown>)).toEqual([]);
   });
 
   it('refuses drops while disabled', () => {

@@ -1,8 +1,12 @@
-<script lang="ts" generics="F extends { name: string; size: number }">
+<script
+  lang="ts"
+  generics="F extends { name: string; size: number; path?: string | undefined; hidden?: boolean | undefined }"
+>
   // List of files with their size, an optional remove button per file (accessible name
   // "Remove <file name>") and an optional total. File names are rendered as text.
   import type { Snippet } from 'svelte';
   import { formatBytes, t } from '../i18n/i18n.svelte';
+  import { fullName } from './folders';
   import { totalBytes } from './helpers';
 
   interface Props {
@@ -42,14 +46,23 @@
     {#each files as file, index (key(file, index))}
       <li class="tt-files__item">
         <div class="tt-files__main">
-          <span class="tt-files__name">{file.name}</span>
+          <span class="tt-files__name">
+            {#if file.path}<span class="tt-files__path">{file.path}/</span>{/if}{file.name}
+            {#if file.hidden}
+              <span class="tt-files__hidden"
+                ><span aria-hidden="true">{t('components.fileList.hiddenShort')}</span><span
+                  class="visually-hidden">{t('components.fileList.hidden')}</span
+                ></span
+              >
+            {/if}
+          </span>
           <span class="tt-files__size">{formatBytes(file.size)}</span>
           {#if onremove}
             <button
               type="button"
               class="tt-files__remove"
               {disabled}
-              aria-label={t('components.fileList.remove', { name: file.name })}
+              aria-label={t('components.fileList.remove', { name: fullName(file.path, file.name) })}
               onclick={() => onremove(index, file)}
             >
               <span aria-hidden="true">×</span>
@@ -96,6 +109,21 @@
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
+  }
+
+  .tt-files__path {
+    color: var(--tt-muted);
+  }
+
+  .tt-files__hidden {
+    display: inline-block;
+    margin-left: var(--tt-space-2);
+    padding: 0 var(--tt-space-2);
+    border: var(--tt-border-width) solid var(--tt-border);
+    border-radius: var(--tt-radius-sm);
+    color: var(--tt-muted);
+    font-size: var(--tt-font-size-sm);
+    white-space: nowrap;
   }
 
   .tt-files__size {

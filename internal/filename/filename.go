@@ -231,3 +231,62 @@ func asciiUpper(s string) string {
 	}
 	return string(b)
 }
+
+// Limits of a folder path (since 1.1, folders dropped in the browser).
+const (
+	// MaxPathBytes is the maximum length of a path, in bytes, after NFC
+	// normalization.
+	MaxPathBytes = 1024
+	// MaxPathSegments is the maximum number of folders in a path.
+	MaxPathSegments = 16
+)
+
+// Reasons returned by ValidatePath, on top of the reasons of a segment.
+const (
+	// ReasonPathEmptySegment: the path starts or ends with "/", or holds
+	// two "/" in a row.
+	ReasonPathEmptySegment Reason = "empty-segment"
+	// ReasonPathTooDeep: the path has more than MaxPathSegments segments.
+	ReasonPathTooDeep Reason = "too-deep"
+	// ReasonPathTooLong: the path exceeds MaxPathBytes after NFC
+	// normalization.
+	ReasonPathTooLong Reason = "path-too-long"
+)
+
+// ValidatePath checks the relative folder of a file (threat T-226) and
+// returns it normalized to NFC, or a *ValidationError. The empty path is
+// the root and is valid. Otherwise the path is made of 1 to MaxPathSegments
+// segments separated by "/" (no leading, trailing or doubled "/"), at most
+// MaxPathBytes bytes long, and each segment passes Validate: it holds no
+// "\", ":" nor control, bidirectional or invisible character, is not "."
+// or "..", and is not a Windows reserved name. Nothing is decoded: "%2e%2e"
+// is a literal, harmless name. As with Validate, a non-conforming path is
+// rejected, never corrected; the reason of a rejected segment is reported
+// as is.
+func ValidatePath(p string) (string, error) {
+	if p == "" {
+		return "", nil
+	}
+	if !utf8.ValidString(p) {
+		return reject(ReasonInvalidUTF8)
+	}
+	p = norm.NFC.String(p)
+	if len(p) > MaxPathBytes {
+		return reject(ReasonPathTooLong)
+	}
+	segments := strings.Split(p, "/")
+	if len(segments) > MaxPathSegments {
+		return reject(ReasonPathTooDeep)
+	}
+	for i, s := range segments {
+		if s == "" {
+			return reject(ReasonPathEmptySegment)
+		}
+		n, err := Validate(s)
+		if err != nil {
+			return "", err
+		}
+		segments[i] = n
+	}
+	return strings.Join(segments, "/"), nil
+}

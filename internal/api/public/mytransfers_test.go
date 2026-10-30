@@ -336,7 +336,7 @@ func TestGetAndExtendMyTransfer(t *testing.T) {
 				Transfer:   sampleTransfer(),
 				Recipients: []string{"carol@customer.example.net"},
 				Files: []store.TransferFile{
-					{ID: "fil_1", Name: "plans.pdf", Size: 1024, SHA256: strings.Repeat("a", 64), ScanStatus: store.ScanClean, DEKKeyID: "wk_dek", StorageName: "abcdef"},
+					{ID: "fil_1", Path: "site-a/2026", Name: "plans.pdf", Size: 1024, SHA256: strings.Repeat("a", 64), ScanStatus: store.ScanClean, DEKKeyID: "wk_dek", StorageName: "abcdef"},
 					{ID: "fil_2", Name: "big.iso", Size: 1024, ScanStatus: store.ScanNotScannedTooLarge},
 				},
 			},
@@ -355,7 +355,8 @@ func TestGetAndExtendMyTransfer(t *testing.T) {
 	}
 	d := gen.MyTransferDetail(resp.(gen.GetMyTransfer200JSONResponse))
 	if f.gotTransfer != "trf_x" || d.FileCount != 2 || len(d.Files) != 2 || d.Files[0].Sha256 == nil || d.Files[1].Sha256 != nil ||
-		d.Files[1].ScanStatus != "not_scanned_too_large" || d.ExtendableTo == nil || !d.ExtendableTo.Equal(extendable) ||
+		d.Files[1].ScanStatus != "not_scanned_too_large" || d.Files[0].Path == nil || *d.Files[0].Path != "site-a/2026" ||
+		d.Files[1].Path != nil || d.ExtendableTo == nil || !d.ExtendableTo.Equal(extendable) ||
 		d.ExtensionCount == nil || *d.ExtensionCount != 1 || d.DownloadCount != 2 || d.MaxDownloads == nil || *d.MaxDownloads != 3 ||
 		d.Message == nil || *d.Message != "Plans" || len(d.RecipientTracking) != 1 || d.RecipientTracking[0].Downloads[0].Count != 2 {
 		t.Errorf("detail = %+v", d)

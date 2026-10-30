@@ -28,6 +28,8 @@ const (
 	MaxRecipients = 100
 	// maxNameRunes bounds a file name in the mails.
 	maxNameRunes = 255
+	// maxPathRunes bounds the folder of a file in the mails.
+	maxPathRunes = 1024
 	// maxSignatureRunes bounds a threat name in the mails.
 	maxSignatureRunes = 200
 	// maxLinkLen bounds the download link.
@@ -100,6 +102,9 @@ func (r ScanResult) notScanned() mail.NotScannedReason {
 
 // FileView is one file of a [TransferView].
 type FileView struct {
+	// Path is the folder of the file inside the transfer ("a/b"), "" at
+	// the root.
+	Path string
 	// Name is the original file name.
 	Name string
 	// Size is the size in bytes.
@@ -410,7 +415,7 @@ func (n *Notifier) FileProblems(ctx context.Context, t *tenant.Tenant, tr Transf
 			data.Rejected = false
 		case f.Scan == ScanInfected:
 			data.Infected = append(data.Infected, mail.InfectedFile{
-				Name:      oneLine(f.Name, maxNameRunes),
+				Name:      f.displayName(),
 				Signature: oneLine(f.Signature, maxSignatureRunes),
 			})
 		}
@@ -671,7 +676,7 @@ func deliveredFiles(files []FileView) ([]mail.FileInfo, error) {
 			return nil, fmt.Errorf("%w: file digest or size", ErrInvalidTransfer)
 		}
 		out = append(out, mail.FileInfo{
-			Name: oneLine(f.Name, maxNameRunes), Size: f.Size, SHA256: sum, NotScanned: f.Scan.notScanned(),
+			Name: f.displayName(), Size: f.Size, SHA256: sum, NotScanned: f.Scan.notScanned(),
 		})
 	}
 	return out, nil
@@ -683,10 +688,21 @@ func withheldFiles(files []FileView) []mail.FileInfo {
 	var out []mail.FileInfo
 	for _, f := range files {
 		if f.Scan == ScanWithheld {
-			out = append(out, mail.FileInfo{Name: oneLine(f.Name, maxNameRunes), Size: max(f.Size, 0)})
+			out = append(out, mail.FileInfo{Name: f.displayName(), Size: max(f.Size, 0)})
 		}
 	}
 	return out
+}
+
+// displayName returns the name of f as the mails show it, sanitized: its
+// folder and its name joined by "/" ("plans/2026/site.pdf"), its name
+// alone at the root.
+func (f FileView) displayName() string {
+	name := oneLine(f.Name, maxNameRunes)
+	if f.Path == "" {
+		return name
+	}
+	return oneLine(f.Path, maxPathRunes) + "/" + name
 }
 
 // isHex reports whether s is n lowercase hexadecimal digits.
@@ -742,7 +758,7 @@ func ViewOf(d store.TransferDetails) TransferView {
 		v.ConfidentialityLabels = maps.Clone(d.ConfidentialityLabel)
 	}
 	for _, f := range d.Files {
-		fv := FileView{Name: f.Name, Size: f.Size, SHA256: f.SHA256}
+		fv := FileView{Path: f.Path, Name: f.Name, Size: f.Size, SHA256: f.SHA256}
 		switch f.ScanStatus {
 		case store.ScanClean:
 			fv.Scan = ScanClean

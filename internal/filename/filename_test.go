@@ -169,100 +169,6 @@ func TestValidationErrorMessage(t *testing.T) {
 	}
 }
 
-func TestArchiveName(t *testing.T) {
-	seen := map[string]int{}
-	steps := []struct{ in, want string }{
-		{"a.txt", "a.txt"},
-		{"a.txt", "a (2).txt"},
-		{"A.TXT", "A (3).TXT"},
-		{"a (4).txt", "a (4).txt"},
-		{"a.txt", "a (5).txt"},
-		{"b", "b"},
-		{"B", "B (2)"},
-		{"archive.tar.gz", "archive.tar.gz"},
-		{"archive.tar.gz", "archive.tar (2).gz"},
-		{"", Fallback},
-		{"../x", Fallback + " (2)"},
-		{"CON", Fallback + " (3)"},
-		{"Why?.pdf", "Why_.pdf"},
-		{`a<b>c"d|e*f`, "a_b_c_d_e_f"},
-		{"e\u0301.txt", "é.txt"},
-		{"É.TXT", "É (2).TXT"},
-		{".env", ".env"},
-		{".ENV", ".ENV (2)"},
-		{"..env", "..env"},
-		{"..env", ". (2).env"},
-		{".a.b", ".a.b"},
-		{".a.b", ".a (2).b"},
-		{"q  .txt", "q  .txt"},
-		{"q  .txt", "q (2).txt"},
-	}
-	for _, s := range steps {
-		if got := ArchiveName(s.in, seen); got != s.want {
-			t.Fatalf("ArchiveName(%q) = %q, want %q", s.in, got, s.want)
-		}
-	}
-}
-
-func TestArchiveNameLength(t *testing.T) {
-	long := strings.Repeat("a", 251) + ".txt" // 255 bytes
-	seen := map[string]int{}
-	ArchiveName(long, seen)
-	got := ArchiveName(long, seen)
-	want := strings.Repeat("a", 247) + " (2).txt"
-	if got != want {
-		t.Fatalf("got %q (%d bytes)", got, len(got))
-	}
-
-	// Multi-byte stem: never split a character.
-	multi := strings.Repeat("é", 125) + ".txt" // 254 bytes
-	seen = map[string]int{}
-	ArchiveName(multi, seen)
-	got = ArchiveName(multi, seen)
-	if len(got) > MaxBytes || !utf8.ValidString(got) || !strings.HasSuffix(got, " (2).txt") {
-		t.Fatalf("got %q (%d bytes)", got, len(got))
-	}
-
-	// An extension leaving no room for a stem is dropped.
-	hugeExt := "a." + strings.Repeat("x", 252) // 254 bytes
-	seen = map[string]int{}
-	ArchiveName(hugeExt, seen)
-	got = ArchiveName(hugeExt, seen)
-	if want := ("a." + strings.Repeat("x", 252))[:251] + " (2)"; got != want {
-		t.Fatalf("got %q (%d bytes)", got, len(got))
-	}
-
-	// Truncation removes the trailing spaces and dots of the stem.
-	spaced := strings.Repeat("a", 245) + "  .  b.txt" // 255 bytes
-	seen = map[string]int{}
-	ArchiveName(spaced, seen)
-	if got := ArchiveName(spaced, seen); got != strings.Repeat("a", 245)+" (2).txt" {
-		t.Fatalf("got %q", got)
-	}
-
-	// A stem that cannot be cut on a normalization boundary falls back.
-	marks := strings.Repeat("\u0301", 12) + "." + strings.Repeat("x", 239) // 24 + 240 = 264 > 255
-	marks = marks[:len(marks)-10]                                          // 254 bytes
-	if _, err := Validate(marks); err != nil {
-		t.Fatalf("Validate(marks): %v", err)
-	}
-	seen = map[string]int{}
-	ArchiveName(marks, seen)
-	if got := ArchiveName(marks, seen); got != Fallback+" (2)" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestArchiveNameAlwaysValid(t *testing.T) {
-	seen := map[string]int{}
-	for range 30 {
-		got := ArchiveName(strings.Repeat("z", 255), seen)
-		if v, err := Validate(got); err != nil || v != got {
-			t.Fatalf("ArchiveName produced invalid %q: %v", got, err)
-		}
-	}
-}
-
 func FuzzValidate(f *testing.F) {
 	for _, s := range []string{
 		"q  .txt", "a\u3164b", "a\uff0fb", "x   y",
@@ -273,7 +179,6 @@ func FuzzValidate(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, in string) {
-		seen := map[string]int{}
 		out, err := Validate(in)
 		if err == nil {
 			checkName(t, out)
@@ -286,11 +191,10 @@ func FuzzValidate(f *testing.F) {
 				t.Fatalf("bad error %v / %q", err, out)
 			}
 		}
-		for range 3 {
-			a := ArchiveName(in, seen)
+		for _, a := range ArchiveEntries([]ArchiveFile{{Name: in}, {Name: in}, {Name: in}}) {
 			checkName(t, a)
 			if v, err := Validate(a); err != nil || v != a {
-				t.Fatalf("ArchiveName(%q) = %q, invalid: %v", in, a, err)
+				t.Fatalf("archive entry of %q = %q, invalid: %v", in, a, err)
 			}
 		}
 	})

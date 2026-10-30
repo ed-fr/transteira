@@ -4,6 +4,7 @@
   "invalid-format": "This value is not in the expected format.",
   "invalid-email": "Enter a valid email address, for example name@example.com.",
   "invalid-file-name": "This file name is not accepted.",
+  "invalid-file-path": "This folder name or path is not accepted.",
   "invalid-template": "This template contains an error.",
   "duplicate": "This value appears more than once.",
   "not-allowed": "This value is not allowed.",

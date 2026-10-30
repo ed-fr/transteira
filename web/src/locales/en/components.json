@@ -15,7 +15,38 @@
   "fileDrop": {
     "instructions": "Drag and drop files here, or",
     "browse": "choose files",
-    "active": "Release to add the files"
+    "active": "Release to add the files",
+    "emptyFolder": "No file found in the folder.",
+    "addFolder": "Add a folder",
+    "excluded": {
+      "one": "{count} system file was left out (such as .DS_Store or Thumbs.db).",
+      "other": "{count} system files were left out (such as .DS_Store or Thumbs.db)."
+    },
+    "rejected": {
+      "one": "{count} file was not added because its name or folder is not accepted.",
+      "other": "{count} files were not added because their name or folder is not accepted."
+    },
+    "rejectedItem": "{name}: {reason}",
+    "rejectedMore": {
+      "one": "And {count} other file.",
+      "other": "And {count} other files."
+    },
+    "reason": {
+      "empty": "empty name",
+      "too-long": "name or path too long",
+      "control-character": "control character in the name",
+      "bidi-control": "text direction character in the name",
+      "invisible-character": "invisible character in the name",
+      "path-separator": "forbidden character ( / \\ : ) in the name",
+      "space-run": "too many consecutive spaces",
+      "dot-name": "name made of dots only",
+      "leading-or-trailing-space-or-dot": "name starting with a space or ending with a space or a dot",
+      "reserved-name": "name reserved by Windows",
+      "empty-segment": "empty folder name in the path",
+      "too-deep": "folders nested too deeply (16 levels at most)",
+      "path-too-long": "folder path too long",
+      "too-many": "too many files in the transfer"
+    }
   },
   "fileList": {
     "label": "Selected files",
@@ -23,7 +54,9 @@
     "total": {
       "one": "{count} file, {size}",
       "other": "{count} files, {size}"
-    }
+    },
+    "hiddenShort": "Hidden",
+    "hidden": "Hidden file (name starting with a dot)"
   },
   "progress": {
     "value": "{percent}%"

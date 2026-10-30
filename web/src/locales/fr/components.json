@@ -15,7 +15,38 @@
   "fileDrop": {
     "instructions": "Glissez-déposez des fichiers ici, ou",
     "browse": "choisissez des fichiers",
-    "active": "Relâchez pour ajouter les fichiers"
+    "active": "Relâchez pour ajouter les fichiers",
+    "emptyFolder": "Aucun fichier trouvé dans le dossier.",
+    "addFolder": "Ajouter un dossier",
+    "excluded": {
+      "one": "{count} fichier système a été écarté (par exemple .DS_Store ou Thumbs.db).",
+      "other": "{count} fichiers système ont été écartés (par exemple .DS_Store ou Thumbs.db)."
+    },
+    "rejected": {
+      "one": "{count} fichier n’a pas été ajouté car son nom ou son dossier n’est pas accepté.",
+      "other": "{count} fichiers n’ont pas été ajoutés car leur nom ou leur dossier n’est pas accepté."
+    },
+    "rejectedItem": "{name} : {reason}",
+    "rejectedMore": {
+      "one": "Et {count} autre fichier.",
+      "other": "Et {count} autres fichiers."
+    },
+    "reason": {
+      "empty": "nom vide",
+      "too-long": "nom ou chemin trop long",
+      "control-character": "caractère de contrôle dans le nom",
+      "bidi-control": "caractère de sens d’écriture dans le nom",
+      "invisible-character": "caractère invisible dans le nom",
+      "path-separator": "caractère interdit ( / \\ : ) dans le nom",
+      "space-run": "trop d’espaces consécutifs",
+      "dot-name": "nom composé uniquement de points",
+      "leading-or-trailing-space-or-dot": "nom commençant par une espace ou finissant par une espace ou un point",
+      "reserved-name": "nom réservé par Windows",
+      "empty-segment": "nom de dossier vide dans le chemin",
+      "too-deep": "dossiers imbriqués trop profondément (16 niveaux au plus)",
+      "path-too-long": "chemin de dossier trop long",
+      "too-many": "trop de fichiers dans le transfert"
+    }
   },
   "fileList": {
     "label": "Fichiers sélectionnés",
@@ -23,7 +54,9 @@
     "total": {
       "one": "{count} fichier, {size}",
       "other": "{count} fichiers, {size}"
-    }
+    },
+    "hiddenShort": "Caché",
+    "hidden": "Fichier caché (nom commençant par un point)"
   },
   "progress": {
     "value": "{percent} %"

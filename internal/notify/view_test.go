@@ -1,6 +1,8 @@
 package notify
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,5 +90,48 @@ func TestViewOfReply(t *testing.T) {
 	reply.ReplyToTransferID = "trf_bad"
 	if v := ViewOf(store.TransferDetails{Transfer: reply}); v.ReplyTo == nil || !v.ReplyTo.OriginalCreatedAt.Equal(reply.CreatedAt) {
 		t.Errorf("fallback view %+v", v.ReplyTo)
+	}
+}
+
+// TestFolderPathInMails joins the folder of a file to its name in the
+// mail lists (delivered, infected and withheld files), and ViewOf carries
+// the folder of the store file.
+func TestFolderPathInMails(t *testing.T) {
+	v := ViewOf(store.TransferDetails{Files: []store.TransferFile{
+		{Path: "plans/2026", Name: "a.pdf", ScanStatus: store.ScanClean},
+		{Name: "b.pdf", ScanStatus: store.ScanClean},
+	}})
+	if v.Files[0].Path != "plans/2026" || v.Files[1].Path != "" {
+		t.Fatalf("view files = %+v", v.Files)
+	}
+	for _, tc := range []struct {
+		f    FileView
+		want string
+	}{
+		{FileView{Name: "a.pdf"}, "a.pdf"},
+		{FileView{Path: "plans/2026", Name: "a.pdf"}, "plans/2026/a.pdf"},
+		{FileView{Path: "pl\u202eans\nx", Name: "a\u200b.pdf"}, "plans x/a.pdf"},
+	} {
+		if got := tc.f.displayName(); got != tc.want {
+			t.Errorf("displayName(%+v) = %q, want %q", tc.f, got, tc.want)
+		}
+	}
+
+	e := newEnv(t)
+	tr := testTransfer()
+	tr.Language = "en"
+	tr.Files[0].Path = "plans/2026"
+	tr.Files[2].Path = "suspect"
+	tr.Files[3].Path = "archives/old"
+	ctx := context.Background()
+	jobs, err := e.n.RecipientJobs(ctx, e.t, tr, testLink)
+	if err != nil || len(jobs) == 0 || !strings.Contains(jobs[0].Message.Text, "plans/2026/report.pdf") ||
+		!strings.Contains(jobs[0].Message.HTML, "plans/2026/report.pdf") {
+		t.Errorf("recipient mail: %v\n%+v", err, jobs)
+	}
+	j, err := e.n.FileProblems(ctx, e.t, tr)
+	if err != nil || !strings.Contains(j.Message.Text, "suspect/eicar.com") ||
+		!strings.Contains(j.Message.Text, "archives/old/locked.zip") {
+		t.Errorf("problems mail: %v\n%s", err, j.Message.Text)
 	}
 }

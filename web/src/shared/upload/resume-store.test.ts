@@ -45,9 +45,9 @@ const throwing = {
 const record: ResumeRecord = {
   transferId: 'trf_1',
   files: [
-    { name: 'a.bin', size: 10, lastModified: 1 },
-    { name: 'a.bin', size: 10, lastModified: 2 },
-    { name: 'b.bin', size: 0, lastModified: 3 },
+    { name: 'a.bin', size: 10, lastModified: 1, path: '' },
+    { name: 'a.bin', size: 10, lastModified: 2, path: '' },
+    { name: 'b.bin', size: 0, lastModified: 3, path: '' },
   ],
 };
 
@@ -121,7 +121,28 @@ describe('fingerprint and matchFiles', () => {
       name: 'x',
       size: 3,
       lastModified: 9,
+      path: '',
     });
+    expect(fingerprint({ name: 'x', size: 3, lastModified: 9, path: 'a/b' })).toMatchObject({ path: 'a/b' });
+  });
+
+  it('reads a record saved before folders existed (no path = root)', () => {
+    const storage = new MemoryStorage();
+    const store = createResumeStore(() => storage, 'k');
+    storage.setItem(
+      'k',
+      JSON.stringify({ transferId: 't', files: [{ name: 'a', size: 1, lastModified: 2 }] }),
+    );
+    expect(store.load()?.files).toEqual([{ name: 'a', size: 1, lastModified: 2, path: '' }]);
+  });
+
+  it('does not pair files of the same name in different folders', () => {
+    const rec: ResumeRecord = {
+      transferId: 't',
+      files: [{ name: 'a', size: 1, lastModified: 2, path: 'x' }],
+    };
+    expect(matchFiles(rec, [{ name: 'a', size: 1, lastModified: 2, path: 'y' }]).complete).toBe(false);
+    expect(matchFiles(rec, [{ name: 'a', size: 1, lastModified: 2, path: 'x' }]).complete).toBe(true);
   });
 
   it('pairs reselected files in the record order, each used once', () => {

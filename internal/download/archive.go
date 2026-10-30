@@ -52,8 +52,9 @@ type Archive struct {
 // PrepareArchive prepares the archive of the transfer of the download
 // token rawToken in tenant t, for the client clientIP. cookies are the raw
 // technical cookies of the request. The entries are the deliverable files
-// by position, named by filename.ArchiveName (sanitized and made unique),
-// stored without compression.
+// by position, named by filename.ArchiveEntries from their folder and name
+// (sanitized, folders merged and names made unique), stored without
+// compression.
 //
 // It returns ErrNotFound and ErrGone as Resolve does (a transfer whose
 // download limit is reached is prepared: [Archive.Begin] decides),
@@ -72,10 +73,14 @@ func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken
 	if !a.unlocked {
 		return nil, ErrDownloadLocked
 	}
-	seen := map[string]int{}
-	entries := make([]zipstream.Entry, 0, len(a.files))
-	for _, f := range a.files {
-		entries = append(entries, zipstream.Entry{Name: filename.ArchiveName(f.Name, seen), Size: f.Size, Modified: f.UploadedAt})
+	files := make([]filename.ArchiveFile, len(a.files))
+	for i, f := range a.files {
+		files[i] = filename.ArchiveFile{Path: f.Path, Name: f.Name}
+	}
+	names := filename.ArchiveEntries(files)
+	entries := make([]zipstream.Entry, len(a.files))
+	for i, f := range a.files {
+		entries[i] = zipstream.Entry{Name: names[i], Size: f.Size, Modified: f.UploadedAt}
 	}
 	size, err := archiveSize(entries)
 	if err != nil {

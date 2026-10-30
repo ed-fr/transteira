@@ -32,7 +32,7 @@ func uploadingDetails() transfer.Details {
 		TotalBytes: 15, CreatedAt: created, UploadExpiresAt: created.Add(24 * time.Hour),
 		Files: []transfer.File{
 			{
-				ID: "fil_1", Name: "plans.pdf", Size: 10, MediaType: "application/pdf", ScanStatus: store.ScanPending,
+				ID: "fil_1", Path: "site-a/2026", Name: "plans.pdf", Size: 10, MediaType: "application/pdf", ScanStatus: store.ScanPending,
 				UploadID: "upl_1", UploadOffset: 4,
 			},
 			{
@@ -114,13 +114,13 @@ func TestCreateTransfer(t *testing.T) {
 	msg, pw, lang, del, mt, sum := "Hello", "secret", gen.Language("en"), true, "application/pdf", "ab"
 	sender := gen.Email("bot@entity-a.example.com")
 	recipients := []gen.Email{"carol@customer.example.net", "dave@customer.example.net"}
-	key := "key-1"
+	key, path := "key-1", gen.FilePath("plans/2026")
 	resp, err := NewServer(WithTransfers(f)).CreateTransfer(depositCtx(t, &info), gen.CreateTransferRequestObject{
 		Params: gen.CreateTransferParams{IdempotencyKey: &key},
 		Body: &gen.TransferCreate{
 			SenderEmail: &sender, Recipients: &recipients, Message: &msg, ExpiryDays: 7, Password: &pw,
 			DeleteAfterFirstDownload: &del, Language: &lang,
-			Files: []gen.FileDeclaration{{Name: "plans.pdf", Size: 10, MediaType: &mt, ExpectedSha256: &sum}, {Name: "b", Size: 0}},
+			Files: []gen.FileDeclaration{{Name: "plans.pdf", Size: 10, MediaType: &mt, ExpectedSha256: &sum, Path: &path}, {Name: "b", Size: 0}},
 		},
 	})
 	if err != nil {
@@ -147,7 +147,7 @@ func TestCreateTransfer(t *testing.T) {
 	if r.SenderEmail != string(sender) || !slices.Equal(r.Recipients, []string{"carol@customer.example.net", "dave@customer.example.net"}) ||
 		r.Message != msg || r.ExpiryDays != 7 || r.Password == nil || *r.Password != pw || !r.DeleteAfterFirstDownload ||
 		r.Language != "en" || len(r.Files) != 2 ||
-		r.Files[0] != (transfer.FileDeclaration{Name: "plans.pdf", Size: 10, MediaType: mt, ExpectedSHA256: sum}) ||
+		r.Files[0] != (transfer.FileDeclaration{Name: "plans.pdf", Size: 10, MediaType: mt, ExpectedSHA256: sum, Path: "plans/2026"}) ||
 		r.Files[1] != (transfer.FileDeclaration{Name: "b"}) {
 		t.Errorf("request = %+v", r)
 	}
@@ -201,10 +201,11 @@ func TestTransferBody(t *testing.T) {
 	}
 	f0, f1 := b.Files[0], b.Files[1]
 	if f0.MediaType == nil || *f0.MediaType != "application/pdf" || f0.Sha256 != nil || f0.UploadUrl == nil ||
-		*f0.UploadUrl != "/api/v1/uploads/upl_1" || f0.UploadOffset == nil || *f0.UploadOffset != 4 || f0.ScanStatus != "pending" {
+		*f0.UploadUrl != "/api/v1/uploads/upl_1" || f0.UploadOffset == nil || *f0.UploadOffset != 4 || f0.ScanStatus != "pending" ||
+		f0.Path == nil || *f0.Path != "site-a/2026" {
 		t.Errorf("file 0 = %+v", f0)
 	}
-	if f1.MediaType != nil || f1.Sha256 == nil || *f1.Sha256 != "e3b0" || *f1.UploadOffset != 5 {
+	if f1.Path != nil || f1.MediaType != nil || f1.Sha256 == nil || *f1.Sha256 != "e3b0" || *f1.UploadOffset != 5 {
 		t.Errorf("file 1 = %+v", f1)
 	}
 

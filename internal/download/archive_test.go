@@ -54,11 +54,11 @@ func TestArchive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		seen := map[string]int{}
-		var want []string
+		var files []filename.ArchiveFile
 		for _, n := range names[:4] {
-			want = append(want, filename.ArchiveName(n, seen))
+			files = append(files, filename.ArchiveFile{Name: n})
 		}
+		want := filename.ArchiveEntries(files)
 		if len(zr.File) != 4 {
 			t.Fatalf("%d entries, want the 4 deliverable files", len(zr.File))
 		}
@@ -87,6 +87,62 @@ func TestArchive(t *testing.T) {
 		}
 		if len(ev.firstDownloads()) != 1 {
 			t.Fatal("second first download mail")
+		}
+	})
+}
+
+// TestArchiveFolders checks the entries of the archive of files dropped as
+// folders (since 1.1): folders merged by case and NFC, duplicate names and a
+// file named as a folder suffixed, and the folders on the download page.
+func TestArchiveFolders(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, nil)
+		ctx := context.Background()
+		contents := [][]byte{random(100), random(200), random(300), random(400), random(500), random(600)}
+		names := []string{"a.pdf", "A.PDF", "x.txt", "x.txt", "plans", "2026"}
+		paths := []string{"Plans/2026", "plans/2026", "été", "ÉTÉ", "", "Plans"}
+		p := ev.publish(ev.a, spec{contents: contents, names: names, paths: paths})
+		v, err := ev.svc.Resolve(ctx, ev.a, p.token, Cookies{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, f := range v.Files {
+			if f.Path != paths[i] || f.Name != names[i] {
+				t.Errorf("file %d shown as %q / %q", i, f.Path, f.Name)
+			}
+		}
+		a, err := ev.svc.PrepareArchive(ctx, ev.a, p.token, ipOne, Cookies{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer a.Close()
+		var buf bytes.Buffer
+		if err := a.Write(ctx, &buf); err != nil {
+			t.Fatal(err)
+		}
+		zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			"Plans/2026/a.pdf", "Plans/2026/A (2).PDF", "été/x.txt", "été/x (2).txt", "plans (2)", "Plans/2026 (2)",
+		}
+		if len(zr.File) != len(want) {
+			t.Fatalf("%d entries, want %d", len(zr.File), len(want))
+		}
+		for i, zf := range zr.File {
+			if zf.Name != want[i] {
+				t.Errorf("entry %d: %q, want %q", i, zf.Name, want[i])
+			}
+			rc, err := zf.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(rc)
+			_ = rc.Close()
+			if err != nil || !bytes.Equal(got, contents[i]) {
+				t.Errorf("entry %d content differs (%v)", i, err)
+			}
 		}
 	})
 }

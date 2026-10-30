@@ -209,7 +209,8 @@ func TestGetPublicTenantOptions(t *testing.T) {
 		t.Errorf("second level %+v", l[1])
 	}
 	// Every transfer has per-recipient links since 1.1: the verification is offered.
-	if b.Features == nil || !b.Features.MaxDownloads || !b.Features.RecipientVerification || !b.Features.RecipientRestrictions {
+	if b.Features == nil || !b.Features.MaxDownloads || !b.Features.RecipientVerification || !b.Features.RecipientRestrictions ||
+		!b.Features.Folders {
 		t.Errorf("features %+v", b.Features)
 	}
 	if b.Features.RemoteInternalDeposit {

@@ -189,7 +189,7 @@ scan_status TEXT NOT NULL DEFAULT 'pending'
 ```
 
 - `not_scanned_disabled` is a final status. `scanned_at` is set at the time of the decision, which is finalization: the transfer goes from scanning to available without contacting any engine. A file that is disabled, too large or encrypted is delivered and flagged. The file-not-scanned mail and the download page show the reason.
-- `path`: `''` means the root. The value is a relative directory with segments separated by `/`, at most 16 segments, and each segment is validated like a file name by `internal/filename` (store and API). There is no unique constraint on `(transfer_id, path, name)`, because uniqueness depends on Unicode normalisation that SQL cannot express on both engines. Duplicates are detected case-insensitively after NFC normalisation when the list and the ZIP are built. A conflict between a file name and a folder name is resolved by suffixing the file ("name (2)") (D25).
+- `path`: `''` means the root. The value is a relative directory with segments separated by `/`, at most 16 segments, and each segment is validated like a file name by `internal/filename` (store and API). There is no unique constraint on `(transfer_id, path, name)`, because uniqueness depends on Unicode normalisation that SQL cannot express on both engines. Duplicates are detected case-insensitively after NFC normalisation when the ZIP is built, and told apart in the archive only: the file lists show the stored path and name. A conflict between a file name and a folder name is resolved in the archive by suffixing the file ("name (2)") (D25).
 
 ### 2.3 Migration 0015 `recipient_links`
 
@@ -688,6 +688,6 @@ The open questions of the first draft are settled by the review resolutions (`v1
 | Antivirus disable timing | Frozen at finalization. Engine `none` releases waiting files at startup. No rescan (D8) | §2.2 |
 | Recipient verification cookie | Stateless `__Host-tt_rv`, no table (D10) | §1 |
 | "My transfers" requests | Identical request path, async worker, limits counted for unknown addresses too (D12) | §2.7 |
-| Folder duplicates | Case-insensitive after NFC, file suffixed on a file/folder conflict (D25) | §2.2 |
+| Folder duplicates | Case-insensitive after NFC, told apart in the ZIP only (the lists show the stored names), file suffixed on a file/folder conflict (D25) | §2.2 |
 | Problem codes | kebab-case (D18) | §1 |
 | Per-link served-range state | One small range-state file per (transfer, link) on disk, same mechanism as V1 per transfer, removed with the transfer; the database is still written only at download start and completion (D2) | §2.3 |

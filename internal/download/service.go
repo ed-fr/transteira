@@ -318,6 +318,9 @@ type FileView struct {
 	ID string
 	// Name is the original file name, to be shown as text.
 	Name string
+	// Path is the folder of the file inside the transfer, "" at the root
+	// (since 1.1), to be shown as text.
+	Path string
 	// Size is the size of the clear file in bytes.
 	Size int64
 	// MediaType is the informational media type, "" when unknown.
@@ -624,7 +627,7 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 	for _, f := range a.files {
 		v.TotalBytes += f.Size
 		v.Files = append(v.Files, FileView{
-			ID: f.ID, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+			ID: f.ID, Name: f.Name, Path: f.Path, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
 		})
 	}
 	return v, nil

@@ -166,6 +166,9 @@ func TestFingerprint(t *testing.T) {
 		func(p *plan, _ *CreateRequest) {
 			p.files = []store.TransferFile{{Name: "f", Size: 2, MediaType: "t", ExpectedSHA256: "h"}}
 		},
+		func(p *plan, _ *CreateRequest) {
+			p.files = []store.TransferFile{{Path: "d", Name: "f", Size: 1, MediaType: "t", ExpectedSHA256: "h"}}
+		},
 	}
 	for i, change := range changes {
 		p, r := base, req

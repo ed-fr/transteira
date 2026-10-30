@@ -252,11 +252,11 @@ func myTransferDetailBody(d mytransfers.TransferDetail) gen.MyTransferDetail {
 	// The generated item type is anonymous: grow the slice rather than
 	// spelling it out; max(.., 1) keeps it non-nil, so that the JSON is [].
 	body.Files = slices.Grow(body.Files, max(len(d.Files), 1))[:len(d.Files)]
-	// Folder paths (since 1.1, folders dropped in the browser) are not
-	// stored yet: every file is at the root, Path stays absent.
 	for i, f := range d.Files {
 		file := &body.Files[i]
 		file.Id, file.Name, file.Size, file.ScanStatus = f.ID, f.Name, f.Size, gen.ScanStatus(f.ScanStatus)
+		// The folder (since 1.1) is absent at the root.
+		file.Path = optional(f.Path)
 		if f.SHA256 != "" {
 			sum := f.SHA256
 			file.Sha256 = &sum
