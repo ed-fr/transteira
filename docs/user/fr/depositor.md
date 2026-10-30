@@ -17,6 +17,15 @@ Une personne externe (hors du réseau ou avec une autre adresse mail) a besoin d
 
 > **À savoir** Votre administrateur peut aussi avoir bloqué certaines adresses ou certains domaines. Une adresse bloquée ne peut pas envoyer de fichiers.
 
+<!-- topic: rules -->
+## Règles de votre organisation
+
+Votre organisation a fixé des règles pour l’envoi de fichiers ; voici celles de l’entité à laquelle vous accédez.
+
+<!-- rules: summary -->
+
+Les règles en vigueur sont toujours celles que le service applique au moment de votre envoi : elles peuvent changer, et une copie imprimée peut être périmée. L’aide en ligne propose aussi une version imprimable de cette documentation.
+
 <!-- topic: deposit -->
 ## Envoyer des fichiers
 
@@ -72,7 +81,11 @@ Remplissez les champs :
 - **Nombre maximal de téléchargements** : facultatif, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Laissez le champ vide pour ne pas limiter, sauf si le niveau choisi impose un plafond.
 - **Fichiers à envoyer** : faites glisser vos fichiers sur la zone **Glissez-déposez des fichiers ici, ou** cliquez sur **choisissez des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait à côté de son nom. Sous la liste, le formulaire affiche **Total :** suivi de la taille de vos fichiers et de la taille autorisée.
 
+<!-- rules: levels -->
+
 Un transfert peut contenir jusqu’à 20 Go au total ; votre organisation a pu fixer une limite plus basse. L’indication sous **Fichiers à envoyer** donne les limites réelles (taille totale et nombre de fichiers).
+
+<!-- rules: limits -->
 
 Pour envoyer un dossier entier, faites-le glisser sur la zone, ou cliquez sur **Ajouter un dossier** (le chemin accessible au clavier) et choisissez-le. L’arborescence est conservée : la liste affiche le dossier avant chaque nom de fichier (par exemple `photos/2026/`), et les destinataires retrouvent la même arborescence dans l’archive ZIP. Avant d’envoyer, vérifiez la liste :
 
@@ -129,6 +142,7 @@ Par mail, vous recevez aussi une confirmation d’envoi et un avis de premier t�
 > **À savoir** Le lien de téléchargement n’est pas affiché à l’écran : les destinataires le reçoivent par mail, avec un QR code pour l’ouvrir sur un téléphone et les empreintes des fichiers.
 
 <!-- topic: deposit-remote -->
+<!-- when: remoteInternalDeposit -->
 ## Dépôt depuis l’extérieur
 
 Si votre organisation l’a activé, vous pouvez envoyer des fichiers en télétravail, hors du réseau de l’organisation, sans invitation. Cela ne vaut que pour une adresse mail d’un domaine de l’organisation, **déjà vérifiée une première fois depuis le réseau interne**.
@@ -145,6 +159,7 @@ Si l’option est désactivée, le dépôt depuis l’extérieur est refusé ave
 > **À savoir** Pour pouvoir envoyer un jour depuis l’extérieur, utilisez au moins une fois le service depuis le réseau de l’organisation avec la même adresse.
 
 <!-- topic: receive-reply -->
+<!-- when: transferReply -->
 ## Recevoir une réponse
 
 Si votre organisation l’a activé, vos destinataires peuvent vous renvoyer des fichiers depuis la page de téléchargement avec le bouton **Répondre**, sans invitation. Cela ne concerne que les transferts que vous avez envoyés vous-même (page web ou jeton d’API), jamais ceux d’un invité externe, et seulement via le lien personnel de chaque destinataire.

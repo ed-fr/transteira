@@ -9,6 +9,9 @@
   //   message, which repeats the topic only when it is a well-formed slug (shownTopic);
   // - a failed load shows an error with a retry button, also above a guide already shown (a
   //   failed reload after a language change);
+  // - with the rules of the tenant (public application), the rules blocks show them and the
+  //   sections of the options it does not offer are hidden (a topic in one opens the guide top);
+  //   the index then links to the printable version;
   // - the page title becomes "Section – Guide" (title.svelte.ts, read by the applications);
   // - "back to the previous screen" goes back in history when the previous entry belongs to the
   //   application (an entry added by the router), next to the link to the home page.
@@ -26,6 +29,7 @@
     shownTopic,
     type HelpLinks,
   } from './help';
+  import type { HelpTenantRules } from './rules';
   import { helpTitle } from './title.svelte';
   import type { GuideId, HelpGuideSet } from './types';
 
@@ -40,9 +44,13 @@
     nav: Pick<Router, 'href' | 'link'>;
     /** Text of the link to the home page of the application. */
     homeLabel: string;
+    /** Rules of the current tenant (public application only). */
+    rules?: HelpTenantRules | undefined;
+    /** Path of the printable version, linked from the index (public application only). */
+    printPath?: string | undefined;
   }
 
-  let { load, topic, guides, nav, homeLabel }: Props = $props();
+  let { load, topic, guides, nav, homeLabel, rules, printPath }: Props = $props();
 
   let set = $state.raw<HelpGuideSet | undefined>();
   let failed = $state(false);
@@ -67,7 +75,7 @@
     };
   });
 
-  const view = $derived(set === undefined ? undefined : resolveHelp(set, topic, guides));
+  const view = $derived(set === undefined ? undefined : resolveHelp(set, topic, guides, rules?.features));
   const guideLang = $derived(set !== undefined && set.lang !== locale.current ? set.lang : undefined);
 
   $effect(() => {
@@ -166,7 +174,7 @@
     {#if failed}
       {@render loadError()}
     {/if}
-    <HelpGuide guide={view.guide} {links} lang={guideLang} />
+    <HelpGuide guide={view.guide} {links} lang={guideLang} {rules} />
   {:else}
     <h1 tabindex="-1">{t('common.help.title')}</h1>
     {#if failed}
@@ -192,6 +200,11 @@
           </li>
         {/each}
       </ul>
+      {#if printPath !== undefined}
+        <p class="help-print-link">
+          <a href={nav.href(printPath)} use:nav.link>{t('help.print.link')}</a>
+        </p>
+      {/if}
     {/if}
     {@render backLinks()}
   {/if}
@@ -227,5 +240,16 @@
 
   .help-index p {
     margin: var(--tt-space-1) 0 0;
+  }
+
+  .help-print-link {
+    margin: var(--tt-space-6) 0 0;
+  }
+
+  @media print {
+    .help-links,
+    .help-print-link {
+      display: none;
+    }
   }
 </style>

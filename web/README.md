@@ -209,6 +209,17 @@ errors, so that a guide reads the same on GitHub and in the application and neve
 - notes: `> **Label** text`, the following `> ` lines continuing the note (a single paragraph:
   an empty `>` line is refused);
 - topic markers: `<!-- topic: some-topic -->` on the line right before a level 2 or 3 heading.
+- entity directives (per-entity documentation, see below), the only other HTML allowed, each as a
+  comment alone on its line:
+  - `<!-- rules: summary -->`, `<!-- rules: limits -->` or `<!-- rules: levels -->`, between
+    blocks (never inside a list item, a note or a paragraph): replaced in the application by the
+    real rules of the entity (summary: entity name, maximum size, durations, options on or off;
+    limits: maximum size and durations; levels: confidentiality levels and their rules); it
+    renders nothing on GitHub;
+  - `<!-- when: remoteInternalDeposit|transferReply|recipientVerification|maxDownloads|folders -->`
+    on the line right before a level 2 or 3 heading, alone or combined with a topic marker (either
+    order, each on its own line, no blank line between the markers and the heading): the section
+    is hidden in the application when the entity has the feature off.
 
 Refused: level 4 to 6 headings, tables (with or without outer pipes), code blocks (fenced or
 indented), horizontal rules and underlined headings, nested lists or quotes, list items separated

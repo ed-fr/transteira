@@ -133,6 +133,7 @@ Votre adresse n’est enregistrée avec le signalement que si vous avez validé 
 > **À savoir** Les signalements ne servent qu’à la sécurité du service ; ils sont conservés 12 mois, puis supprimés. Vous pouvez demander à votre administrateur l’effacement des données liées à votre adresse.
 
 <!-- topic: download-reply -->
+<!-- when: transferReply -->
 ## Répondre à un transfert
 
 Si l’organisation de l’expéditeur l’a autorisé, vous pouvez lui renvoyer des fichiers directement depuis la page de téléchargement, sans invitation ni compte.
@@ -172,4 +173,4 @@ Cette section explique les messages que vous pouvez voir à la place des fichier
 - **Nombre maximal de téléchargements atteint** : l’expéditeur avait autorisé un nombre limité de téléchargements et il est épuisé, par vous ou par les autres destinataires. Demandez à l’expéditeur de renvoyer les fichiers.
 - La page affiche **Maintenance en cours** : seuls les nouveaux transferts sont suspendus. Les téléchargements restent disponibles, vous pouvez donc continuer normalement.
 
-Pour répondre à l’expéditeur, utilisez le bouton **Répondre** s’il est proposé (voir [Répondre à un transfert](topic:download-reply)) ; sinon, répondez-lui par mail.
+Pour répondre à l’expéditeur, utilisez le bouton **Répondre** s’il est proposé ; sinon, répondez-lui par mail.

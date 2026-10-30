@@ -3,6 +3,7 @@
 import type { Route } from '../shared/router/router.svelte';
 import Download from './screens/Download.svelte';
 import Help from './screens/Help.svelte';
+import HelpPrint from './screens/HelpPrint.svelte';
 import Home from './screens/Home.svelte';
 import InvitationLanding from './screens/InvitationLanding.svelte';
 import Invite from './screens/Invite.svelte';
@@ -32,6 +33,8 @@ export const routes: readonly Route<ScreenComponent>[] = [
   { pattern: '/me', component: MyTransfers, titleKey: 'myTransfers.title', helpTopic: 'my-transfers' },
   { pattern: '/legal/:document', component: Legal, titleKey: 'legal.title', helpTopic: 'legal' },
   { pattern: '/help', component: Help, titleKey: 'common.help.title' },
+  // Before /help/:topic: "print" is reserved, no guide declares it as a topic.
+  { pattern: '/help/print', component: HelpPrint, titleKey: 'help.print.title' },
   { pattern: '/help/:topic', component: Help, titleKey: 'common.help.title' },
 ];
 

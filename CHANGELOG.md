@@ -7,6 +7,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Per-entity user documentation and printable version (specification section 4.2): the public help on
+  an entity address shows the entity name, logo, colours and real rules (maximum size, durations,
+  options, confidentiality levels) through the new guide directives `<!-- rules: summary|limits|levels -->`
+  and `<!-- when: feature -->` (section hidden when the entity has the feature off); nothing secret
+  is exposed (no IP ranges, internal domains, thresholds or domain lists). A printable page
+  `/help/print`, dated and carrying the application version, is saved as PDF with the browser; the
+  entity screen links to it. Guides and `web/README.md` updated.
 - Dark mode (specification section 13.1): the interfaces follow `prefers-color-scheme` by default,
   live; a "Dark theme" button in the footer of both applications switches the theme and remembers
   it in the technical cookie `tt_theme` (`light` or `dark`, one year, `SameSite=Lax`, no `Domain`,

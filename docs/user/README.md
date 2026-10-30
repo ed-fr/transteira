@@ -60,9 +60,18 @@ racine du dépôt avec `make screenshots` (Docker requis), puis vérifiez-les av
 
 The guides use a strict Markdown subset (no HTML, no tables, no external links), checked when the
 help is generated: see the section "Integrated help" of [`web/README.md`](../../web/README.md),
-which also explains how to add a help topic. Both languages must keep the same topics.
+which also explains how to add a help topic. Both languages must keep the same topics. Two
+directives, each as an HTML comment alone on its line, personalise the guides per entity:
+`<!-- rules: summary|limits|levels -->` (replaced in the application by the real rules of the
+entity) and `<!-- when: feature -->` before a level 2 or 3 heading (section hidden when the entity
+has the feature off). They render nothing on GitHub; both languages must carry them at the same
+places.
 
 Les guides utilisent un sous-ensemble strict de Markdown (ni HTML, ni tableau, ni lien externe),
 vérifié à la génération de l’aide : voir la section « Integrated help » de
 [`web/README.md`](../../web/README.md), qui explique aussi comment ajouter un sujet d’aide. Les deux
-langues doivent garder les mêmes sujets.
+langues doivent garder les mêmes sujets. Deux directives, chacune en commentaire HTML seul sur sa
+ligne, personnalisent les guides par entité : `<!-- rules: summary|limits|levels -->` (remplacée
+dans l’application par les règles réelles de l’entité) et `<!-- when: fonctionnalité -->` avant un
+titre de niveau 2 ou 3 (section masquée si l’entité a désactivé la fonctionnalité). Elles
+n’affichent rien sur GitHub ; les deux langues doivent les porter aux mêmes endroits.

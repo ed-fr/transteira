@@ -17,6 +17,7 @@ import {
   languageLabel,
   listRedirect,
   normalizeFqdn,
+  userDocsHref,
   quotaUsage,
   statusView,
   limitFollowsCeiling,
@@ -147,6 +148,12 @@ describe('form model', () => {
   it('normalises the FQDN when it is valid', () => {
     expect(normalizeFqdn('  Transfer.Example.COM ')).toBe('transfer.example.com');
     expect(normalizeFqdn(' not valid ')).toBe('not valid');
+  });
+
+  it('links to the printable user documentation of the saved FQDN', () => {
+    expect(userDocsHref('Transfer.Example.COM')).toBe('//transfer.example.com/help/print');
+    expect(userDocsHref('evil.example.com/x?')).toBeUndefined();
+    expect(userDocsHref('')).toBeUndefined();
   });
 
   it('builds the creation body', () => {

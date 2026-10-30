@@ -12,6 +12,8 @@ import {
   shownTopic,
   tableOfContents,
   visibleGuides,
+  visibleSections,
+  type HelpFeatures,
 } from './help';
 import { createHelpLoader, HELP_FALLBACK_LANGUAGE } from './load';
 import { helpTitle, pageTitleOf } from './title.svelte';
@@ -228,5 +230,90 @@ describe('plainClick', () => {
     for (const key of ['metaKey', 'ctrlKey', 'shiftKey', 'altKey'] as const) {
       expect(plainClick({ ...click, [key]: true })).toBe(false);
     }
+  });
+});
+
+describe('sections hidden for the tenant', () => {
+  const depositor: HelpGuide = {
+    id: 'depositor',
+    title: 'Depositor guide',
+    sections: [
+      { id: 'depositor-guide', level: 1, title: 'Depositor guide', topic: 'depositor', blocks: [] },
+      { id: 'send', level: 2, title: 'Send', topic: 'deposit', blocks: [] },
+      {
+        id: 'remote',
+        level: 3,
+        title: 'From outside',
+        topic: 'remote',
+        when: 'remoteInternalDeposit',
+        blocks: [],
+      },
+      { id: 'options', level: 3, title: 'Options', blocks: [] },
+      { id: 'reply', level: 2, title: 'Replies', topic: 'reply', when: 'transferReply', blocks: [] },
+      { id: 'reply-read', level: 3, title: 'Read a reply', topic: 'reply-read', blocks: [] },
+      { id: 'after', level: 2, title: 'After', blocks: [] },
+    ],
+  };
+  const publicSet: HelpGuideSet = {
+    lang: 'en',
+    app: 'public',
+    guides: [depositor],
+    topics: {
+      depositor: { guide: 'depositor', section: 'depositor-guide' },
+      deposit: { guide: 'depositor', section: 'send' },
+      remote: { guide: 'depositor', section: 'remote' },
+      reply: { guide: 'depositor', section: 'reply' },
+      'reply-read': { guide: 'depositor', section: 'reply-read' },
+    },
+  };
+  const features = (on: boolean): NonNullable<HelpFeatures> => ({
+    remoteInternalDeposit: on,
+    transferReply: on,
+    recipientVerification: on,
+    maxDownloads: on,
+    folders: on,
+    recipientRestrictions: on,
+    antivirus: 'enabled',
+  });
+  const ids = (f: HelpFeatures): string[] => visibleSections(depositor, f).map((s) => s.id);
+
+  it('shows every section without a tenant or with every feature on', () => {
+    expect(visibleSections(depositor, undefined)).toBe(depositor.sections);
+    expect(ids(features(true))).toEqual(depositor.sections.map((s) => s.id));
+  });
+
+  it('drops a section whose feature is off, with its deeper sub-sections only', () => {
+    expect(ids(features(false))).toEqual(['depositor-guide', 'send', 'options', 'after']);
+    expect(ids({ ...features(true), transferReply: false })).toEqual([
+      'depositor-guide',
+      'send',
+      'remote',
+      'options',
+      'after',
+    ]);
+  });
+
+  it('builds the table of contents from the visible sections', () => {
+    const toc = tableOfContents({ ...depositor, sections: visibleSections(depositor, features(false)) });
+    expect(toc.map((e) => e.id)).toEqual(['send', 'after']);
+    expect(toc[0]?.children.map((e) => e.id)).toEqual(['options']);
+  });
+
+  it('opens the guide top for a topic of a hidden section', () => {
+    for (const topic of ['remote', 'reply', 'reply-read']) {
+      expect(resolveHelp(publicSet, topic, PUBLIC_GUIDES, features(false))).toEqual({
+        kind: 'guide',
+        guide: depositor,
+        section: depositor.sections[0],
+      });
+    }
+    expect(resolveHelp(publicSet, 'remote', PUBLIC_GUIDES, features(true))).toMatchObject({
+      kind: 'guide',
+      section: { id: 'remote' },
+    });
+    expect(resolveHelp(publicSet, 'remote', PUBLIC_GUIDES)).toMatchObject({ section: { id: 'remote' } });
+    expect(resolveHelp(publicSet, 'deposit', PUBLIC_GUIDES, features(false))).toMatchObject({
+      section: { id: 'send' },
+    });
   });
 });

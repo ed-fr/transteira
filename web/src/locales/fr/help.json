@@ -16,5 +16,66 @@
   "unknownTopicGeneric": "Aucune page d’aide ne correspond à l’adresse demandée. Choisissez un guide ci-dessous.",
   "loading": "Chargement de l’aide…",
   "error": "L’aide n’a pas pu être chargée.",
-  "icon": "Aide : {title}"
+  "icon": "Aide : {title}",
+  "print": {
+    "title": "Documentation imprimable",
+    "link": "Version imprimable (PDF)",
+    "heading": "Documentation utilisateur – {name}",
+    "generated": "Générée le {date}",
+    "version": "Version de l’application {version}",
+    "notice": "Ce document décrit les règles du service à la date ci-dessus. Les règles en vigueur sont toujours celles appliquées par le service au moment de l’envoi : consultez l’aide en ligne pour la version la plus récente.",
+    "button": "Imprimer / Enregistrer en PDF",
+    "back": "Retour à l’aide en ligne"
+  },
+  "rules": {
+    "summary": {
+      "intro": "Règles appliquées par {name} :"
+    },
+    "maxSize": "Taille maximale par envoi : {size}.",
+    "durations": "Durées disponibles : {durations}.",
+    "features": {
+      "remoteInternalDeposit": {
+        "on": "Les utilisateurs internes déjà vérifiés peuvent déposer depuis l’extérieur du réseau de l’organisation, avec un code à chaque fois.",
+        "off": "Le dépôt n’est possible que depuis le réseau de l’organisation (ou avec une invitation)."
+      },
+      "transferReply": {
+        "on": "Les destinataires peuvent répondre à un transfert en renvoyant des fichiers à l’expéditeur.",
+        "off": "Les destinataires ne peuvent pas répondre à un transfert."
+      },
+      "recipientVerification": {
+        "on": "Vous pouvez exiger que les destinataires confirment leur adresse par un code avant de télécharger.",
+        "off": "L’option de vérification du destinataire n’est pas proposée."
+      },
+      "maxDownloads": {
+        "on": "Vous pouvez limiter le nombre de téléchargements d’un transfert.",
+        "off": "L’option de nombre maximal de téléchargements n’est pas proposée."
+      },
+      "folders": {
+        "on": "Vous pouvez envoyer des dossiers entiers : leur arborescence est conservée.",
+        "off": "Les dossiers ne peuvent pas être envoyés : sélectionnez les fichiers eux-mêmes."
+      },
+      "recipientRestrictions": {
+        "on": "L’envoi est limité à certains domaines destinataires.",
+        "off": "Aucune restriction ne s’applique aux domaines destinataires."
+      },
+      "antivirus": {
+        "on": "Chaque fichier est analysé par un antivirus avant d’être mis à disposition.",
+        "off": "Les fichiers ne sont pas analysés par un antivirus : la page de téléchargement l’indique."
+      }
+    },
+    "levels": {
+      "intro": "Niveaux de confidentialité que vous pouvez choisir :",
+      "default": "(par défaut)",
+      "none": "Aucune règle supplémentaire.",
+      "durations": "Durées : {durations}.",
+      "password": "Mot de passe obligatoire.",
+      "recipientVerification": "Vérification du destinataire obligatoire.",
+      "internalRecipients": "Destinataires de l’organisation uniquement.",
+      "deleteAfterFirst": "Supprimé après le premier téléchargement.",
+      "maxDownloads": {
+        "one": "Au plus {count} téléchargement.",
+        "other": "Au plus {count} téléchargements."
+      }
+    }
+  }
 }

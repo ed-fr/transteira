@@ -1,10 +1,12 @@
 <script lang="ts">
   // A user guide: title (the page heading), table of contents in a <nav>, then the sections.
   // Every heading has tabindex="-1" so that the help screen can move the focus to the section of
-  // the requested topic (and to the target of a link inside the guide).
+  // the requested topic (and to the target of a link inside the guide). With the rules of a
+  // tenant, the sections of the options it does not offer are left out (visibleSections).
   import { t } from '../shared/i18n/i18n.svelte';
   import HelpBlocks from './HelpBlocks.svelte';
-  import { sectionDomId, tableOfContents, type HelpLinks } from './help';
+  import { sectionDomId, tableOfContents, visibleSections, type HelpLinks } from './help';
+  import type { HelpTenantRules } from './rules';
   import type { HelpGuide } from './types';
 
   interface Props {
@@ -12,24 +14,32 @@
     links: HelpLinks;
     /** Language of the guide when it differs from the interface (fallback guides). */
     lang?: string | undefined;
+    /** Rules of the current tenant (public application): rules blocks and hidden sections. */
+    rules?: HelpTenantRules | undefined;
+    /**
+     * Printable version: one guide among others under the page heading, so headings one level
+     * down, without ids (two guides may share a section id) nor table of contents.
+     */
+    printable?: boolean;
   }
 
-  let { guide, links, lang }: Props = $props();
+  let { guide, links, lang, rules, printable = false }: Props = $props();
   const uid = $props.id();
-  const toc = $derived(tableOfContents(guide));
+  const sections = $derived(visibleSections(guide, rules?.features));
+  const toc = $derived(printable ? [] : tableOfContents({ ...guide, sections }));
 </script>
 
 <article class="help-guide" {lang}>
-  {#each guide.sections as section, i (section.id)}
+  {#each sections as section, i (section.id)}
     <svelte:element
-      this={`h${section.level}`}
-      id={sectionDomId(section.id)}
-      tabindex="-1"
+      this={`h${printable ? section.level + 1 : section.level}`}
+      id={printable ? undefined : sectionDomId(section.id)}
+      tabindex={printable ? undefined : -1}
       class="help-heading"
     >
       {section.title}
     </svelte:element>
-    <HelpBlocks blocks={section.blocks} {links} />
+    <HelpBlocks blocks={section.blocks} {links} {rules} />
     {#if i === 0 && toc.length > 0}
       <nav class="help-toc" aria-labelledby="{uid}-toc">
         <p id="{uid}-toc" class="help-toc__title">{t('help.toc')}</p>
@@ -99,5 +109,15 @@
 
   .help-toc li {
     margin: var(--tt-space-1) 0;
+  }
+
+  @media print {
+    .help-heading {
+      break-after: avoid;
+    }
+
+    .help-toc {
+      display: none;
+    }
   }
 </style>

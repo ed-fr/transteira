@@ -129,3 +129,63 @@
 .tt-cluster--between {
   justify-content: space-between;
 }
+
+/*
+ * Printing (printable help /help/print, CLAUDE.md section 4.2; any page prints the same way):
+ * the content only, on white paper. The light palette applies (tokens.css keeps the dark one on
+ * screen); the page header, footer, background, veil, skip link and banner are left out, and the
+ * card loses its frame. Buttons never print.
+ */
+@page {
+  size: A4;
+  margin: 18mm 16mm;
+}
+
+@media print {
+  .skip-link,
+  .tt-page__header,
+  .tt-page__footer,
+  .tt-page__background,
+  .tt-page__veil,
+  .tt-page__banner,
+  button {
+    display: none !important;
+  }
+
+  .tt-page,
+  .tt-page--plain {
+    display: block;
+    min-height: 0;
+    background: none;
+  }
+
+  .tt-page__main {
+    display: block;
+    padding: 0;
+  }
+
+  .tt-card,
+  .tt-card--wide {
+    max-width: none;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+
+  img,
+  figure {
+    break-inside: avoid;
+  }
+}

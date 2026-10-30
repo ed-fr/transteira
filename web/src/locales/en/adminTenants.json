@@ -76,6 +76,10 @@
     "saved": "The general settings have been saved.",
     "storage": "Storage used: {used} of {quota} ({percent}%)",
     "deletingBanner": "This entity is being deleted. The deletion resumes automatically if it was interrupted.",
+    "userDocs": {
+      "link": "Open the entity’s user documentation",
+      "hint": "(new tab)"
+    },
     "delete": {
       "title": "Delete the entity",
       "text": "Deletion permanently erases every transfer, file, verified address, invitation, API token and setting of the entity. This cannot be undone.",

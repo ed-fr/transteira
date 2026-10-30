@@ -19,12 +19,28 @@
 //   - notes: "> **Label** text", the following "> " lines continuing the note (one paragraph: an
 //     empty ">" line is refused);
 //   - topic markers: "<!-- topic: some-topic -->" on the line right before a level 2 or 3
-//     heading. Each guide also has an implicit topic, its id, on its title.
+//     heading. Each guide also has an implicit topic, its id, on its title. "print" is reserved
+//     (printable page /help/print);
+//   - feature markers (public guides only): "<!-- when: <feature> -->" on the line(s) right before
+//     a level 2 or 3 heading, in either order with a topic marker (each at most once), hides the
+//     section and its sub-sections for a tenant whose feature is off (HelpFeature);
+//   - rules markers (public guides only): "<!-- rules: <set> -->" alone on its line, set being
+//     summary, limits or levels, renders the real rules of the tenant at this place (RulesSet).
 // Refused: other headings levels, tables (with or without outer pipes), code blocks, horizontal
 // rules, nested lists or quotes, list items separated or continued after a blank line, HTML
-// (other than topic markers), entities, strikethrough, inline images, external or relative links,
+// (other than the topic, when and rules markers), entities, strikethrough, inline images, external or relative links,
 // bare URLs, control characters and bidirectional formatting characters (invisible in a review).
-import type { GuideId, HelpApp, HelpBlock, HelpGuide, HelpGuideSet, HelpInline, HelpSection } from './types';
+import type {
+  GuideId,
+  HelpApp,
+  HelpBlock,
+  HelpFeature,
+  HelpGuide,
+  HelpGuideSet,
+  HelpInline,
+  HelpSection,
+  RulesSet,
+} from './types';
 
 /** Languages of the guides (same as the interface). */
 export const HELP_LANGUAGES: readonly string[] = ['en', 'fr'];
@@ -42,6 +58,21 @@ export const GUIDE_APPS: Readonly<Record<GuideId, HelpApp>> = {
 
 /** Pattern of a help topic (same as HELP_TOPIC of shared/components/helpers.ts). */
 export const TOPIC_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Topics that cannot be used in the guides. */
+export const RESERVED_TOPICS: readonly string[] = ['print'];
+
+/** Values accepted by "<!-- rules: … -->". */
+export const RULES_SETS: readonly RulesSet[] = ['summary', 'limits', 'levels'];
+
+/** Values accepted by "<!-- when: … -->". */
+export const HELP_FEATURES: readonly HelpFeature[] = [
+  'remoteInternalDeposit',
+  'transferReply',
+  'recipientVerification',
+  'maxDownloads',
+  'folders',
+];
 
 /** A build error, located in a guide. */
 export interface HelpError {
@@ -311,7 +342,7 @@ export function parseInline(
         if (node !== undefined) nodes.push(node);
         else nodes.push(...label.nodes);
       } else if (c === '<' && next !== undefined && /[A-Za-z/!?]/.test(next)) {
-        report('HTML is not supported (only topic markers <!-- topic: … -->)');
+        report('HTML is not supported (only the topic, when and rules markers <!-- topic: … -->)');
         buf += c;
         pos += 1;
       } else if (c === '&' && /^&(?:#\d+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i.test(rest)) {
@@ -400,8 +431,14 @@ export interface ParsedGuide {
   guide: HelpGuide;
   /** Line of each topic marker (the implicit guide topic is on line 1). */
   topicLines: Map<string, number>;
+  /** Rules markers in document order, with their line (compared between languages). */
+  rules: { set: RulesSet; line: number }[];
   /** Internal links, checked by buildHelp. */
   links: LinkRef[];
+  /** Index in guide.sections of the section holding each link (parallel to links). */
+  linkSections: number[];
+  /** Line of the heading of each section (parallel to guide.sections). */
+  sectionLines: number[];
   errors: HelpError[];
 }
 
@@ -441,6 +478,8 @@ function joinPieces(
 const HEADING = /^(#{1,6})(?:\s+(.*?))?\s*$/;
 const CLOSING_HASHES = /(?:^|\s+)#+$/;
 const TOPIC_MARKER = /^<!--\s*topic:\s*(.*?)\s*-->$/;
+const WHEN_MARKER = /^<!--\s*when:\s*(.*?)\s*-->$/;
+const RULES_MARKER = /^<!--\s*rules:\s*(.*?)\s*-->$/;
 const BULLET = /^[-*+]\s+(.*)$/;
 const ORDERED = /^\d{1,9}[.)]\s+(.*)$/;
 const IMAGE = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/;
@@ -454,7 +493,10 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
   const { file, id, lang } = options;
   const errors: HelpError[] = [];
   const links: LinkRef[] = [];
+  const linkSections: number[] = [];
+  const sectionLines: number[] = [];
   const topicLines = new Map<string, number>();
+  const rules: { set: RulesSet; line: number }[] = [];
   const sections: HelpSection[] = [];
   const usedIds = new Set<string>();
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
@@ -465,6 +507,7 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
   };
 
   let pendingTopic: { topic: string; line: number } | undefined;
+  let pendingWhen: { feature: HelpFeature; line: number } | undefined;
   let para: { pieces: Piece[]; line: number } | undefined;
   let list: { ordered: boolean; items: { pieces: Piece[]; line: number }[] } | undefined;
   let note: { label: string; pieces: Piece[]; line: number } | undefined;
@@ -473,7 +516,9 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
 
   const inline = (pieces: readonly Piece[], at: number): HelpInline[] => {
     const { text, lineAt } = joinPieces(pieces, at);
-    return parseInline(text, (message, offset) => error(message, lineAt(offset)), links, lineAt);
+    const nodes = parseInline(text, (message, offset) => error(message, lineAt(offset)), links, lineAt);
+    while (linkSections.length < links.length) linkSections.push(sections.length - 1);
+    return nodes;
   };
 
   function push(block: HelpBlock, at: number): void {
@@ -515,7 +560,9 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
   function heading(level: number, rawTitle: string): void {
     flush();
     const topic = pendingTopic;
+    const when = pendingWhen;
     pendingTopic = undefined;
+    pendingWhen = undefined;
     if (level > 3) {
       error(`level ${level} headings are not supported (levels 1 to 3)`);
       return;
@@ -537,6 +584,9 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
       if (topic !== undefined) {
         error(`the guide title already has the topic "${id}": put the marker before a level 2 or 3 heading`);
       }
+      if (when !== undefined) {
+        error('a when marker applies to a level 2 or 3 heading, not to the guide title', when.line);
+      }
     } else if (previous === undefined) {
       error('a guide starts with a level 1 heading (its title)');
       return;
@@ -549,6 +599,9 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
       title,
       blocks: [],
     };
+    if (when !== undefined && level !== 1) {
+      section.when = when.feature;
+    }
     const sectionTopic = level === 1 ? id : topic?.topic;
     if (sectionTopic !== undefined) {
       section.topic = sectionTopic;
@@ -559,6 +612,7 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
       }
     }
     sections.push(section);
+    sectionLines.push(lineNo);
   }
 
   function figure(alt: string, path: string, caption: string | undefined): void {
@@ -603,14 +657,19 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
     const trimmed = raw.trim();
     const indent = raw.length - raw.trimStart().length;
     const isHeading = indent < 4 && HEADING.test(trimmed);
+    const isMarker = TOPIC_MARKER.test(trimmed) || WHEN_MARKER.test(trimmed);
 
     const forbidden = forbiddenCharacter(raw);
     if (forbidden !== undefined) {
       error(`control or bidirectional formatting character ${forbidden} is not allowed`);
     }
-    if (pendingTopic !== undefined && !isHeading) {
+    if (pendingTopic !== undefined && !isHeading && !isMarker) {
       error('a topic marker must be followed directly by a heading', pendingTopic.line);
       pendingTopic = undefined;
+    }
+    if (pendingWhen !== undefined && !isHeading && !isMarker) {
+      error('a when marker must be followed directly by a heading', pendingWhen.line);
+      pendingWhen = undefined;
     }
     if (trimmed === '') {
       if (list !== undefined) afterList = { ordered: list.ordered };
@@ -660,13 +719,48 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
       const topic = marker[1] as string;
       if (!TOPIC_PATTERN.test(topic)) {
         error(`invalid topic "${topic}" (lower-case words separated by hyphens)`);
+      } else if (RESERVED_TOPICS.includes(topic)) {
+        error(`topic "${topic}" is reserved (printable page /help/${topic})`);
+      } else if (pendingTopic !== undefined) {
+        error('only one topic marker per heading');
       } else {
         pendingTopic = { topic, line: lineNo };
       }
       continue;
     }
+    const whenMarker = WHEN_MARKER.exec(trimmed);
+    if (whenMarker !== null) {
+      flush();
+      const feature = whenMarker[1] as string;
+      if (GUIDE_APPS[id] === 'admin') {
+        error('when markers are for the public guides only');
+      } else if (!(HELP_FEATURES as readonly string[]).includes(feature)) {
+        error(`unknown feature "${feature}" (${HELP_FEATURES.join(', ')})`);
+      } else if (pendingWhen !== undefined) {
+        error('only one when marker per heading');
+      } else {
+        pendingWhen = { feature: feature as HelpFeature, line: lineNo };
+      }
+      continue;
+    }
+    const rulesMarker = RULES_MARKER.exec(trimmed);
+    if (rulesMarker !== null) {
+      flush();
+      const set = rulesMarker[1] as string;
+      if (GUIDE_APPS[id] === 'admin') {
+        error('rules markers are for the public guides only');
+      } else if (!(RULES_SETS as readonly string[]).includes(set)) {
+        error(`unknown rules set "${set}" (${RULES_SETS.join(', ')})`);
+      } else if (sections.length === 0) {
+        error('content before the guide title (level 1 heading)');
+      } else {
+        rules.push({ set: set as RulesSet, line: lineNo });
+        push({ type: 'rules', set: set as RulesSet }, lineNo);
+      }
+      continue;
+    }
     if (trimmed.startsWith('<!--') || /^<[A-Za-z/!?]/.test(trimmed)) {
-      error('HTML is not supported (only topic markers <!-- topic: … -->)');
+      error('HTML is not supported (only the topic, when and rules markers <!-- topic: … -->)');
       flush();
       continue;
     }
@@ -753,6 +847,9 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
   if (pendingTopic !== undefined) {
     error('a topic marker must be followed directly by a heading', pendingTopic.line);
   }
+  if (pendingWhen !== undefined) {
+    error('a when marker must be followed directly by a heading', pendingWhen.line);
+  }
   if (sections.length === 0) {
     error('missing guide title (level 1 heading)', 1);
   }
@@ -760,7 +857,10 @@ export function parseGuide(source: string, options: ParseOptions): ParsedGuide {
   return {
     guide: { id, title: first?.title ?? id, sections },
     topicLines,
+    rules,
     links,
+    linkSections,
+    sectionLines,
     errors,
   };
 }
@@ -837,7 +937,23 @@ export function buildHelp(sources: readonly GuideSource[], options: BuildOptions
       const entry = parsed.get(key(lang, id));
       if (entry === undefined) continue;
       const sectionIds = new Set(entry.result.guide.sections.map((s) => s.id));
-      for (const link of entry.result.links) {
+      for (const [linkIndex, link] of entry.result.links.entries()) {
+        const from = whenChains(entry.result.guide.sections)[entry.result.linkSections[linkIndex] ?? 0] ?? [];
+        const targetEntry =
+          link.kind === 'anchor' ? entry : parsed.get(key(lang, owner.get(link.target)?.id ?? id));
+        const targetSections = targetEntry?.result.guide.sections ?? [];
+        const targetIndex = targetSections.findIndex((s) =>
+          link.kind === 'anchor' ? s.id === link.target : s.topic === link.target,
+        );
+        const to = whenChains(targetSections)[targetIndex] ?? [];
+        const hidden = to.find((feature) => !from.includes(feature));
+        if (hidden !== undefined) {
+          errors.push({
+            file: entry.source.file,
+            line: link.line,
+            message: `link to a section shown only when ${hidden} is on: "${link.target}" (move the link or remove it)`,
+          });
+        }
         if (link.kind === 'anchor' && !sectionIds.has(link.target)) {
           errors.push({
             file: entry.source.file,
@@ -902,8 +1018,56 @@ export function buildHelp(sources: readonly GuideSource[], options: BuildOptions
         }
       }
     }
+    checkMarkerParity(all, errors);
   }
   return { sets, errors };
+}
+
+/**
+ * Checks that the languages of a guide agree on the "when" marker of each level 2 or 3 section (by heading index)
+ * and on the sequence of rules sets (the first language is the reference).
+ */
+function whenChains(sections: readonly HelpSection[]): HelpFeature[][] {
+  const stack: { level: number; chain: HelpFeature[] }[] = [];
+  return sections.map((section) => {
+    while ((stack[stack.length - 1]?.level ?? 0) >= section.level) stack.pop();
+    const chain = [
+      ...(stack[stack.length - 1]?.chain ?? []),
+      ...(section.when === undefined ? [] : [section.when]),
+    ];
+    stack.push({ level: section.level, chain });
+    return chain;
+  });
+}
+
+function checkMarkerParity(
+  all: readonly { source: GuideSource; result: ParsedGuide }[],
+  errors: HelpError[],
+): void {
+  const [reference, ...others] = all;
+  if (reference === undefined) return;
+  const referenceSections = reference.result.guide.sections;
+  const sequence = (entry: { result: ParsedGuide }): string => entry.result.rules.map((r) => r.set).join(',');
+  for (const entry of others) {
+    for (const [index, section] of entry.result.guide.sections.entries()) {
+      const other = referenceSections[index];
+      if (section.level === 1 || other === undefined || other.when === section.when) continue;
+      errors.push({
+        file: entry.source.file,
+        line: entry.result.sectionLines[index] ?? 1,
+        message: `section "${section.title}" has a different when marker than in ${reference.source.file}`,
+      });
+    }
+    if (sequence(entry) !== sequence(reference)) {
+      const index = entry.result.rules.findIndex((r, i) => r.set !== reference.result.rules[i]?.set);
+      const at = entry.result.rules[index === -1 ? entry.result.rules.length - 1 : index];
+      errors.push({
+        file: entry.source.file,
+        line: at?.line ?? 1,
+        message: `rules markers differ from ${reference.source.file} (same sets in the same order expected)`,
+      });
+    }
+  }
 }
 
 /** File name of the generated module of a guide set ("fr-public.ts"). */

@@ -12,6 +12,8 @@
   // - Webhooks (since 1.1, any admin of the tenant): whether the tenant webhooks receive the
   //   addresses concerned (webhookIncludeAddresses, off by default: addresses are personal data),
   //   saved by its own form so that it never sends the general settings being edited.
+  // - A link opens the printable user documentation of the entity (/help/print on its FQDN, in a
+  //   new tab), as the users see it with the rules in force.
   // The admin profile is reloaded after a rename and after a deletion (it lists the tenants).
   // The tenant sub-navigation (components/TenantNav.svelte) is rendered by App.svelte above
   // every /tenants/:id/... screen: it is not rendered again here.
@@ -51,6 +53,7 @@
     statusView,
     tenantFailure,
     tenantPatch,
+    userDocsHref,
     validateTenantForm,
     type SizeField,
     type Tenant,
@@ -94,6 +97,7 @@
   let deleted = $state(false);
   let deleteMessage = $state('');
   const deleting = $derived(tenant?.status === 'deleting');
+  const docsHref = $derived(tenant === undefined ? undefined : userDocsHref(tenant.fqdn));
   const webhookPatch = $derived(tenant === undefined ? {} : includeAddressesPatch(tenant, includeAddresses));
   const webhookDirty = $derived(!deleted && Object.keys(webhookPatch).length > 0);
   const dirty = $derived(
@@ -282,6 +286,14 @@
       <StatusBadge variant={status.variant} label={t(status.key)} />
     </p>
     <p>{storageText(tenant)}</p>
+    {#if docsHref !== undefined}
+      <p>
+        <a href={docsHref} target="_blank" rel="noopener noreferrer">
+          {t('adminTenants.general.userDocs.link')}
+          <span class="visually-hidden">{t('adminTenants.general.userDocs.hint')}</span>
+        </a>
+      </p>
+    {/if}
 
     {#if deleting}
       <Alert severity="warning" live={false}>{t('adminTenants.general.deletingBanner')}</Alert>

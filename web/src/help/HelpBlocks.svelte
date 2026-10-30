@@ -1,18 +1,23 @@
 <script lang="ts">
   // Blocks of a help section: paragraphs, lists, notes and screenshots (figure with its
   // alternative text, optional caption and the pixel size of the PNG read at build time, so that
-  // the page does not move while the image loads lazily from /assets/). The blocks never change
-  // once loaded: each one is keyed by its own object, not by its index.
+  // the page does not move while the image loads lazily from /assets/), and the real rules of
+  // the tenant (HelpRules.svelte, nothing without rules). The blocks never change once loaded:
+  // each one is keyed by its own object, not by its index.
   import type { HelpLinks } from './help';
   import HelpInline from './HelpInline.svelte';
+  import HelpRules from './HelpRules.svelte';
+  import type { HelpTenantRules } from './rules';
   import type { HelpBlock } from './types';
 
   interface Props {
     blocks: readonly HelpBlock[];
     links: HelpLinks;
+    /** Rules of the current tenant (public application), for the rules blocks. */
+    rules?: HelpTenantRules | undefined;
   }
 
-  let { blocks, links }: Props = $props();
+  let { blocks, links, rules }: Props = $props();
 </script>
 
 {#each blocks as block (block)}
@@ -36,6 +41,8 @@
     <div class="help-note" role="note">
       <p><strong>{block.label}</strong> <HelpInline nodes={block.content} {links} /></p>
     </div>
+  {:else if block.type === 'rules'}
+    <HelpRules set={block.set} {rules} />
   {:else}
     <figure class="help-figure">
       <img
@@ -83,5 +90,17 @@
     margin-top: var(--tt-space-2);
     color: var(--tt-text-muted);
     font-size: var(--tt-font-size-sm);
+  }
+
+  @media print {
+    .help-note,
+    .help-figure {
+      break-inside: avoid;
+    }
+
+    .help-figure img {
+      max-height: 60vh;
+      width: auto;
+    }
   }
 </style>

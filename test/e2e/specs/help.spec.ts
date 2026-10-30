@@ -18,6 +18,7 @@ import { recipientPath, tokenDeposit } from '../support/deposit';
 import { HOSTS, ORIGINS, REPO_ROOT, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
 import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures';
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
+import { loadState, superAdminApi } from '../support/state';
 
 type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin';
 
@@ -459,3 +460,153 @@ for (const lang of LANGS) {
     });
   });
 }
+
+/**
+ * Personalised public help (plan step 12, threat model T-232 to T-235): the guides show the real
+ * rules of the entity, hide the sections of the options it does not offer, render every tenant
+ * value as text, and the printable version (/help/print) gathers both guides. These tests set the
+ * reply option and the confidentiality levels of entity B (no other spec changes them, so
+ * parallel deposits on entity A are unaffected) and restore them.
+ */
+test.describe('personalised documentation', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const XSS_LABEL = '<b>x</b> Sensitive';
+  let tenantId = '';
+  let initialLevels: { items: unknown[] } | undefined;
+  let initialReply: boolean | undefined;
+
+  test.beforeAll(async () => {
+    tenantId = loadState().tenants.b.id;
+    const api = superAdminApi();
+    initialLevels = await api.ok<{ items: unknown[] }>(
+      'GET',
+      `/admin/tenants/${tenantId}/confidentiality-levels`,
+    );
+    initialReply = (await api.ok<{ allowTransferReply?: boolean }>('GET', `/admin/tenants/${tenantId}`))
+      .allowTransferReply;
+    await api.ok('PATCH', `/admin/tenants/${tenantId}`, { allowTransferReply: false });
+    await api.ok('PUT', `/admin/tenants/${tenantId}/confidentiality-levels`, {
+      items: [
+        ...(initialLevels?.items ?? []),
+        {
+          key: 'sensitive',
+          labels: { en: XSS_LABEL, fr: XSS_LABEL },
+          isDefault: false,
+          rules: {
+            requireRecipientVerification: false,
+            requirePassword: true,
+            allowedExpiryDays: [1],
+            internalRecipientsOnly: false,
+            forceDeleteAfterFirstDownload: false,
+            maxDownloads: null,
+          },
+        },
+      ],
+    });
+  });
+
+  test.afterAll(async () => {
+    const api = superAdminApi();
+    if (initialLevels) {
+      await api.call('PUT', `/admin/tenants/${tenantId}/confidentiality-levels`, initialLevels);
+    }
+    await api.call('PATCH', `/admin/tenants/${tenantId}`, { allowTransferReply: initialReply ?? false });
+  });
+
+  test('the depositor guide shows the rules and hides the options the entity does not offer', async ({
+    page,
+    state,
+  }) => {
+    await page.goto(`${state.tenants.b.origin}/help/deposit`);
+    await expectHelpSection(page, 'en', 'depositor', 'deposit', '');
+    const article = page.getByRole('article');
+    // The reply option is off: its section is gone, with its entry in the table of contents.
+    const reply = section('en', 'depositor', 'receive-reply');
+    await expect(sectionHeading(page, reply)).toHaveCount(0);
+    await expect(
+      page.getByRole('navigation', { name: msg('en', 'help.toc') }).getByRole('link', { name: reply.title }),
+    ).toHaveCount(0);
+    // The summary of the real rules.
+    await expect(article.getByText(/Maximum size per transfer: /).first()).toBeVisible();
+    await expect(article.getByText('Recipients cannot reply to a transfer.')).toBeVisible();
+    // The custom level label is plain text, never HTML.
+    await expect(article.getByText(XSS_LABEL, { exact: false }).first()).toBeVisible();
+    expect(await article.locator('b').filter({ hasText: /^x$/ }).count()).toBe(0);
+    await checkA11y(page);
+    await expectCleanStorage(page);
+
+    // A link to the hidden section opens the guide from its top instead of an empty screen.
+    await page.goto(`${state.tenants.b.origin}/help/receive-reply`);
+    await expect(
+      page.getByRole('heading', { name: outline('en', 'depositor').title, level: 1 }),
+    ).toBeVisible();
+    await expect(sectionHeading(page, reply)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/help\/receive-reply$/);
+  });
+
+  test('the index links to the printable version', async ({ page, state }) => {
+    await page.goto(`${state.tenants.b.origin}/help`);
+    const link = page.getByRole('link', { name: msg('en', 'help.print.link'), exact: true });
+    await expect(link).toBeVisible();
+    await link.click();
+    await expect(page).toHaveURL(/\/help\/print$/);
+    await expect(
+      page.getByRole('heading', { name: /^User documentation – Entity B$/, level: 1 }),
+    ).toBeVisible();
+  });
+
+  test('the printable page gathers the guides, in both themes, and prints without the chrome', async ({
+    page,
+    state,
+  }) => {
+    await page.goto(`${state.tenants.b.origin}/help/print`);
+    await expect(
+      page.getByRole('heading', { name: 'User documentation – Entity B', level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByText(/^Generated on /)).toBeVisible();
+    await expect(page.getByText(/^Application version \S+/)).toBeVisible();
+    await expect(page.getByText(/^Application version —/)).toHaveCount(0);
+    await expect(page.locator('.help-print__notice[role="note"]')).toContainText('rules in force');
+    const guides = page.locator('section.help-print__guide');
+    await expect(guides).toHaveCount(2);
+    await expect(
+      guides.nth(0).getByRole('heading', { name: outline('en', 'depositor').title, level: 2 }),
+    ).toBeVisible();
+    await expect(
+      guides.nth(1).getByRole('heading', { name: outline('en', 'recipient').title, level: 2 }),
+    ).toBeVisible();
+    // Same personalisation as the screen help.
+    await expect(
+      guides.nth(0).getByRole('heading', { name: section('en', 'depositor', 'receive-reply').title }),
+    ).toHaveCount(0);
+    await expect(guides.nth(0).getByText(XSS_LABEL, { exact: false }).first()).toBeVisible();
+    const button = page.getByRole('button', { name: 'Print / Save as PDF', exact: true });
+    await expect(button).toBeVisible();
+    await checkA11y(page);
+
+    // On paper: no header, no footer, no button.
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.getByRole('banner')).toBeHidden();
+    await expect(page.getByRole('contentinfo')).toBeHidden();
+    await expect(button).toBeHidden();
+    await expect(
+      page.getByRole('heading', { name: 'User documentation – Entity B', level: 1 }),
+    ).toBeVisible();
+    await page.emulateMedia({ media: 'screen' });
+    await expect(button).toBeVisible();
+  });
+});
+
+test.describe('admin link to the entity documentation', () => {
+  test.use({ storageState: STORAGE_SUPER });
+
+  test('the general screen of an entity links to its printable documentation', async ({ page, state }) => {
+    await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/general`);
+    const link = page.getByRole('link', { name: /^Open the entity’s user documentation/ });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', `//${HOSTS.a}/help/print`);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+  });
+});

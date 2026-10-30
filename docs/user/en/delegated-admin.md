@@ -300,6 +300,15 @@ Click a document to edit it in **Text (Markdown)**: headings with `#`, lists wit
 
 Visitors see the document in their language, or in the default language of the entity if it is not written in theirs. A missing document is announced as not published.
 
+<!-- topic: tenant-docs -->
+### Entity user documentation
+
+The public help, on the entity address (`/help`), is customised: it shows the entity name, logo and colours, and its real rules (maximum size per transfer, available durations, enabled options, confidentiality levels and their rules). Sections about an option that is disabled for the entity are hidden. Nothing secret is shown: no IP ranges, no internal domains, no abuse detection thresholds, no domain lists.
+
+On the entity screen, the link **Open the entity's user documentation** opens the printable page `https://<entity address>/help/print`. Print it or save it as PDF with your browser to distribute it to users. The page carries its date and the application version.
+
+> **Note** The printed rules are those of the moment: print the documentation again after changing a rule of the entity.
+
 ## Operating an entity
 
 The operations screens let you follow the daily activity of the entity and act on it. The lists can be filtered and show the most recent items first.

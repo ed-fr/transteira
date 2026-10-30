@@ -16,5 +16,66 @@
   "unknownTopicGeneric": "No help page matches the requested address. Choose a guide below.",
   "loading": "Loading the help…",
   "error": "The help could not be loaded.",
-  "icon": "Help: {title}"
+  "icon": "Help: {title}",
+  "print": {
+    "title": "Printable documentation",
+    "link": "Printable version (PDF)",
+    "heading": "User documentation – {name}",
+    "generated": "Generated on {date}",
+    "version": "Application version {version}",
+    "notice": "This document describes the rules of the service on the date above. The rules in force are always those applied by the service when you send files: check the online help for the latest version.",
+    "button": "Print / Save as PDF",
+    "back": "Back to the online help"
+  },
+  "rules": {
+    "summary": {
+      "intro": "Rules applied by {name}:"
+    },
+    "maxSize": "Maximum size per transfer: {size}.",
+    "durations": "Available durations: {durations}.",
+    "features": {
+      "remoteInternalDeposit": {
+        "on": "Internal users already verified can send files from outside the organisation's network, with a code each time.",
+        "off": "Files can only be sent from the organisation's network (or with an invitation)."
+      },
+      "transferReply": {
+        "on": "Recipients can reply to a transfer by sending files back to the sender.",
+        "off": "Recipients cannot reply to a transfer."
+      },
+      "recipientVerification": {
+        "on": "You can require recipients to confirm their address with a code before downloading.",
+        "off": "The recipient verification option is not offered."
+      },
+      "maxDownloads": {
+        "on": "You can limit the number of downloads of a transfer.",
+        "off": "The maximum number of downloads option is not offered."
+      },
+      "folders": {
+        "on": "You can send whole folders: their tree is kept.",
+        "off": "Folders cannot be sent: select the files themselves."
+      },
+      "recipientRestrictions": {
+        "on": "Sending is restricted to some recipient domains.",
+        "off": "No restriction applies to recipient domains."
+      },
+      "antivirus": {
+        "on": "Every file is checked by an antivirus before it is made available.",
+        "off": "Files are not checked by an antivirus: the download page says so."
+      }
+    },
+    "levels": {
+      "intro": "Confidentiality levels you can choose:",
+      "default": "(default)",
+      "none": "No additional rule.",
+      "durations": "Durations: {durations}.",
+      "password": "Password required.",
+      "recipientVerification": "Recipient verification required.",
+      "internalRecipients": "Recipients of the organisation only.",
+      "deleteAfterFirst": "Deleted after the first download.",
+      "maxDownloads": {
+        "one": "At most {count} download.",
+        "other": "At most {count} downloads."
+      }
+    }
+  }
 }

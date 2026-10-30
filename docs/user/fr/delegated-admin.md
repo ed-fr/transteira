@@ -300,6 +300,15 @@ Cliquez sur un document pour le modifier dans **Texte (Markdown)** : titres avec
 
 Les visiteurs voient le document dans leur langue, ou dans la langue par défaut de l’entité s’il n’est pas rédigé dans la leur. Un document absent est signalé comme non publié.
 
+<!-- topic: tenant-docs -->
+### Documentation de l’entité
+
+L’aide publique, à l’adresse de l’entité (`/help`), est personnalisée : elle affiche le nom, le logo et les couleurs de l’entité, ainsi que ses règles réelles (taille maximale par transfert, durées disponibles, options activées, niveaux de confidentialité et leurs règles). Les sections qui concernent une option désactivée pour l’entité sont masquées. Rien de secret n’y figure : ni plages IP, ni domaines internes, ni seuils de détection des abus, ni listes de domaines.
+
+Sur l’écran de l’entité, le lien **Ouvrir la documentation de l’entité** ouvre la page imprimable `https://<adresse de l’entité>/help/print`. Imprimez-la ou enregistrez-la en PDF avec votre navigateur pour la diffuser aux utilisateurs. La page porte sa date et le numéro de version de l’application.
+
+> **À savoir** Les règles imprimées sont celles du moment : imprimez de nouveau la documentation après avoir modifié une règle de l’entité.
+
 ## Exploiter une entité
 
 Les écrans d’exploitation permettent de suivre l’activité quotidienne de l’entité et d’agir sur elle. Les listes peuvent être filtrées et affichent les éléments les plus récents en premier.

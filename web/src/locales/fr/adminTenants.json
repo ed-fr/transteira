@@ -76,6 +76,10 @@
     "saved": "Les réglages généraux ont été enregistrés.",
     "storage": "Stockage utilisé : {used} sur {quota} ({percent} %)",
     "deletingBanner": "La suppression de cette entité est en cours. Elle reprendra automatiquement si elle a été interrompue.",
+    "userDocs": {
+      "link": "Ouvrir la documentation utilisateur de l’entité",
+      "hint": "(nouvel onglet)"
+    },
     "delete": {
       "title": "Supprimer l’entité",
       "text": "La suppression efface définitivement tous les transferts, fichiers, adresses vérifiées, invitations, jetons d’API et réglages de l’entité. Cette action est irréversible.",

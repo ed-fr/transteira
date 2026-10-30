@@ -69,40 +69,43 @@
  * its computed text colour (--tt-brand-on-primary); links and focus use the primary only when it
  * reaches the contrast on the dark surface (--tt-brand-link-dark, --tt-brand-focus-dark), else
  * light blue defaults. The veil is more opaque, so that the card stands out of any image.
+ * Screen only: paper is always printed with the light palette (printable help, section 4.2).
  */
-[data-theme='dark'] {
-  color-scheme: dark;
+@media not print {
+  [data-theme='dark'] {
+    color-scheme: dark;
 
-  --tt-primary: var(--tt-brand-primary, #1d4ed8);
-  --tt-on-primary: var(--tt-brand-on-primary, #ffffff);
-  --tt-accent: var(--tt-brand-accent, #0f766e);
-  --tt-link: var(--tt-brand-link-dark, #93c5fd);
-  --tt-focus: var(--tt-brand-focus-dark, #60a5fa);
-  --tt-graphic: var(--tt-brand-focus-dark, #60a5fa);
+    --tt-primary: var(--tt-brand-primary, #1d4ed8);
+    --tt-on-primary: var(--tt-brand-on-primary, #ffffff);
+    --tt-accent: var(--tt-brand-accent, #0f766e);
+    --tt-link: var(--tt-brand-link-dark, #93c5fd);
+    --tt-focus: var(--tt-brand-focus-dark, #60a5fa);
+    --tt-graphic: var(--tt-brand-focus-dark, #60a5fa);
 
-  --tt-surface: #111827;
-  --tt-surface-muted: #1f2937;
-  --tt-text: #f9fafb;
-  --tt-muted: #9ca3af;
-  --tt-text-muted: var(--tt-muted);
-  --tt-border: #6b7280;
-  /* Dark gap between the element and its focus outline (base.css). */
-  --tt-focus-ring: #111827;
-  /* The logo box stays light: a dark logo would vanish on the dark surface. */
-  --tt-logo-surface: #ffffff;
-  --tt-logo-text: #111827;
-  --tt-veil: rgb(0 0 0 / 70%);
-  --tt-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 60%);
+    --tt-surface: #111827;
+    --tt-surface-muted: #1f2937;
+    --tt-text: #f9fafb;
+    --tt-muted: #9ca3af;
+    --tt-text-muted: var(--tt-muted);
+    --tt-border: #6b7280;
+    /* Dark gap between the element and its focus outline (base.css). */
+    --tt-focus-ring: #111827;
+    /* The logo box stays light: a dark logo would vanish on the dark surface. */
+    --tt-logo-surface: #ffffff;
+    --tt-logo-text: #111827;
+    --tt-veil: rgb(0 0 0 / 70%);
+    --tt-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 60%);
 
-  --tt-success: #86efac;
-  --tt-success-bg: #052e16;
-  --tt-warning: #fcd34d;
-  --tt-warning-bg: #451a03;
-  --tt-danger: #fca5a5;
-  --tt-danger-bg: #450a0a;
-  --tt-on-danger: #111827;
-  --tt-info: #93c5fd;
-  --tt-info-bg: #172554;
+    --tt-success: #86efac;
+    --tt-success-bg: #052e16;
+    --tt-warning: #fcd34d;
+    --tt-warning-bg: #451a03;
+    --tt-danger: #fca5a5;
+    --tt-danger-bg: #450a0a;
+    --tt-on-danger: #111827;
+    --tt-info: #93c5fd;
+    --tt-info-bg: #172554;
+  }
 }
 
 :root {

@@ -17,6 +17,15 @@ An external person (outside the network or with another email address) needs an 
 
 > **Note** Your administrator may also have blocked some addresses or domains. A blocked address cannot send files.
 
+<!-- topic: rules -->
+## Your organisation's rules
+
+Your organisation has set rules for sending files; these are the ones of the entity you are using.
+
+<!-- rules: summary -->
+
+The rules in force are always those applied by the service when you send: they can change, and a printed copy may be outdated. The online help also offers a printable version of this documentation.
+
 <!-- topic: deposit -->
 ## Sending files
 
@@ -72,7 +81,11 @@ Fill in the fields:
 - **Maximum number of downloads**: optional, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. Leave the field empty for no limit, unless the chosen level sets a cap.
 - **Files to send**: drag your files onto the area **Drag and drop files here, or** click **choose files**. To remove a file from the list, use the remove button next to its name. Under the list, the form shows **Total:** followed by the size of your files and the size allowed.
 
+<!-- rules: levels -->
+
 A transfer can contain up to 20 GB in total; your organisation may have set a lower limit. The hint under **Files to send** shows the actual limits (total size and number of files).
+
+<!-- rules: limits -->
 
 To send a whole folder, drag it onto the area, or click **Add a folder** (the keyboard-friendly way) and choose it. The tree of folders is kept: the list shows the folder before each file name (for example `photos/2026/`), and the recipients find the same tree in the ZIP archive. Before sending, check the list:
 
@@ -129,6 +142,7 @@ By email, you also receive a confirmation of sending and a notice of the first d
 > **Note** The download link is not shown on the screen: the recipients receive it by email, with a QR code to open it on a phone and the fingerprints of the files.
 
 <!-- topic: deposit-remote -->
+<!-- when: remoteInternalDeposit -->
 ## Depositing from outside
 
 If your organisation has turned it on, you can send files when working remotely, outside the organisation's network, without an invitation. This only applies to an email address of an organisation domain that was **already verified once from the internal network**.
@@ -145,6 +159,7 @@ If the option is off, a deposit from outside is refused with the same message as
 > **Note** To be able to send from outside one day, use the service at least once from the organisation's network with the same address.
 
 <!-- topic: receive-reply -->
+<!-- when: transferReply -->
 ## Receiving a reply
 
 If your organization has turned it on, your recipients can send files back to you from the download page with the **Reply** button, without an invitation. This only concerns transfers you sent yourself (web page or API token), never those of an external guest, and only through each recipient's personal link.

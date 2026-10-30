@@ -153,6 +153,16 @@ export function normalizeFqdn(input: string): string {
   return parsed.ok ? parsed.value : input.trim();
 }
 
+/**
+ * Link to the printable user documentation of a tenant (/help/print on its FQDN, CLAUDE.md
+ * section 4.2), opened in a new tab; undefined when the saved FQDN is not a valid host name.
+ * Scheme-relative: it keeps the scheme of the administration (HTTPS behind the reverse proxy).
+ */
+export function userDocsHref(fqdn: string): string | undefined {
+  const parsed = parseDomain(fqdn);
+  return parsed.ok ? `//${parsed.value}/help/print` : undefined;
+}
+
 function edited(form: TenantForm): Record<TenantField, string | number | null> {
   return {
     name: form.name.trim(),

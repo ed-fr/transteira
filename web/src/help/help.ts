@@ -1,8 +1,12 @@
 // Logic of the help screen (HelpScreen.svelte), kept out of the components so that it is unit
 // tested in Node: which guides an application offers, what /help and /help/<topic> show, the
-// table of contents and the page title.
+// table of contents, the sections hidden for the tenant and the page title.
 import { HELP_TOPIC } from '../shared/components/helpers';
+import type { HelpTenantRules } from './rules';
 import type { GuideId, HelpGuide, HelpGuideSet, HelpSection } from './types';
+
+/** Options of the tenant read by the help (GET /tenant), undefined outside a tenant. */
+export type HelpFeatures = HelpTenantRules['features'];
 
 /** Guides of the public application. */
 export const PUBLIC_GUIDES: readonly GuideId[] = ['depositor', 'recipient'];
@@ -30,14 +34,41 @@ export function visibleGuides(set: HelpGuideSet, allowed: readonly GuideId[]): H
 }
 
 /**
+ * Sections of a guide shown to the tenant: a section whose feature (when) is off is left out with
+ * its deeper sub-sections (the level 3 sections up to the next level 2 heading). Without
+ * features (admin application, no tenant), every section is shown.
+ */
+export function visibleSections(guide: HelpGuide, features: HelpFeatures): HelpSection[] {
+  if (features === undefined) {
+    return guide.sections;
+  }
+  const out: HelpSection[] = [];
+  let hiddenLevel: number | undefined;
+  for (const section of guide.sections) {
+    if (hiddenLevel !== undefined && section.level > hiddenLevel) {
+      continue;
+    }
+    hiddenLevel = undefined;
+    if (section.when !== undefined && !features[section.when]) {
+      hiddenLevel = section.level;
+      continue;
+    }
+    out.push(section);
+  }
+  return out;
+}
+
+/**
  * Resolves /help (topic undefined: the index) or /help/<topic>: the guide holding the topic and
  * its section, or the index with the unknown topic when the topic does not exist or is in a guide
- * that is not offered.
+ * that is not offered. A topic in a section hidden for the tenant (visibleSections) opens its
+ * guide at the top: the address is valid, the option is just not offered here.
  */
 export function resolveHelp(
   set: HelpGuideSet,
   topic: string | undefined,
   allowed: readonly GuideId[],
+  features?: HelpFeatures,
 ): HelpView {
   const guides = visibleGuides(set, allowed);
   if (topic === undefined || topic === '') {
@@ -48,6 +79,10 @@ export function resolveHelp(
   const section = guide?.sections.find((s) => s.id === target?.section);
   if (guide === undefined || section === undefined) {
     return { kind: 'index', guides, unknownTopic: topic };
+  }
+  const first = guide.sections[0];
+  if (first !== undefined && !visibleSections(guide, features).includes(section)) {
+    return { kind: 'guide', guide, section: first };
   }
   return { kind: 'guide', guide, section };
 }
@@ -83,6 +118,8 @@ export function tableOfContents(guide: HelpGuide): TocEntry[] {
 
 /** Links of the rendered guide (HelpInline): a section of the same guide, or another topic. */
 export interface HelpLinks {
+  /** Links rendered as their plain text (printable version). */
+  plain?: boolean;
   /** URL of a help topic (/help/<topic>, under the base path of the application). */
   topicHref: (topic: string) => string;
   /** Svelte action of the router for internal links (in-app navigation). */

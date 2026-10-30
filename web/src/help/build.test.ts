@@ -642,7 +642,7 @@ describe('error lines inside joined blocks', () => {
       '5: unclosed code span (`)',
     ]);
     expect(messages('# T\n\n- item\n  continued <b>\n- next')).toEqual([
-      '4: HTML is not supported (only topic markers <!-- topic: … -->)',
+      '4: HTML is not supported (only the topic, when and rules markers <!-- topic: … -->)',
     ]);
     expect(messages('# T\n\n> **Note** text\n> more https://example.com')).toEqual([
       '4: external URLs are not allowed (write paths and addresses as `code`)',
@@ -685,5 +685,130 @@ describe('buildHelp audience checks', () => {
     const { sets } = buildHelp(sources(), { manifest, imageSize: () => ({ width: 8, height: 5 }) });
     const figure = sets[0]?.guides[1]?.sections[1]?.blocks[0];
     expect(figure).toMatchObject({ type: 'figure', width: 8, height: 5 });
+  });
+});
+
+describe('when and rules markers', () => {
+  it('parses rules blocks and when markers, in either order with a topic', () => {
+    const result = parse(
+      '# T\n\n<!-- rules: summary -->\n\n<!-- when: folders -->\n<!-- topic: dir -->\n## A\n\ntext\n<!-- rules: limits -->\n\n<!-- topic: b -->\n<!-- when: maxDownloads -->\n### B\n\n## C',
+    );
+    expect(result.errors).toEqual([]);
+    const [title, a, b, c] = result.guide.sections;
+    expect(title?.blocks).toEqual([{ type: 'rules', set: 'summary' }]);
+    expect(a).toMatchObject({ topic: 'dir', when: 'folders' });
+    expect(a?.blocks.map((x) => x.type)).toEqual(['paragraph', 'rules']);
+    expect(b).toMatchObject({ topic: 'b', when: 'maxDownloads' });
+    expect(c).not.toHaveProperty('when');
+    expect(result.rules).toEqual([
+      { set: 'summary', line: 3 },
+      { set: 'limits', line: 10 },
+    ]);
+  });
+
+  it.each([
+    ['# T\n\n<!-- rules: nope -->', '3: unknown rules set "nope"'],
+    ['<!-- rules: limits -->\n# T', '1: content before the guide title'],
+    ['# T\n\n<!-- when: nope -->\n## A', '3: unknown feature "nope"'],
+    ['# T\n\n<!-- when: folders -->\n<!-- when: folders -->\n## A', '4: only one when marker per heading'],
+    ['# T\n\n<!-- topic: a -->\n<!-- topic: b -->\n## A', '4: only one topic marker per heading'],
+    ['# T\n\n<!-- when: folders -->\ntext\n## A', '3: a when marker must be followed directly by a heading'],
+    ['# T\n\n<!-- when: folders -->', '3: a when marker must be followed directly by a heading'],
+    ['<!-- when: folders -->\n# T', '1: a when marker applies to a level 2 or 3 heading'],
+    ['# T\n\n<!-- topic: print -->\n## A', '3: topic "print" is reserved (printable page /help/print)'],
+  ])('reports %j', (source, message) => {
+    expect(messages(source).join('\n')).toContain(message);
+  });
+
+  it('refuses both markers in an admin guide', () => {
+    const options = { id: 'delegated-admin' as const };
+    expect(messages('# T\n\n<!-- rules: summary -->', options)).toEqual([
+      '3: rules markers are for the public guides only',
+    ]);
+    expect(messages('# T\n\n<!-- when: folders -->\n## A', options)).toEqual([
+      '3: when markers are for the public guides only',
+    ]);
+  });
+
+  it('checks the markers are the same in every language', () => {
+    const { errors } = buildHelp(
+      sources({
+        'en/depositor':
+          '<!-- when: folders -->\n<!-- topic: deposit -->\n## Deposit\n\n<!-- rules: limits -->',
+        'fr/depositor': '<!-- topic: deposit -->\n## Deposit\n\n<!-- rules: summary -->',
+      }),
+      { manifest },
+    );
+    expect(errors.map(formatError)).toEqual([
+      'docs/user/fr/depositor.md:4: section "Deposit" has a different when marker than in docs/user/en/depositor.md',
+      'docs/user/fr/depositor.md:6: rules markers differ from docs/user/en/depositor.md (same sets in the same order expected)',
+    ]);
+  });
+
+  it('accepts matching markers and a missing rules marker in the other language', () => {
+    const same = '<!-- when: folders -->\n<!-- topic: deposit -->\n## Deposit\n\n<!-- rules: levels -->';
+    expect(buildHelp(sources({ 'en/depositor': same, 'fr/depositor': same }), { manifest }).errors).toEqual(
+      [],
+    );
+    const { errors } = buildHelp(sources({ 'en/depositor': same }), { manifest });
+    expect(errors.map((e) => e.file)).toEqual(['docs/user/fr/depositor.md', 'docs/user/fr/depositor.md']);
+    expect(errors.map((e) => e.line)).toEqual([4, 1]);
+  });
+
+  it('writes when and rules into the generated module', () => {
+    const { sets } = buildHelp(
+      sources({
+        'en/depositor':
+          '<!-- when: folders -->\n<!-- topic: deposit -->\n## Deposit\n\n<!-- rules: levels -->',
+      }),
+      { manifest },
+    );
+    const code = generateModule(sets[0] as HelpGuideSet, '../shots');
+    expect(code).toContain('"when": "folders"');
+    expect(code).toContain('"type": "rules"');
+  });
+});
+
+describe('links to conditional sections', () => {
+  const folders = '<!-- when: folders -->\n';
+  const hidden = `${folders}<!-- topic: dir -->\n## Dir\n\n### Inner\n\ntext`;
+
+  function build(depositor: string, recipient = '<!-- topic: download -->\n## Download') {
+    const both = { 'en/depositor': depositor, 'fr/depositor': depositor, 'en/recipient': recipient };
+    return buildHelp(sources({ ...both, 'fr/recipient': recipient }), { manifest }).errors.map(formatError);
+  }
+
+  it('refuses an unconditional link to a conditional section, by anchor or topic, ancestors included', () => {
+    const errors = build(`${hidden}\n\n## Other\n\n[a](#inner) [b](topic:dir)`);
+    expect(errors).toEqual([
+      'docs/user/en/depositor.md:13: link to a section shown only when folders is on: "inner" (move the link or remove it)',
+      'docs/user/en/depositor.md:13: link to a section shown only when folders is on: "dir" (move the link or remove it)',
+      'docs/user/fr/depositor.md:13: link to a section shown only when folders is on: "inner" (move the link or remove it)',
+      'docs/user/fr/depositor.md:13: link to a section shown only when folders is on: "dir" (move the link or remove it)',
+    ]);
+  });
+
+  it('refuses it from another public guide', () => {
+    const errors = build(hidden, '<!-- topic: download -->\n## Download\n\n[x](topic:dir)');
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toContain('docs/user/en/recipient.md');
+  });
+
+  it('accepts a link from a section under the same condition, or to an unconditional one', () => {
+    const body = `${hidden}\n\n${folders}## Same\n\n[a](#inner) [b](topic:dir)\n\n## Plain\n\n[c](#dir-1)`;
+    expect(build(body.replace('[c](#dir-1)', '[c](#plain)'))).toEqual([]);
+  });
+
+  it('compares the when of sections without topic between languages', () => {
+    const { errors } = buildHelp(
+      sources({
+        'en/depositor': '<!-- topic: deposit -->\n## Deposit\n\n<!-- when: folders -->\n### Sub',
+        'fr/depositor': '<!-- topic: deposit -->\n## Deposit\n\n### Sub',
+      }),
+      { manifest },
+    );
+    expect(errors.map(formatError)).toEqual([
+      'docs/user/fr/depositor.md:6: section "Sub" has a different when marker than in docs/user/en/depositor.md',
+    ]);
   });
 });

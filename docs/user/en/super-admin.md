@@ -1,6 +1,6 @@
 # Super administrator guide
 
-This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation of entities and administrator accounts, the system screens, maintenance mode and the master key. Your main navigation therefore has two extra entries, **Administrators** and **System**.
+This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation of entities and administrator accounts, the system screens, maintenance mode and the master key. Your main navigation therefore has two extra entries, **Administrators** and **System**. The customised public documentation of each entity (printable version included) is described in [Entity user documentation](topic:tenant-docs).
 
 <!-- topic: setup -->
 ## First launch

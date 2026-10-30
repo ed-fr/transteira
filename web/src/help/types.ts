@@ -33,7 +33,19 @@ export type HelpBlock =
    * Screenshot: src is the URL of the image (an asset fingerprinted by Vite under /assets/);
    * width and height are the pixel size of the PNG, read at build time.
    */
-  | { type: 'figure'; src: string; alt: string; caption?: string; width?: number; height?: number };
+  | { type: 'figure'; src: string; alt: string; caption?: string; width?: number; height?: number }
+  /**
+   * Real rules of the current tenant ("<!-- rules: <set> -->", public guides only), rendered as
+   * text from GET /tenant by HelpRules.svelte; renders nothing without a tenant.
+   */
+  | { type: 'rules'; set: RulesSet };
+
+/** Rules shown by a rules block: overview, size and durations, or confidentiality levels. */
+export type RulesSet = 'summary' | 'limits' | 'levels';
+
+/** Tenant feature a section depends on ("<!-- when: <feature> -->", public guides only). */
+export type HelpFeature =
+  'remoteInternalDeposit' | 'transferReply' | 'recipientVerification' | 'maxDownloads' | 'folders';
 
 /** A section: a heading and the blocks up to the next heading. */
 export interface HelpSection {
@@ -41,6 +53,11 @@ export interface HelpSection {
   id: string;
   /** Help topic opening this section (/help/<topic>), if any. */
   topic?: string;
+  /**
+   * Feature the section depends on: with a tenant whose feature is off, the section and its
+   * sub-sections are hidden.
+   */
+  when?: HelpFeature;
   /** Heading level: 1 (guide title, first section only), 2 or 3. */
   level: 1 | 2 | 3;
   /** Heading text (plain text). */

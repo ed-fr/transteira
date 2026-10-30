@@ -12,6 +12,7 @@ describe('public routes', () => {
     ['/me', '/me'],
     ['/legal/legal-notice', '/legal/:document'],
     ['/help', '/help'],
+    ['/help/print', '/help/print'],
     ['/help/download', '/help/:topic'],
     ['/unknown/path', '*'],
   ])('resolves %s', (path, pattern) => {
@@ -23,6 +24,7 @@ describe('public routes', () => {
       expect(isHelpRoute(route) || route.helpTopic !== undefined, route.pattern).toBe(true);
     }
     expect(isHelpRoute({ pattern: '/help/:topic' })).toBe(true);
+    expect(isHelpRoute({ pattern: '/help/print' })).toBe(true);
     expect(isHelpRoute({ pattern: '/d/:token' })).toBe(false);
   });
 });

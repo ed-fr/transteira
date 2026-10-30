@@ -133,6 +133,7 @@ Your address is recorded with the report only if you validated your address with
 > **Note** Reports are used only for the security of the service; they are kept for 12 months, then deleted. You can ask your administrator to erase the data linked to your address.
 
 <!-- topic: download-reply -->
+<!-- when: transferReply -->
 ## Reply to a transfer
 
 If the sender's organization allows it, you can send files back to the sender straight from the download page, without an invitation or an account.
@@ -172,4 +173,4 @@ This section explains the messages you may see instead of the files, and what to
 - **Maximum number of downloads reached**: the sender allowed a limited number of downloads and it has been used up, by you or by the other recipients. Ask the sender to send the files again.
 - The page shows **Maintenance in progress**: only new transfers are suspended. Downloads remain available, so you can continue normally.
 
-To answer the sender, use the **Reply** button if it is offered (see [Reply to a transfer](topic:download-reply)); otherwise, reply by email.
+To answer the sender, use the **Reply** button if it is offered; otherwise, reply by email.
