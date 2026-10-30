@@ -116,6 +116,9 @@ type Server struct {
 	// rotations serves the master key rotations; nil until
 	// WithKeyRotation.
 	rotations KeyRotationService
+	// avTest runs the EICAR self-tests of the antivirus engine; nil until
+	// WithAntivirusTest.
+	avTest AntivirusTestService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

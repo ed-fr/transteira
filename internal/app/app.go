@@ -30,6 +30,7 @@ import (
 	"github.com/ed-fr/transteira/internal/apitoken"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/avalert"
+	"github.com/ed-fr/transteira/internal/avselftest"
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
@@ -271,6 +272,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	logger.InfoContext(ctx, "starting TransTeira",
 		slog.String("version", info.Version), slog.String("commit", info.Commit),
 		slog.String("db_driver", cfg.DBDriver))
+	for _, w := range cfg.Warnings {
+		logger.WarnContext(ctx, "configuration: "+w)
+	}
 	for _, p := range cfg.BroadTrustedProxies() {
 		logger.WarnContext(ctx, "broad trusted proxy prefix: every host inside it may forge the client IP; "+
 			"list the reverse proxies by their exact IP address in "+config.EnvTrustedProxies,
@@ -389,8 +393,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// Deferred after db.Close, so it runs before it, once the handlers
 	// have drained.
 	defer func() { err = errors.Join(err, closeWith(files.Close, "data directory")) }()
-	clamd := antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address,
-		antivirus.WithMaxScanBytes(cfg.ClamAVMaxScanBytes), antivirus.WithScanTimeout(cfg.ClamAVTimeout))
+	// The antivirus engine is guarded by its EICAR self-test (decision
+	// P44): until a self-test passes, the gate refuses the analyses and the
+	// pings, so that files wait and the engine is reported down.
+	engine, engineTimeout, err := newAntivirusEngine(cfg)
+	if err != nil {
+		return err
+	}
+	selfTests := avselftest.New(engine, avselftest.Options{
+		Engine: antivirusEngine(cfg), Timeout: engineTimeout, Audit: auditLog, Logger: logger,
+	})
+	scanner := antivirusScanner(selfTests)
 	uploads := upload.New(db, vault, files, upload.Options{UploadTTL: cfg.UploadTTL, MaxAge: cfg.UploadMaxAge, Logger: logger})
 	notifier := notify.New(vault, db.SMTPSettings(), nil, notify.Options{Logger: logger, Overrides: overrides})
 	// One hasher bounds the argon2id computations of the transfer passwords,
@@ -418,9 +431,11 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// With the engine "none", clamd is never contacted: no pinger, and the
 	// worker never reports an outage.
 	avDisabled := cfg.AntivirusEngine == config.EngineNone
-	var avPinger avalert.Pinger = clamd
+	var avPinger avalert.Pinger
+	if scanner != nil {
+		avPinger = scanner
+	}
 	if avDisabled {
-		avPinger = nil
 		logger.WarnContext(ctx, "antivirus disabled for the whole instance (TT_ANTIVIRUS_ENGINE=none): "+
 			"deposited files are delivered without any analysis")
 	}
@@ -431,7 +446,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 	worker := scan.New(scan.Deps{
-		DB: db, Vault: vault, Files: files, Scanner: clamd, Remover: uploads, Notifier: notifier, Mail: mailQueue,
+		DB: db, Vault: vault, Files: files, Scanner: scanner, Remover: uploads, Notifier: notifier, Mail: mailQueue,
 		Audit: auditLog, Usage: usageCounts, Outage: avAlerts, Events: bus,
 	}, scanOptions(cfg, &o, logger))
 	downloads := download.New(download.Deps{
@@ -500,7 +515,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// the admin mails stops and the usage counters get their final flush,
 	// while the database is still open.
 	defer closeStages(ctx, logger,
-		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations, senders}},
+		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{
+			worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations, senders, selfTests,
+		}},
 		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, busOut.closer}})
 	transfers := newTransferService(cfg, db, transferDeps{
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
@@ -535,6 +552,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			return err
 		}
 	}
+	if err := startSelfTests(ctx, selfTests); err != nil {
+		return err
+	}
 	if err := worker.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the antivirus workers: %w", err)
 	}
@@ -556,7 +576,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// A change of the system settings, served by the admin API,
 	// re-evaluates the disk alert at once.
 	systemSettings, err := systemsettings.New(db, auditLog, systemsettings.Options{
-		OnChange: diskAlerts.Check, AntivirusEngine: antivirusEngine(cfg),
+		OnChange: diskAlerts.Check, AntivirusEngine: antivirusEngine(cfg), AntivirusSelfTest: selfTestLast(selfTests),
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -589,7 +609,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 
 	healthChecks := &health.Service{
 		Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
-		Antivirus: health.Check{Checker: antivirusHealth(cfg, clamd)},
+		Antivirus: health.Check{Checker: antivirusHealth(scanner)},
 		Storage:   health.Check{Checker: health.StorageCheck(cfg.DataDir)},
 		Logger:    logger,
 	}
@@ -602,6 +622,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Maintenance: maint, Mail: mailQueues(mailQueue, sysMail.queue), Bus: bus,
 		LastRun: func(task string) time.Time { return sweeper.LastRun(lifecycle.Task(task)) },
 		Tasks:   supervisedTasks, AntivirusEngine: antivirusEngine(cfg),
+		AntivirusSelfTestPassed: selfTestPassed(selfTests),
 	}), counters, metrics.WithStartTime(processStart), metrics.WithLogger(logger))
 	if err := collector.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the supervision collector: %w", err)
@@ -630,7 +651,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
-			admin.WithWebhookService(busOut.hooks)),
+			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
@@ -1024,13 +1045,108 @@ func antivirusEngine(cfg *config.Config) string {
 	return string(cfg.AntivirusEngine)
 }
 
-// antivirusHealth returns the antivirus check of /healthz: a ping of clamd,
-// or nothing to probe (always available) with the engine "none".
-func antivirusHealth(cfg *config.Config, clamd *antivirus.Client) health.Checker {
-	if cfg.AntivirusEngine == config.EngineNone {
+// antivirusHealth returns the antivirus check of /healthz: a ping of the
+// engine through its self-test gate (unavailable until a self-test
+// passed), or nothing to probe (always available) with the engine "none"
+// (nil scanner).
+func antivirusHealth(scanner scan.Scanner) health.Checker {
+	if scanner == nil {
 		return health.Disabled
 	}
-	return health.CheckerFunc(clamd.Ping)
+	return health.CheckerFunc(scanner.Ping)
+}
+
+// selfTestStartWait bounds the wait for the first start-up self-test
+// before the antivirus worker starts.
+const selfTestStartWait = 5 * time.Second
+
+// newAntivirusEngine returns the client of the antivirus engine of cfg and
+// its scan timeout; nil with the engine "none". The errors name the
+// variable at fault, never a credential.
+func newAntivirusEngine(cfg *config.Config) (avselftest.Engine, time.Duration, error) {
+	switch cfg.AntivirusEngine {
+	case config.EngineNone:
+		return nil, 0, nil
+	case config.EngineICAP:
+		c, err := antivirus.NewICAPClient(cfg.ICAP.URL,
+			antivirus.WithICAPMaxScanBytes(cfg.ICAP.MaxScanBytes), antivirus.WithICAPScanTimeout(cfg.ICAP.Timeout),
+			antivirus.WithICAPRootCAs(cfg.ICAP.CAPEM), antivirus.WithICAPInfectionHeaders(cfg.ICAP.InfectionHeaders...))
+		if err != nil {
+			return nil, 0, fmt.Errorf("app: %s: %w", config.EnvICAPURL, err)
+		}
+		return c, cfg.ICAP.Timeout, nil
+	case config.EngineHTTP:
+		h := cfg.AVHTTP
+		clean, err := antivirus.ParseRule(h.CleanRule)
+		if err != nil {
+			return nil, 0, fmt.Errorf("app: %s: %w", config.EnvAVHTTPCleanRule, err)
+		}
+		infected, err := antivirus.ParseRule(h.InfectedRule)
+		if err != nil {
+			return nil, 0, fmt.Errorf("app: %s: %w", config.EnvAVHTTPInfectedRule, err)
+		}
+		c, err := antivirus.NewHTTPClient(antivirus.HTTPConfig{
+			URL: h.URL, Method: h.Method, Body: antivirus.BodyMode(h.Body), MultipartField: h.MultipartField,
+			AuthHeader: h.AuthHeader.Reveal(), CAPEM: h.CAPEM, CleanRule: clean, InfectedRule: infected,
+			SignaturePointer: h.SignaturePointer, HealthURL: h.HealthURL, MaxScanBytes: h.MaxScanBytes,
+			Timeout: h.Timeout,
+		})
+		if err != nil {
+			return nil, 0, fmt.Errorf("app: %s: %w", config.EnvAVHTTPURL, err)
+		}
+		return c, h.Timeout, nil
+	default:
+		return antivirus.NewClient(cfg.ClamAV.Network, cfg.ClamAV.Address,
+			antivirus.WithMaxScanBytes(cfg.ClamAVMaxScanBytes), antivirus.WithScanTimeout(cfg.ClamAVTimeout)), cfg.ClamAVTimeout, nil
+	}
+}
+
+// antivirusScanner returns what the worker, the outage alert and the health
+// check use: the self-test gate of svc, nil with the engine "none".
+func antivirusScanner(svc *avselftest.Service) scan.Scanner {
+	if svc.Disabled() {
+		return nil
+	}
+	return svc.Gate()
+}
+
+// startSelfTests starts the self-tests of the engine and waits, at most
+// selfTestStartWait, for the first one, so that the files waiting at
+// start-up are not taken for an engine outage when the engine answers at
+// once.
+func startSelfTests(ctx context.Context, svc *avselftest.Service) error {
+	if svc.Disabled() {
+		return nil
+	}
+	if err := svc.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the antivirus self-tests: %w", err)
+	}
+	timer := time.NewTimer(selfTestStartWait)
+	defer timer.Stop()
+	select {
+	case <-svc.FirstDone():
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
+// selfTestLast returns the last self-test source of the system settings,
+// nil with the engine "none".
+func selfTestLast(svc *avselftest.Service) func() (avselftest.Result, bool) {
+	if svc.Disabled() {
+		return nil
+	}
+	return svc.Last
+}
+
+// selfTestPassed returns the self-test source of /status, nil with the
+// engine "none".
+func selfTestPassed(svc *avselftest.Service) func() bool {
+	if svc.Disabled() {
+		return nil
+	}
+	return svc.Passed
 }
 
 // unscannedReleaser releases the files waiting for a scan

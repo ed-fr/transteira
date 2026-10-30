@@ -545,6 +545,11 @@ func (Unimplemented) TerminateUpload(_ context.Context, _ gen.TerminateUploadReq
 	return gen.TerminateUpload404Response{}, nil
 }
 
+// TestAntivirus answers 404 not-found until the operation is implemented.
+func (Unimplemented) TestAntivirus(_ context.Context, _ gen.TestAntivirusRequestObject) (gen.TestAntivirusResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // TestSmtp answers 404 not-found until the operation is implemented.
 func (Unimplemented) TestSmtp(_ context.Context, _ gen.TestSmtpRequestObject) (gen.TestSmtpResponseObject, error) {
 	return nil, ErrNotImplemented

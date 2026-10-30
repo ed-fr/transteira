@@ -183,6 +183,14 @@ func startScanDeposit(t *testing.T, e storetest.Engine, o serverOptions) (*depos
 	return startDeposit(t, e, o, true), av
 }
 
+// fileScans returns the scans av received, without the EICAR self-tests
+// of the instance (exactly the EICAR string, at start-up).
+func fileScans(av *antivirustest.Server) []antivirustest.Scan {
+	return slices.DeleteFunc(av.Scans(), func(s antivirustest.Scan) bool {
+		return bytes.Equal(s.Data, antivirustest.EICAR())
+	})
+}
+
 // uploadedFile is a file to deposit.
 type uploadedFile struct {
 	name    string
@@ -485,7 +493,7 @@ func TestScanCleanFlow(t *testing.T) {
 				expectNoLeak(t, d.server, alice, token, sender, r1, r2, string(files[0].content))
 			})
 		}
-		if n := len(av.Scans()); n != 4 {
+		if n := len(fileScans(av)); n != 4 {
 			t.Errorf("clamd received %d scans, want 4 (one per file)", n)
 		}
 	})
@@ -629,7 +637,7 @@ func TestScanTooLarge(t *testing.T) {
 				if f := got.Files[1]; f.ScanStatus != "clean" {
 					t.Errorf("small file = %+v, want clean", f)
 				}
-				scans := av.Scans()
+				scans := fileScans(av)
 				if tc.clamLimit == 0 {
 					// Never sent to clamd: only the small file was scanned.
 					if len(scans) != 1 || !bytes.Equal(scans[0].Data, small) {

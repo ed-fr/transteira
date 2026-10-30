@@ -144,6 +144,7 @@ export const AUDIT_ACTION_GROUPS = [
       'antivirus.alert_raised',
       'antivirus.alert_cleared',
       'antivirus.scans_released',
+      'antivirus.self_test',
       'master_key.rotation_started',
       'master_key.rotation_completed',
       'master_key.rotation_failed',

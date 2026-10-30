@@ -18,12 +18,13 @@ import (
 
 // Scan defaults, used when the matching option is not given.
 const (
-	// DefaultMaxScanBytes is the largest size sent to clamd (2 GiB, the
-	// practical limit of clamd).
+	// DefaultMaxScanBytes is the largest size sent to the antivirus engine
+	// (2 GiB, the practical limit of clamd).
 	DefaultMaxScanBytes int64 = 2 << 30
-	// DefaultScanTimeout bounds a whole INSTREAM exchange.
+	// DefaultScanTimeout bounds a whole scan exchange (INSTREAM for clamd,
+	// RESPMOD for ICAP).
 	DefaultScanTimeout = 10 * time.Minute
-	// DefaultIdleTimeout bounds each write to clamd: a stream that stops
+	// DefaultIdleTimeout bounds each write to the engine: a stream that stops
 	// progressing for that long is cut, whatever the overall timeout.
 	DefaultIdleTimeout = time.Minute
 )
@@ -58,27 +59,30 @@ var (
 	errClosedNoData = fmt.Errorf("%w: connection closed without reply", ErrProtocol)
 )
 
-// Error classes returned by Scan. Every error wraps exactly one of them.
+// Error classes returned by the Scan method of every engine. Every error
+// wraps exactly one of them.
 var (
-	// ErrUnavailable means clamd could not be reached or did not complete
-	// the exchange: dial failure, connection reset or closed before the
-	// reply, or cancellation. The file was not analyzed and the scan should
+	// ErrUnavailable means the antivirus engine could not be reached or did
+	// not complete the exchange: dial failure, connection reset or closed
+	// before the reply, engine reporting itself overloaded (ICAP 503), or
+	// cancellation. The file was not analyzed and the scan should
 	// be retried later; the file must stay unavailable meanwhile
 	// (fail-closed, decision P10). When the connection was lost after a
-	// successful dial, the error also wraps ErrConnectionLost: clamd may
-	// have crashed on this very content, which the caller can tell apart
+	// successful dial, the error also wraps ErrConnectionLost: the engine
+	// may have crashed on this very content, which the caller can tell apart
 	// with a Ping. When the caller's context is done, the error also wraps
 	// its error (context.Canceled or context.DeadlineExceeded).
-	ErrUnavailable = errors.New("antivirus: clamd unavailable")
-	// ErrTimeout means clamd accepted the connection but did not complete
-	// the exchange in time: the scan timeout fired, or clamd stopped
-	// reading the stream for longer than the idle timeout, while the
-	// caller's context was still live. It is specific to the content (a
-	// file that blocks clamd) and counts toward the scan_error status.
-	ErrTimeout = errors.New("antivirus: clamd did not complete the analysis in time")
-	// ErrProtocol means clamd answered something unexpected. It is
+	ErrUnavailable = errors.New("antivirus: engine unavailable")
+	// ErrTimeout means the engine accepted the connection but did not
+	// complete the exchange in time: the scan timeout fired, or the engine
+	// stopped reading the stream for longer than the idle timeout, while
+	// the caller's context was still live. It is specific to the content (a
+	// file that blocks the engine) and counts toward the scan_error status.
+	ErrTimeout = errors.New("antivirus: engine did not complete the analysis in time")
+	// ErrProtocol means the engine answered something unexpected, which is
+	// never taken for a clean verdict (fail-closed, decision P44). It is
 	// specific to the exchange and counts toward the scan_error status.
-	ErrProtocol = errors.New("antivirus: unexpected clamd reply")
+	ErrProtocol = errors.New("antivirus: unexpected engine reply")
 	// ErrSource means the content to analyze could not be read, or did not
 	// have the declared size. It also counts toward the scan_error status.
 	ErrSource = errors.New("antivirus: cannot read the content to scan")
@@ -87,9 +91,9 @@ var (
 // ErrConnectionLost is wrapped, together with ErrUnavailable, by the
 // errors of Scan that happen after a successful dial (connection reset or
 // closed in the middle of the stream or before the reply).
-var ErrConnectionLost = errors.New("antivirus: connection to clamd lost during the exchange")
+var ErrConnectionLost = errors.New("antivirus: connection to the engine lost during the exchange")
 
-// ErrUnexpectedReply is returned by Ping when clamd answers something
+// ErrUnexpectedReply is returned by Ping when the engine answers something
 // unexpected. It is the same error as ErrProtocol.
 var ErrUnexpectedReply = ErrProtocol
 
@@ -99,13 +103,14 @@ type Verdict int
 
 // Verdicts.
 const (
-	// Clean means clamd found nothing.
+	// Clean means the engine found nothing.
 	Clean Verdict = iota + 1
-	// Infected means clamd found a signature, given in Result.Signature.
+	// Infected means the engine found a signature, given in
+	// Result.Signature.
 	Infected
 	// TooLarge means the content was not analyzed, or not completely,
-	// because of its size: above the client limit (never sent), refused by
-	// clamd (StreamMaxLength), or with parts skipped past clamd's archive
+	// because of its size: above the client limit (never sent to any
+	// engine), refused by clamd (StreamMaxLength), or with parts skipped past clamd's archive
 	// limits (Heuristics.Limits.Exceeded.*). Result.Detail tells which.
 	TooLarge
 	// Unscannable means clamd could not look inside the content: an
@@ -116,7 +121,8 @@ const (
 // Details of a TooLarge result that do not come from a heuristic signature.
 const (
 	// DetailClientLimit means the content is above the client limit
-	// (WithMaxScanBytes) and was never sent to clamd.
+	// (WithMaxScanBytes, WithICAPMaxScanBytes) and was never sent to the
+	// engine.
 	DetailClientLimit = "client limit"
 	// DetailStreamLimit means clamd refused the stream as larger than its
 	// StreamMaxLength: the clamd limits are below the client limit and
@@ -140,13 +146,13 @@ func (v Verdict) String() string {
 	}
 }
 
-// Result is the outcome of Scan.
+// Result is the outcome of the Scan method of every engine.
 type Result struct {
 	Verdict Verdict
 	// Signature is the name of the detected signature when Verdict is
 	// Infected, empty otherwise. It is valid UTF-8, contains no control or
 	// hidden character and is at most MaxSignatureLen bytes long, but it
-	// comes from clamd and must still be escaped when displayed.
+	// comes from the engine and must still be escaped when displayed.
 	Signature string
 	// Detail tells why the content was not fully analyzed when Verdict is
 	// TooLarge or Unscannable: DetailClientLimit, DetailStreamLimit, or the

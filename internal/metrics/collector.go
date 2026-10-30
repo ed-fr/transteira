@@ -57,6 +57,9 @@ type snapshot struct {
 	hasAVAlert bool
 	avAlert    bool
 
+	hasSelfTest    bool
+	selfTestPassed bool
+
 	hasMaintenance bool
 	maintenance    bool
 
@@ -244,6 +247,9 @@ func (c *Collector) collect(ctx context.Context) {
 		version: c.build.Version,
 		commit:  c.build.Commit,
 		engine:  src.AntivirusEngine,
+	}
+	if src.AntivirusSelfTestPassed != nil {
+		s.hasSelfTest, s.selfTestPassed = true, src.AntivirusSelfTestPassed()
 	}
 	if src.State != nil {
 		st, err := src.State.InstanceState(ctx)

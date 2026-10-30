@@ -109,6 +109,48 @@ func (e AntivirusEngine) Valid() bool {
 	}
 }
 
+// Defines values for AntivirusSelfTestOutcome.
+const (
+	AntivirusSelfTestOutcomeDetected    AntivirusSelfTestOutcome = "detected"
+	AntivirusSelfTestOutcomeError       AntivirusSelfTestOutcome = "error"
+	AntivirusSelfTestOutcomeNotDetected AntivirusSelfTestOutcome = "not_detected"
+	AntivirusSelfTestOutcomeUnavailable AntivirusSelfTestOutcome = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AntivirusSelfTestOutcome enum.
+func (e AntivirusSelfTestOutcome) Valid() bool {
+	switch e {
+	case AntivirusSelfTestOutcomeDetected:
+		return true
+	case AntivirusSelfTestOutcomeError:
+		return true
+	case AntivirusSelfTestOutcomeNotDetected:
+		return true
+	case AntivirusSelfTestOutcomeUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AntivirusSelfTestTrigger.
+const (
+	AntivirusSelfTestTriggerAdmin   AntivirusSelfTestTrigger = "admin"
+	AntivirusSelfTestTriggerStartup AntivirusSelfTestTrigger = "startup"
+)
+
+// Valid indicates whether the value is a known member of the AntivirusSelfTestTrigger enum.
+func (e AntivirusSelfTestTrigger) Valid() bool {
+	switch e {
+	case AntivirusSelfTestTriggerAdmin:
+		return true
+	case AntivirusSelfTestTriggerStartup:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AuditAction.
 const (
 	AuditActionAbuseReportClosed            AuditAction = "abuse.report_closed"
@@ -134,6 +176,7 @@ const (
 	AuditActionAntivirusAlertCleared        AuditAction = "antivirus.alert_cleared"
 	AuditActionAntivirusAlertRaised         AuditAction = "antivirus.alert_raised"
 	AuditActionAntivirusScansReleased       AuditAction = "antivirus.scans_released"
+	AuditActionAntivirusSelfTest            AuditAction = "antivirus.self_test"
 	AuditActionApiTokenCreated              AuditAction = "api_token.created"
 	AuditActionApiTokenRevoked              AuditAction = "api_token.revoked"
 	AuditActionApiTokenUpdated              AuditAction = "api_token.updated"
@@ -242,6 +285,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionAntivirusAlertRaised:
 		return true
 	case AuditActionAntivirusScansReleased:
+		return true
+	case AuditActionAntivirusSelfTest:
 		return true
 	case AuditActionApiTokenCreated:
 		return true
@@ -1877,6 +1922,44 @@ type AllowedSenders = []string
 // `not_scanned_disabled`).
 type AntivirusEngine string
 
+// AntivirusSelfTest Since 1.1. Outcome of an EICAR self-test: the standard antivirus test string (harmless) is
+// sent to the engine, which must report it infected. Until a self-test passes, the engine
+// is treated as unavailable (fail-closed): files wait, the outage alert follows its usual
+// grace period and the instance retries the self-test with a growing delay (15 seconds up
+// to 10 minutes). Once a self-test passed, the instance never repeats it by itself, only
+// on demand (`testAntivirus`); a test on demand that fails closes the engine again.
+type AntivirusSelfTest struct {
+	DurationMs int64 `json:"durationMs"`
+
+	// Engine Since 1.1. Antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (environment only):
+	// `clamd` (default, local or remote clamd), `icap` (RFC 3507 server), `http` (generic HTTP
+	// scanning API), `none` (antivirus disabled for the whole instance: files are delivered
+	// `not_scanned_disabled`).
+	Engine AntivirusEngine `json:"engine"`
+
+	// Outcome `detected`: the engine reported the EICAR string infected (passed). `not_detected`:
+	// the engine answered but did not report it (wrong verdict rules or engine
+	// configuration). `unavailable`: the engine could not be reached. `error`: the engine
+	// answered something unexpected or too late.
+	Outcome AntivirusSelfTestOutcome `json:"outcome"`
+
+	// Signature Signature reported by the engine, with the outcome `detected` only.
+	Signature *string   `json:"signature,omitempty"`
+	TestedAt  time.Time `json:"testedAt"`
+
+	// Trigger `startup`: run by the instance (at the start or a retry); `admin`: asked by a super admin.
+	Trigger AntivirusSelfTestTrigger `json:"trigger"`
+}
+
+// AntivirusSelfTestOutcome `detected`: the engine reported the EICAR string infected (passed). `not_detected`:
+// the engine answered but did not report it (wrong verdict rules or engine
+// configuration). `unavailable`: the engine could not be reached. `error`: the engine
+// answered something unexpected or too late.
+type AntivirusSelfTestOutcome string
+
+// AntivirusSelfTestTrigger `startup`: run by the instance (at the start or a retry); `admin`: asked by a super admin.
+type AntivirusSelfTestTrigger string
+
 // ApiToken defines model for ApiToken.
 type ApiToken struct {
 	// AllowedCidrs IPv4 or IPv6 CIDR ranges the token may be used from. `0.0.0.0/0` and `::/0` mean any address.
@@ -1975,16 +2058,20 @@ type ApiTokenUpdate = json.RawMessage
 // `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
 // the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
 // (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-// mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+// mail can be sent; `antivirus.alert_raised` (antivirus engine unreachable, or its EICAR self-test failing, beyond the grace period,
 // details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
-// (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+// (engine answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
 // `system`, without tenant, and are recorded even when no mail can be sent.
 // Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 // `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 // extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
 // security log) names the refused domains; `antivirus.scans_released` (actor `system`,
 // without tenant) counts the files released as `not_scanned_disabled` at a start with
-// `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+// `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
+// tenant) records an EICAR self-test of the engine with details `engine`, `outcome` and
+// `trigger`: every test asked by a super admin (actor that admin), and the self-tests run by
+// the instance itself (actor `system`) only for the first one after a start and when the
+// outcome changes; `abuse.report_reopened` names the report;
 // `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
 // recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
 // are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
@@ -2015,16 +2102,20 @@ type AuditEvent struct {
 	// `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
 	// the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
 	// (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-	// mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+	// mail can be sent; `antivirus.alert_raised` (antivirus engine unreachable, or its EICAR self-test failing, beyond the grace period,
 	// details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
-	// (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+	// (engine answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
 	// `system`, without tenant, and are recorded even when no mail can be sent.
 	// Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 	// `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 	// extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
 	// security log) names the refused domains; `antivirus.scans_released` (actor `system`,
 	// without tenant) counts the files released as `not_scanned_disabled` at a start with
-	// `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+	// `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
+	// tenant) records an EICAR self-test of the engine with details `engine`, `outcome` and
+	// `trigger`: every test asked by a super admin (actor that admin), and the self-tests run by
+	// the instance itself (actor `system`) only for the first one after a start and when the
+	// outcome changes; `abuse.report_reopened` names the report;
 	// `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
 	// recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
 	// are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
@@ -2476,6 +2567,9 @@ type InstanceStatus struct {
 
 		// QueuedFiles Files waiting for or under analysis.
 		QueuedFiles int `json:"queuedFiles"`
+
+		// SelfTestPassed Since 1.1. An EICAR self-test of the engine passed since the start; absent with the engine `none`.
+		SelfTestPassed *bool `json:"selfTestPassed,omitempty"`
 	} `json:"antivirus"`
 	CheckedAt time.Time `json:"checkedAt"`
 	Checks    struct {
@@ -3289,6 +3383,9 @@ type SystemSettings struct {
 
 	// AntivirusEngine Since 1.1. Read only: the antivirus engine selected by `TT_ANTIVIRUS_ENGINE`, configured by environment variables only.
 	AntivirusEngine *AntivirusEngine `json:"antivirusEngine,omitempty"`
+
+	// AntivirusSelfTest Since 1.1. Read only: the last EICAR self-test of the engine; absent with the engine `none` or before the first test ends.
+	AntivirusSelfTest *AntivirusSelfTest `json:"antivirusSelfTest,omitempty"`
 
 	// DiskAlertThreshold Disk usage ratio at or above which the disk alert is raised; it clears 5 points below.
 	DiskAlertThreshold float32 `json:"diskAlertThreshold"`
@@ -4452,6 +4549,9 @@ type ServerInterface interface {
 	// CreateSuperAdmin First-run setup - create the super admin
 	// (POST /admin/setup)
 	CreateSuperAdmin(w http.ResponseWriter, r *http.Request)
+	// TestAntivirus Run an EICAR self-test of the antivirus engine (super admin)
+	// (POST /admin/system/antivirus/test)
+	TestAntivirus(w http.ResponseWriter, r *http.Request)
 	// ListGlobalAuditEvents Instance-wide audit log (super admin)
 	// (GET /admin/system/audit-events)
 	ListGlobalAuditEvents(w http.ResponseWriter, r *http.Request, params ListGlobalAuditEventsParams)
@@ -5096,6 +5196,20 @@ func (siw *ServerInterfaceWrapper) CreateSuperAdmin(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateSuperAdmin(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestAntivirus operation middleware
+func (siw *ServerInterfaceWrapper) TestAntivirus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestAntivirus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8918,6 +9032,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/stats", wrapper.GetGlobalStats)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/settings", wrapper.GetSystemSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/system/settings", wrapper.UpdateSystemSettings)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/antivirus/test", wrapper.TestAntivirus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/maintenance", wrapper.GetMaintenance)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/system/maintenance", wrapper.SetMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/master-key", wrapper.GetMasterKeyStatus)
@@ -10722,6 +10837,89 @@ type CreateSuperAdmin500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response CreateSuperAdmin500ApplicationProblemPlusJSONResponse) VisitCreateSuperAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestAntivirusRequestObject struct {
+}
+
+type TestAntivirusResponseObject interface {
+	VisitTestAntivirusResponse(w http.ResponseWriter) error
+}
+
+type TestAntivirus200JSONResponse AntivirusSelfTest
+
+func (response TestAntivirus200JSONResponse) VisitTestAntivirusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestAntivirus401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response TestAntivirus401ApplicationProblemPlusJSONResponse) VisitTestAntivirusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestAntivirus403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response TestAntivirus403ApplicationProblemPlusJSONResponse) VisitTestAntivirusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestAntivirus409ApplicationProblemPlusJSONResponse Problem
+
+func (response TestAntivirus409ApplicationProblemPlusJSONResponse) VisitTestAntivirusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestAntivirus500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response TestAntivirus500ApplicationProblemPlusJSONResponse) VisitTestAntivirusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -21870,6 +22068,9 @@ type StrictServerInterface interface {
 	// CreateSuperAdmin First-run setup - create the super admin
 	// (POST /admin/setup)
 	CreateSuperAdmin(ctx context.Context, request CreateSuperAdminRequestObject) (CreateSuperAdminResponseObject, error)
+	// TestAntivirus Run an EICAR self-test of the antivirus engine (super admin)
+	// (POST /admin/system/antivirus/test)
+	TestAntivirus(ctx context.Context, request TestAntivirusRequestObject) (TestAntivirusResponseObject, error)
 	// ListGlobalAuditEvents Instance-wide audit log (super admin)
 	// (GET /admin/system/audit-events)
 	ListGlobalAuditEvents(ctx context.Context, request ListGlobalAuditEventsRequestObject) (ListGlobalAuditEventsResponseObject, error)
@@ -22719,6 +22920,30 @@ func (sh *strictHandler) CreateSuperAdmin(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateSuperAdminResponseObject); ok {
 		if err := validResponse.VisitCreateSuperAdminResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestAntivirus operation middleware
+func (sh *strictHandler) TestAntivirus(w http.ResponseWriter, r *http.Request) {
+	var request TestAntivirusRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestAntivirus(ctx, request.(TestAntivirusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestAntivirus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestAntivirusResponseObject); ok {
+		if err := validResponse.VisitTestAntivirusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

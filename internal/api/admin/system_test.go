@@ -14,6 +14,7 @@ import (
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/avselftest"
 	"github.com/ed-fr/transteira/internal/keyrotation"
 	"github.com/ed-fr/transteira/internal/maintenance"
 	"github.com/ed-fr/transteira/internal/store"
@@ -449,6 +450,105 @@ func TestSystemSettingsOperations(t *testing.T) {
 	}
 	if len(st.calls) != 0 {
 		t.Errorf("service called: %v", st.calls)
+	}
+}
+
+// fakeAVTest is a fake AntivirusTestService.
+type fakeAVTest struct {
+	recorder
+	result avselftest.Result
+}
+
+func (f *fakeAVTest) Test(_ context.Context, p adminauth.Principal, ip netip.Addr) (avselftest.Result, error) {
+	return f.result, f.record("Test", p.SessionID, ip)
+}
+
+func TestTestAntivirus(t *testing.T) {
+	t.Parallel()
+	req := gen.TestAntivirusRequestObject{}
+	super := ctxWith(store.SessionAuthenticated, superRoot)
+	// Wiring.
+	if _, err := NewServer().TestAntivirus(super, req); !errors.Is(err, errNoAntivirusTest) {
+		t.Fatalf("no service: %v", err)
+	}
+	f := &fakeAVTest{}
+	s := NewServer(WithAntivirusTest(f))
+	// 401 without session, 403 for a delegated admin, before the service.
+	_, err := s.TestAntivirus(ctxWith("", superRoot), req)
+	expectProblem(t, err, problem.CodeUnauthenticated)
+	_, err = s.TestAntivirus(ctxWith(store.SessionAuthenticated, delegated), req)
+	expectProblem(t, err, problem.CodeForbidden)
+	if len(f.calls) != 0 {
+		t.Fatalf("service called: %v", f.calls)
+	}
+	// 409 with the engine none.
+	f.err = avselftest.ErrDisabled
+	_, err = s.TestAntivirus(super, req)
+	if p := expectProblem(t, err, problem.CodeStateConflict); p.Detail != "The antivirus is disabled for the whole instance." {
+		t.Fatalf("detail = %q", p.Detail)
+	}
+	if args := f.args["Test"]; args[0] != "as_01" || args[1] != clientIP {
+		t.Fatalf("args = %v", args)
+	}
+	// Other errors keep their cause.
+	f.err = errors.New("boom")
+	if _, err := s.TestAntivirus(super, req); err == nil || err.Error() != "boom" {
+		t.Fatalf("failure: %v", err)
+	}
+	// 200 for each outcome; the signature only when detected.
+	f.err = nil
+	at := time.Date(2026, 10, 30, 10, 15, 0, 0, time.FixedZone("CET", 3600))
+	for _, c := range []struct {
+		r    avselftest.Result
+		want string
+	}{
+		{
+			avselftest.Result{
+				Engine: "icap", Outcome: avselftest.OutcomeDetected, Signature: "Eicar-Test-Signature",
+				Trigger: avselftest.TriggerAdmin, TestedAt: at, Duration: 48 * time.Millisecond,
+			},
+			`{"durationMs":48,"engine":"icap","outcome":"detected","signature":"Eicar-Test-Signature","testedAt":"2026-10-30T09:15:00Z","trigger":"admin"}`,
+		},
+		{
+			avselftest.Result{
+				Engine: "http", Outcome: avselftest.OutcomeNotDetected, Signature: "ignored",
+				Trigger: avselftest.TriggerAdmin, TestedAt: at, Duration: 120 * time.Millisecond,
+			},
+			`{"durationMs":120,"engine":"http","outcome":"not_detected","testedAt":"2026-10-30T09:15:00Z","trigger":"admin"}`,
+		},
+		{
+			avselftest.Result{Engine: "clamd", Outcome: avselftest.OutcomeUnavailable, Trigger: avselftest.TriggerAdmin, TestedAt: at},
+			`{"durationMs":0,"engine":"clamd","outcome":"unavailable","testedAt":"2026-10-30T09:15:00Z","trigger":"admin"}`,
+		},
+		{
+			avselftest.Result{Engine: "clamd", Outcome: avselftest.OutcomeError, Trigger: avselftest.TriggerAdmin, TestedAt: at, Duration: -time.Second},
+			`{"durationMs":0,"engine":"clamd","outcome":"error","testedAt":"2026-10-30T09:15:00Z","trigger":"admin"}`,
+		},
+	} {
+		f.result = c.r
+		resp, err := s.TestAntivirus(super, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec := visit(t, resp); rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != c.want {
+			t.Errorf("%s: %d %s", c.r.Outcome, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestSettingsBodySelfTest(t *testing.T) {
+	t.Parallel()
+	r := avselftest.Result{
+		Engine: "clamd", Outcome: avselftest.OutcomeDetected, Signature: "Eicar-Test-Signature",
+		Trigger: avselftest.TriggerStartup, TestedAt: time.Date(2026, 10, 30, 8, 0, 2, 0, time.UTC), Duration: 35 * time.Millisecond,
+	}
+	body := settingsBody(systemsettings.Settings{DiskAlertThreshold: 0.85, AntivirusEngine: "clamd", AntivirusSelfTest: &r})
+	if body.AntivirusSelfTest == nil || body.AntivirusSelfTest.DurationMs != 35 || *body.AntivirusSelfTest.Signature != r.Signature ||
+		body.AntivirusSelfTest.Trigger != gen.AntivirusSelfTestTriggerStartup {
+		t.Fatalf("body = %+v", body.AntivirusSelfTest)
+	}
+	if settingsBody(systemsettings.Settings{}).AntivirusSelfTest != nil {
+		t.Fatal("self-test without result")
 	}
 }
 

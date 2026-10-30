@@ -201,6 +201,11 @@ const (
 	// engine "none" and released the files still waiting for a scan as
 	// not_scanned_disabled (details: the number of files).
 	ActionAntivirusScansReleased Action = "antivirus.scans_released"
+	// ActionAntivirusSelfTest: an EICAR self-test of the antivirus engine
+	// (details: the engine, the outcome and the trigger); every test asked
+	// by a super admin, and the tests run by the instance only for the
+	// first one after the start and when the outcome changes.
+	ActionAntivirusSelfTest Action = "antivirus.self_test"
 )
 
 // Actions of the webhooks (tenant and instance-wide), each listed in the

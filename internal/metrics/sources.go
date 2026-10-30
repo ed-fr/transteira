@@ -110,6 +110,10 @@ type Sources struct {
 	Subscribers []string
 	// AntivirusEngine is the engine name reported by /status ("clamd").
 	AntivirusEngine string
+	// AntivirusSelfTestPassed reports whether an EICAR self-test of the
+	// engine passed (avselftest.Service.Passed), reported by /status; nil
+	// leaves it out (engine "none").
+	AntivirusSelfTestPassed func() bool
 }
 
 // Recorder is the method set of [*Counters] that the instrumented packages

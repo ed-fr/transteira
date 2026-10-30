@@ -365,7 +365,7 @@ func TestHandlerStatusContent(t *testing.T) {
 	want := `{"status":"ok","version":"1.1.0","checkedAt":"2026-10-27T09:00:00Z","uptimeSeconds":864000,"maintenance":true,` +
 		`"checks":{"database":"ok","antivirus":"ok","storage":"ok"},` +
 		`"disk":{"totalBytes":1000,"usedBytes":300,"usedRatio":0.3,"alertThreshold":0.85,"alertActive":false},` +
-		`"antivirus":{"engine":"clamd","queuedFiles":2,"alertActive":false},` +
+		`"antivirus":{"engine":"clamd","queuedFiles":2,"alertActive":false,"selfTestPassed":true},` +
 		`"lifecycle":{"expire":"2026-10-27T08:59:30.5Z"},` +
 		`"tenants":[{"id":"ten_A","name":"Entity A","storageUsedBytes":250,"storageQuotaBytes":1000,"storageUsedRatio":0.25,"activeTransfers":3,"transfersLast24h":2},` +
 		`{"id":"ten_B","name":"Entity \"B\"","storageUsedBytes":0,"storageQuotaBytes":0,"storageUsedRatio":0,"activeTransfers":0,"transfersLast24h":0}]}`
@@ -392,7 +392,8 @@ func TestBuildStatusDegradedAndMinimal(t *testing.T) {
 	if st.Status != statusDegraded || st.Checks.Database != health.StatusUnavailable || st.Tenants == nil || st.Lifecycle != nil {
 		t.Fatalf("minimal status = %+v", st)
 	}
-	if strings.Contains(string(b), `"engine"`) || strings.Contains(string(b), `"lifecycle"`) {
+	if strings.Contains(string(b), `"engine"`) || strings.Contains(string(b), `"lifecycle"`) ||
+		strings.Contains(string(b), `"selfTestPassed"`) {
 		t.Fatalf("optional fields present: %s", b)
 	}
 

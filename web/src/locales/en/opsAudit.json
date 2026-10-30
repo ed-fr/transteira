@@ -172,7 +172,8 @@
     "antivirus": {
       "alert_raised": "Antivirus alert raised",
       "alert_cleared": "Antivirus alert cleared",
-      "scans_released": "Files released unscanned (antivirus disabled)"
+      "scans_released": "Files released unscanned (antivirus disabled)",
+      "self_test": "Antivirus self-test"
     },
     "setup": {
       "completed": "Initial setup completed"

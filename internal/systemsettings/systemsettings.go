@@ -28,6 +28,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/avselftest"
 	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/store"
@@ -101,6 +102,10 @@ type Settings struct {
 	// AntivirusEngine is the antivirus engine of the instance
 	// (TT_ANTIVIRUS_ENGINE), read only: Options.AntivirusEngine.
 	AntivirusEngine string
+	// AntivirusSelfTest is the last EICAR self-test of the antivirus
+	// engine, read only (Options.AntivirusSelfTest); nil before the first
+	// test ends or with the engine "none".
+	AntivirusSelfTest *avselftest.Result
 }
 
 // Field is an optional member of a JSON Merge Patch: Set tells whether the
@@ -143,6 +148,10 @@ type Options struct {
 	// AntivirusEngine is the antivirus engine of the instance, reported
 	// read only in the settings ("" leaves it out).
 	AntivirusEngine string
+	// AntivirusSelfTest returns the last EICAR self-test of the engine,
+	// reported read only in the settings (avselftest.Service.Last); nil
+	// leaves it out.
+	AntivirusSelfTest func() (avselftest.Result, bool)
 }
 
 // Service reads and changes the instance settings. It is safe for
@@ -152,6 +161,7 @@ type Service struct {
 	auditor  Auditor
 	onChange func()
 	engine   string
+	selfTest func() (avselftest.Result, bool)
 }
 
 // New returns the service over db, recording the changes with auditor.
@@ -164,7 +174,7 @@ func New(db *store.DB, auditor Auditor, opts Options) (*Service, error) {
 
 // newService returns the service over r.
 func newService(r repo, auditor Auditor, opts Options) *Service {
-	s := &Service{repo: r, auditor: auditor, onChange: opts.OnChange, engine: opts.AntivirusEngine}
+	s := &Service{repo: r, auditor: auditor, onChange: opts.OnChange, engine: opts.AntivirusEngine, selfTest: opts.AntivirusSelfTest}
 	if s.onChange == nil {
 		s.onChange = func() {}
 	}
@@ -292,10 +302,16 @@ func parseEmail(raw string) (string, error) {
 
 // fromRow returns the settings of row.
 func (s *Service) fromRow(row store.SystemSettingsRow) Settings {
-	return Settings{
+	out := Settings{
 		DiskAlertThreshold: float64(row.DiskAlertThresholdBP) / basisPoints,
 		AlertEmail:         row.AlertEmail,
 		AlertEmailLanguage: row.AlertEmailLanguage,
 		AntivirusEngine:    s.engine,
 	}
+	if s.selfTest != nil {
+		if r, ok := s.selfTest(); ok {
+			out.AntivirusSelfTest = &r
+		}
+	}
+	return out
 }

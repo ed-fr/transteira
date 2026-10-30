@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -21,6 +20,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/maintenance"
@@ -156,29 +156,12 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// fakeClamd answers PONG to every PING and returns its address.
+// fakeClamd starts a fake clamd (antivirustest, mode scan: PONG to every
+// PING, EICAR reported infected, anything else clean), so that the EICAR
+// self-test passes at start-up, and returns its address.
 func fakeClamd(t *testing.T) string {
 	t.Helper()
-	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer func() { _ = c.Close() }()
-				if _, err := bufio.NewReader(c).ReadBytes(0); err == nil {
-					_, _ = c.Write([]byte("PONG\x00"))
-				}
-			}()
-		}
-	}()
-	return ln.Addr().String()
+	return antivirustest.New(t).Addr()
 }
 
 // testConfig completes the engine configuration with temporary directories.

@@ -258,6 +258,13 @@ startup. **Security warning**: the instance can then distribute malware (threat 
 only as an explicit choice. Consequences and the per-entity switch:
 [Antivirus](../operations/antivirus.md#disabling-the-antivirus).
 
+### Another antivirus engine (optional)
+
+Instead of ClamAV, the analysis can be delegated to an ICAP server (`TT_ANTIVIRUS_ENGINE=icap`) or
+to a generic HTTP API (`TT_ANTIVIRUS_ENGINE=http`). Variables, verdict rules, deployment with a
+remote engine, warnings (the clear of every file leaves the VM; cleartext only on a trusted
+internal network) and the EICAR self-test run at startup: [Antivirus](../operations/antivirus.md#choosing-the-engine).
+
 ## 9. First run: the super admin
 
 While no administrator exists, TransTeira prints a **setup token** in its

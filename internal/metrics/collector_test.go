@@ -114,9 +114,10 @@ func fullSources(st *fakeState) Sources {
 			}
 			return time.Time{}
 		},
-		Tasks:           []string{"expire", "backup"},
-		Subscribers:     []string{"webhook", "mail"},
-		AntivirusEngine: "clamd",
+		Tasks:                   []string{"expire", "backup"},
+		Subscribers:             []string{"webhook", "mail"},
+		AntivirusEngine:         "clamd",
+		AntivirusSelfTestPassed: func() bool { return true },
 	}
 }
 

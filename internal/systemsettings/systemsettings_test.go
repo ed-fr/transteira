@@ -11,6 +11,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/avselftest"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -142,6 +143,27 @@ func TestAntivirusEngine(t *testing.T) {
 	got, err = ev.svc.Update(ctx, p, Patch{Threshold: ptr(0.9)}, netip.Addr{})
 	if err != nil || got.AntivirusEngine != "clamd" {
 		t.Fatalf("Update = %+v, %v", got, err)
+	}
+	if got.AntivirusSelfTest != nil {
+		t.Fatal("self-test without source")
+	}
+}
+
+func TestAntivirusSelfTest(t *testing.T) {
+	ctx := context.Background()
+	ev := newEnv(t, storetest.SQLite(t))
+	var last avselftest.Result
+	var ok bool
+	ev.svc.selfTest = func() (avselftest.Result, bool) { return last, ok }
+	p := principal(store.RoleSuperAdmin, "en")
+	got, err := ev.svc.Get(ctx, p)
+	if err != nil || got.AntivirusSelfTest != nil {
+		t.Fatalf("Get before a test = %+v, %v", got, err)
+	}
+	last, ok = avselftest.Result{Engine: "clamd", Outcome: avselftest.OutcomeDetected}, true
+	got, err = ev.svc.Get(ctx, p)
+	if err != nil || got.AntivirusSelfTest == nil || *got.AntivirusSelfTest != last {
+		t.Fatalf("Get = %+v, %v", got, err)
 	}
 }
 

@@ -174,6 +174,10 @@ The system settings hold the disk usage alert of the whole instance.
 - **Alert threshold (% of the data disk)**: a percentage from 50 to 99, 85 by default. The alert is raised when disk usage reaches the threshold and clears once it falls 5 points below.
 - **Additional alert address**: optional, it receives the disk alert and the antivirus alert in addition to the super administrators. This address is not verified: type it a second time in **Alert address again** and check it carefully. Leave the field empty to remove it.
 
+Below the form, the **Antivirus** section shows the engine selected by the operator (read only) and, unless it is disabled, the result of the last **self-test**: outcome, date, signature when the test string was detected, and who started it (the instance or a super administrator). The self-test sends the harmless EICAR test string to the engine, which must report it infected. Click **Test the antivirus** to run it now; the result is announced and recorded in the [audit log](topic:system-audit) (`antivirus.self_test`). The button is not shown when the antivirus is disabled for the instance.
+
+A result other than **Detected (passed)** means that the engine does not do its job: it is unreachable, answers something unexpected, or does not report the test string (check its configuration and, for an HTTP engine, the verdict rules). Until a self-test passes, the engine is treated as unavailable and **files wait for analysis** (the antivirus alert follows after the usual delay). The instance retries by itself after a failure at startup; after a successful test it never repeats it by itself, and a test you run that fails closes the engine again.
+
 Click **Save**. The alert mails go through the system SMTP server of the instance, configured by environment variables, never through the SMTP settings of an entity. Without it, no alert mail is sent.
 
 <!-- topic: system-webhooks -->

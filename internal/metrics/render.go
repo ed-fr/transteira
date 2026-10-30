@@ -131,6 +131,8 @@ type statusAntivirus struct {
 	Engine      string `json:"engine,omitempty"`
 	QueuedFiles int64  `json:"queuedFiles"`
 	AlertActive bool   `json:"alertActive"`
+	// SelfTestPassed is absent without a self-test source (engine "none").
+	SelfTestPassed *bool `json:"selfTestPassed,omitempty"`
 }
 
 // statusTenant is one row of InstanceStatus.tenants.
@@ -182,6 +184,10 @@ func buildStatus(s *snapshot) instanceStatus {
 		},
 		Lifecycle: s.lifecycle,
 		Tenants:   make([]statusTenant, 0, len(st.Tenants)),
+	}
+	if s.hasSelfTest {
+		passed := s.selfTestPassed
+		out.Antivirus.SelfTestPassed = &passed
 	}
 	if !s.hasHealth || !s.health.Healthy() {
 		out.Status = statusDegraded

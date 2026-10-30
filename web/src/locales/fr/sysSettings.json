@@ -36,6 +36,34 @@
       "icap": "ICAP",
       "http": "API HTTP",
       "none": "Désactivé"
+    },
+    "selfTest": {
+      "title": "Auto-test",
+      "outcomeLabel": "Dernier résultat",
+      "dateLabel": "Date",
+      "signatureLabel": "Signature",
+      "triggerLabel": "Lancé par",
+      "none": "Aucun auto-test n’est encore terminé.",
+      "hint": "Le test envoie au moteur la chaîne de test EICAR (inoffensive), qu’il doit signaler comme infectée. Tant qu’un test n’a pas réussi, le moteur est considéré comme indisponible et les fichiers attendent. Un test qui échoue referme le moteur.",
+      "button": "Tester l’antivirus",
+      "running": "Test en cours...",
+      "errorDisabled": "L’antivirus est désactivé pour toute l’instance : il n’y a rien à tester.",
+      "errorForbidden": "Seul un super admin peut lancer le test de l’antivirus.",
+      "outcome": {
+        "detected": "Détecté (réussi)",
+        "not_detected": "Non détecté",
+        "unavailable": "Indisponible",
+        "error": "Erreur"
+      },
+      "trigger": {
+        "startup": "L’instance (démarrage ou nouvelle tentative)",
+        "admin": "Un super admin"
+      },
+      "explain": {
+        "not_detected": "Le moteur a répondu sans signaler la chaîne de test. Vérifiez sa configuration et, pour le moteur HTTP, les règles de verdict. Tant qu’un test n’a pas réussi, les fichiers attendent.",
+        "unavailable": "Le moteur est injoignable. Tant qu’un test n’a pas réussi, le moteur est considéré comme indisponible et les fichiers attendent ; l’instance réessaie d’elle-même.",
+        "error": "Le moteur a répondu de façon inattendue ou trop tard. Tant qu’un test n’a pas réussi, les fichiers attendent ; l’instance réessaie d’elle-même."
+      }
     }
   }
 }

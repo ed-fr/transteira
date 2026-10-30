@@ -164,7 +164,7 @@ func TestRunAntivirusEngineNone(t *testing.T) {
 func TestAntivirusHealth(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{AntivirusEngine: config.EngineNone}
-	if err := antivirusHealth(cfg, nil).Check(context.Background()); err != nil {
+	if err := antivirusHealth(nil).Check(context.Background()); err != nil {
 		t.Errorf("engine none: %v", err)
 	}
 	if got := antivirusEngine(cfg); got != "none" {

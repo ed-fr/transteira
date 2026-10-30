@@ -11,6 +11,7 @@ import (
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/avselftest"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/keyrotation"
@@ -41,11 +42,18 @@ type KeyRotationService interface {
 	Status(ctx context.Context, p adminauth.Principal) (keyrotation.MasterKeyStatus, error)
 }
 
+// AntivirusTestService runs an EICAR self-test of the antivirus engine on
+// demand (*avselftest.Service), for the super admin only.
+type AntivirusTestService interface {
+	Test(ctx context.Context, p adminauth.Principal, clientIP netip.Addr) (avselftest.Result, error)
+}
+
 // Compile-time checks that the system services fit.
 var (
 	_ MaintenanceService    = (*maintenance.Mode)(nil)
 	_ SystemSettingsService = (*systemsettings.Service)(nil)
 	_ KeyRotationService    = (*keyrotation.Service)(nil)
+	_ AntivirusTestService  = (*avselftest.Service)(nil)
 )
 
 // WithMaintenance serves the maintenance operations with m. Without it they
@@ -66,11 +74,18 @@ func WithKeyRotation(svc KeyRotationService) Option {
 	return func(s *Server) { s.rotations = svc }
 }
 
+// WithAntivirusTest serves the antivirus self-test operation with svc.
+// Without it the operation answers 500.
+func WithAntivirusTest(svc AntivirusTestService) Option {
+	return func(s *Server) { s.avTest = svc }
+}
+
 // Wiring errors, answered 500.
 var (
 	errNoMaintenance    = errors.New("admin: no maintenance mode configured")
 	errNoSystemSettings = errors.New("admin: no system settings service configured")
 	errNoKeyRotation    = errors.New("admin: no key rotation service configured")
+	errNoAntivirusTest  = errors.New("admin: no antivirus self-test service configured")
 )
 
 // systemError maps an error of the maintenance, system settings or key
@@ -108,6 +123,8 @@ func systemError(err error) error {
 		return problem.New(problem.CodeStateConflict)
 	case errors.Is(err, keyrotation.ErrNotFound):
 		return problem.New(problem.CodeNotFound)
+	case errors.Is(err, avselftest.ErrDisabled):
+		return problem.New(problem.CodeStateConflict, problem.WithDetail(detailAntivirusDisabled))
 	default:
 		return serviceError(err)
 	}
@@ -118,7 +135,9 @@ func systemError(err error) error {
 const (
 	detailRotationRunning  = "A master key rotation is already running."
 	detailRotationMismatch = "A rotation between other keys is unfinished; finish or abandon it with the command line."
-	detailRestartRequired  = "The last rotation is complete; restart with the new key as " + config.EnvMasterKeyFile +
+	// detailAntivirusDisabled is the detail of the 409 of testAntivirus.
+	detailAntivirusDisabled = "The antivirus is disabled for the whole instance."
+	detailRestartRequired   = "The last rotation is complete; restart with the new key as " + config.EnvMasterKeyFile +
 		" before starting another."
 )
 
@@ -353,12 +372,55 @@ func isNull(members map[string]json.RawMessage, name string) bool {
 }
 
 // settingsBody renders v as the OpenAPI SystemSettings: alertEmail null
-// when none.
+// when none, antivirusEngine and antivirusSelfTest absent when unknown.
 func settingsBody(v systemsettings.Settings) gen.SystemSettings {
 	body := gen.SystemSettings{DiskAlertThreshold: float32(v.DiskAlertThreshold), AlertEmail: optional(v.AlertEmail)}
 	if v.AntivirusEngine != "" {
 		engine := gen.AntivirusEngine(v.AntivirusEngine)
 		body.AntivirusEngine = &engine
+	}
+	if v.AntivirusSelfTest != nil {
+		st := selfTestBody(*v.AntivirusSelfTest)
+		body.AntivirusSelfTest = &st
+	}
+	return body
+}
+
+// --- Antivirus self-test -------------------------------------------------------
+
+// TestAntivirus runs an EICAR self-test of the antivirus engine (super
+// admin) and returns its outcome: 409 state-conflict with the engine
+// "none". The role is checked before anything, so another administrator
+// gets 403 whatever the engine; the service checks it again. Concurrent
+// calls share the running test (see avselftest.Service.Test).
+func (s *Server) TestAntivirus(ctx context.Context, _ gen.TestAntivirusRequestObject) (gen.TestAntivirusResponseObject, error) {
+	if s.avTest == nil {
+		return nil, errNoAntivirusTest
+	}
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := adminauth.RequireSuperAdmin(p.Admin); err != nil {
+		return nil, serviceError(err)
+	}
+	r, err := s.avTest.Test(ctx, p, middleware.ClientIP(ctx))
+	if err != nil {
+		return nil, systemError(err)
+	}
+	return gen.TestAntivirus200JSONResponse(selfTestBody(r)), nil
+}
+
+// selfTestBody renders r as the OpenAPI AntivirusSelfTest: signature
+// absent unless detected.
+func selfTestBody(r avselftest.Result) gen.AntivirusSelfTest {
+	body := gen.AntivirusSelfTest{
+		Engine: gen.AntivirusEngine(r.Engine), Outcome: gen.AntivirusSelfTestOutcome(r.Outcome),
+		Trigger: gen.AntivirusSelfTestTrigger(r.Trigger), TestedAt: r.TestedAt.UTC(),
+		DurationMs: max(r.Duration.Milliseconds(), 0),
+	}
+	if r.Outcome == avselftest.OutcomeDetected {
+		body.Signature = optional(r.Signature)
 	}
 	return body
 }

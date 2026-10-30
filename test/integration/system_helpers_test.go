@@ -23,6 +23,7 @@ import (
 const (
 	pathMaintenance    = "/api/v1/admin/system/maintenance"
 	pathSystemSettings = "/api/v1/admin/system/settings"
+	pathAntivirusTest  = "/api/v1/admin/system/antivirus/test"
 	pathMasterKey      = "/api/v1/admin/system/master-key"
 	pathRotations      = "/api/v1/admin/system/master-key/rotations"
 )

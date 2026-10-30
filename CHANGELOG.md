@@ -7,6 +7,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- ICAP and HTTP antivirus engines (specification section 11.1): `TT_ANTIVIRUS_ENGINE=icap|http`
+  with `TT_ICAP_*` and `TT_AVHTTP_*` variables, configurable verdict rules, TLS always verified
+  and credentials from a file only. EICAR self-test at startup and on demand (button in the
+  system settings, `POST /admin/system/antivirus/test`, audited as `antivirus.self_test`):
+  the engine is unavailable until it passes (fail-closed), retried 15 s doubling to 10 min,
+  never repeated once passed. Guide `docs/operations/antivirus.md`. Threat model T-238 to
+  T-242, P44 to P46 implemented.
 - Disabling the antivirus (specification section 11.1), instance and entity: `TT_ANTIVIRUS_ENGINE`
   (`clamd` by default, `none` to disable the analysis for the whole instance, no ClamAV container
   needed) and the per-entity switch `antivirusEnabled`, changed by the super administrator only

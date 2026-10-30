@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
 	"github.com/ed-fr/transteira/internal/app"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/diskalert"
@@ -549,7 +551,10 @@ func withHost(lines []logLine, quoted string) []logLine {
 	return out
 }
 
-// fakeClamd answers PONG to every PING and returns its address.
+// fakeClamd answers PONG to every PING and returns its address. It
+// reports the EICAR string infected, so that the EICAR self-test of the
+// instance passes, and answers PONG (an unexpected reply) to any other
+// INSTREAM, as before the self-test existed.
 func fakeClamd(t *testing.T) string {
 	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
@@ -565,9 +570,16 @@ func fakeClamd(t *testing.T) string {
 			}
 			go func() {
 				defer func() { _ = c.Close() }()
-				if _, err := bufio.NewReader(c).ReadBytes(0); err == nil {
-					_, _ = c.Write([]byte("PONG\x00"))
+				r := bufio.NewReader(c)
+				cmd, err := r.ReadBytes(0)
+				if err != nil {
+					return
 				}
+				if string(cmd) == "zINSTREAM\x00" && isEICARStream(r) {
+					_, _ = c.Write([]byte("stream: Eicar-Test-Signature FOUND\x00"))
+					return
+				}
+				_, _ = c.Write([]byte("PONG\x00"))
 			}()
 		}
 	}()
@@ -652,4 +664,19 @@ func mustJSON(t *testing.T, b []byte, v any) {
 	if err := json.Unmarshal(b, v); err != nil {
 		t.Fatalf("invalid JSON %s: %v", b, err)
 	}
+}
+
+// isEICARStream reads the first INSTREAM chunk from r and reports whether
+// the stream is exactly the EICAR string (one chunk, then the end marker).
+func isEICARStream(r *bufio.Reader) bool {
+	eicar := antivirustest.EICAR()
+	var n uint32
+	if binary.Read(r, binary.BigEndian, &n) != nil || int(n) != len(eicar) {
+		return false
+	}
+	data := make([]byte, n)
+	if _, err := io.ReadFull(r, data); err != nil || !bytes.Equal(data, eicar) {
+		return false
+	}
+	return binary.Read(r, binary.BigEndian, &n) == nil && n == 0
 }

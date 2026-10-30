@@ -561,8 +561,12 @@ func TestLoadInvalid(t *testing.T) {
 		{"admin host IP", map[string]string{EnvAdminHosts: "192.0.2.1"}, []string{EnvAdminHosts}},
 		{"admin host with port", map[string]string{EnvAdminHosts: "admin.example.com:443"}, []string{EnvAdminHosts}},
 		{"antivirus engine unknown", map[string]string{EnvAntivirusEngine: "sophos"}, []string{EnvAntivirusEngine}},
-		{"antivirus engine icap not yet", map[string]string{EnvAntivirusEngine: "icap"}, []string{EnvAntivirusEngine}},
-		{"antivirus engine http not yet", map[string]string{EnvAntivirusEngine: "http"}, []string{EnvAntivirusEngine}},
+		{"antivirus engine icap without URL", map[string]string{EnvAntivirusEngine: "icap"}, []string{EnvICAPURL, EnvICAPMaxScanBytes}},
+		{
+			"antivirus engine http without URL and rules",
+			map[string]string{EnvAntivirusEngine: "http"},
+			[]string{EnvAVHTTPURL, EnvAVHTTPCleanRule, EnvAVHTTPInfectedRule, EnvAVHTTPMaxScanBytes},
+		},
 		{"clamav no host", map[string]string{EnvClamAVAddr: ":3310"}, []string{EnvClamAVAddr}},
 		{"clamav port too big", map[string]string{EnvClamAVAddr: "clamav:65536"}, []string{EnvClamAVAddr}},
 		{"clamav relative socket", map[string]string{EnvClamAVAddr: "unix:clamd.sock"}, []string{EnvClamAVAddr}},
@@ -871,9 +875,15 @@ func TestAntivirusEngine(t *testing.T) {
 	if c := mustLoad(t, map[string]string{EnvAntivirusEngine: "None"}); c.AntivirusEngine != EngineNone {
 		t.Errorf("engine = %q, want none", c.AntivirusEngine)
 	}
-	_, err := Load(envFunc(map[string]string{EnvAntivirusEngine: "icap"}))
-	if err == nil || !strings.Contains(err.Error(), "later version") {
-		t.Errorf("icap error = %v, want a later version notice", err)
+	c := mustLoad(t, map[string]string{
+		EnvAntivirusEngine: "ICAP", EnvICAPURL: "icap://icap:1344/avscan", EnvICAPMaxScanBytes: "5242880",
+	})
+	if c.AntivirusEngine != EngineICAP {
+		t.Errorf("engine = %q, want icap", c.AntivirusEngine)
+	}
+	_, err := Load(envFunc(map[string]string{EnvAntivirusEngine: "sophos"}))
+	if err == nil || !strings.Contains(err.Error(), `"icap"`) || !strings.Contains(err.Error(), `"http"`) {
+		t.Errorf("unknown engine error = %v, want the engines listed", err)
 	}
 }
 

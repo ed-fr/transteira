@@ -41,6 +41,23 @@ const (
 	EnvClamAVAddr               = "TT_CLAMAV_ADDR"
 	EnvClamAVMaxScanBytes       = "TT_CLAMAV_MAX_SCAN_BYTES"
 	EnvClamAVTimeout            = "TT_CLAMAV_TIMEOUT"
+	EnvICAPURL                  = "TT_ICAP_URL"
+	EnvICAPCAFile               = "TT_ICAP_CA_FILE"
+	EnvICAPInfectionHeaders     = "TT_ICAP_INFECTION_HEADERS"
+	EnvICAPMaxScanBytes         = "TT_ICAP_MAX_SCAN_BYTES"
+	EnvICAPTimeout              = "TT_ICAP_TIMEOUT"
+	EnvAVHTTPURL                = "TT_AVHTTP_URL"
+	EnvAVHTTPMethod             = "TT_AVHTTP_METHOD"
+	EnvAVHTTPBody               = "TT_AVHTTP_BODY"
+	EnvAVHTTPMultipartField     = "TT_AVHTTP_MULTIPART_FIELD"
+	EnvAVHTTPAuthHeaderFile     = "TT_AVHTTP_AUTH_HEADER_FILE"
+	EnvAVHTTPCAFile             = "TT_AVHTTP_CA_FILE"
+	EnvAVHTTPCleanRule          = "TT_AVHTTP_CLEAN_RULE"
+	EnvAVHTTPInfectedRule       = "TT_AVHTTP_INFECTED_RULE"
+	EnvAVHTTPSignaturePointer   = "TT_AVHTTP_SIGNATURE_POINTER"
+	EnvAVHTTPHealthURL          = "TT_AVHTTP_HEALTH_URL"
+	EnvAVHTTPMaxScanBytes       = "TT_AVHTTP_MAX_SCAN_BYTES"
+	EnvAVHTTPTimeout            = "TT_AVHTTP_TIMEOUT"
 	EnvScanWorkers              = "TT_SCAN_WORKERS"
 	EnvSMTPTimeout              = "TT_SMTP_TIMEOUT"
 	EnvMailQueueSize            = "TT_MAIL_QUEUE_SIZE"
@@ -91,6 +108,11 @@ const (
 	DefaultClamAVAddr               = "clamav:3310"
 	DefaultClamAVMaxScanBytes       = "2147483648"
 	DefaultClamAVTimeout            = "10m"
+	DefaultICAPInfectionHeaders     = "X-Infection-Found,X-Virus-ID,X-Violations-Found"
+	DefaultEngineTimeout            = "10m"
+	DefaultAVHTTPMethod             = "POST"
+	DefaultAVHTTPBody               = AVHTTPBodyMultipart
+	DefaultAVHTTPMultipartField     = "file"
 	DefaultScanWorkers              = "2"
 	DefaultSMTPTimeout              = "30s"
 	DefaultMailQueueSize            = "1000"
@@ -250,7 +272,10 @@ func Variables() []Var {
 				"deposited file is marked \"not scanned: antivirus disabled\", the sender and the " +
 				"download page say so, and the health check no longer checks the antivirus). " +
 				"Files still waiting for an analysis when the instance starts with none are " +
-				"released without analysis. The icap and http engines arrive in a later version.",
+				"released without analysis. Also icap (an ICAP server, RFC 3507, see TT_ICAP_*) " +
+				"and http (a generic HTTP scanning API, see TT_AVHTTP_*). Whatever the engine, " +
+				"no file is analyzed until the engine has detected the EICAR test string " +
+				"(self-test at start-up, retried while it fails).",
 		},
 		{
 			Name: EnvClamAVAddr, Group: "Antivirus", Default: DefaultClamAVAddr,
@@ -271,6 +296,110 @@ func Variables() []Var {
 				"10s and 2h). A stalled exchange is also cut after one minute without progress. " +
 				"A timed-out analysis counts against the file and is retried later; the file stays " +
 				"unavailable meanwhile, and after 3 timeouts it is withheld for good (scan_error).",
+		},
+		{
+			Name: EnvICAPURL, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=icap (required): URL of the ICAP " +
+				"service, icap://host[:port]/service (cleartext, port 1344 by default: on a " +
+				"trusted internal network only) or icaps://host[:port]/service (TLS, port 11344 " +
+				"by default), e.g. icap://icap:1344/avscan. No credentials, query or fragment.",
+		},
+		{
+			Name: EnvICAPCAFile, Group: "Antivirus",
+			Description: "With icaps:// only: absolute path of a PEM file holding the only " +
+				"certificate authorities trusted for the ICAP server (system pool when unset). " +
+				"The certificate is always verified.",
+		},
+		{
+			Name: EnvICAPInfectionHeaders, Group: "Antivirus", Default: DefaultICAPInfectionHeaders,
+			Description: "Comma-separated header names whose presence in the ICAP reply means " +
+				"the file is infected.",
+		},
+		{
+			Name: EnvICAPMaxScanBytes, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=icap (required, no default): largest " +
+				"file size, in bytes, sent to the ICAP server (between 1048576 and 21474836480). " +
+				"Set it at most to the server's own size limit (c-icap virus_scan MaxObjectSize, " +
+				"about 5 MB by default; squidclamav maxsize): the server answers clean (204 or " +
+				"unchanged echo) for a larger object without analyzing it. Larger files are " +
+				"accepted without analysis, and the sender and recipients are told so.",
+		},
+		{
+			Name: EnvICAPTimeout, Group: "Antivirus", Default: DefaultEngineTimeout,
+			Description: "Time limit of the analysis of one file by the ICAP server (Go " +
+				"duration, between 10s and 2h).",
+		},
+		{
+			Name: EnvAVHTTPURL, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=http (required): URL receiving the " +
+				"files to analyze, http:// (on a trusted internal network only) or https://. No " +
+				"credentials in the URL: use " + EnvAVHTTPAuthHeaderFile + ".",
+		},
+		{
+			Name: EnvAVHTTPMethod, Group: "Antivirus", Default: DefaultAVHTTPMethod,
+			Description: "HTTP method of the analysis request: POST or PUT.",
+		},
+		{
+			Name: EnvAVHTTPBody, Group: "Antivirus", Default: DefaultAVHTTPBody,
+			Description: "Body of the analysis request: multipart (multipart/form-data with " +
+				"one part) or raw (the file as application/octet-stream).",
+		},
+		{
+			Name: EnvAVHTTPMultipartField, Group: "Antivirus", Default: DefaultAVHTTPMultipartField,
+			Description: "Name of the multipart part holding the file (letters, digits, dots, " +
+				"underscores and hyphens).",
+		},
+		{
+			Name: EnvAVHTTPAuthHeaderFile, Group: "Antivirus",
+			Description: "Absolute path of a file (e.g. a Docker secret) holding one header " +
+				"line Name: value sent with every request to the engine (e.g. " +
+				"Authorization: Bearer ...). Never logged. With an http:// URL it travels in " +
+				"cleartext (a start-up warning says so): trusted internal network only.",
+		},
+		{
+			Name: EnvAVHTTPCAFile, Group: "Antivirus",
+			Description: "With an https:// URL only: absolute path of a PEM file holding the " +
+				"only certificate authorities trusted for the engine (system pool when unset).",
+		},
+		{
+			Name: EnvAVHTTPCleanRule, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=http (required): rule matching a " +
+				"clean verdict. Conditions joined by &&: status=200, status=200-299, " +
+				"status=200,204, json:/pointer=<JSON value> or json:/pointer!=<JSON value>, " +
+				"e.g. status=200 && json:/infected=false. Include at least one positive JSON " +
+				"condition (json:/pointer=value): without one, an error body returned with a " +
+				"matching status would be read clean (start-up warning). See " +
+				"docs/operations/antivirus.md.",
+		},
+		{
+			Name: EnvAVHTTPInfectedRule, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=http (required): rule matching an " +
+				"infected verdict, same syntax, e.g. status=200 && json:/infected=true. A reply " +
+				"matching both rules or neither is an error, never a clean verdict.",
+		},
+		{
+			Name: EnvAVHTTPSignaturePointer, Group: "Antivirus",
+			Description: "JSON pointer (starting with /) to the signature name in the reply of " +
+				"an infected verdict, e.g. /viruses/0. Without it the signature is unknown.",
+		},
+		{
+			Name: EnvAVHTTPHealthURL, Group: "Antivirus",
+			Description: "URL checked with a GET by the health probe (2xx expected); without " +
+				"it, the probe only opens a connection to the engine.",
+		},
+		{
+			Name: EnvAVHTTPMaxScanBytes, Group: "Antivirus",
+			Description: "With " + EnvAntivirusEngine + "=http (required, no default): largest " +
+				"file size, in bytes, sent to the HTTP engine (between 1048576 and 21474836480). " +
+				"Set it at most to the engine's own size limit (e.g. the StreamMaxLength of the " +
+				"clamd behind clamav-rest): an engine may answer 2xx clean for a larger file " +
+				"without analyzing it. Larger files are accepted without analysis, and the " +
+				"sender and recipients are told so.",
+		},
+		{
+			Name: EnvAVHTTPTimeout, Group: "Antivirus", Default: DefaultEngineTimeout,
+			Description: "Time limit of the analysis of one file by the HTTP engine (Go " +
+				"duration, between 10s and 2h).",
 		},
 		{
 			Name: EnvScanWorkers, Group: "Antivirus", Default: DefaultScanWorkers,

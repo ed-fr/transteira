@@ -261,3 +261,42 @@ export function engineLabel(engine: string, t: Translate): string {
 export function engineDisabled(engine: string | undefined): boolean {
   return engine === 'none';
 }
+
+// ---- Antivirus self-test (since 1.1) ---------------------------------------------------------
+
+/** Outcome of an EICAR self-test of the antivirus engine. */
+export type AntivirusSelfTest = components['schemas']['AntivirusSelfTest'];
+
+/** Translation key of the label of a self-test outcome. */
+export function selfTestOutcomeKey(outcome: AntivirusSelfTest['outcome']): string {
+  return `sysSettings.antivirus.selfTest.outcome.${outcome}`;
+}
+
+/** Translation key of the label of a self-test trigger. */
+export function selfTestTriggerKey(trigger: AntivirusSelfTest['trigger']): string {
+  return `sysSettings.antivirus.selfTest.trigger.${trigger}`;
+}
+
+/** Badge variant of an outcome: only a detection means that the engine works. */
+export function selfTestVariant(outcome: AntivirusSelfTest['outcome']): 'ok' | 'error' {
+  return outcome === 'detected' ? 'ok' : 'error';
+}
+
+/**
+ * Translation key of the explanation of a failed self-test (the engine is unavailable until a
+ * self-test passes: files wait), undefined for a passed one.
+ */
+export function selfTestExplanationKey(outcome: AntivirusSelfTest['outcome']): string | undefined {
+  return outcome === 'detected' ? undefined : `sysSettings.antivirus.selfTest.explain.${outcome}`;
+}
+
+/** Message of a failed self-test request: 409 (engine disabled), 403, anything else. */
+export function selfTestRequestError(view: ErrorView, t: Translate): string {
+  if (view.status === 409) {
+    return t('sysSettings.antivirus.selfTest.errorDisabled');
+  }
+  if (view.status === 403) {
+    return t('sysSettings.antivirus.selfTest.errorForbidden');
+  }
+  return view.message;
+}

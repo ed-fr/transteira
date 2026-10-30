@@ -241,6 +241,10 @@ type Config struct {
 	ClamAVMaxScanBytes int64
 	// ClamAVTimeout bounds the analysis of one file.
 	ClamAVTimeout time.Duration
+	// ICAP configures the ICAP engine; set only with EngineICAP.
+	ICAP ICAPConfig
+	// AVHTTP configures the generic HTTP engine; set only with EngineHTTP.
+	AVHTTP AVHTTPConfig
 	// ScanWorkers is the number of antivirus workers, each analyzing one
 	// file at a time.
 	ScanWorkers int
@@ -284,6 +288,11 @@ type Config struct {
 	// MetricsAllowedIPs, when not empty, lists the client networks allowed
 	// to read /metrics and /status, checked before the token.
 	MetricsAllowedIPs []netip.Prefix
+
+	// Warnings lists the non-fatal problems found by Load (variables
+	// ignored with the selected antivirus engine), for the start-up log.
+	// They never quote a value.
+	Warnings []string
 }
 
 // Transports of the syslog export (TT_SYSLOG_PROTOCOL).
@@ -429,14 +438,17 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	if len(l.problems) > 0 {
 		return nil, &ValidationError{Problems: l.problems}
 	}
+	c.Warnings = l.warnings
 	return c, nil
 }
 
-// loader accumulates validation problems while reading variables.
+// loader accumulates validation problems and warnings while reading
+// variables.
 type loader struct {
 	getenv   func(string) string
 	readFile func(string) ([]byte, error)
 	problems []Problem
+	warnings []string
 }
 
 // get returns the trimmed value of a variable.
@@ -814,17 +826,18 @@ func (l *loader) loadMail(c *Config) {
 	c.SMTPDenyNetworks = deny
 }
 
-// loadAntivirus reads the antivirus engine, the scan size limit, the scan
-// timeout and the number of scan workers.
+// loadAntivirus reads the antivirus engine and the settings of the
+// selected engine (clamd: the scan size limit and timeout; icap and http:
+// see loadEngines), and the number of scan workers.
 func (l *loader) loadAntivirus(c *Config) {
 	switch e := AntivirusEngine(strings.ToLower(l.getOr(EnvAntivirusEngine, DefaultAntivirusEngine))); e {
-	case EngineClamd, EngineNone:
+	case EngineClamd, EngineNone, EngineICAP, EngineHTTP:
 		c.AntivirusEngine = e
-	case EngineICAP, EngineHTTP:
-		l.fail(EnvAntivirusEngine, "engine %q is not available in this version yet (it arrives in a later version); use %q or %q", string(e), string(EngineClamd), string(EngineNone))
 	default:
-		l.fail(EnvAntivirusEngine, "unknown engine %q (want %q or %q)", string(e), string(EngineClamd), string(EngineNone))
+		l.fail(EnvAntivirusEngine, "unknown engine %q (want %q, %q, %q or %q)", string(e),
+			string(EngineClamd), string(EngineICAP), string(EngineHTTP), string(EngineNone))
 	}
+	l.loadEngines(c)
 	n, err := parseInt64(l.getOr(EnvClamAVMaxScanBytes, DefaultClamAVMaxScanBytes),
 		minClamAVMaxScanBytes, maxClamAVMaxScanBytes)
 	if err != nil {

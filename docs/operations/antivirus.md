@@ -30,7 +30,7 @@ network, never on the network shared with the reverse proxy.
 | `infected` | Threat found: the file key is destroyed and the file erased; the row stays so that the sender knows which file it was. | no |
 | `not_scanned_too_large` | Larger than `TT_CLAMAV_MAX_SCAN_BYTES`, refused by clamd's stream limit, or only partly analysed because of clamd's archive limits (`Heuristics.Limits.Exceeded`). Accepted, and flagged to the sender and recipients (section 11). | yes |
 | `not_scanned_encrypted` | Encrypted (password-protected) archive that clamd cannot analyse (`Heuristics.Encrypted`). Accepted and flagged the same way. | yes |
-| `scan_error` | The file could not be analysed after 3 attempts: unexpected clamd reply, unreadable file, clamd timing out on it, or clamd dropping the connection on it while still answering pings. Withheld for safety. | no |
+| `scan_error` | The file could not be analysed after 3 attempts: unexpected engine reply, unreadable file, the engine timing out on it, or the engine dropping the connection on it while still answering its probe. Withheld for safety. | no |
 
 4. When every file is done:
    - at least one deliverable file: the transfer becomes `available`, a
@@ -112,8 +112,8 @@ Specification section 11.1. Two independent levels:
   deployment, use the overlay
   [`deploy/docker-compose.no-antivirus.yml`](../../deploy/docker-compose.no-antivirus.yml)
   (`docker compose -f docker-compose.yml -f docker-compose.no-antivirus.yml up -d`, added
-  last when combined with the PostgreSQL overlay): no ClamAV container is needed. Other
-  engines (ICAP, HTTP API) are planned.
+  last when combined with the PostgreSQL overlay): no ClamAV container is needed. The
+  other engines (ICAP, HTTP API) are described in [Choosing the engine](#choosing-the-engine).
 - **Entity**: the `antivirusEnabled` switch of the entity, changed by the super admin only
   (a delegated admin sees it read-only), audited as `tenant.antivirus_disabled` and
   `tenant.antivirus_enabled`.
@@ -137,6 +137,197 @@ Behaviour:
 can be used to distribute malware. This is accepted only as an explicit operator or super
 admin choice; consider compensating measures (restricted recipient domains, confidentiality
 levels).
+
+## Choosing the engine
+
+Specification section 11.1. `TT_ANTIVIRUS_ENGINE` selects the engine of the whole
+instance:
+
+| Value | Engine |
+|---|---|
+| `clamd` (default) | ClamAV over its network protocol, as described in the rest of this page. |
+| `icap` | An ICAP server (RFC 3507), for enterprise antivirus gateways. |
+| `http` | A generic HTTP API: the file is sent as a stream and the verdict is read with configurable rules. |
+| `none` | No analysis ([Disabling the antivirus](#disabling-the-antivirus)). |
+
+All the engines follow the same rules: the file is scanned as a stream (decrypted on the
+fly, never written in clear to disk), a size limit applies (a larger file is accepted and
+flagged `not_scanned_too_large`), an infected file is erased, an unavailable engine
+raises the outage alert, and a timeout bounds each scan. **Fail-closed**: when the engine
+is unreachable or answers something that is not an explicit verdict, the file waits and
+is retried; it is never published unanalysed.
+
+**Warnings that apply to a remote engine.**
+
+- The clear content of every file leaves the VM for the engine. Choose the provider knowingly.
+- Cleartext `icap://` and `http://` only on a trusted internal network. Otherwise use
+  `icaps://` or `https://`: the server certificate is always verified (system roots, or
+  the file given by the `*_CA_FILE` variable); there is no option to skip the check.
+- Credentials come from a file only (Docker secret), never from an environment value, and a
+  URL that contains credentials (`user:pass@`) is refused at startup. Credentials are
+  never logged. With an `http://` URL, the authorization header travels in cleartext: the
+  startup log carries a warning, and such a setup belongs on a trusted internal network only.
+- **Align the limit of TransTeira on the limit of the engine.** Engines answer "clean" for
+  an object above their own size limit without analysing it (ICAP `204 No Content` or the
+  content echoed unchanged, a `2xx` from an HTTP API). `TT_ICAP_MAX_SCAN_BYTES` and
+  `TT_AVHTTP_MAX_SCAN_BYTES` are therefore **required, without a default**: set them at most
+  equal to the limit of the engine (c-icap `virus_scan` `MaxObjectSize`, `squidclamav`
+  `maxsize`, `StreamMaxLength` of the clamd behind an HTTP front such as clamav-rest), and
+  lower if unsure. Larger files are then accepted without analysis and delivered marked as
+  not analysed because of their size (`not_scanned_too_large`), the sender and the
+  recipients being told so, instead of being reported clean by an engine that never read
+  them.
+
+### ICAP (`TT_ANTIVIRUS_ENGINE=icap`)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TT_ICAP_URL` | none (required) | `icap://host[:port]/service`, default port 1344; `icaps://` (default port 11344) for ICAP over TLS. The path is the service, for example `icap://icap.internal.example.com:1344/avscan`. |
+| `TT_ICAP_CA_FILE` | system roots | PEM file of the certification authority that signed the server certificate (`icaps://` only). |
+| `TT_ICAP_INFECTION_HEADERS` | `X-Infection-Found,X-Virus-ID,X-Violations-Found` | Comma-separated list of the ICAP response headers that report an infection. |
+| `TT_ICAP_MAX_SCAN_BYTES` | none (required) | Largest file sent to the engine, in bytes (1 MiB to 20 GiB). At most the size limit of the server, see above. |
+| `TT_ICAP_TIMEOUT` | `10m` | Timeout of one scan. |
+
+Verdicts: `204` means clean; `200` means clean only if the body comes back unchanged; any
+configured infection header means infected (its value is the signature name); `503` means
+the engine is unavailable; anything else is an error and the file waits. The protocol probe
+is an `OPTIONS` request.
+
+Example: a c-icap server with the `squidclamav` or `virus_scan` module, on the internal
+network:
+
+```sh
+TT_ANTIVIRUS_ENGINE=icap
+TT_ICAP_URL=icap://icap.internal.example.com:1344/avscan
+# Equal to virus_scan.MaxObjectSize in c-icap.conf (here 100M = 104857600 bytes).
+TT_ICAP_MAX_SCAN_BYTES=104857600
+```
+
+Check the service name and the infection header of your server (`squidclamav` and
+`virus_scan` do not use the same service path), and its size limit: the `virus_scan` module
+defaults to `MaxObjectSize 5M` (about 5 MB), above which it answers clean without scanning.
+Raise `virus_scan.MaxObjectSize` in the c-icap configuration to the size you need, then set
+`TT_ICAP_MAX_SCAN_BYTES` to the same value in bytes (with `squidclamav`, its `maxsize`).
+
+### HTTP API (`TT_ANTIVIRUS_ENGINE=http`)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TT_AVHTTP_URL` | none (required) | URL that receives the file. Credentials in the URL are refused. |
+| `TT_AVHTTP_METHOD` | `POST` | `POST` or `PUT`. |
+| `TT_AVHTTP_BODY` | `multipart` | `multipart` (the file in a form field) or `raw` (the file as the request body). |
+| `TT_AVHTTP_MULTIPART_FIELD` | `file` | Name of the form field, with the `multipart` body. |
+| `TT_AVHTTP_AUTH_HEADER_FILE` | none | File that holds one `Name: value` line, sent with every request (for example `Authorization: Bearer ...`). Provide it as a Docker secret, never as an environment value. With an `http://` URL it travels in cleartext (startup warning). |
+| `TT_AVHTTP_CA_FILE` | system roots | PEM file of the certification authority (`https://` only). |
+| `TT_AVHTTP_CLEAN_RULE` | none (required) | Rule that must hold for a clean verdict. Include at least one positive JSON condition (see below). |
+| `TT_AVHTTP_INFECTED_RULE` | none (required) | Rule that must hold for an infected verdict. |
+| `TT_AVHTTP_SIGNATURE_POINTER` | none | JSON pointer of the signature name in an infected answer. |
+| `TT_AVHTTP_HEALTH_URL` | none | Optional URL used as the protocol probe of the engine. |
+| `TT_AVHTTP_MAX_SCAN_BYTES` | none (required) | Largest file sent to the engine, in bytes (1 MiB to 20 GiB). At most the size limit of the engine, see above. |
+| `TT_AVHTTP_TIMEOUT` | `10m` | Timeout of one scan. |
+
+**Rule grammar.** A rule is a list of conditions joined by `&&`. A condition is one of:
+
+| Condition | Holds when |
+|---|---|
+| `status=200` | the HTTP status is 200 |
+| `status=200-299` | the status is in the range |
+| `status=200,204` | the status is one of the listed values |
+| `json:/pointer=<JSON literal>` | the value at the JSON pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) equals the literal (`"OK"`, `true`, `0`, `null`...) |
+| `json:/pointer!=<JSON literal>` | the value at the pointer exists and differs from the literal. Not enough on its own for the clean rule: see the warning below. |
+
+Limits of the grammar: a rule is at most 1 KiB long and holds at most 16 conditions; a
+pointer cannot contain `=` nor end with `!` (the pointer stops at the first `=`, and a `!`
+just before it is read as the `!=` operator); a literal cannot contain `&&`.
+
+**Make the clean rule explicit.** A clean rule without any positive JSON condition
+(`json:/pointer=<literal>`), that is a rule made of status conditions only, or of `!=`
+conditions only, would read as clean an error body that comes with a matching status code
+(with the rule `status=200`, an answer `200` carrying `{"error": "engine overloaded"}`;
+with `status=200 && json:/infected!=true`, an answer `200` carrying
+`{"infected": null, "error": "..."}`). TransTeira accepts
+such a rule but logs a startup warning naming `TT_AVHTTP_CLEAN_RULE`. Add a condition on a
+field that the engine sets only for a clean file, such as `json:/Status="OK"` or
+`json:/infected=false`.
+
+A pointer that is missing from the answer is an error, never a verdict. The verdict is
+**clean** only when the clean rule holds and the infected rule does not, **infected** when
+the infected rule holds and the clean rule does not; in every other case (both hold,
+neither holds, unreadable body, missing field, timeout) it is an error and the file waits.
+Both rules are mandatory, and are validated at startup.
+
+Example: the `ajilach/clamav-rest` image (a ClamAV with a REST front), on the internal
+network. It receives the file in the multipart field `file`, on `/scan`:
+
+```sh
+TT_ANTIVIRUS_ENGINE=http
+TT_AVHTTP_URL=http://clamav-rest.internal.example.com:9000/scan
+TT_AVHTTP_CLEAN_RULE='status=200 && json:/Status="OK"'
+TT_AVHTTP_INFECTED_RULE='status=406 && json:/Status="FOUND"'
+TT_AVHTTP_SIGNATURE_POINTER=/Description
+# At most the StreamMaxLength of the clamd behind clamav-rest (here 2 GiB).
+TT_AVHTTP_MAX_SCAN_BYTES=2147483648
+```
+
+The rules contain spaces, `&&` and double quotes: in a `.env` file read by Docker Compose,
+write them between single quotes as above; Compose strips the single quotes and keeps the
+content between them literally (no interpolation, the double quotes are kept). In the
+`environment:` block of a `compose.yaml`, quote the value as a YAML string instead, for
+example `TT_AVHTTP_CLEAN_RULE: 'status=200 && json:/Status="OK"'`.
+
+The response shape (status codes, `Status` and `Description` fields) depends on the version
+of the image: check it on the version you deploy, and rely on the self-test below, which
+fails when the rules do not recognise an infection.
+
+### Self-test (EICAR)
+
+Whatever the engine, TransTeira checks that it really detects a threat by sending it the
+EICAR test string (the standard antivirus test, harmless, generated by the server):
+
+- It runs **at startup**. Until it passes, the engine is treated as **unavailable**
+  (fail-closed): files wait, the outage alert follows its usual grace period and `/healthz`
+  answers unavailable.
+- While it fails, it is retried by the instance, starting after 15 seconds and doubling
+  up to 10 minutes.
+- Once it has passed, it is **never repeated by the instance** (no periodic EICAR; the
+  protocol probe watches the availability). It then runs only on demand, by the super admin:
+  button **Test the antivirus** in System > Settings, or `POST /admin/system/antivirus/test`.
+  A test on demand that fails closes the engine again until a later test passes. A test
+  on demand with the engine `none` answers `409`.
+- The last result (outcome, date, signature, trigger) is shown in System > Settings and in
+  `antivirusSelfTest` of the system settings; each test is audited as `antivirus.self_test`.
+
+Outcomes: `detected` (passed), `not_detected` (the engine answered without reporting the
+string: wrong rules or engine configuration), `unavailable` (unreachable), `error`
+(unexpected or late answer).
+
+### Deployment with a remote engine
+
+There is no extra compose file for the remote engines. The default `docker-compose.yml`
+with its ClamAV containers can stay, they are simply unused. To drop the ClamAV containers,
+use the overlay
+[`deploy/docker-compose.no-antivirus.yml`](../../deploy/docker-compose.no-antivirus.yml):
+it removes the dependency on ClamAV and moves the three ClamAV services to an inactive
+profile, but it also **sets `TT_ANTIVIRUS_ENGINE=none`**, which would disable the analysis.
+Override that value with a small file of your own, added after it:
+
+```yaml
+# deploy/docker-compose.remote-engine.yml (yours, not provided)
+services:
+  transteira:
+    environment:
+      TT_ANTIVIRUS_ENGINE: icap
+```
+
+```sh
+docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.no-antivirus.yml \
+  -f deploy/docker-compose.remote-engine.yml up -d
+```
+
+(a value set in `environment` wins over the `.env` file; put the `TT_ICAP_*` or
+`TT_AVHTTP_*` variables in `.env`, and the CA file and the authorization header file in
+mounted secrets). Check in the startup log and in System > Settings that the engine is the
+expected one and that the self-test passed.
 
 ## Size limits
 

@@ -174,6 +174,10 @@ Les paramètres du système portent l’alerte d’occupation du disque de toute
 - **Seuil d’alerte (% du disque de données)** : un pourcentage de 50 à 99, 85 par défaut. L’alerte se lève quand l’occupation du disque atteint le seuil et retombe quand elle redescend 5 points en dessous.
 - **Adresse d’alerte supplémentaire** : facultative, elle reçoit l’alerte disque et l’alerte antivirus en plus des super administrateurs. Cette adresse n’est pas vérifiée : saisissez-la une seconde fois dans **Adresse d’alerte, de nouveau** et contrôlez-la soigneusement. Laissez le champ vide pour la retirer.
 
+Sous le formulaire, la section **Antivirus** affiche le moteur choisi par l’exploitant (en lecture seule) et, sauf s’il est désactivé, le résultat du dernier **auto-test** : résultat, date, signature lorsque la chaîne de test a été détectée, et qui l’a lancé (l’instance ou un super administrateur). L’auto-test envoie au moteur la chaîne de test EICAR (inoffensive), qu’il doit signaler comme infectée. Cliquez sur **Tester l’antivirus** pour le lancer maintenant ; le résultat est annoncé et consigné dans le [journal d’audit](topic:system-audit) (`antivirus.self_test`). Le bouton n’apparaît pas lorsque l’antivirus est désactivé pour l’instance.
+
+Un résultat autre que **Détecté (réussi)** signifie que le moteur ne remplit pas son rôle : il est injoignable, répond de façon inattendue ou ne signale pas la chaîne de test (vérifiez sa configuration et, pour un moteur HTTP, les règles de verdict). Tant qu’un auto-test n’a pas réussi, le moteur est considéré comme indisponible et **les fichiers attendent leur analyse** (l’alerte antivirus suit après le délai habituel). L’instance réessaie d’elle-même après un échec au démarrage ; après un test réussi, elle ne le répète jamais seule, et un test que vous lancez et qui échoue referme le moteur.
+
 Cliquez sur **Enregistrer**. Les mails d’alerte partent par le serveur SMTP système de l’instance, configuré par variables d’environnement, jamais par la messagerie d’une entité. Sans lui, aucun mail d’alerte n’est envoyé.
 
 <!-- topic: system-webhooks -->

@@ -10,7 +10,7 @@
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Spinner, TextField } from '../../../shared/components';
-  import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
+  import { formatDate, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { EMAIL_MAX_LENGTH } from '../../../shared/validation/email';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -25,6 +25,11 @@
     decimalSeparator,
     engineDisabled,
     engineLabel,
+    selfTestExplanationKey,
+    selfTestOutcomeKey,
+    selfTestRequestError,
+    selfTestTriggerKey,
+    selfTestVariant,
     emailChanged,
     emailRemoved,
     formFromSettings,
@@ -33,6 +38,7 @@
     settingsPatch,
     validateSettingsForm,
     type SettingsFieldRefs,
+    type AntivirusSelfTest,
     type SettingsForm,
     type SystemSettings,
   } from './settings';
@@ -66,6 +72,7 @@
 
   function show(next: SystemSettings): void {
     settings = next;
+    selfTest = next.antivirusSelfTest;
     form = formFromSettings(next, separator);
   }
 
@@ -79,6 +86,29 @@
       loadError = describeError(i18n, err).message;
     } finally {
       loading = false;
+    }
+  }
+
+  let selfTest = $state.raw<AntivirusSelfTest | undefined>(undefined);
+  let testing = $state(false);
+  let testError = $state('');
+  let testAnnounce = $state('');
+
+  // POST /admin/system/antivirus/test: the answer comes when the test ends; a failed test is a
+  // normal 200 answer (the engine is then closed until a later test passes).
+  async function runSelfTest(): Promise<void> {
+    testing = true;
+    testError = '';
+    testAnnounce = t('sysSettings.antivirus.selfTest.running');
+    try {
+      const res = await adminApi.post('/admin/system/antivirus/test');
+      selfTest = res.data;
+      testAnnounce = t(selfTestOutcomeKey(res.data.outcome));
+    } catch (err) {
+      testError = selfTestRequestError(describeError(i18n, err), t);
+      testAnnounce = '';
+    } finally {
+      testing = false;
     }
   }
 
@@ -193,6 +223,45 @@
       <p class="tt-text-muted">{t('sysSettings.antivirus.hint')}</p>
       {#if engineDisabled(settings.antivirusEngine)}
         <Alert severity="warning" live={false}>{t('sysSettings.antivirus.disabledWarning')}</Alert>
+      {:else}
+        <h3>{t('sysSettings.antivirus.selfTest.title')}</h3>
+        {#if selfTest !== undefined}
+          {@const explanation = selfTestExplanationKey(selfTest.outcome)}
+          <dl class="tt-dl" data-testid="antivirus-self-test">
+            <dt>{t('sysSettings.antivirus.selfTest.outcomeLabel')}</dt>
+            <dd>
+              <StatusBadge
+                variant={selfTestVariant(selfTest.outcome)}
+                label={t(selfTestOutcomeKey(selfTest.outcome))}
+              />
+            </dd>
+            <dt>{t('sysSettings.antivirus.selfTest.dateLabel')}</dt>
+            <dd>{formatDate(selfTest.testedAt)}</dd>
+            {#if selfTest.signature !== undefined}
+              <dt>{t('sysSettings.antivirus.selfTest.signatureLabel')}</dt>
+              <dd><code>{selfTest.signature}</code></dd>
+            {/if}
+            <dt>{t('sysSettings.antivirus.selfTest.triggerLabel')}</dt>
+            <dd>{t(selfTestTriggerKey(selfTest.trigger))}</dd>
+          </dl>
+          {#if explanation !== undefined}
+            <Alert severity="warning" live={false}>{t(explanation)}</Alert>
+          {/if}
+        {:else}
+          <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.none')}</p>
+        {/if}
+        <p class="tt-text-muted">{t('sysSettings.antivirus.selfTest.hint')}</p>
+        <p>
+          <Button variant="secondary" disabled={testing} onclick={() => void runSelfTest()}>
+            {testing
+              ? t('sysSettings.antivirus.selfTest.running')
+              : t('sysSettings.antivirus.selfTest.button')}
+          </Button>
+        </p>
+        <div role="status" aria-live="polite" data-testid="antivirus-self-test-live">{testAnnounce}</div>
+        {#if testError !== ''}
+          <Alert severity="error">{testError}</Alert>
+        {/if}
       {/if}
     </section>
   {/if}

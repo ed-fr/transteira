@@ -3,10 +3,13 @@
 // string, records what it receives and can misbehave on demand (size limit,
 // connection closed mid-stream, hang, garbage reply, the heuristic
 // signatures of a partial analysis, stop and restart on the same address).
-// It is excluded from the coverage thresholds, like storetest.
+// It also provides a fake ICAP server (ICAPServer: OPTIONS, RESPMOD with
+// preview, clean, echo, infected and failure replies) and a run-time test CA
+// (TLSConfig). It is excluded from the coverage thresholds, like storetest.
 //
-// The server keeps every stream it receives in memory (see Server.Scans): it
-// is meant for small test contents, not for large streams.
+// The servers keep every stream they receive in memory (see Server.Scans and
+// ICAPServer.Requests): they are meant for small test contents, not for
+// large streams.
 //
 // It does not import package antivirus, so that the antivirus tests can use
 // it too.

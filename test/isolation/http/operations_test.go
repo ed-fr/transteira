@@ -29,6 +29,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +50,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ed-fr/transteira/api"
+	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
 	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/public"
@@ -252,6 +254,7 @@ var isolationCases = map[string]isolationCase{
 	"startMasterKeyRotation": systemOperation,
 	"getMasterKeyRotation":   systemOperation,
 	"getMasterKeyStatus":     systemOperation,
+	"testAntivirus":          systemOperation,
 	// Webhooks (webhooks_test.go): served on the admin host only. The
 	// delegated admin of tenant A gets for tenant B's ID exactly the answer
 	// of an unknown tenant ID, even with an invalid body, and, under A's
@@ -665,7 +668,10 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 	return h
 }
 
-// fakeClamd answers PONG to every PING, so that /healthz is healthy.
+// fakeClamd answers PONG to every PING and returns its address. It
+// reports the EICAR string infected, so that the EICAR self-test of the
+// instance passes, and answers PONG (an unexpected reply) to any other
+// INSTREAM, as before the self-test existed.
 func fakeClamd(t *testing.T) string {
 	t.Helper()
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
@@ -681,9 +687,16 @@ func fakeClamd(t *testing.T) string {
 			}
 			go func() {
 				defer func() { _ = c.Close() }()
-				if _, err := bufio.NewReader(c).ReadBytes(0); err == nil {
-					_, _ = c.Write([]byte("PONG\x00"))
+				r := bufio.NewReader(c)
+				cmd, err := r.ReadBytes(0)
+				if err != nil {
+					return
 				}
+				if string(cmd) == "zINSTREAM\x00" && isEICARStream(r) {
+					_, _ = c.Write([]byte("stream: Eicar-Test-Signature FOUND\x00"))
+					return
+				}
+				_, _ = c.Write([]byte("PONG\x00"))
 			}()
 		}
 	}()
@@ -865,4 +878,19 @@ func noLeak(t *testing.T, h *harness, op operation, host string, resp response) 
 			t.Errorf("%s under %s leaks tenant data in header %s: %q", op, host, k, vs)
 		}
 	}
+}
+
+// isEICARStream reads the first INSTREAM chunk from r and reports whether
+// the stream is exactly the EICAR string (one chunk, then the end marker).
+func isEICARStream(r *bufio.Reader) bool {
+	eicar := antivirustest.EICAR()
+	var n uint32
+	if binary.Read(r, binary.BigEndian, &n) != nil || int(n) != len(eicar) {
+		return false
+	}
+	data := make([]byte, n)
+	if _, err := io.ReadFull(r, data); err != nil || !bytes.Equal(data, eicar) {
+		return false
+	}
+	return binary.Read(r, binary.BigEndian, &n) == nil && n == 0
 }

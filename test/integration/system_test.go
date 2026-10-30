@@ -277,8 +277,28 @@ func TestSystemSettings(t *testing.T) {
 		var members map[string]json.RawMessage
 		mustJSON(t, resp.body, &members)
 		if string(members["alertEmail"]) != "null" || string(members["diskAlertThreshold"]) != "0.85" ||
-			string(members["antivirusEngine"]) != `"clamd"` || len(members) != 3 {
-			t.Errorf("default settings = %s, want threshold 0.85, alertEmail null and engine clamd", resp.body)
+			string(members["antivirusEngine"]) != `"clamd"` || len(members) != 4 {
+			t.Errorf("default settings = %s, want threshold 0.85, alertEmail null, engine clamd and a self-test", resp.body)
+		}
+		// The start-up EICAR self-test passed (the fake clamd detects it).
+		var selfTest struct {
+			Engine, Outcome, Signature, Trigger string
+		}
+		mustJSON(t, members["antivirusSelfTest"], &selfTest)
+		if selfTest.Engine != "clamd" || selfTest.Outcome != "detected" || selfTest.Trigger != "startup" || selfTest.Signature == "" {
+			t.Errorf("start-up self-test = %s", members["antivirusSelfTest"])
+		}
+		// A self-test on demand answers its outcome, then becomes the last
+		// one.
+		resp = mustStatus(t, "testAntivirus", sa.call(t, http.MethodPost, pathAntivirusTest, nil), http.StatusOK)
+		mustJSON(t, resp.body, &selfTest)
+		if selfTest.Outcome != "detected" || selfTest.Trigger != "admin" {
+			t.Errorf("self-test on demand = %s", resp.body)
+		}
+		resp = mustStatus(t, "getSystemSettings", sa.call(t, http.MethodGet, pathSystemSettings, nil), http.StatusOK)
+		mustJSON(t, resp.body, &members)
+		if !strings.Contains(string(members["antivirusSelfTest"]), `"trigger":"admin"`) {
+			t.Errorf("last self-test = %s", members["antivirusSelfTest"])
 		}
 
 		alert := uniqueEmail(t, "it-admin", "example.com")

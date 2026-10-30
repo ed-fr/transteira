@@ -36,6 +36,34 @@
       "icap": "ICAP",
       "http": "HTTP API",
       "none": "Disabled"
+    },
+    "selfTest": {
+      "title": "Self-test",
+      "outcomeLabel": "Last result",
+      "dateLabel": "Date",
+      "signatureLabel": "Signature",
+      "triggerLabel": "Started by",
+      "none": "No self-test has finished yet.",
+      "hint": "The test sends the harmless EICAR test string to the engine, which must report it infected. Until a test passes, the engine is treated as unavailable and files wait. A test that fails closes the engine again.",
+      "button": "Test the antivirus",
+      "running": "Test in progress...",
+      "errorDisabled": "The antivirus is disabled for the whole instance: there is nothing to test.",
+      "errorForbidden": "Only a super admin can run the antivirus test.",
+      "outcome": {
+        "detected": "Detected (passed)",
+        "not_detected": "Not detected",
+        "unavailable": "Unavailable",
+        "error": "Error"
+      },
+      "trigger": {
+        "startup": "The instance (start or retry)",
+        "admin": "A super admin"
+      },
+      "explain": {
+        "not_detected": "The engine answered but did not report the test string. Check its configuration and, for the HTTP engine, the verdict rules. Until a test passes, files wait.",
+        "unavailable": "The engine could not be reached. Until a test passes, the engine is treated as unavailable and files wait; the instance retries by itself.",
+        "error": "The engine answered something unexpected or too late. Until a test passes, files wait; the instance retries by itself."
+      }
     }
   }
 }

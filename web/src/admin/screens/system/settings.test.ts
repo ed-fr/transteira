@@ -14,6 +14,11 @@ import {
   percentFromRatio,
   ratioFromPercent,
   roundRatio,
+  selfTestExplanationKey,
+  selfTestOutcomeKey,
+  selfTestRequestError,
+  selfTestTriggerKey,
+  selfTestVariant,
   settingsFailure,
   settingsPatch,
   thresholdIssue,
@@ -273,5 +278,31 @@ describe('antivirus engine', () => {
     expect(engineDisabled('none')).toBe(true);
     expect(engineDisabled('clamd')).toBe(false);
     expect(engineDisabled(undefined)).toBe(false);
+  });
+});
+
+describe('antivirus self-test', () => {
+  it('maps outcomes and triggers to keys and badge variants', () => {
+    expect(selfTestOutcomeKey('not_detected')).toBe('sysSettings.antivirus.selfTest.outcome.not_detected');
+    expect(selfTestTriggerKey('admin')).toBe('sysSettings.antivirus.selfTest.trigger.admin');
+    expect(selfTestVariant('detected')).toBe('ok');
+    for (const outcome of ['not_detected', 'unavailable', 'error'] as const) {
+      expect(selfTestVariant(outcome)).toBe('error');
+    }
+  });
+
+  it('explains only the failures', () => {
+    expect(selfTestExplanationKey('detected')).toBeUndefined();
+    expect(selfTestExplanationKey('unavailable')).toBe('sysSettings.antivirus.selfTest.explain.unavailable');
+  });
+
+  it('maps the request errors', () => {
+    expect(selfTestRequestError(view({ status: 409, code: 'state-conflict' }), t)).toBe(
+      'sysSettings.antivirus.selfTest.errorDisabled',
+    );
+    expect(selfTestRequestError(view({ status: 403, code: 'forbidden' }), t)).toBe(
+      'sysSettings.antivirus.selfTest.errorForbidden',
+    );
+    expect(selfTestRequestError(view({ status: 500, code: 'internal-error' }), t)).toBe('general');
   });
 });

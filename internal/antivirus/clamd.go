@@ -1,14 +1,22 @@
-// Package antivirus talks to a ClamAV clamd daemon over TCP or a Unix socket.
+// Package antivirus talks to the antivirus engine that analyzes deposited
+// files. Three engines are implemented, all with the same Scan and Ping
+// methods, error classes and Result semantics:
 //
-// Two commands are implemented: PING, which backs the health check, and
-// INSTREAM ([Client.Scan]), which analyzes a stream. The Client keeps the
-// dial parameters (network, address, dialer, timeouts) rather than a live
-// connection: every command opens its own short-lived connection, with its
-// own deadlines.
+//   - clamd ([Client]): a ClamAV daemon over TCP or a Unix socket, with the
+//     PING command (health check) and INSTREAM ([Client.Scan]);
+//   - ICAP ([ICAPClient], RFC 3507): OPTIONS (health check) and RESPMOD
+//     ([ICAPClient.Scan]), in cleartext or over TLS;
+//   - a generic HTTP API, whose verdict is read with configurable rules.
 //
-// Errors returned by this package may contain the clamd address (dial errors
-// from the net package do). Callers exposing results over HTTP must map them
-// to a generic status and never forward the error text.
+// Clients keep the dial parameters (address, dialer, timeouts) rather than a
+// live connection: every command opens its own short-lived connection, with
+// its own deadlines. Any reply that is not an explicit verdict is an error,
+// never a clean result (fail-closed, decision P44).
+//
+// Errors returned by this package may contain the engine host or address
+// (dial errors from the net package do), never credentials. Callers exposing
+// results over HTTP must map them to a generic status and never forward the
+// error text.
 package antivirus
 
 import (

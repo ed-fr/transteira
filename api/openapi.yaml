@@ -241,6 +241,9 @@ paths:
 
         Since 1.1, with `TT_ANTIVIRUS_ENGINE=none` (antivirus disabled for the whole instance, no
         antivirus container needed) the antivirus is not probed and `checks.antivirus` is `ok`.
+        With the `clamd`, `icap` and `http` engines, `checks.antivirus` is `unavailable` while the
+        engine does not answer its protocol probe (`PING`, `OPTIONS`, health URL or connection)
+        or while no EICAR self-test has passed since the start (see `testAntivirus`).
         The engine name is never disclosed here (unauthenticated): see `/status` and the system
         settings.
       security: []
@@ -335,7 +338,7 @@ paths:
                 # HELP transteira_scan_queue_files Files waiting for or under analysis.
                 # TYPE transteira_scan_queue_files gauge
                 transteira_scan_queue_files 0
-                # HELP transteira_antivirus_up Whether clamd answers (1) or not (0).
+                # HELP transteira_antivirus_up Whether the antivirus engine answers (1) or not (0).
                 # TYPE transteira_antivirus_up gauge
                 transteira_antivirus_up 1
                 # HELP transteira_disk_used_ratio Usage of the filesystem holding the data directory.
@@ -384,7 +387,7 @@ paths:
                 maintenance: false
                 checks: { database: ok, antivirus: ok, storage: ok }
                 disk: { totalBytes: 4398046511104, usedBytes: 1319413953331, usedRatio: 0.3, alertThreshold: 0.85, alertActive: false }
-                antivirus: { engine: clamd, queuedFiles: 0, alertActive: false }
+                antivirus: { engine: clamd, queuedFiles: 0, alertActive: false, selfTestPassed: true }
                 lifecycle: { expire: '2026-10-27T08:59:30Z', purge-rows: '2026-10-27T03:00:05Z', backup: '2026-10-27T02:30:41Z' }
                 tenants:
                   - id: ten_01JAB00000000000000ENT1TYA
@@ -1209,7 +1212,8 @@ paths:
         can be delivered (every file infected or in `scan_error`), the transfer ends `rejected`,
         the sender is alerted and no recipient is notified.
 
-        The antivirus is **fail-closed**: while ClamAV is unreachable, files stay `scanning`, the
+        The antivirus is **fail-closed**: while the antivirus engine is unreachable, or until its
+        EICAR self-test passes (since 1.1), files stay `scanning`, the
         analysis is retried with back-off (and resumed after a restart), and nothing is made
         available.
 
@@ -5376,7 +5380,7 @@ paths:
       tags: [Admin system]
       operationId: getSystemSettings
       summary: Instance settings editable at runtime (super admin)
-      description: "Returns the instance settings that can be changed at runtime: the disk alert threshold and the optional address that receives the disk alert in addition to the super admins (`null` when none). Since 1.1 it also reports, read only, the antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (`antivirusEngine`): the engine is configured by environment variables only and cannot be changed through the API. Reserved to the super admin."
+      description: "Returns the instance settings that can be changed at runtime: the disk alert threshold and the optional address that receives the disk alert in addition to the super admins (`null` when none). Since 1.1 it also reports, read only, the antivirus engine selected by `TT_ANTIVIRUS_ENGINE` (`antivirusEngine`): the engine is configured by environment variables only and cannot be changed through the API; and the last EICAR self-test of the engine (`antivirusSelfTest`, absent with the engine `none` or before the first test ends). Reserved to the super admin."
       security:
         - adminSession: []
       responses:
@@ -5385,7 +5389,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SystemSettings' }
-              example: { diskAlertThreshold: 0.85, alertEmail: it-admin@example.com, antivirusEngine: clamd }
+              example: { diskAlertThreshold: 0.85, alertEmail: it-admin@example.com, antivirusEngine: clamd, antivirusSelfTest: { engine: clamd, outcome: detected, signature: Eicar-Test-Signature, trigger: startup, testedAt: '2026-10-30T08:00:02Z', durationMs: 35 } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
@@ -5421,6 +5425,50 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/system/antivirus/test:
+    post:
+      tags: [Admin system]
+      operationId: testAntivirus
+      summary: Run an EICAR self-test of the antivirus engine (super admin)
+      description: |
+        Since 1.1. Sends the EICAR test string (harmless, generated by the server) to the antivirus
+        engine selected by `TT_ANTIVIRUS_ENGINE` and returns the outcome, which also becomes the
+        last self-test reported by the system settings. A test that passes opens the engine to the
+        analyses; a test that fails closes it until a later self-test passes (see
+        `AntivirusSelfTest`). The answer comes when the test ends (bounded by the scan timeout of
+        the engine); calls made while a test is running share its outcome. `409` with the engine
+        `none`. Reserved to the super admin. Audited as `antivirus.self_test`, without tenant.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: Outcome of the self-test.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AntivirusSelfTest' }
+              examples:
+                detected:
+                  summary: Engine detecting EICAR
+                  value: { engine: icap, outcome: detected, signature: Eicar-Test-Signature, trigger: admin, testedAt: '2026-10-30T10:15:00Z', durationMs: 48 }
+                notDetected:
+                  summary: Verdict rules that never report an infection
+                  value: { engine: http, outcome: not_detected, trigger: admin, testedAt: '2026-10-30T10:16:00Z', durationMs: 120 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: The antivirus is disabled for the whole instance (`TT_ANTIVIRUS_ENGINE=none`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#state-conflict
+                title: Operation not allowed in the current state
+                status: 409
+                code: state-conflict
+                detail: The antivirus is disabled for the whole instance.
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/system/maintenance:
@@ -7866,16 +7914,20 @@ components:
         `master_key.rotation_completed` and `master_key.rotation_failed` (without tenant) carry
         the key identifiers, never key material; `disk.alert_raised` and `disk.alert_cleared`
         (object `system`/`disk`, actor `system`, without tenant) are recorded even when no system
-        mail can be sent; `antivirus.alert_raised` (clamd unreachable beyond the grace period,
+        mail can be sent; `antivirus.alert_raised` (antivirus engine unreachable, or its EICAR self-test failing, beyond the grace period,
         details `outageSeconds`, `waitingTransfers` and `tenants`) and `antivirus.alert_cleared`
-        (clamd answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
+        (engine answering again, details `outageSeconds`) use object `system`/`antivirus`, actor
         `system`, without tenant, and are recorded even when no mail can be sent.
         Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
         `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
         extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
         security log) names the refused domains; `antivirus.scans_released` (actor `system`,
         without tenant) counts the files released as `not_scanned_disabled` at a start with
-        `TT_ANTIVIRUS_ENGINE=none`; `abuse.report_reopened` names the report;
+        `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
+        tenant) records an EICAR self-test of the engine with details `engine`, `outcome` and
+        `trigger`: every test asked by a super admin (actor that admin), and the self-tests run by
+        the instance itself (actor `system`) only for the first one after a start and when the
+        outcome changes; `abuse.report_reopened` names the report;
         `transfer.reminder_sent` the number of recipients; `recipient.verified` names the
         recipient link, never the code; `abuse.threshold_exceeded` and `abuse.unusual_activity`
         are recorded with the sender as actor (kind `depositor`, so that a GDPR erasure pseudonymises
@@ -7956,6 +8008,7 @@ components:
         - abuse.report_reopened
         - transfer.recipient_refused
         - antivirus.scans_released
+        - antivirus.self_test
         - webhook.created
         - webhook.updated
         - webhook.deleted
@@ -8129,6 +8182,10 @@ components:
           allOf: [{ $ref: '#/components/schemas/AntivirusEngine' }]
           readOnly: true
           description: "Since 1.1. Read only: the antivirus engine selected by `TT_ANTIVIRUS_ENGINE`, configured by environment variables only."
+        antivirusSelfTest:
+          allOf: [{ $ref: '#/components/schemas/AntivirusSelfTest' }]
+          readOnly: true
+          description: "Since 1.1. Read only: the last EICAR self-test of the engine; absent with the engine `none` or before the first test ends."
       additionalProperties: false
     SystemSettingsUpdate:
       type: object
@@ -8233,6 +8290,37 @@ components:
         scanning API), `none` (antivirus disabled for the whole instance: files are delivered
         `not_scanned_disabled`).
       enum: [clamd, icap, http, none]
+    AntivirusSelfTest:
+      type: object
+      description: |
+        Since 1.1. Outcome of an EICAR self-test: the standard antivirus test string (harmless) is
+        sent to the engine, which must report it infected. Until a self-test passes, the engine
+        is treated as unavailable (fail-closed): files wait, the outage alert follows its usual
+        grace period and the instance retries the self-test with a growing delay (15 seconds up
+        to 10 minutes). Once a self-test passed, the instance never repeats it by itself, only
+        on demand (`testAntivirus`); a test on demand that fails closes the engine again.
+      required: [engine, outcome, trigger, testedAt, durationMs]
+      properties:
+        engine: { $ref: '#/components/schemas/AntivirusEngine' }
+        outcome:
+          type: string
+          enum: [detected, not_detected, unavailable, error]
+          description: |
+            `detected`: the engine reported the EICAR string infected (passed). `not_detected`:
+            the engine answered but did not report it (wrong verdict rules or engine
+            configuration). `unavailable`: the engine could not be reached. `error`: the engine
+            answered something unexpected or too late.
+        signature:
+          type: string
+          maxLength: 200
+          description: Signature reported by the engine, with the outcome `detected` only.
+        trigger:
+          type: string
+          enum: [startup, admin]
+          description: "`startup`: run by the instance (at the start or a retry); `admin`: asked by a super admin."
+        testedAt: { type: string, format: date-time }
+        durationMs: { type: integer, format: int64, minimum: 0 }
+      additionalProperties: false
     InstanceStatus:
       type: object
       description: Since 1.1. Answer of `/status`.
@@ -8266,6 +8354,9 @@ components:
             engine: { $ref: '#/components/schemas/AntivirusEngine' }
             queuedFiles: { type: integer, minimum: 0, description: Files waiting for or under analysis. }
             alertActive: { type: boolean, description: The antivirus outage alert is raised. }
+            selfTestPassed:
+              type: boolean
+              description: Since 1.1. An EICAR self-test of the engine passed since the start; absent with the engine `none`.
         lifecycle:
           type: object
           description: |

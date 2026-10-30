@@ -258,6 +258,14 @@ au démarrage. **Avertissement de sécurité** : l’instance peut alors distrib
 (modèle de menaces T-236) ; ne le faites que par un choix explicite. Conséquences et interrupteur par entité :
 [Antivirus](../../operations/antivirus.md#disabling-the-antivirus).
 
+### Un autre moteur antivirus (facultatif)
+
+À la place de ClamAV, l’analyse peut être confiée à un serveur ICAP (`TT_ANTIVIRUS_ENGINE=icap`) ou à
+une API HTTP générique (`TT_ANTIVIRUS_ENGINE=http`). Variables, règles de verdict, déploiement avec un
+moteur distant, avertissements (le clair de chaque fichier quitte la VM ; le clair seulement sur un
+réseau interne de confiance) et auto-test EICAR au démarrage : [Antivirus](../../operations/antivirus.md#choosing-the-engine)
+(page en anglais).
+
 ## 9. Premier lancement : le super administrateur
 
 Tant qu’aucun administrateur n’existe, TransTeira écrit un **jeton d’initialisation** dans son
