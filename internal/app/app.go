@@ -548,6 +548,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: start the antivirus alert monitor: %w", err)
 	}
 	if avDisabled {
+		auditInstanceDisabled(ctx, auditLog, logger)
 		if err := releaseUnscanned(ctx, db.TransferFiles(), auditLog, logger); err != nil {
 			return err
 		}
@@ -1158,6 +1159,20 @@ type unscannedReleaser interface {
 // eventRecorder records a global audit event (*audit.Writer).
 type eventRecorder interface {
 	Record(ctx context.Context, ev audit.Event) error
+}
+
+// auditInstanceDisabled records, at every start with the antivirus engine
+// "none", that the analysis is disabled for the whole instance
+// (antivirus.instance_disabled, a global event). An audit failure is
+// logged, never fatal to the start.
+func auditInstanceDisabled(ctx context.Context, auditLog eventRecorder, logger *slog.Logger) {
+	if err := auditLog.Record(ctx, audit.Event{
+		ActorKind: store.ActorSystem, Actor: audit.ActorAntivirus, Action: audit.ActionAntivirusInstanceDisabled,
+		ObjectKind: audit.ObjectSystem, ObjectID: "antivirus",
+	}); err != nil {
+		logger.ErrorContext(ctx, "audit write failed", slog.String("action", string(audit.ActionAntivirusInstanceDisabled)),
+			slog.Any("error", err))
+	}
 }
 
 // releaseUnscanned runs at start-up with the antivirus engine "none",

@@ -172,6 +172,7 @@
     "antivirus": {
       "alert_raised": "Antivirus alert raised",
       "alert_cleared": "Antivirus alert cleared",
+      "instance_disabled": "Antivirus disabled for the instance",
       "scans_released": "Files released unscanned (antivirus disabled)",
       "self_test": "Antivirus self-test"
     },

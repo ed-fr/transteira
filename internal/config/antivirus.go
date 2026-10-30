@@ -180,7 +180,7 @@ func (l *loader) loadAVHTTP(c *Config) {
 	if !validFieldName(hc.MultipartField) {
 		l.fail(EnvAVHTTPMultipartField, "must be 1 to %d letters, digits, '.', '_' or '-'", maxMultipartFieldLen)
 	}
-	hc.AuthHeader = l.authHeaderFile(EnvAVHTTPAuthHeaderFile)
+	hc.AuthHeader = l.authHeaderFile(c, EnvAVHTTPAuthHeaderFile)
 	if hc.AuthHeader.IsSet() && scheme == "http" {
 		l.warnings = append(l.warnings, fmt.Sprintf("%s is sent in cleartext: %s uses http://; "+
 			"use https://, or keep the engine on a trusted internal network only",
@@ -304,15 +304,21 @@ func (l *loader) engineCAFile(name, urlVar, scheme, secure string) (string, []by
 }
 
 // authHeaderFile reads the optional file of name holding one "Name: value"
-// header line (trailing newline trimmed). Neither the line nor any part of
-// it ever appears in a problem.
-func (l *loader) authHeaderFile(name string) Secret {
+// header line (trailing newline trimmed). The file must lie outside the
+// volumes of c, like the master key: a backup of the volumes never carries
+// the engine credential. Neither the line nor any part of it ever appears
+// in a problem.
+func (l *loader) authHeaderFile(c *Config, name string) Secret {
 	raw := l.get(name)
 	if raw == "" {
 		return Secret{}
 	}
 	path, err := checkAbsPath(raw)
 	if err != nil {
+		l.fail(name, "%v", err)
+		return Secret{}
+	}
+	if err := c.outsideVolumes(path, avhttpAuthHeaderWhat); err != nil {
 		l.fail(name, "%v", err)
 		return Secret{}
 	}

@@ -149,7 +149,8 @@ func TestRunAntivirusEngineNone(t *testing.T) {
 			}
 		}
 
-		// A second start has nothing left to release: no new event.
+		// A second start has nothing left to release: no new release
+		// event, but the disabled engine is audited at every start.
 		s = start(t, cfg)
 		if err := s.stop(t); err != nil {
 			t.Fatalf("Run = %v", err)
@@ -157,6 +158,10 @@ func TestRunAntivirusEngineNone(t *testing.T) {
 		if page, err := db.AuditEvents().List(ctx, store.AuditFilter{Action: string(audit.ActionAntivirusScansReleased)}); err != nil ||
 			len(page.Items) != 1 {
 			t.Errorf("events after a second start: %+v, %v", page.Items, err)
+		}
+		if page, err := db.AuditEvents().List(ctx, store.AuditFilter{Action: string(audit.ActionAntivirusInstanceDisabled)}); err != nil ||
+			len(page.Items) != 2 || page.Items[0].TenantID != "" || page.Items[0].ActorKind != store.ActorSystem {
+			t.Errorf("instance_disabled events after two starts: %+v, %v", page.Items, err)
 		}
 	})
 }
@@ -217,6 +222,29 @@ func TestReleaseUnscannedErrors(t *testing.T) {
 		ev.Details["files"] != 3 || ev.TenantID != "" {
 		t.Errorf("event %+v", ev)
 	}
+	if !strings.Contains(logs.String(), "audit write failed") {
+		t.Errorf("logs %s", logs.String())
+	}
+}
+
+func TestAuditInstanceDisabled(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	var logs syncBuffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	rec := &fakeRecorder{}
+	auditInstanceDisabled(ctx, rec, logger)
+	if len(rec.events) != 1 {
+		t.Fatalf("%d events", len(rec.events))
+	}
+	if ev := rec.events[0]; ev.Action != audit.ActionAntivirusInstanceDisabled || ev.Actor != audit.ActorAntivirus ||
+		ev.ActorKind != store.ActorSystem || ev.TenantID != "" {
+		t.Errorf("event %+v", ev)
+	}
+	// An audit failure is logged, never fatal to the start.
+	rec.err = errors.New("boom")
+	auditInstanceDisabled(ctx, rec, logger)
 	if !strings.Contains(logs.String(), "audit write failed") {
 		t.Errorf("logs %s", logs.String())
 	}

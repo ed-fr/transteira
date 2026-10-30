@@ -120,7 +120,8 @@ Specification section 11.1. Two independent levels:
 
 Behaviour:
 
-- With the engine `none`, a WARN is logged at startup. Files still waiting for analysis at
+- With the engine `none`, a WARN is logged and the audit event `antivirus.instance_disabled`
+  (system actor) is recorded at every startup. Files still waiting for analysis at
   startup are released as `not_scanned_disabled` (audit event `antivirus.scans_released`,
   system actor).
 - The status is **frozen at finalization**: a file finalized while the antivirus is
@@ -164,9 +165,13 @@ is retried; it is never published unanalysed.
   `icaps://` or `https://`: the server certificate is always verified (system roots, or
   the file given by the `*_CA_FILE` variable); there is no option to skip the check.
 - Credentials come from a file only (Docker secret), never from an environment value, and a
-  URL that contains credentials (`user:pass@`) is refused at startup. Credentials are
-  never logged. With an `http://` URL, the authorization header travels in cleartext: the
-  startup log carries a warning, and such a setup belongs on a trusted internal network only.
+  URL that contains credentials (`user:pass@`) is refused at startup. Never put an API key
+  in the query string of `TT_AVHTTP_URL` either (`?apikey=`): it is not refused, but it is
+  visible through `docker inspect`. The credentials file must lie outside the data, backup,
+  log and SQLite database volumes (refused at startup otherwise), like the master key.
+  Credentials are never logged. With an `http://` URL, the authorization header travels in
+  cleartext: the startup log carries a warning, and such a setup belongs on a trusted internal
+  network only.
 - **Align the limit of TransTeira on the limit of the engine.** Engines answer "clean" for
   an object above their own size limit without analysing it (ICAP `204 No Content` or the
   content echoed unchanged, a `2xx` from an HTTP API). `TT_ICAP_MAX_SCAN_BYTES` and
@@ -208,6 +213,9 @@ Check the service name and the infection header of your server (`squidclamav` an
 defaults to `MaxObjectSize 5M` (about 5 MB), above which it answers clean without scanning.
 Raise `virus_scan.MaxObjectSize` in the c-icap configuration to the size you need, then set
 `TT_ICAP_MAX_SCAN_BYTES` to the same value in bytes (with `squidclamav`, its `maxsize`).
+A `204 No Content` answered after the preview is read as clean: make sure the server does not
+decide on the preview alone (no file-type exclusions or `Transfer-Ignore` list that skips
+analysis).
 
 ### HTTP API (`TT_ANTIVIRUS_ENGINE=http`)
 
@@ -217,7 +225,7 @@ Raise `virus_scan.MaxObjectSize` in the c-icap configuration to the size you nee
 | `TT_AVHTTP_METHOD` | `POST` | `POST` or `PUT`. |
 | `TT_AVHTTP_BODY` | `multipart` | `multipart` (the file in a form field) or `raw` (the file as the request body). |
 | `TT_AVHTTP_MULTIPART_FIELD` | `file` | Name of the form field, with the `multipart` body. |
-| `TT_AVHTTP_AUTH_HEADER_FILE` | none | File that holds one `Name: value` line, sent with every request (for example `Authorization: Bearer ...`). Provide it as a Docker secret, never as an environment value. With an `http://` URL it travels in cleartext (startup warning). |
+| `TT_AVHTTP_AUTH_HEADER_FILE` | none | File that holds one `Name: value` line, sent with every request (for example `Authorization: Bearer ...`). Provide it as a Docker secret, never as an environment value; refused inside the data, backup, log and SQLite database volumes. With an `http://` URL it travels in cleartext (startup warning). |
 | `TT_AVHTTP_CA_FILE` | system roots | PEM file of the certification authority (`https://` only). |
 | `TT_AVHTTP_CLEAN_RULE` | none (required) | Rule that must hold for a clean verdict. Include at least one positive JSON condition (see below). |
 | `TT_AVHTTP_INFECTED_RULE` | none (required) | Rule that must hold for an infected verdict. |

@@ -130,6 +130,9 @@ func TestEngineInvalid(t *testing.T) {
 		"/run/two-lines":      "X-Api-Key: s3cr3t-t0ken\nX-Other: s3cr3t-t0ken",
 		"/run/control":        "X-Api-Key: s3cr3t\x00t0ken",
 		"/run/secrets/ca.pem": "unused",
+		// Valid header files, refused only for their place in a volume.
+		DefaultDataDir + "/avhttp_auth":   testAuthLine,
+		DefaultBackupDir + "/avhttp_auth": testAuthLine,
 	})
 	tests := []struct {
 		name string
@@ -166,6 +169,8 @@ func TestEngineInvalid(t *testing.T) {
 		{"http CA not PEM", httpEngineVars(map[string]string{EnvAVHTTPCAFile: "/etc/ca.pem"}), []string{EnvAVHTTPCAFile}},
 		{"http pointer", httpEngineVars(map[string]string{EnvAVHTTPSignaturePointer: "viruses/0"}), []string{EnvAVHTTPSignaturePointer}},
 		{"http auth relative", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: "auth"}), []string{EnvAVHTTPAuthHeaderFile}},
+		{"http auth in data volume", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: DefaultDataDir + "/avhttp_auth"}), []string{EnvAVHTTPAuthHeaderFile}},
+		{"http auth in backup volume", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: DefaultBackupDir + "/avhttp_auth"}), []string{EnvAVHTTPAuthHeaderFile}},
 		{"http auth unreadable", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: "/run/none"}), []string{EnvAVHTTPAuthHeaderFile}},
 		{"http auth no colon", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: "/run/no-colon"}), []string{EnvAVHTTPAuthHeaderFile}},
 		{"http auth bad name", httpEngineVars(map[string]string{EnvAVHTTPAuthHeaderFile: "/run/bad-name"}), []string{EnvAVHTTPAuthHeaderFile}},

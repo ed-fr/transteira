@@ -659,11 +659,13 @@ func (c *Config) CheckMasterKeyPath(path string) (string, error) {
 const (
 	masterKeyWhat          = "the master key"
 	systemSMTPPasswordWhat = "the system SMTP password file" //nolint:gosec // G101: a description, not a credential
+	avhttpAuthHeaderWhat   = "the antivirus HTTP auth header file"
 )
 
 // outsideVolumes reports an error when path, the file of a secret
-// described by what (the master key, the system SMTP password), lies
-// inside one of the volumes of c: the data, backup and log directories and
+// described by what (the master key, the system SMTP password, the
+// antivirus HTTP auth header), lies inside one of the volumes of c: the
+// data, backup and log directories and
 // the folder of the SQLite database. Only that folder is reported, never
 // the DSN itself.
 func (c *Config) outsideVolumes(path, what string) error {

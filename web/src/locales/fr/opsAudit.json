@@ -172,6 +172,7 @@
     "antivirus": {
       "alert_raised": "Alerte antivirus déclenchée",
       "alert_cleared": "Alerte antivirus levée",
+      "instance_disabled": "Antivirus désactivé pour l’instance",
       "scans_released": "Fichiers libérés sans analyse (antivirus désactivé)",
       "self_test": "Auto-test de l’antivirus"
     },

@@ -145,7 +145,8 @@ It sets `TT_ANTIVIRUS_ENGINE=none` on `transteira`, removes its dependency on
 not started. Containers created by an earlier `up` are not removed
 automatically: run `docker compose ... rm -sf clamav clamav-update clamav-init`.
 
-Consequences: a WARN is logged at startup; files still waiting for analysis at
+Consequences: a WARN is logged and the audit event `antivirus.instance_disabled`
+is recorded at every startup; files still waiting for analysis at
 startup are released as "not analysed: antivirus disabled" (audit event
 `antivirus.scans_released`); every file deposited afterwards is delivered
 unscanned and flagged (the sender is told by email, the download page says so);

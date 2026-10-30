@@ -175,6 +175,7 @@ const (
 	AuditActionAdminUpdated                 AuditAction = "admin.updated"
 	AuditActionAntivirusAlertCleared        AuditAction = "antivirus.alert_cleared"
 	AuditActionAntivirusAlertRaised         AuditAction = "antivirus.alert_raised"
+	AuditActionAntivirusInstanceDisabled    AuditAction = "antivirus.instance_disabled"
 	AuditActionAntivirusScansReleased       AuditAction = "antivirus.scans_released"
 	AuditActionAntivirusSelfTest            AuditAction = "antivirus.self_test"
 	AuditActionApiTokenCreated              AuditAction = "api_token.created"
@@ -283,6 +284,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionAntivirusAlertCleared:
 		return true
 	case AuditActionAntivirusAlertRaised:
+		return true
+	case AuditActionAntivirusInstanceDisabled:
 		return true
 	case AuditActionAntivirusScansReleased:
 		return true
@@ -2065,9 +2068,10 @@ type ApiTokenUpdate = json.RawMessage
 // Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 // `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 // extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
-// security log) names the refused domains; `antivirus.scans_released` (actor `system`,
-// without tenant) counts the files released as `not_scanned_disabled` at a start with
-// `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
+// security log) names the refused domains; `antivirus.instance_disabled` (actor `system`,
+// without tenant) is recorded at every start with `TT_ANTIVIRUS_ENGINE=none`;
+// `antivirus.scans_released` (actor `system`, without tenant) counts the files released as
+// `not_scanned_disabled` at a start with `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
 // tenant) records an EICAR self-test of the engine with details `engine`, `outcome` and
 // `trigger`: every test asked by a super admin (actor that admin), and the self-tests run by
 // the instance itself (actor `system`) only for the first one after a start and when the
@@ -2109,9 +2113,10 @@ type AuditEvent struct {
 	// Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 	// `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 	// extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
-	// security log) names the refused domains; `antivirus.scans_released` (actor `system`,
-	// without tenant) counts the files released as `not_scanned_disabled` at a start with
-	// `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
+	// security log) names the refused domains; `antivirus.instance_disabled` (actor `system`,
+	// without tenant) is recorded at every start with `TT_ANTIVIRUS_ENGINE=none`;
+	// `antivirus.scans_released` (actor `system`, without tenant) counts the files released as
+	// `not_scanned_disabled` at a start with `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
 	// tenant) records an EICAR self-test of the engine with details `engine`, `outcome` and
 	// `trigger`: every test asked by a super admin (actor that admin), and the self-tests run by
 	// the instance itself (actor `system`) only for the first one after a start and when the

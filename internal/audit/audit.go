@@ -197,6 +197,10 @@ const (
 	// ActionAntivirusAlertCleared: clamd answered again after a raised
 	// antivirus alert.
 	ActionAntivirusAlertCleared Action = "antivirus.alert_cleared"
+	// ActionAntivirusInstanceDisabled: the instance started with the
+	// antivirus engine "none" (recorded at every such start, specification
+	// section 11.1: disabling the analysis is always audited).
+	ActionAntivirusInstanceDisabled Action = "antivirus.instance_disabled"
 	// ActionAntivirusScansReleased: the instance started with the antivirus
 	// engine "none" and released the files still waiting for a scan as
 	// not_scanned_disabled (details: the number of files).
