@@ -165,6 +165,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     TT_SYSTEM_SMTP_SECURITY: 'none',
     TT_SYSTEM_SMTP_FROM: 'transteira@example.com',
     TT_LOG_LEVEL: 'debug',
+    // No outbound connection to the GitHub API from the tests.
+    TT_UPDATE_CHECK: 'false',
     ...opts.env,
   };
 

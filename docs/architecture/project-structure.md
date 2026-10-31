@@ -119,6 +119,9 @@ transteira/
 │   │                                # hystérésis de 5 points, mail disk_alert via le SMTP système, audit
 │   ├── keyrotation/                 # Rotation de la clé maître lancée depuis l'administration : reconfirmation TOTP,
 │   │                                # worker unique par instance, audit, état des clés (restartRequired)
+│   ├── updatecheck/                 # [V1.2] Vérification des mises à jour : GET anonyme fixe vers l'API GitHub (TLS vérifié,
+│   │                                # HTTPS_PROXY, sans redirection, 10 s, 64 Kio), SemVer strict, filtre d'URL de release,
+│   │                                # boucle de fond 24 h + gigue, vérification manuelle 1/min, cache system_state
 │   ├── (backup → lifecycle)         # Copie SQLite dans lifecycle ; PostgreSQL : conteneur pg_dump dédié (compose)
 │   ├── datasubject/                 # Droits des personnes (RGPD) : recherche et effacement des données d'une adresse
 │   │                                # dans une entité, pseudonymisation de l'audit (anciennement prévu sous le nom gdpr/)

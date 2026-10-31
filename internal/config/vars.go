@@ -27,6 +27,7 @@ const (
 	EnvAdminSessionIdleTimeout  = "TT_ADMIN_SESSION_IDLE_TIMEOUT"
 	EnvAdminSessionMaxAge       = "TT_ADMIN_SESSION_MAX_AGE"
 	EnvAPIDocsPublic            = "TT_API_DOCS_PUBLIC"
+	EnvUpdateCheck              = "TT_UPDATE_CHECK"
 	EnvSetupToken               = "TT_SETUP_TOKEN"      //nolint:gosec // G101: variable name, not a credential
 	EnvSetupTokenFile           = "TT_SETUP_TOKEN_FILE" //nolint:gosec // G101: variable name, not a credential
 	EnvUploadTTL                = "TT_UPLOAD_TTL"
@@ -496,6 +497,18 @@ func Variables() []Var {
 			Description: "Serve the interactive API documentation (/api/docs) to anonymous visitors " +
 				"on the tenant FQDNs (true/false/1/0). By default it is only served on the admin " +
 				"host, to authenticated admins.",
+		},
+		{
+			Name: EnvUpdateCheck, Group: "Operations", Default: "true",
+			Description: "Check once a day for a newer release of TransTeira (true/false/1/0). " +
+				"The instance sends an anonymous GET to " +
+				"https://api.github.com/repos/ed-fr/transteira/releases/latest (only header of its " +
+				"own: User-Agent TransTeira/<version>; no cookie, token nor instance or tenant " +
+				"identifier) and shows a notice to the super admin; it never updates anything. " +
+				"This is the only outbound connection to the Internet made without an admin's " +
+				"configuration; it goes through HTTPS_PROXY when that variable is set (this " +
+				"client only, never the webhooks nor the antivirus). Set false on air-gapped " +
+				"installs, or to make no outbound connection at all, not even at start-up.",
 		},
 		{
 			Name: EnvSetupToken, Group: "Operations", Secret: true,

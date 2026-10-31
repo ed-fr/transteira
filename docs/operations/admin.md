@@ -11,7 +11,7 @@ rotation is in [Master key](master-key.md).
 - Variables: `TT_ADMIN_HOSTS` (required), `TT_ADMIN_SESSION_IDLE_TIMEOUT`,
   `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`,
   `TT_API_DOCS_PUBLIC`, `TT_MAX_OPEN_TRANSFERS` (per API token),
-  `TT_MAINTENANCE`, `TT_SYSTEM_SMTP_*`, see `.env.example`.
+  `TT_MAINTENANCE`, `TT_SYSTEM_SMTP_*`, `TT_UPDATE_CHECK`, see `.env.example`.
 - Commands: `transteira admin list`, `transteira admin reset-totp <username>`,
   `transteira admin reset-password <username>`.
 - Implementation: `internal/adminauth`, `internal/audit`,
@@ -19,7 +19,8 @@ rotation is in [Master key](master-key.md).
   `internal/apitoken` (API tokens),
   `internal/datasubject` (GDPR), `internal/stats` and `internal/usage`
   (statistics), `internal/maintenance`, `internal/systemsettings`,
-  `internal/diskalert` (instance settings); web interface in
+  `internal/diskalert` (instance settings), `internal/updatecheck`
+  (version and update check); web interface in
   `web/src/admin` (see `web/README.md`).
 - Threat model: T-58 to T-73, T-102, T-104 to T-107, T-111, T-112, T-146
   to T-151, T-154 to T-158, T-162 to T-166 in
@@ -964,6 +965,48 @@ The global statistics (`GET /admin/system/stats`) show the disk figures,
 the threshold, `alertActive` (alert raised) and `alertMailConfigured`
 (system SMTP server configured). Without system SMTP, the alert is only
 visible there, in the audit log and in the application log: configure it.
+
+## Version and update check
+
+Since 1.2, the super admin sees the running version and whether a newer
+release of TransTeira exists (`GET /admin/system/version`; every admin sees
+the running version through `GET /version`). TransTeira **never updates
+itself**: the notice links to the release page; read `CHANGELOG.md` and
+follow [Upgrade](upgrade.md) as usual.
+
+- **What is sent.** Once every 24 hours (plus a random delay of up to one
+  hour), an anonymous `GET https://api.github.com/repos/ed-fr/transteira/releases/latest`
+  with `User-Agent: TransTeira/<version>` and nothing else: no cookie, no
+  token, no identifier of the instance or of a tenant. The address is fixed
+  in the code. GitHub (and a proxy on the way) learns the public address of
+  the instance and its version.
+- **When.** Never during the start-up nor for `/healthz`: the first check
+  comes at least 5 minutes after the start, and no sooner than 24 hours
+  after the last attempt recorded in the database, so that restarts add no
+  request. One check at a time, no retry before the next cycle. The super
+  admin may ask for a check now (`POST /admin/system/version/check`, the
+  **Check now** button), at most once per minute for the whole instance
+  (`429 rate-limited` otherwise).
+- **What is kept.** Only the version (strict SemVer; drafts and
+  pre-releases are ignored), the release page when it is under
+  `https://github.com/ed-fr/transteira/releases/` (otherwise no link, the
+  version still shown) and the dates, in the `system_state` table. The name
+  and the notes of the release are never stored nor shown. A failure keeps
+  the last good result and reports `lastError`: `network` (GitHub
+  unreachable, timeout, TLS, proxy), `http` (unexpected status, such as the
+  GitHub rate limit or a redirection, never followed) or `parse` (unreadable
+  answer or version). The log line carries the category only.
+- **Proxy.** When the instance reaches the Internet through a proxy, set
+  `HTTPS_PROXY` (and `NO_PROXY` if needed) in the environment of the
+  container. It applies to this check only: the webhooks and the antivirus
+  never use it. TLS is verified end to end with `api.github.com`; a proxy
+  that intercepts TLS needs its CA in the system roots (`SSL_CERT_FILE`),
+  otherwise the check fails with `network`.
+- **Turning it off.** `TT_UPDATE_CHECK=false` removes the outbound
+  connection entirely, at start-up included (installs without Internet
+  access, strict egress policies). The administration then shows the
+  running version only, and a manual check answers
+  `409 update-check-disabled`.
 
 ## System SMTP server
 

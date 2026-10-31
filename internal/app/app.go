@@ -63,6 +63,7 @@ import (
 	"github.com/ed-fr/transteira/internal/tenantadmin"
 	"github.com/ed-fr/transteira/internal/tenantops"
 	"github.com/ed-fr/transteira/internal/transfer"
+	"github.com/ed-fr/transteira/internal/updatecheck"
 	"github.com/ed-fr/transteira/internal/upload"
 	"github.com/ed-fr/transteira/internal/usage"
 	"github.com/ed-fr/transteira/internal/version"
@@ -509,6 +510,10 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
+	// The check for a newer release (V1.2, T-244 to T-248): with
+	// TT_UPDATE_CHECK=false it makes no outbound connection at all; enabled,
+	// its background loop never runs during the start-up nor for /healthz.
+	updates := updatecheck.New(db.SystemState(), updatecheck.Options{Enabled: cfg.UpdateCheck, Logger: logger})
 	// Deferred after closeMailQueues, the data directory and the database, so
 	// it runs before them: the workers stop enqueueing mails, touching the
 	// files and counting usage before the queue drains, then the retrier of
@@ -516,7 +521,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// while the database is still open.
 	defer closeStages(ctx, logger,
 		closeStage{timeout: BackgroundCloseTimeout, closers: []closer{
-			worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations, senders, selfTests,
+			worker, downloads, sweeper, quotas, diskAlerts, avAlerts, rotations, senders, selfTests, updates,
 		}},
 		closeStage{timeout: FinalCloseTimeout, closers: []closer{opsMails, sysMail, usageCounts, busOut.closer}})
 	transfers := newTransferService(cfg, db, transferDeps{
@@ -573,6 +578,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	}
 	if err := senders.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the my transfers workers: %w", err)
+	}
+	if err := updates.Start(ctx); err != nil {
+		return fmt.Errorf("app: start the update check: %w", err)
 	}
 	// A change of the system settings, served by the admin API,
 	// re-evaluates the disk alert at once.
@@ -652,7 +660,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
-			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests)),
+			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
+			admin.WithUpdateCheck(updates)),
 		AdminSessions:       admins,
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,

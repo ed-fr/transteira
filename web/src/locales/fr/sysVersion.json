@@ -1,0 +1,30 @@
+{
+  "footer": "Version {version}",
+  "notice": "Une nouvelle version de TransTeira est disponible : {version}.",
+  "noticeDetails": "Voir les détails",
+  "title": "Version",
+  "running": "Version en cours d’exécution",
+  "commit": "Commit",
+  "latest": "Dernière version publiée",
+  "latestNone": "Inconnue : aucune vérification n’a encore abouti.",
+  "checkedAt": "Dernière vérification réussie",
+  "checkedAtNone": "Jamais",
+  "upToDate": "Cette instance est à jour.",
+  "available": "La version {version} est disponible.",
+  "releaseLink": "Voir la version {version} sur GitHub",
+  "procedure": "TransTeira ne se met jamais à jour tout seul. Lisez le CHANGELOG et la procédure de mise à jour de la documentation avant de passer à la nouvelle version.",
+  "disabled": "La recherche de nouvelles versions est désactivée. Pour l’activer, retirez TT_UPDATE_CHECK=false de l’environnement du serveur puis redémarrez l’application.",
+  "newWindow": "(s’ouvre dans une nouvelle fenêtre)",
+  "disabledNow": "La recherche de nouvelles versions vient d’être désactivée sur ce serveur.",
+  "check": "Vérifier maintenant",
+  "checking": "Vérification en cours…",
+  "resultAvailable": "Vérification terminée : la version {version} est disponible.",
+  "resultUpToDate": "Vérification terminée : cette instance est à jour.",
+  "rateLimited": "Vérification trop fréquente. Patientez un moment avant de réessayer.",
+  "loadError": "L’état de la version n’a pas pu être chargé.",
+  "error": {
+    "network": "La dernière tentative a échoué : GitHub est injoignable (réseau, délai dépassé ou certificat).",
+    "http": "La dernière tentative a échoué : GitHub a répondu avec un statut inattendu.",
+    "parse": "La dernière tentative a échoué : la réponse de GitHub n’a pas pu être lue."
+  }
+}

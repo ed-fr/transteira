@@ -14,6 +14,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
   TLS `ask` endpoint), answered by stubs until implemented; data model
   (`docs/architecture/data-model-v1.2.md`) and migrations 0022 to 0025; threat model 1.2 draft
   (T-244 to T-280, decisions P47 to P54).
+- Version and update check: the running version is shown in the administration footer; the super
+  admin sees the outcome of a daily check of the latest TransTeira release on GitHub (a notice
+  and a "Check now" button, never an automatic update). Only the version and the release link are
+  kept; `TT_UPDATE_CHECK=false` turns off every outbound connection, `HTTPS_PROXY` is honoured by
+  this check only.
 
 ## [1.1.0] - 2026-10-31
 

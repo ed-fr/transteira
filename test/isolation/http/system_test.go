@@ -68,11 +68,18 @@ func systemOperation(t *testing.T, h *harness, op operation) {
 	case "getMasterKeyRotation":
 		resp = h.adminCall(t, super, op.verb, systemPath(op), "")
 		wantCode(t, op, hostAdmin, resp, http.StatusNotFound, "not-found")
-	default: // getSystemSettings, updateSystemSettings, getMasterKeyStatus, testAntivirus
+	case "checkSystemVersion":
+		// The harness disables the update check (no outbound connection).
+		resp = h.adminCall(t, super, op.verb, systemPath(op), "")
+		wantCode(t, op, hostAdmin, resp, http.StatusConflict, "update-check-disabled")
+	default: // getSystemSettings, updateSystemSettings, getMasterKeyStatus, testAntivirus, getSystemVersion
 		resp = h.adminCall(t, super, op.verb, systemPath(op), systemBodies[op.id])
 		wantOK(t, op, "super admin", resp)
 		if op.id == "testAntivirus" && !strings.Contains(string(resp.body), `"outcome":"detected"`) {
 			t.Errorf("%s: self-test %s", op, resp.body)
+		}
+		if op.id == "getSystemVersion" && !strings.Contains(string(resp.body), `"enabled":false`) {
+			t.Errorf("%s: update check %s", op, resp.body)
 		}
 		if op.id == "getMasterKeyStatus" && !strings.Contains(string(resp.body), `"activeKeyId":"`) {
 			t.Errorf("%s: no active key in %s", op, resp.body)

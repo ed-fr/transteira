@@ -981,6 +981,10 @@ var systemAllowlist = map[string]string{
 	`UPDATE system_webhooks SET last_delivery_at = ?, last_status = ?, last_http_status = ?, last_duration_ms = ?, ` +
 		`last_error = ?, consecutive_failures = ?, circuit_open_until = ? WHERE id = ? AND updated_at = ?`: reasonSystemWebhooks,
 	`DELETE FROM system_webhooks WHERE id = ? AND url_secret_id IS NULL AND hmac_secret_id IS NULL`: reasonSystemWebhooks,
+	// Instance state (0025).
+	`SELECT value, updated_at FROM system_state WHERE key = ?`: reasonSystemState,
+	`INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) ` +
+		`ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`: reasonSystemState,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

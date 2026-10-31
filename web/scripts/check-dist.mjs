@@ -7,8 +7,10 @@
 //     element, no inline event handler attribute (onclick=...) in the HTML;
 //   - no style= attribute anywhere, including in the HTML templates compiled into the JS
 //     (Svelte builds the DOM from template strings, an inline style would be blocked);
-//   - no absolute http(s):// URL except XML namespaces (w3.org) and the Svelte error
-//     documentation links embedded in the runtime messages (never fetched);
+//   - no absolute http(s):// URL except XML namespaces (w3.org), the Svelte error
+//     documentation links embedded in the runtime messages and the prefix of the TransTeira
+//     release pages the admin update notice links to (version.ts, threat model T-244); none is
+//     ever fetched;
 //   - no data: URI in the files of the public application (img-src 'self'; the admin app may
 //     display data: images received from the API, but never ships one);
 //   - every file has an extension of the allowlist of webui.go (uiContentTypes, plus .html for
@@ -30,6 +32,7 @@ const SERVED = /\.(html|js|css|svg|png|ico|txt)$/;
 const URL_ALLOW = [
   /^https?:\/\/www\.w3\.org\//, // XML namespaces (SVG, XLink, MathML)
   /^https:\/\/svelte\.dev\/e\//, // Svelte runtime error documentation links (text only)
+  /^https:\/\/github\.com\/ed-fr\/transteira\/releases\/$/, // release link prefix check (version.ts), a link only
 ];
 // Root scripts the entry pages may load besides /assets/: adding one is a deliberate change here.
 const ROOT_SCRIPTS = new Set(['/theme-init.js']);

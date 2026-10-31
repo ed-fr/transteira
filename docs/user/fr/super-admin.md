@@ -143,6 +143,17 @@ La vue d’ensemble montre l’activité de toutes les entités et l’occupatio
 
 Lorsqu’aucun serveur SMTP système n’est configuré, l’avertissement **L’alerte disque n’est pas envoyée par mail** s’affiche : l’alerte n’est alors visible que sur cette page, dans le journal d’audit et dans le journal applicatif. Pour la recevoir par mail, renseignez `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM` et les variables associées (voir `.env.example`), puis redémarrez l’application. Les chiffres sont indicatifs : les compteurs sont mis à jour environ toutes les 30 secondes.
 
+<!-- topic: system-version -->
+### Version et mises à jour
+
+La version de TransTeira en cours d’exécution s’affiche dans le pied de page de l’administration, pour tous les administrateurs.
+
+Le bloc **Version** de la [vue d’ensemble du système](topic:system-overview) est réservé au super administrateur. Il indique la version en cours, la **Dernière version publiée** et la date de la **Dernière vérification réussie**. Le bouton **Vérifier maintenant** lance une vérification immédiate, au plus une fois par minute pour toute l’instance. Lorsqu’une version plus récente existe, un avis s’affiche avec un lien vers sa page de publication.
+
+TransTeira ne se met jamais à jour tout seul : lisez le `CHANGELOG.md`, puis suivez la procédure de mise à jour décrite dans la documentation d’installation.
+
+Pour désactiver la recherche de nouvelles versions, par exemple sur une installation isolée d’Internet, définissez `TT_UPDATE_CHECK=false` puis redémarrez l’application : plus aucune connexion sortante n’est alors établie. Sinon, la vérification respecte la variable `HTTPS_PROXY`.
+
 <!-- topic: system-maintenance -->
 ### Mode maintenance
 

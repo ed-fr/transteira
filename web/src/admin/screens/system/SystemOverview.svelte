@@ -15,6 +15,7 @@
   import { formatBytes as formatBinaryBytes } from '../../forms/bytes';
   import { parsePeriod, periodOptions, periodPath, type StatsPeriod } from '../ops/stats';
   import type { AdminScreenProps } from '../types';
+  import VersionBlock from './VersionBlock.svelte';
   import {
     SETTINGS_PATH,
     SYSTEM_SMTP_VARIABLES,
@@ -114,6 +115,8 @@
 />
 
 <p class="tt-overview__note">{t('sysStats.indicative')}</p>
+
+<VersionBlock />
 
 {#if error !== ''}
   <Alert severity="error">

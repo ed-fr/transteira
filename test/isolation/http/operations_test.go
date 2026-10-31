@@ -255,6 +255,8 @@ var isolationCases = map[string]isolationCase{
 	"getMasterKeyRotation":   systemOperation,
 	"getMasterKeyStatus":     systemOperation,
 	"testAntivirus":          systemOperation,
+	"getSystemVersion":       systemOperation,
+	"checkSystemVersion":     systemOperation,
 	// Webhooks (webhooks_test.go): served on the admin host only. The
 	// delegated admin of tenant A gets for tenant B's ID exactly the answer
 	// of an unknown tenant ID, even with an invalid body, and, under A's
@@ -641,6 +643,8 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 		config.EnvTrustedProxies: "127.0.0.1",
 		config.EnvClamAVAddr:     fakeClamd(t),
 		config.EnvAdminHosts:     hostAdmin,
+		// No outbound connection to the GitHub API from the tests.
+		config.EnvUpdateCheck: "false",
 	}
 	cfg, err := config.Load(func(k string) string { return env[k] })
 	if err != nil {

@@ -143,6 +143,17 @@ The system overview shows the activity of every entity and the use of the data d
 
 When no system SMTP server is configured, the warning **The disk alert is not sent by mail** appears: the alert is then only visible on this page, in the audit log and in the application log. To receive it by mail, set `TT_SYSTEM_SMTP_HOST`, `TT_SYSTEM_SMTP_FROM` and the related variables (see `.env.example`), then restart the application. The figures are indicative: the counters are updated about every 30 seconds.
 
+<!-- topic: system-version -->
+### Version and updates
+
+The running TransTeira version is shown in the footer of the administration, for every administrator.
+
+The **Version** block of the [System overview](topic:system-overview) is reserved to the super administrator. It shows the running version, the **Latest published version** and the date of the **Last successful check**. The **Check now** button runs a check at once, at most once a minute for the whole instance. When a newer release exists, a notice appears with a link to its release page.
+
+TransTeira never updates itself: read the `CHANGELOG.md`, then follow the update procedure described in the installation documentation.
+
+To turn the check off, for example on an air-gapped installation, set `TT_UPDATE_CHECK=false` and restart the application: no outbound connection is made any more. Otherwise the check honours the `HTTPS_PROXY` variable.
+
 <!-- topic: system-maintenance -->
 ### Maintenance mode
 

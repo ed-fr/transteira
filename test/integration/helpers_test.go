@@ -159,6 +159,9 @@ func testEnv(t *testing.T, e storetest.Engine, o serverOptions) map[string]strin
 		config.EnvLogLevel:      "debug",
 		config.EnvClamAVAddr:    o.clamd,
 		config.EnvAdminHosts:    adminHost,
+		// No test may reach the GitHub API: the update check is covered by
+		// internal/updatecheck against a fake server.
+		config.EnvUpdateCheck: "false",
 		// Mailpit listens on the loopback, which the default
 		// TT_SMTP_DENY_NETWORKS refuses (P21): keep the link-local and
 		// metadata addresses denied only.

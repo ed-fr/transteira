@@ -31,6 +31,8 @@
   import NotFound from './screens/NotFound.svelte';
   import type { AdminScreenComponent } from './screens/types';
   import { pickAdminLanguage, redirectTarget, tenantNameOf } from './shell';
+  import { footerVersionText } from './version';
+  import { adminVersion } from './version.svelte';
 
   const storage = browserStorage();
   const browserLanguages: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages;
@@ -177,7 +179,11 @@
         {helpTopic}
         helpBase={ADMIN_BASE}
         nav={router}
-      />
+      >
+        {#if adminVersion.running !== undefined}
+          <p class="tt-text-sm tt-text-muted tt-mb-0">{footerVersionText(adminVersion.running, t)}</p>
+        {/if}
+      </Footer>
     {/snippet}
   </AdminLayout>
 {/if}

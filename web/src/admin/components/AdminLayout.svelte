@@ -9,7 +9,9 @@
   // keep the session alive, T-165) and a polite banner tells every admin that the maintenance
   // mode is on, with a link to the maintenance screen for the super admin. The live region
   // (role="status") is always rendered, empty without a banner, so that its content is announced.
-  import type { Snippet } from 'svelte';
+  // Since 1.2, a super admin also sees a discreet notice when a newer release exists (no
+  // automatic update: a link to the release page and the screen with the details).
+  import { untrack, type Snippet } from 'svelte';
   import { problemMessage } from '../../shared/api/problem';
   import { Alert, Button, PageLayout } from '../../shared/components';
   import { formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
@@ -19,6 +21,8 @@
   import { maintenanceBanner, maintenanceBannerText } from '../maintenanceBanner';
   import type { Navigation } from '../screens/types';
   import { navCurrent, roleKey, systemPath } from '../shell';
+  import { updateNotice } from '../version';
+  import { adminVersion } from '../version.svelte';
 
   interface Props {
     /** Profile of the authenticated admin; the navigation is hidden without it. */
@@ -64,6 +68,16 @@
     return () => adminMaintenance.stop();
   });
 
+  // Versions (footer, update notice of the super admin): read once per sign-in, never on a timer.
+  const isSuperAdmin = $derived(me?.role === 'super_admin');
+  $effect(() => {
+    if (!authenticated || me === undefined) {
+      return;
+    }
+    void adminVersion.start(untrack(() => isSuperAdmin));
+    return () => adminVersion.stop();
+  });
+
   // A navigation of the admin is admin activity: the state is read again on a new path.
   $effect(() => {
     if (authenticated) {
@@ -76,6 +90,8 @@
   const bannerText = $derived(
     maintenanceBannerText(banner, t, (iso) => formatDate(iso, { dateStyle: 'medium', timeStyle: 'short' })),
   );
+
+  const update = $derived(updateNotice(isSuperAdmin ? adminVersion.system : undefined));
 
   async function signOut(): Promise<void> {
     signingOut = true;
@@ -139,6 +155,14 @@
       </Alert>
     {/if}
   </div>
+  {#if showNav && me !== undefined && update.visible}
+    <Alert severity="info" live={false}>
+      <p>
+        {t('sysVersion.notice', { version: update.latest ?? '' })}
+        <a href={nav.href(systemPath('overview'))} use:nav.link>{t('sysVersion.noticeDetails')}</a>
+      </p>
+    </Alert>
+  {/if}
   {#if logoutError !== undefined}
     <Alert severity="error" ondismiss={() => (logoutError = undefined)}>
       <p>{logoutError}</p>

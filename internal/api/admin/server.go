@@ -12,7 +12,9 @@
 // (sections 4, 16.1 and 19: maintenance mode, instance settings and master
 // key rotation) over internal/maintenance, internal/systemsettings and
 // internal/keyrotation, and the alert webhooks of the tenants and of the
-// instance (section 12.4) over internal/webhookadmin.
+// instance (section 12.4) over internal/webhookadmin, and the running
+// version with the check for a newer release (V1.2) over
+// internal/updatecheck.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -119,6 +121,9 @@ type Server struct {
 	// avTest runs the EICAR self-tests of the antivirus engine; nil until
 	// WithAntivirusTest.
 	avTest AntivirusTestService
+	// updates serves the check for a newer release; nil until
+	// WithUpdateCheck.
+	updates UpdateCheckService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

@@ -1,0 +1,30 @@
+{
+  "footer": "Version {version}",
+  "notice": "A new version of TransTeira is available: {version}.",
+  "noticeDetails": "See details",
+  "title": "Version",
+  "running": "Running version",
+  "commit": "Commit",
+  "latest": "Latest published version",
+  "latestNone": "Unknown: no check has succeeded yet.",
+  "checkedAt": "Last successful check",
+  "checkedAtNone": "Never",
+  "upToDate": "This instance is up to date.",
+  "available": "Version {version} is available.",
+  "releaseLink": "See version {version} on GitHub",
+  "procedure": "TransTeira never updates itself. Read the CHANGELOG and the update procedure in the documentation before moving to the new version.",
+  "disabled": "The check for new versions is disabled. To enable it, remove TT_UPDATE_CHECK=false from the server environment and restart the application.",
+  "newWindow": "(opens in a new window)",
+  "disabledNow": "The update check has just been disabled on this server.",
+  "check": "Check now",
+  "checking": "Checking…",
+  "resultAvailable": "Check finished: version {version} is available.",
+  "resultUpToDate": "Check finished: this instance is up to date.",
+  "rateLimited": "Checking too often. Please wait a moment before trying again.",
+  "loadError": "The version status could not be loaded.",
+  "error": {
+    "network": "The last attempt failed: GitHub is unreachable (network, timeout or certificate).",
+    "http": "The last attempt failed: GitHub answered with an unexpected status.",
+    "parse": "The last attempt failed: the answer from GitHub could not be read."
+  }
+}

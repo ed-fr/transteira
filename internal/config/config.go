@@ -203,6 +203,10 @@ type Config struct {
 	// to anonymous visitors on the tenant FQDNs, in addition to the admin
 	// sessions on the admin host.
 	APIDocsPublic bool
+	// UpdateCheck is true when the instance checks once a day for a newer
+	// release on the GitHub API (TT_UPDATE_CHECK, true by default); false
+	// makes no outbound connection at all.
+	UpdateCheck bool
 	// SetupToken, when set, must be provided to create the first super admin.
 	// When it is unset, the server generates a random token at each start
 	// while no admin exists and prints it in its logs.
@@ -752,6 +756,14 @@ func (l *loader) boolVar(name string) bool {
 	return b
 }
 
+// boolVarDefault reads an optional boolean variable (def when unset).
+func (l *loader) boolVarDefault(name string, def bool) bool {
+	if l.get(name) == "" {
+		return def
+	}
+	return l.boolVar(name)
+}
+
 // loadOperations reads the log level, flags and setup token.
 func (l *loader) loadOperations(c *Config) {
 	level := strings.ToLower(l.getOr(EnvLogLevel, DefaultLogLevel))
@@ -762,6 +774,7 @@ func (l *loader) loadOperations(c *Config) {
 	}
 	c.Maintenance = l.boolVar(EnvMaintenance)
 	c.APIDocsPublic = l.boolVar(EnvAPIDocsPublic)
+	c.UpdateCheck = l.boolVarDefault(EnvUpdateCheck, true)
 
 	token, ok := l.secret(EnvSetupToken, EnvSetupTokenFile)
 	if !ok {

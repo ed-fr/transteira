@@ -78,6 +78,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"LogLevel", c.LogLevel, slog.LevelInfo},
 		{"Maintenance", c.Maintenance, false},
 		{"APIDocsPublic", c.APIDocsPublic, false},
+		{"UpdateCheck", c.UpdateCheck, true},
 		{"SetupToken", c.SetupToken.IsSet(), false},
 		{"UploadTTL", c.UploadTTL, 24 * time.Hour},
 		{"UploadMaxAge", c.UploadMaxAge, 7 * 24 * time.Hour},
@@ -260,12 +261,12 @@ func TestLoadValid(t *testing.T) {
 		{
 			name: "operations",
 			vars: map[string]string{
-				EnvLogLevel: "DEBUG", EnvMaintenance: "TRUE", EnvAPIDocsPublic: "1",
+				EnvLogLevel: "DEBUG", EnvMaintenance: "TRUE", EnvAPIDocsPublic: "1", EnvUpdateCheck: "1",
 				EnvSetupToken: "  " + fakeToken + "  ",
 			},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.LogLevel != slog.LevelDebug || !c.Maintenance || !c.APIDocsPublic {
+				if c.LogLevel != slog.LevelDebug || !c.Maintenance || !c.APIDocsPublic || !c.UpdateCheck {
 					t.Errorf("got level %v maintenance %v docs %v", c.LogLevel, c.Maintenance, c.APIDocsPublic)
 				}
 				if c.SetupToken.Reveal() != fakeToken {
@@ -275,10 +276,10 @@ func TestLoadValid(t *testing.T) {
 		},
 		{
 			name: "explicit false flags and other levels",
-			vars: map[string]string{EnvLogLevel: "error", EnvMaintenance: "0", EnvAPIDocsPublic: "False"},
+			vars: map[string]string{EnvLogLevel: "error", EnvMaintenance: "0", EnvAPIDocsPublic: "False", EnvUpdateCheck: "false"},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
-				if c.LogLevel != slog.LevelError || c.Maintenance || c.APIDocsPublic {
+				if c.LogLevel != slog.LevelError || c.Maintenance || c.APIDocsPublic || c.UpdateCheck {
 					t.Errorf("unexpected %+v", c)
 				}
 			},
@@ -573,6 +574,7 @@ func TestLoadInvalid(t *testing.T) {
 		{"log level", map[string]string{EnvLogLevel: "verbose"}, []string{EnvLogLevel}},
 		{"maintenance", map[string]string{EnvMaintenance: "yes"}, []string{EnvMaintenance}},
 		{"api docs", map[string]string{EnvAPIDocsPublic: "on"}, []string{EnvAPIDocsPublic}},
+		{"update check", map[string]string{EnvUpdateCheck: "yes"}, []string{EnvUpdateCheck}},
 		{"setup token short", map[string]string{EnvSetupToken: "short"}, []string{EnvSetupToken}},
 		{"setup token long", map[string]string{EnvSetupToken: strings.Repeat("a", 129)}, []string{EnvSetupToken}},
 		{
@@ -919,5 +921,32 @@ func TestParseTimeOfDay(t *testing.T) {
 		if (err != nil) != tc.wantErr || got != tc.want {
 			t.Errorf("parseTimeOfDay(%q) = %v, %v; want %v, err %v", tc.raw, got, err, tc.want, tc.wantErr)
 		}
+	}
+}
+
+func TestBoolVarDefault(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		def  bool
+		want bool
+		bad  bool
+	}{
+		{"unset keeps true", "", true, true, false},
+		{"unset keeps false", "", false, false, false},
+		{"explicit false overrides true", "false", true, false, false},
+		{"explicit true overrides false", "1", false, true, false},
+		{"invalid value is reported", "maybe", true, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := &loader{getenv: func(string) string { return tc.raw }}
+			if got := l.boolVarDefault("TT_X", tc.def); got != tc.want && !tc.bad {
+				t.Errorf("boolVarDefault = %v, want %v", got, tc.want)
+			}
+			if (len(l.problems) > 0) != tc.bad {
+				t.Errorf("problems = %v, want problem: %v", l.problems, tc.bad)
+			}
+		})
 	}
 }
