@@ -6,11 +6,31 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-31
+
+The V1.1 scope of the specification (CLAUDE.md section 2, "operations"), on top of the 1.0.0 core:
+monitoring (Prometheus `/metrics`, JSON `/status`, Grafana dashboard, Zabbix template, syslog
+export, webhooks), abuse detection and the report button, confidentiality levels and recipient
+domain rules, per-recipient links with optional recipient verification and tracking, expiry
+reminder, maximum number of downloads, "My transfers", deposit from outside for verified internal
+users, reply to a transfer, folder upload, dark mode, per-entity user documentation with a
+printable version, and the antivirus switch-off and ICAP/HTTP engines. Validated by `make check`
+(unit, integration, contract, tenant isolation, fuzzing, end-to-end on SQLite and PostgreSQL,
+automated 20 GB test).
+
+Real big file trial validated by the operator on 2026-10-31 (build `0.0.0-dev+bd68cb9`, the 1.0
+trial installation upgraded in place: 9 migrations applied at startup, SQLite, reference Caddy with
+`tls internal` on a Docker Desktop workstation): a 7.9 GB file uploaded from a browser with a
+network cut and an automatic resume, per-recipient links with recipient verification, a folder
+upload with its tree kept in the file list and the ZIP, every SHA-256 matching. Browser upload
+throughput about 55 MiB/s (the browser's own HTTP/2 upload rate; the automated client reaches
+87 to 97 MiB/s through the same proxy, with 32 MiB chunks like the browser).
+
 ### Added
 - ICAP and HTTP antivirus engines (specification section 11.1): `TT_ANTIVIRUS_ENGINE=icap|http`
   with `TT_ICAP_*` and `TT_AVHTTP_*` variables, configurable verdict rules, TLS always verified
-  and credentials from a file only. EICAR self-test at startup and on demand (button in the
-  system settings, `POST /admin/system/antivirus/test`, audited as `antivirus.self_test`):
+  and credentials from a file only, refused inside the data, backup and log volumes. EICAR
+  self-test at startup and on demand (button in the system settings, `POST /admin/system/antivirus/test`, audited as `antivirus.self_test`):
   the engine is unavailable until it passes (fail-closed), retried 15 s doubling to 10 min,
   never repeated once passed. Guide `docs/operations/antivirus.md`. Threat model T-238 to
   T-242, P44 to P46 implemented.
@@ -22,7 +42,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   status `not_scanned_disabled`, frozen at finalization (files already waiting keep waiting for the
   engine, re-enabling never rescans): the sender receives the "file not scanned" mail with the
   reason "antivirus disabled" and the download page says so. With the engine `none`, a warning is
-  logged at startup, files still waiting are released (audit event `antivirus.scans_released`),
+  logged and the audit event `antivirus.instance_disabled` recorded at every startup, files still waiting are released (audit event `antivirus.scans_released`),
   `/healthz` no longer probes the antivirus, and the engine name is shown read-only in the system
   settings and in `/status`. New overlay `deploy/docker-compose.no-antivirus.yml`; installation,
   operations and user guides updated (FR/EN). The blocklist by SHA-256, the abuse detection and the
@@ -951,5 +971,6 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ed-fr/transteira/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ed-fr/transteira/releases/tag/v1.0.0

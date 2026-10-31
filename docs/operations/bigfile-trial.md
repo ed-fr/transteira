@@ -1,6 +1,6 @@
 # Big file trial (human acceptance test)
 
-Before the V1 is declared done, an operator runs a **real trial with very big files behind the
+Before each release, an operator runs a **real trial with very big files behind the
 reverse proxy**, in a real browser (specification sections 24.2 and 27.4). This guide describes
 the procedure, the expected results, the grid to fill in and what to send back to the developer.
 
@@ -185,7 +185,10 @@ or after the browser is closed. It also needs the deposit session to still be va
 ## 5. Downloads and SHA-256 check
 
 Open the link of the notification e-mail received by the recipient (preferably on the client
-machine, or on another one: the download page needs no IP rule).
+machine, or on another one: the download page needs no IP rule). With several recipients, each one
+has their own link (and a verification code if the option was chosen): download from at least two
+of them. If time allows, also send one large folder tree by drag and drop and check that the
+tree is preserved in the file list and in the ZIP.
 
 1. **Expected on the page:** the sender, the expiry date, "Total: 3 files, ...", for each file its
    size, its **SHA-256 fingerprint** (with a copy button) and the notice "Not analysed by the
@@ -293,6 +296,16 @@ remains to be checked on the production host. The changes made after that build 
 outage alert, default deadline before routing, which the streaming routes clear) are covered by
 `make check` on the release commit, including the automated 20 GB test and
 `TestDefaultDeadlineSparesStreaming`.
+
+The 1.1.0 trial was run and validated by the operator on 2026-10-31: build `0.0.0-dev+bd68cb9`,
+the 1.0 trial installation upgraded in place (9 migrations applied at startup), SQLite, reference
+Caddy (`tls internal`) on the same Docker Desktop workstation. A 7.9 GB file was uploaded from a
+browser with a network cut and an automatic resume, two recipients downloaded with their own
+links after verifying their address, a folder kept its tree in the file list and in the ZIP, and
+every SHA-256 matched. The browser uploaded at about 55 MiB/s (8081 MiB in 148 s, over HTTP/2,
+32 MiB chunks, pauses between chunks of a few milliseconds): this is the browser's own upload
+rate, the server and the proxy are not the limit (the automated client reaches 87 to 97 MiB/s
+through the same proxy, with 32 MiB chunks too).
 
 ## 8. What to send back
 

@@ -1,15 +1,15 @@
 # TransTeira
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: stable.** Version 1.0.0 delivers the V1 scope (the core); see [Versions](#versions)
-> for what comes next.
+> **Status: stable.** Version 1.1.0 delivers the V1 scope (the core) and the V1.1 scope
+> (operations); see [Versions](#versions) for what comes next.
 
-## Highlights (version 1.0)
+## Highlights
 
 - **Multi-tenant**: one instance serves several entities, each with its own domain name,
   branding, language, SMTP server, internal IP ranges and email domains, quotas and strictly
@@ -41,6 +41,22 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   system, switchable, remembered by a technical cookie).
 - **GDPR minded**: automatic expiry and purges, data subject search and erasure (audit log
   pseudonymised), technical cookies only.
+- **Operations (V1.1)**: Prometheus `/metrics` and JSON `/status` endpoints with a Grafana
+  dashboard and a Zabbix template ([integrations](integrations/grafana/README.md)), syslog export
+  of the audit and security logs, alerts by mail and by webhook (Teams, Slack or generic JSON).
+- **Sharing controls (V1.1)**: per-recipient links with optional recipient verification by code and
+  per-recipient download tracking, expiry reminder, maximum number of downloads, confidentiality
+  levels with their rules, allowed and forbidden recipient domains.
+- **More ways to send (V1.1)**: "My transfers" to list, extend or delete one's transfers without an
+  account, folder upload with the tree preserved, deposit from outside for verified internal users,
+  reply to a transfer.
+- **Abuse detection (V1.1)**: per-sender thresholds and unusual behaviour alerts, external
+  quotas and invitation limits, "Report abuse" button, blocklist of addresses, domains and
+  SHA-256 fingerprints.
+- **Antivirus (V1.1)**: can be disabled per instance or per entity, and interchangeable engines
+  (clamd, ICAP, generic HTTP API) with an EICAR self-test ([guide](docs/operations/antivirus.md)).
+- **Documentation (V1.1)**: user guides personalised with each entity's real rules, with a
+  printable version.
 
 ## How it works
 
@@ -261,7 +277,7 @@ scan, HTTP server, image, deployment, reference Caddy, the test itself) changed 
 green run; `make check-full` always runs it and is required before every release;
 `make check BIGFILE=0` skips it; `make bigfile BIGFILE_BYTES=1073741824
 BIGFILE_DBS=sqlite` is a quick 1 GiB run. See [test/README.md](test/README.md#big-file-test-testbigfile-make-bigfile).
-Before the V1 is declared done, an operator also runs the human
+Before each release, an operator also runs the human
 [big file trial](docs/operations/bigfile-trial.md) in a real browser behind the production
 reverse proxy.
 
@@ -281,8 +297,8 @@ returned by `/api/v1/version` and `/healthz` and printed by `transteira version`
 
 | Scope | Content |
 |---|---|
-| **V1, the core** (1.0, current) | Everything listed above. |
-| V1.1, operations (planned) | Abuse detection, Prometheus metrics and JSON status, Grafana and Zabbix, syslog, webhooks, expiry reminder, maximum number of downloads, "My transfers", recipient verification and tracking, folder upload, deposit from outside for verified internal users, reply to a transfer, confidentiality levels, recipient restrictions, dark mode, per-entity documentation and its PDF export. |
+| V1, the core (1.0) | Core transfer, security, administration and API features. |
+| **V1.1, operations** (1.1, current) | Everything listed above. |
 | V2, enterprise (planned) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
 
 The API reserves the paths and fields of these later scopes, so they are planned as minor
