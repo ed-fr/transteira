@@ -297,7 +297,7 @@ func TestRLSBlocksCrossTenantRawSQL(t *testing.T) {
 	}{
 		{"insert blocklist entry for B", `INSERT INTO blocklist_entries (id, tenant_id, kind, value, created_at) VALUES ($1, $2, 'email', 'evil@example.net', 0)`, []any{"blk_01JZZZZZZZZZZZZZZZZZZZZZZZ", b}},
 		{"insert network rule for B", `INSERT INTO tenant_network_rules (tenant_id, kind, value) VALUES ($1, 'cidr', '0.0.0.0/0')`, []any{b}},
-		{"insert a tenant", `INSERT INTO tenants (id, name, fqdn, default_language, max_transfer_bytes, storage_quota_bytes, created_at, updated_at) VALUES ('ten_01JZZZZZZZZZZZZZZZZZZZZZZZ', 'x', 'transfer.entity-x.example.com', 'en', 1, 1, 0, 0)`, nil},
+		{"insert a tenant", `INSERT INTO tenants (id, name, fqdn, default_language, max_transfer_bytes, storage_quota_bytes, created_at, updated_at, setup_state) VALUES ('ten_01JZZZZZZZZZZZZZZZZZZZZZZZ', 'x', 'transfer.entity-x.example.com', 'en', 1, 1, 0, 0, 'active')`, nil},
 		{"move A's entries to B", `UPDATE blocklist_entries SET tenant_id = $1`, []any{b}},
 		{"move A's rules to B", `UPDATE tenant_network_rules SET tenant_id = $1`, []any{b}},
 	}

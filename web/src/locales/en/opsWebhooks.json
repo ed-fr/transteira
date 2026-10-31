@@ -38,6 +38,10 @@
       "rotation_completed": "Master key rotation completed",
       "rotation_failed": "Master key rotation failed"
     },
+    "tenant": {
+      "provisioned": "Entity created by provisioning",
+      "setup_completed": "Entity setup completed"
+    },
     "webhook": {
       "test": "Test event"
     }

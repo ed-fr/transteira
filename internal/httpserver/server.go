@@ -21,11 +21,14 @@
 //     the web interface (GET and HEAD under /assets/, any Host), the
 //     global limit for every other request;
 //  7. routes outside any tenant: exactly /healthz, /api/openapi.yaml,
-//     /metrics and /status (the last two answer a 404 Problem until they
-//     are implemented, as when TT_METRICS_TOKEN is unset);
+//     /metrics, /status and /tls/ask (the last one, since API 1.2,
+//     answers a 404 Problem until it is implemented, as when
+//     TT_TLS_ASK_ALLOWED_IPS is unset);
 //  8. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
-//     tenant resolution: it serves /api/v1/admin/* and /api/v1/version,
+//     tenant resolution: it serves /api/v1/admin/*, /api/v1/version and,
+//     since API 1.2, /api/v1/provisioning/* (provisioning token, no admin
+//     session),
 //     and the interactive API documentation (/api/docs) to an
 //     authenticated admin session, and the admin web interface: / redirects
 //     to /admin/, /admin/ and below serve the admin application, any other
@@ -34,7 +37,8 @@
 //     - any other host goes through tenant resolution, before any routing
 //     (an unknown host gets 421 whatever the path, including paths that
 //     would be 404, 405 or a redirect); a known tenant host answers 404
-//     for /api/v1/admin and below, before any admin logic, and, with
+//     for /api/v1/admin and /api/v1/provisioning and below, before any
+//     admin or provisioning logic, and, with
 //     TT_API_DOCS_PUBLIC, serves the interactive API documentation
 //     without authentication (without it, /api/docs is an ordinary
 //     unknown path); every other path is the public web interface (see
@@ -152,6 +156,9 @@ const (
 	// StatusPath is the path of the JSON instance status (outside any
 	// tenant, since API 1.1).
 	StatusPath = "/status"
+	// TLSAskPath is the path of the on-demand TLS permission asked by the
+	// reverse proxy (outside any tenant, since API 1.2).
+	TLSAskPath = "/tls/ask"
 	// ScopeGlobal is the rate-limit scope of the global per-IP limiter.
 	ScopeGlobal = "global"
 	// ScopeAssets is the rate-limit scope of the per-IP limiter of the
@@ -397,6 +404,10 @@ type Deps struct {
 	// AdminSessions resolves the admin session cookies and checks their
 	// CSRF tokens (*adminauth.Service); nil authenticates no session.
 	AdminSessions AdminSessions
+	// Provisioning authenticates the provisioning tokens of the
+	// provisioning operations on the admin hosts (since API 1.2); nil
+	// accepts no token: every provisioning operation answers 401.
+	Provisioning ProvisioningAuthenticator
 	// UploadIdleTimeout is the idle read timeout of a tus PATCH body
 	// (TT_UPLOAD_IDLE_TIMEOUT); DefaultUploadIdleTimeout when zero.
 	UploadIdleTimeout time.Duration
@@ -601,6 +612,8 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if deps.Status != nil {
 		freeMux.Handle(StatusPath, deps.Status)
 	}
+	// TLSAskPath (since API 1.2) has no handler yet: it answers the 404
+	// Problem of the fallback, whatever the Host.
 	tenantFree := withProblemFallback(freeMux)
 
 	// Tenant-scoped routes. The bare APIBaseURL would otherwise be
@@ -612,6 +625,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	// prefix answers 404 before any admin middleware or handler.
 	tenantMux.Handle(AdminPrefix+"/", http.HandlerFunc(notFound))
 	tenantMux.Handle(AdminPrefix, http.HandlerFunc(notFound))
+	// Nor is the provisioning API (since API 1.2), served on the admin
+	// hosts only.
+	tenantMux.Handle(ProvisioningPrefix+"/", http.HandlerFunc(notFound))
+	tenantMux.Handle(ProvisioningPrefix, http.HandlerFunc(notFound))
 	// The public API documentation is served on known tenant hosts only:
 	// an unknown host keeps its 421 and its unknown_fqdn event.
 	if deps.APIDocsPublic {
@@ -688,7 +705,7 @@ func isAssetRequest(r *http.Request) bool {
 // isTenantFree reports whether p is one of the paths served without a
 // tenant (exact match, no cleaning).
 func isTenantFree(p string) bool {
-	return p == HealthPath || p == SpecPath || p == MetricsPath || p == StatusPath
+	return p == HealthPath || p == SpecPath || p == MetricsPath || p == StatusPath || p == TLSAskPath
 }
 
 // rejectUncleanAPIPaths answers a 404 not-found Problem for a path that is

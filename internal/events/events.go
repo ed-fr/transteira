@@ -74,6 +74,13 @@ const (
 	MasterKeyRotationCompleted Type = "master_key.rotation_completed"
 	// MasterKeyRotationFailed: a master key rotation stopped on an error.
 	MasterKeyRotationFailed Type = "master_key.rotation_failed"
+	// TenantProvisioned: a tenant was created through the provisioning API
+	// (since API 1.2). A system event that names its tenant.
+	TenantProvisioned Type = "tenant.provisioned"
+	// TenantSetupCompleted: a tenant created through the provisioning API
+	// left the setup state (since API 1.2). A system event that names its
+	// tenant.
+	TenantSetupCompleted Type = "tenant.setup_completed"
 	// WebhookTest: a test delivery requested by an admin. It is only sent
 	// by the webhook test operations and can never be subscribed to.
 	WebhookTest Type = "webhook.test"
@@ -93,6 +100,7 @@ func SystemTypes() []Type {
 	return []Type{
 		DiskAlertRaised, DiskAlertCleared, AntivirusAlertRaised, AntivirusAlertCleared,
 		MaintenanceEnabled, MaintenanceDisabled, MasterKeyRotationCompleted, MasterKeyRotationFailed,
+		TenantProvisioned, TenantSetupCompleted,
 	}
 }
 

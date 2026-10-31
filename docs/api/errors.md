@@ -457,8 +457,9 @@ use to ban the client IP.
   SMTP server is configured for the entity, its SMTP settings are unusable, the SMTP circuit of the entity is
   open (its server failed several times in a row and is not tried again for a minute), or the
   mail queue is shutting down. Nothing was sent, and nothing was changed. Admin activation
-  links are never mailed (they are returned by `POST /admin/admins` and
-  `POST /admin/admins/{adminId}/reset-credentials`). In the administration, only the resend of
+  links never go through the SMTP of an entity: they are returned by `POST /admin/admins` and
+  `POST /admin/admins/{adminId}/reset-credentials`, or, since 1.2, mailed through the system SMTP
+  (see `system-smtp-unavailable`). In the administration, only the resend of
   a transfer notification answers it, when no SMTP server is configured for the entity.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /invitations`,
   `POST /admin/tenants/{tenantId}/transfers/{transferId}/resend`.
@@ -568,6 +569,78 @@ use to ban the client IP.
 - **Meaning:** extending the transfer would keep it available more than 90 days after its creation; `extendableTo` of the transfer tells the latest expiry possible.
 - **Typical endpoints:** `POST /me/transfers/{transferId}/extension`.
 - **What to do:** choose a shorter duration, or send the files again in a new transfer.
+
+### tenant-in-setup
+
+- **HTTP status:** 503 Service Unavailable
+- **Since:** 1.2.
+- **Meaning:** the entity is still being configured by its administrators (`setupState: setup` in `GET /tenant`): deposits, verification codes for a deposit, invitations and uploads are refused, including with an API token. Downloads are not affected. Unlike `maintenance`, the answer carries no `Retry-After`: the end of the setup depends on the administrators. The tus `PATCH` gets a bodyless `503`.
+- **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`, `POST /transfers/{transferId}/finalize`, `PATCH /uploads/{uploadId}`, `POST /invitations`, `POST /downloads/{linkToken}/reply`.
+- **What to do:** try again once the entity is open; administrators complete the setup with `POST /admin/tenants/{tenantId}/setup/complete`.
+
+### setup-incomplete
+
+- **HTTP status:** 409 Conflict
+- **Since:** 1.2.
+- **Meaning:** a required item of the setup checklist of the entity is not done. Each missing item is an entry of `errors`, `field` being its key (for example `smtp`) and `code` `not-done`.
+- **Typical endpoints:** `POST /admin/tenants/{tenantId}/setup/complete`.
+- **What to do:** complete the listed items (see `GET /admin/tenants/{tenantId}/setup`); a super admin may open the entity anyway with `force: true`.
+
+### setup-already-complete
+
+- **HTTP status:** 409 Conflict
+- **Since:** 1.2.
+- **Meaning:** the setup of the entity is already completed: the entity is active. There is no way back to the setup state.
+- **Typical endpoints:** `POST /admin/tenants/{tenantId}/setup/complete`.
+- **What to do:** nothing; the entity already accepts deposits.
+
+### unknown-background-preset
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 1.2.
+- **Meaning:** the background preset is not one of the library of the server.
+- **Typical endpoints:** `PUT /admin/tenants/{tenantId}/branding/background-preset`, `POST /admin/tenants`, `POST /provisioning/tenants`.
+- **What to do:** choose an identifier listed by `GET /admin/background-presets`.
+
+### system-smtp-unavailable
+
+- **HTTP status:** 503 Service Unavailable
+- **Since:** 1.2.
+- **Meaning:** an admin activation link must be mailed, but no system SMTP is configured (`TT_SYSTEM_SMTP`) or the system mail queue is shutting down. Nothing was created nor sent.
+- **Typical endpoints:** `POST /admin/admins`, `POST /admin/admins/{adminId}/invite`, `POST /admin/tenants` (with `delegatedAdmin`), `POST /provisioning/tenants`.
+- **What to do:** configure the system SMTP, or, in the administration, choose the `copy` delivery and hand the link over yourself (the provisioning API never returns the link).
+
+### admin-already-active
+
+- **HTTP status:** 409 Conflict
+- **Since:** 1.2.
+- **Meaning:** the administrator account is already activated: an invitation can only be sent again to an account that has not chosen its password yet.
+- **Typical endpoints:** `POST /admin/admins/{adminId}/invite`.
+- **What to do:** to give the administrator new credentials, use `POST /admin/admins/{adminId}/reset-credentials`.
+
+### update-check-disabled
+
+- **HTTP status:** 409 Conflict
+- **Since:** 1.2.
+- **Meaning:** the check for a newer release is disabled on this instance (`TT_UPDATE_CHECK=false`).
+- **Typical endpoints:** `POST /admin/system/version/check`.
+- **What to do:** check the releases page of the project yourself, or set `TT_UPDATE_CHECK=true`.
+
+### provisioning-token-invalid
+
+- **HTTP status:** 401 Unauthorized
+- **Since:** 1.2.
+- **Meaning:** the provisioning token is malformed, unknown, revoked or expired, or it is used from an address outside its allowed IP ranges (the same answer in every case). Written to the security log (`provisioning_token_invalid`); repeated failures from one IP are answered `429 rate-limited`.
+- **Typical endpoints:** `GET /provisioning/tenants`, `POST /provisioning/tenants`, `GET /provisioning/tenants/{tenantId}`.
+- **What to do:** check the token and the address of the calling server with the super admin of the instance.
+
+### provisioning-scope-exceeded
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 1.2.
+- **Meaning:** the request is outside the scope of the provisioning token: the FQDN does not end with one of its allowed suffixes, the storage quota or the per-transfer limit exceeds its caps, or the token already created its maximum number of entities. `errors` names the refused field (`/fqdn`, `/storageQuotaBytes`, `/maxTransferBytes`, or an empty pointer for the number of entities).
+- **Typical endpoints:** `POST /provisioning/tenants`.
+- **What to do:** stay within the scope of the token, or ask the super admin to widen it (a new token).
 
 ### internal-error
 

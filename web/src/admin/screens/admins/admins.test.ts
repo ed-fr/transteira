@@ -14,6 +14,7 @@ import {
   loadAllPages,
   roleKey,
   splitActivation,
+  splitCreated,
   statusVariant,
   tenantLabel,
   tenantNameMap,
@@ -21,6 +22,7 @@ import {
   validateCreate,
   validateEdit,
   type Admin,
+  type AdminCreated,
   type AdminWithActivation,
 } from './admins';
 
@@ -62,6 +64,32 @@ describe('splitActivation', () => {
     });
     expect(account).toEqual(delegated());
     expect(JSON.stringify(account)).not.toContain('act_x');
+  });
+});
+
+describe('splitCreated', () => {
+  it('separates the link and the delivery from the account', () => {
+    const data: AdminCreated = {
+      ...delegated(),
+      invitationDelivery: 'copy',
+      activationUrl: 'https://admin.example.com/admin/activate#act_y',
+      activationExpiresAt: '2026-11-03T09:00:00Z',
+    };
+    const { account, link } = splitCreated(data);
+    expect(link).toEqual({
+      url: 'https://admin.example.com/admin/activate#act_y',
+      expiresAt: '2026-11-03T09:00:00Z',
+    });
+    expect(account).toEqual(delegated());
+  });
+
+  it('refuses an answer without link (mail delivery)', () => {
+    const data: AdminCreated = {
+      ...delegated(),
+      invitationDelivery: 'mail',
+      activationExpiresAt: '2026-11-03T09:00:00Z',
+    };
+    expect(() => splitCreated(data)).toThrow();
   });
 });
 
@@ -235,6 +263,7 @@ describe('creation form', () => {
       role: 'delegated_admin',
       tenantIds: ['ten_a', 'ten_b'],
       requireTotp: false,
+      invitation: { delivery: 'copy' },
     });
   });
 });

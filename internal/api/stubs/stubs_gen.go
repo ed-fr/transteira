@@ -45,6 +45,11 @@ func (Unimplemented) AppendUploadChunk(_ context.Context, _ gen.AppendUploadChun
 	return gen.AppendUploadChunk404Response{}, nil
 }
 
+// AskTls answers 404 not-found until the operation is implemented.
+func (Unimplemented) AskTls(_ context.Context, _ gen.AskTlsRequestObject) (gen.AskTlsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // CancelTransfer answers 404 not-found until the operation is implemented.
 func (Unimplemented) CancelTransfer(_ context.Context, _ gen.CancelTransferRequestObject) (gen.CancelTransferResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -57,6 +62,16 @@ func (Unimplemented) ChangeAdminPassword(_ context.Context, _ gen.ChangeAdminPas
 
 // CheckMailDns answers 404 not-found until the operation is implemented.
 func (Unimplemented) CheckMailDns(_ context.Context, _ gen.CheckMailDnsRequestObject) (gen.CheckMailDnsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// CheckSystemVersion answers 404 not-found until the operation is implemented.
+func (Unimplemented) CheckSystemVersion(_ context.Context, _ gen.CheckSystemVersionRequestObject) (gen.CheckSystemVersionResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// CompleteTenantSetup answers 404 not-found until the operation is implemented.
+func (Unimplemented) CompleteTenantSetup(_ context.Context, _ gen.CompleteTenantSetupRequestObject) (gen.CompleteTenantSetupResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -92,6 +107,11 @@ func (Unimplemented) CreateBlocklistEntry(_ context.Context, _ gen.CreateBlockli
 
 // CreateInvitation answers 404 not-found until the operation is implemented.
 func (Unimplemented) CreateInvitation(_ context.Context, _ gen.CreateInvitationRequestObject) (gen.CreateInvitationResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// CreateProvisioningToken answers 404 not-found until the operation is implemented.
+func (Unimplemented) CreateProvisioningToken(_ context.Context, _ gen.CreateProvisioningTokenRequestObject) (gen.CreateProvisioningTokenResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -220,6 +240,11 @@ func (Unimplemented) GetAdminMe(_ context.Context, _ gen.GetAdminMeRequestObject
 	return nil, ErrNotImplemented
 }
 
+// GetBackgroundPreset answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetBackgroundPreset(_ context.Context, _ gen.GetBackgroundPresetRequestObject) (gen.GetBackgroundPresetResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetBranding answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetBranding(_ context.Context, _ gen.GetBrandingRequestObject) (gen.GetBrandingResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -310,6 +335,11 @@ func (Unimplemented) GetOpenApiSpec(_ context.Context, _ gen.GetOpenApiSpecReque
 	return nil, ErrNotImplemented
 }
 
+// GetProvisionedTenant answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetProvisionedTenant(_ context.Context, _ gen.GetProvisionedTenantRequestObject) (gen.GetProvisionedTenantResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetPublicTenant answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetPublicTenant(_ context.Context, _ gen.GetPublicTenantRequestObject) (gen.GetPublicTenantResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -340,6 +370,11 @@ func (Unimplemented) GetSystemSettings(_ context.Context, _ gen.GetSystemSetting
 	return nil, ErrNotImplemented
 }
 
+// GetSystemVersion answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetSystemVersion(_ context.Context, _ gen.GetSystemVersionRequestObject) (gen.GetSystemVersionResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetSystemWebhook answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetSystemWebhook(_ context.Context, _ gen.GetSystemWebhookRequestObject) (gen.GetSystemWebhookResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -360,6 +395,11 @@ func (Unimplemented) GetTenantLegalDocument(_ context.Context, _ gen.GetTenantLe
 	return nil, ErrNotImplemented
 }
 
+// GetTenantSetup answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetTenantSetup(_ context.Context, _ gen.GetTenantSetupRequestObject) (gen.GetTenantSetupResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetTenantStats answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetTenantStats(_ context.Context, _ gen.GetTenantStatsRequestObject) (gen.GetTenantStatsResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -372,6 +412,11 @@ func (Unimplemented) GetTenantTransfer(_ context.Context, _ gen.GetTenantTransfe
 
 // GetTenantWebhook answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetTenantWebhook(_ context.Context, _ gen.GetTenantWebhookRequestObject) (gen.GetTenantWebhookResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// GetTextProposal answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetTextProposal(_ context.Context, _ gen.GetTextProposalRequestObject) (gen.GetTextProposalResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -395,6 +440,11 @@ func (Unimplemented) GetVersion(_ context.Context, _ gen.GetVersionRequestObject
 	return nil, ErrNotImplemented
 }
 
+// InviteAdmin answers 404 not-found until the operation is implemented.
+func (Unimplemented) InviteAdmin(_ context.Context, _ gen.InviteAdminRequestObject) (gen.InviteAdminResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // ListAbuseReports answers 404 not-found until the operation is implemented.
 func (Unimplemented) ListAbuseReports(_ context.Context, _ gen.ListAbuseReportsRequestObject) (gen.ListAbuseReportsResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -407,6 +457,11 @@ func (Unimplemented) ListAdmins(_ context.Context, _ gen.ListAdminsRequestObject
 
 // ListApiTokens answers 404 not-found until the operation is implemented.
 func (Unimplemented) ListApiTokens(_ context.Context, _ gen.ListApiTokensRequestObject) (gen.ListApiTokensResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// ListBackgroundPresets answers 404 not-found until the operation is implemented.
+func (Unimplemented) ListBackgroundPresets(_ context.Context, _ gen.ListBackgroundPresetsRequestObject) (gen.ListBackgroundPresetsResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -427,6 +482,16 @@ func (Unimplemented) ListGlobalAuditEvents(_ context.Context, _ gen.ListGlobalAu
 
 // ListMyTransfers answers 404 not-found until the operation is implemented.
 func (Unimplemented) ListMyTransfers(_ context.Context, _ gen.ListMyTransfersRequestObject) (gen.ListMyTransfersResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// ListProvisionedTenants answers 404 not-found until the operation is implemented.
+func (Unimplemented) ListProvisionedTenants(_ context.Context, _ gen.ListProvisionedTenantsRequestObject) (gen.ListProvisionedTenantsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// ListProvisioningTokens answers 404 not-found until the operation is implemented.
+func (Unimplemented) ListProvisioningTokens(_ context.Context, _ gen.ListProvisioningTokensRequestObject) (gen.ListProvisioningTokensResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -465,6 +530,11 @@ func (Unimplemented) PreviewEmailTemplate(_ context.Context, _ gen.PreviewEmailT
 	return nil, ErrNotImplemented
 }
 
+// ProvisionTenant answers 404 not-found until the operation is implemented.
+func (Unimplemented) ProvisionTenant(_ context.Context, _ gen.ProvisionTenantRequestObject) (gen.ProvisionTenantResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // ReportAbuse answers 404 not-found until the operation is implemented.
 func (Unimplemented) ReportAbuse(_ context.Context, _ gen.ReportAbuseRequestObject) (gen.ReportAbuseResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -500,8 +570,18 @@ func (Unimplemented) RevokeInvitation(_ context.Context, _ gen.RevokeInvitationR
 	return nil, ErrNotImplemented
 }
 
+// RevokeProvisioningToken answers 404 not-found until the operation is implemented.
+func (Unimplemented) RevokeProvisioningToken(_ context.Context, _ gen.RevokeProvisioningTokenRequestObject) (gen.RevokeProvisioningTokenResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // SearchDataSubject answers 404 not-found until the operation is implemented.
 func (Unimplemented) SearchDataSubject(_ context.Context, _ gen.SearchDataSubjectRequestObject) (gen.SearchDataSubjectResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// SetBackgroundPreset answers 404 not-found until the operation is implemented.
+func (Unimplemented) SetBackgroundPreset(_ context.Context, _ gen.SetBackgroundPresetRequestObject) (gen.SetBackgroundPresetResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 

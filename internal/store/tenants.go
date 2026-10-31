@@ -30,7 +30,10 @@ const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max
 // tenants itself, so its statements are system queries.
 var (
 	qTenantInsert = systemQuery(
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		// The setup state is always written explicitly (migration 0022 drops
+		// its default on PostgreSQL); 'active' until the creation with a
+		// setup state is implemented (step 5 of V1.2).
+		`INSERT INTO tenants (`+tenantColumns+`, setup_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,

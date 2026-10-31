@@ -132,6 +132,18 @@ func TestAdminHostRouting(t *testing.T) {
 		{name: "unknown admin path", method: http.MethodGet, target: "/api/v1/admin/nope", host: hostAdmin, status: http.StatusNotFound, code: problem.CodeNotFound},
 		{name: "wrong method", method: http.MethodDelete, target: "/api/v1/admin/setup", host: hostAdmin, status: http.StatusMethodNotAllowed, code: problem.CodeMethodNotAllowed},
 		{name: "admin operation on a tenant host", method: http.MethodGet, target: "/api/v1/admin/setup", host: hostA, status: http.StatusNotFound, code: problem.CodeNotFound},
+		// The provisioning operations (since API 1.2) take no admin session:
+		// without a provisioning service they answer 401 on the admin host
+		// (TestProvisioningFailsClosed), and 404 before any logic on a
+		// tenant host.
+		{name: "provisioning without token", method: http.MethodGet, target: "/api/v1/provisioning/tenants", host: hostAdmin, status: http.StatusUnauthorized, code: problem.CodeUnauthenticated},
+		{
+			name: "provisioning with a token", method: http.MethodPost, target: "/api/v1/provisioning/tenants", host: hostAdmin,
+			hdr: []string{"Content-Type", "application/json", "Authorization", "Bearer ttp_x"}, status: http.StatusUnauthorized, code: problem.CodeProvisioningTokenInvalid,
+		},
+		{name: "bare provisioning prefix", method: http.MethodGet, target: "/api/v1/provisioning", host: hostAdmin, status: http.StatusNotFound, code: problem.CodeNotFound},
+		{name: "provisioning on a tenant host", method: http.MethodGet, target: "/api/v1/provisioning/tenants", host: hostA, status: http.StatusNotFound, code: problem.CodeNotFound},
+		{name: "bare provisioning prefix on a tenant host", method: http.MethodGet, target: "/api/v1/provisioning", host: hostA, status: http.StatusNotFound, code: problem.CodeNotFound},
 		{name: "bare admin prefix on a tenant host", method: http.MethodGet, target: "/api/v1/admin", host: hostA, status: http.StatusNotFound, code: problem.CodeNotFound},
 		{
 			name: "admin session on a tenant host", method: http.MethodGet, target: "/api/v1/admin/me", host: hostA,

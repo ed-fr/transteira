@@ -154,6 +154,16 @@ func TestAdminHostIsolation(t *testing.T) {
 				switch {
 				case strings.HasPrefix(op.template, "/admin/"):
 					continue
+				case strings.HasPrefix(op.template, "/provisioning/"):
+					// Served on the admin host only (since API 1.2), behind a
+					// provisioning token: 401 without one, 404 on a tenant host.
+					if resp := h.send(t, op, hostAdmin); resp.status != http.StatusUnauthorized {
+						t.Errorf("%s on the admin host: %d %s, want 401", op, resp.status, resp.body)
+					}
+					if resp := h.send(t, op, hostA); resp.status != http.StatusNotFound {
+						t.Errorf("%s on a tenant host: %d %s, want 404", op, resp.status, resp.body)
+					}
+					continue
 				case op.id == "getHealth" || op.id == "getOpenApiSpec":
 					continue // outside any host (tenantAgnostic)
 				case op.id == "getVersion":

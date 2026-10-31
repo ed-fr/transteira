@@ -189,6 +189,11 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 		return nil, validationFailed(tenantadmin.FieldName, fieldRequired)
 	}
 	b := req.Body
+	if p.Admin.Role == store.RoleSuperAdmin {
+		if prob := unsupportedTenantCreate(b); prob != nil {
+			return nil, prob
+		}
+	}
 	v, err := svc.CreateTenant(ctx, p, tenantadmin.TenantCreate{
 		Name: b.Name, FQDN: b.Fqdn, DefaultLanguage: string(b.DefaultLanguage), StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: deref(b.MaxTransferBytes), MaxTransferCeiling: b.MaxTransferCeiling,
@@ -196,7 +201,7 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 	if err != nil {
 		return nil, tenantError(err)
 	}
-	return gen.CreateTenant201JSONResponse(tenantBody(v)), nil
+	return gen.CreateTenant201JSONResponse(tenantCreatedBody(v)), nil
 }
 
 // GetTenant returns the general settings of a tenant.
@@ -317,6 +322,38 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
 		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
 		AntivirusEffective: &v.AntivirusEffective, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+	}
+}
+
+// unsupportedTenantCreate refuses the members of TenantCreate added by API
+// 1.2 that are not implemented yet (setupState, delegatedAdmin,
+// backgroundPreset) with a 400 validation-failed naming the first one
+// present, or returns nil. It is checked for the super admin only, after
+// the role, so that another admin keeps its 403 from the service.
+func unsupportedTenantCreate(b *gen.TenantCreate) *problem.Problem {
+	switch {
+	case b.SetupState != nil:
+		return validationFailed("/setupState", fieldNotSupported)
+	case b.DelegatedAdmin != nil:
+		return validationFailed("/delegatedAdmin", fieldNotSupported)
+	case b.BackgroundPreset != nil:
+		return validationFailed("/backgroundPreset", fieldNotSupported)
+	}
+	return nil
+}
+
+// tenantCreatedBody renders a new tenant as the OpenAPI TenantCreated
+// (since API 1.2): the Tenant fields, without delegated admin until the
+// creation of one with the tenant is implemented.
+func tenantCreatedBody(v tenantadmin.TenantView) gen.TenantCreated {
+	t := tenantBody(v)
+	return gen.TenantCreated{
+		Id: t.Id, Name: t.Name, Fqdn: t.Fqdn, DefaultLanguage: t.DefaultLanguage,
+		MaxTransferBytes: t.MaxTransferBytes, MaxTransferCeiling: t.MaxTransferCeiling,
+		Status: gen.TenantCreatedStatus(t.Status), StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: t.StorageUsedBytes,
+		WebhookIncludeAddresses: t.WebhookIncludeAddresses, AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit,
+		AllowTransferReply: t.AllowTransferReply, AntivirusEnabled: t.AntivirusEnabled,
+		AntivirusEffective: t.AntivirusEffective, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 

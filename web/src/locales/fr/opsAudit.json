@@ -46,7 +46,8 @@
     "recipient": "Destinataire",
     "admin": "Administrateur",
     "api_token": "Jeton d’API",
-    "system": "Système"
+    "system": "Système",
+    "provisioning_token": "Jeton de provisionnement"
   },
   "objectKinds": {
     "transfer": "Transfert",
@@ -60,7 +61,8 @@
     "deposit_session": "Session de dépôt",
     "master_key_rotation": "Rotation de la clé maître",
     "system": "Système",
-    "webhook": "Webhook"
+    "webhook": "Webhook",
+    "provisioning_token": "Jeton de provisionnement"
   },
   "groups": {
     "transfers": "Transferts",
@@ -124,7 +126,8 @@
       "credentials_reset": "Identifiants d’administrateur réinitialisés",
       "activated": "Compte d’administrateur activé",
       "totp_reset_local": "Double authentification réinitialisée depuis le serveur",
-      "password_reset_local": "Mot de passe réinitialisé depuis le serveur"
+      "password_reset_local": "Mot de passe réinitialisé depuis le serveur",
+      "invited": "Administrateur invité"
     },
     "tenant": {
       "created": "Entité créée",
@@ -144,7 +147,9 @@
       "recipient_rules_updated": "Règles des domaines destinataires modifiées",
       "abuse_settings_updated": "Seuils d’abus modifiés",
       "antivirus_disabled": "Antivirus désactivé pour l’entité",
-      "antivirus_enabled": "Antivirus activé pour l’entité"
+      "antivirus_enabled": "Antivirus activé pour l’entité",
+      "setup_completed": "Configuration de l’entité terminée",
+      "provisioned": "Entité créée par provisionnement"
     },
     "config": {
       "updated": "Paramètres système modifiés"
@@ -198,6 +203,10 @@
       "updated": "Webhook modifié",
       "deleted": "Webhook supprimé",
       "tested": "Webhook testé"
+    },
+    "provisioning_token": {
+      "created": "Jeton de provisionnement créé",
+      "revoked": "Jeton de provisionnement révoqué"
     }
   }
 }

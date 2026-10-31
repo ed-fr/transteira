@@ -472,7 +472,7 @@ func TestTenantsHandlers(t *testing.T) {
 	ctx := ctxWith(store.SessionAuthenticated, superRoot)
 	wantTenant := gen.Tenant{
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
-		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.Active, StorageQuotaBytes: 1 << 40,
+		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.TenantStatusActive, StorageQuotaBytes: 1 << 40,
 		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), AllowTransferReply: new(false),
 		AntivirusEnabled: new(true), AntivirusEffective: new(false), CreatedAt: created, UpdatedAt: now,
 	}

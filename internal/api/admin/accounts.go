@@ -41,6 +41,13 @@ func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObje
 	if req.Body == nil {
 		return nil, validationFailed(adminauth.FieldUsername, fieldRequired)
 	}
+	// The mail delivery of API 1.2 is not implemented yet: refused rather
+	// than silently replaced by a copy (the default, absent or copy, is
+	// the 1.1 behavior). Checked for the super admin only, so that another
+	// admin keeps its 403 from the service.
+	if inv := req.Body.Invitation; p.Admin.Role == store.RoleSuperAdmin && inv != nil && inv.Delivery != nil && *inv.Delivery == gen.Mail {
+		return nil, validationFailed("/invitation/delivery", fieldNotSupported)
+	}
 	a, link, err := svc.Create(ctx, p, adminauth.AdminCreate{
 		Username: req.Body.Username, Email: string(req.Body.Email), Role: store.AdminRole(req.Body.Role),
 		TenantIDs: tenantIDs(deref(req.Body.TenantIds)), RequireTOTP: req.Body.RequireTotp,
@@ -48,7 +55,7 @@ func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObje
 	if err != nil {
 		return nil, serviceError(err)
 	}
-	return gen.CreateAdmin201JSONResponse(withActivation(a, link)), nil
+	return gen.CreateAdmin201JSONResponse(createdBody(a, link)), nil
 }
 
 // GetAdmin returns one administrator account (super admin).
@@ -168,6 +175,20 @@ func withActivation(a adminauth.Account, link adminauth.Activation) gen.AdminWit
 		TotpEnabled: b.TotpEnabled, Activated: b.Activated, RequireTotp: b.RequireTotp, Disabled: b.Disabled,
 		LastLoginAt: b.LastLoginAt, CreatedAt: b.CreatedAt,
 		ActivationUrl: link.URL, ActivationExpiresAt: link.ExpiresAt,
+	}
+}
+
+// createdBody renders a and its activation link as the OpenAPI
+// AdminCreated (since API 1.2). Until the delivery by mail is implemented,
+// the link is always returned (invitationDelivery copy, as in API
+// 1.1).
+func createdBody(a adminauth.Account, link adminauth.Activation) gen.AdminCreated {
+	w := withActivation(a, link)
+	return gen.AdminCreated{
+		Id: w.Id, Username: w.Username, Email: w.Email, Role: w.Role, TenantIds: w.TenantIds,
+		TotpEnabled: w.TotpEnabled, Activated: w.Activated, RequireTotp: w.RequireTotp, Disabled: w.Disabled,
+		LastLoginAt: w.LastLoginAt, CreatedAt: w.CreatedAt,
+		InvitationDelivery: gen.Copy, ActivationUrl: &w.ActivationUrl, ActivationExpiresAt: w.ActivationExpiresAt,
 	}
 }
 

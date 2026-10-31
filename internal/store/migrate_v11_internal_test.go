@@ -157,7 +157,8 @@ func rowCounts(ctx context.Context, t *testing.T, db *DB) map[string]int64 {
 	return out
 }
 
-// TestMigrationV11Upgrade applies the V1.1 migrations (0014 to 0021) on a
+// TestMigrationV11Upgrade applies the V1.1 migrations (0014 to 0021, then the
+// V1.2 ones, 0022 to 0025) on a
 // database at 0013 holding V1 data: no row is lost (in particular no
 // cascade from the rebuilt transfers and system_secrets tables), the
 // columns keep their values, the backfills are right, the foreign keys,
@@ -179,7 +180,7 @@ func TestMigrationV11Upgrade(t *testing.T) {
 		before := rowCounts(ctx, t, db)
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 8 {
+		if n, err := db.Migrate(ctx); err != nil || n != 12 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -487,7 +488,7 @@ func openFaultEmpty(ctx context.Context, t *testing.T, fsys fstest.MapFS) (*DB, 
 // TestMigrationV11FailureKeepsData makes the recording of 0014 fail after
 // its body ran (sqlite-fault driver): the whole migration rolls back, the
 // V1 data is intact, and the writer connection enforces foreign keys again.
-// The retry then applies 0014 to 0021.
+// The retry then applies 0014 to 0025.
 func TestMigrationV11FailureKeepsData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -513,7 +514,7 @@ func TestMigrationV11FailureKeepsData(t *testing.T) {
 	if n := rawInt(ctx, t, db, `SELECT count(*) FROM pragma_table_info('transfers') WHERE name = 'link_mode'`); n != 0 {
 		t.Error("the failed 0014 left its columns behind")
 	}
-	if n, err := db.Migrate(ctx); err != nil || n != 8 {
+	if n, err := db.Migrate(ctx); err != nil || n != 12 {
 		t.Fatalf("retry = %d, %v", n, err)
 	}
 	if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -715,8 +716,10 @@ func TestMigration0021Upgrade(t *testing.T) {
 		if n, err := db.Migrate(ctx); err != nil || n != 20 {
 			t.Fatalf("Migrate to 0020 = %d, %v", n, err)
 		}
-		a := newTestTenant(ctx, t, db, "a.example.com")
-		b := newTestTenant(ctx, t, db, "b.example.com")
+		// The store writes columns of later migrations (setup_state, 0022):
+		// the tenants of this older schema are inserted with its columns.
+		a := createLegacyTenant(ctx, t, db, "a.example.com", 100)
+		b := createLegacyTenant(ctx, t, db, "b.example.com", 100)
 		ins := `INSERT INTO abuse_alerts (tenant_id, sender_email, rule, day, created_at) VALUES (?, ?, ?, ?, ?)`
 		for _, args := range [][]any{
 			{string(a), "alice@a.example.com", "daily_bytes", "2026-10-19", 5},
@@ -729,7 +732,7 @@ func TestMigration0021Upgrade(t *testing.T) {
 		}
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 1 {
+		if n, err := db.Migrate(ctx); err != nil || n != 5 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		if e.Driver == "sqlite" {

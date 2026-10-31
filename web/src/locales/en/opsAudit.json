@@ -46,7 +46,8 @@
     "recipient": "Recipient",
     "admin": "Administrator",
     "api_token": "API token",
-    "system": "System"
+    "system": "System",
+    "provisioning_token": "Provisioning token"
   },
   "objectKinds": {
     "transfer": "Transfer",
@@ -60,7 +61,8 @@
     "deposit_session": "Deposit session",
     "master_key_rotation": "Master key rotation",
     "system": "System",
-    "webhook": "Webhook"
+    "webhook": "Webhook",
+    "provisioning_token": "Provisioning token"
   },
   "groups": {
     "transfers": "Transfers",
@@ -124,7 +126,8 @@
       "credentials_reset": "Administrator credentials reset",
       "activated": "Administrator account activated",
       "totp_reset_local": "Two-factor authentication reset from the server",
-      "password_reset_local": "Password reset from the server"
+      "password_reset_local": "Password reset from the server",
+      "invited": "Administrator invited"
     },
     "tenant": {
       "created": "Entity created",
@@ -144,7 +147,9 @@
       "recipient_rules_updated": "Recipient domain rules updated",
       "abuse_settings_updated": "Abuse thresholds updated",
       "antivirus_disabled": "Antivirus disabled for the entity",
-      "antivirus_enabled": "Antivirus enabled for the entity"
+      "antivirus_enabled": "Antivirus enabled for the entity",
+      "setup_completed": "Entity setup completed",
+      "provisioned": "Entity created by provisioning"
     },
     "config": {
       "updated": "System settings updated"
@@ -198,6 +203,10 @@
       "updated": "Webhook updated",
       "deleted": "Webhook deleted",
       "tested": "Webhook tested"
+    },
+    "provisioning_token": {
+      "created": "Provisioning token created",
+      "revoked": "Provisioning token revoked"
     }
   }
 }

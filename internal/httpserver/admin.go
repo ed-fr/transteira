@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
@@ -20,6 +21,11 @@ const (
 	// AdminPrefix is the prefix of the administration operations, served
 	// on the admin hosts only (404 on tenant hosts).
 	AdminPrefix = APIBaseURL + "/admin"
+	// ProvisioningPrefix is the prefix of the provisioning operations
+	// (since API 1.2), served on the admin hosts only (404 on tenant
+	// hosts) and authenticated by a provisioning token, never by an admin
+	// session.
+	ProvisioningPrefix = APIBaseURL + "/provisioning"
 	// ScopeAdminAuth is the rate-limit scope of the per-IP limit of the
 	// admin login steps (setup, password, second factor, activation).
 	ScopeAdminAuth = "admin_auth"
@@ -71,8 +77,20 @@ var adminAuthRoutes = map[string]bool{
 }
 
 // adminSessionRequired reports whether the matched admin operation
-// requires the admin session.
-func adminSessionRequired(r *http.Request) bool { return !adminOpenRoutes[r.Pattern] }
+// requires the admin session: every operation of the admin router but the
+// open ones and the provisioning operations, which carry a provisioning
+// token instead (and need no CSRF token, a browser never adding their
+// Authorization header by itself).
+func adminSessionRequired(r *http.Request) bool {
+	return !adminOpenRoutes[r.Pattern] && !isProvisioningPattern(r.Pattern)
+}
+
+// isProvisioningPattern reports whether a route pattern ("METHOD /path")
+// is a provisioning operation (under ProvisioningPrefix).
+func isProvisioningPattern(pattern string) bool {
+	_, p, _ := strings.Cut(pattern, " ")
+	return strings.HasPrefix(p, ProvisioningPrefix+"/")
+}
 
 // adminOpenRoute reports whether the matched admin operation is served
 // without a session.
@@ -165,7 +183,9 @@ func noStore(next http.Handler) http.Handler {
 // steps, the admin session cookie (401), the Origin and Sec-Fetch-Site
 // checks of the open login steps and the CSRF checks of the session
 // operations (403), the body limit (413) and the JSON media type (415),
-// all before the body is read.
+// all before the body is read. The provisioning operations get instead,
+// right after the deadlines, their provisioning token check (401,
+// provisioningAuth).
 func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.SecurityEvents, limiter middleware.Limiter, logger *slog.Logger) http.Handler {
 	api := deps.AdminAPI
 	if api == nil {
@@ -196,6 +216,10 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 			middleware.SameOrigin(adminOpenRoute),
 			middleware.AdminSession(sessions, adminSessionRequired, logger),
 			middleware.RateLimitIf(limiter, events, ScopeAdminAuth, adminAuthRoute),
+			// The provisioning operations (since API 1.2) are refused here,
+			// before any session, CSRF, body or handler, unless their
+			// provisioning token is accepted (fail closed).
+			provisioningAuth(deps.Provisioning),
 			deadlineMiddleware(logger),
 		},
 		ErrorHandlerFunc: eh.paramError,
@@ -204,11 +228,15 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 	mux := http.NewServeMux()
 	mux.Handle(AdminPrefix+"/", api404)
 	mux.Handle(APIBaseURL+"/version", api404)
+	// The provisioning operations (since API 1.2) answer the 404 Problem of
+	// their stubs until they are implemented.
+	mux.Handle(ProvisioningPrefix+"/", api404)
 	docs := adminDocsHandler(sessions, logger)
 	mux.Handle(DocsPath, docs)
 	mux.Handle(DocsPath+"/", docs)
 	// The bare prefix would otherwise be redirected by the mux.
 	mux.Handle(AdminPrefix, http.HandlerFunc(notFound))
+	mux.Handle(ProvisioningPrefix, http.HandlerFunc(notFound))
 	// The web interface overrides the Cache-Control: no-store set by noStore
 	// on its fingerprinted assets only.
 	mux.Handle("/", middleware.Chain(ui.adminHandler(), fixedDeadline(RequestDeadline, logger)))

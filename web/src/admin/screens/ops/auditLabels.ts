@@ -105,6 +105,8 @@ export const AUDIT_ACTION_GROUPS = [
       'tenant.abuse_settings_updated',
       'tenant.antivirus_disabled',
       'tenant.antivirus_enabled',
+      'tenant.setup_completed',
+      'tenant.provisioned',
       'webhook.created',
       'webhook.updated',
       'webhook.deleted',
@@ -131,6 +133,7 @@ export const AUDIT_ACTION_GROUPS = [
       'admin.activated',
       'admin.totp_reset_local',
       'admin.password_reset_local',
+      'admin.invited',
     ],
   },
   {
@@ -149,6 +152,8 @@ export const AUDIT_ACTION_GROUPS = [
       'master_key.rotation_started',
       'master_key.rotation_completed',
       'master_key.rotation_failed',
+      'provisioning_token.created',
+      'provisioning_token.revoked',
     ],
   },
 ] as const satisfies readonly AuditActionGroup[];
@@ -178,6 +183,7 @@ export const AUDIT_OBJECT_KINDS = [
   'deposit_session',
   'master_key_rotation',
   'system',
+  'provisioning_token',
 ] as const;
 
 /** Prefix of the pseudonym that replaces an erased address (GDPR erasure). */

@@ -6,6 +6,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Design of version 1.2 ("onboarding"): OpenAPI specification 1.2.0 (16 new operations: update
+  check, background presets, tenant setup state and wizard checklist, proposed legal texts,
+  delegated admin invitation by mail, provisioning API for managed service providers, on-demand
+  TLS `ask` endpoint), answered by stubs until implemented; data model
+  (`docs/architecture/data-model-v1.2.md`) and migrations 0022 to 0025; threat model 1.2 draft
+  (T-244 to T-280, decisions P47 to P54).
+
 ## [1.1.0] - 2026-10-31
 
 The V1.1 scope of the specification (CLAUDE.md section 2, "operations"), on top of the 1.0.0 core:

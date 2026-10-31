@@ -164,7 +164,9 @@ type envConfig struct {
 	// the admin host is always hostAdmin.
 	adminAPI      gen.StrictServerInterface
 	adminSessions AdminSessions
-	idle          time.Duration
+	// provisioning is Deps.Provisioning.
+	provisioning ProvisioningAuthenticator
+	idle         time.Duration
 	// downloadIdle is Deps.DownloadIdleTimeout.
 	downloadIdle time.Duration
 	// docsPublic is Deps.APIDocsPublic.
@@ -207,6 +209,7 @@ func newEnv(t *testing.T, c envConfig) *env {
 		AdminHosts:          []string{hostAdmin},
 		AdminAPI:            c.adminAPI,
 		AdminSessions:       c.adminSessions,
+		Provisioning:        c.provisioning,
 		UploadIdleTimeout:   c.idle,
 		DownloadIdleTimeout: c.downloadIdle,
 		APIDocsPublic:       c.docsPublic,
@@ -391,7 +394,7 @@ func TestUnknownHostOnEveryPath(t *testing.T) {
 func TestIsTenantFree(t *testing.T) {
 	t.Parallel()
 	cases := map[string]bool{
-		HealthPath: true, SpecPath: true,
+		HealthPath: true, SpecPath: true, MetricsPath: true, StatusPath: true, TLSAskPath: true,
 		"/healthz/": false, "//healthz": false, "/api/v1/healthz": false, "/": false, "": false,
 	}
 	for p, want := range cases {
@@ -1175,9 +1178,10 @@ func TestSupervisionRoutes(t *testing.T) {
 			}
 		}
 	}
-	// Without handlers, the paths fall to the 404 problem.
+	// Without handlers, the paths fall to the 404 problem; so does
+	// TLSAskPath until it is implemented (since API 1.2).
 	e = newEnv(t, envConfig{})
-	for _, path := range []string{MetricsPath, StatusPath} {
+	for _, path := range []string{MetricsPath, StatusPath, TLSAskPath + "?domain=" + hostA} {
 		if rec := e.do(t, http.MethodGet, path, hostUnknown, nil); rec.Code != http.StatusNotFound {
 			t.Errorf("%s without handler = %d", path, rec.Code)
 		}

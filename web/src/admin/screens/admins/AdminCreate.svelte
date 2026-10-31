@@ -19,7 +19,7 @@
     createBody,
     emptyCreateForm,
     loadAllPages,
-    splitActivation,
+    splitCreated,
     validateCreate,
     type ActivationLink,
     type Admin,
@@ -82,7 +82,7 @@
   async function submit(): Promise<SubmitOutcome> {
     try {
       const res = await adminApi.post('/admin/admins', { body: createBody(form) });
-      const { account, link: activation } = splitActivation(res.data);
+      const { account, link: activation } = splitCreated(res.data);
       created = account;
       link = activation;
       return { ok: true };

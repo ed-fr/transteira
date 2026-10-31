@@ -163,6 +163,7 @@ const (
 	AuditActionAdminCreated                 AuditAction = "admin.created"
 	AuditActionAdminCredentialsReset        AuditAction = "admin.credentials_reset"
 	AuditActionAdminDeleted                 AuditAction = "admin.deleted"
+	AuditActionAdminInvited                 AuditAction = "admin.invited"
 	AuditActionAdminLogin                   AuditAction = "admin.login"
 	AuditActionAdminLoginFailed             AuditAction = "admin.login_failed"
 	AuditActionAdminLogout                  AuditAction = "admin.logout"
@@ -200,6 +201,8 @@ const (
 	AuditActionMasterKeyRotationStarted     AuditAction = "master_key.rotation_started"
 	AuditActionMyTransfersLinkRequested     AuditAction = "my_transfers.link_requested"
 	AuditActionMyTransfersSignedIn          AuditAction = "my_transfers.signed_in"
+	AuditActionProvisioningTokenCreated     AuditAction = "provisioning_token.created"
+	AuditActionProvisioningTokenRevoked     AuditAction = "provisioning_token.revoked"
 	AuditActionQuotaReached                 AuditAction = "quota.reached"
 	AuditActionQuotaWarning                 AuditAction = "quota.warning"
 	AuditActionRecipientVerified            AuditAction = "recipient.verified"
@@ -216,7 +219,9 @@ const (
 	AuditActionTenantDeletionStarted        AuditAction = "tenant.deletion_started"
 	AuditActionTenantLegalUpdated           AuditAction = "tenant.legal_updated"
 	AuditActionTenantNetworkUpdated         AuditAction = "tenant.network_updated"
+	AuditActionTenantProvisioned            AuditAction = "tenant.provisioned"
 	AuditActionTenantRecipientRulesUpdated  AuditAction = "tenant.recipient_rules_updated"
+	AuditActionTenantSetupCompleted         AuditAction = "tenant.setup_completed"
 	AuditActionTenantSmtpTested             AuditAction = "tenant.smtp_tested"
 	AuditActionTenantSmtpUpdated            AuditAction = "tenant.smtp_updated"
 	AuditActionTenantTemplateReset          AuditAction = "tenant.template_reset"
@@ -260,6 +265,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionAdminCredentialsReset:
 		return true
 	case AuditActionAdminDeleted:
+		return true
+	case AuditActionAdminInvited:
 		return true
 	case AuditActionAdminLogin:
 		return true
@@ -335,6 +342,10 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionMyTransfersSignedIn:
 		return true
+	case AuditActionProvisioningTokenCreated:
+		return true
+	case AuditActionProvisioningTokenRevoked:
+		return true
 	case AuditActionQuotaReached:
 		return true
 	case AuditActionQuotaWarning:
@@ -367,7 +378,11 @@ func (e AuditAction) Valid() bool {
 		return true
 	case AuditActionTenantNetworkUpdated:
 		return true
+	case AuditActionTenantProvisioned:
+		return true
 	case AuditActionTenantRecipientRulesUpdated:
+		return true
+	case AuditActionTenantSetupCompleted:
 		return true
 	case AuditActionTenantSmtpTested:
 		return true
@@ -414,11 +429,12 @@ func (e AuditAction) Valid() bool {
 
 // Defines values for AuditEventActorKind.
 const (
-	AuditEventActorKindAdmin     AuditEventActorKind = "admin"
-	AuditEventActorKindApiToken  AuditEventActorKind = "api_token"
-	AuditEventActorKindDepositor AuditEventActorKind = "depositor"
-	AuditEventActorKindRecipient AuditEventActorKind = "recipient"
-	AuditEventActorKindSystem    AuditEventActorKind = "system"
+	AuditEventActorKindAdmin             AuditEventActorKind = "admin"
+	AuditEventActorKindApiToken          AuditEventActorKind = "api_token"
+	AuditEventActorKindDepositor         AuditEventActorKind = "depositor"
+	AuditEventActorKindProvisioningToken AuditEventActorKind = "provisioning_token"
+	AuditEventActorKindRecipient         AuditEventActorKind = "recipient"
+	AuditEventActorKindSystem            AuditEventActorKind = "system"
 )
 
 // Valid indicates whether the value is a known member of the AuditEventActorKind enum.
@@ -429,6 +445,8 @@ func (e AuditEventActorKind) Valid() bool {
 	case AuditEventActorKindApiToken:
 		return true
 	case AuditEventActorKindDepositor:
+		return true
+	case AuditEventActorKindProvisioningToken:
 		return true
 	case AuditEventActorKindRecipient:
 		return true
@@ -709,6 +727,24 @@ func (e InstanceStatusStatus) Valid() bool {
 	}
 }
 
+// Defines values for InvitationDelivery.
+const (
+	Copy InvitationDelivery = "copy"
+	Mail InvitationDelivery = "mail"
+)
+
+// Valid indicates whether the value is a known member of the InvitationDelivery enum.
+func (e InvitationDelivery) Valid() bool {
+	switch e {
+	case Copy:
+		return true
+	case Mail:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InvitationStatus.
 const (
 	InvitationStatusExpired InvitationStatus = "expired"
@@ -863,6 +899,7 @@ func (e MaintenanceSource) Valid() bool {
 const (
 	ProblemCodeAbuseThresholdBlocked         ProblemCode = "abuse-threshold-blocked"
 	ProblemCodeAccessLinkInvalid             ProblemCode = "access-link-invalid"
+	ProblemCodeAdminAlreadyActive            ProblemCode = "admin-already-active"
 	ProblemCodeAlreadyExists                 ProblemCode = "already-exists"
 	ProblemCodeBlockedFile                   ProblemCode = "blocked-file"
 	ProblemCodeChecksumMismatch              ProblemCode = "checksum-mismatch"
@@ -884,22 +921,30 @@ const (
 	ProblemCodeNewMasterKeyMissing           ProblemCode = "new-master-key-missing"
 	ProblemCodeNotFound                      ProblemCode = "not-found"
 	ProblemCodePayloadTooLarge               ProblemCode = "payload-too-large"
+	ProblemCodeProvisioningScopeExceeded     ProblemCode = "provisioning-scope-exceeded"
+	ProblemCodeProvisioningTokenInvalid      ProblemCode = "provisioning-token-invalid"
 	ProblemCodeQuotaExceeded                 ProblemCode = "quota-exceeded"
 	ProblemCodeRangeNotSatisfiable           ProblemCode = "range-not-satisfiable"
 	ProblemCodeRateLimited                   ProblemCode = "rate-limited"
 	ProblemCodeRecipientDomainRefused        ProblemCode = "recipient-domain-refused"
 	ProblemCodeRecipientVerificationRequired ProblemCode = "recipient-verification-required"
 	ProblemCodeReplyNotAllowed               ProblemCode = "reply-not-allowed"
+	ProblemCodeSetupAlreadyComplete          ProblemCode = "setup-already-complete"
 	ProblemCodeSetupAlreadyDone              ProblemCode = "setup-already-done"
+	ProblemCodeSetupIncomplete               ProblemCode = "setup-incomplete"
 	ProblemCodeSetupTokenInvalid             ProblemCode = "setup-token-invalid"
 	ProblemCodeStateConflict                 ProblemCode = "state-conflict"
+	ProblemCodeSystemSmtpUnavailable         ProblemCode = "system-smtp-unavailable"
+	ProblemCodeTenantInSetup                 ProblemCode = "tenant-in-setup"
 	ProblemCodeTransferGone                  ProblemCode = "transfer-gone"
 	ProblemCodeTransferLocked                ProblemCode = "transfer-locked"
 	ProblemCodeTransferPasswordInvalid       ProblemCode = "transfer-password-invalid"
 	ProblemCodeTransferTooLarge              ProblemCode = "transfer-too-large"
 	ProblemCodeUnauthenticated               ProblemCode = "unauthenticated"
+	ProblemCodeUnknownBackgroundPreset       ProblemCode = "unknown-background-preset"
 	ProblemCodeUnknownTenant                 ProblemCode = "unknown-tenant"
 	ProblemCodeUnsupportedMediaType          ProblemCode = "unsupported-media-type"
+	ProblemCodeUpdateCheckDisabled           ProblemCode = "update-check-disabled"
 	ProblemCodeUploadIncomplete              ProblemCode = "upload-incomplete"
 	ProblemCodeValidationFailed              ProblemCode = "validation-failed"
 	ProblemCodeVerificationCodeInvalid       ProblemCode = "verification-code-invalid"
@@ -912,6 +957,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeAbuseThresholdBlocked:
 		return true
 	case ProblemCodeAccessLinkInvalid:
+		return true
+	case ProblemCodeAdminAlreadyActive:
 		return true
 	case ProblemCodeAlreadyExists:
 		return true
@@ -955,6 +1002,10 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodePayloadTooLarge:
 		return true
+	case ProblemCodeProvisioningScopeExceeded:
+		return true
+	case ProblemCodeProvisioningTokenInvalid:
+		return true
 	case ProblemCodeQuotaExceeded:
 		return true
 	case ProblemCodeRangeNotSatisfiable:
@@ -967,11 +1018,19 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodeReplyNotAllowed:
 		return true
+	case ProblemCodeSetupAlreadyComplete:
+		return true
 	case ProblemCodeSetupAlreadyDone:
+		return true
+	case ProblemCodeSetupIncomplete:
 		return true
 	case ProblemCodeSetupTokenInvalid:
 		return true
 	case ProblemCodeStateConflict:
+		return true
+	case ProblemCodeSystemSmtpUnavailable:
+		return true
+	case ProblemCodeTenantInSetup:
 		return true
 	case ProblemCodeTransferGone:
 		return true
@@ -983,9 +1042,13 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodeUnauthenticated:
 		return true
+	case ProblemCodeUnknownBackgroundPreset:
+		return true
 	case ProblemCodeUnknownTenant:
 		return true
 	case ProblemCodeUnsupportedMediaType:
+		return true
+	case ProblemCodeUpdateCheckDisabled:
 		return true
 	case ProblemCodeUploadIncomplete:
 		return true
@@ -1137,16 +1200,34 @@ func (e SmtpTestResultStage) Valid() bool {
 
 // Defines values for TenantStatus.
 const (
-	Active   TenantStatus = "active"
-	Deleting TenantStatus = "deleting"
+	TenantStatusActive   TenantStatus = "active"
+	TenantStatusDeleting TenantStatus = "deleting"
 )
 
 // Valid indicates whether the value is a known member of the TenantStatus enum.
 func (e TenantStatus) Valid() bool {
 	switch e {
-	case Active:
+	case TenantStatusActive:
 		return true
-	case Deleting:
+	case TenantStatusDeleting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TenantCreatedStatus.
+const (
+	TenantCreatedStatusActive   TenantCreatedStatus = "active"
+	TenantCreatedStatusDeleting TenantCreatedStatus = "deleting"
+)
+
+// Valid indicates whether the value is a known member of the TenantCreatedStatus enum.
+func (e TenantCreatedStatus) Valid() bool {
+	switch e {
+	case TenantCreatedStatusActive:
+		return true
+	case TenantCreatedStatusDeleting:
 		return true
 	default:
 		return false
@@ -1171,6 +1252,60 @@ func (e TenantFeaturesAntivirus) Valid() bool {
 	}
 }
 
+// Defines values for TenantSetupItemKey.
+const (
+	TenantSetupItemKeyBrandingColors   TenantSetupItemKey = "branding_colors"
+	TenantSetupItemKeyBrandingLogo     TenantSetupItemKey = "branding_logo"
+	TenantSetupItemKeyInternalDomains  TenantSetupItemKey = "internal_domains"
+	TenantSetupItemKeyInternalNetworks TenantSetupItemKey = "internal_networks"
+	TenantSetupItemKeyLegalNotice      TenantSetupItemKey = "legal_notice"
+	TenantSetupItemKeyMailTemplates    TenantSetupItemKey = "mail_templates"
+	TenantSetupItemKeyPrivacyPolicy    TenantSetupItemKey = "privacy_policy"
+	TenantSetupItemKeySmtp             TenantSetupItemKey = "smtp"
+)
+
+// Valid indicates whether the value is a known member of the TenantSetupItemKey enum.
+func (e TenantSetupItemKey) Valid() bool {
+	switch e {
+	case TenantSetupItemKeyBrandingColors:
+		return true
+	case TenantSetupItemKeyBrandingLogo:
+		return true
+	case TenantSetupItemKeyInternalDomains:
+		return true
+	case TenantSetupItemKeyInternalNetworks:
+		return true
+	case TenantSetupItemKeyLegalNotice:
+		return true
+	case TenantSetupItemKeyMailTemplates:
+		return true
+	case TenantSetupItemKeyPrivacyPolicy:
+		return true
+	case TenantSetupItemKeySmtp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TenantSetupState.
+const (
+	TenantSetupStateActive TenantSetupState = "active"
+	TenantSetupStateSetup  TenantSetupState = "setup"
+)
+
+// Valid indicates whether the value is a known member of the TenantSetupState enum.
+func (e TenantSetupState) Valid() bool {
+	switch e {
+	case TenantSetupStateActive:
+		return true
+	case TenantSetupStateSetup:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TenantStatsPeriod.
 const (
 	TenantStatsPeriodN12m TenantStatsPeriod = "12m"
@@ -1186,6 +1321,24 @@ func (e TenantStatsPeriod) Valid() bool {
 	case TenantStatsPeriodN30d:
 		return true
 	case TenantStatsPeriodN7d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TextProposalDocument.
+const (
+	TextProposalDocumentLegalNotice   TextProposalDocument = "legal-notice"
+	TextProposalDocumentPrivacyPolicy TextProposalDocument = "privacy-policy"
+)
+
+// Valid indicates whether the value is a known member of the TextProposalDocument enum.
+func (e TextProposalDocument) Valid() bool {
+	switch e {
+	case TextProposalDocumentLegalNotice:
+		return true
+	case TextProposalDocumentPrivacyPolicy:
 		return true
 	default:
 		return false
@@ -1243,6 +1396,30 @@ func (e TransferStatus) Valid() bool {
 	case TransferStatusScanning:
 		return true
 	case TransferStatusUploading:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateCheckLastError.
+const (
+	UpdateCheckLastErrorHttp    UpdateCheckLastError = "http"
+	UpdateCheckLastErrorNetwork UpdateCheckLastError = "network"
+	UpdateCheckLastErrorNone    UpdateCheckLastError = "none"
+	UpdateCheckLastErrorParse   UpdateCheckLastError = "parse"
+)
+
+// Valid indicates whether the value is a known member of the UpdateCheckLastError enum.
+func (e UpdateCheckLastError) Valid() bool {
+	switch e {
+	case UpdateCheckLastErrorHttp:
+		return true
+	case UpdateCheckLastErrorNetwork:
+		return true
+	case UpdateCheckLastErrorNone:
+		return true
+	case UpdateCheckLastErrorParse:
 		return true
 	default:
 		return false
@@ -1330,6 +1507,8 @@ const (
 	WebhookEventTypeMasterKeyRotationFailed    WebhookEventType = "master_key.rotation_failed"
 	WebhookEventTypeQuotaReached               WebhookEventType = "quota.reached"
 	WebhookEventTypeQuotaWarning               WebhookEventType = "quota.warning"
+	WebhookEventTypeTenantProvisioned          WebhookEventType = "tenant.provisioned"
+	WebhookEventTypeTenantSetupCompleted       WebhookEventType = "tenant.setup_completed"
 	WebhookEventTypeVirusDetected              WebhookEventType = "virus.detected"
 	WebhookEventTypeWebhookTest                WebhookEventType = "webhook.test"
 )
@@ -1362,6 +1541,10 @@ func (e WebhookEventType) Valid() bool {
 	case WebhookEventTypeQuotaReached:
 		return true
 	case WebhookEventTypeQuotaWarning:
+		return true
+	case WebhookEventTypeTenantProvisioned:
+		return true
+	case WebhookEventTypeTenantSetupCompleted:
 		return true
 	case WebhookEventTypeVirusDetected:
 		return true
@@ -1470,14 +1653,23 @@ func (e GetTenantStatsParamsPeriod) Valid() bool {
 
 // Defines values for GetTenantAssetParamsAsset.
 const (
-	Background GetTenantAssetParamsAsset = "background"
-	Logo       GetTenantAssetParamsAsset = "logo"
+	AppleTouchIcon GetTenantAssetParamsAsset = "apple-touch-icon"
+	Background     GetTenantAssetParamsAsset = "background"
+	Favicon        GetTenantAssetParamsAsset = "favicon"
+	Favicon32      GetTenantAssetParamsAsset = "favicon-32"
+	Logo           GetTenantAssetParamsAsset = "logo"
 )
 
 // Valid indicates whether the value is a known member of the GetTenantAssetParamsAsset enum.
 func (e GetTenantAssetParamsAsset) Valid() bool {
 	switch e {
+	case AppleTouchIcon:
+		return true
 	case Background:
+		return true
+	case Favicon:
+		return true
+	case Favicon32:
 		return true
 	case Logo:
 		return true
@@ -1685,13 +1877,69 @@ type Admin struct {
 // AdminCreate defines model for AdminCreate.
 type AdminCreate struct {
 	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
-	Email       Email `json:"email"`
-	RequireTotp *bool `json:"requireTotp,omitempty"`
+	Email Email `json:"email"`
+
+	// Invitation Since 1.2. Delivery of the activation link of an admin. Without `delivery`, `copy` (the 1.1
+	// behaviour); `mail` must be asked for explicitly and needs the system SMTP
+	// (`TT_SYSTEM_SMTP`). `language` is the language
+	// of the mail (default: the default language of the first tenant of the admin, else `en`);
+	// ignored with `copy`.
+	Invitation  *AdminInvitation `json:"invitation,omitempty"`
+	RequireTotp *bool            `json:"requireTotp,omitempty"`
 
 	// Role Reserved for V2 - `auditor` (read-only on assigned tenants).
 	Role      AdminRole `json:"role"`
 	TenantIds *[]string `json:"tenantIds,omitempty"`
 	Username  Username  `json:"username"`
+}
+
+// AdminCreated Since 1.2. An admin account with its new single-use activation link, valid 72 hours,
+// returned by `createAdmin` and `inviteAdmin`: `activationUrl` is present, once, only when
+// `invitationDelivery` is `copy`; with `mail` the link was mailed to the admin and is never
+// returned. Only a hash of the link token is stored.
+type AdminCreated struct {
+	// Activated True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used.
+	Activated bool `json:"activated"`
+
+	// ActivationExpiresAt End of validity of the link (72 hours).
+	ActivationExpiresAt time.Time `json:"activationExpiresAt"`
+
+	// ActivationUrl Only with `invitationDelivery: copy`. Activation link on the admin host: `https://<admin host>/admin/activate#<token>`. The token is in the fragment, so that it never reaches a server log; the page posts it to `activateAdmin`.
+	ActivationUrl *string   `json:"activationUrl,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	Disabled      bool      `json:"disabled"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email Email  `json:"email"`
+	Id    string `json:"id"`
+
+	// InvitationDelivery Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+	InvitationDelivery InvitationDelivery `json:"invitationDelivery"`
+	LastLoginAt        *time.Time         `json:"lastLoginAt,omitempty"`
+
+	// RequireTotp Always true for super admins.
+	RequireTotp *bool `json:"requireTotp,omitempty"`
+
+	// Role Reserved for V2 - `auditor` (read-only on assigned tenants).
+	Role AdminRole `json:"role"`
+
+	// TenantIds Empty for super admins (implicit access to all tenants).
+	TenantIds   []string `json:"tenantIds"`
+	TotpEnabled bool     `json:"totpEnabled"`
+	Username    Username `json:"username"`
+}
+
+// AdminInvitation Since 1.2. Delivery of the activation link of an admin. Without `delivery`, `copy` (the 1.1
+// behaviour); `mail` must be asked for explicitly and needs the system SMTP
+// (`TT_SYSTEM_SMTP`). `language` is the language
+// of the mail (default: the default language of the first tenant of the admin, else `en`);
+// ignored with `copy`.
+type AdminInvitation struct {
+	// Delivery Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+	Delivery *InvitationDelivery `json:"delivery,omitempty"`
+
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language *Language `json:"language,omitempty"`
 }
 
 // AdminList defines model for AdminList.
@@ -1877,7 +2125,7 @@ type AdminUpdate struct {
 	TenantIds *[]string  `json:"tenantIds,omitempty"`
 }
 
-// AdminWithActivation An admin account with its new single-use activation link, returned once by `createAdmin` and `resetAdminCredentials`. Only a hash of the link token is stored; the link is never sent by email.
+// AdminWithActivation An admin account with its new single-use activation link, returned once by `resetAdminCredentials` (and by `createAdmin` until 1.1, see `AdminCreated`). Only a hash of the link token is stored; this link is never sent by email.
 type AdminWithActivation struct {
 	// Activated True once the admin has chosen a password from an activation link; false after a credentials reset until the new link is used.
 	Activated bool `json:"activated"`
@@ -2085,6 +2333,12 @@ type ApiTokenUpdate = json.RawMessage
 // `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
 // admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
 // a link is actually sent.
+// Since 1.2: `admin.invited` carries `details.delivery` (`mail` or `copy`), never the link;
+// `admin.activated` is recorded with the client IP of the activation;
+// `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
+// `provisioning_token`, actor the token identifier) names the created tenant;
+// `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
+// the secret.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -2130,9 +2384,17 @@ type AuditEvent struct {
 	// `tenant.antivirus_disabled` and `tenant.antivirus_enabled` are recorded for the super
 	// admin's change of `antivirusEnabled`; `my_transfers.link_requested` is recorded only when
 	// a link is actually sent.
+	// Since 1.2: `admin.invited` carries `details.delivery` (`mail` or `copy`), never the link;
+	// `admin.activated` is recorded with the client IP of the activation;
+	// `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
+	// `provisioning_token`, actor the token identifier) names the created tenant;
+	// `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
+	// the secret.
 	Action AuditAction `json:"action"`
 	Actor  struct {
-		Id   string              `json:"id"`
+		Id string `json:"id"`
+
+		// Kind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API.
 		Kind AuditEventActorKind `json:"kind"`
 	} `json:"actor"`
 	Details *map[string]interface{} `json:"details,omitempty"`
@@ -2148,7 +2410,7 @@ type AuditEvent struct {
 	TenantId *string `json:"tenantId,omitempty"`
 }
 
-// AuditEventActorKind defines model for AuditEvent.Actor.Kind.
+// AuditEventActorKind Kind of the actor; since 1.2, `provisioning_token` for the tenants created through the provisioning API.
 type AuditEventActorKind string
 
 // AuditEventList defines model for AuditEventList.
@@ -2157,6 +2419,29 @@ type AuditEventList struct {
 
 	// NextCursor Opaque cursor for the next page; absent on the last page.
 	NextCursor *PageCursor `json:"nextCursor,omitempty"`
+}
+
+// BackgroundPreset Since 1.2. A background image of the library, generated by the server.
+type BackgroundPreset struct {
+	// Id Since 1.2. Stable identifier of a background preset generated by the server (for example `default`, `aurora`, `ocean`); `default` is the default background.
+	Id BackgroundPresetId `json:"id"`
+
+	// Labels Label of the preset in every interface language, keyed by language.
+	Labels map[string]string `json:"labels"`
+}
+
+// BackgroundPresetChoice Since 1.2. Background preset chosen for a tenant; `null` or `default` resets to the default background.
+type BackgroundPresetChoice struct {
+	// Preset Identifier of the preset.
+	Preset *string `json:"preset"`
+}
+
+// BackgroundPresetId Since 1.2. Stable identifier of a background preset generated by the server (for example `default`, `aurora`, `ocean`); `default` is the default background.
+type BackgroundPresetId = string
+
+// BackgroundPresetList Since 1.2. The background presets, in display order.
+type BackgroundPresetList struct {
+	Items []BackgroundPreset `json:"items"`
 }
 
 // BlocklistEntry defines model for BlocklistEntry.
@@ -2191,11 +2476,14 @@ type BlocklistList struct {
 
 // Branding defines model for Branding.
 type Branding struct {
-	AccentColor   HexColor         `json:"accentColor"`
-	Contrast      []ContrastResult `json:"contrast"`
-	HasBackground bool             `json:"hasBackground"`
-	HasLogo       bool             `json:"hasLogo"`
-	PrimaryColor  HexColor         `json:"primaryColor"`
+	AccentColor HexColor `json:"accentColor"`
+
+	// BackgroundPreset Since 1.2. Background preset of the tenant, served when `hasBackground` is false.
+	BackgroundPreset *BackgroundPresetId `json:"backgroundPreset,omitempty"`
+	Contrast         []ContrastResult    `json:"contrast"`
+	HasBackground    bool                `json:"hasBackground"`
+	HasLogo          bool                `json:"hasLogo"`
+	PrimaryColor     HexColor            `json:"primaryColor"`
 }
 
 // BrandingUpdate defines model for BrandingUpdate.
@@ -2307,6 +2595,19 @@ type DataSubjectSummary struct {
 	TransfersAsRecipient int  `json:"transfersAsRecipient"`
 	TransfersAsSender    int  `json:"transfersAsSender"`
 	VerifiedAddress      bool `json:"verifiedAddress"`
+}
+
+// DelegatedAdminInvited Since 1.2. The delegated admin created with a tenant; `activationUrl` is present, once, only when `invitationDelivery` is `copy`.
+type DelegatedAdminInvited struct {
+	// ActivationExpiresAt End of validity of the link (72 hours).
+	ActivationExpiresAt time.Time `json:"activationExpiresAt"`
+
+	// ActivationUrl Only with `invitationDelivery: copy`: activation link on the admin host, token in the fragment.
+	ActivationUrl *string `json:"activationUrl,omitempty"`
+	Id            string  `json:"id"`
+
+	// InvitationDelivery Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+	InvitationDelivery InvitationDelivery `json:"invitationDelivery"`
 }
 
 // DepositSession defines model for DepositSession.
@@ -2507,6 +2808,16 @@ type FilePath = string
 // Fqdn defines model for Fqdn.
 type Fqdn = string
 
+// FqdnSuffixes Since 1.2. Domain suffixes the FQDN of a tenant created with the token must end with. Each
+// suffix starts with a dot and has at least two labels (`.transfer.example.com`, not `.com`);
+// it is normalized like an FQDN (lowercase, punycode) and matched on a label boundary: the
+// FQDN must have at least one more label in front of it (`entity-c.transfer.example.com`
+// matches `.transfer.example.com`, `eviltransfer.example.com` does not). A suffix equal to an
+// admin host (`TT_ADMIN_HOSTS`) or to a parent domain of one (an admin host ending with the
+// suffix) is refused with `400 validation-failed`, and an FQDN equal to an admin host is never
+// created.
+type FqdnSuffixes = []string
+
 // GlobalStats defines model for GlobalStats.
 type GlobalStats struct {
 	// Disk Usage of the filesystem that holds the data directory (encrypted files).
@@ -2646,6 +2957,9 @@ type InvitationCreate struct {
 	// Message Optional text for the invited person. Control and invisible characters are removed.
 	Message *string `json:"message,omitempty"`
 }
+
+// InvitationDelivery Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+type InvitationDelivery string
 
 // InvitationList defines model for InvitationList.
 type InvitationList struct {
@@ -2918,6 +3232,23 @@ type NetworkRules struct {
 	InternalDomains []string `json:"internalDomains"`
 }
 
+// NewDelegatedAdmin Since 1.2. First delegated admin of a new tenant, created with it in one transaction:
+// assigned to that tenant only, TOTP required, activation link valid 72 hours delivered as
+// `AdminInvitation` says (`copy` when `delivery` is absent; `language` is also the language
+// of the mail). With `provisionTenant`, the delivery is always `mail`: `delivery` must be
+// absent or `mail`.
+type NewDelegatedAdmin struct {
+	// Delivery Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+	Delivery *InvitationDelivery `json:"delivery,omitempty"`
+
+	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	Email Email `json:"email"`
+
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language Language `json:"language"`
+	Username Username `json:"username"`
+}
+
 // OfficeHours Office hours of the tenant, in the `timeZone` of the thresholds; a transfer created outside them raises an unusual activity alert.
 type OfficeHours struct {
 	// End Local end time (HH:MM, `24:00` for the end of the day), after `start`.
@@ -2956,7 +3287,7 @@ type Problem struct {
 	// Detail Localised human-readable explanation.
 	Detail *string `json:"detail,omitempty"`
 
-	// Errors Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met).
+	// Errors Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met), and since 1.2 `setup-incomplete` (`field` is the key of a required setup item not done, `code` is `not-done`) and `provisioning-scope-exceeded` (the field outside the scope of the token).
 	Errors *[]struct {
 		Allowed *[]interface{} `json:"allowed,omitempty"`
 		Code    string         `json:"code"`
@@ -2988,6 +3319,172 @@ type Problem struct {
 
 // ProblemCode Stable error code. See `docs/api/errors.md`.
 type ProblemCode string
+
+// ProvisionTenantRequest Since 1.2. A tenant to create through the provisioning API, always in the `setup` state, with its first delegated admin.
+type ProvisionTenantRequest struct {
+	// BackgroundPreset Since 1.2. Stable identifier of a background preset generated by the server (for example `default`, `aurora`, `ocean`); `default` is the default background.
+	BackgroundPreset *BackgroundPresetId `json:"backgroundPreset,omitempty"`
+
+	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
+	DefaultLanguage Language `json:"defaultLanguage"`
+
+	// DelegatedAdmin Since 1.2. First delegated admin of a new tenant, created with it in one transaction:
+	// assigned to that tenant only, TOTP required, activation link valid 72 hours delivered as
+	// `AdminInvitation` says (`copy` when `delivery` is absent; `language` is also the language
+	// of the mail). With `provisionTenant`, the delivery is always `mail`: `delivery` must be
+	// absent or `mail`.
+	DelegatedAdmin    NewDelegatedAdmin `json:"delegatedAdmin"`
+	Fqdn              Fqdn              `json:"fqdn"`
+	MaxTransferBytes  *int64            `json:"maxTransferBytes,omitempty"`
+	Name              string            `json:"name"`
+	StorageQuotaBytes int64             `json:"storageQuotaBytes"`
+}
+
+// ProvisionedTenant Since 1.2. What a provisioning token sees of a tenant it created.
+type ProvisionedTenant struct {
+	CreatedAt time.Time `json:"createdAt"`
+
+	// DelegatedAdminActivated The delegated admin created with the tenant has activated the account.
+	DelegatedAdminActivated bool   `json:"delegatedAdminActivated"`
+	Fqdn                    Fqdn   `json:"fqdn"`
+	Id                      string `json:"id"`
+	Name                    string `json:"name"`
+
+	// SetupState Since 1.2. `setup`: the tenant is being configured and refuses deposits (`503 tenant-in-setup`); `active`: open.
+	SetupState TenantSetupState `json:"setupState"`
+}
+
+// ProvisionedTenantList Since 1.2. The tenants created by a provisioning token.
+type ProvisionedTenantList struct {
+	Items []ProvisionedTenant `json:"items"`
+}
+
+// ProvisioningCidrs Since 1.2. IPv4 or IPv6 CIDR ranges a provisioning token may be used from; `0.0.0.0/0` and `::/0` are refused.
+type ProvisioningCidrs = []string
+
+// ProvisioningToken Since 1.2. A provisioning token (never its secret).
+type ProvisioningToken struct {
+	// AllowedCidrs Since 1.2. IPv4 or IPv6 CIDR ranges a provisioning token may be used from; `0.0.0.0/0` and `::/0` are refused.
+	AllowedCidrs ProvisioningCidrs `json:"allowedCidrs"`
+
+	// AllowedFqdnSuffixes Since 1.2. Domain suffixes the FQDN of a tenant created with the token must end with. Each
+	// suffix starts with a dot and has at least two labels (`.transfer.example.com`, not `.com`);
+	// it is normalized like an FQDN (lowercase, punycode) and matched on a label boundary: the
+	// FQDN must have at least one more label in front of it (`entity-c.transfer.example.com`
+	// matches `.transfer.example.com`, `eviltransfer.example.com` does not). A suffix equal to an
+	// admin host (`TT_ADMIN_HOSTS`) or to a parent domain of one (an admin host ending with the
+	// suffix) is refused with `400 validation-failed`, and an FQDN equal to an admin host is never
+	// created.
+	AllowedFqdnSuffixes FqdnSuffixes `json:"allowedFqdnSuffixes"`
+	CreatedAt           time.Time    `json:"createdAt"`
+
+	// CreatedBy Identifier (`adm_...`) of the super admin who created it; the interface resolves the name.
+	CreatedBy string `json:"createdBy"`
+
+	// ExpiresAt Optional expiry; `null` means the token never expires.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt Last successful use; updated at most once a minute.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+
+	// MaxStorageQuotaBytes Highest storage quota of a tenant created with the token.
+	MaxStorageQuotaBytes int64 `json:"maxStorageQuotaBytes"`
+
+	// MaxTenants Highest number of live tenants created with the token.
+	MaxTenants int `json:"maxTenants"`
+
+	// MaxTransferBytes Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB.
+	MaxTransferBytes *int64 `json:"maxTransferBytes,omitempty"`
+	Name             string `json:"name"`
+
+	// Prefix First characters of the token, to recognise it.
+	Prefix string `json:"prefix"`
+
+	// RevokedAt Revocation date; a revoked token is refused immediately.
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
+
+	// TenantsCreated Live tenants created with the token.
+	TenantsCreated int `json:"tenantsCreated"`
+}
+
+// ProvisioningTokenCreate Since 1.2. A new provisioning token.
+type ProvisioningTokenCreate struct {
+	// AllowedCidrs Since 1.2. IPv4 or IPv6 CIDR ranges a provisioning token may be used from; `0.0.0.0/0` and `::/0` are refused.
+	AllowedCidrs ProvisioningCidrs `json:"allowedCidrs"`
+
+	// AllowedFqdnSuffixes Since 1.2. Domain suffixes the FQDN of a tenant created with the token must end with. Each
+	// suffix starts with a dot and has at least two labels (`.transfer.example.com`, not `.com`);
+	// it is normalized like an FQDN (lowercase, punycode) and matched on a label boundary: the
+	// FQDN must have at least one more label in front of it (`entity-c.transfer.example.com`
+	// matches `.transfer.example.com`, `eviltransfer.example.com` does not). A suffix equal to an
+	// admin host (`TT_ADMIN_HOSTS`) or to a parent domain of one (an admin host ending with the
+	// suffix) is refused with `400 validation-failed`, and an FQDN equal to an admin host is never
+	// created.
+	AllowedFqdnSuffixes FqdnSuffixes `json:"allowedFqdnSuffixes"`
+
+	// Code Current TOTP code of the super admin (re-confirmation, as `TotpCode.code`); exactly one of `code` or `recoveryCode`.
+	Code                 *string    `json:"code,omitempty"`
+	ExpiresAt            *time.Time `json:"expiresAt,omitempty"`
+	MaxStorageQuotaBytes int64      `json:"maxStorageQuotaBytes"`
+
+	// MaxTenants Highest number of live tenants created with the token.
+	MaxTenants       int    `json:"maxTenants"`
+	MaxTransferBytes *int64 `json:"maxTransferBytes,omitempty"`
+	Name             string `json:"name"`
+
+	// RecoveryCode Recovery code instead of `code` (consumed and audited).
+	RecoveryCode *string `json:"recoveryCode,omitempty"`
+}
+
+// ProvisioningTokenCreated Since 1.2. A new provisioning token with its secret, returned once.
+type ProvisioningTokenCreated struct {
+	// AllowedCidrs Since 1.2. IPv4 or IPv6 CIDR ranges a provisioning token may be used from; `0.0.0.0/0` and `::/0` are refused.
+	AllowedCidrs ProvisioningCidrs `json:"allowedCidrs"`
+
+	// AllowedFqdnSuffixes Since 1.2. Domain suffixes the FQDN of a tenant created with the token must end with. Each
+	// suffix starts with a dot and has at least two labels (`.transfer.example.com`, not `.com`);
+	// it is normalized like an FQDN (lowercase, punycode) and matched on a label boundary: the
+	// FQDN must have at least one more label in front of it (`entity-c.transfer.example.com`
+	// matches `.transfer.example.com`, `eviltransfer.example.com` does not). A suffix equal to an
+	// admin host (`TT_ADMIN_HOSTS`) or to a parent domain of one (an admin host ending with the
+	// suffix) is refused with `400 validation-failed`, and an FQDN equal to an admin host is never
+	// created.
+	AllowedFqdnSuffixes FqdnSuffixes `json:"allowedFqdnSuffixes"`
+	CreatedAt           time.Time    `json:"createdAt"`
+
+	// CreatedBy Identifier (`adm_...`) of the super admin who created it; the interface resolves the name.
+	CreatedBy string `json:"createdBy"`
+
+	// ExpiresAt Optional expiry; `null` means the token never expires.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Id        string     `json:"id"`
+
+	// LastUsedAt Last successful use; updated at most once a minute.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+
+	// MaxStorageQuotaBytes Highest storage quota of a tenant created with the token.
+	MaxStorageQuotaBytes int64 `json:"maxStorageQuotaBytes"`
+
+	// MaxTenants Highest number of live tenants created with the token.
+	MaxTenants int `json:"maxTenants"`
+
+	// MaxTransferBytes Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB.
+	MaxTransferBytes *int64 `json:"maxTransferBytes,omitempty"`
+	Name             string `json:"name"`
+
+	// Prefix First characters of the token, to recognise it.
+	Prefix string `json:"prefix"`
+
+	// RevokedAt Revocation date; a revoked token is refused immediately.
+	RevokedAt *time.Time `json:"revokedAt,omitempty"`
+
+	// TenantsCreated Live tenants created with the token.
+	TenantsCreated int `json:"tenantsCreated"`
+
+	// Token Secret value (`ttp_` followed by 43 base62 characters), returned only once.
+	Token string `json:"token"`
+}
 
 // PublicConfidentialityLevel Since 1.1. A confidentiality level as offered to senders, label in the response language.
 type PublicConfidentialityLevel struct {
@@ -3048,6 +3545,9 @@ type PublicTenant struct {
 		// BackgroundUrl URL of the background image (the default one when the tenant has none).
 		BackgroundUrl string `json:"backgroundUrl"`
 
+		// FaviconUrl Since 1.2. URL of the favicon (`image/x-icon`); the PNG variants are served at `favicon-32` and `apple-touch-icon` beside it. Always present: the built-in icon when the tenant has no logo.
+		FaviconUrl *string `json:"faviconUrl,omitempty"`
+
 		// HasBackground The tenant configured a background image (otherwise the default one is served).
 		HasBackground bool `json:"hasBackground"`
 
@@ -3087,6 +3587,9 @@ type PublicTenant struct {
 	// criterion 8.7). Present if and only if `maintenanceMessage` is present.
 	MaintenanceMessageLanguage *Language `json:"maintenanceMessageLanguage,omitempty"`
 	Name                       string    `json:"name"`
+
+	// SetupState Since 1.2. `setup` while the tenant is being configured: the public interface shows a "being configured" page and the deposit operations answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`).
+	SetupState *TenantSetupState `json:"setupState,omitempty"`
 }
 
 // PublicTenantLegalDocuments defines model for PublicTenant.LegalDocuments.
@@ -3401,6 +3904,18 @@ type SystemSettings struct {
 // (`invalid-email` otherwise). An unknown member is refused.
 type SystemSettingsUpdate = json.RawMessage
 
+// SystemVersion Since 1.2. Running version and outcome of the last check for a newer release.
+type SystemVersion struct {
+	// Commit Commit the binary was built from.
+	Commit *string `json:"commit,omitempty"`
+
+	// UpdateCheck Since 1.2. Outcome of the check for a newer release (never an automatic update).
+	UpdateCheck UpdateCheck `json:"updateCheck"`
+
+	// Version SemVer of the running instance.
+	Version string `json:"version"`
+}
+
 // Tenant defines model for Tenant.
 type Tenant struct {
 	// AllowRemoteInternalDeposit Since 1.1. Addresses of an internal domain already verified from the internal network may deposit from outside, with a code each time.
@@ -3428,6 +3943,9 @@ type Tenant struct {
 	MaxTransferCeiling int64  `json:"maxTransferCeiling"`
 	Name               string `json:"name"`
 
+	// SetupState Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`.
+	SetupState *TenantSetupState `json:"setupState,omitempty"`
+
 	// Status `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
 	Status            TenantStatus `json:"status"`
 	StorageQuotaBytes ByteSize     `json:"storageQuotaBytes"`
@@ -3443,16 +3961,75 @@ type TenantStatus string
 
 // TenantCreate defines model for TenantCreate.
 type TenantCreate struct {
+	// BackgroundPreset Since 1.2. Background preset of the tenant (see `listBackgroundPresets`).
+	BackgroundPreset *BackgroundPresetId `json:"backgroundPreset,omitempty"`
+
 	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
-	DefaultLanguage  Language `json:"defaultLanguage"`
-	Fqdn             Fqdn     `json:"fqdn"`
-	MaxTransferBytes *int64   `json:"maxTransferBytes,omitempty"`
+	DefaultLanguage Language `json:"defaultLanguage"`
+
+	// DelegatedAdmin Since 1.2. First delegated admin of a new tenant, created with it in one transaction:
+	// assigned to that tenant only, TOTP required, activation link valid 72 hours delivered as
+	// `AdminInvitation` says (`copy` when `delivery` is absent; `language` is also the language
+	// of the mail). With `provisionTenant`, the delivery is always `mail`: `delivery` must be
+	// absent or `mail`.
+	DelegatedAdmin   *NewDelegatedAdmin `json:"delegatedAdmin,omitempty"`
+	Fqdn             Fqdn               `json:"fqdn"`
+	MaxTransferBytes *int64             `json:"maxTransferBytes,omitempty"`
 
 	// MaxTransferCeiling Ceiling of `maxTransferBytes` for the delegated admins; defaults to `maxTransferBytes`, which must not exceed it.
 	MaxTransferCeiling *int64 `json:"maxTransferCeiling,omitempty"`
 	Name               string `json:"name"`
-	StorageQuotaBytes  int64  `json:"storageQuotaBytes"`
+
+	// SetupState Since 1.2. Initial state: `active` when absent (the 1.1 behaviour), or `setup` until the setup is completed (`completeTenantSetup`). The administration interface sends `setup`.
+	SetupState        *TenantSetupState `json:"setupState,omitempty"`
+	StorageQuotaBytes int64             `json:"storageQuotaBytes"`
 }
+
+// TenantCreated The created tenant; since 1.2 with its first delegated admin when `TenantCreate.delegatedAdmin` was given.
+type TenantCreated struct {
+	// AllowRemoteInternalDeposit Since 1.1. Addresses of an internal domain already verified from the internal network may deposit from outside, with a code each time.
+	AllowRemoteInternalDeposit *bool `json:"allowRemoteInternalDeposit,omitempty"`
+
+	// AllowTransferReply Since 1.1. Recipients may send files back to the sender of a transfer (`startTransferReply`).
+	AllowTransferReply *bool `json:"allowTransferReply,omitempty"`
+
+	// AntivirusEffective Since 1.1. Read only: files of the tenant are really analysed (`antivirusEnabled` and an instance engine other than `none`).
+	AntivirusEffective *bool `json:"antivirusEffective,omitempty"`
+
+	// AntivirusEnabled Since 1.1. Antivirus analysis of the tenant's files; changed by the super admin only.
+	AntivirusEnabled *bool     `json:"antivirusEnabled,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+
+	// DefaultLanguage Supported UI language (ISO 639-1). New languages may be added.
+	DefaultLanguage Language `json:"defaultLanguage"`
+
+	// DelegatedAdmin Since 1.2. The delegated admin created with a tenant; `activationUrl` is present, once, only when `invitationDelivery` is `copy`.
+	DelegatedAdmin *DelegatedAdminInvited `json:"delegatedAdmin,omitempty"`
+	Fqdn           Fqdn                   `json:"fqdn"`
+	Id             string                 `json:"id"`
+
+	// MaxTransferBytes Per-transfer size limit.
+	MaxTransferBytes int64 `json:"maxTransferBytes"`
+
+	// MaxTransferCeiling Ceiling of `maxTransferBytes`, set by the super admin: a delegated admin may set `maxTransferBytes` at most to it.
+	MaxTransferCeiling int64  `json:"maxTransferCeiling"`
+	Name               string `json:"name"`
+
+	// SetupState Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`.
+	SetupState *TenantSetupState `json:"setupState,omitempty"`
+
+	// Status `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
+	Status            TenantCreatedStatus `json:"status"`
+	StorageQuotaBytes ByteSize            `json:"storageQuotaBytes"`
+	StorageUsedBytes  ByteSize            `json:"storageUsedBytes"`
+	UpdatedAt         time.Time           `json:"updatedAt"`
+
+	// WebhookIncludeAddresses Since 1.1. The tenant webhooks receive the sender and recipient addresses concerned (`WebhookEvent.addresses`); off by default (minimal payloads).
+	WebhookIncludeAddresses *bool `json:"webhookIncludeAddresses,omitempty"`
+}
+
+// TenantCreatedStatus `deleting` while a deletion is in progress or left unfinished (seen by the super admin only).
+type TenantCreatedStatus string
 
 // TenantFeatures Since 1.1. Real rules of the tenant, for the deposit form and the built-in help.
 type TenantFeatures struct {
@@ -3496,6 +4073,39 @@ type TenantRef struct {
 	Name string `json:"name"`
 }
 
+// TenantSetup Since 1.2. Setup state and checklist of a tenant.
+type TenantSetup struct {
+	// CanComplete Every required item is done.
+	CanComplete bool              `json:"canComplete"`
+	Items       []TenantSetupItem `json:"items"`
+
+	// SetupState Since 1.2. `setup`: the tenant is being configured and refuses deposits (`503 tenant-in-setup`); `active`: open.
+	SetupState TenantSetupState `json:"setupState"`
+}
+
+// TenantSetupCompletion Since 1.2. Completion of the setup. `force` (super admin only) opens the tenant even when required items are not done; `mailTemplatesReviewed` records the review of the mail templates.
+type TenantSetupCompletion struct {
+	Force                 *bool `json:"force,omitempty"`
+	MailTemplatesReviewed *bool `json:"mailTemplatesReviewed,omitempty"`
+}
+
+// TenantSetupItem Since 1.2. One item of the setup checklist.
+type TenantSetupItem struct {
+	Done bool `json:"done"`
+
+	// Key Since 1.2. Item of the setup checklist (see `getTenantSetup`). New items may be added.
+	Key TenantSetupItemKey `json:"key"`
+
+	// Required The item must be done before the setup can be completed without `force`.
+	Required bool `json:"required"`
+}
+
+// TenantSetupItemKey Since 1.2. Item of the setup checklist (see `getTenantSetup`). New items may be added.
+type TenantSetupItemKey string
+
+// TenantSetupState Since 1.2. `setup`: the tenant is being configured and refuses deposits (`503 tenant-in-setup`); `active`: open.
+type TenantSetupState string
+
 // TenantStats defines model for TenantStats.
 type TenantStats struct {
 	// BytesDownloaded Plaintext bytes actually served to recipients during the period.
@@ -3538,8 +4148,27 @@ type TenantStats struct {
 // TenantStatsPeriod defines model for TenantStats.Period.
 type TenantStatsPeriod string
 
-// TenantUpdate JSON Merge Patch of the tenant general settings; `null` is refused on every field.
+// TenantUpdate JSON Merge Patch of the tenant general settings; `null` is refused on every field. Since
+// 1.2, `setupState` is not a member (refused like any unknown member): see
+// `completeTenantSetup`.
 type TenantUpdate = json.RawMessage
+
+// TextProposal Since 1.2. Proposal of a legal text, filled with the real configuration of the tenant; never saved by itself.
+type TextProposal struct {
+	Document TextProposalDocument `json:"document"`
+
+	// Language Supported UI language (ISO 639-1). New languages may be added.
+	Language Language `json:"language"`
+
+	// Markdown Proposed text, in the limited Markdown of `LegalDocumentUpdate`.
+	Markdown string `json:"markdown"`
+
+	// Notice Translation key of the warning to show with the proposal: it must be reviewed by the data protection officer or a lawyer before use.
+	Notice string `json:"notice"`
+}
+
+// TextProposalDocument defines model for TextProposal.Document.
+type TextProposalDocument string
 
 // TotpCode Exactly one of `code` or `recoveryCode`.
 type TotpCode struct {
@@ -3636,6 +4265,30 @@ type TransferReplyStart struct {
 // TransferStatus `uploading` → `scanning` → `available` → `expired` | `deleted`.
 // `rejected`: every file was infected or blocklisted.
 type TransferStatus string
+
+// UpdateCheck Since 1.2. Outcome of the check for a newer release (never an automatic update).
+type UpdateCheck struct {
+	// CheckedAt Last successful check; `null` before the first one.
+	CheckedAt *time.Time `json:"checkedAt"`
+
+	// Enabled `TT_UPDATE_CHECK`.
+	Enabled bool `json:"enabled"`
+
+	// LastError Outcome of the last attempt: `none` (success), `network` (GitHub unreachable, timeout, TLS), `http` (unexpected status), `parse` (unreadable answer or version).
+	LastError UpdateCheckLastError `json:"lastError"`
+
+	// LatestVersion Latest stable release found (SemVer, without the `v`); `null` before the first successful check.
+	LatestVersion *string `json:"latestVersion"`
+
+	// ReleaseUrl Page of that release, only under `https://github.com/ed-fr/transteira/releases/`; `null` otherwise.
+	ReleaseUrl *string `json:"releaseUrl"`
+
+	// UpdateAvailable `latestVersion` is newer than the running version.
+	UpdateAvailable bool `json:"updateAvailable"`
+}
+
+// UpdateCheckLastError Outcome of the last attempt: `none` (success), `network` (GitHub unreachable, timeout, TLS), `http` (unexpected status), `parse` (unreadable answer or version).
+type UpdateCheckLastError string
 
 // Username defines model for Username.
 type Username = string
@@ -3753,7 +4406,7 @@ type WebhookEvent struct {
 	OccurredAt time.Time            `json:"occurredAt"`
 	Severity   WebhookEventSeverity `json:"severity"`
 
-	// Tenant Tenant of a tenant event; absent for a system event.
+	// Tenant Tenant of a tenant event, and since 1.2 of the system events `tenant.provisioned` and `tenant.setup_completed`; absent for the other system events.
 	Tenant *struct {
 		Id   string `json:"id"`
 		Name string `json:"name"`
@@ -3764,7 +4417,11 @@ type WebhookEvent struct {
 	// `quota.warning`, `quota.reached`. System events, for the instance-wide webhooks only:
 	// `disk.alert_raised`, `disk.alert_cleared`, `antivirus.alert_raised`,
 	// `antivirus.alert_cleared`, `maintenance.enabled`, `maintenance.disabled`,
-	// `master_key.rotation_completed`, `master_key.rotation_failed`. `webhook.test` is only
+	// `master_key.rotation_completed`, `master_key.rotation_failed`, and since 1.2
+	// `tenant.provisioned` (a tenant was created through the provisioning API) and
+	// `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
+	// state); these two carry `tenant` and
+	// are also mailed to the super admins through the system SMTP. `webhook.test` is only
 	// sent by the test operations and cannot be subscribed to.
 	Type WebhookEventType `json:"type"`
 }
@@ -3777,7 +4434,11 @@ type WebhookEventSeverity string
 // `quota.warning`, `quota.reached`. System events, for the instance-wide webhooks only:
 // `disk.alert_raised`, `disk.alert_cleared`, `antivirus.alert_raised`,
 // `antivirus.alert_cleared`, `maintenance.enabled`, `maintenance.disabled`,
-// `master_key.rotation_completed`, `master_key.rotation_failed`. `webhook.test` is only
+// `master_key.rotation_completed`, `master_key.rotation_failed`, and since 1.2
+// `tenant.provisioned` (a tenant was created through the provisioning API) and
+// `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
+// state); these two carry `tenant` and
+// are also mailed to the super admins through the system SMTP. `webhook.test` is only
 // sent by the test operations and cannot be subscribed to.
 type WebhookEventType string
 
@@ -3858,6 +4519,12 @@ type Limit = int
 
 // LinkToken defines model for LinkToken.
 type LinkToken = string
+
+// PresetId Since 1.2. Stable identifier of a background preset generated by the server (for example `default`, `aurora`, `ocean`); `default` is the default background.
+type PresetId = BackgroundPresetId
+
+// ProvisioningTokenId defines model for ProvisioningTokenId.
+type ProvisioningTokenId = string
 
 // RecognitionCookie defines model for RecognitionCookie.
 type RecognitionCookie = string
@@ -3942,6 +4609,9 @@ type NotFound = Problem
 // PayloadTooLarge RFC 9457 Problem Details with TransTeira extension members.
 type PayloadTooLarge = Problem
 
+// ProvisioningUnauthenticated RFC 9457 Problem Details with TransTeira extension members.
+type ProvisioningUnauthenticated = Problem
+
 // QuotaExceeded RFC 9457 Problem Details with TransTeira extension members.
 type QuotaExceeded = Problem
 
@@ -3953,6 +4623,9 @@ type ServiceUnavailable = Problem
 
 // StateConflict RFC 9457 Problem Details with TransTeira extension members.
 type StateConflict = Problem
+
+// SystemSmtpUnavailable RFC 9457 Problem Details with TransTeira extension members.
+type SystemSmtpUnavailable = Problem
 
 // TokenIpNotAllowed RFC 9457 Problem Details with TransTeira extension members.
 type TokenIpNotAllowed = Problem
@@ -3968,6 +4641,9 @@ type TransferTooLarge = Problem
 
 // Unauthenticated RFC 9457 Problem Details with TransTeira extension members.
 type Unauthenticated = Problem
+
+// UnknownBackgroundPreset RFC 9457 Problem Details with TransTeira extension members.
+type UnknownBackgroundPreset = Problem
 
 // UnknownTenant RFC 9457 Problem Details with TransTeira extension members.
 type UnknownTenant = Problem
@@ -3985,6 +4661,12 @@ type ListAdminsParams struct {
 
 	// Cursor Opaque cursor returned as `nextCursor` by the previous page.
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetBackgroundPresetParams defines parameters for GetBackgroundPreset.
+type GetBackgroundPresetParams struct {
+	// IfNoneMatch Entity tag of the copy held by the client; `304` when it is still current.
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
 }
 
 // ListGlobalAuditEventsParams defines parameters for ListGlobalAuditEvents.
@@ -4194,6 +4876,12 @@ type GetTenantLegalDocumentParams struct {
 // GetTenantLegalDocumentParamsDocument defines parameters for GetTenantLegalDocument.
 type GetTenantLegalDocumentParamsDocument string
 
+// AskTlsParams defines parameters for AskTls.
+type AskTlsParams struct {
+	// Domain Domain the reverse proxy is about to request a certificate for (compared like the `Host` of a request, case-insensitive, without port).
+	Domain string `form:"domain" json:"domain"`
+}
+
 // CreateTransferParams defines parameters for CreateTransfer.
 type CreateTransferParams struct {
 	// IdempotencyKey Optional key making retries of transfer creation safe (24 h retention): a request with a
@@ -4250,6 +4938,9 @@ type CreateAdminJSONRequestBody = AdminCreate
 // UpdateAdminApplicationMergePatchPlusJSONRequestBody defines body for UpdateAdmin for application/merge-patch+json ContentType.
 type UpdateAdminApplicationMergePatchPlusJSONRequestBody = AdminUpdate
 
+// InviteAdminJSONRequestBody defines body for InviteAdmin for application/json ContentType.
+type InviteAdminJSONRequestBody = AdminInvitation
+
 // AdminLoginJSONRequestBody defines body for AdminLogin for application/json ContentType.
 type AdminLoginJSONRequestBody = LoginRequest
 
@@ -4267,6 +4958,9 @@ type StartTotpEnrollmentJSONRequestBody = TotpReenrollment
 
 // ConfirmTotpEnrollmentJSONRequestBody defines body for ConfirmTotpEnrollment for application/json ContentType.
 type ConfirmTotpEnrollmentJSONRequestBody = TotpCode
+
+// CreateProvisioningTokenJSONRequestBody defines body for CreateProvisioningToken for application/json ContentType.
+type CreateProvisioningTokenJSONRequestBody = ProvisioningTokenCreate
 
 // CreateSuperAdminJSONRequestBody defines body for CreateSuperAdmin for application/json ContentType.
 type CreateSuperAdminJSONRequestBody = SetupRequest
@@ -4310,6 +5004,9 @@ type CreateBlocklistEntryJSONRequestBody = BlocklistEntryCreate
 // UpdateBrandingJSONRequestBody defines body for UpdateBranding for application/json ContentType.
 type UpdateBrandingJSONRequestBody = BrandingUpdate
 
+// SetBackgroundPresetJSONRequestBody defines body for SetBackgroundPreset for application/json ContentType.
+type SetBackgroundPresetJSONRequestBody = BackgroundPresetChoice
+
 // UpdateConfidentialityLevelsJSONRequestBody defines body for UpdateConfidentialityLevels for application/json ContentType.
 type UpdateConfidentialityLevelsJSONRequestBody = ConfidentialityLevelList
 
@@ -4333,6 +5030,9 @@ type UpdateNetworkRulesJSONRequestBody = NetworkRules
 
 // UpdateRecipientRulesJSONRequestBody defines body for UpdateRecipientRules for application/json ContentType.
 type UpdateRecipientRulesJSONRequestBody = RecipientRules
+
+// CompleteTenantSetupJSONRequestBody defines body for CompleteTenantSetup for application/json ContentType.
+type CompleteTenantSetupJSONRequestBody = TenantSetupCompletion
 
 // UpdateSmtpSettingsJSONRequestBody defines body for UpdateSmtpSettings for application/json ContentType.
 type UpdateSmtpSettingsJSONRequestBody = SmtpSettingsUpdate
@@ -4381,6 +5081,9 @@ type StartMyTransfersSessionJSONRequestBody = MyTransfersSessionStart
 
 // ExtendMyTransferJSONRequestBody defines body for ExtendMyTransfer for application/json ContentType.
 type ExtendMyTransferJSONRequestBody = TransferExtension
+
+// ProvisionTenantJSONRequestBody defines body for ProvisionTenant for application/json ContentType.
+type ProvisionTenantJSONRequestBody = ProvisionTenantRequest
 
 // CreateTransferJSONRequestBody defines body for CreateTransfer for application/json ContentType.
 type CreateTransferJSONRequestBody = TransferCreate
@@ -4521,6 +5224,9 @@ type ServerInterface interface {
 	// UpdateAdmin Update role, assignments, TOTP requirement or disable an account (super admin)
 	// (PATCH /admin/admins/{adminId})
 	UpdateAdmin(w http.ResponseWriter, r *http.Request, adminId AdminId)
+	// InviteAdmin Send a new activation link to an admin not yet activated (super admin)
+	// (POST /admin/admins/{adminId}/invite)
+	InviteAdmin(w http.ResponseWriter, r *http.Request, adminId AdminId)
 	// ResetAdminCredentials Reset password and TOTP of an admin (super admin)
 	// (POST /admin/admins/{adminId}/reset-credentials)
 	ResetAdminCredentials(w http.ResponseWriter, r *http.Request, adminId AdminId)
@@ -4533,6 +5239,12 @@ type ServerInterface interface {
 	// AdminVerifyTotp Second factor - TOTP code or recovery code
 	// (POST /admin/auth/totp)
 	AdminVerifyTotp(w http.ResponseWriter, r *http.Request)
+	// ListBackgroundPresets Library of background images
+	// (GET /admin/background-presets)
+	ListBackgroundPresets(w http.ResponseWriter, r *http.Request)
+	// GetBackgroundPreset Preview of a background preset
+	// (GET /admin/background-presets/{presetId})
+	GetBackgroundPreset(w http.ResponseWriter, r *http.Request, presetId PresetId, params GetBackgroundPresetParams)
 	// GetAdminMe Current admin profile
 	// (GET /admin/me)
 	GetAdminMe(w http.ResponseWriter, r *http.Request)
@@ -4548,6 +5260,15 @@ type ServerInterface interface {
 	// ConfirmTotpEnrollment Confirm TOTP enrollment
 	// (POST /admin/me/totp/confirm)
 	ConfirmTotpEnrollment(w http.ResponseWriter, r *http.Request)
+	// ListProvisioningTokens List provisioning tokens (super admin)
+	// (GET /admin/provisioning-tokens)
+	ListProvisioningTokens(w http.ResponseWriter, r *http.Request)
+	// CreateProvisioningToken Create a provisioning token (super admin)
+	// (POST /admin/provisioning-tokens)
+	CreateProvisioningToken(w http.ResponseWriter, r *http.Request)
+	// RevokeProvisioningToken Revoke a provisioning token (super admin)
+	// (DELETE /admin/provisioning-tokens/{tokenId})
+	RevokeProvisioningToken(w http.ResponseWriter, r *http.Request, tokenId ProvisioningTokenId)
 	// GetSetupStatus Is first-run setup required?
 	// (GET /admin/setup)
 	GetSetupStatus(w http.ResponseWriter, r *http.Request)
@@ -4584,6 +5305,12 @@ type ServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(w http.ResponseWriter, r *http.Request, params GetGlobalStatsParams)
+	// GetSystemVersion Running version and latest release (super admin)
+	// (GET /admin/system/version)
+	GetSystemVersion(w http.ResponseWriter, r *http.Request)
+	// CheckSystemVersion Check for a newer release now (super admin)
+	// (POST /admin/system/version/check)
+	CheckSystemVersion(w http.ResponseWriter, r *http.Request)
 	// ListSystemWebhooks List the instance-wide webhooks (super admin)
 	// (GET /admin/system/webhooks)
 	ListSystemWebhooks(w http.ResponseWriter, r *http.Request)
@@ -4662,6 +5389,9 @@ type ServerInterface interface {
 	// UpdateBranding Update colours
 	// (PUT /admin/tenants/{tenantId}/branding)
 	UpdateBranding(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// SetBackgroundPreset Choose the background preset of the tenant
+	// (PUT /admin/tenants/{tenantId}/branding/background-preset)
+	SetBackgroundPreset(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// DeleteBrandingAsset Revert to the default image
 	// (DELETE /admin/tenants/{tenantId}/branding/{asset})
 	DeleteBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string)
@@ -4722,6 +5452,12 @@ type ServerInterface interface {
 	// UpdateRecipientRules Replace the allowed and denied recipient domains
 	// (PUT /admin/tenants/{tenantId}/recipient-rules)
 	UpdateRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// GetTenantSetup Setup checklist of the tenant
+	// (GET /admin/tenants/{tenantId}/setup)
+	GetTenantSetup(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// CompleteTenantSetup Complete the setup and open the tenant
+	// (POST /admin/tenants/{tenantId}/setup/complete)
+	CompleteTenantSetup(w http.ResponseWriter, r *http.Request, tenantId TenantId)
 	// GetSmtpSettings SMTP settings
 	// (GET /admin/tenants/{tenantId}/smtp)
 	GetSmtpSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId)
@@ -4737,6 +5473,9 @@ type ServerInterface interface {
 	// GetTenantStats Tenant dashboard statistics
 	// (GET /admin/tenants/{tenantId}/stats)
 	GetTenantStats(w http.ResponseWriter, r *http.Request, tenantId TenantId, params GetTenantStatsParams)
+	// GetTextProposal Proposal of a legal text for the tenant
+	// (GET /admin/tenants/{tenantId}/text-proposals/{document}/{language})
+	GetTextProposal(w http.ResponseWriter, r *http.Request, tenantId TenantId, document LegalDocumentPath, language LanguagePath)
 	// ListTenantTransfers List transfers of the tenant
 	// (GET /admin/tenants/{tenantId}/transfers)
 	ListTenantTransfers(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantTransfersParams)
@@ -4839,18 +5578,30 @@ type ServerInterface interface {
 	// GetOpenApiSpec Download the OpenAPI specification
 	// (GET /openapi.yaml)
 	GetOpenApiSpec(w http.ResponseWriter, r *http.Request)
+	// ListProvisionedTenants List the tenants created by this token
+	// (GET /provisioning/tenants)
+	ListProvisionedTenants(w http.ResponseWriter, r *http.Request)
+	// ProvisionTenant Create a tenant with its first delegated admin
+	// (POST /provisioning/tenants)
+	ProvisionTenant(w http.ResponseWriter, r *http.Request)
+	// GetProvisionedTenant State of a tenant created by this token
+	// (GET /provisioning/tenants/{tenantId})
+	GetProvisionedTenant(w http.ResponseWriter, r *http.Request, tenantId string)
 	// GetStatus Instance status (JSON)
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
 	// GetPublicTenant Public configuration of the current tenant
 	// (GET /tenant)
 	GetPublicTenant(w http.ResponseWriter, r *http.Request, params GetPublicTenantParams)
-	// GetTenantAsset Tenant logo or background image
+	// GetTenantAsset Tenant logo, background image or favicon
 	// (GET /tenant/assets/{asset})
 	GetTenantAsset(w http.ResponseWriter, r *http.Request, asset GetTenantAssetParamsAsset, params GetTenantAssetParams)
 	// GetTenantLegalDocument Legal notice or privacy policy of the tenant
 	// (GET /tenant/legal/{document})
 	GetTenantLegalDocument(w http.ResponseWriter, r *http.Request, document GetTenantLegalDocumentParamsDocument, params GetTenantLegalDocumentParams)
+	// AskTls On-demand TLS permission for the reverse proxy
+	// (GET /tls/ask)
+	AskTls(w http.ResponseWriter, r *http.Request, params AskTlsParams)
 	// CreateTransfer Create a transfer and its upload resources
 	// (POST /transfers)
 	CreateTransfer(w http.ResponseWriter, r *http.Request, params CreateTransferParams)
@@ -5044,6 +5795,32 @@ func (siw *ServerInterfaceWrapper) UpdateAdmin(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// InviteAdmin operation middleware
+func (siw *ServerInterfaceWrapper) InviteAdmin(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "adminId" -------------
+	var adminId AdminId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "adminId", r.PathValue("adminId"), &adminId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "adminId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InviteAdmin(w, r, adminId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ResetAdminCredentials operation middleware
 func (siw *ServerInterfaceWrapper) ResetAdminCredentials(w http.ResponseWriter, r *http.Request) {
 
@@ -5103,6 +5880,70 @@ func (siw *ServerInterfaceWrapper) AdminVerifyTotp(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AdminVerifyTotp(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBackgroundPresets operation middleware
+func (siw *ServerInterfaceWrapper) ListBackgroundPresets(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBackgroundPresets(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBackgroundPreset operation middleware
+func (siw *ServerInterfaceWrapper) GetBackgroundPreset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "presetId" -------------
+	var presetId PresetId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "presetId", r.PathValue("presetId"), &presetId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "presetId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetBackgroundPresetParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBackgroundPreset(w, r, presetId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5173,6 +6014,60 @@ func (siw *ServerInterfaceWrapper) ConfirmTotpEnrollment(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ConfirmTotpEnrollment(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProvisioningTokens operation middleware
+func (siw *ServerInterfaceWrapper) ListProvisioningTokens(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProvisioningTokens(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProvisioningToken operation middleware
+func (siw *ServerInterfaceWrapper) CreateProvisioningToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProvisioningToken(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeProvisioningToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokeProvisioningToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tokenId" -------------
+	var tokenId ProvisioningTokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tokenId", r.PathValue("tokenId"), &tokenId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tokenId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeProvisioningToken(w, r, tokenId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5430,6 +6325,34 @@ func (siw *ServerInterfaceWrapper) GetGlobalStats(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetGlobalStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSystemVersion operation middleware
+func (siw *ServerInterfaceWrapper) GetSystemVersion(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSystemVersion(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CheckSystemVersion operation middleware
+func (siw *ServerInterfaceWrapper) CheckSystemVersion(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckSystemVersion(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6325,6 +7248,32 @@ func (siw *ServerInterfaceWrapper) UpdateBranding(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// SetBackgroundPreset operation middleware
+func (siw *ServerInterfaceWrapper) SetBackgroundPreset(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetBackgroundPreset(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteBrandingAsset operation middleware
 func (siw *ServerInterfaceWrapper) DeleteBrandingAsset(w http.ResponseWriter, r *http.Request) {
 
@@ -7031,6 +7980,58 @@ func (siw *ServerInterfaceWrapper) UpdateRecipientRules(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetTenantSetup operation middleware
+func (siw *ServerInterfaceWrapper) GetTenantSetup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTenantSetup(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteTenantSetup operation middleware
+func (siw *ServerInterfaceWrapper) CompleteTenantSetup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteTenantSetup(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSmtpSettings operation middleware
 func (siw *ServerInterfaceWrapper) GetSmtpSettings(w http.ResponseWriter, r *http.Request) {
 
@@ -7184,6 +8185,50 @@ func (siw *ServerInterfaceWrapper) GetTenantStats(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTenantStats(w, r, tenantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTextProposal operation middleware
+func (siw *ServerInterfaceWrapper) GetTextProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "document" -------------
+	var document LegalDocumentPath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "document", r.PathValue("document"), &document, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "document", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "language" -------------
+	var language LanguagePath
+
+	err = runtime.BindStyledParameterWithOptions("simple", "language", r.PathValue("language"), &language, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "language", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTextProposal(w, r, tenantId, document, language)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8273,6 +9318,60 @@ func (siw *ServerInterfaceWrapper) GetOpenApiSpec(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListProvisionedTenants operation middleware
+func (siw *ServerInterfaceWrapper) ListProvisionedTenants(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProvisionedTenants(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ProvisionTenant operation middleware
+func (siw *ServerInterfaceWrapper) ProvisionTenant(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ProvisionTenant(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProvisionedTenant operation middleware
+func (siw *ServerInterfaceWrapper) GetProvisionedTenant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProvisionedTenant(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatus operation middleware
 func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Request) {
 
@@ -8419,6 +9518,39 @@ func (siw *ServerInterfaceWrapper) GetTenantLegalDocument(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTenantLegalDocument(w, r, document, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AskTls operation middleware
+func (siw *ServerInterfaceWrapper) AskTls(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AskTlsParams
+
+	// ------------- Required query parameter "domain" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "domain", r.URL.Query(), &params.Domain, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "domain"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "domain", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AskTls(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8927,6 +10059,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/healthz", wrapper.GetHealth)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/metrics", wrapper.GetMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/status", wrapper.GetStatus)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tls/ask", wrapper.AskTls)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/openapi.yaml", wrapper.GetOpenApiSpec)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tenant", wrapper.GetPublicTenant)
@@ -8982,6 +10115,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.DeleteBrandingAsset)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.GetBrandingAsset)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/{asset}", wrapper.UploadBrandingAsset)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/branding/background-preset", wrapper.SetBackgroundPreset)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/setup", wrapper.GetTenantSetup)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/setup/complete", wrapper.CompleteTenantSetup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/text-proposals/{document}/{language}", wrapper.GetTextProposal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/network", wrapper.GetNetworkRules)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/network", wrapper.UpdateNetworkRules)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/smtp", wrapper.GetSmtpSettings)
@@ -9033,8 +10170,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/admins/{adminId}", wrapper.GetAdmin)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/admins/{adminId}", wrapper.UpdateAdmin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/admins/{adminId}/reset-credentials", wrapper.ResetAdminCredentials)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/admins/{adminId}/invite", wrapper.InviteAdmin)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/background-presets", wrapper.ListBackgroundPresets)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/background-presets/{presetId}", wrapper.GetBackgroundPreset)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/activation", wrapper.ActivateAdmin)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/stats", wrapper.GetGlobalStats)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/version", wrapper.GetSystemVersion)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/version/check", wrapper.CheckSystemVersion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/settings", wrapper.GetSystemSettings)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/system/settings", wrapper.UpdateSystemSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/antivirus/test", wrapper.TestAntivirus)
@@ -9050,6 +10192,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}", wrapper.GetSystemWebhook)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}", wrapper.UpdateSystemWebhook)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/system/webhooks/{webhookId}/test", wrapper.TestSystemWebhook)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/provisioning-tokens", wrapper.ListProvisioningTokens)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/provisioning-tokens", wrapper.CreateProvisioningToken)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/provisioning-tokens/{tokenId}", wrapper.RevokeProvisioningToken)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/provisioning/tenants", wrapper.ListProvisionedTenants)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/provisioning/tenants", wrapper.ProvisionTenant)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/provisioning/tenants/{tenantId}", wrapper.GetProvisionedTenant)
 
 	return m
 }
@@ -9142,6 +10290,15 @@ type NotFoundApplicationProblemPlusJSONResponse Problem
 
 type PayloadTooLargeApplicationProblemPlusJSONResponse Problem
 
+type ProvisioningUnauthenticatedResponseHeaders struct {
+	WWWAuthenticate *string
+}
+type ProvisioningUnauthenticatedApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers ProvisioningUnauthenticatedResponseHeaders
+}
+
 type QuotaExceededApplicationProblemPlusJSONResponse Problem
 
 type RateLimitedResponseHeaders struct {
@@ -9163,6 +10320,8 @@ type ServiceUnavailableApplicationProblemPlusJSONResponse struct {
 }
 
 type StateConflictApplicationProblemPlusJSONResponse Problem
+
+type SystemSmtpUnavailableApplicationProblemPlusJSONResponse Problem
 
 type TokenIpNotAllowedApplicationProblemPlusJSONResponse Problem
 
@@ -9187,6 +10346,8 @@ type TusVersionUnsupportedResponse struct {
 }
 
 type UnauthenticatedApplicationProblemPlusJSONResponse Problem
+
+type UnknownBackgroundPresetApplicationProblemPlusJSONResponse Problem
 
 type UnknownTenantApplicationProblemPlusJSONResponse Problem
 
@@ -9403,7 +10564,7 @@ type CreateAdminResponseObject interface {
 	VisitCreateAdminResponse(w http.ResponseWriter) error
 }
 
-type CreateAdmin201JSONResponse AdminWithActivation
+type CreateAdmin201JSONResponse AdminCreated
 
 func (response CreateAdmin201JSONResponse) VisitCreateAdminResponse(w http.ResponseWriter) error {
 
@@ -9493,6 +10654,22 @@ func (response CreateAdmin500ApplicationProblemPlusJSONResponse) VisitCreateAdmi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAdmin503ApplicationProblemPlusJSONResponse struct {
+	SystemSmtpUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response CreateAdmin503ApplicationProblemPlusJSONResponse) VisitCreateAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -9794,6 +10971,158 @@ func (response UpdateAdmin500ApplicationProblemPlusJSONResponse) VisitUpdateAdmi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdminRequestObject struct {
+	AdminId AdminId `json:"adminId"`
+	Body    *InviteAdminJSONRequestBody
+}
+
+type InviteAdminResponseObject interface {
+	VisitInviteAdminResponse(w http.ResponseWriter) error
+}
+
+type InviteAdmin200JSONResponse AdminCreated
+
+func (response InviteAdmin200JSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin400ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin401ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin403ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin404ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin409ApplicationProblemPlusJSONResponse Problem
+
+func (response InviteAdmin409ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin429ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin500ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type InviteAdmin503ApplicationProblemPlusJSONResponse struct {
+	SystemSmtpUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response InviteAdmin503ApplicationProblemPlusJSONResponse) VisitInviteAdminResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -10190,6 +11519,172 @@ type AdminVerifyTotp500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response AdminVerifyTotp500ApplicationProblemPlusJSONResponse) VisitAdminVerifyTotpResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBackgroundPresetsRequestObject struct {
+}
+
+type ListBackgroundPresetsResponseObject interface {
+	VisitListBackgroundPresetsResponse(w http.ResponseWriter) error
+}
+
+type ListBackgroundPresets200JSONResponse BackgroundPresetList
+
+func (response ListBackgroundPresets200JSONResponse) VisitListBackgroundPresetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBackgroundPresets401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListBackgroundPresets401ApplicationProblemPlusJSONResponse) VisitListBackgroundPresetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBackgroundPresets500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListBackgroundPresets500ApplicationProblemPlusJSONResponse) VisitListBackgroundPresetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBackgroundPresetRequestObject struct {
+	PresetId PresetId `json:"presetId"`
+	Params   GetBackgroundPresetParams
+}
+
+type GetBackgroundPresetResponseObject interface {
+	VisitGetBackgroundPresetResponse(w http.ResponseWriter) error
+}
+
+type GetBackgroundPreset200ResponseHeaders struct {
+	CacheControl        *string
+	ETag                *string
+	XContentTypeOptions *string
+}
+
+type GetBackgroundPreset200ImagejpegResponse struct {
+	Body          io.Reader
+	Headers       GetBackgroundPreset200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetBackgroundPreset200ImagejpegResponse) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetBackgroundPreset304ResponseHeaders struct {
+	CacheControl *string
+	ETag         *string
+}
+
+type GetBackgroundPreset304Response struct {
+	Headers GetBackgroundPreset304ResponseHeaders
+}
+
+func (response GetBackgroundPreset304Response) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(304)
+	return nil
+}
+
+type GetBackgroundPreset401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetBackgroundPreset401ApplicationProblemPlusJSONResponse) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBackgroundPreset404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetBackgroundPreset404ApplicationProblemPlusJSONResponse) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBackgroundPreset500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetBackgroundPreset500ApplicationProblemPlusJSONResponse) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -10675,6 +12170,258 @@ type ConfirmTotpEnrollment500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ConfirmTotpEnrollment500ApplicationProblemPlusJSONResponse) VisitConfirmTotpEnrollmentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisioningTokensRequestObject struct {
+}
+
+type ListProvisioningTokensResponseObject interface {
+	VisitListProvisioningTokensResponse(w http.ResponseWriter) error
+}
+
+type ListProvisioningTokens200JSONResponse []ProvisioningToken
+
+func (response ListProvisioningTokens200JSONResponse) VisitListProvisioningTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisioningTokens401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisioningTokens401ApplicationProblemPlusJSONResponse) VisitListProvisioningTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisioningTokens403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisioningTokens403ApplicationProblemPlusJSONResponse) VisitListProvisioningTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisioningTokens500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisioningTokens500ApplicationProblemPlusJSONResponse) VisitListProvisioningTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningTokenRequestObject struct {
+	Body *CreateProvisioningTokenJSONRequestBody
+}
+
+type CreateProvisioningTokenResponseObject interface {
+	VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error
+}
+
+type CreateProvisioningToken201JSONResponse ProvisioningTokenCreated
+
+func (response CreateProvisioningToken201JSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningToken400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateProvisioningToken400ApplicationProblemPlusJSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningToken401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateProvisioningToken401ApplicationProblemPlusJSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningToken403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CreateProvisioningToken403ApplicationProblemPlusJSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningToken429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateProvisioningToken429ApplicationProblemPlusJSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateProvisioningToken500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateProvisioningToken500ApplicationProblemPlusJSONResponse) VisitCreateProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeProvisioningTokenRequestObject struct {
+	TokenId ProvisioningTokenId `json:"tokenId"`
+}
+
+type RevokeProvisioningTokenResponseObject interface {
+	VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokeProvisioningToken204Response struct {
+}
+
+func (response RevokeProvisioningToken204Response) VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeProvisioningToken401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeProvisioningToken401ApplicationProblemPlusJSONResponse) VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeProvisioningToken403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeProvisioningToken403ApplicationProblemPlusJSONResponse) VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeProvisioningToken404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeProvisioningToken404ApplicationProblemPlusJSONResponse) VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeProvisioningToken500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeProvisioningToken500ApplicationProblemPlusJSONResponse) VisitRevokeProvisioningTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -11688,6 +13435,177 @@ func (response GetGlobalStats500ApplicationProblemPlusJSONResponse) VisitGetGlob
 	return err
 }
 
+type GetSystemVersionRequestObject struct {
+}
+
+type GetSystemVersionResponseObject interface {
+	VisitGetSystemVersionResponse(w http.ResponseWriter) error
+}
+
+type GetSystemVersion200JSONResponse SystemVersion
+
+func (response GetSystemVersion200JSONResponse) VisitGetSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemVersion401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemVersion401ApplicationProblemPlusJSONResponse) VisitGetSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemVersion403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemVersion403ApplicationProblemPlusJSONResponse) VisitGetSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSystemVersion500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetSystemVersion500ApplicationProblemPlusJSONResponse) VisitGetSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersionRequestObject struct {
+}
+
+type CheckSystemVersionResponseObject interface {
+	VisitCheckSystemVersionResponse(w http.ResponseWriter) error
+}
+
+type CheckSystemVersion200JSONResponse SystemVersion
+
+func (response CheckSystemVersion200JSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersion401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response CheckSystemVersion401ApplicationProblemPlusJSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersion403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CheckSystemVersion403ApplicationProblemPlusJSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersion409ApplicationProblemPlusJSONResponse Problem
+
+func (response CheckSystemVersion409ApplicationProblemPlusJSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersion429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response CheckSystemVersion429ApplicationProblemPlusJSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckSystemVersion500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CheckSystemVersion500ApplicationProblemPlusJSONResponse) VisitCheckSystemVersionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListSystemWebhooksRequestObject struct {
 }
 
@@ -12365,7 +14283,7 @@ type CreateTenantResponseObject interface {
 	VisitCreateTenantResponse(w http.ResponseWriter) error
 }
 
-type CreateTenant201JSONResponse Tenant
+type CreateTenant201JSONResponse TenantCreated
 
 func (response CreateTenant201JSONResponse) VisitCreateTenantResponse(w http.ResponseWriter) error {
 
@@ -12443,6 +14361,22 @@ func (response CreateTenant409ApplicationProblemPlusJSONResponse) VisitCreateTen
 	return err
 }
 
+type CreateTenant422ApplicationProblemPlusJSONResponse struct {
+	UnknownBackgroundPresetApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenant422ApplicationProblemPlusJSONResponse) VisitCreateTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type CreateTenant500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -12455,6 +14389,22 @@ func (response CreateTenant500ApplicationProblemPlusJSONResponse) VisitCreateTen
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateTenant503ApplicationProblemPlusJSONResponse struct {
+	SystemSmtpUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response CreateTenant503ApplicationProblemPlusJSONResponse) VisitCreateTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -14090,6 +16040,125 @@ type UpdateBranding500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateBranding500ApplicationProblemPlusJSONResponse) VisitUpdateBrandingResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPresetRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *SetBackgroundPresetJSONRequestBody
+}
+
+type SetBackgroundPresetResponseObject interface {
+	VisitSetBackgroundPresetResponse(w http.ResponseWriter) error
+}
+
+type SetBackgroundPreset200JSONResponse Branding
+
+func (response SetBackgroundPreset200JSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset400ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset401ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset403ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset404ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset422ApplicationProblemPlusJSONResponse struct {
+	UnknownBackgroundPresetApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset422ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBackgroundPreset500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response SetBackgroundPreset500ApplicationProblemPlusJSONResponse) VisitSetBackgroundPresetResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -15964,6 +18033,193 @@ func (response UpdateRecipientRules500ApplicationProblemPlusJSONResponse) VisitU
 	return err
 }
 
+type GetTenantSetupRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type GetTenantSetupResponseObject interface {
+	VisitGetTenantSetupResponse(w http.ResponseWriter) error
+}
+
+type GetTenantSetup200JSONResponse TenantSetup
+
+func (response GetTenantSetup200JSONResponse) VisitGetTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantSetup401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantSetup401ApplicationProblemPlusJSONResponse) VisitGetTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantSetup404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantSetup404ApplicationProblemPlusJSONResponse) VisitGetTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTenantSetup500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantSetup500ApplicationProblemPlusJSONResponse) VisitGetTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetupRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *CompleteTenantSetupJSONRequestBody
+}
+
+type CompleteTenantSetupResponseObject interface {
+	VisitCompleteTenantSetupResponse(w http.ResponseWriter) error
+}
+
+type CompleteTenantSetup200JSONResponse TenantSetup
+
+func (response CompleteTenantSetup200JSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteTenantSetup400ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteTenantSetup401ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteTenantSetup403ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteTenantSetup404ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup409ApplicationProblemPlusJSONResponse Problem
+
+func (response CompleteTenantSetup409ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteTenantSetup500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteTenantSetup500ApplicationProblemPlusJSONResponse) VisitCompleteTenantSetupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSmtpSettingsRequestObject struct {
 	TenantId TenantId `json:"tenantId"`
 }
@@ -16422,6 +18678,78 @@ type GetTenantStats500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetTenantStats500ApplicationProblemPlusJSONResponse) VisitGetTenantStatsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTextProposalRequestObject struct {
+	TenantId TenantId          `json:"tenantId"`
+	Document LegalDocumentPath `json:"document"`
+	Language LanguagePath      `json:"language"`
+}
+
+type GetTextProposalResponseObject interface {
+	VisitGetTextProposalResponse(w http.ResponseWriter) error
+}
+
+type GetTextProposal200JSONResponse TextProposal
+
+func (response GetTextProposal200JSONResponse) VisitGetTextProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTextProposal401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTextProposal401ApplicationProblemPlusJSONResponse) VisitGetTextProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTextProposal404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetTextProposal404ApplicationProblemPlusJSONResponse) VisitGetTextProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTextProposal500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetTextProposal500ApplicationProblemPlusJSONResponse) VisitGetTextProposalResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -20357,6 +22685,359 @@ func (response GetOpenApiSpec500ApplicationProblemPlusJSONResponse) VisitGetOpen
 	return err
 }
 
+type ListProvisionedTenantsRequestObject struct {
+}
+
+type ListProvisionedTenantsResponseObject interface {
+	VisitListProvisionedTenantsResponse(w http.ResponseWriter) error
+}
+
+type ListProvisionedTenants200JSONResponse ProvisionedTenantList
+
+func (response ListProvisionedTenants200JSONResponse) VisitListProvisionedTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisionedTenants401ApplicationProblemPlusJSONResponse struct {
+	ProvisioningUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisionedTenants401ApplicationProblemPlusJSONResponse) VisitListProvisionedTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisionedTenants404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisionedTenants404ApplicationProblemPlusJSONResponse) VisitListProvisionedTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisionedTenants429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisionedTenants429ApplicationProblemPlusJSONResponse) VisitListProvisionedTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListProvisionedTenants500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListProvisionedTenants500ApplicationProblemPlusJSONResponse) VisitListProvisionedTenantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenantRequestObject struct {
+	Body *ProvisionTenantJSONRequestBody
+}
+
+type ProvisionTenantResponseObject interface {
+	VisitProvisionTenantResponse(w http.ResponseWriter) error
+}
+
+type ProvisionTenant201JSONResponse ProvisionedTenant
+
+func (response ProvisionTenant201JSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant400ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant401ApplicationProblemPlusJSONResponse struct {
+	ProvisioningUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant401ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant403ApplicationProblemPlusJSONResponse Problem
+
+func (response ProvisionTenant403ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant404ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant409ApplicationProblemPlusJSONResponse struct {
+	AlreadyExistsApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant409ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant422ApplicationProblemPlusJSONResponse struct {
+	UnknownBackgroundPresetApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant422ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant429ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant500ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProvisionTenant503ApplicationProblemPlusJSONResponse struct {
+	SystemSmtpUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response ProvisionTenant503ApplicationProblemPlusJSONResponse) VisitProvisionTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProvisionedTenantRequestObject struct {
+	TenantId string `json:"tenantId"`
+}
+
+type GetProvisionedTenantResponseObject interface {
+	VisitGetProvisionedTenantResponse(w http.ResponseWriter) error
+}
+
+type GetProvisionedTenant200JSONResponse ProvisionedTenant
+
+func (response GetProvisionedTenant200JSONResponse) VisitGetProvisionedTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProvisionedTenant401ApplicationProblemPlusJSONResponse struct {
+	ProvisioningUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetProvisionedTenant401ApplicationProblemPlusJSONResponse) VisitGetProvisionedTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProvisionedTenant404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetProvisionedTenant404ApplicationProblemPlusJSONResponse) VisitGetProvisionedTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProvisionedTenant429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetProvisionedTenant429ApplicationProblemPlusJSONResponse) VisitGetProvisionedTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProvisionedTenant500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetProvisionedTenant500ApplicationProblemPlusJSONResponse) VisitGetProvisionedTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetStatusRequestObject struct {
 }
 
@@ -20597,6 +23278,36 @@ func (response GetTenantAsset200ImagepngResponse) VisitGetTenantAssetResponse(w 
 	return err
 }
 
+type GetTenantAsset200ImagexIconResponse struct {
+	Body          io.Reader
+	Headers       GetTenantAsset200ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetTenantAsset200ImagexIconResponse) VisitGetTenantAssetResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/x-icon")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
 type GetTenantAsset304ResponseHeaders struct {
 	CacheControl *string
 	ETag         *string
@@ -20735,6 +23446,81 @@ type GetTenantLegalDocument500ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetTenantLegalDocument500ApplicationProblemPlusJSONResponse) VisitGetTenantLegalDocumentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AskTlsRequestObject struct {
+	Params AskTlsParams
+}
+
+type AskTlsResponseObject interface {
+	VisitAskTlsResponse(w http.ResponseWriter) error
+}
+
+type AskTls200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type AskTls200Response struct {
+	Headers AskTls200ResponseHeaders
+}
+
+func (response AskTls200Response) VisitAskTlsResponse(w http.ResponseWriter) error {
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	return nil
+}
+
+type AskTls404ResponseHeaders struct {
+	CacheControl *string
+}
+
+type AskTls404Response struct {
+	Headers AskTls404ResponseHeaders
+}
+
+func (response AskTls404Response) VisitAskTlsResponse(w http.ResponseWriter) error {
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(404)
+	return nil
+}
+
+type AskTls429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response AskTls429ApplicationProblemPlusJSONResponse) VisitAskTlsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AskTls500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response AskTls500ApplicationProblemPlusJSONResponse) VisitAskTlsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -22040,6 +24826,9 @@ type StrictServerInterface interface {
 	// UpdateAdmin Update role, assignments, TOTP requirement or disable an account (super admin)
 	// (PATCH /admin/admins/{adminId})
 	UpdateAdmin(ctx context.Context, request UpdateAdminRequestObject) (UpdateAdminResponseObject, error)
+	// InviteAdmin Send a new activation link to an admin not yet activated (super admin)
+	// (POST /admin/admins/{adminId}/invite)
+	InviteAdmin(ctx context.Context, request InviteAdminRequestObject) (InviteAdminResponseObject, error)
 	// ResetAdminCredentials Reset password and TOTP of an admin (super admin)
 	// (POST /admin/admins/{adminId}/reset-credentials)
 	ResetAdminCredentials(ctx context.Context, request ResetAdminCredentialsRequestObject) (ResetAdminCredentialsResponseObject, error)
@@ -22052,6 +24841,12 @@ type StrictServerInterface interface {
 	// AdminVerifyTotp Second factor - TOTP code or recovery code
 	// (POST /admin/auth/totp)
 	AdminVerifyTotp(ctx context.Context, request AdminVerifyTotpRequestObject) (AdminVerifyTotpResponseObject, error)
+	// ListBackgroundPresets Library of background images
+	// (GET /admin/background-presets)
+	ListBackgroundPresets(ctx context.Context, request ListBackgroundPresetsRequestObject) (ListBackgroundPresetsResponseObject, error)
+	// GetBackgroundPreset Preview of a background preset
+	// (GET /admin/background-presets/{presetId})
+	GetBackgroundPreset(ctx context.Context, request GetBackgroundPresetRequestObject) (GetBackgroundPresetResponseObject, error)
 	// GetAdminMe Current admin profile
 	// (GET /admin/me)
 	GetAdminMe(ctx context.Context, request GetAdminMeRequestObject) (GetAdminMeResponseObject, error)
@@ -22067,6 +24862,15 @@ type StrictServerInterface interface {
 	// ConfirmTotpEnrollment Confirm TOTP enrollment
 	// (POST /admin/me/totp/confirm)
 	ConfirmTotpEnrollment(ctx context.Context, request ConfirmTotpEnrollmentRequestObject) (ConfirmTotpEnrollmentResponseObject, error)
+	// ListProvisioningTokens List provisioning tokens (super admin)
+	// (GET /admin/provisioning-tokens)
+	ListProvisioningTokens(ctx context.Context, request ListProvisioningTokensRequestObject) (ListProvisioningTokensResponseObject, error)
+	// CreateProvisioningToken Create a provisioning token (super admin)
+	// (POST /admin/provisioning-tokens)
+	CreateProvisioningToken(ctx context.Context, request CreateProvisioningTokenRequestObject) (CreateProvisioningTokenResponseObject, error)
+	// RevokeProvisioningToken Revoke a provisioning token (super admin)
+	// (DELETE /admin/provisioning-tokens/{tokenId})
+	RevokeProvisioningToken(ctx context.Context, request RevokeProvisioningTokenRequestObject) (RevokeProvisioningTokenResponseObject, error)
 	// GetSetupStatus Is first-run setup required?
 	// (GET /admin/setup)
 	GetSetupStatus(ctx context.Context, request GetSetupStatusRequestObject) (GetSetupStatusResponseObject, error)
@@ -22103,6 +24907,12 @@ type StrictServerInterface interface {
 	// GetGlobalStats Global dashboard (super admin)
 	// (GET /admin/system/stats)
 	GetGlobalStats(ctx context.Context, request GetGlobalStatsRequestObject) (GetGlobalStatsResponseObject, error)
+	// GetSystemVersion Running version and latest release (super admin)
+	// (GET /admin/system/version)
+	GetSystemVersion(ctx context.Context, request GetSystemVersionRequestObject) (GetSystemVersionResponseObject, error)
+	// CheckSystemVersion Check for a newer release now (super admin)
+	// (POST /admin/system/version/check)
+	CheckSystemVersion(ctx context.Context, request CheckSystemVersionRequestObject) (CheckSystemVersionResponseObject, error)
 	// ListSystemWebhooks List the instance-wide webhooks (super admin)
 	// (GET /admin/system/webhooks)
 	ListSystemWebhooks(ctx context.Context, request ListSystemWebhooksRequestObject) (ListSystemWebhooksResponseObject, error)
@@ -22181,6 +24991,9 @@ type StrictServerInterface interface {
 	// UpdateBranding Update colours
 	// (PUT /admin/tenants/{tenantId}/branding)
 	UpdateBranding(ctx context.Context, request UpdateBrandingRequestObject) (UpdateBrandingResponseObject, error)
+	// SetBackgroundPreset Choose the background preset of the tenant
+	// (PUT /admin/tenants/{tenantId}/branding/background-preset)
+	SetBackgroundPreset(ctx context.Context, request SetBackgroundPresetRequestObject) (SetBackgroundPresetResponseObject, error)
 	// DeleteBrandingAsset Revert to the default image
 	// (DELETE /admin/tenants/{tenantId}/branding/{asset})
 	DeleteBrandingAsset(ctx context.Context, request DeleteBrandingAssetRequestObject) (DeleteBrandingAssetResponseObject, error)
@@ -22241,6 +25054,12 @@ type StrictServerInterface interface {
 	// UpdateRecipientRules Replace the allowed and denied recipient domains
 	// (PUT /admin/tenants/{tenantId}/recipient-rules)
 	UpdateRecipientRules(ctx context.Context, request UpdateRecipientRulesRequestObject) (UpdateRecipientRulesResponseObject, error)
+	// GetTenantSetup Setup checklist of the tenant
+	// (GET /admin/tenants/{tenantId}/setup)
+	GetTenantSetup(ctx context.Context, request GetTenantSetupRequestObject) (GetTenantSetupResponseObject, error)
+	// CompleteTenantSetup Complete the setup and open the tenant
+	// (POST /admin/tenants/{tenantId}/setup/complete)
+	CompleteTenantSetup(ctx context.Context, request CompleteTenantSetupRequestObject) (CompleteTenantSetupResponseObject, error)
 	// GetSmtpSettings SMTP settings
 	// (GET /admin/tenants/{tenantId}/smtp)
 	GetSmtpSettings(ctx context.Context, request GetSmtpSettingsRequestObject) (GetSmtpSettingsResponseObject, error)
@@ -22256,6 +25075,9 @@ type StrictServerInterface interface {
 	// GetTenantStats Tenant dashboard statistics
 	// (GET /admin/tenants/{tenantId}/stats)
 	GetTenantStats(ctx context.Context, request GetTenantStatsRequestObject) (GetTenantStatsResponseObject, error)
+	// GetTextProposal Proposal of a legal text for the tenant
+	// (GET /admin/tenants/{tenantId}/text-proposals/{document}/{language})
+	GetTextProposal(ctx context.Context, request GetTextProposalRequestObject) (GetTextProposalResponseObject, error)
 	// ListTenantTransfers List transfers of the tenant
 	// (GET /admin/tenants/{tenantId}/transfers)
 	ListTenantTransfers(ctx context.Context, request ListTenantTransfersRequestObject) (ListTenantTransfersResponseObject, error)
@@ -22358,18 +25180,30 @@ type StrictServerInterface interface {
 	// GetOpenApiSpec Download the OpenAPI specification
 	// (GET /openapi.yaml)
 	GetOpenApiSpec(ctx context.Context, request GetOpenApiSpecRequestObject) (GetOpenApiSpecResponseObject, error)
+	// ListProvisionedTenants List the tenants created by this token
+	// (GET /provisioning/tenants)
+	ListProvisionedTenants(ctx context.Context, request ListProvisionedTenantsRequestObject) (ListProvisionedTenantsResponseObject, error)
+	// ProvisionTenant Create a tenant with its first delegated admin
+	// (POST /provisioning/tenants)
+	ProvisionTenant(ctx context.Context, request ProvisionTenantRequestObject) (ProvisionTenantResponseObject, error)
+	// GetProvisionedTenant State of a tenant created by this token
+	// (GET /provisioning/tenants/{tenantId})
+	GetProvisionedTenant(ctx context.Context, request GetProvisionedTenantRequestObject) (GetProvisionedTenantResponseObject, error)
 	// GetStatus Instance status (JSON)
 	// (GET /status)
 	GetStatus(ctx context.Context, request GetStatusRequestObject) (GetStatusResponseObject, error)
 	// GetPublicTenant Public configuration of the current tenant
 	// (GET /tenant)
 	GetPublicTenant(ctx context.Context, request GetPublicTenantRequestObject) (GetPublicTenantResponseObject, error)
-	// GetTenantAsset Tenant logo or background image
+	// GetTenantAsset Tenant logo, background image or favicon
 	// (GET /tenant/assets/{asset})
 	GetTenantAsset(ctx context.Context, request GetTenantAssetRequestObject) (GetTenantAssetResponseObject, error)
 	// GetTenantLegalDocument Legal notice or privacy policy of the tenant
 	// (GET /tenant/legal/{document})
 	GetTenantLegalDocument(ctx context.Context, request GetTenantLegalDocumentRequestObject) (GetTenantLegalDocumentResponseObject, error)
+	// AskTls On-demand TLS permission for the reverse proxy
+	// (GET /tls/ask)
+	AskTls(ctx context.Context, request AskTlsRequestObject) (AskTlsResponseObject, error)
 	// CreateTransfer Create a transfer and its upload resources
 	// (POST /transfers)
 	CreateTransfer(ctx context.Context, request CreateTransferRequestObject) (CreateTransferResponseObject, error)
@@ -22614,6 +25448,39 @@ func (sh *strictHandler) UpdateAdmin(w http.ResponseWriter, r *http.Request, adm
 	}
 }
 
+// InviteAdmin operation middleware
+func (sh *strictHandler) InviteAdmin(w http.ResponseWriter, r *http.Request, adminId AdminId) {
+	var request InviteAdminRequestObject
+
+	request.AdminId = adminId
+
+	var body InviteAdminJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.InviteAdmin(ctx, request.(InviteAdminRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "InviteAdmin")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(InviteAdminResponseObject); ok {
+		if err := validResponse.VisitInviteAdminResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ResetAdminCredentials operation middleware
 func (sh *strictHandler) ResetAdminCredentials(w http.ResponseWriter, r *http.Request, adminId AdminId) {
 	var request ResetAdminCredentialsRequestObject
@@ -22719,6 +25586,57 @@ func (sh *strictHandler) AdminVerifyTotp(w http.ResponseWriter, r *http.Request)
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AdminVerifyTotpResponseObject); ok {
 		if err := validResponse.VisitAdminVerifyTotpResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListBackgroundPresets operation middleware
+func (sh *strictHandler) ListBackgroundPresets(w http.ResponseWriter, r *http.Request) {
+	var request ListBackgroundPresetsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBackgroundPresets(ctx, request.(ListBackgroundPresetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBackgroundPresets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBackgroundPresetsResponseObject); ok {
+		if err := validResponse.VisitListBackgroundPresetsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBackgroundPreset operation middleware
+func (sh *strictHandler) GetBackgroundPreset(w http.ResponseWriter, r *http.Request, presetId PresetId, params GetBackgroundPresetParams) {
+	var request GetBackgroundPresetRequestObject
+
+	request.PresetId = presetId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBackgroundPreset(ctx, request.(GetBackgroundPresetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBackgroundPreset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBackgroundPresetResponseObject); ok {
+		if err := validResponse.VisitGetBackgroundPresetResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -22870,6 +25788,87 @@ func (sh *strictHandler) ConfirmTotpEnrollment(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ConfirmTotpEnrollmentResponseObject); ok {
 		if err := validResponse.VisitConfirmTotpEnrollmentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListProvisioningTokens operation middleware
+func (sh *strictHandler) ListProvisioningTokens(w http.ResponseWriter, r *http.Request) {
+	var request ListProvisioningTokensRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProvisioningTokens(ctx, request.(ListProvisioningTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProvisioningTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProvisioningTokensResponseObject); ok {
+		if err := validResponse.VisitListProvisioningTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateProvisioningToken operation middleware
+func (sh *strictHandler) CreateProvisioningToken(w http.ResponseWriter, r *http.Request) {
+	var request CreateProvisioningTokenRequestObject
+
+	var body CreateProvisioningTokenJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateProvisioningToken(ctx, request.(CreateProvisioningTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateProvisioningToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateProvisioningTokenResponseObject); ok {
+		if err := validResponse.VisitCreateProvisioningTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeProvisioningToken operation middleware
+func (sh *strictHandler) RevokeProvisioningToken(w http.ResponseWriter, r *http.Request, tokenId ProvisioningTokenId) {
+	var request RevokeProvisioningTokenRequestObject
+
+	request.TokenId = tokenId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeProvisioningToken(ctx, request.(RevokeProvisioningTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeProvisioningToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeProvisioningTokenResponseObject); ok {
+		if err := validResponse.VisitRevokeProvisioningTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -23192,6 +26191,54 @@ func (sh *strictHandler) GetGlobalStats(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetGlobalStatsResponseObject); ok {
 		if err := validResponse.VisitGetGlobalStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSystemVersion operation middleware
+func (sh *strictHandler) GetSystemVersion(w http.ResponseWriter, r *http.Request) {
+	var request GetSystemVersionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSystemVersion(ctx, request.(GetSystemVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSystemVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSystemVersionResponseObject); ok {
+		if err := validResponse.VisitGetSystemVersionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CheckSystemVersion operation middleware
+func (sh *strictHandler) CheckSystemVersion(w http.ResponseWriter, r *http.Request) {
+	var request CheckSystemVersionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CheckSystemVersion(ctx, request.(CheckSystemVersionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CheckSystemVersion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CheckSystemVersionResponseObject); ok {
+		if err := validResponse.VisitCheckSystemVersionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -23948,6 +26995,39 @@ func (sh *strictHandler) UpdateBranding(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// SetBackgroundPreset operation middleware
+func (sh *strictHandler) SetBackgroundPreset(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request SetBackgroundPresetRequestObject
+
+	request.TenantId = tenantId
+
+	var body SetBackgroundPresetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetBackgroundPreset(ctx, request.(SetBackgroundPresetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetBackgroundPreset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetBackgroundPresetResponseObject); ok {
+		if err := validResponse.VisitSetBackgroundPresetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DeleteBrandingAsset operation middleware
 func (sh *strictHandler) DeleteBrandingAsset(w http.ResponseWriter, r *http.Request, tenantId TenantId, asset string) {
 	var request DeleteBrandingAssetRequestObject
@@ -24547,6 +27627,65 @@ func (sh *strictHandler) UpdateRecipientRules(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// GetTenantSetup operation middleware
+func (sh *strictHandler) GetTenantSetup(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request GetTenantSetupRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTenantSetup(ctx, request.(GetTenantSetupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTenantSetup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTenantSetupResponseObject); ok {
+		if err := validResponse.VisitGetTenantSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteTenantSetup operation middleware
+func (sh *strictHandler) CompleteTenantSetup(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request CompleteTenantSetupRequestObject
+
+	request.TenantId = tenantId
+
+	var body CompleteTenantSetupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteTenantSetup(ctx, request.(CompleteTenantSetupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteTenantSetup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteTenantSetupResponseObject); ok {
+		if err := validResponse.VisitCompleteTenantSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetSmtpSettings operation middleware
 func (sh *strictHandler) GetSmtpSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
 	var request GetSmtpSettingsRequestObject
@@ -24686,6 +27825,34 @@ func (sh *strictHandler) GetTenantStats(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTenantStatsResponseObject); ok {
 		if err := validResponse.VisitGetTenantStatsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTextProposal operation middleware
+func (sh *strictHandler) GetTextProposal(w http.ResponseWriter, r *http.Request, tenantId TenantId, document LegalDocumentPath, language LanguagePath) {
+	var request GetTextProposalRequestObject
+
+	request.TenantId = tenantId
+	request.Document = document
+	request.Language = language
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTextProposal(ctx, request.(GetTextProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTextProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTextProposalResponseObject); ok {
+		if err := validResponse.VisitGetTextProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -25677,6 +28844,87 @@ func (sh *strictHandler) GetOpenApiSpec(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// ListProvisionedTenants operation middleware
+func (sh *strictHandler) ListProvisionedTenants(w http.ResponseWriter, r *http.Request) {
+	var request ListProvisionedTenantsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListProvisionedTenants(ctx, request.(ListProvisionedTenantsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListProvisionedTenants")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListProvisionedTenantsResponseObject); ok {
+		if err := validResponse.VisitListProvisionedTenantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ProvisionTenant operation middleware
+func (sh *strictHandler) ProvisionTenant(w http.ResponseWriter, r *http.Request) {
+	var request ProvisionTenantRequestObject
+
+	var body ProvisionTenantJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ProvisionTenant(ctx, request.(ProvisionTenantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ProvisionTenant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ProvisionTenantResponseObject); ok {
+		if err := validResponse.VisitProvisionTenantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProvisionedTenant operation middleware
+func (sh *strictHandler) GetProvisionedTenant(w http.ResponseWriter, r *http.Request, tenantId string) {
+	var request GetProvisionedTenantRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProvisionedTenant(ctx, request.(GetProvisionedTenantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProvisionedTenant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProvisionedTenantResponseObject); ok {
+		if err := validResponse.VisitGetProvisionedTenantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetStatus operation middleware
 func (sh *strictHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	var request GetStatusRequestObject
@@ -25774,6 +29022,32 @@ func (sh *strictHandler) GetTenantLegalDocument(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTenantLegalDocumentResponseObject); ok {
 		if err := validResponse.VisitGetTenantLegalDocumentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AskTls operation middleware
+func (sh *strictHandler) AskTls(w http.ResponseWriter, r *http.Request, params AskTlsParams) {
+	var request AskTlsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AskTls(ctx, request.(AskTlsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AskTls")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AskTlsResponseObject); ok {
+		if err := validResponse.VisitAskTlsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

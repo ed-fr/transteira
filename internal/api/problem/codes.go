@@ -105,6 +105,33 @@ const (
 	// CodeExtensionLimitReached means extending the transfer would take its
 	// total lifetime beyond 90 days from its creation (since 1.1).
 	CodeExtensionLimitReached Code = "extension-limit-reached"
+	// CodeTenantInSetup means the tenant is still being configured and
+	// refuses deposits (since 1.2).
+	CodeTenantInSetup Code = "tenant-in-setup"
+	// CodeSetupIncomplete means a required item of the tenant setup
+	// checklist is not done (since 1.2).
+	CodeSetupIncomplete Code = "setup-incomplete"
+	// CodeSetupAlreadyComplete means the tenant setup is already completed
+	// (since 1.2).
+	CodeSetupAlreadyComplete Code = "setup-already-complete"
+	// CodeUnknownBackgroundPreset means the background preset is not one of
+	// the library (since 1.2).
+	CodeUnknownBackgroundPreset Code = "unknown-background-preset"
+	// CodeSystemSMTPUnavailable means an activation link must be mailed but
+	// no system SMTP is available (since 1.2).
+	CodeSystemSMTPUnavailable Code = "system-smtp-unavailable"
+	// CodeAdminAlreadyActive means the admin account is already activated
+	// (since 1.2).
+	CodeAdminAlreadyActive Code = "admin-already-active"
+	// CodeUpdateCheckDisabled means the check for a newer release is
+	// disabled by TT_UPDATE_CHECK (since 1.2).
+	CodeUpdateCheckDisabled Code = "update-check-disabled"
+	// CodeProvisioningTokenInvalid means the provisioning token is unknown,
+	// revoked or expired, or used from outside its IP ranges (since 1.2).
+	CodeProvisioningTokenInvalid Code = "provisioning-token-invalid"
+	// CodeProvisioningScopeExceeded means the request is outside the scope
+	// of the provisioning token (since 1.2).
+	CodeProvisioningScopeExceeded Code = "provisioning-scope-exceeded"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -165,6 +192,15 @@ var catalog = map[Code]Definition{
 	CodeReplyNotAllowed:               {http.StatusForbidden, "Reply not allowed"},
 	CodeAccessLinkInvalid:             {http.StatusGone, "Access link no longer valid"},
 	CodeExtensionLimitReached:         {http.StatusConflict, "Extension limit reached"},
+	CodeTenantInSetup:                 {http.StatusServiceUnavailable, "Service being set up"},
+	CodeSetupIncomplete:               {http.StatusConflict, "Setup incomplete"},
+	CodeSetupAlreadyComplete:          {http.StatusConflict, "Setup already complete"},
+	CodeUnknownBackgroundPreset:       {http.StatusUnprocessableEntity, "Unknown background preset"},
+	CodeSystemSMTPUnavailable:         {http.StatusServiceUnavailable, "System email unavailable"},
+	CodeAdminAlreadyActive:            {http.StatusConflict, "Administrator already active"},
+	CodeUpdateCheckDisabled:           {http.StatusConflict, "Update check disabled"},
+	CodeProvisioningTokenInvalid:      {http.StatusUnauthorized, "Invalid provisioning token"},
+	CodeProvisioningScopeExceeded:     {http.StatusForbidden, "Outside the provisioning token scope"},
 	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 

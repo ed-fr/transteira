@@ -15,6 +15,11 @@ export { roleKey };
 export type Admin = components['schemas']['Admin'];
 /** An admin account with its single-use activation link (create, reset credentials). */
 export type AdminWithActivation = components['schemas']['AdminWithActivation'];
+/**
+ * Answer of POST /admin/admins (since API 1.2): the account and how its activation link was
+ * delivered; the link itself only with the copy delivery.
+ */
+export type AdminCreated = components['schemas']['AdminCreated'];
 /** Body of POST /admin/admins. */
 export type AdminCreate = components['schemas']['AdminCreate'];
 /** Merge patch of PATCH /admin/admins/{adminId}. */
@@ -37,6 +42,19 @@ export interface ActivationLink {
  */
 export function splitActivation(data: AdminWithActivation): { account: Admin; link: ActivationLink } {
   const { activationUrl, activationExpiresAt, ...account } = data;
+  return { account, link: { url: activationUrl, expiresAt: activationExpiresAt } };
+}
+
+/**
+ * Splits an answer of createAdmin delivered by copy (the delivery createBody asks for) like
+ * splitActivation. An answer without link (delivered by mail) is an error: this screen always
+ * asks for the copy delivery.
+ */
+export function splitCreated(data: AdminCreated): { account: Admin; link: ActivationLink } {
+  const { invitationDelivery: _delivery, activationUrl, activationExpiresAt, ...account } = data;
+  if (activationUrl === undefined) {
+    throw new Error('createAdmin answered without activation link');
+  }
   return { account, link: { url: activationUrl, expiresAt: activationExpiresAt } };
 }
 
@@ -229,6 +247,9 @@ export function createBody(form: CreateForm): AdminCreate {
     role: 'delegated_admin',
     tenantIds: [...new Set(form.tenantIds)].sort(),
     requireTotp: form.requireTotp,
+    // The link is shown once on the screen (the 1.1 behaviour), until the mail delivery of
+    // API 1.2 is offered by the form.
+    invitation: { delivery: 'copy' },
   };
 }
 

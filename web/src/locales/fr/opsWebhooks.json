@@ -38,6 +38,10 @@
       "rotation_completed": "Rotation de la clé maître terminée",
       "rotation_failed": "Échec de la rotation de la clé maître"
     },
+    "tenant": {
+      "provisioned": "Entité créée par provisionnement",
+      "setup_completed": "Configuration de l’entité terminée"
+    },
     "webhook": {
       "test": "Événement de test"
     }

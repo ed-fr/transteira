@@ -2,7 +2,7 @@
 
 > Document de cadrage destiné au développement (Claude Code). Il décrit le besoin fonctionnel, les contraintes techniques, les exigences de qualité et les règles de travail de **TransTeira**, un outil de transfert de fichiers multi-tenant open source. Toutes les valeurs indiquées sont validées.
 >
-> Le périmètre est découpé en quatre versions (section 2). Les fonctionnalités marquées **[V1.1]**, **[V2]** ou **[V2.1]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
+> Le périmètre est découpé en quatre versions (section 2). Les fonctionnalités marquées **[V1.1]**, **[V1.2]**, **[V2]** ou **[V2.1]** ne sont pas à implémenter en V1, mais **l'architecture de la V1 doit les anticiper** pour éviter toute refonte ultérieure.
 
 ---
 
@@ -24,6 +24,7 @@ TransTeira est un outil de transfert de fichiers de type WeTransfer / SwissTrans
 |---|---|
 | **V1, le cœur** | Tout le présent cahier des charges hors éléments marqués [V1.1] et [V2], y compris : journal de sécurité pour fail2ban et CrowdSec, configurations de reverse proxys (Caddy, Nginx, Traefik, Apache), configuration par variables d'environnement, mode maintenance, empreinte SHA-256 des fichiers, rotation de la clé maître, effacement cryptographique, guides utilisateur et aide intégrée avec captures automatiques, modèle de menaces. |
 | **V1.1, l'exploitation** | Détection des abus (seuils et alertes), métriques Prometheus, endpoint d'état JSON, tableau de bord Grafana et template Zabbix, export syslog, alertes par webhook, rappel d'expiration, nombre maximal de téléchargements, « Mes envois », vérification du destinataire par code, suivi par destinataire, envoi de dossiers par glisser-déposer, dépôt depuis l'extérieur pour les internes déjà vérifiés, réponse au transfert, niveaux de confidentialité, restriction des destinataires, mode sombre, documentation utilisateur personnalisée par entité et export PDF, désactivation de l'antivirus (instance ou entité) et moteurs antivirus interchangeables (clamd, ICAP, API HTTP). |
+| **V1.2, la mise en service** | Favicon généré depuis le logo de l'entité, assistant de création d'entité (textes proposés pour les modèles de mails et les mentions légales), bibliothèque d'images de fond libres de droits, choix de l'image de fond par le super admin à la création, désignation d'un admin délégué invité par mail pour configurer son entité via l'assistant, API de provisionnement d'entités pour les ESN (jeton d'instance restreint, TLS automatique via Caddy on-demand TLS), entité « en cours de configuration » jusqu'à la fin de l'assistant, affichage de la version et vérification des mises à jour dans l'administration du super admin. |
 | **V2, l'entreprise** | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise en PDF, export / import de configuration d'entité, lien de dépôt permanent, image Docker signée avec SBOM, kit de conformité, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option. |
 | **V2.1, le partage de secrets** | Module de partage de secrets à usage unique, chiffrés dans le navigateur (section 22.1). |
 
