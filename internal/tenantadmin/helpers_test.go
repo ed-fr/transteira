@@ -66,6 +66,12 @@ type memAssets struct {
 	putErr error
 	getErr error
 	delErr error
+	// getErrAt fails the reads of one kind only.
+	getErrAt map[branding.Kind]error
+	// putErrAt fails the writes of one kind only.
+	putErrAt map[branding.Kind]error
+	// delErrAt fails the deletions of one kind only.
+	delErrAt map[branding.Kind]error
 }
 
 func assetKey(tid tenant.ID, kind branding.Kind) string { return string(tid) + "/" + kind.String() }
@@ -76,6 +82,9 @@ func (m *memAssets) Put(tid tenant.ID, kind branding.Kind, data []byte) error {
 	if m.putErr != nil {
 		return m.putErr
 	}
+	if err := m.putErrAt[kind]; err != nil {
+		return err
+	}
 	m.data[assetKey(tid, kind)] = bytes.Clone(data)
 	return nil
 }
@@ -85,6 +94,9 @@ func (m *memAssets) Get(tid tenant.ID, kind branding.Kind) ([]byte, error) {
 	defer m.mu.Unlock()
 	if m.getErr != nil {
 		return nil, m.getErr
+	}
+	if err := m.getErrAt[kind]; err != nil {
+		return nil, err
 	}
 	d, ok := m.data[assetKey(tid, kind)]
 	if !ok {
@@ -99,8 +111,18 @@ func (m *memAssets) Delete(tid tenant.ID, kind branding.Kind) error {
 	if m.delErr != nil {
 		return m.delErr
 	}
+	if err := m.delErrAt[kind]; err != nil {
+		return err
+	}
 	delete(m.data, assetKey(tid, kind))
 	return nil
+}
+
+// get returns the stored image of kind, nil when missing.
+func (m *memAssets) get(tid tenant.ID, kind branding.Kind) []byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.data[assetKey(tid, kind)]
 }
 
 func (m *memAssets) has(tid tenant.ID, kind branding.Kind) bool {

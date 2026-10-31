@@ -54,7 +54,7 @@ var (
 		CreatedAt: created, UpdatedAt: now,
 	}
 	brandingA = tenantadmin.Branding{
-		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true,
+		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true, BackgroundPreset: "aurora",
 		Contrast: []branding.ContrastResult{{Pair: "primary-on-light", Ratio: 5.1, Level: "AA"}},
 	}
 	smtpA = tenantadmin.SMTPView{
@@ -117,6 +117,22 @@ func (f *fakeTenantService) UploadAsset(_ context.Context, p adminauth.Principal
 
 func (f *fakeTenantService) DeleteAsset(_ context.Context, p adminauth.Principal, tid tenant.ID, asset string, ip netip.Addr) error {
 	return f.record("DeleteAsset", p.SessionID, tid, asset, ip)
+}
+
+func (f *fakeTenantService) SetBackgroundPreset(_ context.Context, p adminauth.Principal, tid tenant.ID, preset *string, ip netip.Addr) (tenantadmin.Branding, error) {
+	return brandingA, f.record("SetBackgroundPreset", p.SessionID, tid, preset, ip)
+}
+
+func (f *fakeTenantService) ListBackgroundPresets(_ context.Context, p adminauth.Principal) ([]branding.Preset, error) {
+	return []branding.Preset{
+		{ID: "default", Labels: map[string]string{"en": "Default", "fr": "Par défaut"}},
+		{ID: "ocean", Labels: map[string]string{"en": "Ocean", "fr": "Océan"}},
+	}, f.record("ListBackgroundPresets", p.SessionID)
+}
+
+func (f *fakeTenantService) BackgroundPreset(_ context.Context, p adminauth.Principal, id string) (branding.Image, error) {
+	return branding.Image{Data: []byte("jpeg"), ContentType: branding.ContentTypeJPEG, ETag: `"p1"`},
+		f.record("BackgroundPreset", p.SessionID, id)
 }
 
 func (f *fakeTenantService) GetNetworkRules(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.NetworkRules, error) {
@@ -287,6 +303,12 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("UploadAsset", err)
 	_, err = s.DeleteBrandingAsset(ctx, gen.DeleteBrandingAssetRequestObject{TenantId: "ten_a", Asset: "logo"})
 	call("DeleteAsset", err)
+	_, err = s.SetBackgroundPreset(ctx, gen.SetBackgroundPresetRequestObject{TenantId: "ten_a", Body: &gen.BackgroundPresetChoice{}})
+	call("SetBackgroundPreset", err)
+	_, err = s.ListBackgroundPresets(ctx, gen.ListBackgroundPresetsRequestObject{})
+	call("ListBackgroundPresets", err)
+	_, err = s.GetBackgroundPreset(ctx, gen.GetBackgroundPresetRequestObject{PresetId: "ocean"})
+	call("BackgroundPreset", err)
 	_, err = s.GetNetworkRules(ctx, gen.GetNetworkRulesRequestObject{TenantId: "ten_a"})
 	call("GetNetworkRules", err)
 	_, err = s.UpdateNetworkRules(ctx, gen.UpdateNetworkRulesRequestObject{TenantId: "ten_a", Body: &gen.NetworkRules{}})
@@ -356,8 +378,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 29 {
-		t.Fatalf("%d operations, want 29", len(ops))
+	if len(ops) != 32 {
+		t.Fatalf("%d operations, want 32", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)
@@ -385,6 +407,7 @@ func TestTenantErrors(t *testing.T) {
 		{fmt.Errorf("x: %w", tenantadmin.ErrPayloadTooLarge), problem.CodePayloadTooLarge},
 		{fmt.Errorf("read: %w", &http.MaxBytesError{Limit: 5}), problem.CodePayloadTooLarge},
 		{fmt.Errorf("x: %w", tenantadmin.ErrUnsupportedMediaType), problem.CodeUnsupportedMediaType},
+		{tenantadmin.ErrUnknownBackgroundPreset, problem.CodeUnknownBackgroundPreset},
 	}
 	for _, tt := range tests {
 		expectProblem(t, tenantError(tt.err), tt.code)
@@ -456,6 +479,8 @@ func TestTenantMissingBodies(t *testing.T) {
 	_, err = s.UpdateEmailTemplate(ctx, gen.UpdateEmailTemplateRequestObject{})
 	errs = append(errs, err)
 	_, err = s.UpdateLegalDocument(ctx, gen.UpdateLegalDocumentRequestObject{})
+	errs = append(errs, err)
+	_, err = s.SetBackgroundPreset(ctx, gen.SetBackgroundPresetRequestObject{})
 	errs = append(errs, err)
 	for i, err := range errs {
 		p := expectProblem(t, err, problem.CodeValidationFailed)
@@ -558,7 +583,7 @@ func TestCreateTenant(t *testing.T) {
 			in := svc.args["CreateTenant"][1].(tenantadmin.TenantCreate)
 			if in.Name != "Entity B" || in.FQDN != "transfer.entity-b.example.com" || in.DefaultLanguage != "en" ||
 				in.StorageQuotaBytes != 1<<40 || in.MaxTransferBytes != deref(tt.limit) ||
-				in.MaxTransferCeiling != tt.ceiling {
+				in.MaxTransferCeiling != tt.ceiling || in.BackgroundPreset != nil {
 				t.Errorf("create input %+v", in)
 			}
 			if len(svc.calls) != 1 {
@@ -584,8 +609,9 @@ func TestBrandingHandlers(t *testing.T) {
 	svc := &fakeTenantService{}
 	s := tenantServer(svc)
 	ctx := ctxWith(store.SessionAuthenticated, delegated)
+	aurora := "aurora"
 	want := gen.Branding{
-		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true,
+		PrimaryColor: "#0B5FFF", AccentColor: "#00875A", HasLogo: true, BackgroundPreset: &aurora,
 		Contrast: []gen.ContrastResult{{Pair: "primary-on-light", Ratio: 5.1, Level: "AA"}},
 	}
 	got, err := s.GetBranding(ctx, gen.GetBrandingRequestObject{TenantId: "ten_a"})
@@ -650,6 +676,93 @@ func TestBrandingHandlers(t *testing.T) {
 	if !reflect.DeepEqual(svc.args["DeleteAsset"], []any{"as_01", tenant.ID("ten_a"), "logo", clientIP}) {
 		t.Errorf("delete args %v", svc.args["DeleteAsset"])
 	}
+	// No preset in the service answer: the member is omitted.
+	if b := brandingBody(tenantadmin.Branding{}); b.BackgroundPreset != nil || b.Contrast == nil {
+		t.Errorf("empty branding %+v", b)
+	}
+}
+
+func TestBackgroundPresetHandlers(t *testing.T) {
+	t.Parallel()
+	svc := &fakeTenantService{}
+	s := tenantServer(svc)
+	ctx := ctxWith(store.SessionAuthenticated, delegated)
+
+	// Set: the preset (or null) is passed as is; the branding is answered.
+	ocean := "ocean"
+	for _, preset := range []*string{&ocean, nil} {
+		resp, err := s.SetBackgroundPreset(ctx, gen.SetBackgroundPresetRequestObject{
+			TenantId: "ten_a", Body: &gen.BackgroundPresetChoice{Preset: preset},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := gen.Branding(resp.(gen.SetBackgroundPreset200JSONResponse))
+		if b.BackgroundPreset == nil || *b.BackgroundPreset != "aurora" || b.PrimaryColor != "#0B5FFF" {
+			t.Errorf("set answer %+v", b)
+		}
+		if !reflect.DeepEqual(svc.args["SetBackgroundPreset"], []any{"as_01", tenant.ID("ten_a"), preset, clientIP}) {
+			t.Errorf("set args %v", svc.args["SetBackgroundPreset"])
+		}
+	}
+	unknown := &fakeTenantService{err: tenantadmin.ErrUnknownBackgroundPreset}
+	bad := "../x"
+	_, err := tenantServer(unknown).SetBackgroundPreset(ctx, gen.SetBackgroundPresetRequestObject{
+		TenantId: "ten_a", Body: &gen.BackgroundPresetChoice{Preset: &bad},
+	})
+	if p := expectProblem(t, err, problem.CodeUnknownBackgroundPreset); p.Status != http.StatusUnprocessableEntity {
+		t.Errorf("status %d", p.Status)
+	}
+
+	// List: display order and labels.
+	list, err := s.ListBackgroundPresets(ctx, gen.ListBackgroundPresetsRequestObject{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantList := gen.ListBackgroundPresets200JSONResponse{Items: []gen.BackgroundPreset{
+		{Id: "default", Labels: map[string]string{"en": "Default", "fr": "Par défaut"}},
+		{Id: "ocean", Labels: map[string]string{"en": "Ocean", "fr": "Océan"}},
+	}}
+	if !reflect.DeepEqual(list, wantList) {
+		t.Errorf("list %+v", list)
+	}
+	if rec := visit(t, list); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"id":"ocean"`) {
+		t.Errorf("list body %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Preview: JPEG, nosniff, strong ETag, public cache; 304 on a match.
+	img, err := s.GetBackgroundPreset(ctx, gen.GetBackgroundPresetRequestObject{PresetId: "ocean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := visit(t, img)
+	if h := rec.Header(); rec.Code != http.StatusOK || rec.Body.String() != "jpeg" || h.Get("Content-Type") != "image/jpeg" ||
+		h.Get("Cache-Control") != PresetCacheControl || h.Get("X-Content-Type-Options") != "nosniff" || h.Get("ETag") != `"p1"` {
+		t.Errorf("preview %d %q %v", rec.Code, rec.Body.String(), h)
+	}
+	if !reflect.DeepEqual(svc.args["BackgroundPreset"], []any{"as_01", "ocean"}) {
+		t.Errorf("preview args %v", svc.args["BackgroundPreset"])
+	}
+	for header, code := range map[string]int{`"p1"`: http.StatusNotModified, `W/"p1"`: http.StatusNotModified, `"other"`: http.StatusOK} {
+		img, err := s.GetBackgroundPreset(ctx, gen.GetBackgroundPresetRequestObject{
+			PresetId: "ocean", Params: gen.GetBackgroundPresetParams{IfNoneMatch: &header},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := visit(t, img)
+		if rec.Code != code || rec.Header().Get("ETag") != `"p1"` || rec.Header().Get("Cache-Control") != PresetCacheControl {
+			t.Errorf("If-None-Match %s: %d %v", header, rec.Code, rec.Header())
+		}
+		if code == http.StatusNotModified && rec.Body.Len() != 0 {
+			t.Errorf("304 with a body")
+		}
+	}
+	missing := &fakeTenantService{err: tenantadmin.ErrNotFound}
+	_, err = tenantServer(missing).GetBackgroundPreset(ctx, gen.GetBackgroundPresetRequestObject{PresetId: "nope"})
+	expectProblem(t, err, problem.CodeNotFound)
+	_, err = tenantServer(&fakeTenantService{err: tenantadmin.ErrUnauthenticated}).ListBackgroundPresets(ctx, gen.ListBackgroundPresetsRequestObject{})
+	expectProblem(t, err, problem.CodeUnauthenticated)
 }
 
 func TestNetworkHandlers(t *testing.T) {

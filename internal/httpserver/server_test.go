@@ -882,6 +882,15 @@ func TestBrandingBodyLimit(t *testing.T) {
 	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
 	rec = e.do(t, http.MethodPut, unknown, hostAdmin, body(middleware.ImageBodyLimit+1), hdr...)
 	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
+
+	// The background preset choice, a literal segment where {asset} would
+	// match, is an ordinary JSON operation: JSON body limit, no raw image.
+	const preset = "/api/v1/admin/tenants/ten_x/branding/background-preset"
+	jsonHdr := append(adminAuth(), "Content-Type", "application/json")
+	rec = e.do(t, http.MethodPut, preset, hostAdmin, body(middleware.DefaultJSONBodyLimit+1), jsonHdr...)
+	decodeProblem(t, rec, http.StatusRequestEntityTooLarge, problem.CodePayloadTooLarge)
+	rec = e.do(t, http.MethodPut, preset, hostAdmin, strings.NewReader("PNG-bytes"), hdr...)
+	decodeProblem(t, rec, http.StatusUnsupportedMediaType, problem.CodeUnsupportedMediaType)
 }
 
 func TestBodyLimit(t *testing.T) {
@@ -947,6 +956,17 @@ func TestRoutePolicies(t *testing.T) {
 	// Every pattern of the table is a route of the API router.
 	mux := http.NewServeMux()
 	gen.HandlerWithOptions(gen.NewStrictHandler(public.NewServer(), nil), gen.StdHTTPServerOptions{BaseURL: APIBaseURL, BaseRouter: mux})
+	// The background preset choice matches its own literal pattern, never
+	// the raw image policy of {asset}, and keeps the JSON body limit.
+	r := httptest.NewRequest(http.MethodPut, "/api/v1/admin/tenants/ten_x/branding/background-preset", nil)
+	if _, got := mux.Handler(r); got != "PUT /api/v1/admin/tenants/{tenantId}/branding/background-preset" {
+		t.Errorf("background preset route matched %q", got)
+	} else {
+		r.Pattern = got
+		if p := policyOf(r); p != defaultPolicy || bodyLimitOf(r) != middleware.DefaultJSONBodyLimit {
+			t.Errorf("background preset policy %+v, limit %d", p, bodyLimitOf(r))
+		}
+	}
 	wildcard := regexp.MustCompile(`\{[A-Za-z]+\}`)
 	for pattern := range routePolicies {
 		method, path, _ := strings.Cut(pattern, " ")

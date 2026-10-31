@@ -68,6 +68,27 @@ func ValidColor(s string) bool {
 		strings.Trim(s[1:], "0123456789abcdefABCDEF") == ""
 }
 
+// maxPresetLen is the maximum length of a background preset identifier
+// (the CHECK of tenants.background_preset).
+const maxPresetLen = 32
+
+// ValidPresetID reports whether s has the syntax of a background preset
+// identifier: a lowercase letter followed by up to 31 lowercase letters,
+// digits or hyphens (^[a-z][a-z0-9-]{0,31}$). It does not tell whether the
+// preset exists: the library belongs to package branding.
+func ValidPresetID(s string) bool {
+	if len(s) == 0 || len(s) > maxPresetLen || s[0] < 'a' || s[0] > 'z' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		c := s[i]
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 // Tenant is an entity sharing the TransTeira instance. All of its fields are
 // plain values, so copying the struct yields an independent copy.
 type Tenant struct {
@@ -100,6 +121,11 @@ type Tenant struct {
 	// database); the default ones are used otherwise.
 	HasLogo       bool
 	HasBackground bool
+	// BackgroundPreset is the identifier of the background preset of the
+	// library served when HasBackground is false; "" means the default
+	// preset (stored as NULL). The list of valid identifiers belongs to
+	// package branding: this package checks the syntax only (ValidPresetID).
+	BackgroundPreset string
 	// WebhookIncludeAddresses tells whether the tenant webhooks receive the
 	// sender and recipient addresses concerned by an event; off by default
 	// (minimal payloads, decision P31).
@@ -199,6 +225,9 @@ func (t *Tenant) Validate() error {
 	}
 	if !ValidColor(t.PrimaryColor) || !ValidColor(t.AccentColor) {
 		return fmt.Errorf("%w: colors must be #RRGGBB", ErrInvalidTenant)
+	}
+	if t.BackgroundPreset != "" && !ValidPresetID(t.BackgroundPreset) {
+		return fmt.Errorf("%w: invalid background preset %q", ErrInvalidTenant, truncate(t.BackgroundPreset))
 	}
 	return nil
 }

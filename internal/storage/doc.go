@@ -9,9 +9,11 @@
 //	<dataDir>/<tenantID>/<name>.dlstate  download state of a transfer
 //	<dataDir>/<tenantID>/logo.asset      re-encoded branding logo
 //	<dataDir>/<tenantID>/background.asset re-encoded branding background
+//	<dataDir>/<tenantID>/favicon.asset, favicon-32.asset, apple-touch-icon.asset
+//	                                     favicons generated from the logo
 //
-// Branding assets ([Store.WriteAsset]) have fixed names, logo and
-// background, and are written atomically like checkpoints. They are
+// Branding assets ([Store.WriteAsset]) have fixed names (logo,
+// background and the favicons generated from the logo), and are written atomically like checkpoints. They are
 // referenced by the tenant row, not by a transfer: [Store.List] reports
 // them as [KindAsset] so that the orphan reconciliation keeps them.
 //

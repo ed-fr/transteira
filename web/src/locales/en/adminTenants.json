@@ -194,6 +194,16 @@
       "title": "Background image",
       "hint": "Shown full screen behind the deposit area. Without an image, the default image is used.",
       "alt": "Background image of the entity"
+    },
+    "library": {
+      "title": "Background library",
+      "intro": "Choose one of the images supplied with TransTeira as the background of the public pages.",
+      "legend": "Background image of the library",
+      "customNote": "A background image uploaded above takes precedence over this choice.",
+      "customActive": "A custom background image is uploaded: the choice below will only apply once it has been removed.",
+      "apply": "Apply",
+      "applying": "Applying…",
+      "saved": "The background image has been applied."
     }
   },
   "network": {

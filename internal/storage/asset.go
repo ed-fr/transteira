@@ -15,11 +15,19 @@ const (
 	AssetLogo = "logo"
 	// AssetBackground is the re-encoded background image of the tenant.
 	AssetBackground = "background"
+	// AssetFavicon is the favicon of the tenant generated from its logo
+	// (the multi-size .ico).
+	AssetFavicon = "favicon"
+	// AssetFavicon32 is the 32 px PNG favicon generated from the logo.
+	AssetFavicon32 = "favicon-32"
+	// AssetAppleTouchIcon is the Apple touch icon generated from the logo.
+	AssetAppleTouchIcon = "apple-touch-icon"
 )
 
 // MaxAssetSize bounds the size of a branding asset. The assets are images
-// re-encoded by package branding (at most 512 px PNG logos and 3840 px
-// JPEG backgrounds), far below this bound.
+// re-encoded by package branding (at most 512 px PNG logos, 3840 px JPEG
+// backgrounds and the small favicons generated from the logo), far below
+// this bound.
 const MaxAssetSize = 32 << 20
 
 // assetExt is the extension of a branding asset.
@@ -27,7 +35,11 @@ const assetExt = ".asset"
 
 // validAsset reports whether name is one of the fixed asset names.
 func validAsset(name string) bool {
-	return name == AssetLogo || name == AssetBackground
+	switch name {
+	case AssetLogo, AssetBackground, AssetFavicon, AssetFavicon32, AssetAppleTouchIcon:
+		return true
+	}
+	return false
 }
 
 // checkAsset validates the identifiers that make up an asset path.
@@ -41,8 +53,8 @@ func checkAsset(tid tenant.ID, name string) error {
 	return nil
 }
 
-// WriteAsset atomically replaces the branding asset name ([AssetLogo] or
-// [AssetBackground]) of tenant tid with data, at most [MaxAssetSize] bytes,
+// WriteAsset atomically replaces the branding asset name ([AssetLogo],
+// [AssetBackground], [AssetFavicon], [AssetFavicon32] or [AssetAppleTouchIcon]) of tenant tid with data, at most [MaxAssetSize] bytes,
 // like [Store.WriteCheckpoint]. Any other name fails with ErrInvalid before
 // the file system is touched. The data must already be re-encoded by the
 // caller: the store never inspects it.

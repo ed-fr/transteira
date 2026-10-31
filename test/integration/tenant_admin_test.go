@@ -389,7 +389,7 @@ type tenantOp struct {
 	ctype  string
 }
 
-// tenantOps lists the 24 operations of api/openapi.yaml taking a tenant
+// tenantOps lists the 25 operations of api/openapi.yaml taking a tenant
 // ID, with valid inputs (so that only the tenant decides the answer).
 func tenantOps(t *testing.T) []tenantOp {
 	t.Helper()
@@ -405,6 +405,7 @@ func tenantOps(t *testing.T) []tenantOp {
 		{"updateBranding", http.MethodPut, "/branding", `{"primaryColor":"#000000","accentColor":"#FFFFFF"}`, contentJSON},
 		{"uploadBrandingAsset", http.MethodPut, "/branding/logo", string(pngWithText(t, 8, 8, "y")), "image/png"},
 		{"deleteBrandingAsset", http.MethodDelete, "/branding/logo", "", ""},
+		{"setBackgroundPreset", http.MethodPut, "/branding/background-preset", `{"preset":"ocean"}`, contentJSON},
 		{"getNetworkRules", http.MethodGet, "/network", "", ""},
 		{"updateNetworkRules", http.MethodPut, "/network", `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["example.org"]}`, contentJSON},
 		{"getConfidentialityLevels", http.MethodGet, "/confidentiality-levels", "", ""},
@@ -454,7 +455,7 @@ func unknownTenantID(tid string) string {
 
 // TestTenantAdminRights: a delegated admin of C may lower or raise the
 // limit up to the ceiling only and change no reserved setting; a delegated
-// admin of A gets, for each of the 24 operations on C's ID, exactly the
+// admin of A gets, for each of the 25 operations on C's ID, exactly the
 // answer of an unknown ID and changes nothing of C; the FQDN can be
 // neither an admin host nor one already used.
 func TestTenantAdminRights(t *testing.T) {

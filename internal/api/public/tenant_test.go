@@ -31,6 +31,10 @@ type fakeTenantConfig struct {
 	// avOff makes AntivirusEffective false whatever the tenant flag
 	// (instance engine "none").
 	avOff bool
+	// assets, when set, serves the named assets (any name), and records
+	// the names asked in asked.
+	assets map[string]branding.Image
+	asked  []string
 }
 
 func (f *fakeTenantConfig) AntivirusEffective(t *tenant.Tenant) bool {
@@ -53,6 +57,14 @@ func (f *fakeTenantConfig) HasRecipientRules(_ context.Context, t *tenant.Tenant
 }
 
 func (f *fakeTenantConfig) Asset(_ context.Context, t *tenant.Tenant, asset string) (branding.Image, error) {
+	if f.assets != nil && t.ID == "ten_x" {
+		f.asked = append(f.asked, asset)
+		img, ok := f.assets[asset]
+		if !ok {
+			return branding.Image{}, tenantadmin.ErrNotFound
+		}
+		return img, nil
+	}
 	if t.ID != "ten_x" || asset != "logo" {
 		return branding.Image{}, errors.New("unexpected arguments")
 	}
@@ -131,7 +143,8 @@ func TestGetPublicTenant(t *testing.T) {
 		t.Errorf("languages %v", b.AvailableLanguages)
 	}
 	if b.Branding.PrimaryColor != "#0B5FFF" || b.Branding.AccentColor != "#00875A" || !b.Branding.HasLogo || b.Branding.HasBackground ||
-		b.Branding.LogoUrl == nil || *b.Branding.LogoUrl != LogoPath || b.Branding.BackgroundUrl != BackgroundPath {
+		b.Branding.LogoUrl == nil || *b.Branding.LogoUrl != LogoPath || b.Branding.BackgroundUrl != BackgroundPath ||
+		b.Branding.FaviconUrl == nil || *b.Branding.FaviconUrl != FaviconPath {
 		t.Errorf("branding %+v", b.Branding)
 	}
 	if b.Limits.MaxTransferBytes != 5<<30 || !reflect.DeepEqual(b.Limits.ExpiryDays, []gen.ExpiryDays{1, 7, 30}) {
@@ -167,7 +180,8 @@ func TestGetPublicTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 	b = resp.(gen.GetPublicTenant200JSONResponse).Body
-	if b.Branding.LogoUrl != nil || b.Branding.HasLogo || b.Maintenance || b.Language != "fr" || b.LegalDocuments == nil {
+	if b.Branding.LogoUrl != nil || b.Branding.HasLogo || b.Maintenance || b.Language != "fr" || b.LegalDocuments == nil ||
+		b.Branding.FaviconUrl == nil || *b.Branding.FaviconUrl != FaviconPath {
 		t.Errorf("body without logo %+v", b)
 	}
 
@@ -315,6 +329,52 @@ func TestGetTenantAsset(t *testing.T) {
 	if _, err := NewServer(WithTenantService(&fakeTenantConfig{err: boom})).GetTenantAsset(brandedCtx(true),
 		gen.GetTenantAssetRequestObject{Asset: "logo"}); !errors.Is(err, boom) {
 		t.Errorf("failure: %v", err)
+	}
+}
+
+// Every asset of the closed list is passed to the service by name and
+// served with the exact type of the image the service returns; the
+// favicon path published in the configuration is one of them.
+func TestGetTenantAssetKinds(t *testing.T) {
+	t.Parallel()
+	if FaviconPath != "/api/v1/tenant/assets/"+branding.KindFavicon.String() {
+		t.Fatalf("FaviconPath %q", FaviconPath)
+	}
+	assets := map[string]branding.Image{}
+	for _, k := range append([]branding.Kind{branding.KindLogo, branding.KindBackground}, branding.FaviconKinds()...) {
+		assets[k.String()] = branding.Image{Data: []byte("data-" + k.String()), ContentType: k.ContentType(), ETag: `"` + k.String() + `"`}
+	}
+	svc := &fakeTenantConfig{assets: assets}
+	s := NewServer(WithTenantService(svc))
+	for name, img := range assets {
+		resp, err := s.GetTenantAsset(brandedCtx(true), gen.GetTenantAssetRequestObject{Asset: gen.GetTenantAssetParamsAsset(name)})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		rec := httptest.NewRecorder()
+		if err := resp.VisitGetTenantAssetResponse(rec); err != nil {
+			t.Fatal(err)
+		}
+		h := rec.Header()
+		if rec.Code != http.StatusOK || rec.Body.String() != string(img.Data) || h.Get("Content-Type") != img.ContentType ||
+			h.Get("ETag") != img.ETag || h.Get("Cache-Control") != AssetCacheControl || h.Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s: %d %v %q", name, rec.Code, h, rec.Body.String())
+		}
+		inm := img.ETag
+		resp, _ = s.GetTenantAsset(brandedCtx(true), gen.GetTenantAssetRequestObject{
+			Asset: gen.GetTenantAssetParamsAsset(name), Params: gen.GetTenantAssetParams{IfNoneMatch: &inm},
+		})
+		if a := resp.(assetResponse); !a.notModified {
+			t.Errorf("%s: its entity tag does not answer 304", name)
+		}
+	}
+	if len(svc.asked) != 2*len(assets) {
+		t.Errorf("asked %v", svc.asked)
+	}
+	_, err := s.GetTenantAsset(brandedCtx(true), gen.GetTenantAssetRequestObject{Asset: "icon"})
+	var p *problem.Problem
+	if !errors.As(err, &p) || p.Code != problem.CodeNotFound {
+		t.Errorf("unknown asset: %v", err)
 	}
 }
 

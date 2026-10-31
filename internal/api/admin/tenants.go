@@ -37,6 +37,9 @@ type TenantService interface {
 	GetAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string) (branding.Image, error)
 	UploadAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string, r io.Reader, ip netip.Addr) error
 	DeleteAsset(ctx context.Context, p adminauth.Principal, tid tenant.ID, asset string, ip netip.Addr) error
+	SetBackgroundPreset(ctx context.Context, p adminauth.Principal, tid tenant.ID, preset *string, ip netip.Addr) (tenantadmin.Branding, error)
+	ListBackgroundPresets(ctx context.Context, p adminauth.Principal) ([]branding.Preset, error)
+	BackgroundPreset(ctx context.Context, p adminauth.Principal, id string) (branding.Image, error)
 	GetNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.NetworkRules, error)
 	UpdateNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID, cidrs, domains []string, ip netip.Addr) (tenantadmin.NetworkRules, error)
 	GetConfidentialityLevels(ctx context.Context, p adminauth.Principal, tid tenant.ID) ([]tenantadmin.ConfidentialityLevel, error)
@@ -111,6 +114,8 @@ func tenantError(err error) error {
 		return problem.New(problem.CodePayloadTooLarge)
 	case errors.Is(err, tenantadmin.ErrUnsupportedMediaType):
 		return problem.New(problem.CodeUnsupportedMediaType)
+	case errors.Is(err, tenantadmin.ErrUnknownBackgroundPreset):
+		return problem.New(problem.CodeUnknownBackgroundPreset)
 	default:
 		return err
 	}
@@ -197,6 +202,7 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 	v, err := svc.CreateTenant(ctx, p, tenantadmin.TenantCreate{
 		Name: b.Name, FQDN: b.Fqdn, DefaultLanguage: string(b.DefaultLanguage), StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: deref(b.MaxTransferBytes), MaxTransferCeiling: b.MaxTransferCeiling,
+		BackgroundPreset: b.BackgroundPreset,
 	}, middleware.ClientIP(ctx))
 	if err != nil {
 		return nil, tenantError(err)
@@ -326,9 +332,8 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 }
 
 // unsupportedTenantCreate refuses the members of TenantCreate added by API
-// 1.2 that are not implemented yet (setupState, delegatedAdmin,
-// backgroundPreset) with a 400 validation-failed naming the first one
-// present, or returns nil. It is checked for the super admin only, after
+// 1.2 that are not implemented yet (setupState, delegatedAdmin) with a 400
+// validation-failed naming the first one present, or returns nil. It is checked for the super admin only, after
 // the role, so that another admin keeps its 403 from the service.
 func unsupportedTenantCreate(b *gen.TenantCreate) *problem.Problem {
 	switch {
@@ -336,8 +341,6 @@ func unsupportedTenantCreate(b *gen.TenantCreate) *problem.Problem {
 		return validationFailed("/setupState", fieldNotSupported)
 	case b.DelegatedAdmin != nil:
 		return validationFailed("/delegatedAdmin", fieldNotSupported)
-	case b.BackgroundPreset != nil:
-		return validationFailed("/backgroundPreset", fieldNotSupported)
 	}
 	return nil
 }
@@ -461,11 +464,87 @@ func (s *Server) DeleteBrandingAsset(ctx context.Context, req gen.DeleteBranding
 	return gen.DeleteBrandingAsset204Response{}, nil
 }
 
+// SetBackgroundPreset chooses the background preset of a tenant: null or
+// "default" resets it, an unknown preset is 422
+// unknown-background-preset. It answers the branding of the tenant.
+func (s *Server) SetBackgroundPreset(ctx context.Context, req gen.SetBackgroundPresetRequestObject) (gen.SetBackgroundPresetResponseObject, error) {
+	svc, p, err := s.tenantSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return nil, validationFailed("/preset", fieldRequired)
+	}
+	b, err := svc.SetBackgroundPreset(ctx, p, tenant.ID(req.TenantId), req.Body.Preset, middleware.ClientIP(ctx))
+	if err != nil {
+		return nil, tenantError(err)
+	}
+	return gen.SetBackgroundPreset200JSONResponse(brandingBody(b)), nil
+}
+
+// ListBackgroundPresets returns the library of background images, in
+// display order, with their labels in every interface language.
+func (s *Server) ListBackgroundPresets(ctx context.Context, _ gen.ListBackgroundPresetsRequestObject) (gen.ListBackgroundPresetsResponseObject, error) {
+	svc, p, err := s.tenantSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := svc.ListBackgroundPresets(ctx, p)
+	if err != nil {
+		return nil, tenantError(err)
+	}
+	out := gen.ListBackgroundPresets200JSONResponse{Items: make([]gen.BackgroundPreset, len(presets))}
+	for i, pr := range presets {
+		out.Items[i] = gen.BackgroundPreset{Id: pr.ID, Labels: pr.Labels}
+	}
+	return out, nil
+}
+
+// PresetCacheControl is the Cache-Control of a background preset preview
+// (OpenAPI AssetCacheControl): the image of an identifier never changes
+// within a version and holds nothing of a tenant, so a short cache
+// lifetime, revalidated with the ETag, replaces the no-store of the admin
+// host; private, since the response needs an admin session and a shared
+// cache must not serve it to anyone else (T-253).
+const PresetCacheControl = "private, max-age=300"
+
+// GetBackgroundPreset returns the image of a background preset (JPEG, as
+// served to the tenants choosing it) with nosniff, a strong ETag and a
+// short public cache lifetime; 304 when If-None-Match names it, 404 for
+// an unknown identifier.
+func (s *Server) GetBackgroundPreset(ctx context.Context, req gen.GetBackgroundPresetRequestObject) (gen.GetBackgroundPresetResponseObject, error) {
+	svc, p, err := s.tenantSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	img, err := svc.BackgroundPreset(ctx, p, req.PresetId)
+	if err != nil {
+		return nil, tenantError(err)
+	}
+	return presetResponse{img: img, notModified: apiutil.ETagMatches(deref(req.Params.IfNoneMatch), img.ETag)}, nil
+}
+
+// presetResponse writes a background preset, or 304 Not Modified.
+type presetResponse struct {
+	img         branding.Image
+	notModified bool
+}
+
+// VisitGetBackgroundPresetResponse implements
+// gen.GetBackgroundPresetResponseObject.
+func (r presetResponse) VisitGetBackgroundPresetResponse(w http.ResponseWriter) error {
+	return apiutil.WriteImage(w, r.img, PresetCacheControl, r.notModified)
+}
+
 // brandingBody renders b as the OpenAPI Branding.
 func brandingBody(b tenantadmin.Branding) gen.Branding {
 	out := gen.Branding{
 		PrimaryColor: b.PrimaryColor, AccentColor: b.AccentColor, HasLogo: b.HasLogo, HasBackground: b.HasBackground,
 		Contrast: make([]gen.ContrastResult, len(b.Contrast)),
+	}
+	if b.BackgroundPreset != "" {
+		preset := b.BackgroundPreset
+		out.BackgroundPreset = &preset
 	}
 	for i, c := range b.Contrast {
 		out.Contrast[i] = gen.ContrastResult{

@@ -41,6 +41,10 @@ var (
 	// ErrUnsupportedMediaType reports an image that is not a PNG, JPEG or
 	// WebP (415 unsupported-media-type).
 	ErrUnsupportedMediaType = errors.New("tenantadmin: unsupported image format")
+	// ErrUnknownBackgroundPreset reports a background preset that is not
+	// one of [branding.Presets] (422 unknown-background-preset), whatever
+	// its syntax: the value is checked against the compiled list only.
+	ErrUnknownBackgroundPreset = errors.New("tenantadmin: unknown background preset")
 	// ErrRateLimited reports too many SMTP tests (429 rate-limited). The
 	// error is a *[RateLimitError] carrying the Retry-After delay.
 	ErrRateLimited = errors.New("tenantadmin: too many attempts")

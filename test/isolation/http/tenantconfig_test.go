@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
@@ -27,18 +28,22 @@ const (
 	legalMarkerB = "Privacy policy of Entity B Isolation, marker LGB-93d2"
 	// colorB is the primary color of tenant B (A keeps the default one).
 	colorB = "#5A189A"
+	// presetB is the background preset of tenant B (A keeps the default).
+	presetB = "ocean"
 )
 
 // configFixtures is the tenant configuration seeded for the tenant cases.
 type configFixtures struct {
 	// logoB is the logo stored for tenant B (tenant A has none).
 	logoB []byte
+	// faviconsB are the favicons generated from logoB, by asset name.
+	faviconsB map[string][]byte
 }
 
 // seedTenantConfig gives the two tenants a different configuration, as an
 // administrator would through the API: tenant A has a legal notice;
-// tenant B has a privacy policy, a logo stored in dataDir and its own
-// primary color.
+// tenant B has a privacy policy, a logo stored in dataDir with its
+// favicons, its own primary color and its own background preset.
 func seedTenantConfig(t *testing.T, db *store.DB, h *harness, dataDir string) configFixtures {
 	t.Helper()
 	ctx := context.Background()
@@ -66,14 +71,26 @@ func seedTenantConfig(t *testing.T, db *store.DB, h *harness, dataDir string) co
 	if err := files.WriteAsset(h.tenantB.ID, storage.AssetLogo, buf.Bytes()); err != nil {
 		t.Fatalf("seed logo: %v", err)
 	}
+	icons, err := branding.GenerateFavicons(ctx, buf.Bytes())
+	if err != nil {
+		t.Fatalf("seed favicons: %v", err)
+	}
+	favicons := map[string][]byte{}
+	for _, k := range branding.FaviconKinds() {
+		img, _ := icons.Get(k)
+		if err := files.WriteAsset(h.tenantB.ID, k.String(), img.Data); err != nil {
+			t.Fatalf("seed %s: %v", k, err)
+		}
+		favicons[k.String()] = img.Data
+	}
 	b := h.tenantB.Clone()
-	b.HasLogo, b.PrimaryColor = true, colorB
+	b.HasLogo, b.PrimaryColor, b.BackgroundPreset = true, colorB, presetB
 	updated, err := db.Tenants().Update(ctx, b)
 	if err != nil {
 		t.Fatalf("seed branding: %v", err)
 	}
 	h.tenantB = updated
-	return configFixtures{logoB: buf.Bytes()}
+	return configFixtures{logoB: buf.Bytes(), faviconsB: favicons}
 }
 
 // session returns the session of the delegated admin of tenant A, opened
@@ -156,6 +173,7 @@ func tenantScoped(t *testing.T, h *harness, op operation) {
 // reaches the tenant check. The other operations accept the sample body.
 var validBodies = map[string]string{
 	"updateBranding":              `{"primaryColor":"#112233","accentColor":"#445566"}`,
+	"setBackgroundPreset":         `{"preset":"forest"}`,
 	"updateSmtpSettings":          `{"host":"smtp-relay","port":25,"security":"none","fromAddress":"no-reply@entity-b.example.com"}`,
 	"testSmtp":                    `{"to":"admin@entity-b.example.com"}`,
 	"updateLegalDocument":         `{"markdown":"# Notice"}`,
@@ -270,7 +288,10 @@ func publicTenantConfig(t *testing.T, h *harness, op operation) {
 
 // tenantAssets is the isolation case of getTenantAsset: tenant B's logo is
 // served under B's host only; tenant A, without logo, answers 404 rather
-// than B's; the default background is the same under both.
+// than B's; B's favicons are served under B's host only, A getting the
+// built-in icons (200) and never a 304 for B's entity tag; A serves the
+// default background and B the background of its preset; an asset name
+// outside the closed list is 404.
 func tenantAssets(t *testing.T, h *harness, op operation) {
 	t.Helper()
 	get := func(host, asset string) response {
@@ -290,12 +311,73 @@ func tenantAssets(t *testing.T, h *harness, op operation) {
 	if r := h.do(t, http.MethodGet, "http://"+h.addr+"/api/v1/tenant/assets/logo", hostA, nil, hdr); r.status != http.StatusNotFound {
 		t.Errorf("%s: logo under %s with B's ETag: %d", op, hostA, r.status)
 	}
+	for _, k := range branding.FaviconKinds() {
+		asset := k.String()
+		fb, fa := get(hostB, asset), get(hostA, asset)
+		def, _ := branding.DefaultFavicon(k)
+		if fb.status != http.StatusOK || !bytes.Equal(fb.body, h.config.faviconsB[asset]) ||
+			fb.header.Get("Content-Type") != k.ContentType() || fb.header.Get("X-Content-Type-Options") != "nosniff" ||
+			fb.header.Get("ETag") == "" {
+			t.Errorf("%s: %s under %s: %d %v", op, asset, hostB, fb.status, fb.header)
+		}
+		if fa.status != http.StatusOK || !bytes.Equal(fa.body, def.Data) || bytes.Equal(fa.body, fb.body) ||
+			fa.header.Get("ETag") == fb.header.Get("ETag") {
+			t.Errorf("%s: %s under %s: %d, want the built-in icon, never B's", op, asset, hostA, fa.status)
+		}
+		hdr := http.Header{"If-None-Match": {fb.header.Get("ETag")}}
+		if r := h.do(t, http.MethodGet, "http://"+h.addr+"/api/v1/tenant/assets/"+asset, hostA, nil, hdr); r.status != http.StatusOK ||
+			!bytes.Equal(r.body, def.Data) {
+			t.Errorf("%s: %s under %s with B's ETag: %d, want 200 with the built-in icon", op, asset, hostA, r.status)
+		}
+		noLeak(t, h, op, hostA, fa)
+	}
 	bgA, bgB := get(hostA, "background"), get(hostB, "background")
-	if bgA.status != http.StatusOK || bgB.status != http.StatusOK || !bytes.Equal(bgA.body, bgB.body) {
-		t.Errorf("%s: default background %d/%d, want the same image under both", op, bgA.status, bgB.status)
+	ocean, _ := branding.PresetBackground(presetB)
+	if bgA.status != http.StatusOK || !bytes.Equal(bgA.body, branding.DefaultBackground().Data) {
+		t.Errorf("%s: background under %s: %d, want the default one", op, hostA, bgA.status)
+	}
+	if bgB.status != http.StatusOK || !bytes.Equal(bgB.body, ocean.Data) {
+		t.Errorf("%s: background under %s: %d, want its preset", op, hostB, bgB.status)
+	}
+	for _, asset := range []string{"icon", "favicon.ico", "..%2Flogo"} {
+		if r := get(hostB, asset); r.status != http.StatusNotFound {
+			t.Errorf("%s: unknown asset %q: %d, want 404", op, asset, r.status)
+		}
 	}
 	noLeak(t, h, op, hostA, a)
 	noLeak(t, h, op, hostA, bgA)
+}
+
+// readBackgroundPresets is the isolation case of the background preset
+// library (listBackgroundPresets, getBackgroundPreset): served on the
+// admin host only, readable by every administrator with the same answer
+// for the delegated admin of tenant A and the super admin, and holding no
+// data of any tenant (the preset chosen by tenant B is not marked).
+func readBackgroundPresets(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	adminHostOnly(t, h, op)
+	deleg := h.sendAs(t, h.session(t), op, "")
+	super := h.sendAs(t, h.superSession(t), op, "")
+	wantOK(t, op, "delegated admin", deleg)
+	wantOK(t, op, "super admin", super)
+	if !bytes.Equal(deleg.body, super.body) {
+		t.Errorf("%s: the delegated admin and the super admin get different answers", op)
+	}
+	if op.id == "getBackgroundPreset" {
+		want, _ := branding.PresetBackground(presetB)
+		if !bytes.Equal(deleg.body, want.Data) || deleg.header.Get("Content-Type") != "image/jpeg" ||
+			deleg.header.Get("X-Content-Type-Options") != "nosniff" || deleg.header.Get("ETag") != want.ETag {
+			t.Errorf("%s: %v, want the image of %s", op, deleg.header, presetB)
+		}
+	} else {
+		for _, s := range []string{nameA, hostA, string(h.tenantA.ID)} {
+			if strings.Contains(string(deleg.body), s) {
+				t.Errorf("%s holds tenant data %q: %s", op, s, deleg.body)
+			}
+		}
+		h.noTenantB(t, op, deleg)
+	}
+	noLeak(t, h, op, hostAdmin, deleg)
 }
 
 // tenantLegal is the isolation case of getTenantLegalDocument: each tenant

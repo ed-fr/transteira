@@ -194,6 +194,16 @@
       "title": "Image de fond",
       "hint": "Affichée en plein écran derrière la zone de dépôt. Sans image, l’image par défaut est utilisée.",
       "alt": "Image de fond de l’entité"
+    },
+    "library": {
+      "title": "Bibliothèque d’images de fond",
+      "intro": "Choisissez l’une des images fournies avec TransTeira comme fond des pages publiques.",
+      "legend": "Image de fond de la bibliothèque",
+      "customNote": "Une image de fond téléversée ci-dessus est prioritaire sur ce choix.",
+      "customActive": "Une image de fond personnalisée est téléversée : le choix ci-dessous ne s’appliquera qu’après sa suppression.",
+      "apply": "Appliquer",
+      "applying": "Application…",
+      "saved": "L’image de fond a été appliquée."
     }
   },
   "network": {

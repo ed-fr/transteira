@@ -161,10 +161,17 @@ type Service struct {
 	smtpTests  *ratelimit.Window
 	// avDisabled is Options.AntivirusDisabled.
 	avDisabled bool
+	// favicons generates the favicons of an uploaded logo
+	// (branding.GenerateFavicons; replaceable in tests).
+	favicons func(ctx context.Context, logoPNG []byte) (branding.Favicons, error)
 
 	// mu serializes the read-modify-write cycles of the tenant rows, so
 	// that two concurrent changes of different fields do not lose one.
 	mu sync.Mutex
+	// assetMu serializes the changes of the branding files (upload,
+	// deletion, favicon backfill) with the flags that point to them, so
+	// that a logo and its favicons always come from the same image.
+	assetMu sync.Mutex
 }
 
 // errMissingDependency reports a [New] call without a required option.
@@ -188,6 +195,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		now:        opts.Now,
 		dnsTimeout: opts.DNSTimeout,
 		avDisabled: opts.AntivirusDisabled,
+		favicons:   branding.GenerateFavicons,
 	}
 	for _, h := range opts.AdminHosts {
 		if n, err := tenant.NormalizeHost(h); err == nil {

@@ -643,3 +643,83 @@ func TestTenantLegalDocuments(t *testing.T) {
 		}
 	})
 }
+
+func TestTenantsBackgroundPreset(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		repo := db.Tenants()
+		mk := func(fqdn, preset string) *tenant.Tenant {
+			c, err := repo.Create(ctx, &tenant.Tenant{
+				Name: "T", FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30,
+				StorageQuotaBytes: 1 << 40, BackgroundPreset: preset,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return c
+		}
+
+		// Without a preset: NULL, read back as "".
+		none := mk("transfer.entity-a.example.com", "")
+		if none.BackgroundPreset != "" {
+			t.Fatalf("created = %q", none.BackgroundPreset)
+		}
+		withP := mk("transfer.entity-b.example.com", "aurora-2")
+
+		// Returned by Get, the FQDN lookup and List.
+		for _, c := range []*tenant.Tenant{none, withP} {
+			got, err := repo.Get(ctx, c.ID)
+			if err != nil || got.BackgroundPreset != c.BackgroundPreset || *got != *c {
+				t.Fatalf("Get(%s) = %+v, %v", c.FQDN, got, err)
+			}
+			byHost, err := repo.TenantByFQDN(ctx, c.FQDN)
+			if err != nil || byHost.BackgroundPreset != c.BackgroundPreset {
+				t.Fatalf("TenantByFQDN(%s) = %+v, %v", c.FQDN, byHost, err)
+			}
+		}
+		page, err := repo.List(ctx, store.TenantListOptions{})
+		if err != nil || len(page.Items) != 2 {
+			t.Fatalf("List = %+v, %v", page, err)
+		}
+		listed := map[tenant.ID]string{}
+		for _, it := range page.Items {
+			listed[it.ID] = it.BackgroundPreset
+		}
+		if listed[none.ID] != "" || listed[withP.ID] != "aurora-2" {
+			t.Fatalf("List presets = %v", listed)
+		}
+
+		// Update sets, changes and clears it (stored as NULL).
+		u := *none
+		u.BackgroundPreset = "dunes"
+		got, err := repo.Update(ctx, &u)
+		if err != nil || got.BackgroundPreset != "dunes" {
+			t.Fatalf("Update set = %+v, %v", got, err)
+		}
+		u.BackgroundPreset = ""
+		if got, err = repo.Update(ctx, &u); err != nil || got.BackgroundPreset != "" {
+			t.Fatalf("Update clear = %+v, %v", got, err)
+		}
+
+		// Invalid syntax is refused, by Create and Update, storing nothing.
+		for _, bad := range []string{"Aurora", "a/b", "1a", strings.Repeat("a", 33)} {
+			x := u
+			x.BackgroundPreset = bad
+			if _, err := repo.Update(ctx, &x); !errors.Is(err, store.ErrInvalid) {
+				t.Errorf("Update(%q) = %v, want ErrInvalid", bad, err)
+			}
+			if _, err := repo.Create(ctx, &tenant.Tenant{
+				Name: "T", FQDN: "bad.example.com", DefaultLanguage: "en", MaxTransferBytes: 1,
+				StorageQuotaBytes: 1, BackgroundPreset: bad,
+			}); !errors.Is(err, store.ErrInvalid) {
+				t.Errorf("Create(%q) = %v, want ErrInvalid", bad, err)
+			}
+		}
+		if got, err := repo.Get(ctx, withP.ID); err != nil || got.BackgroundPreset != "aurora-2" {
+			t.Fatalf("untouched tenant = %+v, %v", got, err)
+		}
+	})
+}

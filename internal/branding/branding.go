@@ -33,6 +33,15 @@ const (
 	KindLogo Kind = iota + 1
 	// KindBackground is the full-screen background image, re-encoded as JPEG.
 	KindBackground
+	// KindFavicon is the multi-size ICO generated from the logo (16, 32 and
+	// 48 px PNG images). Served only, never uploadable.
+	KindFavicon
+	// KindFavicon32 is the 32x32 PNG icon generated from the logo. Served
+	// only, never uploadable.
+	KindFavicon32
+	// KindAppleTouchIcon is the 180x180 PNG icon generated from the logo.
+	// Served only, never uploadable.
+	KindAppleTouchIcon
 )
 
 // Upload size limits, as published in the OpenAPI specification.
@@ -93,6 +102,8 @@ const (
 const (
 	ContentTypePNG  = "image/png"
 	ContentTypeJPEG = "image/jpeg"
+	// ContentTypeICO is the media type of the generated favicon container.
+	ContentTypeICO = "image/x-icon"
 )
 
 // Errors returned by [Process] and [ParseKind].
@@ -163,11 +174,34 @@ func (k Kind) spec() (kindSpec, bool) {
 	}
 }
 
-// String returns "logo" or "background" (the {asset} path value of the
-// API), or "" for an unknown kind.
+// servedKind describes a kind that is generated and served but never
+// uploaded: it has no upload limits, so it is absent from [Kind.spec].
+type servedKind struct {
+	name        string
+	contentType string
+}
+
+// servedKinds lists the generated kinds, in the order of [FaviconKinds].
+var servedKinds = map[Kind]servedKind{
+	KindFavicon:        {"favicon", ContentTypeICO},
+	KindFavicon32:      {"favicon-32", ContentTypePNG},
+	KindAppleTouchIcon: {"apple-touch-icon", ContentTypePNG},
+}
+
+// String returns the {asset} path value of the API ("logo", "background",
+// "favicon", "favicon-32" or "apple-touch-icon"), or "" for an unknown kind.
 func (k Kind) String() string {
+	if s, ok := servedKinds[k]; ok {
+		return s.name
+	}
 	s, _ := k.spec()
 	return s.name
+}
+
+// IsFavicon reports whether k is one of [FaviconKinds].
+func (k Kind) IsFavicon() bool {
+	_, ok := servedKinds[k]
+	return ok
 }
 
 // MaxBytes returns the upload size limit of k, or 0 for an unknown kind.
@@ -179,13 +213,32 @@ func (k Kind) MaxBytes() int64 {
 // ContentType returns the media type of the images stored for k, or "" for
 // an unknown kind.
 func (k Kind) ContentType() string {
+	if s, ok := servedKinds[k]; ok {
+		return s.contentType
+	}
 	s, _ := k.spec()
 	return s.contentType
 }
 
-// ParseKind parses an {asset} path value: "logo" or "background".
+// ParseKind parses an uploadable {asset} path value: "logo" or "background".
+// Generated kinds are refused here (use [ParseAsset]), so that an upload or
+// a body limit can never be derived for them.
 func ParseKind(s string) (Kind, error) {
 	for _, k := range []Kind{KindLogo, KindBackground} {
+		if s == k.String() {
+			return k, nil
+		}
+	}
+	return 0, ErrUnknownKind
+}
+
+// ParseAsset parses any served {asset} path value: "logo", "background",
+// "favicon", "favicon-32" or "apple-touch-icon".
+func ParseAsset(s string) (Kind, error) {
+	if k, err := ParseKind(s); err == nil {
+		return k, nil
+	}
+	for _, k := range FaviconKinds() {
 		if s == k.String() {
 			return k, nil
 		}

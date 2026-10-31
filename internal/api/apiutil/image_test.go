@@ -40,3 +40,16 @@ func TestWriteImage(t *testing.T) {
 		})
 	}
 }
+
+func TestETagMatches(t *testing.T) {
+	t.Parallel()
+	const etag = `"abc"`
+	for header, want := range map[string]bool{
+		`"abc"`: true, `W/"abc"`: true, `"x", "abc"`: true, ` "abc" `: true, "*": true,
+		"": false, `"ab"`: false, `abc`: false, `"x"`: false, `W/"x", "y"`: false,
+	} {
+		if got := ETagMatches(header, etag); got != want {
+			t.Errorf("ETagMatches(%q) = %v, want %v", header, got, want)
+		}
+	}
+}

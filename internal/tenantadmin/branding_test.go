@@ -68,7 +68,7 @@ func TestBrandingAssets(t *testing.T) {
 		if img.ContentType != branding.ContentTypeJPEG || img.ETag == "" || len(img.Data) == 0 {
 			t.Fatalf("default background: %s %s", img.ContentType, img.ETag)
 		}
-		_, err = ev.svc.Asset(ctx, ev.a, "favicon")
+		_, err = ev.svc.Asset(ctx, ev.a, "icon")
 		wantErr(t, "unknown asset", err, ErrNotFound)
 
 		mustNoErr(t, "upload logo", ev.svc.UploadAsset(ctx, ev.adminA, ev.a.ID, "logo", bytes.NewReader(pngImage(t, 64, 32)), clientIP))

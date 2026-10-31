@@ -6,15 +6,19 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
+// allAssets lists every fixed asset name.
+var allAssets = []string{AssetLogo, AssetBackground, AssetFavicon, AssetFavicon32, AssetAppleTouchIcon}
+
 func TestAssetRoundTrip(t *testing.T) {
 	s, dir := newTestStore(t)
 	tid := newTenant()
-	for _, name := range []string{AssetLogo, AssetBackground} {
+	for _, name := range allAssets {
 		if _, err := s.ReadAsset(tid, name); !errors.Is(err, ErrNotFound) || !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("missing %s: %v", name, err)
 		}
@@ -32,7 +36,7 @@ func TestAssetRoundTrip(t *testing.T) {
 			t.Fatalf("read %s = %q, %v", name, got, err)
 		}
 	}
-	if got := listDir(t, filepath.Join(dir, string(tid))); len(got) != 2 {
+	if got := listDir(t, filepath.Join(dir, string(tid))); len(got) != len(allAssets) {
 		t.Fatalf("entries = %v", got)
 	}
 	entries, err := s.List(tid)
@@ -40,11 +44,11 @@ func TestAssetRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.Kind != KindAsset || (e.Name != AssetLogo && e.Name != AssetBackground) {
+		if e.Kind != KindAsset || !slices.Contains(allAssets, e.Name) {
 			t.Fatalf("entry %+v", e)
 		}
 	}
-	for _, name := range []string{AssetLogo, AssetBackground} {
+	for _, name := range allAssets {
 		if err := s.RemoveAsset(tid, name); err != nil {
 			t.Fatal(err)
 		}
@@ -62,7 +66,10 @@ func TestAssetValidation(t *testing.T) {
 		name string
 	}{
 		{"bad", AssetLogo},
-		{tid, "favicon"},
+		{tid, "Favicon"},
+		{tid, "favicon/../x"},
+		{tid, "favicon.asset"},
+		{tid, "favicon-16"},
 		{tid, "../logo"},
 		{tid, NewName()},
 		{tid, ""},
@@ -107,7 +114,11 @@ func TestClassifyAsset(t *testing.T) {
 		{tempName("background", assetExt), "background", KindTemp},
 		{"logo", "logo", KindUnknown},
 		{"logo.png", "logo.png", KindUnknown},
-		{"favicon.asset", "favicon.asset", KindUnknown},
+		{"favicon.asset", "favicon", KindAsset},
+		{"favicon-32.asset", "favicon-32", KindAsset},
+		{"apple-touch-icon.asset", "apple-touch-icon", KindAsset},
+		{tempName("favicon-32", assetExt), "favicon-32", KindTemp},
+		{"favicon-16.asset", "favicon-16.asset", KindUnknown},
 		{"logo.asset.0123456789abcdef", "logo.asset.0123456789abcdef", KindUnknown},
 		{"logo.asset.0123456789abcde.tmp", "logo.asset.0123456789abcde.tmp", KindUnknown},
 		{"logo.asset.x", "logo.asset.x", KindUnknown},

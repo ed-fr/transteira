@@ -61,6 +61,10 @@ func TestTenantValidate(t *testing.T) {
 		{"empty primary", func(x *Tenant) { x.PrimaryColor = "" }, false},
 		{"short accent", func(x *Tenant) { x.AccentColor = "#FFF" }, false},
 		{"assets", func(x *Tenant) { x.HasLogo, x.HasBackground = true, true }, true},
+		{"preset", func(x *Tenant) { x.BackgroundPreset = "aurora-2" }, true},
+		{"empty preset", func(x *Tenant) { x.BackgroundPreset = "" }, true},
+		{"preset upper case", func(x *Tenant) { x.BackgroundPreset = "Aurora" }, false},
+		{"preset slash", func(x *Tenant) { x.BackgroundPreset = "a/b" }, false},
 		{"zero quota", func(x *Tenant) { x.StorageQuotaBytes = 0 }, false},
 		{"negative quota", func(x *Tenant) { x.StorageQuotaBytes = -5 }, false},
 	}
@@ -77,6 +81,20 @@ func TestTenantValidate(t *testing.T) {
 				t.Fatalf("Validate() = %v, want ErrInvalidTenant", err)
 			}
 		})
+	}
+}
+
+func TestValidPresetID(t *testing.T) {
+	t.Parallel()
+	for s, want := range map[string]bool{
+		"a": true, "default": true, "aurora-2": true, "a-": true, "z9": true,
+		strings.Repeat("a", 32): true, strings.Repeat("a", 33): false,
+		"": false, "A": false, "Aurora": false, "1a": false, "-a": false, "a_b": false,
+		"a b": false, "a/b": false, "a.b": false, "é": false, "aé": false, "a\x00": false, "a\n": false,
+	} {
+		if got := ValidPresetID(s); got != want {
+			t.Errorf("ValidPresetID(%q) = %v, want %v", s, got, want)
+		}
 	}
 }
 

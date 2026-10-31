@@ -72,6 +72,10 @@ type TenantCreate struct {
 	// MaxTransferCeiling is the ceiling of MaxTransferBytes for the
 	// delegated admins; nil means MaxTransferBytes.
 	MaxTransferCeiling *int64
+	// BackgroundPreset is the background preset of the tenant (one of
+	// [branding.Presets]); nil or [branding.DefaultPresetID] means the
+	// default background.
+	BackgroundPreset *string
 }
 
 // TenantUpdate is the input of [Service.UpdateTenant] (OpenAPI
@@ -194,7 +198,9 @@ func (s *Service) GetTenant(ctx context.Context, p adminauth.Principal, tid tena
 // customized. The transfer limit and its ceiling are set in one step: the
 // ceiling defaults to the limit and the limit to the ceiling. It returns an
 // *InvalidError for a malformed field, a limit above the ceiling or an FQDN
-// equal to an admin host, and ErrAlreadyExists for an FQDN already used.
+// equal to an admin host, ErrUnknownBackgroundPreset for a background
+// preset outside the library, and ErrAlreadyExists for an FQDN already
+// used.
 func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in TenantCreate, ip netip.Addr) (TenantView, error) {
 	if err := superAdmin(p); err != nil {
 		return TenantView{}, err
@@ -217,9 +223,13 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 	if err != nil {
 		return TenantView{}, err
 	}
+	preset, err := storedPreset(in.BackgroundPreset)
+	if err != nil {
+		return TenantView{}, err
+	}
 	t, err := s.repo.createTenant(ctx, &tenant.Tenant{
 		Name: name, FQDN: fqdn, DefaultLanguage: in.DefaultLanguage, StorageQuotaBytes: in.StorageQuotaBytes,
-		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling,
+		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset,
 	})
 	switch {
 	case errors.Is(err, store.ErrConflict):

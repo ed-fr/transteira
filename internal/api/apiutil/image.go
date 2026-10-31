@@ -6,6 +6,7 @@ package apiutil
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ed-fr/transteira/internal/branding"
 )
@@ -28,4 +29,16 @@ func WriteImage(w http.ResponseWriter, img branding.Image, cacheControl string, 
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write(img.Data)
 	return err
+}
+
+// ETagMatches reports whether the If-None-Match value header names etag
+// (RFC 9110 section 13.1.2: weak comparison, "*" matches any).
+func ETagMatches(header, etag string) bool {
+	for v := range strings.SplitSeq(header, ",") {
+		v = strings.TrimSpace(v)
+		if v == "*" || strings.TrimPrefix(v, "W/") == etag {
+			return true
+		}
+	}
+	return false
 }

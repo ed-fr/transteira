@@ -1310,6 +1310,12 @@ func assetName(kind branding.Kind) (string, error) {
 		return storage.AssetLogo, nil
 	case branding.KindBackground:
 		return storage.AssetBackground, nil
+	case branding.KindFavicon:
+		return storage.AssetFavicon, nil
+	case branding.KindFavicon32:
+		return storage.AssetFavicon32, nil
+	case branding.KindAppleTouchIcon:
+		return storage.AssetAppleTouchIcon, nil
 	default:
 		return "", errUnknownAsset
 	}

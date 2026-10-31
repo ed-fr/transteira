@@ -335,7 +335,14 @@ func TestAssetStore(t *testing.T) {
 	t.Cleanup(func() { _ = files.Close() })
 	a := assetStore{files: files}
 	tid := tenant.ID(id.New(id.Tenant))
-	for _, kind := range []branding.Kind{branding.KindLogo, branding.KindBackground} {
+	kinds := append([]branding.Kind{branding.KindLogo, branding.KindBackground}, branding.FaviconKinds()...)
+	names := map[string]bool{}
+	for _, kind := range kinds {
+		name, err := assetName(kind)
+		if err != nil || name != kind.String() || names[name] {
+			t.Fatalf("assetName(%s) = %q, %v", kind, name, err)
+		}
+		names[name] = true
 		if _, err := a.Get(tid, kind); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%s missing: %v", kind, err)
 		}

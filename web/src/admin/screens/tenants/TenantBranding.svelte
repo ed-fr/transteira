@@ -11,6 +11,7 @@
   import { Alert, Spinner } from '../../../shared/components';
   import { i18n, formatNumber, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import BackgroundPresets from '../../components/BackgroundPresets.svelte';
   import BrandPreview from '../../components/BrandPreview.svelte';
   import ColorField from '../../components/ColorField.svelte';
   import FormSection from '../../components/FormSection.svelte';
@@ -39,6 +40,7 @@
   let accent = $state('');
   let hasLogo = $state(false);
   let hasBackground = $state(false);
+  let backgroundPreset = $state<string | undefined>(undefined);
   let logoUrl = $state<string | null>(null);
   let errors = $state<SummaryError[]>([]);
 
@@ -75,12 +77,15 @@
     }
   }
 
-  function apply(data: SavedBranding & { hasLogo: boolean; hasBackground: boolean }): void {
+  function apply(
+    data: SavedBranding & { hasLogo: boolean; hasBackground: boolean; backgroundPreset?: string },
+  ): void {
     saved = { primaryColor: data.primaryColor, accentColor: data.accentColor, contrast: data.contrast };
     primary = data.primaryColor;
     accent = data.accentColor;
     hasLogo = data.hasLogo;
     hasBackground = data.hasBackground;
+    backgroundPreset = data.backgroundPreset;
   }
 
   const fieldLabels = $derived({
@@ -222,6 +227,12 @@
       hint={t('adminTenants.branding.background.hint')}
       alt={t('adminTenants.branding.background.alt')}
       bind:has={hasBackground}
+    />
+    <BackgroundPresets
+      {tenantId}
+      preset={backgroundPreset}
+      {hasBackground}
+      addGuard={(guard) => nav.addGuard(guard)}
     />
   {/key}
 {/if}

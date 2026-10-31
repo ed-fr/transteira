@@ -23,7 +23,7 @@ const (
 
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
-	`status, primary_color, accent_color, has_logo, has_background, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
+	`status, primary_color, accent_color, has_logo, has_background, background_preset, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
 	`antivirus_enabled, created_at, updated_at`
 
 // Statements of the Tenants repository. The tenants table is the registry of
@@ -33,7 +33,7 @@ var (
 		// The setup state is always written explicitly (migration 0022 drops
 		// its default on PostgreSQL); 'active' until the creation with a
 		// setup state is implemented (step 5 of V1.2).
-		`INSERT INTO tenants (`+tenantColumns+`, setup_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+		`INSERT INTO tenants (`+tenantColumns+`, setup_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -49,8 +49,8 @@ var (
 	qTenantUpdate = systemQuery(
 		`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?,
 			max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?,
-			has_logo = ?, has_background = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?,
-			allow_transfer_reply = ?, updated_at = ?
+			has_logo = ?, has_background = ?, background_preset = ?, webhook_include_addresses = ?,
+			allow_remote_internal_deposit = ?, allow_transfer_reply = ?, updated_at = ?
 			WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	// qTenantSetAntivirus switches the antivirus of an active tenant (super
@@ -134,19 +134,30 @@ func (db *DB) Tenants() *Tenants { return &Tenants{db: db} }
 // compile-time check: Tenants resolves hosts for tenant.Resolver.
 var _ tenant.Lookup = (*Tenants)(nil)
 
+// presetArg is the statement argument of a background preset: NULL (the
+// default preset) for "".
+func presetArg(preset string) any {
+	if preset == "" {
+		return nil
+	}
+	return preset
+}
+
 // scanTenant reads one row of tenantColumns.
 func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	var (
 		t                tenant.Tenant
 		tid, status      string
 		created, updated int64
+		preset           sql.NullString
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
-		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground,
+		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
 		&created, &updated); err != nil {
 		return nil, err
 	}
+	t.BackgroundPreset = preset.String // NULL is the default preset, ""
 	t.ID = tenant.ID(tid)
 	t.Status = tenant.Status(status)
 	t.CreatedAt = fromMillis(created)
@@ -163,7 +174,8 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // t.AntivirusEnabled ([Tenants.SetAntivirusEnabled] changes it). It
 // returns the stored tenant, ErrInvalid for invalid fields (including a
 // preset ID, a status other than active, or a transfer limit above the
-// ceiling, the ceiling being at most [tenant.MaxTransferLimit]) and
+// ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
+// background preset of invalid syntax) and
 // ErrConflict when the FQDN is already used.
 func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	if !t.ID.IsZero() {
@@ -187,7 +199,7 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
-			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
+			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, presetArg(c.BackgroundPreset), c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
 			c.AllowTransferReply, c.AntivirusEnabled,
 			toMillis(now), toMillis(now))
 		if err != nil {
@@ -271,7 +283,8 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 }
 
 // Update stores the modifiable fields of t (name, FQDN, language, limits,
-// colors, asset flags, webhook address option, remote internal deposit
+// colors, asset flags, background preset (syntax checked by
+// [tenant.Tenant.Validate]; "" is stored as NULL), webhook address option, remote internal deposit
 // and reply options) and refreshes UpdatedAt. The status only changes with
 // [Tenants.SetStatus] and the antivirus switch with
 // [Tenants.UpdateWithAntivirus] or [Tenants.SetAntivirusEnabled]
@@ -327,7 +340,7 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, general, antivir
 		if general {
 			res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
 				t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
-				t.HasLogo, t.HasBackground, t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
+				t.HasLogo, t.HasBackground, presetArg(t.BackgroundPreset), t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
 				string(t.ID))
 			if err == nil {
 				err = expectOne(res)

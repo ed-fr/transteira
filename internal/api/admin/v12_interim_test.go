@@ -17,7 +17,6 @@ func TestCreateTenantRefusesUnimplementedMembers(t *testing.T) {
 	ctx := ctxWith(store.SessionAuthenticated, superRoot)
 	setup := gen.TenantSetupStateSetup
 	active := gen.TenantSetupStateActive
-	preset := gen.BackgroundPresetId("ocean")
 	base := func() *gen.TenantCreate {
 		return &gen.TenantCreate{Name: "Entity B", Fqdn: "transfer.entity-b.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1 << 40}
 	}
@@ -31,7 +30,6 @@ func TestCreateTenantRefusesUnimplementedMembers(t *testing.T) {
 		{"delegated admin", func(b *gen.TenantCreate) {
 			b.DelegatedAdmin = &gen.NewDelegatedAdmin{Username: "admin.b", Email: "admin@entity-b.example.com", Language: "en"}
 		}, "/delegatedAdmin"},
-		{"background preset", func(b *gen.TenantCreate) { b.BackgroundPreset = &preset }, "/backgroundPreset"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +53,28 @@ func TestCreateTenantRefusesUnimplementedMembers(t *testing.T) {
 	b.SetupState = &setup
 	_, err := tenantServer(svc).CreateTenant(ctxWith(store.SessionAuthenticated, delegated), gen.CreateTenantRequestObject{Body: b})
 	expectProblem(t, err, problem.CodeForbidden)
+}
+
+// The background preset of API 1.2 is implemented: passed to the service,
+// whose refusal of an unknown preset is a 422.
+func TestCreateTenantBackgroundPreset(t *testing.T) {
+	t.Parallel()
+	ctx := ctxWith(store.SessionAuthenticated, superRoot)
+	preset := gen.BackgroundPresetId("ocean")
+	body := &gen.TenantCreate{
+		Name: "Entity B", Fqdn: "transfer.entity-b.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1 << 40,
+		BackgroundPreset: &preset,
+	}
+	svc := &fakeTenantService{}
+	if _, err := tenantServer(svc).CreateTenant(ctx, gen.CreateTenantRequestObject{Body: body}); err != nil {
+		t.Fatal(err)
+	}
+	if in := svc.args["CreateTenant"][1].(tenantadmin.TenantCreate); in.BackgroundPreset == nil || *in.BackgroundPreset != "ocean" {
+		t.Errorf("create input %+v", in)
+	}
+	svc = &fakeTenantService{err: tenantadmin.ErrUnknownBackgroundPreset}
+	_, err := tenantServer(svc).CreateTenant(ctx, gen.CreateTenantRequestObject{Body: body})
+	expectProblem(t, err, problem.CodeUnknownBackgroundPreset)
 }
 
 func TestCreateAdminRefusesMailDelivery(t *testing.T) {

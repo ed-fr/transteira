@@ -32,8 +32,8 @@ const (
 	// and left behind only by a crash. A leftover of an asset write
 	// (<asset>.asset.<16 hex>.tmp) is a KindTemp too.
 	KindTemp
-	// KindAsset is a branding asset of the tenant (logo.asset or
-	// background.asset). It is referenced by the tenant row, not by a
+	// KindAsset is a branding asset of the tenant (logo.asset,
+	// background.asset or a favicon). It is referenced by the tenant row, not by a
 	// transfer: the orphan reconciliation must keep it; it is removed with
 	// [Store.RemoveAsset] or with the tenant directory.
 	KindAsset

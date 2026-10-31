@@ -176,6 +176,7 @@ var isolationCases = map[string]isolationCase{
 	"uploadBrandingAsset":         adminTenantOp,
 	"deleteBrandingAsset":         adminTenantOp,
 	"getBrandingAsset":            adminBrandingAsset,
+	"setBackgroundPreset":         adminTenantOp,
 	"getNetworkRules":             adminTenantOp,
 	"updateNetworkRules":          adminTenantOp,
 	"getConfidentialityLevels":    adminTenantOp,
@@ -193,6 +194,10 @@ var isolationCases = map[string]isolationCase{
 	"previewEmailTemplate":        adminTenantOp,
 	"getLegalDocumentAdmin":       adminTenantOp,
 	"updateLegalDocument":         adminTenantOp,
+	// The background preset library (tenantconfig_test.go, since 1.2)
+	// holds no tenant data and is readable by every administrator.
+	"listBackgroundPresets": readBackgroundPresets,
+	"getBackgroundPreset":   readBackgroundPresets,
 	// Public configuration of the tenant (tenantconfig_test.go): under each
 	// tenant host, the name, branding, logo and legal documents of that
 	// tenant only.
