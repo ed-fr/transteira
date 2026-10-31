@@ -17,7 +17,7 @@ import (
 type repo interface {
 	getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
 	listTenants(ctx context.Context, opts store.TenantListOptions) (store.Page[*tenant.Tenant], error)
-	createTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
+	createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error)
 	updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
 	setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error
 	updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error)
@@ -101,8 +101,8 @@ func (r *storeRepo) listTenants(ctx context.Context, opts store.TenantListOption
 	return r.db.Tenants().List(ctx, opts)
 }
 
-func (r *storeRepo) createTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
-	return r.db.Tenants().Create(ctx, t)
+func (r *storeRepo) createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error) {
+	return r.db.Tenants().CreateWith(ctx, t, then)
 }
 
 func (r *storeRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {

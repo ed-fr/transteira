@@ -10,6 +10,9 @@ import {
   canManageTenants,
   changesProfile,
   createBody,
+  delegatedLanguage,
+  emptyDelegatedForm,
+  validateDelegated,
   deletionResumes,
   editableFields,
   effectiveCeiling,
@@ -173,9 +176,107 @@ describe('form model', () => {
       maxTransferBytes: MAX_TRANSFER_BYTES,
       maxTransferCeiling: MAX_TRANSFER_BYTES,
     });
+    // A disabled or absent delegated administrator adds nothing to the body.
+    expect(createBody(form, emptyDelegatedForm())).toEqual(createBody(form));
     expect(createBody(emptyForm())).toBeUndefined();
     expect(createBody({ ...form, maxTransferBytes: null })).toBeUndefined();
     expect(createBody({ ...form, maxTransferCeiling: null })).toBeUndefined();
+  });
+});
+
+describe('delegated administrator of a new tenant', () => {
+  const form: TenantForm = {
+    ...emptyForm('fr'),
+    name: 'Entity B',
+    fqdn: 'transfer.entity-b.example.com',
+    storageQuotaBytes: 512 * GiB,
+  };
+  const enabled = { ...emptyDelegatedForm(), enabled: true, username: ' jordan ', email: ' j@example.com ' };
+
+  it('is off, mailed and follows the tenant language by default', () => {
+    expect(emptyDelegatedForm()).toEqual({
+      enabled: false,
+      username: '',
+      email: '',
+      language: null,
+      delivery: 'mail',
+    });
+    expect(delegatedLanguage(emptyDelegatedForm(), 'fr')).toBe('fr');
+    expect(delegatedLanguage({ ...emptyDelegatedForm(), language: 'en' }, 'fr')).toBe('en');
+  });
+
+  it('adds the delegated administrator with the tenant language by default', () => {
+    expect(createBody(form, enabled)?.delegatedAdmin).toEqual({
+      username: 'jordan',
+      email: 'j@example.com',
+      language: 'fr',
+      delivery: 'mail',
+    });
+  });
+
+  it('keeps the chosen language and delivery', () => {
+    expect(createBody(form, { ...enabled, language: 'en', delivery: 'copy' })?.delegatedAdmin).toEqual({
+      username: 'jordan',
+      email: 'j@example.com',
+      language: 'en',
+      delivery: 'copy',
+    });
+  });
+
+  it('validates the administrator only when enabled', () => {
+    const delegatedRefs = {
+      username: { id: 'd-user', label: 'Username' },
+      email: { id: 'd-mail', label: 'Email' },
+    };
+    expect(validateDelegated(emptyDelegatedForm(), delegatedRefs, t)).toEqual([]);
+    expect(validateDelegated({ ...emptyDelegatedForm(), enabled: true }, delegatedRefs, t)).toEqual([
+      { id: 'd-user', label: 'Username', message: 'fieldErrors.required' },
+      { id: 'd-mail', label: 'Email', message: 'fieldErrors.required' },
+    ]);
+    expect(validateDelegated(enabled, delegatedRefs, t)).toEqual([]);
+  });
+
+  it('words the failures of a creation with an administrator', () => {
+    const delegated = {
+      refs: { username: { id: 'd-user', label: 'Username' }, email: { id: 'd-mail', label: 'Email' } },
+    };
+    expect(tenantFailure(view({ code: 'system-smtp-unavailable', status: 503 }), refs, t, delegated)).toEqual(
+      { ok: false, message: 'adminAccounts.invitation.errors.smtpUnavailable' },
+    );
+    expect(
+      tenantFailure(view({ code: 'rate-limited', status: 429, retryAfterSeconds: 30 }), refs, t, delegated),
+    ).toEqual({ ok: false, message: 'adminAccounts.invitation.errors.rateLimitedIn {"delay":"30 s"}' });
+    // The answer does not say whether the FQDN or the username is taken.
+    expect(tenantFailure(view({ code: 'already-exists', status: 409 }), refs, t, delegated)).toEqual({
+      ok: false,
+      message: 'adminTenants.create.delegated.conflict',
+    });
+    // Without an administrator, the usual FQDN message, and no invitation wording.
+    expect(tenantFailure(view({ code: 'already-exists', status: 409 }), refs, t).ok).toBe(false);
+    expect(tenantFailure(view({ code: 'rate-limited', status: 429 }), refs, t)).toEqual({
+      ok: false,
+      message: 'general',
+    });
+  });
+
+  it('maps the field errors of the administrator to their fields', () => {
+    const delegated = {
+      refs: { username: { id: 'd-user', label: 'Username' }, email: { id: 'd-mail', label: 'Email' } },
+    };
+    const outcome = tenantFailure(
+      view({
+        code: 'validation-failed',
+        status: 400,
+        fields: { 'delegatedAdmin.username': { code: 'invalid-username', message: 'Bad username' } },
+      }),
+      refs,
+      t,
+      delegated,
+    );
+    expect(outcome).toEqual({
+      ok: false,
+      errors: [{ id: 'd-user', label: 'Username', message: 'Bad username' }],
+    });
   });
 });
 

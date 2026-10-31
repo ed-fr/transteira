@@ -6,6 +6,9 @@
   //   account with TOTP (the server checks it too), demotion requires entities;
   // - credentials reset (confirmation) giving a new activation link, shown once by
   //   ActivationLinkPanel and kept in this component's memory only (threat model T-162);
+  // - a new invitation for an account not activated yet (and not disabled): the activation
+  //   link is mailed (delegated admin, default) or shown to copy (the only choice for a super
+  //   admin account); it revokes the links issued before;
   // - deletion (confirmation);
   // - on one's own account, no role change, disabling, reset or deletion (the server refuses
   //   them); the password and TOTP are managed from My account.
@@ -15,12 +18,14 @@
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Checkbox, RadioGroup, TextField, announce } from '../../../shared/components';
-  import { i18n, t } from '../../../shared/i18n/i18n.svelte';
+  import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
+  import InvitationFields from '../../components/InvitationFields.svelte';
+  import InvitationSent from '../../components/InvitationSent.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { isEmptyPatch } from '../../forms/patch';
   import type { AdminScreenProps } from '../types';
@@ -29,11 +34,17 @@
     accountErrorMessage,
     accountStatus,
     buildAdminPatch,
+    canInvite,
+    canMailInvitation,
     canPromote,
+    defaultInvitationLanguage,
     editFormFrom,
+    invitationBody,
+    invitationErrorMessage,
     loadAllPages,
     roleKey,
     splitActivation,
+    splitCreated,
     statusVariant,
     totpStatus,
     validateEdit,
@@ -43,6 +54,9 @@
     type AdminRole,
     type EditForm,
     type FieldIssue,
+    type InvitationDelivery,
+    type InvitationLanguage,
+    type InvitationResult,
   } from './admins';
   import TenantChecklist from './TenantChecklist.svelte';
 
@@ -55,6 +69,7 @@
     tenants: `${uid}-tenants`,
     requireTotp: `${uid}-require-totp`,
     disabled: `${uid}-disabled`,
+    invitation: `${uid}-invitation`,
   };
   const adminId = $derived(params['id'] ?? '');
 
@@ -69,6 +84,15 @@
   let resetOpen = $state(false);
   let deleteOpen = $state(false);
   let notice = $state('');
+  let inviteOpen = $state(false);
+  let inviteBusy = $state(false);
+  let inviteError = $state('');
+  let inviteDelivery = $state<InvitationDelivery>('mail');
+  let inviteLanguage = $state<InvitationLanguage>(defaultInvitationLanguage(locale.current));
+  let sent = $state<InvitationResult | undefined>(undefined);
+  let inviteAlert: HTMLDivElement | undefined = $state();
+  let inviteHeading: HTMLElement | undefined = $state();
+  let inviteButton: HTMLButtonElement | undefined = $state();
   let heading: HTMLHeadingElement | undefined = $state();
 
   const meId = $derived(adminSession.me?.id);
@@ -190,6 +214,66 @@
     }
   }
 
+  async function openInvite(): Promise<void> {
+    inviteError = '';
+    inviteDelivery = admin !== undefined && canMailInvitation(admin) ? 'mail' : 'copy';
+    inviteLanguage = defaultInvitationLanguage(locale.current);
+    inviteOpen = true;
+    await tick();
+    inviteHeading?.focus();
+  }
+
+  async function closeInvite(): Promise<void> {
+    inviteOpen = false;
+    inviteError = '';
+    await tick();
+    inviteButton?.focus();
+  }
+
+  async function invite(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    const current = admin;
+    if (current === undefined || inviteBusy) {
+      return;
+    }
+    inviteBusy = true;
+    inviteError = '';
+    // A super admin account never gets the mail (the server refuses it).
+    const delivery = canMailInvitation(current) ? inviteDelivery : 'copy';
+    try {
+      const res = await adminApi.post('/admin/admins/{adminId}/invite', {
+        path: { adminId },
+        body: invitationBody(delivery, inviteLanguage),
+      });
+      const result = splitCreated(res.data);
+      show(result.account);
+      errors = [];
+      inviteOpen = false;
+      notice = t('adminAccounts.invitation.done', { username: result.account.username });
+      if (result.link !== undefined) {
+        link = result.link;
+      } else {
+        sent = result;
+      }
+    } catch (err) {
+      const view = describeError(i18n, err);
+      inviteError =
+        invitationErrorMessage(view, t) ??
+        (view.code === 'state-conflict' ? t('adminAccounts.invitation.errors.conflict') : view.message);
+      await tick();
+      inviteAlert?.focus();
+    } finally {
+      inviteBusy = false;
+    }
+  }
+
+  async function sentDone(): Promise<void> {
+    sent = undefined;
+    notice = '';
+    await tick();
+    heading?.focus();
+  }
+
   async function remove(): Promise<string | void> {
     const current = admin;
     if (current === undefined) {
@@ -238,7 +322,16 @@
 {:else}
   <h1 tabindex="-1" bind:this={heading}>{t('adminAccounts.form.editTitle', { username: admin.username })}</h1>
 
-  {#if link !== undefined}
+  {#if sent !== undefined}
+    <Alert severity="success">{notice}</Alert>
+    <InvitationSent
+      email={sent.account.email}
+      expiresAt={sent.expiresAt}
+      totpRequired={sent.account.requireTotp === true || sent.account.role === 'super_admin'}
+      doneLabel={t('admin.common.back')}
+      ondone={() => void sentDone()}
+    />
+  {:else if link !== undefined}
     {#if notice !== ''}<Alert severity="success">{notice}</Alert>{/if}
     <ActivationLinkPanel
       {link}
@@ -336,6 +429,11 @@
       <section aria-labelledby="{uid}-actions">
         <h2 id="{uid}-actions">{t('admin.common.actions')}</h2>
         <div class="tt-cluster">
+          {#if canInvite(admin) && !actions.self && !inviteOpen}
+            <Button variant="secondary" bind:element={inviteButton} onclick={() => void openInvite()}
+              >{t('adminAccounts.invitation.action')}</Button
+            >
+          {/if}
           {#if actions.reset}
             <Button variant="secondary" onclick={() => (resetOpen = true)}
               >{t('adminAccounts.reset.action')}</Button
@@ -348,6 +446,33 @@
           {/if}
         </div>
       </section>
+    {/if}
+
+    {#if inviteOpen}
+      <form class="tt-card tt-mt-4" aria-labelledby="{uid}-invite-title" onsubmit={invite}>
+        <h2 id="{uid}-invite-title" class="tt-mt-0" tabindex="-1" bind:this={inviteHeading}>
+          {t('adminAccounts.invitation.title')}
+        </h2>
+        <p>{t('adminAccounts.invitation.intro', { username: admin.username })}</p>
+        <Alert severity="warning" live={false}><p>{t('adminAccounts.invitation.revokes')}</p></Alert>
+        {#if inviteError !== ''}
+          <Alert severity="error" bind:element={inviteAlert}><p>{inviteError}</p></Alert>
+        {/if}
+        <InvitationFields
+          idPrefix={ids.invitation}
+          allowMail={canMailInvitation(admin)}
+          bind:delivery={inviteDelivery}
+          bind:language={inviteLanguage}
+        />
+        <div class="tt-cluster tt-mt-4">
+          <Button type="submit" disabled={inviteBusy}>
+            {inviteBusy ? t('adminAccounts.invitation.sending') : t('adminAccounts.invitation.submit')}
+          </Button>
+          <Button variant="secondary" onclick={() => void closeInvite()} disabled={inviteBusy}
+            >{t('admin.common.cancel')}</Button
+          >
+        </div>
+      </form>
     {/if}
 
     <p class="tt-mt-6"><a href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>

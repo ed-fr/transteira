@@ -10,6 +10,7 @@ import { MAX_TRANSFER_BYTES } from '../../forms/bytes';
 import { parseDomain } from '../../forms/domain';
 import { buildPatch } from '../../forms/patch';
 import { tenantPath } from '../../shell';
+import { invitationErrorMessage, validateInvitee, type InvitationDelivery } from '../admins/admins';
 
 /** A tenant, as returned by the API. */
 export type Tenant = components['schemas']['Tenant'];
@@ -198,11 +199,41 @@ function isSizeField(field: TenantField): field is SizeField {
   return field === 'storageQuotaBytes' || field === 'maxTransferBytes' || field === 'maxTransferCeiling';
 }
 
+/** Answer of a tenant creation (since 1.2: with the first delegated administrator, if any). */
+export type TenantCreated = components['schemas']['TenantCreated'];
+
+/**
+ * First delegated administrator of a new tenant (optional part of the creation form). The
+ * language of the mail follows the default language of the tenant until the user chooses one
+ * (null).
+ */
+export interface DelegatedForm {
+  /** Create the administrator together with the tenant. */
+  enabled: boolean;
+  username: string;
+  email: string;
+  /** Language of the mail; null follows the default language of the tenant. */
+  language: Language | null;
+  /** Delivery of the activation link. */
+  delivery: InvitationDelivery;
+}
+
+/** Initial delegated administrator form: not created, link sent by mail. */
+export function emptyDelegatedForm(): DelegatedForm {
+  return { enabled: false, username: '', email: '', language: null, delivery: 'mail' };
+}
+
+/** Language of the mail of the first administrator: the chosen one, else the tenant default. */
+export function delegatedLanguage(delegated: DelegatedForm, defaultLanguage: Language): Language {
+  return delegated.language ?? defaultLanguage;
+}
+
 /** Body of a tenant creation; undefined while a size is missing (validation reports it). */
-export function createBody(form: TenantForm): TenantCreateBody | undefined {
+export function createBody(form: TenantForm, delegated?: DelegatedForm): TenantCreateBody | undefined {
   if (form.storageQuotaBytes === null || form.maxTransferBytes === null || form.maxTransferCeiling === null) {
     return undefined;
   }
+  const language = delegated === undefined ? undefined : delegatedLanguage(delegated, form.defaultLanguage);
   return {
     name: form.name.trim(),
     fqdn: normalizeFqdn(form.fqdn),
@@ -210,7 +241,42 @@ export function createBody(form: TenantForm): TenantCreateBody | undefined {
     storageQuotaBytes: form.storageQuotaBytes,
     maxTransferBytes: form.maxTransferBytes,
     maxTransferCeiling: form.maxTransferCeiling,
+    ...(delegated?.enabled === true && language !== undefined
+      ? {
+          delegatedAdmin: {
+            username: delegated.username.trim(),
+            email: delegated.email.trim(),
+            language,
+            delivery: delegated.delivery,
+          },
+        }
+      : {}),
   };
+}
+
+/** Fields of the delegated administrator part of the form. */
+export type DelegatedField = 'username' | 'email';
+
+/** References of the delegated administrator fields (element id and visible label). */
+export type DelegatedFieldRefs = Record<DelegatedField, FieldRef>;
+
+/**
+ * Client validation of the delegated administrator part (username and email), only when it is
+ * enabled; returns the entries of the error summary.
+ */
+export function validateDelegated(
+  delegated: DelegatedForm,
+  refs: DelegatedFieldRefs,
+  t: Translate,
+): SummaryError[] {
+  if (!delegated.enabled) {
+    return [];
+  }
+  return validateInvitee(delegated).flatMap((issue) =>
+    issue.field === 'username' || issue.field === 'email'
+      ? [{ id: refs[issue.field].id, label: refs[issue.field].label, message: t(issue.key) }]
+      : [],
+  );
 }
 
 // ---- Validation ------------------------------------------------------------------------------
@@ -331,8 +397,25 @@ function toSummary(messages: Partial<Record<TenantField, string>>, refs: TenantF
  *   an FQDN equal to an admin host (field code reserved-host, tenantadmin.CodeAdminHost) gets
  *   the dedicated message of the screen; errors on unknown fields give the general message;
  * - anything else: the general message of the error (403 forbidden, network...).
+ * With delegated (the first administrator is created too): 503 system-smtp-unavailable and 429
+ * give the invitation messages (nothing was created), a 409 already-exists says it may be the
+ * FQDN or the username (general message), and field errors on delegatedAdmin.username and
+ * delegatedAdmin.email go to their fields.
  */
-export function tenantFailure(view: ErrorView, refs: TenantFieldRefs, t: Translate): SubmitOutcome {
+export function tenantFailure(
+  view: ErrorView,
+  refs: TenantFieldRefs,
+  t: Translate,
+  delegated?: { refs: DelegatedFieldRefs },
+): SubmitOutcome {
+  const invitation = delegated === undefined ? undefined : invitationErrorMessage(view, t);
+  if (invitation !== undefined) {
+    return { ok: false, message: invitation };
+  }
+  if (view.code === 'already-exists' && delegated !== undefined) {
+    // The FQDN or the username: the answer does not say which, and nothing has been created.
+    return { ok: false, message: t('adminTenants.create.delegated.conflict') };
+  }
   if (view.code === 'already-exists' && refs.fqdn !== undefined) {
     return {
       ok: false,
@@ -351,6 +434,10 @@ export function tenantFailure(view: ErrorView, refs: TenantFieldRefs, t: Transla
       if (ref !== undefined) {
         known[field] = ref;
       }
+    }
+    if (delegated !== undefined) {
+      known['delegatedAdmin.username'] = delegated.refs.username;
+      known['delegatedAdmin.email'] = delegated.refs.email;
     }
     const { errors, unmatched } = summaryFromFields(fields, known);
     if (errors.length > 0 && unmatched.length === 0) {

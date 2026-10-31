@@ -29,7 +29,7 @@ import (
 type TenantService interface {
 	ListTenants(ctx context.Context, p adminauth.Principal, cursor string, limit int) (tenantadmin.TenantPage, error)
 	GetTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.TenantView, error)
-	CreateTenant(ctx context.Context, p adminauth.Principal, in tenantadmin.TenantCreate, ip netip.Addr) (tenantadmin.TenantView, error)
+	CreateTenant(ctx context.Context, p adminauth.Principal, in tenantadmin.TenantCreate, ip netip.Addr) (tenantadmin.TenantCreated, error)
 	UpdateTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.TenantUpdate, ip netip.Addr) (tenantadmin.TenantView, error)
 	DeleteTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, confirm string, ip netip.Addr) error
 	GetBranding(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.Branding, error)
@@ -199,13 +199,20 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 			return nil, prob
 		}
 	}
-	v, err := svc.CreateTenant(ctx, p, tenantadmin.TenantCreate{
+	in := tenantadmin.TenantCreate{
 		Name: b.Name, FQDN: b.Fqdn, DefaultLanguage: string(b.DefaultLanguage), StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: deref(b.MaxTransferBytes), MaxTransferCeiling: b.MaxTransferCeiling,
 		BackgroundPreset: b.BackgroundPreset,
-	}, middleware.ClientIP(ctx))
+	}
+	if d := b.DelegatedAdmin; d != nil {
+		in.DelegatedAdmin = &adminauth.DelegatedAdmin{Username: d.Username, Email: string(d.Email), Language: string(d.Language)}
+		if d.Delivery != nil {
+			in.DelegatedAdmin.Delivery = store.ActivationDelivery(*d.Delivery)
+		}
+	}
+	v, err := svc.CreateTenant(ctx, p, in, middleware.ClientIP(ctx))
 	if err != nil {
-		return nil, tenantError(err)
+		return nil, createTenantError(err)
 	}
 	return gen.CreateTenant201JSONResponse(tenantCreatedBody(v)), nil
 }
@@ -332,26 +339,50 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 }
 
 // unsupportedTenantCreate refuses the members of TenantCreate added by API
-// 1.2 that are not implemented yet (setupState, delegatedAdmin) with a 400
-// validation-failed naming the first one present, or returns nil. It is checked for the super admin only, after
-// the role, so that another admin keeps its 403 from the service.
+// 1.2 that are not implemented yet (setupState) with a 400
+// validation-failed naming it, or returns nil. It is checked for the super
+// admin only, after the role, so that another admin keeps its 403 from the
+// service.
 func unsupportedTenantCreate(b *gen.TenantCreate) *problem.Problem {
-	switch {
-	case b.SetupState != nil:
+	if b.SetupState != nil {
 		return validationFailed("/setupState", fieldNotSupported)
-	case b.DelegatedAdmin != nil:
-		return validationFailed("/delegatedAdmin", fieldNotSupported)
 	}
 	return nil
 }
 
+// delegatedAdminField prefixes the fields of the delegated admin errors.
+const delegatedAdminField = "/delegatedAdmin"
+
+// createTenantError maps an error of a tenant creation: the errors of its
+// delegated admin, raised by the authentication service, name their field
+// under /delegatedAdmin; the others are those of tenantError.
+func createTenantError(err error) error {
+	var invalid *adminauth.InvalidError
+	switch {
+	case errors.As(err, &invalid):
+		return validationFailed(delegatedAdminField+invalid.Field, formatCode(invalid.Field == adminauth.FieldEmail))
+	case errors.Is(err, adminauth.ErrSystemSMTPUnavailable),
+		errors.Is(err, adminauth.ErrUnauthenticated), errors.Is(err, adminauth.ErrForbidden):
+		return serviceError(err)
+	}
+	return tenantError(err)
+}
+
 // tenantCreatedBody renders a new tenant as the OpenAPI TenantCreated
-// (since API 1.2): the Tenant fields, without delegated admin until the
-// creation of one with the tenant is implemented.
-func tenantCreatedBody(v tenantadmin.TenantView) gen.TenantCreated {
-	t := tenantBody(v)
+// (since API 1.2), with its delegated admin when one was created: the link
+// URL only when it is copied (T-255).
+func tenantCreatedBody(c tenantadmin.TenantCreated) gen.TenantCreated {
+	t := tenantBody(c.TenantView)
+	var invited *gen.DelegatedAdminInvited
+	if d := c.DelegatedAdmin; d != nil {
+		delivery, url := deliveryOf(d.Activation)
+		invited = &gen.DelegatedAdminInvited{
+			Id: d.Account.ID, InvitationDelivery: delivery, ActivationUrl: url, ActivationExpiresAt: d.Activation.ExpiresAt,
+		}
+	}
 	return gen.TenantCreated{
-		Id: t.Id, Name: t.Name, Fqdn: t.Fqdn, DefaultLanguage: t.DefaultLanguage,
+		DelegatedAdmin: invited,
+		Id:             t.Id, Name: t.Name, Fqdn: t.Fqdn, DefaultLanguage: t.DefaultLanguage,
 		MaxTransferBytes: t.MaxTransferBytes, MaxTransferCeiling: t.MaxTransferCeiling,
 		Status: gen.TenantCreatedStatus(t.Status), StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: t.StorageUsedBytes,
 		WebhookIncludeAddresses: t.WebhookIncludeAddresses, AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit,

@@ -97,7 +97,7 @@ language TEXT CHECK (language IS NULL OR length(language) BETWEEN 2 AND 16)
 - Existing activations are `copy` (they were shown to the super admin), language NULL.
 - `delivery = 'mail'`: the link is sent through the system SMTP after the commit and never returned by the API; `copy`: returned once as `activationLink`. In both cases only the SHA-256 of the token is stored and the token travels in the URL fragment.
 - `language` is the mail language chosen by the super admin (`invitation.language`, defaulting to the admin's language); the length check accepts any future language code without a migration.
-- **Re-issue** (`POST /admin/admins/{id}/invite`): the previous unused activation is invalidated, in the same transaction, by setting its `used_at` (no new column); a new row is inserted (TTL 72 h). `admin-already-active` when the admin already has a password and TOTP enabled.
+- **Re-issue** (`POST /admin/admins/{id}/invite`): the previous activations of the account are deleted in the same transaction, as a credentials reset already does (implementation choice of step 4: the per-account limit of 5 re-issues per hour is kept in memory, so the rows are not needed to count them); a new row is inserted (TTL 72 h). `admin-already-active` when the admin already has a password.
 - RLS: unchanged, the table is altered in place and keeps `admin_activations_system` (0008).
 
 ### 2.4 Migration 0025 `system_state` (F1)

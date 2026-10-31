@@ -68,7 +68,18 @@
     "intro": "Les autres réglages (habillage, réseau, messagerie, modèles) se configurent une fois l’entité créée.",
     "submit": "Créer l’entité",
     "created": "L’entité {name} a été créée.",
-    "legend": "Informations de l’entité"
+    "legend": "Informations de l’entité",
+    "delegated": {
+      "legend": "Premier administrateur délégué",
+      "enable": "Créer dès maintenant l’administrateur délégué",
+      "enableHint": "Facultatif. L’administrateur est rattaché à cette seule entité et reçoit un lien d’activation, valable 72 heures.",
+      "username": "Identifiant",
+      "email": "Adresse électronique",
+      "language": "Langue du courriel",
+      "created": "L’administrateur {username} a été créé.",
+      "continue": "Configurer l’entité",
+      "conflict": "Une entité ou un administrateur existe déjà avec ces données : vérifiez le nom de domaine (FQDN) de l’entité et l’identifiant de l’administrateur. Rien n’a été créé."
+    }
   },
   "general": {
     "title": "Général",

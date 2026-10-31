@@ -21,6 +21,14 @@ import {
   totpStatus,
   validateCreate,
   validateEdit,
+  validateInvitee,
+  asInvitationLanguage,
+  canInvite,
+  canMailInvitation,
+  defaultInvitationLanguage,
+  invitationBody,
+  invitationErrorMessage,
+  retryDelayText,
   type Admin,
   type AdminCreated,
   type AdminWithActivation,
@@ -68,28 +76,103 @@ describe('splitActivation', () => {
 });
 
 describe('splitCreated', () => {
-  it('separates the link and the delivery from the account', () => {
+  it('separates the link and the delivery from the account (copy)', () => {
     const data: AdminCreated = {
       ...delegated(),
       invitationDelivery: 'copy',
       activationUrl: 'https://admin.example.com/admin/activate#act_y',
       activationExpiresAt: '2026-11-03T09:00:00Z',
     };
-    const { account, link } = splitCreated(data);
+    const { account, link, delivery, expiresAt } = splitCreated(data);
     expect(link).toEqual({
       url: 'https://admin.example.com/admin/activate#act_y',
       expiresAt: '2026-11-03T09:00:00Z',
     });
+    expect(delivery).toBe('copy');
+    expect(expiresAt).toBe('2026-11-03T09:00:00Z');
     expect(account).toEqual(delegated());
   });
 
-  it('refuses an answer without link (mail delivery)', () => {
+  it('has no link for a mailed invitation', () => {
     const data: AdminCreated = {
       ...delegated(),
       invitationDelivery: 'mail',
       activationExpiresAt: '2026-11-03T09:00:00Z',
     };
-    expect(() => splitCreated(data)).toThrow();
+    const result = splitCreated(data);
+    expect(result.link).toBeUndefined();
+    expect(result.delivery).toBe('mail');
+    expect(result.expiresAt).toBe('2026-11-03T09:00:00Z');
+    expect(result.account).toEqual(delegated());
+  });
+
+  it('never keeps a link for a mailed invitation, even if one came back', () => {
+    const data: AdminCreated = {
+      ...delegated(),
+      invitationDelivery: 'mail',
+      activationUrl: 'https://admin.example.com/admin/activate#leak',
+      activationExpiresAt: '2026-11-03T09:00:00Z',
+    };
+    expect(splitCreated(data).link).toBeUndefined();
+  });
+});
+
+describe('invitation helpers', () => {
+  it('builds the invitation member', () => {
+    expect(invitationBody('mail', 'fr')).toEqual({ delivery: 'mail', language: 'fr' });
+    expect(invitationBody('copy', 'fr')).toEqual({ delivery: 'copy' });
+  });
+
+  it('defaults the mail language to the interface language when offered', () => {
+    expect(defaultInvitationLanguage('fr')).toBe('fr');
+    expect(defaultInvitationLanguage('en')).toBe('en');
+    expect(defaultInvitationLanguage('de')).toBe('en');
+  });
+
+  it('offers a new invitation to a pending, enabled account only', () => {
+    expect(canInvite({ activated: false, disabled: false })).toBe(true);
+    expect(canInvite({ activated: true, disabled: false })).toBe(false);
+    expect(canInvite({ activated: false, disabled: true })).toBe(false);
+  });
+
+  it('offers the mail to a delegated admin only', () => {
+    expect(canMailInvitation({ role: 'delegated_admin' })).toBe(true);
+    expect(canMailInvitation({ role: 'super_admin' })).toBe(false);
+  });
+
+  it('rounds the retry delay up to seconds, then minutes', () => {
+    expect(retryDelayText(0)).toBe('1 s');
+    expect(retryDelayText(42.2)).toBe('43 s');
+    expect(retryDelayText(60)).toBe('1 min');
+    expect(retryDelayText(61)).toBe('2 min');
+  });
+
+  it('words the errors specific to an invitation', () => {
+    expect(invitationErrorMessage({ code: 'system-smtp-unavailable', message: 'x', status: 503 }, t)).toBe(
+      'adminAccounts.invitation.errors.smtpUnavailable',
+    );
+    expect(invitationErrorMessage({ code: 'admin-already-active', message: 'x', status: 409 }, t)).toBe(
+      'adminAccounts.invitation.errors.alreadyActive',
+    );
+    expect(
+      invitationErrorMessage({ code: 'rate-limited', message: 'x', status: 429, retryAfterSeconds: 90 }, t),
+    ).toBe('adminAccounts.invitation.errors.rateLimitedIn {"delay":"2 min"}');
+    expect(invitationErrorMessage({ code: 'rate-limited', message: 'x', status: 429 }, t)).toBe(
+      'adminAccounts.invitation.errors.rateLimited',
+    );
+    expect(invitationErrorMessage({ code: undefined, message: 'x', status: 429 }, t)).toBe(
+      'adminAccounts.invitation.errors.rateLimited',
+    );
+    expect(invitationErrorMessage({ code: 'state-conflict', message: 'x', status: 409 }, t)).toBeUndefined();
+    expect(invitationErrorMessage({ code: 'forbidden', message: 'x', status: 403 }, t)).toBeUndefined();
+  });
+
+  it('validates a username and an email', () => {
+    expect(validateInvitee({ username: '', email: '' })).toEqual([
+      { field: 'username', key: 'fieldErrors.required' },
+      { field: 'email', key: 'fieldErrors.required' },
+    ]);
+    expect(validateInvitee({ username: 'admin.b', email: 'b@example.com' })).toEqual([]);
   });
 });
 
@@ -214,8 +297,16 @@ describe('loadAllPages', () => {
 });
 
 describe('creation form', () => {
-  it('requires two-factor authentication by default', () => {
-    expect(emptyCreateForm()).toEqual({ username: '', email: '', tenantIds: [], requireTotp: true });
+  it('requires two-factor authentication and mails the link by default', () => {
+    expect(emptyCreateForm()).toEqual({
+      username: '',
+      email: '',
+      tenantIds: [],
+      requireTotp: true,
+      delivery: 'mail',
+      language: 'en',
+    });
+    expect(emptyCreateForm('fr').language).toBe('fr');
   });
 
   it('reports the missing fields in the order of the form', () => {
@@ -228,19 +319,26 @@ describe('creation form', () => {
 
   it('checks the username and email formats', () => {
     expect(
-      validateCreate({ username: 'Bad Name', email: 'nope', tenantIds: ['ten_a'], requireTotp: true }),
+      validateCreate({ ...emptyCreateForm(), username: 'Bad Name', email: 'nope', tenantIds: ['ten_a'] }),
     ).toEqual([
       { field: 'username', key: 'fieldErrors.invalid-username' },
       { field: 'email', key: 'fieldErrors.invalid-email' },
     ]);
     expect(
-      validateCreate({ username: 'ab', email: 'a@b.example', tenantIds: ['x'], requireTotp: false }),
+      validateCreate({
+        ...emptyCreateForm(),
+        username: 'ab',
+        email: 'a@b.example',
+        tenantIds: ['x'],
+        requireTotp: false,
+      }),
     ).toEqual([{ field: 'username', key: 'fieldErrors.invalid-username' }]);
   });
 
   it('accepts a valid form', () => {
     expect(
       validateCreate({
+        ...emptyCreateForm(),
         username: ' admin.b ',
         email: ' admin@entity-b.example.com ',
         tenantIds: ['ten_b'],
@@ -252,10 +350,12 @@ describe('creation form', () => {
   it('builds a delegated admin body with trimmed, unique and sorted values', () => {
     expect(
       createBody({
+        ...emptyCreateForm('fr'),
         username: ' admin.b ',
         email: ' b@example.com ',
         tenantIds: ['ten_b', 'ten_a', 'ten_b'],
         requireTotp: false,
+        delivery: 'copy',
       }),
     ).toEqual({
       username: 'admin.b',
@@ -265,6 +365,34 @@ describe('creation form', () => {
       requireTotp: false,
       invitation: { delivery: 'copy' },
     });
+  });
+
+  it('forces two-factor authentication with the mail delivery', () => {
+    const body = createBody({
+      ...emptyCreateForm('fr'),
+      username: 'admin.b',
+      email: 'b@example.com',
+      tenantIds: ['ten_a'],
+      requireTotp: false,
+    });
+    expect(body.requireTotp).toBe(true);
+    expect(body.invitation).toEqual({ delivery: 'mail', language: 'fr' });
+  });
+
+  it('keeps only offered languages', () => {
+    expect(asInvitationLanguage('fr', 'en')).toBe('fr');
+    expect(asInvitationLanguage('de', 'en')).toBe('en');
+  });
+
+  it('sends no language with the copy delivery', () => {
+    const body = createBody({
+      ...emptyCreateForm('fr'),
+      username: 'admin.b',
+      email: 'b@example.com',
+      tenantIds: ['ten_a'],
+      delivery: 'copy',
+    });
+    expect(body.invitation).toEqual({ delivery: 'copy' });
   });
 });
 

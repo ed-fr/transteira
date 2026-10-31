@@ -17,6 +17,7 @@ import (
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -172,6 +173,10 @@ type Options struct {
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
 	Audit *audit.Writer
+	// Mailer queues the invitation mails through the system SMTP; nil when
+	// no system SMTP is configured, and the mail delivery is then refused
+	// with ErrSystemSMTPUnavailable.
+	Mailer Mailer
 }
 
 // Service authenticates administrators and manages their accounts. It is
@@ -190,6 +195,9 @@ type Service struct {
 	baseURL    string
 	issuer     string
 	clock      func() time.Time
+	mailer     Mailer
+	// invites counts the links issued by Invite per account.
+	invites *ratelimit.Window
 	// Random sources and encoders, replaced by the tests.
 	newToken      func(prefix string, entropyBytes int) (string, error)
 	newID         func(p id.Prefix) (string, error)
@@ -229,7 +237,8 @@ func New(db *store.DB, keys Keys, vault Vault, hasher PasswordHasher, seclog Sec
 	s := &Service{
 		repo: storeRepo{db: db, writer: audit.OrNew(opts.Audit, db)}, keys: keys, vault: vault, hasher: hasher,
 		seclog: seclog, logger: opts.Logger, idle: opts.IdleTimeout, maxAge: opts.MaxAge, stateTTL: opts.StateTTL,
-		setupToken: opts.SetupToken, baseURL: base, issuer: opts.Issuer, clock: opts.Now,
+		setupToken: opts.SetupToken, baseURL: base, issuer: opts.Issuer, clock: opts.Now, mailer: opts.Mailer,
+		invites:  ratelimit.NewWindow(InviteMaxPerHour, InviteWindow, ratelimit.WithClock(opts.Now)),
 		newToken: id.NewToken, newTOTPSecret: crypto.GenerateTOTPSecret, newRecovery: crypto.GenerateRecoveryCodes,
 		qrPNG: notify.QRPNG, recoveryMAC: crypto.RecoveryCodeMAC,
 	}

@@ -338,11 +338,11 @@ func (f *faultRepo) listTenants(ctx context.Context, o store.TenantListOptions) 
 	return f.repo.listTenants(ctx, o)
 }
 
-func (f *faultRepo) createTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
+func (f *faultRepo) createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error) {
 	if err := f.fail("createTenant"); err != nil {
 		return nil, err
 	}
-	return f.repo.createTenant(ctx, t)
+	return f.repo.createTenant(ctx, t, then)
 }
 
 func (f *faultRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {

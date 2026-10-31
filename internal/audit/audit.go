@@ -61,6 +61,10 @@ const (
 	// ActionAdminCredentialsReset: the super admin reset the password and
 	// TOTP of an account.
 	ActionAdminCredentialsReset Action = "admin.credentials_reset" //nolint:gosec // G101 false positive: an audit action name.
+	// ActionAdminInvited: the super admin issued an activation link,
+	// mailed or returned once (since V1.2); the details name the delivery,
+	// never the link.
+	ActionAdminInvited Action = "admin.invited"
 	// ActionAdminActivated: an administrator chose a password from an
 	// activation link.
 	ActionAdminActivated Action = "admin.activated"

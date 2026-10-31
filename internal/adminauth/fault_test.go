@@ -7,6 +7,7 @@ import (
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // faultRepo wraps a repo and fails the operations named in fails (the
@@ -167,6 +168,17 @@ func (f faultRepo) tx(ctx context.Context, fn func(txRepo) error) error {
 	return f.repo.tx(ctx, func(tx txRepo) error { return fn(faultTx{tx: tx, fails: f.fails}) })
 }
 
+func (f faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	if err := f.fail("tenant"); err != nil {
+		return nil, err
+	}
+	return f.repo.tenant(ctx, tid)
+}
+
+func (f faultRepo) wrapTx(tx *store.SystemTx) txRepo {
+	return faultTx{tx: f.repo.wrapTx(tx), fails: f.fails}
+}
+
 // faultTx wraps a txRepo and fails the operations named "tx.<name>".
 type faultTx struct {
 	tx    txRepo
@@ -282,9 +294,9 @@ func (f faultTx) createActivation(ctx context.Context, a store.AdminActivation) 
 	return f.tx.createActivation(ctx, a)
 }
 
-func (f faultTx) consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, error) {
+func (f faultTx) consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, store.ActivationDelivery, error) {
 	if err := f.fail("consumeActivation"); err != nil {
-		return "", err
+		return "", "", err
 	}
 	return f.tx.consumeActivation(ctx, tokenHash, now)
 }
@@ -300,8 +312,14 @@ func (f faultTx) audit(ctx context.Context, ev audit.Event) error {
 	if err := f.fail("audit"); err != nil {
 		return err
 	}
+	// "tx.audit.<action>" fails the events of one action only.
+	if err := f.fail("audit." + string(ev.Action)); err != nil {
+		return err
+	}
 	return f.tx.audit(ctx, ev)
 }
+
+func (f faultTx) afterCommit(fn func()) { f.tx.afterCommit(fn) }
 
 // faultKeys wraps the MAC keys and fails when err is set.
 type faultKeys struct {

@@ -463,6 +463,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		lifecycleOptions(cfg, &o, logger))
 	admins, err := newAdminService(ctx, cfg, db, adminDeps{
 		keys: keys, vault: vault, hasher: passwords, seclog: secLog, audit: auditLog,
+		mailer: sysMail.invitations(cfg, logger),
 	}, logger)
 	if err != nil {
 		return err
@@ -534,7 +535,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	tenants, err := tenantadmin.New(db, tenantadmin.Options{
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
-		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled,
+		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled, Admins: admins,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -759,6 +760,9 @@ type adminDeps struct {
 	hasher adminauth.PasswordHasher
 	seclog adminauth.SecurityLog
 	audit  *audit.Writer
+	// mailer sends the invitation mails through the system SMTP; nil
+	// without one.
+	mailer adminauth.Mailer
 }
 
 // newAdminService builds the administrator authentication service, with
@@ -797,7 +801,7 @@ func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d ad
 	}
 	svc, err := adminauth.New(db, d.keys, d.vault, d.hasher, d.seclog, adminauth.Options{
 		IdleTimeout: cfg.AdminSessionIdleTimeout, MaxAge: cfg.AdminSessionMaxAge,
-		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger, Audit: d.audit,
+		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger, Audit: d.audit, Mailer: d.mailer,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)

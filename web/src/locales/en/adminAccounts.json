@@ -33,7 +33,7 @@
   },
   "form": {
     "createTitle": "Create a delegated administrator",
-    "createIntro": "The account is created without a password. You will receive a single-use activation link so that the person can choose their password.",
+    "createIntro": "The account is created without a password. A single-use activation link, valid 72 hours, is sent by mail to the administrator or shown to you, so that the person can choose their password.",
     "editTitle": "Edit the administrator {username}",
     "username": {
       "label": "Username",
@@ -55,7 +55,8 @@
     },
     "requireTotp": {
       "label": "Require two-factor authentication",
-      "hint": "Recommended. The administrator will have to configure it at the first sign-in and will not be able to disable it."
+      "hint": "Recommended. The administrator will have to configure it at the first sign-in and will not be able to disable it.",
+      "mailHint": "Mandatory for an invitation by mail."
     },
     "disabled": {
       "label": "Account disabled",
@@ -111,5 +112,45 @@
   "notFound": {
     "title": "Administrator not found",
     "text": "This administrator account does not exist or has been deleted."
+  },
+  "invitation": {
+    "action": "Send the invitation again…",
+    "title": "Send a new invitation",
+    "intro": "Issue a new activation link for {username}, who has not activated the account yet.",
+    "revokes": "The links issued before are revoked and can no longer be used. The new link is valid 72 hours.",
+    "submit": "Send the invitation",
+    "sending": "Sending…",
+    "done": "A new activation link has been issued for {username}.",
+    "copyOnly": "The activation link of a super administrator account is never sent by mail: it will be shown to you so that you can hand it over yourself.",
+    "delivery": {
+      "legend": "Delivery of the activation link",
+      "mail": {
+        "label": "Send by mail to the administrator",
+        "hint": "The link is sent from the system mailbox of the instance and is never shown here."
+      },
+      "copy": {
+        "label": "Show the link to copy and hand over myself",
+        "hint": "The link is shown once. Hand it over through another channel than email."
+      }
+    },
+    "language": {
+      "label": "Language of the mail",
+      "hint": "Language of the invitation mail."
+    },
+    "sent": {
+      "title": "Invitation sent",
+      "text": "Invitation sent to {email}. The link is valid until {date}.",
+      "textNoDate": "Invitation sent to {email}.",
+      "totp": "The administrator must choose a password and enroll two-factor authentication (TOTP) when activating the account.",
+      "notShown": "For security, the link is not shown and cannot be retrieved. If the mail does not arrive, send the invitation again.",
+      "done": "Back to the administrators"
+    },
+    "errors": {
+      "smtpUnavailable": "The invitation cannot be sent by mail: the system mail (TT_SYSTEM_SMTP_*) is not configured by the operator of the instance. Choose “Show the link to copy and hand over myself” and submit again.",
+      "alreadyActive": "This administrator has already activated the account: there is nothing to send.",
+      "rateLimited": "Too many invitations for this account. Try again later.",
+      "rateLimitedIn": "Too many invitations for this account. Try again in {delay}.",
+      "conflict": "This account cannot receive an invitation in its current state (disabled or already activated). Reload the page."
+    }
   }
 }

@@ -138,10 +138,21 @@ type Options struct {
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
 	Audit *audit.Writer
+	// Admins creates the first delegated admin of a new tenant inside the
+	// transaction of the tenant (*adminauth.Service); nil refuses
+	// TenantCreate.DelegatedAdmin.
+	Admins AdminCreator
 	// AntivirusDisabled is set when the instance antivirus engine is
 	// "none": no tenant then has its antivirus effective
 	// (TenantView.AntivirusEffective).
 	AntivirusDisabled bool
+}
+
+// AdminCreator creates the first delegated admin of a new tenant inside the
+// transaction creating it. *adminauth.Service implements it.
+type AdminCreator interface {
+	CreateDelegatedAdminTx(ctx context.Context, tx *store.SystemTx, p adminauth.Principal, t *tenant.Tenant,
+		in adminauth.DelegatedAdmin, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
 }
 
 // Service is the tenant configuration service. It is safe for concurrent
@@ -161,6 +172,8 @@ type Service struct {
 	smtpTests  *ratelimit.Window
 	// avDisabled is Options.AntivirusDisabled.
 	avDisabled bool
+	// admins is Options.Admins.
+	admins AdminCreator
 	// favicons generates the favicons of an uploaded logo
 	// (branding.GenerateFavicons; replaceable in tests).
 	favicons func(ctx context.Context, logoPNG []byte) (branding.Favicons, error)
@@ -195,6 +208,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		now:        opts.Now,
 		dnsTimeout: opts.DNSTimeout,
 		avDisabled: opts.AntivirusDisabled,
+		admins:     opts.Admins,
 		favicons:   branding.GenerateFavicons,
 	}
 	for _, h := range opts.AdminHosts {

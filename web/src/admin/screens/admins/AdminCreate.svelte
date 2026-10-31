@@ -2,27 +2,32 @@
   // Creation of a delegated admin (super admin only; CLAUDE.md section 6.5): username, email,
   // attached entities (at least one), two-factor authentication required by default. A super
   // admin is never created directly: an activated delegated admin with TOTP is promoted from
-  // the edit screen. On success the single-use activation link is shown once
-  // (ActivationLinkPanel); the link stays in this component's memory only and is cleared when
-  // the screen goes away (threat model T-162).
+  // the edit screen. The activation link is mailed through the system SMTP (default) or shown
+  // once to copy (ActivationLinkPanel); a shown link stays in this component's memory only and
+  // is cleared when the screen goes away (threat model T-162). Without system SMTP (503) the
+  // form keeps its values so that the copy delivery can be chosen and submitted again.
   import { onDestroy, onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Checkbox, TextField } from '../../../shared/components';
-  import { i18n, t } from '../../../shared/i18n/i18n.svelte';
+  import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, summaryFromFields, type SubmitOutcome, type SummaryError } from '../../components/form';
+  import InvitationFields from '../../components/InvitationFields.svelte';
+  import InvitationSent from '../../components/InvitationSent.svelte';
   import { deepEqual } from '../../forms/patch';
   import type { AdminScreenProps } from '../types';
   import {
     createBody,
+    defaultInvitationLanguage,
     emptyCreateForm,
+    invitationErrorMessage,
     loadAllPages,
     splitCreated,
+    type InvitationResult,
     validateCreate,
     type ActivationLink,
-    type Admin,
     type FieldIssue,
   } from './admins';
   import TenantChecklist from './TenantChecklist.svelte';
@@ -35,17 +40,21 @@
     email: `${uid}-email`,
     tenants: `${uid}-tenants`,
     requireTotp: `${uid}-require-totp`,
+    invitation: `${uid}-invitation`,
   };
 
-  let form = $state(emptyCreateForm());
+  const initialLanguage = defaultInvitationLanguage(locale.current);
+  let form = $state(emptyCreateForm(initialLanguage));
   let errors = $state<SummaryError[]>([]);
   let tenants = $state<{ id: string; name: string }[]>([]);
   let loading = $state(true);
   let loadError = $state('');
-  let created = $state<Admin | undefined>(undefined);
+  let created = $state<InvitationResult | undefined>(undefined);
   let link = $state<ActivationLink | undefined>(undefined);
 
-  const dirty = $derived(created === undefined && !deepEqual($state.snapshot(form), emptyCreateForm()));
+  const dirty = $derived(
+    created === undefined && !deepEqual($state.snapshot(form), emptyCreateForm(initialLanguage)),
+  );
 
   const fieldRefs = $derived({
     username: { id: ids.username, label: t('adminAccounts.form.username.label') },
@@ -82,12 +91,16 @@
   async function submit(): Promise<SubmitOutcome> {
     try {
       const res = await adminApi.post('/admin/admins', { body: createBody(form) });
-      const { account, link: activation } = splitCreated(res.data);
-      created = account;
-      link = activation;
+      const result = splitCreated(res.data);
+      created = result;
+      link = result.link;
       return { ok: true };
     } catch (err) {
       const view = describeError(i18n, err);
+      const invitation = invitationErrorMessage(view, t);
+      if (invitation !== undefined) {
+        return { ok: false, message: invitation };
+      }
       if (view.code === 'already-exists') {
         return {
           ok: false,
@@ -119,12 +132,20 @@
 <h1 tabindex="-1">{t('adminAccounts.form.createTitle')}</h1>
 
 {#if created !== undefined}
-  <Alert severity="success">{t('adminAccounts.form.created', { username: created.username })}</Alert>
+  <Alert severity="success">{t('adminAccounts.form.created', { username: created.account.username })}</Alert>
   {#if link !== undefined}
     <ActivationLinkPanel
       {link}
-      username={created.username}
+      username={created.account.username}
       addGuard={(guard) => nav.addGuard(guard)}
+      ondone={finish}
+    />
+  {:else if created.delivery === 'mail'}
+    <InvitationSent
+      email={created.account.email}
+      expiresAt={created.expiresAt}
+      totpRequired={created.account.requireTotp === true}
+      doneLabel={t('adminAccounts.invitation.sent.done')}
       ondone={finish}
     />
   {/if}
@@ -183,8 +204,18 @@
       <Checkbox
         id={ids.requireTotp}
         label={t('adminAccounts.form.requireTotp.label')}
-        hint={t('adminAccounts.form.requireTotp.hint')}
-        bind:checked={form.requireTotp}
+        hint={form.delivery === 'mail'
+          ? t('adminAccounts.form.requireTotp.mailHint')
+          : t('adminAccounts.form.requireTotp.hint')}
+        disabled={form.delivery === 'mail'}
+        bind:checked={
+          () => form.requireTotp || form.delivery === 'mail', (value) => (form.requireTotp = value)
+        }
+      />
+      <InvitationFields
+        idPrefix={ids.invitation}
+        bind:delivery={form.delivery}
+        bind:language={form.language}
       />
     </FormSection>
   {/if}

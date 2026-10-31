@@ -439,7 +439,8 @@ func Variables() []Var {
 		{
 			Name: EnvSystemSMTPHost, Group: "Mail",
 			Description: "Host name or IP address of the SMTP server of the instance mails (the disk " +
-				"and antivirus alerts sent to the super admins), distinct from the SMTP servers of " +
+				"and antivirus alerts sent to the super admins, and since 1.2 the activation links of the " +
+				"delegated admins invited by mail), distinct from the SMTP servers of " +
 				"the entities, which are set in the administration. Empty (default): system mail is " +
 				"disabled and these alerts are only shown in the administration, the audit log and " +
 				"the application log; " + EnvSystemSMTPPort + ", " + EnvSystemSMTPFrom + ", " +

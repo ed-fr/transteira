@@ -44,6 +44,9 @@ type fakeService struct {
 	page store.Page[adminauth.Account]
 	// confirmed is the answer of ConfirmEnrollment.
 	confirmed adminauth.Confirmed
+	// mailed makes Create, Invite and ResetCredentials answer a mailed
+	// link (no URL).
+	mailed bool
 }
 
 func (f *fakeService) record(name string, args ...any) error {
@@ -118,7 +121,7 @@ func (f *fakeService) Get(_ context.Context, p adminauth.Principal, id string) (
 }
 
 func (f *fakeService) Create(_ context.Context, p adminauth.Principal, req adminauth.AdminCreate, ip netip.Addr) (adminauth.Account, adminauth.Activation, error) {
-	return delegated, link, f.record("Create", p.SessionID, req, ip)
+	return delegated, f.linkOr(), f.record("Create", p.SessionID, req, ip)
 }
 
 func (f *fakeService) Update(_ context.Context, p adminauth.Principal, id string, u adminauth.AdminUpdate, ip netip.Addr) (adminauth.Account, error) {
@@ -131,6 +134,19 @@ func (f *fakeService) Delete(_ context.Context, p adminauth.Principal, id string
 
 func (f *fakeService) ResetCredentials(_ context.Context, p adminauth.Principal, id string, ip netip.Addr) (adminauth.Account, adminauth.Activation, error) {
 	return delegated, link, f.record("ResetCredentials", p.SessionID, id, ip)
+}
+
+func (f *fakeService) Invite(_ context.Context, p adminauth.Principal, id string, inv adminauth.Invitation, ip netip.Addr) (adminauth.Account, adminauth.Activation, error) {
+	return delegated, f.linkOr(), f.record("Invite", p.SessionID, id, inv, ip)
+}
+
+// linkOr returns the link answered by Create, Invite and ResetCredentials:
+// mailed when asked (no URL), else the copied one.
+func (f *fakeService) linkOr() adminauth.Activation {
+	if f.mailed {
+		return adminauth.Activation{Delivery: store.DeliveryMail, ExpiresAt: link.ExpiresAt}
+	}
+	return link
 }
 
 func (f *fakeService) Activate(_ context.Context, token, password string, ip netip.Addr) (adminauth.Session, error) {
@@ -415,6 +431,10 @@ func TestNoSession(t *testing.T) {
 			_, err := s.ResetAdminCredentials(ctx, gen.ResetAdminCredentialsRequestObject{})
 			return err
 		},
+		"InviteAdmin": func(ctx context.Context) error {
+			_, err := s.InviteAdmin(ctx, gen.InviteAdminRequestObject{})
+			return err
+		},
 	}
 	for _, c := range sessionOps {
 		expectProblem(t, c(ctx), problem.CodeUnauthenticated)
@@ -493,6 +513,7 @@ func TestServiceFailures(t *testing.T) {
 	add(s.UpdateAdmin(ctx, gen.UpdateAdminRequestObject{AdminId: "adm_x", Body: &gen.AdminUpdate{}}))
 	add(s.DeleteAdmin(ctx, gen.DeleteAdminRequestObject{AdminId: "adm_x"}))
 	add(s.ResetAdminCredentials(ctx, gen.ResetAdminCredentialsRequestObject{AdminId: "adm_x"}))
+	add(s.InviteAdmin(ctx, gen.InviteAdminRequestObject{AdminId: "adm_x"}))
 	add(s.ActivateAdmin(ctx, gen.ActivateAdminRequestObject{Body: &gen.ActivationRequest{}}))
 	for _, err := range errs {
 		expectProblem(t, err, problem.CodeForbidden)

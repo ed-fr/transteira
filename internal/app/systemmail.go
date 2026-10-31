@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/diskalert"
@@ -117,4 +118,42 @@ func antivirusAlertOptions(cfg *config.Config, o *runOptions, sys *systemMail, o
 		o.avAlertOpts(&opts)
 	}
 	return opts
+}
+
+// invitationMailer sends the activation links of the administrators
+// invited by mail through the system mail channel (adminauth.Mailer).
+type invitationMailer struct {
+	mailer    diskalert.Mailer
+	settings  mail.Settings
+	adminHost string
+	logger    *slog.Logger
+	// render renders a mail template (mail.Render; a field for the tests).
+	render func(name, lang string, data any) (mail.Message, error)
+}
+
+// invitations returns the invitation mailer of the system mail channel,
+// nil when system mail is disabled (the mail delivery is then refused).
+func (s *systemMail) invitations(cfg *config.Config, logger *slog.Logger) adminauth.Mailer {
+	if s.retrier == nil {
+		return nil
+	}
+	return &invitationMailer{
+		mailer: s.retrier, settings: s.settings, adminHost: cfg.AdminHosts[0], logger: logger, render: mail.Render,
+	}
+}
+
+// SendInvitation renders the admin_invitation mail of m and queues it. A
+// rendering failure is logged without the link; the delivery failures are
+// logged by the queue.
+func (im *invitationMailer) SendInvitation(ctx context.Context, m adminauth.InvitationMail) {
+	msg, err := im.render(mail.TemplateAdminInvitation, m.Language, mail.AdminInvitationData{
+		Username: m.Username, TenantNames: m.TenantNames, Link: m.Link, AdminHost: im.adminHost, ExpiresAt: m.ExpiresAt,
+	})
+	if err != nil {
+		im.logger.ErrorContext(ctx, "admin invitation mail not sent: render failed", slog.Any("error", err))
+		return
+	}
+	msg.To = []string{m.To}
+	im.mailer.Send(ctx, []mail.Job{{TenantID: diskalert.MailTenantID, Template: mail.TemplateAdminInvitation, Settings: im.settings, Message: msg}},
+		slog.String("template", mail.TemplateAdminInvitation))
 }

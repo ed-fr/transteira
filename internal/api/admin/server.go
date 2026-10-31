@@ -69,6 +69,7 @@ type Service interface {
 	Update(ctx context.Context, p adminauth.Principal, adminID string, u adminauth.AdminUpdate, clientIP netip.Addr) (adminauth.Account, error)
 	Delete(ctx context.Context, p adminauth.Principal, adminID string, clientIP netip.Addr) error
 	ResetCredentials(ctx context.Context, p adminauth.Principal, adminID string, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
+	Invite(ctx context.Context, p adminauth.Principal, adminID string, inv adminauth.Invitation, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
 	Activate(ctx context.Context, token, password string, clientIP netip.Addr) (adminauth.Session, error)
 }
 

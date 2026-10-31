@@ -55,6 +55,13 @@ const (
 	// mail sent through the system SMTP server, never a tenant template;
 	// data: [AntivirusAlertData].
 	TemplateAntivirusAlert = "antivirus_alert"
+	// TemplateAdminInvitation mails the single-use activation link of a
+	// delegated administrator account (V1.2, threat model T-254 to T-259).
+	// Like [TemplateDiskAlert], it is an instance mail sent through the
+	// system SMTP server, never a tenant template: the store knows no tenant
+	// template key for it, so no entity can customize it; data:
+	// [AdminInvitationData].
+	TemplateAdminInvitation = "admin_invitation"
 	// TemplateAntivirusUnavailable tells the delegated administrators of an
 	// entity (else the super administrators) that the antivirus has stopped
 	// responding while transfers of the entity wait for analysis (tenant
@@ -351,6 +358,29 @@ type DiskAlertData struct {
 	// from the configured admin host, never from a request Host. It carries
 	// no token.
 	AdminLink string
+}
+
+// AdminInvitationData is the data of [TemplateAdminInvitation]. The mail has
+// no free text and holds no password or secret; the link is the only secret
+// and must reach nobody else (threat T-255). The mail engine HTML-escapes the
+// values and strips control and bidirectional characters from the user name
+// and the entity names (T-80, T-256).
+type AdminInvitationData struct {
+	// Username is the login of the invited administrator.
+	Username string
+	// TenantNames are the display names of the entities the account is
+	// assigned to, sorted by the caller. They may be empty.
+	TenantNames []string
+	// Link is the absolute activation URL on the admin host, built from the
+	// configured admin host, never from a request Host. The token is in the
+	// fragment (a [VarURL] value).
+	Link string
+	// AdminHost is the host name of the administration, shown so that the
+	// reader can check the address of the page.
+	AdminHost string
+	// ExpiresAt is the end of validity of the link (72 hours), formatted
+	// with [FormatDateTime].
+	ExpiresAt time.Time
 }
 
 // AntivirusAlertData is the data of [TemplateAntivirusAlert]. It holds no

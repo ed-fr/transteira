@@ -1,0 +1,19 @@
+Bonjour,
+
+Un compte administrateur a été créé pour vous sur TransTeira.
+
+Identifiant : jane.doe
+Entités : Entity A & Co, Entity B
+
+Ouvrez le lien ci-dessous pour choisir votre mot de passe et configurer la double authentification. Cette étape est obligatoire : tenez prête une application d'authentification sur votre téléphone.
+
+https://admin.transfer.example.com/admin/activate#tta_golden
+
+Le lien ne peut servir qu'une fois et reste valable jusqu'au 20 octobre 2027 à 08:30 UTC.
+
+La page d'activation se trouve sur admin.transfer.example.com. Vérifiez l'adresse avant de saisir quoi que ce soit. TransTeira ne demande jamais votre mot de passe par mail.
+
+Si vous n'attendiez pas ce message, ou si le lien a déjà servi, prévenez l'administrateur de l'instance.
+
+-- 
+Ce message a été envoyé automatiquement par TransTeira. Merci de ne pas y répondre.

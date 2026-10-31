@@ -68,7 +68,18 @@
     "intro": "The other settings (branding, network, mail, templates) are configured once the entity is created.",
     "submit": "Create the entity",
     "created": "The entity {name} has been created.",
-    "legend": "Entity details"
+    "legend": "Entity details",
+    "delegated": {
+      "legend": "First delegated administrator",
+      "enable": "Create the delegated administrator now",
+      "enableHint": "Optional. The administrator is attached to this entity only and receives an activation link, valid 72 hours.",
+      "username": "Username",
+      "email": "Email address",
+      "language": "Language of the mail",
+      "created": "The administrator {username} has been created.",
+      "continue": "Configure the entity",
+      "conflict": "An entity or an administrator already exists with this data: check the domain name (FQDN) of the entity and the username of the administrator. Nothing has been created."
+    }
   },
   "general": {
     "title": "General",

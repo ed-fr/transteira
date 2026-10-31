@@ -76,6 +76,24 @@ type TenantCreate struct {
 	// [branding.Presets]); nil or [branding.DefaultPresetID] means the
 	// default background.
 	BackgroundPreset *string
+	// DelegatedAdmin, when not nil, creates the first delegated admin of
+	// the tenant in the same transaction (since V1.2).
+	DelegatedAdmin *adminauth.DelegatedAdmin
+}
+
+// TenantCreated is the result of [Service.CreateTenant].
+type TenantCreated struct {
+	TenantView
+	// DelegatedAdmin is the delegated admin created with the tenant, nil
+	// when none was asked for.
+	DelegatedAdmin *InvitedAdmin
+}
+
+// InvitedAdmin is an account created with its activation link. The link
+// URL is empty when it was mailed.
+type InvitedAdmin struct {
+	Account    adminauth.Account
+	Activation adminauth.Activation
 }
 
 // TenantUpdate is the input of [Service.UpdateTenant] (OpenAPI
@@ -201,45 +219,76 @@ func (s *Service) GetTenant(ctx context.Context, p adminauth.Principal, tid tena
 // equal to an admin host, ErrUnknownBackgroundPreset for a background
 // preset outside the library, and ErrAlreadyExists for an FQDN already
 // used.
-func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in TenantCreate, ip netip.Addr) (TenantView, error) {
+//
+// With in.DelegatedAdmin, the tenant, its first delegated admin, the
+// assignment and the activation link are created in one transaction, and
+// a mailed link is queued only once it commits (T-257); the errors of the
+// account creation are those of [adminauth.Service.CreateDelegatedAdminTx]
+// (an *adminauth.InvalidError, adminauth.ErrSystemSMTPUnavailable,
+// ErrAlreadyExists for a username taken), and nothing is created then.
+func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in TenantCreate, ip netip.Addr) (TenantCreated, error) {
 	if err := superAdmin(p); err != nil {
-		return TenantView{}, err
+		return TenantCreated{}, err
+	}
+	if in.DelegatedAdmin != nil && s.admins == nil {
+		return TenantCreated{}, errors.New("tenantadmin: no admin creator configured")
 	}
 	name, err := checkName(in.Name)
 	if err != nil {
-		return TenantView{}, err
+		return TenantCreated{}, err
 	}
 	fqdn, err := s.checkFQDN(in.FQDN)
 	if err != nil {
-		return TenantView{}, err
+		return TenantCreated{}, err
 	}
 	if !tenant.IsLanguage(in.DefaultLanguage) {
-		return TenantView{}, invalid(FieldDefaultLanguage, "unsupported language")
+		return TenantCreated{}, invalid(FieldDefaultLanguage, "unsupported language")
 	}
 	if in.StorageQuotaBytes <= 0 {
-		return TenantView{}, invalid(FieldStorageQuotaBytes, "must be positive")
+		return TenantCreated{}, invalid(FieldStorageQuotaBytes, "must be positive")
 	}
 	maxBytes, ceiling, err := createLimits(in)
 	if err != nil {
-		return TenantView{}, err
+		return TenantCreated{}, err
 	}
 	preset, err := storedPreset(in.BackgroundPreset)
 	if err != nil {
-		return TenantView{}, err
+		return TenantCreated{}, err
+	}
+	var (
+		invited *InvitedAdmin
+		then    func(tx *store.SystemTx, t *tenant.Tenant) error
+	)
+	if in.DelegatedAdmin != nil {
+		then = func(tx *store.SystemTx, t *tenant.Tenant) error {
+			a, link, err := s.admins.CreateDelegatedAdminTx(ctx, tx, p, t, *in.DelegatedAdmin, ip)
+			if err != nil {
+				return err
+			}
+			invited = &InvitedAdmin{Account: a, Activation: link}
+			return nil
+		}
 	}
 	t, err := s.repo.createTenant(ctx, &tenant.Tenant{
 		Name: name, FQDN: fqdn, DefaultLanguage: in.DefaultLanguage, StorageQuotaBytes: in.StorageQuotaBytes,
 		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset,
-	})
+	}, then)
 	switch {
-	case errors.Is(err, store.ErrConflict):
-		return TenantView{}, ErrAlreadyExists
+	case errors.Is(err, store.ErrConflict), errors.Is(err, adminauth.ErrAlreadyExists):
+		return TenantCreated{}, ErrAlreadyExists
+	case errors.Is(err, adminauth.ErrInvalid), errors.Is(err, adminauth.ErrSystemSMTPUnavailable),
+		errors.Is(err, adminauth.ErrUnauthenticated), errors.Is(err, adminauth.ErrForbidden):
+		return TenantCreated{}, err
 	case err != nil:
-		return TenantView{}, fmt.Errorf("tenantadmin: create tenant: %w", err)
+		return TenantCreated{}, fmt.Errorf("tenantadmin: create tenant: %w", err)
 	}
 	s.invalidate(t.ID, t.FQDN)
 	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN})
-	return s.view(ctx, t)
+	v, err := s.view(ctx, t)
+	if err != nil {
+		return TenantCreated{}, err
+	}
+	return TenantCreated{TenantView: v, DelegatedAdmin: invited}, nil
 }
 
 // createLimits returns the transfer limit and ceiling of a new tenant.

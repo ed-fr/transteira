@@ -90,6 +90,10 @@ func goldenData() map[string]any {
 		TemplateDiskAlert: DiskAlertData{
 			UsedBytes: 4000 << 30 / 100 * 91, TotalBytes: 4000 << 30, ThresholdPercent: 87.5, AdminLink: goldenAdminLink,
 		},
+		TemplateAdminInvitation: AdminInvitationData{
+			Username: "jane.doe", TenantNames: []string{"Entity A & Co", "Entity B"}, AdminHost: "admin.transfer.example.com",
+			Link: "https://admin.transfer.example.com/admin/activate#tta_golden", ExpiresAt: goldenExpiry,
+		},
 		TemplateAntivirusAlert: AntivirusAlertData{
 			Since: goldenOutage, WaitingTransfers: 12, Tenants: 3, AdminLink: goldenAdminLink,
 		},
@@ -135,7 +139,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,admin_invitation,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -277,6 +281,48 @@ func TestTemplatesDiskAlert(t *testing.T) {
 	// "disk-alert", the API spelling, names the same built-in template.
 	if v, err := Variables("disk-alert"); err != nil || len(v) != 5 || v[0].Name != "usage_percent" || !v[0].Required {
 		t.Errorf("Variables(disk-alert) = %+v, %v", v, err)
+	}
+}
+
+func TestTemplatesAdminInvitation(t *testing.T) {
+	data := goldenData()[TemplateAdminInvitation].(AdminInvitationData)
+	def := keyDefs[TemplateAdminInvitation]
+	vals, ok := def.values(labelsFor("en"), "en", data)
+	if !ok || vals["username"].text != "jane.doe" || vals["tenant_names"].text != "Entity A & Co, Entity B" ||
+		vals["activation_link"].text != data.Link || vals["admin_host"].text != "admin.transfer.example.com" ||
+		vals["expires_at"].text != "October 20, 2027 at 08:30 UTC" {
+		t.Errorf("admin invitation values: %+v", vals)
+	}
+	if _, ok := def.values(labelsFor("en"), "en", DiskAlertData{}); ok {
+		t.Error("admin invitation values accepted another data type")
+	}
+	// No entity yet: a localized placeholder, never an empty line.
+	for lang, want := range map[string]string{"en": "no entity yet", "fr": "aucune entité pour le moment"} {
+		empty := data
+		empty.TenantNames = nil
+		vals, ok := def.values(labelsFor(lang), lang, empty)
+		if !ok || vals["tenant_names"].text != want {
+			t.Errorf("%s empty entities: %+v", lang, vals)
+		}
+	}
+	// Control and bidirectional characters are removed (T-80); blank names are skipped.
+	hostile := data
+	hostile.Username = "ja\u202ene\n.doe"
+	hostile.TenantNames = []string{"En\u202etity\r\nA", " ", "B"}
+	vals, _ = def.values(labelsFor("en"), "en", hostile)
+	if vals["username"].text != "jane .doe" || vals["tenant_names"].text != "Entity A, B" {
+		t.Errorf("hostile values: %q %q", vals["username"].text, vals["tenant_names"].text)
+	}
+	// The only link is the activation button; nothing else is clickable.
+	for _, lang := range i18n.Supported() {
+		m, err := Render(TemplateAdminInvitation, lang, data)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Text, data.Link) ||
+			!strings.Contains(m.Text, "admin.transfer.example.com") || !strings.Contains(m.Text, "Entity A & Co, Entity B") {
+			t.Errorf("%s: %v\n%s", lang, err, m.Text)
+		}
+	}
+	if v, err := Variables("admin-invitation"); err != nil || len(v) != 5 || !v[0].Required || !v[2].Required {
+		t.Errorf("Variables(admin-invitation) = %+v, %v", v, err)
 	}
 }
 

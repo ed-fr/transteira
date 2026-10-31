@@ -1,0 +1,19 @@
+Hello,
+
+An administrator account has been created for you on TransTeira.
+
+User name: jane.doe
+Entities: Entity A & Co, Entity B
+
+Open the link below to choose your password and set up two-factor authentication. This step is mandatory: have an authenticator app ready on your phone.
+
+https://admin.transfer.example.com/admin/activate#tta_golden
+
+The link can be used only once and is valid until October 20, 2027 at 08:30 UTC.
+
+The activation page is on admin.transfer.example.com. Check the address before you enter anything. TransTeira never asks for your password by e-mail.
+
+If you did not expect this message, or if the link was already used, warn the administrator of the instance.
+
+-- 
+This message was sent automatically by TransTeira. Please do not reply to it.

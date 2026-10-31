@@ -31,6 +31,8 @@ type fakeTenantService struct {
 	args  map[string][]any
 	// body is the uploaded image read by UploadAsset.
 	body []byte
+	// invited is the delegated admin answered by CreateTenant.
+	invited *tenantadmin.InvitedAdmin
 }
 
 func (f *fakeTenantService) record(name string, args ...any) error {
@@ -79,10 +81,10 @@ func (f *fakeTenantService) GetTenant(_ context.Context, p adminauth.Principal, 
 	return viewA, f.record("GetTenant", p.SessionID, tid)
 }
 
-func (f *fakeTenantService) CreateTenant(_ context.Context, p adminauth.Principal, in tenantadmin.TenantCreate, ip netip.Addr) (tenantadmin.TenantView, error) {
+func (f *fakeTenantService) CreateTenant(_ context.Context, p adminauth.Principal, in tenantadmin.TenantCreate, ip netip.Addr) (tenantadmin.TenantCreated, error) {
 	v := viewA
 	v.MaxTransferBytes, v.MaxTransferCeiling = in.MaxTransferBytes, in.MaxTransferBytes
-	return v, f.record("CreateTenant", p.SessionID, in, ip)
+	return tenantadmin.TenantCreated{TenantView: v, DelegatedAdmin: f.invited}, f.record("CreateTenant", p.SessionID, in, ip)
 }
 
 func (f *fakeTenantService) UpdateTenant(_ context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.TenantUpdate, ip netip.Addr) (tenantadmin.TenantView, error) {

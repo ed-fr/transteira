@@ -178,6 +178,16 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // background preset of invalid syntax) and
 // ErrConflict when the FQDN is already used.
 func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
+	return r.CreateWith(ctx, t, nil)
+}
+
+// CreateWith is Create, then runs then (when not nil) inside the same
+// transaction with the stored tenant, so that rows depending on the new
+// tenant (its first delegated admin and activation link) are committed with
+// it or not at all. An error of then rolls everything back and is returned
+// wrapped. then must not start another transaction; it may register
+// [SystemTx.AfterCommit] hooks.
+func (r *Tenants) CreateWith(ctx context.Context, t *tenant.Tenant, then func(tx *SystemTx, created *tenant.Tenant) error) (*tenant.Tenant, error) {
 	if !t.ID.IsZero() {
 		return nil, invalid("tenant id is assigned by the store")
 	}
@@ -205,7 +215,13 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 		if err != nil {
 			return err
 		}
-		return seedTenant(ctx, tx, c.ID)
+		if err := seedTenant(ctx, tx, c.ID); err != nil {
+			return err
+		}
+		if then == nil {
+			return nil
+		}
+		return then(tx, c)
 	})
 	if err != nil {
 		return nil, wrap("create tenant", err)

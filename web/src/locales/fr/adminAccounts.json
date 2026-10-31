@@ -33,7 +33,7 @@
   },
   "form": {
     "createTitle": "Créer un administrateur délégué",
-    "createIntro": "Le compte est créé sans mot de passe. Un lien d’activation à usage unique vous sera remis pour que la personne choisisse son mot de passe.",
+    "createIntro": "Le compte est créé sans mot de passe. Un lien d’activation à usage unique, valable 72 heures, est envoyé par courriel à l’administrateur ou affiché pour vous, afin que la personne choisisse son mot de passe.",
     "editTitle": "Modifier l’administrateur {username}",
     "username": {
       "label": "Identifiant",
@@ -55,7 +55,8 @@
     },
     "requireTotp": {
       "label": "Exiger la double authentification",
-      "hint": "Recommandé. L’administrateur devra la configurer à sa première connexion et ne pourra pas la désactiver."
+      "hint": "Recommandé. L’administrateur devra la configurer à sa première connexion et ne pourra pas la désactiver.",
+      "mailHint": "Obligatoire pour une invitation par courriel."
     },
     "disabled": {
       "label": "Compte désactivé",
@@ -111,5 +112,45 @@
   "notFound": {
     "title": "Administrateur introuvable",
     "text": "Ce compte administrateur n’existe pas ou a été supprimé."
+  },
+  "invitation": {
+    "action": "Renvoyer l’invitation…",
+    "title": "Envoyer une nouvelle invitation",
+    "intro": "Émettre un nouveau lien d’activation pour {username}, qui n’a pas encore activé son compte.",
+    "revokes": "Les liens émis précédemment sont révoqués et ne fonctionnent plus. Le nouveau lien est valable 72 heures.",
+    "submit": "Envoyer l’invitation",
+    "sending": "Envoi en cours…",
+    "done": "Un nouveau lien d’activation a été émis pour {username}.",
+    "copyOnly": "Le lien d’activation d’un compte de super administrateur n’est jamais envoyé par courriel : il vous sera affiché pour que vous le transmettiez vous-même.",
+    "delivery": {
+      "legend": "Remise du lien d’activation",
+      "mail": {
+        "label": "Envoyer par courriel à l’administrateur",
+        "hint": "Le lien est envoyé depuis la messagerie système de l’instance et n’est jamais affiché ici."
+      },
+      "copy": {
+        "label": "Afficher le lien à copier et le transmettre moi-même",
+        "hint": "Le lien est affiché une seule fois. Transmettez-le par un autre canal que le courriel."
+      }
+    },
+    "language": {
+      "label": "Langue du courriel",
+      "hint": "Langue du courriel d’invitation."
+    },
+    "sent": {
+      "title": "Invitation envoyée",
+      "text": "Invitation envoyée à {email}. Le lien est valable jusqu’au {date}.",
+      "textNoDate": "Invitation envoyée à {email}.",
+      "totp": "L’administrateur devra choisir un mot de passe et configurer la double authentification (TOTP) en activant son compte.",
+      "notShown": "Par sécurité, le lien n’est pas affiché et ne peut pas être retrouvé. Si le courriel n’arrive pas, renvoyez l’invitation.",
+      "done": "Retour aux administrateurs"
+    },
+    "errors": {
+      "smtpUnavailable": "L’invitation ne peut pas être envoyée par courriel : la messagerie système (TT_SYSTEM_SMTP_*) n’est pas configurée par l’exploitant de l’instance. Choisissez « Afficher le lien à copier et le transmettre moi-même » puis validez à nouveau.",
+      "alreadyActive": "Cet administrateur a déjà activé son compte : il n’y a rien à envoyer.",
+      "rateLimited": "Trop d’invitations pour ce compte. Réessayez plus tard.",
+      "rateLimitedIn": "Trop d’invitations pour ce compte. Réessayez dans {delay}.",
+      "conflict": "Ce compte ne peut pas recevoir d’invitation dans son état actuel (désactivé ou déjà activé). Rechargez la page."
+    }
   }
 }

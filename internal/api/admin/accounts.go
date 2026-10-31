@@ -32,7 +32,8 @@ func (s *Server) ListAdmins(ctx context.Context, req gen.ListAdminsRequestObject
 }
 
 // CreateAdmin creates a delegated admin and returns it with its activation
-// link, shown once and never mailed (super admin, 201).
+// link, returned once or, with invitation.delivery mail, mailed through the
+// system SMTP and never returned (super admin, 201).
 func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObject) (gen.CreateAdminResponseObject, error) {
 	svc, p, err := s.authenticatedSession(ctx)
 	if err != nil {
@@ -41,21 +42,44 @@ func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObje
 	if req.Body == nil {
 		return nil, validationFailed(adminauth.FieldUsername, fieldRequired)
 	}
-	// The mail delivery of API 1.2 is not implemented yet: refused rather
-	// than silently replaced by a copy (the default, absent or copy, is
-	// the 1.1 behavior). Checked for the super admin only, so that another
-	// admin keeps its 403 from the service.
-	if inv := req.Body.Invitation; p.Admin.Role == store.RoleSuperAdmin && inv != nil && inv.Delivery != nil && *inv.Delivery == gen.Mail {
-		return nil, validationFailed("/invitation/delivery", fieldNotSupported)
-	}
 	a, link, err := svc.Create(ctx, p, adminauth.AdminCreate{
 		Username: req.Body.Username, Email: string(req.Body.Email), Role: store.AdminRole(req.Body.Role),
 		TenantIDs: tenantIDs(deref(req.Body.TenantIds)), RequireTOTP: req.Body.RequireTotp,
+		Invitation: invitation(req.Body.Invitation),
 	}, middleware.ClientIP(ctx))
 	if err != nil {
 		return nil, serviceError(err)
 	}
 	return gen.CreateAdmin201JSONResponse(createdBody(a, link)), nil
+}
+
+// InviteAdmin issues a new activation link for an account not yet
+// activated, mailed or returned once (super admin, 200).
+func (s *Server) InviteAdmin(ctx context.Context, req gen.InviteAdminRequestObject) (gen.InviteAdminResponseObject, error) {
+	svc, p, err := s.authenticatedSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a, link, err := svc.Invite(ctx, p, req.AdminId, invitation(req.Body), middleware.ClientIP(ctx))
+	if err != nil {
+		return nil, serviceError(err)
+	}
+	return gen.InviteAdmin200JSONResponse(createdBody(a, link)), nil
+}
+
+// invitation converts an OpenAPI AdminInvitation (nil: the defaults).
+func invitation(b *gen.AdminInvitation) adminauth.Invitation {
+	var inv adminauth.Invitation
+	if b == nil {
+		return inv
+	}
+	if b.Delivery != nil {
+		inv.Delivery = store.ActivationDelivery(*b.Delivery)
+	}
+	if b.Language != nil {
+		inv.Language = string(*b.Language)
+	}
+	return inv
 }
 
 // GetAdmin returns one administrator account (super admin).
@@ -179,17 +203,27 @@ func withActivation(a adminauth.Account, link adminauth.Activation) gen.AdminWit
 }
 
 // createdBody renders a and its activation link as the OpenAPI
-// AdminCreated (since API 1.2). Until the delivery by mail is implemented,
-// the link is always returned (invitationDelivery copy, as in API
-// 1.1).
+// AdminCreated (since API 1.2): the link URL only for a copied link, never
+// for a mailed one (T-255).
 func createdBody(a adminauth.Account, link adminauth.Activation) gen.AdminCreated {
 	w := withActivation(a, link)
+	delivery, url := deliveryOf(link)
 	return gen.AdminCreated{
 		Id: w.Id, Username: w.Username, Email: w.Email, Role: w.Role, TenantIds: w.TenantIds,
 		TotpEnabled: w.TotpEnabled, Activated: w.Activated, RequireTotp: w.RequireTotp, Disabled: w.Disabled,
 		LastLoginAt: w.LastLoginAt, CreatedAt: w.CreatedAt,
-		InvitationDelivery: gen.Copy, ActivationUrl: &w.ActivationUrl, ActivationExpiresAt: w.ActivationExpiresAt,
+		InvitationDelivery: delivery, ActivationUrl: url, ActivationExpiresAt: w.ActivationExpiresAt,
 	}
+}
+
+// deliveryOf returns the delivery of link and the URL to return: nil
+// unless the link is copied.
+func deliveryOf(link adminauth.Activation) (gen.InvitationDelivery, *string) {
+	if link.Delivery == store.DeliveryMail {
+		return gen.Mail, nil
+	}
+	url := link.URL
+	return gen.Copy, &url
 }
 
 // tenantIDs converts the tenant IDs of a request.

@@ -473,6 +473,9 @@ test.describe('tenant configuration', () => {
         await page.getByRole('textbox', { name: /^Username/ }).fill(username);
         await page.getByRole('textbox', { name: /^Email address/ }).fill(`${username}@example.com`);
         await page.getByRole('checkbox', { name: tenant.name }).check();
+        // The mail delivery is the default; this flow needs the link, so ask for the copy
+        // (a mail invitation always requires TOTP, its checkbox is then locked).
+        await page.getByRole('radio', { name: /^Show the link to copy/ }).check();
         // No second factor, to keep the activation short.
         await page.getByRole('checkbox', { name: /^Require two-factor authentication/ }).uncheck();
         await page.getByRole('button', { name: 'Create the administrator' }).click();

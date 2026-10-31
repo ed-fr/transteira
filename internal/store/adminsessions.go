@@ -89,14 +89,14 @@ var (
 		reasonAdminAuth)
 
 	qActivationInsert = systemQuery(
-		`INSERT INTO admin_activations (id, admin_id, token_hash, created_at, expires_at, used_at)
-		VALUES (?, ?, ?, ?, ?, NULL)`,
+		`INSERT INTO admin_activations (id, admin_id, token_hash, created_at, expires_at, used_at, delivery, language)
+		VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
 		reasonAdminAuth)
 	// qActivationConsume marks a link used, only once and only before it
-	// expires, and returns its admin.
+	// expires, and returns its admin and its delivery.
 	qActivationConsume = systemQuery(
 		`UPDATE admin_activations SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?
-		RETURNING admin_id`,
+		RETURNING admin_id, delivery`,
 		reasonAdminAuth)
 	qActivationDeleteByAdmin = systemQuery(
 		`DELETE FROM admin_activations WHERE admin_id = ?`,
@@ -523,7 +523,27 @@ type AdminActivation struct {
 	CreatedAt time.Time
 	// ExpiresAt is the end of validity, after CreatedAt.
 	ExpiresAt time.Time
+	// Delivery is how the link reaches the administrator: DeliveryCopy
+	// (returned once to the super admin) when empty, or DeliveryMail
+	// (mailed through the system SMTP, never returned).
+	Delivery ActivationDelivery
+	// Language is the language of the mail, "" for a copied link.
+	Language string
 }
+
+// ActivationDelivery is how an activation link reaches the administrator
+// (OpenAPI InvitationDelivery).
+type ActivationDelivery string
+
+// Activation deliveries.
+const (
+	// DeliveryCopy: the link is returned once to the super admin, who
+	// hands it over out of band (the V1 behavior).
+	DeliveryCopy ActivationDelivery = "copy"
+	// DeliveryMail: the link is mailed through the system SMTP after the
+	// commit and never returned.
+	DeliveryMail ActivationDelivery = "mail"
+)
 
 // AdminActivations is the repository of activation links. Its operations
 // are system-scoped. Obtain it with [DB.AdminActivations].
@@ -563,7 +583,20 @@ func (r *AdminActivations) create(ctx context.Context, tx *SystemTx, a AdminActi
 	case !a.ExpiresAt.After(created):
 		return invalid("activation must expire after its creation")
 	}
-	_, err := tx.Exec(ctx, qActivationInsert, a.ID, a.AdminID, a.TokenHash, toMillis(created), toMillis(a.ExpiresAt))
+	delivery := a.Delivery
+	if delivery == "" {
+		delivery = DeliveryCopy
+	}
+	switch {
+	case delivery != DeliveryCopy && delivery != DeliveryMail:
+		return invalid("unknown activation delivery")
+	case delivery == DeliveryCopy && a.Language != "":
+		return invalid("a copied activation link has no mail language")
+	case delivery == DeliveryMail && (len(a.Language) < 2 || len(a.Language) > 16):
+		return invalid("a mailed activation link needs a language of 2 to 16 bytes")
+	}
+	_, err := tx.Exec(ctx, qActivationInsert, a.ID, a.AdminID, a.TokenHash, toMillis(created), toMillis(a.ExpiresAt),
+		string(delivery), nullText(a.Language))
 	return err
 }
 
@@ -573,7 +606,7 @@ func (r *AdminActivations) Consume(ctx context.Context, tokenHash []byte, now ti
 	var adminID string
 	err := r.db.authWrite(ctx, "consume admin activation", func(tx *SystemTx) error {
 		var err error
-		adminID, err = consumeActivation(ctx, tx, tokenHash, now)
+		adminID, _, err = consumeActivation(ctx, tx, tokenHash, now)
 		return err
 	})
 	return adminID, err
@@ -581,27 +614,28 @@ func (r *AdminActivations) Consume(ctx context.Context, tokenHash []byte, now ti
 
 // ConsumeTx marks, inside tx, the activation link whose token hashes to
 // tokenHash as used at now, provided it is unused and not expired, and
-// returns its administrator: the activation then sets the password in the
-// same transaction. A link can be consumed only once, even concurrently.
-// It returns ErrNotFound otherwise (unknown, used or expired) and
-// ErrInvalid for a hash of the wrong size.
-func (r *AdminActivations) ConsumeTx(ctx context.Context, tx *SystemTx, tokenHash []byte, now time.Time) (string, error) {
-	adminID, err := consumeActivation(ctx, tx, tokenHash, now)
+// returns its administrator and how the link was delivered: the activation
+// then sets the password in the same transaction, and requires TOTP for a
+// mailed link. A link can be consumed only once, even concurrently. It
+// returns ErrNotFound otherwise (unknown, used or expired) and ErrInvalid
+// for a hash of the wrong size.
+func (r *AdminActivations) ConsumeTx(ctx context.Context, tx *SystemTx, tokenHash []byte, now time.Time) (string, ActivationDelivery, error) {
+	adminID, delivery, err := consumeActivation(ctx, tx, tokenHash, now)
 	if err != nil {
-		return "", wrap("consume admin activation", err)
+		return "", "", wrap("consume admin activation", err)
 	}
-	return adminID, nil
+	return adminID, delivery, nil
 }
 
 // consumeActivation implements ConsumeTx, returning raw errors.
-func consumeActivation(ctx context.Context, tx *SystemTx, tokenHash []byte, now time.Time) (string, error) {
+func consumeActivation(ctx context.Context, tx *SystemTx, tokenHash []byte, now time.Time) (string, ActivationDelivery, error) {
 	if !validTokenHash(tokenHash) {
-		return "", invalid("token hash must hold %d bytes", TokenHashSize)
+		return "", "", invalid("token hash must hold %d bytes", TokenHashSize)
 	}
 	ms := toMillis(now)
-	var adminID string
-	err := tx.QueryRow(ctx, qActivationConsume, ms, tokenHash, ms).Scan(&adminID)
-	return adminID, err
+	var adminID, delivery string
+	err := tx.QueryRow(ctx, qActivationConsume, ms, tokenHash, ms).Scan(&adminID, &delivery)
+	return adminID, ActivationDelivery(delivery), err
 }
 
 // DeleteByAdmin revokes the activation links of adminID in its own

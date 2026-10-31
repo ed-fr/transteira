@@ -8,16 +8,19 @@ import (
 	"github.com/ed-fr/transteira/internal/store"
 )
 
-// Activation is a single-use activation link, valid ActivationTTL. It is
-// never mailed: the service returns it once, to the super admin who
-// created or reset the account (or to the operator of the local command),
-// who hands it to the administrator out of band. Only the SHA-256 of its
-// token is stored.
+// Activation is a single-use activation link, valid ActivationTTL. A
+// copied link is returned once, to the super admin who created, invited or
+// reset the account (or to the operator of the local command), who hands
+// it to the administrator out of band; a mailed link (since V1.2, delegated
+// admins only) is sent through the system SMTP and never returned. Only the
+// SHA-256 of its token is stored.
 type Activation struct {
 	// URL is the link: AdminBaseURL + ActivationPath + "#" + token (the
 	// token in the fragment, so that it never reaches a server log or a
-	// Referer header).
+	// Referer header). It is empty for a mailed link.
 	URL string
+	// Delivery is how the link reaches the administrator.
+	Delivery store.ActivationDelivery
 	// ExpiresAt is the end of its validity.
 	ExpiresAt time.Time
 }
@@ -42,5 +45,5 @@ func (s *Service) newActivation(adminID string, now time.Time) (store.AdminActiv
 	}
 	expires := now.Add(ActivationTTL)
 	row := store.AdminActivation{ID: actID, AdminID: adminID, TokenHash: tokenHash(token), CreatedAt: now, ExpiresAt: expires}
-	return row, Activation{URL: s.activationLink(token), ExpiresAt: expires}, nil
+	return row, Activation{URL: s.activationLink(token), Delivery: store.DeliveryCopy, ExpiresAt: expires}, nil
 }

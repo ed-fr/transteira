@@ -372,7 +372,7 @@ func TestPreviewAndVariables(t *testing.T) {
 		// The disk and antivirus alerts are instance mails: they name the
 		// service, not an entity.
 		want := sampleTenant
-		if name == TemplateDiskAlert || name == TemplateAntivirusAlert {
+		if name == TemplateDiskAlert || name == TemplateAntivirusAlert || name == TemplateAdminInvitation {
 			want = "TransTeira"
 		}
 		for _, lang := range i18n.Supported() {

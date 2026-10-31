@@ -45,17 +45,101 @@ export function splitActivation(data: AdminWithActivation): { account: Admin; li
   return { account, link: { url: activationUrl, expiresAt: activationExpiresAt } };
 }
 
+/** Delivery of an activation link: mailed through the system SMTP, or shown to copy. */
+export type InvitationDelivery = components['schemas']['InvitationDelivery'];
+/** Language of the invitation mail. */
+export type InvitationLanguage = components['schemas']['Language'];
+/** Body of POST /admin/admins/{adminId}/invite and member `invitation` of AdminCreate. */
+export type AdminInvitation = components['schemas']['AdminInvitation'];
+
+/** Languages offered for the invitation mail. */
+export const INVITATION_LANGUAGES: readonly InvitationLanguage[] = ['fr', 'en'];
+
+/** The language of a select value, or the fallback when it is not an offered language. */
+export function asInvitationLanguage(value: string, fallback: InvitationLanguage): InvitationLanguage {
+  return INVITATION_LANGUAGES.find((code) => code === value) ?? fallback;
+}
+
+/** Default language of the invitation mail: the interface language when offered, else English. */
+export function defaultInvitationLanguage(uiLanguage: string): InvitationLanguage {
+  return uiLanguage === 'fr' ? 'fr' : 'en';
+}
+
 /**
- * Splits an answer of createAdmin delivered by copy (the delivery createBody asks for) like
- * splitActivation. An answer without link (delivered by mail) is an error: this screen always
- * asks for the copy delivery.
+ * Invitation member of a request: the mail delivery carries the language of the mail, the copy
+ * delivery nothing (the language is ignored then).
  */
-export function splitCreated(data: AdminCreated): { account: Admin; link: ActivationLink } {
-  const { invitationDelivery: _delivery, activationUrl, activationExpiresAt, ...account } = data;
-  if (activationUrl === undefined) {
-    throw new Error('createAdmin answered without activation link');
+export function invitationBody(delivery: InvitationDelivery, language: InvitationLanguage): AdminInvitation {
+  return delivery === 'mail' ? { delivery, language } : { delivery };
+}
+
+/** What the screen shows after an invitation: the link to copy, or the confirmation of the mail. */
+export interface InvitationResult {
+  account: Admin;
+  delivery: InvitationDelivery;
+  /** The link, only with the copy delivery. */
+  link: ActivationLink | undefined;
+  /** End of validity of the link (ISO 8601). */
+  expiresAt: string;
+}
+
+/**
+ * Splits an answer of createAdmin or inviteAdmin like splitActivation, for either delivery: the
+ * link is present only with the copy delivery (a mailed link is never returned).
+ */
+export function splitCreated(data: AdminCreated): InvitationResult {
+  const { invitationDelivery: delivery, activationUrl, activationExpiresAt, ...account } = data;
+  const link =
+    delivery === 'copy' && activationUrl !== undefined
+      ? { url: activationUrl, expiresAt: activationExpiresAt }
+      : undefined;
+  return { account, delivery, link, expiresAt: activationExpiresAt };
+}
+
+/** The parts of an ErrorView (describeError) used to word an invitation error. */
+export interface InvitationErrorLike extends ErrorLike {
+  status?: number | undefined;
+  retryAfterSeconds?: number | undefined;
+}
+
+/** Wait before a new attempt, as a short text: seconds under a minute, else minutes (rounded up). */
+export function retryDelayText(seconds: number): string {
+  const s = Math.max(1, Math.ceil(seconds));
+  return s < 60 ? `${s} s` : `${Math.ceil(s / 60)} min`;
+}
+
+/**
+ * Message of an error specific to sending an activation link, or undefined for any other error:
+ * - system-smtp-unavailable (503): the operator did not configure the system mail; choose the
+ *   copy delivery and submit again (the form keeps its values);
+ * - 429 rate-limited: with the delay of Retry-After when known;
+ * - admin-already-active (409): the account was activated meanwhile.
+ */
+export function invitationErrorMessage(error: InvitationErrorLike, t: Translate): string | undefined {
+  if (error.code === 'system-smtp-unavailable') {
+    return t('adminAccounts.invitation.errors.smtpUnavailable');
   }
-  return { account, link: { url: activationUrl, expiresAt: activationExpiresAt } };
+  if (error.code === 'admin-already-active') {
+    return t('adminAccounts.invitation.errors.alreadyActive');
+  }
+  if (error.code === 'rate-limited' || error.status === 429) {
+    return error.retryAfterSeconds === undefined
+      ? t('adminAccounts.invitation.errors.rateLimited')
+      : t('adminAccounts.invitation.errors.rateLimitedIn', {
+          delay: retryDelayText(error.retryAfterSeconds),
+        });
+  }
+  return undefined;
+}
+
+/** Reports whether an account can be sent a new invitation: not activated and not disabled. */
+export function canInvite(admin: Pick<Admin, 'activated' | 'disabled'>): boolean {
+  return !admin.activated && !admin.disabled;
+}
+
+/** Reports whether the activation link of an account can be mailed (delegated admins only). */
+export function canMailInvitation(admin: Pick<Admin, 'role'>): boolean {
+  return admin.role === 'delegated_admin';
 }
 
 /** Application path of the edit screen of an account (the id is percent-encoded). */
@@ -220,23 +304,35 @@ export interface CreateForm {
   email: string;
   tenantIds: string[];
   requireTotp: boolean;
+  /** Delivery of the activation link. */
+  delivery: InvitationDelivery;
+  /** Language of the invitation mail (used with the mail delivery). */
+  language: InvitationLanguage;
 }
 
-/** Initial creation form: two-factor authentication required by default. */
-export function emptyCreateForm(): CreateForm {
-  return { username: '', email: '', tenantIds: [], requireTotp: true };
+/**
+ * Initial creation form: two-factor authentication required, activation link sent by mail, in
+ * the given language (English by default).
+ */
+export function emptyCreateForm(language: InvitationLanguage = 'en'): CreateForm {
+  return { username: '', email: '', tenantIds: [], requireTotp: true, delivery: 'mail', language };
 }
 
-/** Client-side validation of the creation form, in the order of the form. */
-export function validateCreate(form: CreateForm): FieldIssue[] {
+/** Client-side validation of a username and an email address, in the order of the form. */
+export function validateInvitee(input: { username: string; email: string }): FieldIssue[] {
   const issues: FieldIssue[] = [];
-  const username = form.username.trim();
+  const username = input.username.trim();
   if (username === '') {
     issues.push({ field: 'username', key: 'fieldErrors.required' });
   } else if (!USERNAME.test(username)) {
     issues.push({ field: 'username', key: 'fieldErrors.invalid-username' });
   }
-  return [...issues, ...emailIssues(form.email), ...tenantIssues(form.tenantIds)];
+  return [...issues, ...emailIssues(input.email)];
+}
+
+/** Client-side validation of the creation form, in the order of the form. */
+export function validateCreate(form: CreateForm): FieldIssue[] {
+  return [...validateInvitee(form), ...tenantIssues(form.tenantIds)];
 }
 
 /** Body of POST /admin/admins: always a delegated admin (a super admin is promoted later). */
@@ -246,10 +342,9 @@ export function createBody(form: CreateForm): AdminCreate {
     email: form.email.trim(),
     role: 'delegated_admin',
     tenantIds: [...new Set(form.tenantIds)].sort(),
-    requireTotp: form.requireTotp,
-    // The link is shown once on the screen (the 1.1 behaviour), until the mail delivery of
-    // API 1.2 is offered by the form.
-    invitation: { delivery: 'copy' },
+    // The server forces two-factor authentication for an invitation by mail.
+    requireTotp: form.requireTotp || form.delivery === 'mail',
+    invitation: invitationBody(form.delivery, form.language),
   };
 }
 

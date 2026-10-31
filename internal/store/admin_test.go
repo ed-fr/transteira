@@ -1048,7 +1048,7 @@ func TestAdminActivations(t *testing.T) {
 		for range 8 {
 			wg.Go(func() {
 				err := db.Admins().Tx(ctx, func(tx *store.SystemTx) error {
-					_, err := repo.ConsumeTx(ctx, tx, tokenHash("link-2"), msNow)
+					_, _, err := repo.ConsumeTx(ctx, tx, tokenHash("link-2"), msNow)
 					return err
 				})
 				switch {
@@ -1066,7 +1066,7 @@ func TestAdminActivations(t *testing.T) {
 			t.Errorf("an activation link was consumed %d times", wins)
 		}
 		err = db.Admins().Tx(ctx, func(tx *store.SystemTx) error {
-			_, err := repo.ConsumeTx(ctx, tx, []byte("x"), msNow)
+			_, _, err := repo.ConsumeTx(ctx, tx, []byte("x"), msNow)
 			return err
 		})
 		wantErr(t, "ConsumeTx(bad hash)", err, store.ErrInvalid)

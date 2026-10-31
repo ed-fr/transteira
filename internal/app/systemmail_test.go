@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/config"
@@ -208,5 +209,93 @@ func TestRunDiskAlertMailpit(t *testing.T) {
 	row, err := db.SystemSettings().Get(ctx)
 	if err != nil || row.DiskAlertLevel != store.DiskAlertLevelRaised {
 		t.Fatalf("level: %v %+v", err, row)
+	}
+}
+
+// recordingMailer records the jobs sent through the system channel.
+type recordingMailer struct{ jobs []mail.Job }
+
+func (r *recordingMailer) Send(_ context.Context, jobs []mail.Job, _ ...slog.Attr) {
+	r.jobs = append(r.jobs, jobs...)
+}
+
+func TestSystemMailInvitations(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{AdminHosts: []string{adminHost, "other-admin.example.com"}}
+	off, err := newSystemMail(&config.Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := off.invitations(cfg, slog.New(slog.DiscardHandler)); m != nil {
+		t.Fatalf("invitations without system mail = %v, want nil", m)
+	}
+	on, err := newSystemMail(&config.Config{SystemSMTP: config.SystemSMTP{
+		Host: "smtp.example.com", Port: 25, Security: config.SMTPSecurityNone, From: "noreply@example.com",
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = on.Close(context.Background()) })
+	m, ok := on.invitations(cfg, slog.New(slog.DiscardHandler)).(*invitationMailer)
+	if !ok || m.adminHost != adminHost || m.settings != on.settings || m.mailer == nil || m.render == nil {
+		t.Fatalf("invitations = %+v", m)
+	}
+}
+
+func TestInvitationMailerSend(t *testing.T) {
+	t.Parallel()
+	settings := mail.Settings{Host: "smtp.example.com", Port: 25, FromAddress: "noreply@example.com"}
+	im := adminauthInvitation()
+
+	// Rendered with the real templates, in both languages.
+	for _, lang := range []string{"en", "fr"} {
+		rec := &recordingMailer{}
+		m := &invitationMailer{mailer: rec, settings: settings, adminHost: adminHost, logger: slog.New(slog.DiscardHandler), render: mail.Render}
+		im.Language = lang
+		m.SendInvitation(context.Background(), im)
+		if len(rec.jobs) != 1 {
+			t.Fatalf("%s: jobs = %d", lang, len(rec.jobs))
+		}
+		j := rec.jobs[0]
+		if j.TenantID != diskalert.MailTenantID || j.Template != mail.TemplateAdminInvitation || j.Settings != settings ||
+			len(j.Message.To) != 1 || j.Message.To[0] != im.To || j.Message.Subject == "" ||
+			!strings.Contains(j.Message.Text, im.Link) || !strings.Contains(j.Message.HTML, adminHost) {
+			t.Errorf("%s: job %+v", lang, j)
+		}
+	}
+
+	// The data given to the renderer; a render failure sends nothing and
+	// logs no link.
+	var got any
+	var logs strings.Builder
+	rec := &recordingMailer{}
+	m := &invitationMailer{
+		mailer: rec, settings: settings, adminHost: adminHost, logger: slog.New(slog.NewTextHandler(&logs, nil)),
+		render: func(_, _ string, data any) (mail.Message, error) {
+			got = data
+			return mail.Message{}, errors.New("render failed")
+		},
+	}
+	m.SendInvitation(context.Background(), im)
+	want := mail.AdminInvitationData{Username: im.Username, TenantNames: im.TenantNames, Link: im.Link, AdminHost: adminHost, ExpiresAt: im.ExpiresAt}
+	if d, ok := got.(mail.AdminInvitationData); !ok || d.Username != want.Username || d.Link != want.Link ||
+		d.AdminHost != want.AdminHost || !d.ExpiresAt.Equal(want.ExpiresAt) || len(d.TenantNames) != 2 {
+		t.Errorf("render data %+v", got)
+	}
+	if len(rec.jobs) != 0 {
+		t.Errorf("a mail was sent despite the render failure")
+	}
+	if !strings.Contains(logs.String(), "render failed") || strings.Contains(logs.String(), im.Link) || strings.Contains(logs.String(), "act_") {
+		t.Errorf("log: %s", logs.String())
+	}
+}
+
+// adminauthInvitation is an invitation mail to send.
+func adminauthInvitation() adminauth.InvitationMail {
+	return adminauth.InvitationMail{
+		To: "new.admin@entity-a.example.com", Language: "en", Username: "new.admin",
+		TenantNames: []string{"Entity A", "Entity B"},
+		Link:        "https://" + adminHost + "/admin/activate#act_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG",
+		ExpiresAt:   time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC),
 	}
 }

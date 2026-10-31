@@ -6,6 +6,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // repo is the part of the store the service uses. It exists so that the
@@ -36,6 +37,11 @@ type repo interface {
 
 	audit(ctx context.Context, ev audit.Event) error
 	tx(ctx context.Context, fn func(txRepo) error) error
+	// tenant reads a tenant, for the invitation mails.
+	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
+	// wrapTx returns the txRepo of tx, a transaction opened by another
+	// service (the tenant creation).
+	wrapTx(tx *store.SystemTx) txRepo
 }
 
 // txRepo is the part of the store used inside a system transaction.
@@ -56,9 +62,11 @@ type txRepo interface {
 		stateExpiresAt, now time.Time, idle time.Duration) error
 	deleteSessions(ctx context.Context, adminID, exceptID string) (int64, error)
 	createActivation(ctx context.Context, a store.AdminActivation) error
-	consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, error)
+	consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, store.ActivationDelivery, error)
 	deleteActivations(ctx context.Context, adminID string) (int64, error)
 	audit(ctx context.Context, ev audit.Event) error
+	// afterCommit runs fn once the transaction committed, never otherwise.
+	afterCommit(fn func())
 }
 
 // storeRepo implements repo over a *store.DB.
@@ -143,6 +151,14 @@ func (r storeRepo) resetLogin(ctx context.Context, keys []store.AdminLoginKey) e
 
 func (r storeRepo) audit(ctx context.Context, ev audit.Event) error { return r.writer.Record(ctx, ev) }
 
+func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	return r.db.Tenants().Get(ctx, tid)
+}
+
+func (r storeRepo) wrapTx(tx *store.SystemTx) txRepo {
+	return storeTxRepo{db: r.db, tx: tx, writer: r.writer}
+}
+
 func (r storeRepo) tx(ctx context.Context, fn func(txRepo) error) error {
 	return r.db.Admins().Tx(ctx, func(tx *store.SystemTx) error {
 		return fn(storeTxRepo{db: r.db, tx: tx, writer: r.writer})
@@ -218,7 +234,7 @@ func (r storeTxRepo) createActivation(ctx context.Context, a store.AdminActivati
 	return r.db.AdminActivations().CreateTx(ctx, r.tx, a)
 }
 
-func (r storeTxRepo) consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, error) {
+func (r storeTxRepo) consumeActivation(ctx context.Context, tokenHash []byte, now time.Time) (string, store.ActivationDelivery, error) {
 	return r.db.AdminActivations().ConsumeTx(ctx, r.tx, tokenHash, now)
 }
 
@@ -229,3 +245,5 @@ func (r storeTxRepo) deleteActivations(ctx context.Context, adminID string) (int
 func (r storeTxRepo) audit(ctx context.Context, ev audit.Event) error {
 	return r.writer.RecordTx(ctx, r.tx, ev)
 }
+
+func (r storeTxRepo) afterCommit(fn func()) { r.tx.AfterCommit(fn) }

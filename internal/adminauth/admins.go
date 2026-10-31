@@ -36,8 +36,12 @@ type AdminCreate struct {
 	Role store.AdminRole
 	// TenantIDs are the tenants of the administrator, at least one.
 	TenantIDs []tenant.ID
-	// RequireTOTP makes the TOTP enrollment mandatory (true when nil).
+	// RequireTOTP makes the TOTP enrollment mandatory (true when nil);
+	// always true for an invitation by mail.
 	RequireTOTP *bool
+	// Invitation chooses how the activation link reaches the
+	// administrator (copied when zero, the V1 behavior).
+	Invitation Invitation
 }
 
 // AdminUpdate lists the changes of an account (OpenAPI AdminUpdate); nil
@@ -116,14 +120,16 @@ func (s *Service) Get(ctx context.Context, p Principal, adminID string) (Account
 }
 
 // Create creates a delegated admin for the super admin of p, from
-// clientIP, with a single-use activation link valid ActivationTTL. The
-// link is returned once and never mailed: the super admin hands it to the
-// administrator out of band. The account has no password until the link
-// is used.
+// clientIP, with a single-use activation link valid ActivationTTL,
+// delivered as req.Invitation says: returned once, for the super admin to
+// hand over out of band (the default), or mailed through the system SMTP
+// once the account is committed, and then never returned (TOTP is then
+// mandatory). The account has no password until the link is used.
 //
 // It returns ErrUnauthenticated or ErrForbidden for a caller who is not an
 // authenticated super admin, an *InvalidError for a malformed field, a
-// role other than delegated_admin, no tenant or an unknown tenant, and
+// role other than delegated_admin, no tenant or an unknown tenant,
+// ErrSystemSMTPUnavailable for the mail delivery without a system SMTP and
 // ErrAlreadyExists for a username taken.
 func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clientIP netip.Addr) (Account, Activation, error) {
 	if err := manager(p); err != nil {
@@ -146,7 +152,19 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	if err := checkTenantIDs(req.TenantIDs); err != nil {
 		return Account{}, Activation{}, err
 	}
-	requireTOTP := req.RequireTOTP == nil || *req.RequireTOTP
+	inv := req.Invitation
+	if err := inv.check(FieldInvitation); err != nil {
+		return Account{}, Activation{}, err
+	}
+	if inv.mail() && s.mailer == nil {
+		return Account{}, Activation{}, ErrSystemSMTPUnavailable
+	}
+	tenants, err := s.tenantInfos(ctx, req.TenantIDs)
+	if err != nil {
+		return Account{}, Activation{}, err
+	}
+	lang := mailLanguage(inv, tenants)
+	requireTOTP := req.RequireTOTP == nil || *req.RequireTOTP || inv.mail()
 	var (
 		created store.Admin
 		link    Activation
@@ -158,17 +176,17 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 		if err != nil {
 			return err
 		}
-		row, out, err := s.newActivation(a.ID, s.now())
+		out, err := s.issueTx(ctx, tx, a, inv, lang, tenantNames(tenants))
 		if err != nil {
-			return err
-		}
-		if err := tx.createActivation(ctx, row); err != nil {
 			return err
 		}
 		ev := adminEvent(p.Admin.Username, clientIP, audit.ActionAdminCreated, a.ID, map[string]any{
 			"username": a.Username, "role": string(a.Role), "tenant_ids": a.TenantIDs, "require_totp": a.RequireTOTP,
 		})
 		if err := tx.audit(ctx, ev); err != nil {
+			return err
+		}
+		if err := tx.audit(ctx, invitedEvent(p.Admin.Username, clientIP, a, out, lang, false)); err != nil {
 			return err
 		}
 		created, link = a, out
@@ -422,7 +440,8 @@ func (s *Service) resetTx(ctx context.Context, tx txRepo, a store.Admin) (store.
 
 // Activate uses the activation link token from clientIP: the account gets
 // password and a session, in state totp_enrollment_required when TOTP is
-// required, authenticated otherwise. The link is consumed and the other
+// required (always for a mailed link, which makes it mandatory again if it
+// was lifted), authenticated otherwise. The link is consumed and the other
 // links of the account are revoked.
 //
 // It returns ErrNotFound for a malformed, unknown, used or expired token,
@@ -445,7 +464,7 @@ func (s *Service) Activate(ctx context.Context, token, password string, clientIP
 		sess      Session
 	)
 	err = s.repo.tx(ctx, func(tx txRepo) error {
-		adminID, err := tx.consumeActivation(ctx, tokenHash(token), now)
+		adminID, delivery, err := tx.consumeActivation(ctx, tokenHash(token), now)
 		if err != nil {
 			return err
 		}
@@ -455,6 +474,15 @@ func (s *Service) Activate(ctx context.Context, token, password string, clientIP
 		}
 		if a.Disabled {
 			return store.ErrNotFound
+		}
+		// A mailed link always ends with a TOTP enrollment, even if TOTP was
+		// made optional after the link was sent: whoever reads the mailbox
+		// must not get an account without a second factor (T-254).
+		if delivery == store.DeliveryMail && !a.RequireTOTP {
+			on := true
+			if _, a, err = tx.updateAdmin(ctx, a.ID, store.AdminUpdate{RequireTOTP: &on}); err != nil {
+				return err
+			}
 		}
 		if err := tx.setPassword(ctx, a.ID, hash); err != nil {
 			return err

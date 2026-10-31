@@ -27,6 +27,9 @@ const (
 	// that a client never believes a setup state, a delegated admin, a
 	// background preset or a mailed invitation was applied.
 	fieldNotSupported = "not-supported"
+	// fieldNotAllowed is a valid value that is not allowed here: the mail
+	// delivery of a super admin activation link.
+	fieldNotAllowed = "not-allowed"
 )
 
 // errNoService reports a server built without WithService: a wiring error,
@@ -43,12 +46,15 @@ var errNoTenants = errors.New("admin: no tenant registry configured")
 // in it).
 func serviceError(err error) error {
 	var (
-		invalid *adminauth.InvalidError
-		limited *adminauth.RateLimitError
+		invalid    *adminauth.InvalidError
+		notAllowed *adminauth.NotAllowedError
+		limited    *adminauth.RateLimitError
 	)
 	switch {
 	case errors.As(err, &invalid):
 		return validationFailed(invalid.Field, formatCode(invalid.Field == adminauth.FieldEmail))
+	case errors.As(err, &notAllowed):
+		return validationFailed(notAllowed.Field, fieldNotAllowed)
 	case errors.As(err, &limited):
 		return problem.New(problem.CodeRateLimited, problem.WithRetryAfter(limited.RetryAfter))
 	case errors.Is(err, adminauth.ErrInvalid):
@@ -69,6 +75,10 @@ func serviceError(err error) error {
 		return problem.New(problem.CodeNotFound)
 	case errors.Is(err, adminauth.ErrAlreadyExists):
 		return problem.New(problem.CodeAlreadyExists)
+	case errors.Is(err, adminauth.ErrAdminAlreadyActive):
+		return problem.New(problem.CodeAdminAlreadyActive)
+	case errors.Is(err, adminauth.ErrSystemSMTPUnavailable):
+		return problem.New(problem.CodeSystemSMTPUnavailable)
 	case errors.Is(err, adminauth.ErrStateConflict):
 		return problem.New(problem.CodeStateConflict)
 	default:

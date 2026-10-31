@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/i18n"
+	"github.com/ed-fr/transteira/internal/textsafe"
 )
 
 // VarKind is the type of a template variable, which decides where it can
@@ -302,6 +303,20 @@ var keyDefs = map[string]keyDef{
 		sample: DiskAlertData{
 			UsedBytes: 4000 << 30 / 100 * 87, TotalBytes: 4000 << 30, ThresholdPercent: 85,
 			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
+	TemplateAdminInvitation: {
+		vars: []varSpec{
+			{"username", VarText, true, "Login of the administrator account."},
+			{"tenant_names", VarText, false, "Names of the entities the account is assigned to, separated by commas."},
+			{"activation_link", VarURL, true, "Single-use link to activate the account."},
+			{"admin_host", VarText, false, "Host name of the administration, to check the address of the activation page."},
+			{"expires_at", VarText, false, "Date and time until which the link is valid."},
+		},
+		values: adminInvitationValues,
+		sample: AdminInvitationData{
+			Username: "jane.doe", TenantNames: []string{sampleTenant}, AdminHost: "admin.transfer.example.com",
+			Link: "https://admin.transfer.example.com/admin/activate#act_sample", ExpiresAt: sampleTime.Add(72 * time.Hour),
 		},
 	},
 	TemplateAntivirusAlert: {
@@ -643,6 +658,49 @@ func diskAlertValues(_ *labels, lang string, data any) (map[string]value, bool) 
 		"total_size":        textValue(FormatSize(lang, d.TotalBytes)),
 		"admin_link":        urlValue(d.AdminLink),
 	}, true
+}
+
+// adminInvitationValues returns the variables of the admin_invitation
+// template from an AdminInvitationData. The user name and the entity names
+// lose their control and bidirectional characters (T-80).
+func adminInvitationValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(AdminInvitationData)
+	if !ok {
+		return nil, false
+	}
+	names := make([]string, 0, len(d.TenantNames))
+	for _, n := range d.TenantNames {
+		if n = cleanInline(n); n != "" {
+			names = append(names, n)
+		}
+	}
+	tenants := l.noEntity
+	if len(names) > 0 {
+		tenants = strings.Join(names, ", ")
+	}
+	return map[string]value{
+		"username":        textValue(cleanInline(d.Username)),
+		"tenant_names":    textValue(tenants),
+		"activation_link": urlValue(d.Link),
+		"admin_host":      textValue(cleanInline(d.AdminHost)),
+		"expires_at":      textValue(FormatDateTime(lang, d.ExpiresAt)),
+	}, true
+}
+
+// cleanInline makes a one-line text: control and line-separator characters
+// become spaces, format and invisible characters (bidirectional controls...)
+// are removed and whitespace is collapsed.
+func cleanInline(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case textsafe.IsControl(r) || textsafe.IsLineSeparator(r):
+			return ' '
+		case textsafe.IsFormat(r) || textsafe.IsInvisible(r):
+			return -1
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // antivirusAlertValues returns the variables of the antivirus_alert

@@ -160,6 +160,7 @@ var isolationCases = map[string]isolationCase{
 	"updateAdmin":           adminHostOnly,
 	"deleteAdmin":           adminHostOnly,
 	"resetAdminCredentials": adminHostOnly,
+	"inviteAdmin":           adminHostOnly,
 	"activateAdmin":         adminHostOnly,
 	// Tenant configuration (tenantconfig_test.go): served on the admin host
 	// only, like every administration operation; the delegated admin of

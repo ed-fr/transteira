@@ -46,6 +46,7 @@ type labels struct {
 	personalLinks         string // sentence replacing the link when each recipient has a personal one
 	myTransfersIntro      string // intro of the My transfers link in the sender confirmation
 	replyNotice           string // %s: date of the original transfer, entity name, sender address
+	noEntity              string // shown when an administrator account is assigned to no entity yet
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -96,6 +97,7 @@ var allLabels = map[string]*labels{
 		operatorsMailed:       "The operators of the instance have been alerted.",
 		operatorsNotMailed:    "Contact the operator of the instance if the situation persists.",
 		waitingSummary:        "Transfers waiting for analysis: %d; entities concerned: %d.",
+		noEntity:              "no entity yet",
 		waitingUnknown:        "The number of transfers waiting could not be determined.",
 		verificationNotice:    "Before downloading, you will be asked to confirm your e-mail address with a code sent to this address.",
 		downloadedBy:          "Downloaded by: ",
@@ -138,7 +140,8 @@ var allLabels = map[string]*labels{
 		operatorsMailed:       "Les exploitants de l'instance ont été alertés.",
 		operatorsNotMailed:    "Contactez l'exploitant de l'instance si la situation persiste.",
 		waitingSummary:        "Transferts en attente d'analyse : %d ; entités concernées : %d.", //nolint:misspell // French text
-		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.",   //nolint:misspell // French text
+		noEntity:              "aucune entité pour le moment",
+		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.", //nolint:misspell // French text
 		verificationNotice:    "Avant de télécharger, il vous sera demandé de confirmer votre adresse e-mail avec un code envoyé à cette adresse.",
 		downloadedBy:          "Téléchargé par : ",
 		downloadLinkIntro:     "Lien de téléchargement",
