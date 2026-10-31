@@ -195,8 +195,11 @@ func (d slowDownloads) OpenFile(context.Context, *tenant.Tenant, string, netip.A
 // for longer than it, both complete.
 func TestDefaultDeadlineSparesStreaming(t *testing.T) {
 	t.Parallel()
-	const def = 100 * time.Millisecond
-	const size = 256 << 10 // 8 slow reads of 32 KiB: about 320 ms
+	// The default deadline leaves room for a loaded machine (make check runs
+	// every package at once): 100 ms could expire before the first response
+	// is even written.
+	const def = 500 * time.Millisecond
+	const size = 1 << 20 // 32 slow reads of 32 KiB: about 1.3 s
 	up := &fakeUploads{}
 	e := newEnv(t, envConfig{
 		opts: []Option{withDefaultDeadline(def)}, idle: 2 * time.Second, downloadIdle: 2 * time.Second,
@@ -242,8 +245,8 @@ func TestDefaultDeadlineSparesStreaming(t *testing.T) {
 	if _, err := io.WriteString(conn, head); err != nil {
 		t.Fatal(err)
 	}
-	for _, b := range []string{"a", "b", "c", "d", "e"} { // 5 x 60 ms: about 300 ms
-		time.Sleep(60 * time.Millisecond)
+	for _, b := range []string{"a", "b", "c", "d", "e"} { // 5 x 250 ms: about 1.25 s
+		time.Sleep(250 * time.Millisecond)
 		if _, err := io.WriteString(conn, b); err != nil {
 			t.Fatal(err)
 		}
