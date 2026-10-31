@@ -78,7 +78,7 @@ func TestCreateTenantDelegatedAdmin(t *testing.T) {
 		ctx := context.Background()
 		ev := newEnv(t, e)
 		in := func(fqdn string, da *adminauth.DelegatedAdmin) TenantCreate {
-			return TenantCreate{Name: "New", FQDN: fqdn, DefaultLanguage: "fr", StorageQuotaBytes: 1 << 40, DelegatedAdmin: da}
+			return TenantCreate{SetupState: tenant.SetupStateActive, Name: "New", FQDN: fqdn, DefaultLanguage: "fr", StorageQuotaBytes: 1 << 40, DelegatedAdmin: da}
 		}
 		good := adminauth.DelegatedAdmin{Username: "first.admin", Email: "first@entity-c.example.com", Language: "fr"}
 
@@ -187,7 +187,8 @@ func TestCreateTenantDelegatedAdminErrors(t *testing.T) {
 		} {
 			ev.svc.admins = fakeAdminCreator{err: tc.err}
 			_, err := ev.svc.CreateTenant(ctx, ev.super, TenantCreate{
-				Name: "New", FQDN: "e1.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1, DelegatedAdmin: da,
+				SetupState: tenant.SetupStateActive,
+				Name:       "New", FQDN: "e1.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1, DelegatedAdmin: da,
 			}, clientIP)
 			wantErr(t, name, err, tc.want)
 			ev.tenantGone(t, "e1.example.com")
@@ -202,7 +203,8 @@ func TestCreateTenantViewFailure(t *testing.T) {
 		ev := newEnv(t, e)
 		ev.faults("usedBytes")
 		_, err := ev.svc.CreateTenant(context.Background(), ev.super, TenantCreate{
-			Name: "New", FQDN: "v1.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1,
+			SetupState: tenant.SetupStateActive,
+			Name:       "New", FQDN: "v1.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1,
 		}, clientIP)
 		wantErr(t, "view", err, errBoom)
 	})

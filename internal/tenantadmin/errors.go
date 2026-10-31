@@ -65,6 +65,7 @@ const (
 	FieldStorageQuotaBytes  = "/storageQuotaBytes"
 	FieldMaxTransferBytes   = "/maxTransferBytes"
 	FieldMaxTransferCeiling = "/maxTransferCeiling"
+	FieldSetupState         = "/setupState"
 	FieldConfirm            = "confirm"
 	FieldPrimaryColor       = "/primaryColor"
 	FieldAccentColor        = "/accentColor"

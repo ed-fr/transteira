@@ -18,6 +18,7 @@ import (
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/textproposals"
 )
 
 // Defaults of the [Options].
@@ -177,6 +178,9 @@ type Service struct {
 	// favicons generates the favicons of an uploaded logo
 	// (branding.GenerateFavicons; replaceable in tests).
 	favicons func(ctx context.Context, logoPNG []byte) (branding.Favicons, error)
+	// propose builds the legal text proposals (textproposals.Propose;
+	// replaceable in tests).
+	propose func(document, language string, f textproposals.Facts) (string, error)
 
 	// mu serializes the read-modify-write cycles of the tenant rows, so
 	// that two concurrent changes of different fields do not lose one.
@@ -210,6 +214,7 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		avDisabled: opts.AntivirusDisabled,
 		admins:     opts.Admins,
 		favicons:   branding.GenerateFavicons,
+		propose:    textproposals.Propose,
 	}
 	for _, h := range opts.AdminHosts {
 		if n, err := tenant.NormalizeHost(h); err == nil {

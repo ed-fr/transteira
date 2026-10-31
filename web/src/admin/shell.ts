@@ -64,6 +64,7 @@ function trimSlash(path: string): string {
 
 /** Sections of the configuration of a tenant (group "configuration"), in navigation order. */
 export const TENANT_CONFIG_SECTIONS = [
+  'setup',
   'general',
   'branding',
   'network',

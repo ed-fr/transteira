@@ -68,6 +68,10 @@ var (
 	// reached its download limit ([Transfers.ClaimDownloadTx]): nothing is
 	// counted.
 	ErrMaxDownloads = errors.New("store: download limit reached")
+	// ErrSetupComplete reports the completion of the setup of a tenant that
+	// is already active ([Tenants.CompleteSetup]): there is no way back to
+	// the setup state, and nothing is changed.
+	ErrSetupComplete = errors.New("store: tenant setup already complete")
 	// ErrScrubBusy reports a WAL checkpoint that could not complete because
 	// readers were active: deleted data may remain in the SQLite WAL until
 	// the next [DB.ScrubDeleted]. It is not fatal.

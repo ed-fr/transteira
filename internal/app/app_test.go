@@ -201,7 +201,8 @@ func prepare(t *testing.T, cfg *config.Config) {
 		t.Fatal(err)
 	}
 	if _, err := db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: "Entity A", FQDN: tenantHost, DefaultLanguage: "fr",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity A", FQDN: tenantHost, DefaultLanguage: "fr",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 10 << 30,
 	}); err != nil {
 		t.Fatal(err)

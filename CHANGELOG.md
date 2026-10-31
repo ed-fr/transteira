@@ -33,6 +33,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
   account not yet activated (`POST /admin/admins/{id}/invite`, at most 5 per hour), which revokes
   the previous ones. Without a system SMTP the mail delivery answers `503 system-smtp-unavailable`
   and the link can still be copied.
+- Tenant setup state and checklist (server side): a tenant can be created in the `setup` state
+  (`setupState: setup`; without it, `createTenant` still creates an active tenant). While in setup,
+  every public operation of the tenant answers `503 tenant-in-setup` (deposits, codes,
+  invitations, uploads, API tokens, downloads, "my transfers"), except its public information,
+  images and legal texts, which carry `setupState`. The checklist
+  (`GET /admin/tenants/{id}/setup`) is computed from the real configuration: SMTP settings tested
+  successfully since their last change, internal IP ranges and domains, legal notice and privacy
+  policy written in the default language without "to complete" marker, plus optional branding and
+  mail template review. `POST /admin/tenants/{id}/setup/complete` opens the tenant (`409
+  setup-incomplete` listing the missing items; `force` for the super admin only); there is no way
+  back. `GET /admin/tenants/{id}/text-proposals/{document}/{language}` proposes a legal notice or
+  privacy policy filled with the tenant configuration, never saved.
 
 ## [1.1.0] - 2026-10-31
 

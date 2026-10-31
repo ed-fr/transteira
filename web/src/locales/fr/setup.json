@@ -1,0 +1,100 @@
+{
+  "textProposal": {
+    "reviewNotice": "Ce texte est une proposition de départ, pas un avis juridique. Il doit être relu par le délégué à la protection des données ou par un juriste avant toute publication. Remplacez chaque mention « [À compléter : …] » par les informations de votre entité."
+  },
+  "state": {
+    "setup": "En cours de mise en service",
+    "active": "Active"
+  },
+  "wizard": {
+    "title": "Mise en service",
+    "intro": "Suivez la liste ci-dessous pour configurer l’entité. Les dépôts restent fermés au public tant que la mise en service n’est pas terminée.",
+    "introActive": "La mise en service est terminée : l’entité est ouverte. La liste ci-dessous est donnée à titre d’information.",
+    "setupBanner": "Cette entité est en cours de mise en service : les dépôts sont fermés au public.",
+    "setupBannerLink": "Ouvrir la mise en service",
+    "loading": "Chargement de la mise en service…",
+    "listLabel": "Étapes de la mise en service",
+    "required": "Obligatoire",
+    "optional": "Facultatif",
+    "done": "Fait",
+    "todo": "À faire",
+    "configure": "Configurer",
+    "configureItem": "Configurer : {item}",
+    "reviewed": "J’ai relu les modèles de mails",
+    "reviewedHint": "Cochez cette case une fois les modèles de mails relus ou adaptés ; elle est enregistrée à la fin de la mise en service.",
+    "complete": "Terminer la mise en service",
+    "completing": "Finalisation…",
+    "completed": "La mise en service est terminée : l’entité est ouverte aux dépôts.",
+    "canCompleteNo": "Il reste des étapes obligatoires à terminer avant d’ouvrir l’entité :",
+    "incompleteTitle": "La mise en service ne peut pas être terminée",
+    "incompleteText": "Ces étapes obligatoires ne sont pas faites :",
+    "alreadyComplete": "La mise en service de cette entité est déjà terminée.",
+    "forbidden": "Vous n’avez pas le droit de forcer l’ouverture de cette entité.",
+    "force": {
+      "action": "Forcer l’ouverture",
+      "hint": "Réservé au super administrateur : ouvre l’entité même si des étapes obligatoires ne sont pas faites.",
+      "title": "Forcer l’ouverture de l’entité ?",
+      "text": "Les dépôts deviendront possibles alors que des étapes obligatoires ne sont pas faites : l’entité pourrait envoyer des mails ou afficher des textes incomplets. Cette action est tracée dans le journal d’audit.",
+      "confirm": "Forcer l’ouverture"
+    },
+    "back": "Retour à la mise en service",
+    "backLabel": "Revenir à la liste de mise en service de l’entité",
+    "error": "Impossible de charger la mise en service.",
+    "retry": "Réessayer"
+  },
+  "items": {
+    "branding_logo": {
+      "label": "Logo",
+      "hint": "Le logo affiché en haut des pages publiques et dans les mails."
+    },
+    "branding_colors": {
+      "label": "Couleurs",
+      "hint": "Couleur principale et couleur d’accent, avec contrôle du contraste."
+    },
+    "smtp": {
+      "label": "Messagerie (SMTP)",
+      "hint": "Serveur d’envoi des mails de l’entité ; testez-le avec le bouton d’envoi de test."
+    },
+    "internal_networks": {
+      "label": "Plages d’adresses IP internes",
+      "hint": "Les réseaux depuis lesquels un utilisateur est reconnu comme interne."
+    },
+    "internal_domains": {
+      "label": "Domaines de messagerie internes",
+      "hint": "Les domaines des adresses des utilisateurs internes."
+    },
+    "legal_notice": {
+      "label": "Mentions légales",
+      "hint": "Texte à relire ; l’étape est faite lorsqu’il ne reste aucune mention « [À compléter : …] »."
+    },
+    "privacy_policy": {
+      "label": "Politique de confidentialité",
+      "hint": "Texte à relire ; l’étape est faite lorsqu’il ne reste aucune mention « [À compléter : …] »."
+    },
+    "mail_templates": {
+      "label": "Modèles de mails",
+      "hint": "Relisez les modèles par défaut ou adaptez-les, puis cochez la case ci-dessous."
+    }
+  },
+  "home": {
+    "title": "Mise en service à terminer",
+    "text": "L’entité {name} est en cours de mise en service : configurez-la pour l’ouvrir aux dépôts.",
+    "textMany": "Ces entités sont en cours de mise en service : configurez-les pour les ouvrir aux dépôts.",
+    "action": "Commencer la mise en service de {name}"
+  },
+  "legalProposal": {
+    "action": "Utiliser le texte proposé",
+    "loading": "Chargement de la proposition…",
+    "error": "Impossible de charger le texte proposé.",
+    "loaded": "Le texte proposé a été placé dans l’éditeur. Relisez-le, complétez-le puis enregistrez.",
+    "noticeTitle": "Proposition de texte à relire",
+    "confirm": {
+      "title": "Remplacer le texte actuel ?",
+      "text": "L’éditeur contient déjà du texte. Le texte proposé le remplacera (rien n’est enregistré tant que vous n’enregistrez pas).",
+      "action": "Remplacer par le texte proposé"
+    },
+    "markers": "Il reste {count} mention « À compléter » dans le texte. L’étape ne sera comptée comme faite que lorsqu’il n’en reste plus.",
+    "markersMany": "Il reste {count} mentions « À compléter » dans le texte. L’étape ne sera comptée comme faite que lorsqu’il n’en reste plus.",
+    "hint": "L’étape de mise en service ne tient compte que du texte dans la langue par défaut de l’entité ; elle n’est comptée comme faite que lorsque ce texte ne contient plus aucune mention « [À compléter : …] » (ou « [To complete: …] »)."
+  }
+}

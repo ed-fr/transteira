@@ -42,6 +42,7 @@
     type TenantRow,
   } from './home';
   import { loadGlobalStats, OVERVIEW_PATH, type GlobalStats } from './system/overview';
+  import { setupPath, tenantsInSetup } from './tenants/setup';
   import { appendPage, type Tenant } from './tenants/tenants';
   import type { AdminScreenProps } from './types';
 
@@ -80,7 +81,23 @@
     }
   }
 
+  // Tenants of the delegated admin still being set up (call to action to their wizard). The
+  // list is informative: a failure simply shows no call to action.
+  let setupTenants = $state.raw<Tenant[]>([]);
+
+  async function loadSetupTenants(): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/tenants');
+      if (alive) {
+        setupTenants = tenantsInSetup(res.data.items);
+      }
+    } catch {
+      // Ignored: see above.
+    }
+  }
+
   async function loadCards(refs: readonly Ref[]): Promise<void> {
+    void loadSetupTenants();
     cards = initialCards(refs);
     await mapLimit(refs, STATS_CONCURRENCY, loadCard);
   }
@@ -229,6 +246,25 @@
 {/if}
 
 {#if kind === 'delegated'}
+  {#if setupTenants.length > 0}
+    <Alert severity="warning" live={false} title={t('setup.home.title')}>
+      {#if setupTenants.length === 1}
+        {@const only = setupTenants[0] as Tenant}
+        <p>{t('setup.home.text', { name: only.name })}</p>
+      {:else}
+        <p>{t('setup.home.textMany')}</p>
+      {/if}
+      <ul>
+        {#each setupTenants as tenant (tenant.id)}
+          <li>
+            <a href={nav.href(setupPath(tenant.id))} use:nav.link>
+              {t('setup.home.action', { name: tenant.name })}
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </Alert>
+  {/if}
   {#if cards.length === 0}
     <Alert severity="info" live={false}>
       <p>{t('adminHome.noTenant')}</p>

@@ -55,7 +55,7 @@ func TestAdminActivationDelivery(t *testing.T) {
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func TestTenantsCreateWith(t *testing.T) {
 			t.Fatalf("Migrate: %v", err)
 		}
 		newT := func(fqdn string) *tenant.Tenant {
-			return &tenant.Tenant{Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}
+			return &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}
 		}
 
 		// nil callback: Create.
@@ -193,7 +193,7 @@ func TestConsumeTxReturnsDelivery(t *testing.T) {
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

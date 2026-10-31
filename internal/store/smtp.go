@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -75,7 +76,9 @@ type SMTPConfig struct {
 	// characters, no control character).
 	FromName string
 	// UpdatedAt is the time of the last change; the store's clock is used
-	// when it is zero.
+	// when it is zero. It is also the version of the settings: every write
+	// stores a time strictly after the previous one (see
+	// [Tenants.SetSMTPTested]).
 	UpdatedAt time.Time
 }
 
@@ -211,10 +214,27 @@ func (r *SMTPSettings) PutTx(ctx context.Context, tx *ScopedTx, c SMTPConfig) er
 	return nil
 }
 
-// put validates and upserts c in tx, returning raw errors.
+// put validates and upserts c in tx, returning raw errors. Under the
+// tenant lock, it moves the modification time strictly after the stored
+// one: the time is the version of the settings, and a successful SMTP test
+// is recorded for one version only ([Tenants.SetSMTPTested]), so that any
+// change of the settings, even within the same millisecond or with a clock
+// going back, invalidates that record in this very statement.
 func (r *SMTPSettings) put(ctx context.Context, tx *ScopedTx, c SMTPConfig) error {
 	c, err := r.normalizeSMTP(c)
 	if err != nil {
+		return err
+	}
+	if err := tx.lock(ctx); err != nil {
+		return err
+	}
+	old, err := getSMTP(ctx, tx)
+	switch {
+	case err == nil:
+		if toMillis(c.UpdatedAt) <= toMillis(old.UpdatedAt) {
+			c.UpdatedAt = fromMillis(toMillis(old.UpdatedAt) + 1)
+		}
+	case !errors.Is(err, ErrNotFound):
 		return err
 	}
 	if c.PasswordKeyID != "" {

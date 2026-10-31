@@ -18,7 +18,7 @@ type frenchResolver struct{}
 
 func (frenchResolver) Resolve(_ context.Context, host string) (*tenant.Tenant, error) {
 	if host == hostA {
-		return &tenant.Tenant{ID: "ten_a", FQDN: hostA, DefaultLanguage: "fr"}, nil
+		return &tenant.Tenant{ID: "ten_a", FQDN: hostA, DefaultLanguage: "fr", SetupState: tenant.SetupStateActive}, nil
 	}
 	return nil, tenant.ErrUnknownTenant
 }

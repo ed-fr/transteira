@@ -82,6 +82,7 @@ describe('admin routes', () => {
     ['/admin/system/', '/system', 'super', 'system-overview'],
     ['/admin/system/maintenance', '/system/maintenance', 'super', 'system-maintenance'],
     ['/admin/system/settings', '/system/settings', 'super', 'system-settings'],
+    ['/admin/tenants/ten_1/setup', '/tenants/:id/setup', 'auth', 'tenant-general'],
     ['/admin/system/webhooks', '/system/webhooks', 'super', 'system-webhooks'],
     ['/admin/system/audit', '/system/audit', 'super', 'system-audit'],
     ['/admin/system/master-key', '/system/master-key', 'super', 'system-master-key'],

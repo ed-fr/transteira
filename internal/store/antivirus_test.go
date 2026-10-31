@@ -160,7 +160,8 @@ func TestTenantsAntivirusEnabled(t *testing.T) {
 
 		// A new tenant always starts with its antivirus enabled.
 		a, err := repo.Create(ctx, &tenant.Tenant{
-			Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+			SetupState: tenant.SetupStateActive,
+			Name:       "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 			MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30, AntivirusEnabled: false,
 		})
 		if err != nil || !a.AntivirusEnabled {

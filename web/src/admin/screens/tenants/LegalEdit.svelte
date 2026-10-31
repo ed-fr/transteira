@@ -5,11 +5,23 @@
   // the public page), made inert like the email preview (neutralizePreview, threat model T-163:
   // links lose their href, ids and roles are removed, headings nest below the preview heading;
   // the public page is unchanged). Saving an empty text deletes the document: it asks for
-  // confirmation first. FormSection guards the unsaved changes. The tenant sub-navigation is
+  // confirmation first. "Use the proposed text" (GET .../text-proposals/{document}/{lang}) puts a
+  // proposal filled with the tenant configuration into the editor (after a confirmation when the
+  // editor is not empty) and shows its review notice; nothing is saved until the usual save. The
+  // placeholders "[À compléter : …]" left in the text are counted to warn before saving (the
+  // server decides whether the setup item is done). FormSection guards the unsaved changes. The tenant sub-navigation is
   // rendered by App.svelte.
   import { describeError } from '../../../shared/api/problem';
   import type { components } from '../../../shared/api/schema';
-  import { Alert, LegalContent, Spinner, TextArea, languageName } from '../../../shared/components';
+  import {
+    Alert,
+    Button,
+    LegalContent,
+    Spinner,
+    TextArea,
+    announce,
+    languageName,
+  } from '../../../shared/components';
   import { formatDate, i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
@@ -22,7 +34,9 @@
     type LegalDocumentName,
   } from '../../components/legal';
   import { neutralizePreview } from '../../components/templates';
+  import { setupStates } from '../../setupStates.svelte';
   import type { AdminScreenProps } from '../types';
+  import { remainingMarkers } from './setup';
 
   type Language = components['schemas']['Language'];
   type View = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready' };
@@ -63,8 +77,43 @@
   let confirmOpen = $state(false);
   let pending: ((outcome: SubmitOutcome) => void) | undefined;
   let ticket = 0;
+  let proposalOpen = $state(false);
+  let proposalLoading = $state(false);
+  let proposalError = $state('');
+  let proposalNotice = $state('');
+  let proposalMarkdown: string | undefined;
 
   const dirty = $derived(markdown !== saved);
+  const markerCount = $derived(remainingMarkers(markdown).length);
+
+  /** Fetches the proposal; when the editor is not empty, asks before replacing it. */
+  async function useProposal(): Promise<void> {
+    proposalError = '';
+    proposalLoading = true;
+    try {
+      const { data } = await adminApi.get('/admin/tenants/{tenantId}/text-proposals/{document}/{language}', {
+        path: apiPath,
+      });
+      proposalMarkdown = data.markdown;
+      proposalNotice = i18n.has(data.notice) ? t(data.notice) : t('setup.textProposal.reviewNotice');
+      if (isBlank(markdown)) {
+        applyProposal();
+      } else {
+        proposalOpen = true;
+      }
+    } catch (err) {
+      proposalError = describeError(i18n, err).message;
+    } finally {
+      proposalLoading = false;
+    }
+  }
+
+  function applyProposal(): void {
+    if (proposalMarkdown !== undefined) {
+      markdown = proposalMarkdown;
+      announce(t('setup.legalProposal.loaded'));
+    }
+  }
 
   async function load(): Promise<void> {
     const mine = ++ticket;
@@ -85,6 +134,10 @@
       }
     }
   }
+
+  $effect(() => {
+    void setupStates.ensure(tenantId);
+  });
 
   $effect(() => {
     void apiPath;
@@ -152,6 +205,36 @@
   {#if doc?.updatedAt && !isBlank(saved)}
     <p>{t('admin.common.lastUpdated', { date: formatDate(doc.updatedAt) })}</p>
   {/if}
+  <div class="tt-legal-proposal">
+    {#if setupStates.stateOf(tenantId) === 'setup'}
+      <p>{t('setup.legalProposal.hint')}</p>
+    {/if}
+    <Button
+      variant="secondary"
+      loading={proposalLoading}
+      loadingLabel={t('setup.legalProposal.loading')}
+      onclick={() => void useProposal()}
+    >
+      {t('setup.legalProposal.action')}
+    </Button>
+    {#if proposalError !== ''}
+      <Alert severity="error">{proposalError}</Alert>
+    {/if}
+  </div>
+  {#if proposalNotice !== ''}
+    <Alert severity="warning" live={false} title={t('setup.legalProposal.noticeTitle')}>
+      <p>{proposalNotice}</p>
+    </Alert>
+  {/if}
+  {#if markerCount > 0}
+    <Alert severity="info" live={false}>
+      <p>
+        {t(markerCount === 1 ? 'setup.legalProposal.markers' : 'setup.legalProposal.markersMany', {
+          count: markerCount,
+        })}
+      </p>
+    </Alert>
+  {/if}
   <FormSection
     title={t('adminTenants.legal.editor.formTitle')}
     {dirty}
@@ -191,6 +274,13 @@
   </section>
 
   <ConfirmDialog
+    bind:open={proposalOpen}
+    title={t('setup.legalProposal.confirm.title')}
+    text={t('setup.legalProposal.confirm.text')}
+    confirmLabel={t('setup.legalProposal.confirm.action')}
+    onconfirm={applyProposal}
+  />
+  <ConfirmDialog
     bind:open={confirmOpen}
     title={t('adminTenants.legal.editor.emptyConfirm.title')}
     text={t('adminTenants.legal.editor.emptyConfirm.text')}
@@ -202,6 +292,10 @@
 {/if}
 
 <style>
+  .tt-legal-proposal {
+    margin-bottom: var(--tt-space-4);
+  }
+
   .tt-legal-preview__note {
     color: var(--tt-muted);
   }

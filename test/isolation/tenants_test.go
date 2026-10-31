@@ -81,7 +81,7 @@ func TestTenantFQDNResolution(t *testing.T) {
 		}
 		// Non-normalised FQDNs cannot be stored, so they cannot shadow A.
 		for _, raw := range []string{"TRANSFER.ENTITY-A.EXAMPLE.COM", fqdnA + ".", fqdnA + ":8443", "transfer.entité-d.example.net"} {
-			_, err := repo.Create(ctx, &tenant.Tenant{Name: "Shadow", FQDN: raw, DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+			_, err := repo.Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "Shadow", FQDN: raw, DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 			if !errors.Is(err, store.ErrInvalid) {
 				t.Errorf("Create(FQDN %q) err = %v, want ErrInvalid", raw, err)
 			}

@@ -180,6 +180,9 @@ var validBodies = map[string]string{
 	"updateNetworkRules":          `{"internalCidrs":["10.0.0.0/8"],"internalDomains":["entity-b.example.com"]}`,
 	"updateConfidentialityLevels": `{"items":[{"key":"open","labels":{"en":"Open","fr":"Ouvert"},"isDefault":true,"rules":{"requireRecipientVerification":false,"requirePassword":false,"allowedExpiryDays":[1,7,30],"internalRecipientsOnly":false,"forceDeleteAfterFirstDownload":false,"maxDownloads":null}}]}`,
 	"updateRecipientRules":        `{"allowedDomains":["entity-b.example.com"],"deniedDomains":[]}`,
+	// A forced completion by a delegated admin is a 403 on its own tenant:
+	// for B it must stay the 404 of an unknown tenant (access first).
+	"completeTenantSetup": `{"force":true}`,
 	// The tenant operations check the rights first; with valid bodies, a
 	// broken check would show (409 for B's existing entry, B's sender
 	// counted or erased).

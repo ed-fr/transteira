@@ -621,7 +621,8 @@ func (ev *env) newSweeper(opts Options) *Sweeper {
 func (ev *env) newTenant(fqdn string) *tenant.Tenant {
 	ev.t.Helper()
 	tn, err := ev.db.Tenants().Create(context.Background(), &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 10 << 30,
 	})
 	if err != nil {

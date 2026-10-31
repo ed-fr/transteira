@@ -567,8 +567,9 @@ paths:
         restricted domains, nor the abuse thresholds.
 
         Since 1.2 it carries `setupState`: while it is `setup`, the public interface shows a
-        localized "being configured" page (like the maintenance page) and the deposit operations
-        answer `503 tenant-in-setup`; downloads are not affected. `branding.faviconUrl` gives the
+        localized "being configured" page (like the maintenance page), and every public operation
+        of the tenant other than this one, `getTenantAsset` and `getTenantLegalDocument` answers
+        `503 tenant-in-setup` (no transfer exists while in setup). `branding.faviconUrl` gives the
         favicon of the tenant.
       security: []
       parameters:
@@ -919,6 +920,7 @@ paths:
                 attemptsRemaining: 1
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /deposit-sessions/current:
     get:
@@ -944,6 +946,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
     delete:
       tags: [Deposit sessions]
       operationId: endDepositSession
@@ -961,6 +964,7 @@ paths:
         '403': { $ref: '#/components/responses/CsrfInvalid' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   # ---------------------------------------------------------------------------
   # Transfers (sender side)
@@ -1295,6 +1299,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
     delete:
       tags: [Transfers]
       operationId: cancelTransfer
@@ -1319,6 +1324,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /transfers/{transferId}/finalize:
     parameters:
@@ -1496,6 +1502,7 @@ paths:
               example: 21474836480
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { description: "Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer." }
 
   /uploads/{uploadId}:
     parameters:
@@ -1527,6 +1534,7 @@ paths:
         '412': { $ref: '#/components/responses/TusVersionUnsupported' }
         '429': { description: 'Too many invalid API tokens from this IP (written to the security log); retry after `Retry-After`. No body.' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { description: "Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer." }
     patch:
       tags: [Uploads (tus)]
       operationId: appendUploadChunk
@@ -1597,6 +1605,7 @@ paths:
         '412': { $ref: '#/components/responses/TusVersionUnsupported' }
         '429': { description: 'Too many invalid API tokens from this IP (written to the security log); retry after `Retry-After`. No body.' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { description: "Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer." }
 
   # ---------------------------------------------------------------------------
   # Invitations
@@ -1675,6 +1684,7 @@ paths:
         '410': { $ref: '#/components/responses/InvitationGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   # ---------------------------------------------------------------------------
   # Downloads (recipient side)
@@ -1793,6 +1803,7 @@ paths:
         '410': { $ref: '#/components/responses/TransferGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/unlock:
     parameters:
@@ -1871,6 +1882,7 @@ paths:
                 code: transfer-locked
                 retryAfterSeconds: 900
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/files/{fileId}:
     parameters:
@@ -1976,6 +1988,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/TooManyStreams' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/archive:
     parameters:
@@ -2023,6 +2036,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/TooManyStreams' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/verification:
     parameters:
@@ -2108,15 +2122,24 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503':
-          description: The code cannot be sent (no SMTP server configured for the tenant, mail queue shut down).
+          description: "The code cannot be sent (no SMTP server configured for the tenant, mail queue shut down). Since 1.2, also a tenant still in setup (`tenant-in-setup`, without `Retry-After`). Clients must branch on `code`."
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example:
-                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
-                title: Email cannot be sent
-                status: 503
-                code: mail-unavailable
+              examples:
+                mailUnavailable:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
+                    title: Email cannot be sent
+                    status: 503
+                    code: mail-unavailable
+                tenantInSetup:
+                  summary: Tenant still being configured (since 1.2)
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#tenant-in-setup
+                    title: Service being set up
+                    status: 503
+                    code: tenant-in-setup
         '500': { $ref: '#/components/responses/InternalError' }
 
   /downloads/{linkToken}/verification/confirm:
@@ -2201,6 +2224,7 @@ paths:
                 attemptsRemaining: 1
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/abuse-reports:
     parameters:
@@ -2244,6 +2268,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /downloads/{linkToken}/reply:
     parameters:
@@ -2407,15 +2432,24 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503':
-          description: Mail cannot be sent for this entity at all (no SMTP server configured, mail queue shut down); the answer does not depend on the address.
+          description: "Mail cannot be sent for this entity at all (no SMTP server configured, mail queue shut down); the answer does not depend on the address. Since 1.2, also a tenant still in setup (`tenant-in-setup`, without `Retry-After`). Clients must branch on `code`."
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
-              example:
-                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
-                title: Email cannot be sent
-                status: 503
-                code: mail-unavailable
+              examples:
+                mailUnavailable:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable
+                    title: Email cannot be sent
+                    status: 503
+                    code: mail-unavailable
+                tenantInSetup:
+                  summary: Tenant still being configured (since 1.2)
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#tenant-in-setup
+                    title: Service being set up
+                    status: 503
+                    code: tenant-in-setup
         '500': { $ref: '#/components/responses/InternalError' }
 
   /me/sessions:
@@ -2465,6 +2499,7 @@ paths:
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /me/sessions/current:
     get:
@@ -2487,6 +2522,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
     delete:
       tags: [My transfers]
       operationId: endMyTransfersSession
@@ -2504,6 +2540,7 @@ paths:
         '403': { $ref: '#/components/responses/CsrfInvalid' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /me/transfers:
     get:
@@ -2545,6 +2582,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /me/transfers/{transferId}:
     parameters:
@@ -2612,6 +2650,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
     delete:
       tags: [My transfers]
       operationId: deleteMyTransfer
@@ -2647,6 +2686,7 @@ paths:
                 retryAfterSeconds: 5
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   /me/transfers/{transferId}/extension:
     parameters:
@@ -2738,6 +2778,7 @@ paths:
                     detail: A transfer cannot stay available more than 90 days after its creation.
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
 
   # ---------------------------------------------------------------------------
   # Admin auth
@@ -7785,6 +7826,20 @@ components:
                 title: Email cannot be sent
                 status: 503
                 code: mail-unavailable
+    TenantInSetup:
+      description: |
+        Since 1.2. The tenant is still being configured (`PublicTenant.setupState` is `setup`):
+        every public operation of the tenant answers `503 tenant-in-setup`, except the tenant
+        information, its assets and its legal texts. No `Retry-After`: the end of the setup
+        depends on its administrators. No transfer exists while in setup.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#tenant-in-setup
+            title: Service being set up
+            status: 503
+            code: tenant-in-setup
     TusVersionUnsupported:
       description: '`Tus-Resumable` missing or not a supported version; no body.'
       headers:
@@ -8022,7 +8077,7 @@ components:
         legalDocuments: { type: array, items: { type: string, enum: [legal-notice, privacy-policy] } }
         setupState:
           allOf: [{ $ref: '#/components/schemas/TenantSetupState' }]
-          description: "Since 1.2. `setup` while the tenant is being configured: the public interface shows a \"being configured\" page and the deposit operations answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`)."
+          description: "Since 1.2. `setup` while the tenant is being configured: the public interface shows a \"being configured\" page and the public operations other than the tenant information, assets and legal texts answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`)."
         features: { $ref: '#/components/schemas/TenantFeatures' }
         confidentialityLevels:
           type: array

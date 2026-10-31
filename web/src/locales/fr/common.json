@@ -35,6 +35,10 @@
     "banner": "Maintenance en cours",
     "bannerText": "Les nouveaux transferts sont suspendus pour un moment. Les téléchargements restent disponibles."
   },
+  "setup": {
+    "title": "Service en cours de mise en service",
+    "text": "Ce service est en cours de mise en service et n’est pas encore ouvert. Merci de revenir un peu plus tard."
+  },
   "sessionExpired": {
     "title": "Session expirée",
     "text": "Votre session a expiré. Identifiez-vous de nouveau sur la page d’envoi.",

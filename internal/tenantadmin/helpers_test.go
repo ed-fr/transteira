@@ -539,7 +539,8 @@ func newEnv(t *testing.T, e storetest.Engine, opts ...envOption) *env {
 func (ev *env) newTenant(t *testing.T, name, fqdn string) *tenant.Tenant {
 	t.Helper()
 	tn, err := ev.db.Tenants().Create(context.Background(), &tenant.Tenant{
-		Name: name, FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 10 << 30, StorageQuotaBytes: 100 << 30,
+		SetupState: tenant.SetupStateActive,
+		Name:       name, FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 10 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {
 		t.Fatalf("Create(%s): %v", fqdn, err)
@@ -665,4 +666,18 @@ func (f *faultRepo) replaceRecipientRules(ctx context.Context, tid tenant.ID, se
 		return store.RecipientRuleSet{}, err
 	}
 	return f.repo.replaceRecipientRules(ctx, tid, set, now)
+}
+
+func (f *faultRepo) setSMTPTested(ctx context.Context, tid tenant.ID, version time.Time) error {
+	if err := f.fail("setSMTPTested"); err != nil {
+		return err
+	}
+	return f.repo.setSMTPTested(ctx, tid, version)
+}
+
+func (f *faultRepo) completeSetup(ctx context.Context, tid tenant.ID, force bool, reviewedAt time.Time) (*tenant.Tenant, error) {
+	if err := f.fail("completeSetup"); err != nil {
+		return nil, err
+	}
+	return f.repo.completeSetup(ctx, tid, force, reviewedAt)
 }

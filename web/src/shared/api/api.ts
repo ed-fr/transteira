@@ -3,6 +3,7 @@
 import { i18n } from '../i18n/i18n.svelte';
 import { createApiClient, type ApiClient } from './client';
 import { csrf } from './csrf.svelte';
+import { tenantSetup } from './setupSignal.svelte';
 
 /** Shared API client (/api/v1). */
 export const api: ApiClient = createApiClient({
@@ -10,4 +11,5 @@ export const api: ApiClient = createApiClient({
   language: () => i18n.locale.current || 'en',
   csrfToken: () => csrf.current,
   onCsrfToken: (token) => csrf.set(token),
+  onTenantInSetup: () => tenantSetup.markInSetup(),
 });

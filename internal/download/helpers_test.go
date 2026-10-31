@@ -623,7 +623,8 @@ func (ev *env) newTenant(fqdn string, smtp bool) *tenant.Tenant {
 	ev.t.Helper()
 	ctx := context.Background()
 	tn, err := ev.db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 10 << 30,
 	})
 	if err != nil {

@@ -20,6 +20,8 @@ type repo interface {
 	createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error)
 	updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
 	setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error
+	setSMTPTested(ctx context.Context, tid tenant.ID, version time.Time) error
+	completeSetup(ctx context.Context, tid tenant.ID, force bool, reviewedAt time.Time) (*tenant.Tenant, error)
 	updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error)
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
@@ -115,6 +117,14 @@ func (r *storeRepo) updateTenantWithAntivirus(ctx context.Context, t *tenant.Ten
 
 func (r *storeRepo) setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error {
 	return r.db.Tenants().SetStatus(ctx, tid, status)
+}
+
+func (r *storeRepo) setSMTPTested(ctx context.Context, tid tenant.ID, version time.Time) error {
+	return r.db.Tenants().SetSMTPTested(ctx, tid, version)
+}
+
+func (r *storeRepo) completeSetup(ctx context.Context, tid tenant.ID, force bool, reviewedAt time.Time) (*tenant.Tenant, error) {
+	return r.db.Tenants().CompleteSetup(ctx, tid, force, reviewedAt)
 }
 
 // usedBytes returns the storage used by tenant tid (spec 8.5).

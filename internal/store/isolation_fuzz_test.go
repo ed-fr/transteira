@@ -41,7 +41,7 @@ func newOracleFixture(t *testing.T) *oracleFixture {
 		t.Fatal(err)
 	}
 	mk := func(name string) tenant.ID {
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: name, FQDN: name + ".example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: name, FQDN: name + ".example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

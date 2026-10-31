@@ -120,7 +120,7 @@ func TestSMTPSettings(t *testing.T) {
 
 		// Replace with an authenticated server and a password secret.
 		secret := mustSecret(t, db, a.ID, store.KeyPurposeSecret)
-		at := time.Date(2026, 1, 2, 3, 4, 5, 6_000_000, time.UTC)
+		at := time.Date(2027, 1, 2, 3, 4, 5, 6_000_000, time.UTC) // after msNow: a version only moves forward
 		auth := store.SMTPConfig{
 			Host: "smtp.example.com", Port: 587, Security: store.SMTPSecuritySTARTTLS, Username: "mailer",
 			PasswordKeyID: secret, FromAddress: "noreply@entity-a.example.com", FromName: "Entity A", UpdatedAt: at,

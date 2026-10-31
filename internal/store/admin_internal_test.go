@@ -55,7 +55,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 		}
 	}
 	for i, fqdn := range []string{"a.example.com", "b.example.com"} {
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		must(err)
 		if i == 0 {
 			f.tid = tn.ID

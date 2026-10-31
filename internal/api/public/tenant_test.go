@@ -456,3 +456,27 @@ func TestGetPublicTenantRemoteFeature(t *testing.T) {
 		t.Errorf("features %+v", b.Features)
 	}
 }
+
+// The public configuration carries the setup state only (T-264): absent
+// for a tenant without one, never the checklist.
+func TestGetPublicTenantSetupState(t *testing.T) {
+	t.Parallel()
+	s := NewServer(WithTenantService(&fakeTenantConfig{}))
+	for _, state := range []tenant.SetupState{tenant.SetupStateSetup, tenant.SetupStateActive, ""} {
+		ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{
+			ID: "ten_x", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+			MaxTransferBytes: 5 << 30, SetupState: state,
+		})
+		resp, err := s.GetPublicTenant(ctx, gen.GetPublicTenantRequestObject{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := resp.(gen.GetPublicTenant200JSONResponse).Body.SetupState
+		switch {
+		case state == "" && got != nil:
+			t.Errorf("unknown state rendered as %q", *got)
+		case state != "" && (got == nil || *got != gen.TenantSetupState(state)):
+			t.Errorf("state %q rendered as %v", state, got)
+		}
+	}
+}

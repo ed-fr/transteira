@@ -84,6 +84,7 @@ func (f *fakeTenantService) GetTenant(_ context.Context, p adminauth.Principal, 
 func (f *fakeTenantService) CreateTenant(_ context.Context, p adminauth.Principal, in tenantadmin.TenantCreate, ip netip.Addr) (tenantadmin.TenantCreated, error) {
 	v := viewA
 	v.MaxTransferBytes, v.MaxTransferCeiling = in.MaxTransferBytes, in.MaxTransferBytes
+	v.SetupState = in.SetupState
 	return tenantadmin.TenantCreated{TenantView: v, DelegatedAdmin: f.invited}, f.record("CreateTenant", p.SessionID, in, ip)
 }
 
@@ -217,6 +218,27 @@ func (f *fakeTenantService) PreviewTemplate(_ context.Context, p adminauth.Princ
 	return tenantadmin.Preview{Subject: "s", HTML: "<p>h</p>", Text: "t"}, f.record("PreviewTemplate", p.SessionID, tid, key, lang, in)
 }
 
+// setupA is the checklist answered by the fake setup operations.
+var setupA = tenantadmin.Setup{State: tenant.SetupStateSetup, Items: []tenantadmin.SetupItem{
+	{Key: tenantadmin.SetupBrandingLogo, Done: true},
+	{Key: tenantadmin.SetupSMTP, Required: true},
+}}
+
+func (f *fakeTenantService) GetSetup(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.Setup, error) {
+	return setupA, f.record("GetSetup", p.SessionID, tid)
+}
+
+func (f *fakeTenantService) CompleteSetup(_ context.Context, p adminauth.Principal, tid tenant.ID, force, reviewed bool, ip netip.Addr) (tenantadmin.Setup, error) {
+	done := setupA
+	done.State, done.CanComplete = tenant.SetupStateActive, true
+	return done, f.record("CompleteSetup", p.SessionID, tid, force, reviewed, ip)
+}
+
+func (f *fakeTenantService) TextProposal(_ context.Context, p adminauth.Principal, tid tenant.ID, doc, lang string) (tenantadmin.TextProposal, error) {
+	return tenantadmin.TextProposal{Document: doc, Language: lang, Markdown: "# Notice", Notice: "setup.textProposal.reviewNotice"},
+		f.record("TextProposal", p.SessionID, tid, doc, lang)
+}
+
 func (f *fakeTenantService) GetLegal(_ context.Context, p adminauth.Principal, tid tenant.ID, doc, lang string) (tenantadmin.LegalDocument, error) {
 	return legalA, f.record("GetLegal", p.SessionID, tid, doc, lang)
 }
@@ -263,6 +285,11 @@ func TestUpdateTenantPatchErrors(t *testing.T) {
 		{"string instead of boolean 2", `{"allowRemoteInternalDeposit": "yes"}`, []problem.FieldError{{Field: "/allowRemoteInternalDeposit", Code: fieldInvalidFormat}}},
 		{"string instead of boolean 3", `{"allowTransferReply": "yes"}`, []problem.FieldError{{Field: "/allowTransferReply", Code: fieldInvalidFormat}}},
 		{"string instead of boolean 4", `{"antivirusEnabled": "no"}`, []problem.FieldError{{Field: "/antivirusEnabled", Code: fieldInvalidFormat}}},
+		// Read only since 1.2: only completeTenantSetup changes it (T-261).
+		{"setup state", `{"setupState": "active"}`, []problem.FieldError{{Field: "/setupState", Code: fieldInvalidFormat}}},
+		{"setup state among valid fields", `{"name": "B", "setupState": "setup"}`, []problem.FieldError{{Field: "/setupState", Code: fieldInvalidFormat}}},
+		{"unknown members, first in order", `{"zeta": 1, "alpha": null, "name": null}`, []problem.FieldError{{Field: "/alpha", Code: fieldInvalidFormat}}},
+		{"unknown member escaped", `{"a/b~c": 1}`, []problem.FieldError{{Field: "/a~1b~0c", Code: fieldInvalidFormat}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -349,6 +376,12 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("GetLegal", err)
 	_, err = s.UpdateLegalDocument(ctx, gen.UpdateLegalDocumentRequestObject{TenantId: "ten_a", Body: &gen.LegalDocumentUpdate{}})
 	call("UpdateLegal", err)
+	_, err = s.GetTenantSetup(ctx, gen.GetTenantSetupRequestObject{TenantId: "ten_a"})
+	call("GetSetup", err)
+	_, err = s.CompleteTenantSetup(ctx, gen.CompleteTenantSetupRequestObject{TenantId: "ten_a", Body: &gen.TenantSetupCompletion{}})
+	call("CompleteSetup", err)
+	_, err = s.GetTextProposal(ctx, gen.GetTextProposalRequestObject{TenantId: "ten_a", Document: "legal-notice", Language: "en"})
+	call("TextProposal", err)
 	return out
 }
 
@@ -380,8 +413,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 32 {
-		t.Fatalf("%d operations, want 32", len(ops))
+	if len(ops) != 35 {
+		t.Fatalf("%d operations, want 35", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)
@@ -523,7 +556,7 @@ func TestTenantsHandlers(t *testing.T) {
 	}
 
 	upd, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(
-		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "allowTransferReply": true, "antivirusEnabled": false, "unknown": null}`,
+		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "allowTransferReply": true, "antivirusEnabled": false}`,
 	)})
 	if err != nil || upd.(gen.UpdateTenant200JSONResponse).Id != "ten_a" {
 		t.Fatalf("update %+v %v", upd, err)

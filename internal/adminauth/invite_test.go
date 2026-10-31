@@ -402,7 +402,8 @@ func (ev *env) createTenantWith(t *testing.T, p Principal, fqdn string, in Deleg
 		link Activation
 	)
 	tn, err := ev.db.Tenants().CreateWith(context.Background(), &tenant.Tenant{
-		Name: "New " + fqdn, FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
+		SetupState: tenant.SetupStateActive,
+		Name:       "New " + fqdn, FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	}, func(tx *store.SystemTx, created *tenant.Tenant) error {
 		var err error
 		acc, link, err = ev.svc.CreateDelegatedAdminTx(context.Background(), tx, p, created, in, ipA)
@@ -504,7 +505,8 @@ func TestCreateDelegatedAdminTx(t *testing.T) {
 		// A later failure of the caller rolls everything back, no mail.
 		errLater := errors.New("later failure")
 		_, err = ev.db.Tenants().CreateWith(ctx, &tenant.Tenant{
-			Name: "Later", FQDN: "d7.example.com", DefaultLanguage: "en", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
+			SetupState: tenant.SetupStateActive,
+			Name:       "Later", FQDN: "d7.example.com", DefaultLanguage: "en", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 		}, func(tx *store.SystemTx, created *tenant.Tenant) error {
 			in := DelegatedAdmin{Username: "later.admin", Email: "later@entity-d.example.com", Language: "en", Delivery: store.DeliveryMail}
 			if _, _, err := ev.svc.CreateDelegatedAdminTx(ctx, tx, r.p, created, in, ipA); err != nil {

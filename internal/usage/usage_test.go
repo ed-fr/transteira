@@ -34,7 +34,8 @@ func openDB(t *testing.T, e storetest.Engine) *store.DB {
 func newTenant(t *testing.T, db *store.DB, fqdn string) tenant.ID {
 	t.Helper()
 	tn, err := db.Tenants().Create(context.Background(), &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {

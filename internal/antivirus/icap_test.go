@@ -1162,3 +1162,40 @@ func FuzzICAPChunked(f *testing.F) {
 		}
 	})
 }
+
+// A cancellation while the OPTIONS exchange waits for its reply unblocks
+// the connection at once (deterministic: the context is canceled only once
+// the server has read the request, which it never answers).
+func TestICAPOptionsCanceledWhileWaiting(t *testing.T) {
+	read := make(chan struct{})
+	dial := func(context.Context, string, string) (net.Conn, error) {
+		client, server := net.Pipe()
+		t.Cleanup(func() { _ = server.Close() })
+		go func() {
+			tp := textproto.NewReader(bufio.NewReader(server))
+			if _, err := tp.ReadLine(); err != nil {
+				return
+			}
+			if _, err := tp.ReadMIMEHeader(); err != nil {
+				return
+			}
+			close(read)
+			<-t.Context().Done()
+		}()
+		return client, nil
+	}
+	c, err := NewICAPClient("icap://pipe"+icapService, WithICAPDialer(dial))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-read
+		cancel()
+	}()
+	_, err = c.Scan(ctx, bytes.NewReader(make([]byte, 10)), 10)
+	assertUnavailable(t, err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Scan = %v, want context.Canceled", err)
+	}
+}

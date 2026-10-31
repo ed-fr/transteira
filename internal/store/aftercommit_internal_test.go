@@ -22,7 +22,7 @@ func TestAfterCommit(t *testing.T) {
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatalf("Migrate: %v", err)
 		}
-		a, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		a, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -6,6 +6,8 @@ import {
   isPublishedLegalDocument,
   legalPath,
   maintenanceNotice,
+  reachableDuringSetup,
+  showSetupPage,
   type BootstrapDeps,
   type PublicTenant,
 } from './bootstrap';
@@ -128,5 +130,33 @@ describe('helpers', () => {
     expect(documentTitle('Download', undefined)).toBe('Download');
     expect(documentTitle('Download', '')).toBe('Download');
     expect(documentTitle('Entity A', 'Entity A')).toBe('Entity A');
+  });
+});
+
+describe('setup page selection', () => {
+  const setup = { setupState: 'setup' } as const;
+  const active = { setupState: 'active' } as const;
+
+  it('keeps legal pages and help reachable while the tenant is being set up', () => {
+    for (const pattern of ['/legal/:document', '/help', '/help/:topic', '/help/print']) {
+      expect(reachableDuringSetup(pattern)).toBe(true);
+      expect(showSetupPage(setup, pattern)).toBe(false);
+    }
+  });
+
+  it('shows the setup page instead of deposit, download, invitation and my transfers routes', () => {
+    for (const pattern of ['/', '/d/:token', '/d/:token/reply', '/i/:token', '/invite', '/me', '*']) {
+      expect(showSetupPage(setup, pattern)).toBe(true);
+    }
+  });
+
+  it('shows nothing special for an active tenant, a 1.1 server or no signal', () => {
+    expect(showSetupPage(active, '/')).toBe(false);
+    expect(showSetupPage({}, '/')).toBe(false);
+  });
+
+  it('follows a call refused with tenant-in-setup even if the tenant looked active', () => {
+    expect(showSetupPage(active, '/', true)).toBe(true);
+    expect(showSetupPage(active, '/legal/:document', true)).toBe(false);
   });
 });

@@ -89,7 +89,7 @@ func TestOperationsSchemaConstraints(t *testing.T) {
 		if _, err := db.Migrate(ctx); err != nil {
 			t.Fatal(err)
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 10, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 10, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestOperationsDriverFaults(t *testing.T) {
 	ctx := context.Background()
 	db, plan := openFault(t)
 	f := &transferFixture{db: db, plan: plan}
-	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestOperationsDriverFaults(t *testing.T) {
 	}
 	// The insert of a first quota level fails on a fresh tenant.
 	plan.reset()
-	b, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "B", FQDN: "b.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	b, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "B", FQDN: "b.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

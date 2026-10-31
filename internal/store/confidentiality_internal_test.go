@@ -79,7 +79,7 @@ func TestConfidentialityDriverFaults(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			db, plan := openFault(t)
-			tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+			tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -100,7 +100,7 @@ func TestConfidentialityLockFailure(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db, _ := openFault(t)
-	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

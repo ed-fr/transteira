@@ -283,7 +283,7 @@ func TestRunTxRollback(t *testing.T) {
 	t.Parallel()
 	db, _ := openFault(t)
 	ctx := context.Background()
-	a, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	a, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +329,7 @@ func TestScopeStatements(t *testing.T) {
 	if _, err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	a, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	a, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestDriverFaults(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db, plan := openFault(t, WithClock(func() time.Time { return time.Unix(1_700_000_000, 0) }))
-	a, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	a, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestDriverFaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	newT := func() *tenant.Tenant {
-		return &tenant.Tenant{Name: "N", FQDN: "n.example.com", DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1}
+		return &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "N", FQDN: "n.example.com", DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1}
 	}
 	upd := a.Clone()
 
@@ -557,7 +557,7 @@ func TestTenantSlotInjection(t *testing.T) {
 	db, _ := openFault(t)
 	ctx := context.Background()
 	mk := func(fqdn string) tenant.ID {
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: fqdn, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: fqdn, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

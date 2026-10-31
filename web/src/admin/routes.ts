@@ -51,6 +51,7 @@ import TenantGeneral from './screens/tenants/TenantGeneral.svelte';
 import TenantList from './screens/tenants/TenantList.svelte';
 import TenantNetwork from './screens/tenants/TenantNetwork.svelte';
 import TenantRecipientRules from './screens/tenants/TenantRecipientRules.svelte';
+import TenantSetup from './screens/tenants/TenantSetup.svelte';
 import TenantSmtp from './screens/tenants/TenantSmtp.svelte';
 import type { AdminScreenComponent } from './screens/types';
 
@@ -111,6 +112,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminTenants.create.title',
     access: 'super',
     helpTopic: 'tenant-create',
+  },
+  {
+    pattern: '/tenants/:id/setup',
+    component: TenantSetup,
+    titleKey: 'adminTenants.nav.setup',
+    access: 'auth',
+    helpTopic: 'tenant-general',
+    tenantNav: true,
   },
   {
     pattern: '/tenants/:id/general',

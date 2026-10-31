@@ -68,9 +68,15 @@ export function quotaUsage(tenant: Pick<Tenant, 'storageUsedBytes' | 'storageQuo
 }
 
 /** Variant and label key of the status badge of a tenant. */
-export function statusView(status: Tenant['status']): { variant: 'ok' | 'warning'; key: string } {
-  return status === 'deleting'
-    ? { variant: 'warning', key: 'adminTenants.status.deleting' }
+export function statusView(
+  status: Tenant['status'],
+  setupState?: Tenant['setupState'],
+): { variant: 'ok' | 'warning'; key: string } {
+  if (status === 'deleting') {
+    return { variant: 'warning', key: 'adminTenants.status.deleting' };
+  }
+  return setupState === 'setup'
+    ? { variant: 'warning', key: 'adminTenants.status.setup' }
     : { variant: 'ok', key: 'adminTenants.status.active' };
 }
 
@@ -241,6 +247,8 @@ export function createBody(form: TenantForm, delegated?: DelegatedForm): TenantC
     storageQuotaBytes: form.storageQuotaBytes,
     maxTransferBytes: form.maxTransferBytes,
     maxTransferCeiling: form.maxTransferCeiling,
+    // A new tenant stays closed to deposits until its setup wizard is completed.
+    setupState: 'setup',
     ...(delegated?.enabled === true && language !== undefined
       ? {
           delegatedAdmin: {

@@ -256,7 +256,7 @@ func TestCreateTenantBackgroundPreset(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()
 		ev := newEnv(t, e)
-		base := TenantCreate{DefaultLanguage: "en", StorageQuotaBytes: 1 << 40}
+		base := TenantCreate{SetupState: tenant.SetupStateActive, DefaultLanguage: "en", StorageQuotaBytes: 1 << 40}
 		tests := []struct {
 			fqdn   string
 			preset *string

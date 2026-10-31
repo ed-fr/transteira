@@ -18,10 +18,12 @@
     "configure": "Configurer {name}"
   },
   "status": {
+    "setup": "En cours de mise en service",
     "active": "Active",
     "deleting": "Suppression en cours"
   },
   "nav": {
+    "setup": "Mise en service",
     "general": "Général",
     "branding": "Habillage",
     "network": "Réseau",

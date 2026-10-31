@@ -105,7 +105,8 @@ func publicError(err error) error {
 // message in the negotiated language (else the tenant default, English or
 // any language set) together with the language it is written in, so that
 // the client can mark it up (RGAA 8.7), and the legal documents it has
-// written.
+// written, and since 1.2 its setup state (setup while it is being
+// configured: the interface then shows a "being configured" page).
 func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantRequestObject) (gen.GetPublicTenantResponseObject, error) {
 	t, svc, err := s.publicTenant(ctx)
 	if err != nil {
@@ -127,6 +128,11 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	body := gen.PublicTenant{
 		Name: t.Name, Language: gen.Language(lang),
 		LegalDocuments: make([]gen.PublicTenantLegalDocuments, len(docs)),
+	}
+	// Only the state, never the checklist (T-264).
+	if t.SetupState.Valid() {
+		state := gen.TenantSetupState(t.SetupState)
+		body.SetupState = &state
 	}
 	if s.maintenance != nil && s.maintenance.Active() {
 		body.Maintenance = true

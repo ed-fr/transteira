@@ -35,6 +35,10 @@
     "banner": "Maintenance in progress",
     "bannerText": "New transfers are suspended for a while. Downloads remain available."
   },
+  "setup": {
+    "title": "Service being set up",
+    "text": "This service is being set up and is not open yet. Please come back a little later."
+  },
   "sessionExpired": {
     "title": "Session expired",
     "text": "Your session has expired. Identify yourself again on the sending page.",

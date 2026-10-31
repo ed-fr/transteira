@@ -131,7 +131,8 @@ func TestCreateTenant(t *testing.T) {
 		ctx := context.Background()
 		ev := newEnv(t, e)
 		in := TenantCreate{
-			Name: " Entity C ", FQDN: "Transfer.Entity-C.Example.com", DefaultLanguage: "fr", StorageQuotaBytes: 1 << 40,
+			SetupState: tenant.SetupStateActive,
+			Name:       " Entity C ", FQDN: "Transfer.Entity-C.Example.com", DefaultLanguage: "fr", StorageQuotaBytes: 1 << 40,
 		}
 		v, err := ev.svc.CreateTenant(ctx, ev.super, in, clientIP)
 		mustNoErr(t, "create", err)
@@ -145,6 +146,18 @@ func TestCreateTenant(t *testing.T) {
 		evs := ev.auditEvents(t, v.ID, ActionTenantCreated)
 		if len(evs) != 1 || evs[0].Actor != "root" || evs[0].IP != clientIP {
 			t.Fatalf("audit: %+v", evs)
+		}
+		if v.SetupState != tenant.SetupStateActive {
+			t.Fatalf("setup state %q, want active", v.SetupState)
+		}
+		// The state asked for is kept: setup.
+		setup := in
+		setup.FQDN, setup.SetupState = "transfer.entity-s.example.com", tenant.SetupStateSetup
+		s, err := ev.svc.CreateTenant(ctx, ev.super, setup, clientIP)
+		mustNoErr(t, "create in setup", err)
+		if got, err := ev.db.Tenants().Get(ctx, s.ID); err != nil || s.SetupState != tenant.SetupStateSetup ||
+			got.SetupState != tenant.SetupStateSetup {
+			t.Fatalf("created in setup: %+v; stored %+v, %v", s, got, err)
 		}
 
 		in.FQDN, in.MaxTransferBytes = "transfer.entity-d.example.com", 5<<30
@@ -170,7 +183,8 @@ func TestCreateTenant(t *testing.T) {
 		in.MaxTransferCeiling = nil
 
 		_, err = ev.svc.CreateTenant(ctx, ev.super, TenantCreate{
-			Name: "Dup", FQDN: hostA, DefaultLanguage: "en", StorageQuotaBytes: 1,
+			SetupState: tenant.SetupStateActive,
+			Name:       "Dup", FQDN: hostA, DefaultLanguage: "en", StorageQuotaBytes: 1,
 		}, clientIP)
 		wantErr(t, "duplicate fqdn", err, ErrAlreadyExists)
 
@@ -184,7 +198,7 @@ func TestCreateTenant(t *testing.T) {
 func TestCreateTenantValidation(t *testing.T) {
 	ctx := context.Background()
 	ev := newEnv(t, storetest.SQLite(t))
-	good := TenantCreate{Name: "X", FQDN: "x.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1}
+	good := TenantCreate{SetupState: tenant.SetupStateActive, Name: "X", FQDN: "x.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1}
 	cases := []struct {
 		name  string
 		edit  func(*TenantCreate)
@@ -208,6 +222,9 @@ func TestCreateTenantValidation(t *testing.T) {
 		{"limit over the maximum with a ceiling", func(c *TenantCreate) {
 			c.MaxTransferBytes, c.MaxTransferCeiling = tenant.MaxTransferLimit+1, ptr(int64(5<<30))
 		}, FieldMaxTransferBytes},
+		// The setup state has no default (T-261).
+		{"no setup state", func(c *TenantCreate) { c.SetupState = "" }, FieldSetupState},
+		{"unknown setup state", func(c *TenantCreate) { c.SetupState = "suspended" }, FieldSetupState},
 	}
 	for _, tc := range cases {
 		in := good
@@ -444,7 +461,8 @@ func TestDeleteTenant(t *testing.T) {
 
 		// The FQDN is free again.
 		_, err = ev.svc.CreateTenant(ctx, ev.super, TenantCreate{
-			Name: "Entity A again", FQDN: hostA, DefaultLanguage: "en", StorageQuotaBytes: 1,
+			SetupState: tenant.SetupStateActive,
+			Name:       "Entity A again", FQDN: hostA, DefaultLanguage: "en", StorageQuotaBytes: 1,
 		}, clientIP)
 		mustNoErr(t, "fqdn reused", err)
 	})

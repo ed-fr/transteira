@@ -56,7 +56,8 @@ func TestTenantsConfigFields(t *testing.T) {
 
 		// Explicit settings are kept.
 		b, err := repo.Create(ctx, &tenant.Tenant{
-			Name: "B", FQDN: "transfer.entity-b.example.com", DefaultLanguage: "en",
+			SetupState: tenant.SetupStateActive,
+			Name:       "B", FQDN: "transfer.entity-b.example.com", DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 30, MaxTransferCeiling: tenant.MaxTransferLimit, StorageQuotaBytes: 1 << 40,
 			PrimaryColor: "#000000", AccentColor: "#abcdef", HasLogo: true, HasBackground: true,
 			WebhookIncludeAddresses: true, AllowRemoteInternalDeposit: true, AllowTransferReply: true,
@@ -71,7 +72,7 @@ func TestTenantsConfigFields(t *testing.T) {
 		}
 
 		// The ceiling rule: limit <= ceiling <= 20 GiB.
-		base := tenant.Tenant{Name: "C", FQDN: "c.example.com", DefaultLanguage: "fr", StorageQuotaBytes: 1}
+		base := tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "C", FQDN: "c.example.com", DefaultLanguage: "fr", StorageQuotaBytes: 1}
 		for name, mutate := range map[string]func(*tenant.Tenant){
 			"limit over ceiling":   func(x *tenant.Tenant) { x.MaxTransferBytes, x.MaxTransferCeiling = 11, 10 },
 			"ceiling over 20 GiB":  func(x *tenant.Tenant) { x.MaxTransferBytes, x.MaxTransferCeiling = 1, tenant.MaxTransferLimit+1 },
@@ -175,7 +176,7 @@ func TestTenantsDeletingStatus(t *testing.T) {
 			t.Errorf("Update(deleting) err = %v, want ErrNotFound", err)
 		}
 		// The FQDN stays taken until the final deletion.
-		if _, err := repo.Create(ctx, &tenant.Tenant{Name: "X", FQDN: a.FQDN, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}); !errors.Is(err, store.ErrConflict) {
+		if _, err := repo.Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "X", FQDN: a.FQDN, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}); !errors.Is(err, store.ErrConflict) {
 			t.Errorf("Create(fqdn of a deleting tenant) err = %v", err)
 		}
 		if ids, err := repo.ListDeleting(ctx); err != nil || !slices.Equal(ids, []tenant.ID{a.ID}) {
@@ -653,7 +654,8 @@ func TestTenantsBackgroundPreset(t *testing.T) {
 		repo := db.Tenants()
 		mk := func(fqdn, preset string) *tenant.Tenant {
 			c, err := repo.Create(ctx, &tenant.Tenant{
-				Name: "T", FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30,
+				SetupState: tenant.SetupStateActive,
+				Name:       "T", FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30,
 				StorageQuotaBytes: 1 << 40, BackgroundPreset: preset,
 			})
 			if err != nil {
@@ -712,7 +714,8 @@ func TestTenantsBackgroundPreset(t *testing.T) {
 				t.Errorf("Update(%q) = %v, want ErrInvalid", bad, err)
 			}
 			if _, err := repo.Create(ctx, &tenant.Tenant{
-				Name: "T", FQDN: "bad.example.com", DefaultLanguage: "en", MaxTransferBytes: 1,
+				SetupState: tenant.SetupStateActive,
+				Name:       "T", FQDN: "bad.example.com", DefaultLanguage: "en", MaxTransferBytes: 1,
 				StorageQuotaBytes: 1, BackgroundPreset: bad,
 			}); !errors.Is(err, store.ErrInvalid) {
 				t.Errorf("Create(%q) = %v, want ErrInvalid", bad, err)

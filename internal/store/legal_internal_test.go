@@ -13,7 +13,7 @@ func TestTenantLegalDocumentsListFaults(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db, plan := openFault(t)
-	a, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	a, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

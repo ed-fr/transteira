@@ -1,0 +1,100 @@
+{
+  "textProposal": {
+    "reviewNotice": "This text is a starting point, not legal advice. It must be reviewed by the data protection officer or a lawyer before publication. Replace every \"[To complete: …]\" marker with your organisation's own information."
+  },
+  "state": {
+    "setup": "Being set up",
+    "active": "Active"
+  },
+  "wizard": {
+    "title": "Setup",
+    "intro": "Follow the list below to configure the entity. Deposits stay closed to the public until the setup is complete.",
+    "introActive": "The setup is complete: the entity is open. The list below is shown for information.",
+    "setupBanner": "This entity is being set up: deposits are closed to the public.",
+    "setupBannerLink": "Open the setup",
+    "loading": "Loading the setup…",
+    "listLabel": "Setup steps",
+    "required": "Required",
+    "optional": "Optional",
+    "done": "Done",
+    "todo": "To do",
+    "configure": "Configure",
+    "configureItem": "Configure: {item}",
+    "reviewed": "I reviewed the mail templates",
+    "reviewedHint": "Tick this box once the mail templates are reviewed or adapted; it is recorded when the setup is completed.",
+    "complete": "Finish setup",
+    "completing": "Finishing…",
+    "completed": "The setup is complete: the entity is open for deposits.",
+    "canCompleteNo": "Required steps remain to be done before the entity can be opened:",
+    "incompleteTitle": "The setup cannot be completed",
+    "incompleteText": "These required steps are not done:",
+    "alreadyComplete": "The setup of this entity is already complete.",
+    "forbidden": "You are not allowed to force the opening of this entity.",
+    "force": {
+      "action": "Force opening",
+      "hint": "Super admin only: opens the entity even if required steps are not done.",
+      "title": "Force the opening of the entity?",
+      "text": "Deposits will become possible while required steps are not done: the entity could send incomplete mails or show incomplete texts. This action is recorded in the audit log.",
+      "confirm": "Force opening"
+    },
+    "back": "Back to setup",
+    "backLabel": "Return to the setup list of the entity",
+    "error": "The setup could not be loaded.",
+    "retry": "Try again"
+  },
+  "items": {
+    "branding_logo": {
+      "label": "Logo",
+      "hint": "The logo shown at the top of the public pages and in mails."
+    },
+    "branding_colors": {
+      "label": "Colours",
+      "hint": "Main colour and accent colour, with a contrast check."
+    },
+    "smtp": {
+      "label": "Mail (SMTP)",
+      "hint": "The server sending the entity's mails; try it with the test send button."
+    },
+    "internal_networks": {
+      "label": "Internal IP ranges",
+      "hint": "The networks from which a user is recognised as internal."
+    },
+    "internal_domains": {
+      "label": "Internal mail domains",
+      "hint": "The domains of the addresses of internal users."
+    },
+    "legal_notice": {
+      "label": "Legal notice",
+      "hint": "Text to review; the step is done once no \"[To complete: …]\" marker remains."
+    },
+    "privacy_policy": {
+      "label": "Privacy policy",
+      "hint": "Text to review; the step is done once no \"[To complete: …]\" marker remains."
+    },
+    "mail_templates": {
+      "label": "Mail templates",
+      "hint": "Review the default templates or adapt them, then tick the box below."
+    }
+  },
+  "home": {
+    "title": "Setup to complete",
+    "text": "The entity {name} is being set up: configure it to open it for deposits.",
+    "textMany": "These entities are being set up: configure them to open them for deposits.",
+    "action": "Start the setup of {name}"
+  },
+  "legalProposal": {
+    "action": "Use the proposed text",
+    "loading": "Loading the proposal…",
+    "error": "The proposed text could not be loaded.",
+    "loaded": "The proposed text is in the editor. Review it, complete it, then save.",
+    "noticeTitle": "Proposed text to review",
+    "confirm": {
+      "title": "Replace the current text?",
+      "text": "The editor already contains text. The proposed text will replace it (nothing is saved until you save).",
+      "action": "Replace with the proposed text"
+    },
+    "markers": "{count} \"To complete\" marker remains in the text. The step counts as done only when none remains.",
+    "markersMany": "{count} \"To complete\" markers remain in the text. The step counts as done only when none remains.",
+    "hint": "The setup step only considers the text in the entity's default language; it counts as done only when that text contains no \"[To complete: …]\" (or \"[À compléter : …]\") marker."
+  }
+}

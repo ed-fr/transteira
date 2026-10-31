@@ -18,10 +18,12 @@
     "configure": "Configure {name}"
   },
   "status": {
+    "setup": "Being set up",
     "active": "Active",
     "deleting": "Deletion in progress"
   },
   "nav": {
+    "setup": "Setup",
     "general": "General",
     "branding": "Branding",
     "network": "Network",

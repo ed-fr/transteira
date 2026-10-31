@@ -94,7 +94,7 @@
 {/snippet}
 
 {#snippet statusCell(row: Tenant)}
-  {@const view = statusView(row.status)}
+  {@const view = statusView(row.status, row.setupState)}
   <StatusBadge variant={view.variant} label={t(view.key)} />
 {/snippet}
 

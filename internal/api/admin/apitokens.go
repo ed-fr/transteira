@@ -179,7 +179,7 @@ var apiTokenPatchFields = []string{"name", "allowedCidrs", "allowedSenders"}
 
 // decodeAPITokenUpdate decodes a token merge patch: a JSON object whose
 // members are absent (unchanged) or set, never null. A body that is not an
-// object answers validation-failed on the whole body (""). Unlike
+// object answers validation-failed on the whole body (""). Like
 // decodeTenantUpdate, an unknown member answers invalid-format on its
 // pointer (the first one in sorted order; OpenAPI ApiTokenUpdate has
 // additionalProperties false); a name longer than maxEchoedMemberLen bytes

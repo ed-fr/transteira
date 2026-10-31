@@ -192,7 +192,8 @@ func (ev *env) newTenant(t *testing.T, fqdn, lang string) *tenant.Tenant {
 	t.Helper()
 	ctx := context.Background()
 	tn, err := ev.db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: lang,
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: lang,
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {

@@ -9,7 +9,8 @@
 // - get/post/put/patch/delete are typed from the paths of the specification; request() is the
 //   untyped primitive underneath. Typed PATCH bodies are sent as application/merge-patch+json.
 // - Bodies are JSON, except a Blob (branding images), sent as-is with Content-Type = blob.type.
-// - Optional hooks (admin application only; the public application sets none):
+// - Optional hooks: onTenantInSetup is called on 503 tenant-in-setup (public application);
+//   the others are for the admin application only:
 //   onUnauthenticated is called on 401 unauthenticated (never on invalid-credentials, which is a
 //   form error); recoverCsrf is called on 403 csrf-invalid for an unsafe method and, when it
 //   answers true, the request is retried exactly once with the refreshed token.
@@ -125,6 +126,12 @@ export interface ApiClientDeps {
    * thrown. A rejection counts as false.
    */
   recoverCsrf?: () => Promise<boolean>;
+  /**
+   * Called when an answer is 503 with the code tenant-in-setup (the tenant is still being
+   * configured), before the ApiProblem is thrown. Used by the public application to show its
+   * "service being set up" page.
+   */
+  onTenantInSetup?: (problem: ApiProblem) => void;
 }
 
 // ---- Types derived from the specification -------------------------------------------------
@@ -322,6 +329,8 @@ export function createApiClient(deps: ApiClientDeps): ApiClient {
       const error = new ApiProblem(response.status, problem);
       if (error.status === 401 && error.code === 'unauthenticated') {
         deps.onUnauthenticated?.(error, method, path);
+      } else if (error.status === 503 && error.code === 'tenant-in-setup') {
+        deps.onTenantInSetup?.(error);
       } else if (
         error.status === 403 &&
         error.code === 'csrf-invalid' &&

@@ -59,6 +59,9 @@ type TenantService interface {
 	PreviewTemplate(ctx context.Context, p adminauth.Principal, tid tenant.ID, key, lang string, in *tenantadmin.TemplateInput) (tenantadmin.Preview, error)
 	GetLegal(ctx context.Context, p adminauth.Principal, tid tenant.ID, doc, lang string) (tenantadmin.LegalDocument, error)
 	UpdateLegal(ctx context.Context, p adminauth.Principal, tid tenant.ID, doc, lang, markdown string, ip netip.Addr) (tenantadmin.LegalDocument, error)
+	GetSetup(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.Setup, error)
+	CompleteSetup(ctx context.Context, p adminauth.Principal, tid tenant.ID, force, mailTemplatesReviewed bool, ip netip.Addr) (tenantadmin.Setup, error)
+	TextProposal(ctx context.Context, p adminauth.Principal, tid tenant.ID, doc, lang string) (tenantadmin.TextProposal, error)
 }
 
 // Compile-time check that the tenant configuration service fits.
@@ -184,7 +187,9 @@ func (s *Server) ListTenants(ctx context.Context, req gen.ListTenantsRequestObje
 }
 
 // CreateTenant creates a tenant (super admin, 201), with its transfer
-// limit and ceiling set in one step by the service.
+// limit and ceiling set in one step by the service. An absent setupState is
+// mapped here, explicitly, to active (the 1.1 behavior); the service never
+// defaults it (T-261).
 func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestObject) (gen.CreateTenantResponseObject, error) {
 	svc, p, err := s.tenantSession(ctx)
 	if err != nil {
@@ -194,15 +199,14 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 		return nil, validationFailed(tenantadmin.FieldName, fieldRequired)
 	}
 	b := req.Body
-	if p.Admin.Role == store.RoleSuperAdmin {
-		if prob := unsupportedTenantCreate(b); prob != nil {
-			return nil, prob
-		}
+	state := tenant.SetupStateActive
+	if b.SetupState != nil {
+		state = tenant.SetupState(*b.SetupState)
 	}
 	in := tenantadmin.TenantCreate{
 		Name: b.Name, FQDN: b.Fqdn, DefaultLanguage: string(b.DefaultLanguage), StorageQuotaBytes: b.StorageQuotaBytes,
 		MaxTransferBytes: deref(b.MaxTransferBytes), MaxTransferCeiling: b.MaxTransferCeiling,
-		BackgroundPreset: b.BackgroundPreset,
+		BackgroundPreset: b.BackgroundPreset, SetupState: state,
 	}
 	if d := b.DelegatedAdmin; d != nil {
 		in.DelegatedAdmin = &adminauth.DelegatedAdmin{Username: d.Username, Email: string(d.Email), Language: string(d.Language)}
@@ -279,11 +283,17 @@ var tenantPatchFields = []string{
 // members are absent (unchanged) or set, never null. A body that is not an
 // object answers validation-failed on the whole body (""), null members
 // one not-nullable entry each, and a member of the wrong type
-// invalid-format on its pointer. Unknown members are ignored.
+// invalid-format on its pointer. An unknown member (setupState included,
+// read only since 1.2: OpenAPI TenantUpdate has additionalProperties false)
+// answers invalid-format on its pointer, before anything else, like the
+// API token patch (rejectUnknownMembers).
 func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &members); err != nil || members == nil {
 		return tenantadmin.TenantUpdate{}, validationFailed("", fieldInvalidFormat)
+	}
+	if err := rejectUnknownMembers(members, tenantPatchFields); err != nil {
+		return tenantadmin.TenantUpdate{}, err
 	}
 	var nulls []problem.FieldError
 	for _, name := range tenantPatchFields {
@@ -334,20 +344,19 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		Status: gen.TenantStatus(v.Status), StorageQuotaBytes: v.StorageQuotaBytes, StorageUsedBytes: v.StorageUsedBytes,
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
 		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
-		AntivirusEffective: &v.AntivirusEffective, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		AntivirusEffective: &v.AntivirusEffective, SetupState: setupStateOf(v.SetupState),
+		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 
-// unsupportedTenantCreate refuses the members of TenantCreate added by API
-// 1.2 that are not implemented yet (setupState) with a 400
-// validation-failed naming it, or returns nil. It is checked for the super
-// admin only, after the role, so that another admin keeps its 403 from the
-// service.
-func unsupportedTenantCreate(b *gen.TenantCreate) *problem.Problem {
-	if b.SetupState != nil {
-		return validationFailed("/setupState", fieldNotSupported)
+// setupStateOf renders the setup state of a tenant, nil when unknown (a
+// view built without one; a stored tenant always has one).
+func setupStateOf(s tenant.SetupState) *gen.TenantSetupState {
+	if !s.Valid() {
+		return nil
 	}
-	return nil
+	v := gen.TenantSetupState(s)
+	return &v
 }
 
 // delegatedAdminField prefixes the fields of the delegated admin errors.

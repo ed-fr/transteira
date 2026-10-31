@@ -7,7 +7,9 @@
   // /tenants/:id/... screen.
   import { t } from '../../shared/i18n/i18n.svelte';
   import type { Navigation } from '../screens/types';
+  import { setupStates } from '../setupStates.svelte';
   import { navCurrent, tenantLinkGroups } from '../shell';
+  import StatusBadge from './StatusBadge.svelte';
 
   interface Props {
     /** Tenant id (route parameter). */
@@ -26,10 +28,21 @@
   const groups = $derived(tenantLinkGroups(tenantId));
   // Unique prefix of the group heading ids (several navigations could share a page).
   const uid = $props.id();
+
+  // The "being set up" badge needs the setup state, read once per tenant shown.
+  $effect(() => {
+    void setupStates.ensure(tenantId);
+  });
+  const inSetup = $derived(setupStates.stateOf(tenantId) === 'setup');
 </script>
 
 <nav class="tt-tenant-nav" aria-label={t('admin.nav.tenantNav', { name })}>
-  <p class="tt-tenant-nav__name tt-text-bold tt-break">{name}</p>
+  <p class="tt-tenant-nav__name tt-text-bold tt-break">
+    {name}
+    {#if inSetup}
+      <StatusBadge variant="warning" label={t('setup.state.setup')} />
+    {/if}
+  </p>
   <div class="tt-tenant-nav__groups">
     {#each groups as group (group.group)}
       {@const headingId = `${uid}-${group.group}`}

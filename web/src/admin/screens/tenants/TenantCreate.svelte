@@ -4,7 +4,8 @@
   // transfer (at most the ceiling). An FQDN already used (409) or equal to an admin host (400 on
   // /fqdn with the field code reserved-host) is reported on the field with a dedicated message,
   // any other FQDN refusal with the message of its code (tenantFailure). On success the admin profile is reloaded (it lists the
-  // tenants) and the general settings of the new tenant are shown.
+  // tenants) and the setup wizard of the new tenant is shown: a tenant is always created in the
+  // setup state (setupState: "setup") and stays closed to deposits until the wizard is completed.
   // Optionally the first delegated administrator is created in the same request (since API 1.2):
   // its activation link is mailed (default) or shown once to copy; the result is then shown
   // before going to the tenant. Without system SMTP (503) nothing is created and the form keeps
@@ -21,9 +22,9 @@
   import InvitationFields from '../../components/InvitationFields.svelte';
   import InvitationSent from '../../components/InvitationSent.svelte';
   import { MAX_TRANSFER_BYTES, formatBytes as formatBinaryBytes } from '../../forms/bytes';
-  import { tenantPath } from '../../shell';
   import { asInvitationLanguage, type ActivationLink } from '../admins/admins';
   import type { AdminScreenProps } from '../types';
+  import { setupPath } from './setup';
   import {
     TENANT_FIELDS,
     TENANT_LANGUAGES,
@@ -131,7 +132,7 @@
 
   async function open(id: string): Promise<void> {
     result = undefined;
-    await nav.navigate(tenantPath(id, 'general'));
+    await nav.navigate(setupPath(id));
   }
 
   async function submit(): Promise<SubmitOutcome> {
@@ -157,7 +158,7 @@
         };
         return { ok: true, message: t('adminTenants.create.created', { name: res.data.name }) };
       }
-      await nav.navigate(tenantPath(res.data.id, 'general'));
+      await nav.navigate(setupPath(res.data.id));
       announce(t('adminTenants.create.created', { name: res.data.name }));
       return { ok: true, message: t('adminTenants.create.created', { name: res.data.name }) };
     } catch (err) {

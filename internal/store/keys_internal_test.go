@@ -37,7 +37,7 @@ func newKeyFixture(t *testing.T, empty bool) *keyFixture {
 	t.Helper()
 	ctx := context.Background()
 	db, plan := openFault(t)
-	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestKeySchemaConstraints(t *testing.T) {
 		}
 
 		// The rewrap update leaves a row already moved to another key alone.
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -308,7 +308,7 @@ func TestKeyTablesRLS(t *testing.T) {
 	}
 	var tids []tenant.ID
 	for _, host := range []string{"a.example.com", "b.example.com"} {
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: host, FQDN: host, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: host, FQDN: host, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -406,7 +406,7 @@ func TestCleanupRotation(t *testing.T) {
 		if e.Driver != config.DriverPostgres {
 			withLock(db) // PostgreSQL runs the real LOCK TABLE
 		}
-		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			t.Fatal(err)
 		}

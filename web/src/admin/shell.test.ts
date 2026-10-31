@@ -125,11 +125,12 @@ describe('tenant navigation', () => {
     const links = tenantLinks('ten_1');
     expect(links.map((l) => l.section)).toEqual([...TENANT_SECTIONS]);
     expect(links[0]).toEqual({
-      section: 'general',
+      section: 'setup',
       group: 'configuration',
-      path: '/tenants/ten_1/general',
-      labelKey: 'adminTenants.nav.general',
+      path: '/tenants/ten_1/setup',
+      labelKey: 'adminTenants.nav.setup',
     });
+    expect(links[1]?.section).toBe('general');
     expect(links.at(-1)).toEqual({
       section: 'privacy',
       group: 'operations',

@@ -195,6 +195,12 @@ var isolationCases = map[string]isolationCase{
 	"previewEmailTemplate":        adminTenantOp,
 	"getLegalDocumentAdmin":       adminTenantOp,
 	"updateLegalDocument":         adminTenantOp,
+	// The setup of a tenant (since 1.2): its checklist, its completion
+	// (forced or not) and the text proposals follow the tenant
+	// configuration cases (T-263).
+	"getTenantSetup":      adminTenantOp,
+	"completeTenantSetup": adminTenantOp,
+	"getTextProposal":     adminTenantOp,
 	// The background preset library (tenantconfig_test.go, since 1.2)
 	// holds no tenant data and is readable by every administrator.
 	"listBackgroundPresets": readBackgroundPresets,
@@ -612,7 +618,8 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 	}
 	mk := func(name, fqdn string) *tenant.Tenant {
 		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: name, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
+			SetupState: tenant.SetupStateActive,
+			Name:       name, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
 		})
 		if err != nil {
 			t.Fatalf("create tenant: %v", err)

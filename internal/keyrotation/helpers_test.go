@@ -179,7 +179,8 @@ func newEnv(t *testing.T, e storetest.Engine, n int) *env {
 		t.Fatal(err)
 	}
 	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "en",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "en",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {

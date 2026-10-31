@@ -95,6 +95,25 @@ export function maintenanceNotice(
   return { message, language: tenant.maintenanceMessageLanguage };
 }
 
+/** Route patterns that stay reachable while the tenant is being set up (legal pages, help). */
+export function reachableDuringSetup(pattern: string): boolean {
+  return pattern === '/legal/:document' || pattern === '/help' || pattern.startsWith('/help/');
+}
+
+/**
+ * Reports whether a route must show the "service being set up" page: the tenant is in setup
+ * (PublicTenant.setupState, or a call refused with tenant-in-setup) and the route is neither a
+ * legal page nor the help. Mirrors the maintenance behaviour, extended to downloads, invitations
+ * and "my transfers" that the server refuses too.
+ */
+export function showSetupPage(
+  tenant: Pick<PublicTenant, 'setupState'>,
+  pattern: string,
+  refused = false,
+): boolean {
+  return (tenant.setupState === 'setup' || refused) && !reachableDuringSetup(pattern);
+}
+
 /** Document title: "<page> – <site>", or the page alone when the site name is unknown. */
 export function documentTitle(page: string, site: string | undefined): string {
   return site === undefined || site === '' || site === page ? page : `${page} – ${site}`;

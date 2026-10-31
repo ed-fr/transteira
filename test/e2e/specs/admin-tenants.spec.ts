@@ -116,10 +116,17 @@ test.describe('tenant configuration', () => {
       const fqdn = `t-${id}.localhost`;
       await page.getByRole('textbox', { name: /^Address \(FQDN\)/ }).fill(fqdn);
       await page.getByRole('button', { name: 'Create the entity' }).click();
-      await expectHeading(page, 'General');
-      await expect(page).toHaveURL(/\/admin\/tenants\/[^/]+\/general$/);
-      const tenantId = /\/tenants\/([^/]+)\/general$/.exec(page.url())![1]!;
+      // A new tenant is created in the setup state: the setup wizard is shown, not the settings.
+      await expectHeading(page, 'Setup');
+      await expect(page).toHaveURL(/\/admin\/tenants\/[^/]+\/setup$/);
+      const tenantId = /\/tenants\/([^/]+)\/setup$/.exec(page.url())![1]!;
       created = { id: tenantId, name, fqdn };
+      await expect(page.getByRole('list', { name: 'Setup steps' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Finish setup' })).toBeDisabled();
+      await expect(page.getByRole('button', { name: 'Force opening' })).toBeVisible();
+      await checkA11y(page);
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${tenantId}/general`);
+      await expectHeading(page, 'General');
       await expect(page.getByRole('textbox', { name: /^Entity name/ })).toHaveValue(name);
       await expect(
         page.getByRole('navigation', { name: `Configuration of the entity ${name}` }),

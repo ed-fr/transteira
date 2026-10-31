@@ -182,7 +182,8 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 	ev := &env{db: db, clock: clock, logs: &syncBuffer{}}
 	for _, h := range []string{hostA, hostB} {
 		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: "Entity " + h, FQDN: h, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
+			SetupState: tenant.SetupStateActive,
+			Name:       "Entity " + h, FQDN: h, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
 		})
 		if err != nil {
 			t.Fatal(err)

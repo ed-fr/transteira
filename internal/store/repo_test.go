@@ -39,7 +39,8 @@ func openDB(t *testing.T, e storetest.Engine) *store.DB {
 func newTenant(t *testing.T, db *store.DB, fqdn string) *tenant.Tenant {
 	t.Helper()
 	tn, err := db.Tenants().Create(context.Background(), &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "fr",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "fr",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {
@@ -73,7 +74,7 @@ func TestTenantsCRUD(t *testing.T) {
 		}
 
 		// Duplicate FQDN.
-		_, err = repo.Create(ctx, &tenant.Tenant{Name: "B", FQDN: a.FQDN, DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		_, err = repo.Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "B", FQDN: a.FQDN, DefaultLanguage: "en", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if !errors.Is(err, store.ErrConflict) {
 			t.Errorf("Create(duplicate fqdn) err = %v, want ErrConflict", err)
 		}
@@ -121,7 +122,7 @@ func TestTenantsValidation(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		repo := openDB(t, e).Tenants()
-		valid := tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}
+		valid := tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1}
 
 		preset := valid
 		preset.ID = tenant.ID(id.New(id.Tenant))

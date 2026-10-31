@@ -395,3 +395,24 @@ describe('optional request bodies', () => {
     expect(call(fetch, 1)[1].body).toBe('{"currentPassword":"p"}');
   });
 });
+
+describe('tenant-in-setup hook', () => {
+  const problem = { type: 'about:blank', title: 'Tenant in setup', status: 503, code: 'tenant-in-setup' };
+
+  it('calls onTenantInSetup on a 503 tenant-in-setup, then throws the problem', async () => {
+    const onTenantInSetup = vi.fn();
+    const { api } = client(() => jsonResponse(503, problem, 'application/problem+json'), { onTenantInSetup });
+    await expect(api.get('/tenant')).rejects.toMatchObject({ status: 503, code: 'tenant-in-setup' });
+    expect(onTenantInSetup).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores other 503 answers and a missing hook', async () => {
+    const onTenantInSetup = vi.fn();
+    const other = { ...problem, code: 'maintenance' };
+    const { api } = client(() => jsonResponse(503, other, 'application/problem+json'), { onTenantInSetup });
+    await expect(api.get('/tenant')).rejects.toMatchObject({ code: 'maintenance' });
+    expect(onTenantInSetup).not.toHaveBeenCalled();
+    const bare = client(() => jsonResponse(503, problem, 'application/problem+json'));
+    await expect(bare.api.get('/tenant')).rejects.toBeInstanceOf(ApiProblem);
+  });
+});

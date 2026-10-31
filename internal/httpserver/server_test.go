@@ -47,7 +47,7 @@ func (f fakeResolver) Resolve(_ context.Context, host string) (*tenant.Tenant, e
 		return nil, f.err
 	}
 	if host == hostA {
-		return &tenant.Tenant{ID: "ten_a", FQDN: hostA}, nil
+		return &tenant.Tenant{ID: "ten_a", FQDN: hostA, SetupState: tenant.SetupStateActive}, nil
 	}
 	return nil, tenant.ErrUnknownTenant
 }

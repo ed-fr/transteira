@@ -215,7 +215,8 @@ func createTenants(t *testing.T, e storetest.Engine) (a, b *tenant.Tenant) {
 	}
 	mk := func(name, fqdn string) *tenant.Tenant {
 		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: name, FQDN: fqdn, DefaultLanguage: "en",
+			SetupState: tenant.SetupStateActive,
+			Name:       name, FQDN: fqdn, DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
 		})
 		if err != nil {

@@ -22,11 +22,6 @@ const (
 	// fieldNotNullable is a null member of a merge patch on a field that
 	// cannot be removed.
 	fieldNotNullable = "not-nullable"
-	// fieldNotSupported is a member of API 1.2 that this server does not
-	// implement yet: it is refused rather than ignored (fail closed), so
-	// that a client never believes a setup state, a delegated admin, a
-	// background preset or a mailed invitation was applied.
-	fieldNotSupported = "not-supported"
 	// fieldNotAllowed is a valid value that is not allowed here: the mail
 	// delivery of a super admin activation link.
 	fieldNotAllowed = "not-allowed"

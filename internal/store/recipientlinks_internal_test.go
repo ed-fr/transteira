@@ -14,7 +14,7 @@ import (
 // newTestTenant creates a tenant through Tenants.Create.
 func newTestTenant(ctx context.Context, t *testing.T, db *DB, fqdn string) tenant.ID {
 	t.Helper()
-	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "T", FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatalf("create tenant %s: %v", fqdn, err)
 	}
@@ -221,7 +221,8 @@ func TestTenantCreateSeedFaults(t *testing.T) {
 			ctx := context.Background()
 			plan.add(faultExec, match, 0)
 			if _, err := db.Tenants().Create(ctx, &tenant.Tenant{
-				Name: "T", FQDN: "t.example.com", DefaultLanguage: "fr",
+				SetupState: tenant.SetupStateActive,
+				Name:       "T", FQDN: "t.example.com", DefaultLanguage: "fr",
 				MaxTransferBytes: 1, StorageQuotaBytes: 1,
 			}); !errors.Is(err, errInjected) {
 				t.Fatalf("Create = %v, want the injected fault", err)

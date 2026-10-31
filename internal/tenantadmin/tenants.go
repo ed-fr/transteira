@@ -48,8 +48,11 @@ type TenantView struct {
 	// AntivirusEffective tells whether they really are: AntivirusEnabled
 	// and an instance engine other than "none" (read only).
 	AntivirusEffective bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	// SetupState is setup while the tenant is being configured, active
+	// afterwards (since V1.2, read only: see [Service.CompleteSetup]).
+	SetupState tenant.SetupState
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // TenantPage is a page of tenants.
@@ -79,6 +82,11 @@ type TenantCreate struct {
 	// DelegatedAdmin, when not nil, creates the first delegated admin of
 	// the tenant in the same transaction (since V1.2).
 	DelegatedAdmin *adminauth.DelegatedAdmin
+	// SetupState is the initial setup state (since V1.2): required, never
+	// defaulted here (T-261). The API maps an absent member to
+	// [tenant.SetupStateActive], the administration interface asks for
+	// [tenant.SetupStateSetup].
+	SetupState tenant.SetupState
 }
 
 // TenantCreated is the result of [Service.CreateTenant].
@@ -135,7 +143,7 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
 		AntivirusEnabled: t.AntivirusEnabled, AntivirusEffective: s.AntivirusEffective(t),
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -214,9 +222,10 @@ func (s *Service) GetTenant(ctx context.Context, p adminauth.Principal, tid tena
 // CreateTenant creates a tenant (super admin only) with the default
 // branding; templates and legal documents use the built-in defaults until
 // customized. The transfer limit and its ceiling are set in one step: the
-// ceiling defaults to the limit and the limit to the ceiling. It returns an
-// *InvalidError for a malformed field, a limit above the ceiling or an FQDN
-// equal to an admin host, ErrUnknownBackgroundPreset for a background
+// ceiling defaults to the limit and the limit to the ceiling. The setup
+// state must be given (setup or active, T-261). It returns an
+// *InvalidError for a malformed field, a missing or unknown setup state, a
+// limit above the ceiling or an FQDN equal to an admin host, ErrUnknownBackgroundPreset for a background
 // preset outside the library, and ErrAlreadyExists for an FQDN already
 // used.
 //
@@ -255,6 +264,9 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 	if err != nil {
 		return TenantCreated{}, err
 	}
+	if !in.SetupState.Valid() {
+		return TenantCreated{}, invalid(FieldSetupState, "must be setup or active")
+	}
 	var (
 		invited *InvitedAdmin
 		then    func(tx *store.SystemTx, t *tenant.Tenant) error
@@ -271,7 +283,7 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 	}
 	t, err := s.repo.createTenant(ctx, &tenant.Tenant{
 		Name: name, FQDN: fqdn, DefaultLanguage: in.DefaultLanguage, StorageQuotaBytes: in.StorageQuotaBytes,
-		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset,
+		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset, SetupState: in.SetupState,
 	}, then)
 	switch {
 	case errors.Is(err, store.ErrConflict), errors.Is(err, adminauth.ErrAlreadyExists):
@@ -283,7 +295,9 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 		return TenantCreated{}, fmt.Errorf("tenantadmin: create tenant: %w", err)
 	}
 	s.invalidate(t.ID, t.FQDN)
-	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN})
+	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{
+		"name": audit.RedactAddresses(t.Name), "fqdn": t.FQDN, "setupState": string(t.SetupState),
+	})
 	v, err := s.view(ctx, t)
 	if err != nil {
 		return TenantCreated{}, err

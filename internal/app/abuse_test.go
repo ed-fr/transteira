@@ -57,7 +57,8 @@ func TestAbuseAdapters(t *testing.T) {
 			t.Fatal(err)
 		}
 		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "en",
+			SetupState: tenant.SetupStateActive,
+			Name:       "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 34, StorageQuotaBytes: 1 << 40,
 		})
 		if err != nil {

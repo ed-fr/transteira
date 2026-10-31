@@ -170,7 +170,7 @@ export function tenantRow(
   formatBytes: (n: number) => string,
   formatPercent: (ratio: number) => string,
 ): TenantRow {
-  const status = statusView(tenant.status);
+  const status = statusView(tenant.status, tenant.setupState);
   const level = quotaLevel(quotaRatio(tenant.storageUsedBytes, tenant.storageQuotaBytes));
   const texts = quotaTexts(tenant.storageUsedBytes, tenant.storageQuotaBytes, formatBytes, formatPercent, t);
   return {

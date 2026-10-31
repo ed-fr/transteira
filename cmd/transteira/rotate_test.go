@@ -63,7 +63,8 @@ func sealUnder(t *testing.T, dsn, keyFile string) (tenant.ID, string) {
 		t.Fatal(err)
 	}
 	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
 	})
 	if err != nil {

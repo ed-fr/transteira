@@ -196,7 +196,8 @@ func FuzzSenderAccessTokens(f *testing.F) {
 	}
 	mk := func(fqdn string) tenant.ID {
 		tn, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: fqdn, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 30,
+			SetupState: tenant.SetupStateActive,
+			Name:       fqdn, FQDN: fqdn, DefaultLanguage: "fr", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 30,
 		})
 		if err != nil {
 			f.Fatal(err)

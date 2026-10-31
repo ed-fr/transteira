@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"time"
@@ -264,7 +265,11 @@ func smtpChanges(a, b store.SMTPConfig) []string {
 // TestSMTP sends a fixed test mail to the address to with the SMTP settings
 // of tenant tid and reports how the exchange went. It is limited per
 // administrator and tenant (*RateLimitError). The result is returned even
-// when the delivery fails; an error means the test could not run.
+// when the delivery fails; an error means the test could not run. A
+// successful delivery is recorded for the settings tested (their version,
+// read before sending: [store.Tenants.SetSMTPTested]), which the "smtp"
+// item of the setup checklist requires; a failure to record it is logged,
+// the result being returned anyway.
 func (s *Service) TestSMTP(ctx context.Context, p adminauth.Principal, tid tenant.ID, to string, ip netip.Addr) (SMTPTestResult, error) {
 	t, err := s.writable(ctx, p, tid)
 	if err != nil {
@@ -304,6 +309,11 @@ func (s *Service) TestSMTP(ctx context.Context, p adminauth.Principal, tid tenan
 	if err != nil {
 		res.Stage = stageOf(err)
 		res.Error = testError(res.Stage, err, settings)
+	} else if err := s.repo.setSMTPTested(ctx, tid, c.UpdatedAt); err != nil {
+		// The delivery succeeded: its result stands, only the setup
+		// checklist will not count it.
+		s.logger.ErrorContext(ctx, "recording the smtp test failed", slog.String("tenant", string(tid)),
+			slog.String("error", err.Error()))
 	}
 	s.record(ctx, p, ip, tid, ActionTenantSMTPTested, map[string]any{"success": res.Success, "stage": res.Stage})
 	return res, nil

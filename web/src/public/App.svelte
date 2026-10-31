@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import { pageTitleOf } from '../help/title.svelte';
   import { api } from '../shared/api/api';
+  import { tenantSetup } from '../shared/api/setupSignal.svelte';
   import { problemMessage } from '../shared/api/problem';
   import { Alert, Footer, PageLayout, Spinner, announce } from '../shared/components';
   import {
@@ -23,11 +24,13 @@
     documentTitle,
     legalPath,
     maintenanceNotice,
+    showSetupPage,
     type BootstrapDeps,
     type PublicTenant,
   } from './bootstrap';
   import { isHelpRoute, notFoundRoute, routes } from './routes';
   import ErrorPage from './screens/ErrorPage.svelte';
+  import SetupPage from './screens/SetupPage.svelte';
 
   type Status = 'loading' | 'ready' | 'error';
 
@@ -61,6 +64,10 @@
   function useTenant(next: PublicTenant): void {
     tenant = next;
     applyTenantTheme(next.branding);
+    if (next.setupState !== 'setup') {
+      // A fresh configuration saying the tenant is open clears a sticky tenant-in-setup signal.
+      tenantSetup.reset();
+    }
   }
 
   async function start(): Promise<void> {
@@ -110,6 +117,12 @@
   const notice = $derived(tenant === undefined ? undefined : maintenanceNotice(tenant));
   // The deposit and invite screens show their own full maintenance page.
   const fullMaintenancePage = new Set(['/', '/invite']);
+  const inSetup = $derived(
+    // Maintenance wins over setup, as on the server.
+    tenant === undefined || notice !== undefined
+      ? false
+      : showSetupPage(tenant, match.route.pattern, tenantSetup.inSetup),
+  );
   const showBanner = $derived(notice !== undefined && !fullMaintenancePage.has(match.route.pattern));
 </script>
 
@@ -136,7 +149,11 @@
       {/if}
     {/snippet}
     {#key match.path}
-      <Screen tenant={current} params={match.params} nav={router} />
+      {#if inSetup}
+        <SetupPage />
+      {:else}
+        <Screen tenant={current} params={match.params} nav={router} />
+      {/if}
     {/key}
     {#snippet footer()}
       <Footer

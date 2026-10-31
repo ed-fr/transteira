@@ -206,8 +206,9 @@ export interface paths {
          *     restricted domains, nor the abuse thresholds.
          *
          *     Since 1.2 it carries `setupState`: while it is `setup`, the public interface shows a
-         *     localized "being configured" page (like the maintenance page) and the deposit operations
-         *     answer `503 tenant-in-setup`; downloads are not affected. `branding.faviconUrl` gives the
+         *     localized "being configured" page (like the maintenance page), and every public operation
+         *     of the tenant other than this one, `getTenantAsset` and `getTenantLegalDocument` answers
+         *     `503 tenant-in-setup` (no transfer exists while in setup). `branding.faviconUrl` gives the
          *     favicon of the tenant.
          */
         get: operations["getPublicTenant"];
@@ -3731,7 +3732,7 @@ export interface components {
              */
             maintenanceMessageLanguage?: components["schemas"]["Language"];
             legalDocuments: ("legal-notice" | "privacy-policy")[];
-            /** @description Since 1.2. `setup` while the tenant is being configured: the public interface shows a "being configured" page and the deposit operations answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`). */
+            /** @description Since 1.2. `setup` while the tenant is being configured: the public interface shows a "being configured" page and the public operations other than the tenant information, assets and legal texts answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`). */
             setupState?: components["schemas"]["TenantSetupState"];
             features?: components["schemas"]["TenantFeatures"];
             /** @description Since 1.1. Confidentiality levels offered to the senders (1 to 10), in display order, labels and descriptions in the response language. With a single level, the deposit form hides the selector. */
@@ -6124,6 +6125,28 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Since 1.2. The tenant is still being configured (`PublicTenant.setupState` is `setup`):
+         *     every public operation of the tenant answers `503 tenant-in-setup`, except the tenant
+         *     information, its assets and its legal texts. No `Retry-After`: the end of the setup
+         *     depends on its administrators. No transfer exists while in setup.
+         */
+        TenantInSetup: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#tenant-in-setup",
+                 *       "title": "Service being set up",
+                 *       "status": 503,
+                 *       "code": "tenant-in-setup"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description `Tus-Resumable` missing or not a supported version; no body. */
         TusVersionUnsupported: {
             headers: {
@@ -6991,6 +7014,7 @@ export interface operations {
             };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     getCurrentDepositSession: {
@@ -7031,6 +7055,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     endDepositSession: {
@@ -7054,6 +7079,7 @@ export interface operations {
             403: components["responses"]["CsrfInvalid"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     createTransfer: {
@@ -7225,6 +7251,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     cancelTransfer: {
@@ -7256,6 +7283,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     finalizeTransfer: {
@@ -7371,6 +7399,13 @@ export interface operations {
             };
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            /** @description Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     terminateUpload: {
@@ -7439,6 +7474,13 @@ export interface operations {
                 content?: never;
             };
             500: components["responses"]["InternalError"];
+            /** @description Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getUploadOffset: {
@@ -7511,6 +7553,13 @@ export interface operations {
                 content?: never;
             };
             500: components["responses"]["InternalError"];
+            /** @description Since 1.2, a tenant still in setup (`tenant-in-setup`), without `Retry-After`. Like every error of this operation, the `503` has no body: the status code is the whole answer. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     appendUploadChunk: {
@@ -7718,6 +7767,7 @@ export interface operations {
             410: components["responses"]["InvitationGone"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     getDownload: {
@@ -7748,6 +7798,7 @@ export interface operations {
             410: components["responses"]["TransferGone"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     unlockDownload: {
@@ -7816,6 +7867,7 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     downloadFile: {
@@ -7905,6 +7957,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["TooManyStreams"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     downloadArchive: {
@@ -7943,6 +7996,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["TooManyStreams"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     startRecipientVerification: {
@@ -8012,20 +8066,12 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
-            /** @description The code cannot be sent (no SMTP server configured for the tenant, mail queue shut down). */
+            /** @description The code cannot be sent (no SMTP server configured for the tenant, mail queue shut down). Since 1.2, also a tenant still in setup (`tenant-in-setup`, without `Retry-After`). Clients must branch on `code`. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable",
-                     *       "title": "Email cannot be sent",
-                     *       "status": 503,
-                     *       "code": "mail-unavailable"
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
@@ -8116,6 +8162,7 @@ export interface operations {
             };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     reportAbuse: {
@@ -8157,6 +8204,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     startTransferReply: {
@@ -8291,20 +8339,12 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
-            /** @description Mail cannot be sent for this entity at all (no SMTP server configured, mail queue shut down); the answer does not depend on the address. */
+            /** @description Mail cannot be sent for this entity at all (no SMTP server configured, mail queue shut down); the answer does not depend on the address. Since 1.2, also a tenant still in setup (`tenant-in-setup`, without `Retry-After`). Clients must branch on `code`. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#mail-unavailable",
-                     *       "title": "Email cannot be sent",
-                     *       "status": 503,
-                     *       "code": "mail-unavailable"
-                     *     }
-                     */
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
@@ -8367,6 +8407,7 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     getCurrentMyTransfersSession: {
@@ -8397,6 +8438,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     endMyTransfersSession: {
@@ -8420,6 +8462,7 @@ export interface operations {
             403: components["responses"]["CsrfInvalid"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     listMyTransfers: {
@@ -8481,6 +8524,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     getMyTransfer: {
@@ -8578,6 +8622,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     deleteMyTransfer: {
@@ -8626,6 +8671,7 @@ export interface operations {
             };
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     extendMyTransfer: {
@@ -8715,6 +8761,7 @@ export interface operations {
             };
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
         };
     };
     getSetupStatus: {

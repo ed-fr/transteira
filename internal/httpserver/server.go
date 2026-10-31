@@ -565,7 +565,8 @@ func New(deps Deps, opts ...Option) http.Handler {
 		BaseURL:    APIBaseURL,
 		BaseRouter: apiMux,
 		// The last middleware is the outermost one: the tus protocol rules,
-		// deadlines, maintenance, API token (which, when it authenticates
+		// deadlines, maintenance, tenant setup (refusal by default while the
+		// tenant is being configured), API token (which, when it authenticates
 		// the request, turns the session, CSRF and Origin checks off),
 		// "my transfers" session, deposit session and CSRF, then the body
 		// limit and the JSON media type check, all before the body is
@@ -586,6 +587,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 				return p.meSession || p.meCSRF
 			}, logger),
 			tokens.middleware,
+			setupMiddleware,
 			maintenanceMiddleware(maintenance),
 			idleWriteMiddleware(idleDownload, logger),
 			streamGaugeMiddleware(deps.Streams),

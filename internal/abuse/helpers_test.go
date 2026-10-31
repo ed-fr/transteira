@@ -269,7 +269,8 @@ func (ev *env) tenant(s store.AbuseSettings) *tenant.Tenant {
 	ctx := context.Background()
 	ev.n++
 	tn, err := ev.db.Tenants().Create(ctx, &tenant.Tenant{
-		Name: fmt.Sprintf("Entity %d", ev.n), FQDN: fmt.Sprintf("transfer.entity-%d.example.com", ev.n),
+		SetupState: tenant.SetupStateActive,
+		Name:       fmt.Sprintf("Entity %d", ev.n), FQDN: fmt.Sprintf("transfer.entity-%d.example.com", ev.n),
 		DefaultLanguage: "en", MaxTransferBytes: 1 << 34, StorageQuotaBytes: 1 << 40,
 	})
 	if err != nil {

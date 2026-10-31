@@ -574,7 +574,7 @@ use to ban the client IP.
 
 - **HTTP status:** 503 Service Unavailable
 - **Since:** 1.2.
-- **Meaning:** the entity is still being configured by its administrators (`setupState: setup` in `GET /tenant`): deposits, verification codes for a deposit, invitations and uploads are refused, including with an API token. Downloads are not affected. Unlike `maintenance`, the answer carries no `Retry-After`: the end of the setup depends on the administrators. The tus `PATCH` gets a bodyless `503`.
+- **Meaning:** the entity is still being configured by its administrators (`setupState: setup` in `GET /tenant`): every public operation of the entity is refused (deposits, verification codes, invitations, transfers and uploads, including with an API token, which is refused before it is checked, downloads, replies and "my transfers"; no transfer exists while in setup), except the entity information (`GET /tenant`), its images (`GET /tenant/assets/{asset}`) and its legal texts (`GET /tenant/legal/{document}`). Unlike `maintenance`, the answer carries no `Retry-After`: the end of the setup depends on the administrators; maintenance is checked first. The tus operations (`OPTIONS`, `HEAD`, `PATCH`, `DELETE` on `/uploads`) get a bodyless `503`.
 - **Typical endpoints:** `POST /deposit-sessions`, `POST /transfers`, `POST /transfers/{transferId}/finalize`, `PATCH /uploads/{uploadId}`, `POST /invitations`, `POST /downloads/{linkToken}/reply`.
 - **What to do:** try again once the entity is open; administrators complete the setup with `POST /admin/tenants/{tenantId}/setup/complete`.
 

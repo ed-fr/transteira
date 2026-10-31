@@ -35,7 +35,7 @@ func newDepositFixture(t *testing.T) *depositFixture {
 	t.Helper()
 	ctx := context.Background()
 	db, plan := openFault(t)
-	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+	tn, err := db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "A", FQDN: "a.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestDepositDriverFaults(t *testing.T) {
 		return f.tx(ctx, func(tx *ScopedTx) error { return f.db.SMTPSettings().PutTx(ctx, tx, f.smtp()) })
 	}
 	smtpInsert := func(f *depositFixture) error {
-		tn, err := f.db.Tenants().Create(ctx, &tenant.Tenant{Name: "B", FQDN: "b.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
+		tn, err := f.db.Tenants().Create(ctx, &tenant.Tenant{SetupState: tenant.SetupStateActive, Name: "B", FQDN: "b.example.com", DefaultLanguage: "fr", MaxTransferBytes: 1, StorageQuotaBytes: 1})
 		if err != nil {
 			return nil // reported as "no error": the step fails
 		}

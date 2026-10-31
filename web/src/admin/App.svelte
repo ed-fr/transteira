@@ -30,6 +30,7 @@
   import { ADMIN_BASE, adminRoute, isHelpRoute, notFoundRoute, routes } from './routes';
   import NotFound from './screens/NotFound.svelte';
   import type { AdminScreenComponent } from './screens/types';
+  import { cameFromSetup, setupPath } from './screens/tenants/setup';
   import { pickAdminLanguage, redirectTarget, tenantNameOf } from './shell';
   import { footerVersionText } from './version';
   import { adminVersion } from './version.svelte';
@@ -160,6 +161,11 @@
         <TenantNav {tenantId} tenantName={tenantNameOf(me, tenantId)} path={match.path} nav={router} />
       {:else if systemNav}
         <SystemNav path={match.path} nav={router} />
+      {/if}
+      {#if tenantId !== undefined && route.pattern !== '/tenants/:id/setup' && cameFromSetup(match.search)}
+        <p class="tt-back-to-setup">
+          <a href={router.href(setupPath(tenantId))} use:router.link>{t('setup.wizard.back')}</a>
+        </p>
       {/if}
       {#key match.path}
         <Screen params={match.params} nav={router} />

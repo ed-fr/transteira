@@ -3588,7 +3588,7 @@ type PublicTenant struct {
 	MaintenanceMessageLanguage *Language `json:"maintenanceMessageLanguage,omitempty"`
 	Name                       string    `json:"name"`
 
-	// SetupState Since 1.2. `setup` while the tenant is being configured: the public interface shows a "being configured" page and the deposit operations answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`).
+	// SetupState Since 1.2. `setup` while the tenant is being configured: the public interface shows a "being configured" page and the public operations other than the tenant information, assets and legal texts answer `503 tenant-in-setup`. Absent from a 1.1 server (read it as `active`).
 	SetupState *TenantSetupState `json:"setupState,omitempty"`
 }
 
@@ -4626,6 +4626,9 @@ type StateConflict = Problem
 
 // SystemSmtpUnavailable RFC 9457 Problem Details with TransTeira extension members.
 type SystemSmtpUnavailable = Problem
+
+// TenantInSetup RFC 9457 Problem Details with TransTeira extension members.
+type TenantInSetup = Problem
 
 // TokenIpNotAllowed RFC 9457 Problem Details with TransTeira extension members.
 type TokenIpNotAllowed = Problem
@@ -10322,6 +10325,8 @@ type ServiceUnavailableApplicationProblemPlusJSONResponse struct {
 type StateConflictApplicationProblemPlusJSONResponse Problem
 
 type SystemSmtpUnavailableApplicationProblemPlusJSONResponse Problem
+
+type TenantInSetupApplicationProblemPlusJSONResponse Problem
 
 type TokenIpNotAllowedApplicationProblemPlusJSONResponse Problem
 
@@ -20045,6 +20050,22 @@ func (response EndDepositSession500ApplicationProblemPlusJSONResponse) VisitEndD
 	return err
 }
 
+type EndDepositSession503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response EndDepositSession503ApplicationProblemPlusJSONResponse) VisitEndDepositSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetCurrentDepositSessionRequestObject struct {
 }
 
@@ -20110,6 +20131,22 @@ func (response GetCurrentDepositSession500ApplicationProblemPlusJSONResponse) Vi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentDepositSession503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetCurrentDepositSession503ApplicationProblemPlusJSONResponse) VisitGetCurrentDepositSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -20196,6 +20233,22 @@ func (response GetDownload500ApplicationProblemPlusJSONResponse) VisitGetDownloa
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDownload503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetDownload503ApplicationProblemPlusJSONResponse) VisitGetDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -20328,6 +20381,22 @@ func (response ReportAbuse500ApplicationProblemPlusJSONResponse) VisitReportAbus
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReportAbuse503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ReportAbuse503ApplicationProblemPlusJSONResponse) VisitReportAbuseResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -20479,6 +20548,22 @@ func (response DownloadArchive500ApplicationProblemPlusJSONResponse) VisitDownlo
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadArchive503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadArchive503ApplicationProblemPlusJSONResponse) VisitDownloadArchiveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -20720,6 +20805,22 @@ func (response DownloadFile500ApplicationProblemPlusJSONResponse) VisitDownloadF
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadFile503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadFile503ApplicationProblemPlusJSONResponse) VisitDownloadFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -21059,6 +21160,22 @@ func (response UnlockDownload500ApplicationProblemPlusJSONResponse) VisitUnlockD
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnlockDownload503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response UnlockDownload503ApplicationProblemPlusJSONResponse) VisitUnlockDownloadResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -21404,6 +21521,22 @@ func (response ConfirmRecipientVerification500ApplicationProblemPlusJSONResponse
 	return err
 }
 
+type ConfirmRecipientVerification503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmRecipientVerification503ApplicationProblemPlusJSONResponse) VisitConfirmRecipientVerificationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetHealthRequestObject struct {
 }
 
@@ -21701,6 +21834,22 @@ func (response GetInvitation500ApplicationProblemPlusJSONResponse) VisitGetInvit
 	return err
 }
 
+type GetInvitation503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetInvitation503ApplicationProblemPlusJSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RequestMyTransfersLinkRequestObject struct {
 	Params RequestMyTransfersLinkParams
 	Body   *RequestMyTransfersLinkJSONRequestBody
@@ -21944,6 +22093,22 @@ func (response StartMyTransfersSession500ApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type StartMyTransfersSession503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response StartMyTransfersSession503ApplicationProblemPlusJSONResponse) VisitStartMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type EndMyTransfersSessionRequestObject struct {
 }
 
@@ -22031,6 +22196,22 @@ func (response EndMyTransfersSession500ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type EndMyTransfersSession503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response EndMyTransfersSession503ApplicationProblemPlusJSONResponse) VisitEndMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetCurrentMyTransfersSessionRequestObject struct {
 }
 
@@ -22096,6 +22277,22 @@ func (response GetCurrentMyTransfersSession500ApplicationProblemPlusJSONResponse
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentMyTransfersSession503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetCurrentMyTransfersSession503ApplicationProblemPlusJSONResponse) VisitGetCurrentMyTransfersSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22182,6 +22379,22 @@ func (response ListMyTransfers500ApplicationProblemPlusJSONResponse) VisitListMy
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMyTransfers503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ListMyTransfers503ApplicationProblemPlusJSONResponse) VisitListMyTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22306,6 +22519,22 @@ func (response DeleteMyTransfer500ApplicationProblemPlusJSONResponse) VisitDelet
 	return err
 }
 
+type DeleteMyTransfer503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMyTransfer503ApplicationProblemPlusJSONResponse) VisitDeleteMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMyTransferRequestObject struct {
 	TransferId TransferId `json:"transferId"`
 }
@@ -22388,6 +22617,22 @@ func (response GetMyTransfer500ApplicationProblemPlusJSONResponse) VisitGetMyTra
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransfer503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransfer503ApplicationProblemPlusJSONResponse) VisitGetMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -22521,6 +22766,22 @@ func (response ExtendMyTransfer500ApplicationProblemPlusJSONResponse) VisitExten
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ExtendMyTransfer503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ExtendMyTransfer503ApplicationProblemPlusJSONResponse) VisitExtendMyTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -23896,6 +24157,22 @@ func (response CancelTransfer500ApplicationProblemPlusJSONResponse) VisitCancelT
 	return err
 }
 
+type CancelTransfer503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response CancelTransfer503ApplicationProblemPlusJSONResponse) VisitCancelTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetTransferRequestObject struct {
 	TransferId TransferId `json:"transferId"`
 }
@@ -24016,6 +24293,22 @@ func (response GetTransfer500ApplicationProblemPlusJSONResponse) VisitGetTransfe
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTransfer503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetTransfer503ApplicationProblemPlusJSONResponse) VisitGetTransferResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -24258,6 +24551,14 @@ func (response GetTusCapabilities500ApplicationProblemPlusJSONResponse) VisitGet
 	return err
 }
 
+type GetTusCapabilities503Response struct {
+}
+
+func (response GetTusCapabilities503Response) VisitGetTusCapabilitiesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
+}
+
 type TerminateUploadRequestObject struct {
 	UploadId UploadId `json:"uploadId"`
 	Params   TerminateUploadParams
@@ -24347,6 +24648,14 @@ func (response TerminateUpload500ApplicationProblemPlusJSONResponse) VisitTermin
 	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type TerminateUpload503Response struct {
+}
+
+func (response TerminateUpload503Response) VisitTerminateUploadResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
 }
 
 type GetUploadOffsetRequestObject struct {
@@ -24450,6 +24759,14 @@ func (response GetUploadOffset500ApplicationProblemPlusJSONResponse) VisitGetUpl
 	w.WriteHeader(500)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetUploadOffset503Response struct {
+}
+
+func (response GetUploadOffset503Response) VisitGetUploadOffsetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(503)
+	return nil
 }
 
 type AppendUploadChunkRequestObject struct {
@@ -24749,6 +25066,22 @@ func (response ConfirmVerificationChallenge500ApplicationProblemPlusJSONResponse
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmVerificationChallenge503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ConfirmVerificationChallenge503ApplicationProblemPlusJSONResponse) VisitConfirmVerificationChallengeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }

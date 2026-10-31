@@ -327,7 +327,8 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 func (ev *env) newTenant(t *testing.T, fqdn string) tenant.ID {
 	t.Helper()
 	tn, err := ev.db.Tenants().Create(t.Context(), &tenant.Tenant{
-		Name: "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
+		SetupState: tenant.SetupStateActive,
+		Name:       "Entity " + fqdn, FQDN: fqdn, DefaultLanguage: "en",
 		MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
 	})
 	if err != nil {

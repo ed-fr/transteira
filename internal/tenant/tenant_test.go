@@ -19,6 +19,7 @@ func validTenant() Tenant {
 		MaxTransferCeiling: MaxTransferLimit,
 		StorageQuotaBytes:  1 << 40,
 		Status:             StatusActive,
+		SetupState:         SetupStateActive,
 		PrimaryColor:       DefaultPrimaryColor,
 		AccentColor:        DefaultAccentColor,
 		CreatedAt:          now,
@@ -57,6 +58,9 @@ func TestTenantValidate(t *testing.T) {
 		{"deleting", func(x *Tenant) { x.Status = StatusDeleting }, true},
 		{"empty status", func(x *Tenant) { x.Status = "" }, false},
 		{"unknown status", func(x *Tenant) { x.Status = "archived" }, false},
+		{"in setup", func(x *Tenant) { x.SetupState = SetupStateSetup }, true},
+		{"empty setup state", func(x *Tenant) { x.SetupState = "" }, false},
+		{"unknown setup state", func(x *Tenant) { x.SetupState = "suspended" }, false},
 		{"lower-case colors", func(x *Tenant) { x.PrimaryColor, x.AccentColor = "#abcdef", "#000000" }, true},
 		{"empty primary", func(x *Tenant) { x.PrimaryColor = "" }, false},
 		{"short accent", func(x *Tenant) { x.AccentColor = "#FFF" }, false},
@@ -163,6 +167,13 @@ func TestStatusValid(t *testing.T) {
 	}
 }
 
+func TestSetupStateValid(t *testing.T) {
+	t.Parallel()
+	if !SetupStateSetup.Valid() || !SetupStateActive.Valid() || SetupState("").Valid() || SetupState("Setup").Valid() {
+		t.Fatal("SetupState.Valid is wrong")
+	}
+}
+
 func TestWithDefaults(t *testing.T) {
 	t.Parallel()
 	bare := Tenant{Name: "A", FQDN: "a.example.com", DefaultLanguage: "en", MaxTransferBytes: 5, StorageQuotaBytes: 9}
@@ -171,6 +182,12 @@ func TestWithDefaults(t *testing.T) {
 		d.PrimaryColor != DefaultPrimaryColor || d.AccentColor != DefaultAccentColor {
 		t.Fatalf("WithDefaults() = %+v", d)
 	}
+	// The setup state has no default (T-261): the tenant does not validate
+	// until one is named.
+	if d.SetupState != "" || d.Validate() == nil {
+		t.Fatalf("WithDefaults() set a setup state: %+v", d)
+	}
+	d.SetupState = SetupStateSetup
 	if err := d.Validate(); err != nil {
 		t.Fatalf("defaults do not validate: %v", err)
 	}

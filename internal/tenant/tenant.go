@@ -37,6 +37,25 @@ const (
 // Valid reports whether s is a known status.
 func (s Status) Valid() bool { return s == StatusActive || s == StatusDeleting }
 
+// SetupState tells whether a tenant is still being configured (OpenAPI
+// TenantSetupState, since V1.2). It has no default: every creation names
+// it explicitly (threat model T-261), and the zero value "" is invalid.
+type SetupState string
+
+// Setup states. The only transition is from SetupStateSetup to
+// SetupStateActive, when the setup is completed.
+const (
+	// SetupStateSetup marks a tenant being configured: its public
+	// operations, but the tenant information, assets and legal texts,
+	// answer 503 tenant-in-setup.
+	SetupStateSetup SetupState = "setup"
+	// SetupStateActive marks a tenant open to deposits.
+	SetupStateActive SetupState = "active"
+)
+
+// Valid reports whether s is a known setup state ("" is not).
+func (s SetupState) Valid() bool { return s == SetupStateSetup || s == SetupStateActive }
+
 // Name length bounds, aligned with the OpenAPI Tenant schema.
 const (
 	minNameLen = 1
@@ -140,6 +159,21 @@ type Tenant struct {
 	// without invitation, after verifying their address by code (spec 10);
 	// off by default.
 	AllowTransferReply bool
+	// SetupState is the setup state of the tenant (V1.2). It is set at
+	// creation and only changes from SetupStateSetup to SetupStateActive,
+	// by the completion of the setup; the general update never writes it.
+	SetupState SetupState
+	// SMTPTestedAt stamps the SMTP configuration of the tenant that last
+	// passed a test send: it is the modification time of that
+	// configuration (store.SMTPConfig.UpdatedAt), zero when none passed.
+	// Every change of the SMTP settings gives them a new, strictly later
+	// modification time, so the stamp no longer matches: the "smtp" item
+	// of the setup checklist is done only while it equals the modification
+	// time of the current settings.
+	SMTPTestedAt time.Time
+	// MailTemplatesReviewedAt is the time an administrator marked the mail
+	// templates as reviewed while completing the setup, zero when never.
+	MailTemplatesReviewedAt time.Time
 	// AntivirusEnabled tells whether the files of the tenant are analyzed
 	// by the antivirus (on for every new tenant; only the super admin
 	// turns it off). The analysis really happens only when the instance
@@ -171,7 +205,8 @@ func (t *Tenant) Clone() *Tenant {
 
 // WithDefaults returns a copy of t with its unset settings filled in: the
 // MaxTransferBytes as MaxTransferCeiling, the active status and the default
-// colors. Set fields are kept as they are.
+// colors. Set fields are kept as they are. The setup state has no default
+// (T-261): it stays as given.
 func (t *Tenant) WithDefaults() *Tenant {
 	c := *t
 	if c.MaxTransferCeiling == 0 {
@@ -222,6 +257,9 @@ func (t *Tenant) Validate() error {
 	}
 	if !t.Status.Valid() {
 		return fmt.Errorf("%w: unknown status %q", ErrInvalidTenant, truncate(string(t.Status)))
+	}
+	if !t.SetupState.Valid() {
+		return fmt.Errorf("%w: unknown setup state %q", ErrInvalidTenant, truncate(string(t.SetupState)))
 	}
 	if !ValidColor(t.PrimaryColor) || !ValidColor(t.AccentColor) {
 		return fmt.Errorf("%w: colors must be #RRGGBB", ErrInvalidTenant)

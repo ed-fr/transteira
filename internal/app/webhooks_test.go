@@ -111,7 +111,8 @@ func TestRunWebhookDelivery(t *testing.T) {
 			t.Fatal(err)
 		}
 		b, err := db.Tenants().Create(ctx, &tenant.Tenant{
-			Name: "Entity B", FQDN: "transfer.entity-b.localhost", DefaultLanguage: "en",
+			SetupState: tenant.SetupStateActive,
+			Name:       "Entity B", FQDN: "transfer.entity-b.localhost", DefaultLanguage: "en",
 			MaxTransferBytes: 1 << 30, StorageQuotaBytes: 10 << 30,
 		})
 		if err != nil {

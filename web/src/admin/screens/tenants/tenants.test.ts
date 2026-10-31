@@ -120,6 +120,9 @@ describe('list', () => {
   it('maps the status to a badge', () => {
     expect(statusView('active')).toEqual({ variant: 'ok', key: 'adminTenants.status.active' });
     expect(statusView('deleting')).toEqual({ variant: 'warning', key: 'adminTenants.status.deleting' });
+    expect(statusView('active', 'setup')).toEqual({ variant: 'warning', key: 'adminTenants.status.setup' });
+    expect(statusView('active', 'active')).toEqual({ variant: 'ok', key: 'adminTenants.status.active' });
+    expect(statusView('deleting', 'setup').key).toBe('adminTenants.status.deleting');
   });
 
   it('names a language in the interface language', () => {
@@ -175,6 +178,7 @@ describe('form model', () => {
       storageQuotaBytes: 512 * GiB,
       maxTransferBytes: MAX_TRANSFER_BYTES,
       maxTransferCeiling: MAX_TRANSFER_BYTES,
+      setupState: 'setup',
     });
     // A disabled or absent delegated administrator adds nothing to the body.
     expect(createBody(form, emptyDelegatedForm())).toEqual(createBody(form));
