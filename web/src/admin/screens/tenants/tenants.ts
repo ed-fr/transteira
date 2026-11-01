@@ -6,6 +6,7 @@ import type { ErrorView } from '../../../shared/api/problem';
 import type { AdminMe } from '../../auth/machine';
 import type { FieldRef, SubmitOutcome, SummaryError } from '../../components/form';
 import { summaryFromFields } from '../../components/form';
+import { DEFAULT_PRESET, presetToSend } from '../../components/backgroundPresets';
 import { MAX_TRANSFER_BYTES } from '../../forms/bytes';
 import { parseDomain } from '../../forms/domain';
 import { buildPatch } from '../../forms/patch';
@@ -234,12 +235,20 @@ export function delegatedLanguage(delegated: DelegatedForm, defaultLanguage: Lan
   return delegated.language ?? defaultLanguage;
 }
 
-/** Body of a tenant creation; undefined while a size is missing (validation reports it). */
-export function createBody(form: TenantForm, delegated?: DelegatedForm): TenantCreateBody | undefined {
+/**
+ * Body of a tenant creation; undefined while a size is missing (validation reports it). The
+ * background preset is sent only when it is not the default.
+ */
+export function createBody(
+  form: TenantForm,
+  delegated?: DelegatedForm,
+  preset: string = DEFAULT_PRESET,
+): TenantCreateBody | undefined {
   if (form.storageQuotaBytes === null || form.maxTransferBytes === null || form.maxTransferCeiling === null) {
     return undefined;
   }
   const language = delegated === undefined ? undefined : delegatedLanguage(delegated, form.defaultLanguage);
+  const backgroundPreset = presetToSend(preset);
   return {
     name: form.name.trim(),
     fqdn: normalizeFqdn(form.fqdn),
@@ -249,6 +258,8 @@ export function createBody(form: TenantForm, delegated?: DelegatedForm): TenantC
     maxTransferCeiling: form.maxTransferCeiling,
     // A new tenant stays closed to deposits until its setup wizard is completed.
     setupState: 'setup',
+    // The default background is the absence of the member.
+    ...(backgroundPreset === null ? {} : { backgroundPreset }),
     ...(delegated?.enabled === true && language !== undefined
       ? {
           delegatedAdmin: {

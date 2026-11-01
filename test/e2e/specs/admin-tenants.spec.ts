@@ -115,12 +115,19 @@ test.describe('tenant configuration', () => {
 
       const fqdn = `t-${id}.localhost`;
       await page.getByRole('textbox', { name: /^Address \(FQDN\)/ }).fill(fqdn);
+      // The background image is chosen at creation among the library.
+      await page.getByRole('radio', { name: /Aurora/ }).check();
       await page.getByRole('button', { name: 'Create the entity' }).click();
       // A new tenant is created in the setup state: the setup wizard is shown, not the settings.
       await expectHeading(page, 'Setup');
       await expect(page).toHaveURL(/\/admin\/tenants\/[^/]+\/setup$/);
       const tenantId = /\/tenants\/([^/]+)\/setup$/.exec(page.url())![1]!;
       created = { id: tenantId, name, fqdn };
+      const branding = await superAdminApi().ok<{ backgroundPreset?: string | null }>(
+        'GET',
+        `/admin/tenants/${tenantId}/branding`,
+      );
+      expect(branding.backgroundPreset).toBe('aurora');
       await expect(page.getByRole('list', { name: 'Setup steps' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Finish setup' })).toBeDisabled();
       await expect(page.getByRole('button', { name: 'Force opening' })).toBeVisible();

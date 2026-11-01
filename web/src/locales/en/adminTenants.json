@@ -71,6 +71,11 @@
     "submit": "Create the entity",
     "created": "The entity {name} has been created.",
     "legend": "Entity details",
+    "background": {
+      "legend": "Background image",
+      "hint": "The image shown behind the public pages. You can change it later in Branding; an uploaded image takes precedence over this choice.",
+      "loadError": "The background images could not be loaded. The entity will be created with the default background; you can change it later in Branding."
+    },
     "delegated": {
       "legend": "First delegated administrator",
       "enable": "Create the delegated administrator now",

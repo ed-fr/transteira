@@ -9,13 +9,18 @@
   // Optionally the first delegated administrator is created in the same request (since API 1.2):
   // its activation link is mailed (default) or shown once to copy; the result is then shown
   // before going to the tenant. Without system SMTP (503) nothing is created and the form keeps
-  // its values, so that the copy delivery can be chosen.
+  // its values, so that the copy delivery can be chosen. The background image is chosen among the
+  // library (GET /admin/background-presets), after the size fields; it is sent only when it is
+  // not the default (backgroundPreset). If the library cannot be loaded, an informative alert is
+  // shown and the entity is created with the default background (changeable later in Branding).
   import { tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Checkbox, RadioGroup, TextField, announce } from '../../../shared/components';
+  import { Alert, Checkbox, RadioGroup, Spinner, TextField, announce } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi, adminSession } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
+  import BackgroundPresetPicker from '../../components/BackgroundPresetPicker.svelte';
+  import { DEFAULT_PRESET, type PresetItem } from '../../components/backgroundPresets';
   import ByteSizeField from '../../components/ByteSizeField.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -67,6 +72,9 @@
   let form = $state(emptyForm(initialLanguage));
   let errors = $state<SummaryError[]>([]);
   let delegated = $state(emptyDelegatedForm());
+  let presets = $state.raw<PresetItem[]>([]);
+  let presetsStatus = $state<'loading' | 'ready' | 'error'>('loading');
+  let backgroundChoice = $state(DEFAULT_PRESET);
   let created = $state(false);
   // Result shown instead of the form when an administrator was created with the tenant.
   let result = $state<{ tenant: TenantCreated; link: ActivationLink | undefined; email: string } | undefined>(
@@ -76,8 +84,26 @@
     Record<'storageQuotaBytes' | 'maxTransferCeiling' | 'maxTransferBytes', HTMLInputElement>
   > = $state({});
   const dirty = $derived(
-    !created && (form.name.trim() !== '' || form.fqdn.trim() !== '' || delegated.enabled),
+    !created &&
+      (form.name.trim() !== '' ||
+        form.fqdn.trim() !== '' ||
+        delegated.enabled ||
+        backgroundChoice !== DEFAULT_PRESET),
   );
+
+  $effect(() => {
+    void loadPresets();
+  });
+
+  async function loadPresets(): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/background-presets');
+      presets = res.data.items;
+      presetsStatus = 'ready';
+    } catch {
+      presetsStatus = 'error';
+    }
+  }
 
   const refs = $derived<TenantFieldRefs>({
     name: { id: ids.name, label: t('adminTenants.fields.name.label') },
@@ -136,7 +162,7 @@
   }
 
   async function submit(): Promise<SubmitOutcome> {
-    const body = createBody(form, delegated);
+    const body = createBody(form, delegated, backgroundChoice);
     if (body === undefined) {
       return { ok: false, errors: validate() };
     }
@@ -267,6 +293,18 @@
       bind:element={inputs.maxTransferBytes}
       bind:bytes={form.maxTransferBytes}
     />
+    {#if presetsStatus === 'loading'}
+      <p><Spinner label={t('admin.common.loading')} showLabel /></p>
+    {:else if presetsStatus === 'error'}
+      <Alert severity="info">{t('adminTenants.create.background.loadError')}</Alert>
+    {:else}
+      <BackgroundPresetPicker
+        items={presets}
+        legend={t('adminTenants.create.background.legend')}
+        hint={t('adminTenants.create.background.hint')}
+        bind:choice={backgroundChoice}
+      />
+    {/if}
     <fieldset class="tt-delegated">
       <legend>{t('adminTenants.create.delegated.legend')}</legend>
       <Checkbox

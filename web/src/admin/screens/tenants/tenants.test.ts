@@ -182,6 +182,13 @@ describe('form model', () => {
     });
     // A disabled or absent delegated administrator adds nothing to the body.
     expect(createBody(form, emptyDelegatedForm())).toEqual(createBody(form));
+    // The default preset adds nothing; another preset is sent.
+    expect(createBody(form, undefined, 'default')).toEqual(createBody(form));
+    expect(createBody(form)).not.toHaveProperty('backgroundPreset');
+    expect(createBody(form, undefined, 'aurora')).toEqual({
+      ...createBody(form),
+      backgroundPreset: 'aurora',
+    });
     expect(createBody(emptyForm())).toBeUndefined();
     expect(createBody({ ...form, maxTransferBytes: null })).toBeUndefined();
     expect(createBody({ ...form, maxTransferCeiling: null })).toBeUndefined();

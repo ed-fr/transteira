@@ -71,6 +71,11 @@
     "submit": "Créer l’entité",
     "created": "L’entité {name} a été créée.",
     "legend": "Informations de l’entité",
+    "background": {
+      "legend": "Image de fond",
+      "hint": "L’image affichée derrière les pages publiques. Vous pourrez la changer plus tard dans Habillage ; une image téléversée est prioritaire sur ce choix.",
+      "loadError": "Les images de fond n’ont pas pu être chargées. L’entité sera créée avec le fond par défaut ; vous pourrez le changer plus tard dans Habillage."
+    },
     "delegated": {
       "legend": "Premier administrateur délégué",
       "enable": "Créer dès maintenant l’administrateur délégué",
