@@ -177,7 +177,7 @@ var postgresDialect = &dialect{
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
 		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
 		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures',
-		        'system_settings', 'system_webhooks') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+		        'system_settings', 'system_webhooks', 'provisioning_tokens', 'system_state') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		  AND NOT (c.relrowsecurity AND c.relforcerowsecurity
 		        AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid))

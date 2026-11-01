@@ -136,7 +136,7 @@ func TestRLSRoleCannotBypass(t *testing.T) {
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
 		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
 		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures',
-		        'system_settings', 'system_webhooks') OR EXISTS (
+		        'system_settings', 'system_webhooks', 'provisioning_tokens', 'system_state') OR EXISTS (
 		        SELECT 1 FROM pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		ORDER BY c.relname`)
@@ -184,6 +184,8 @@ func TestRLSOwnerCannotDisablePolicies(t *testing.T) {
 		"recipient_links", "recipient_downloads", "confidentiality_levels", "recipient_domain_rules",
 		"tenant_abuse_settings", "abuse_alerts", "abuse_reports", "webhooks", "system_webhooks",
 		"access_link_requests", "sender_access_links", "sender_sessions",
+		// V1.2 (migrations 0023 and 0025).
+		"provisioning_tokens", "system_state",
 	} {
 		stmts := []string{
 			`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`,
