@@ -56,7 +56,8 @@ export interface paths {
          *     `antivirus_detections_total` (per tenant), `storage_used_bytes`, `storage_quota_bytes`,
          *     `active_transfers` (per tenant), `scan_queue_files`, `antivirus_up`, `antivirus_alert`,
          *     `disk_used_ratio`, `disk_used_bytes`, `disk_total_bytes`, `disk_alert`, `download_streams`,
-         *     `http_requests_total` (per status class), `webhook_deliveries_total` (per result),
+         *     `http_requests_total` (per status class), `tls_ask_total` (per result: allowed, unknown or
+         *     refused, since 1.2), `webhook_deliveries_total` (per result),
          *     `events_dropped_total` (per subscriber), `syslog_messages_total` (per result),
          *     `mail_queue_length`, `mail_dropped_total`, `lifecycle_last_success_timestamp_seconds` (per
          *     task). New names may be added; existing ones are never renamed within `1.x`.
@@ -123,18 +124,22 @@ export interface paths {
          *     unknown, malformed or missing domain, an admin host, or a tenant being deleted. Nothing
          *     else is disclosed (no tenant identifier nor name).
          *
-         *     Protection: the endpoint only exists when `TT_TLS_ASK_ALLOWED_IPS` (CIDR list) is set
-         *     (`404` for every request otherwise, as for an unknown path), and only for a client whose
+         *     Protection: the endpoint only answers when `TT_TLS_ASK_ALLOWED_IPS` (CIDR list) is set
+         *     (an empty `404` for every request otherwise), and only for a client whose
          *     **direct peer address** is inside it: the proxy calls it over the internal network, so
          *     `X-Forwarded-For` and `X-Real-IP` are never read here. Any request carrying a relay
-         *     header (`X-Forwarded-For`, `X-Real-IP` or `Forwarded`) also gets `404`: the `ask` call of
-         *     the proxy carries none, whereas a public request relayed by the same proxy always does and
-         *     would otherwise arrive from an allowed peer address. The reverse proxy configurations
+         *     header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`, `X-Forwarded-Host`,
+         *     `X-Forwarded-Proto` or `Via`), even empty, or using a method other than `GET` and `HEAD`,
+         *     also gets `404`: the `ask` call of the proxy carries none, whereas a public request
+         *     relayed by the same proxy always does and would otherwise arrive from an allowed peer
+         *     address. The reverse proxy configurations
          *     provided with TransTeira must also refuse `/tls/ask` on the public sites, as they do for
          *     `/metrics`. A client outside the list gets the same `404`, counted in the metrics but not
          *     written to the security log; unknown domains are not written either (certificate scanners
-         *     would flood it). `200` and `404` both have an empty body and the same headers. Requests are
-         *     rate limited (`429 rate-limited`).
+         *     would flood it). `200` and `404` both have an empty body and the same headers. The requests
+         *     of an allowed proxy are not charged to the global per-IP limit but to a limit of their own
+         *     per proxy address, generous enough for a flood of server names (`429 rate-limited`, without
+         *     any security log event, so that the proxy is never banned).
          */
         get: operations["askTls"];
         put?: never;

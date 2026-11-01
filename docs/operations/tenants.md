@@ -33,7 +33,10 @@ an unknown one would. Deletion is reserved to the super admin and answers
 
 Each tenant has one FQDN (`transfer.entity-a.example.com`). It must be
 unique and can never be one of the admin hosts (`TT_ADMIN_HOSTS`). Add the
-host to the reverse proxy (certificate) before creating the tenant. A
+host to the reverse proxy (certificate) before creating the tenant, or let
+Caddy obtain the certificate on demand (`Caddyfile.on-demand` and
+`TT_TLS_ASK_ALLOWED_IPS`, see
+[Reverse proxy](../install/reverse-proxy.md#adding-a-tenant)). A
 changed FQDN takes effect at once; the old one then answers 421.
 
 ## Branding
@@ -183,6 +186,11 @@ is irreversible:
 4. the tenant's directory (files, logo, background) is removed;
 5. the tenant and all its configuration are deleted, then the directory is
    removed once more in case a request still running recreated it.
+
+After the deletion, also remove the DNS record of the host name: with on-demand
+certificates, a stale record would still point the name at the proxy (TransTeira
+refuses to confirm it, so no new certificate is issued, but the name stays open
+to a takeover).
 
 The deletion goes on server side even if the browser disconnects. If it is
 interrupted, calling it again resumes it, and the cleanup task finishes it

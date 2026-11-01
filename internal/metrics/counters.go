@@ -10,16 +10,34 @@ import (
 // the order of the status hundreds 1 to 5.
 var httpClasses = [5]string{"1xx", "2xx", "3xx", "4xx", "5xx"}
 
+// TLS ask results, the label values of transteira_tls_ask_total.
+const (
+	// TLSAskAllowed is a /tls/ask answered 200 (FQDN of a tenant).
+	TLSAskAllowed = "allowed"
+	// TLSAskUnknown is a /tls/ask answered 404 for a domain that is not
+	// the FQDN of a tenant.
+	TLSAskUnknown = "unknown"
+	// TLSAskRefused is a /tls/ask refused before the domain is looked up:
+	// endpoint disabled, peer address not allowed, relay header or method.
+	TLSAskRefused = "refused"
+)
+
+// tlsAskResults are the label values of transteira_tls_ask_total, in
+// output order.
+var tlsAskResults = [3]string{TLSAskAllowed, TLSAskUnknown, TLSAskRefused}
+
 // Counters holds the in-memory counters of the process: usage per tenant,
-// HTTP responses per status class and download streams in progress. The
-// zero value is ready to use and every method is safe for concurrent use.
-// The cardinality is bounded by the number of tenants.
+// HTTP responses per status class, download streams in progress and
+// answers of /tls/ask. The zero value is ready to use and every method is
+// safe for concurrent use. The cardinality is bounded by the number of
+// tenants.
 type Counters struct {
 	mu      sync.Mutex
 	tenants map[string]Usage
 
 	http    [5]atomic.Uint64
 	streams atomic.Int64
+	tlsAsk  [3]atomic.Uint64
 }
 
 var _ Recorder = (*Counters)(nil)
@@ -70,11 +88,23 @@ func (c *Counters) StreamClosed() {
 	}
 }
 
+// TLSAsk counts one answer of /tls/ask with result TLSAskAllowed,
+// TLSAskUnknown or TLSAskRefused; any other value is ignored.
+func (c *Counters) TLSAsk(result string) {
+	for i, r := range tlsAskResults {
+		if r == result {
+			c.tlsAsk[i].Add(1)
+			return
+		}
+	}
+}
+
 // countersView is a copy of the counters at one instant.
 type countersView struct {
 	tenants map[string]Usage
 	http    [5]uint64
 	streams int64
+	tlsAsk  [3]uint64
 }
 
 // view returns a copy of the counters.
@@ -87,6 +117,9 @@ func (c *Counters) view() countersView {
 	}
 	for i := range c.http {
 		v.http[i] = c.http[i].Load()
+	}
+	for i := range c.tlsAsk {
+		v.tlsAsk[i] = c.tlsAsk[i].Load()
 	}
 	v.streams = max(c.streams.Load(), 0)
 	return v

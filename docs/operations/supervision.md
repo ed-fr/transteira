@@ -86,6 +86,7 @@ All names start with `transteira_`.
 | `http_requests_total` | counter | `class` (`1xx` to `5xx`) | HTTP responses by status class. |
 | `webhook_deliveries_total` | counter | `result` (`delivered`, `failed`, `dropped`, `skipped_open_circuit`) | Webhook delivery outcomes. |
 | `events_dropped_total` | counter | `subscriber` | Internal events lost because a subscriber (mail, webhook, syslog...) could not keep up. |
+| `tls_ask_total` | counter | `result` (`allowed`, `unknown`, `refused`) | Answers of the on-demand TLS endpoint `/tls/ask` (Caddy): `allowed` (200, known tenant), `unknown` (404: unknown host, admin host, tenant being deleted, or a missing, repeated, too long or malformed `domain`), `refused` (404: endpoint disabled, peer not in `TT_TLS_ASK_ALLOWED_IPS`, relay header, wrong method). |
 | `syslog_messages_total` | counter | `result` (`sent`, `failed`, `dropped`) | Syslog export outcomes. |
 | `mail_queue_length` | gauge | | Alert mails waiting to be sent. |
 | `mail_dropped_total` | counter | | Alert mails dropped. |

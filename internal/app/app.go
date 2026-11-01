@@ -282,6 +282,11 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			"list the reverse proxies by their exact IP address in "+config.EnvTrustedProxies,
 			slog.String("prefix", p.String()))
 	}
+	for _, p := range cfg.BroadTLSAskAllowedIPs() {
+		logger.WarnContext(ctx, "broad /tls/ask prefix: every host inside it may enumerate the tenants; "+
+			"list the reverse proxy by its exact IP address in "+config.EnvTLSAskAllowedIPs,
+			slog.String("prefix", p.String()))
+	}
 
 	// The master keys are read before the database is touched: a missing,
 	// unreadable or malformed key file refuses the start right away.
@@ -689,6 +694,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Streams:             counters,
 		Metrics:             supervision.Metrics,
 		Status:              supervision.Status,
+		TLSAskAllowedIPs:    cfg.TLSAskAllowedIPs,
+		TLSAsk:              counters,
 		Logger:              logger,
 	})
 	return serve(ctx, cfg, &o, handler, logger)

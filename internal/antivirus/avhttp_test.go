@@ -893,3 +893,28 @@ func TestHTTPScanInternalFailures(t *testing.T) {
 		}
 	})
 }
+
+// TestWriteBodyRawEndsWithContent checks that a raw body (no framing)
+// needs no Read beyond its exact length: the transport stops reading at
+// Content-Length, so an empty framing write on the pipe would block until
+// the pipe is closed after the response.
+func TestWriteBodyRawEndsWithContent(t *testing.T) {
+	t.Parallel()
+	content := []byte("exact content")
+	pr, pw := io.Pipe()
+	done := make(chan error, 1)
+	go func() { done <- writeBody(pw, bytes.NewReader(content), int64(len(content)), nil, nil) }()
+	got := make([]byte, len(content))
+	if _, err := io.ReadFull(pr, got); err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("read %q, %v", got, err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("writeBody = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		_ = pr.Close()
+		t.Fatal("writeBody still writing after the whole content was read")
+	}
+}

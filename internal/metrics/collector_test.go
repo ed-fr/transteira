@@ -224,6 +224,11 @@ transteira_http_requests_total{class="2xx"} 10
 transteira_http_requests_total{class="3xx"} 0
 transteira_http_requests_total{class="4xx"} 0
 transteira_http_requests_total{class="5xx"} 1
+# HELP transteira_tls_ask_total Answers of /tls/ask to the reverse proxy, per result.
+# TYPE transteira_tls_ask_total counter
+transteira_tls_ask_total{result="allowed"} 0
+transteira_tls_ask_total{result="refused"} 0
+transteira_tls_ask_total{result="unknown"} 0
 # HELP transteira_webhook_deliveries_total Webhook deliveries, per result.
 # TYPE transteira_webhook_deliveries_total counter
 transteira_webhook_deliveries_total{result="delivered"} 5
@@ -278,7 +283,7 @@ func TestRenderNilSources(t *testing.T) {
 	col := newTestCollector(Sources{}, nil)
 	col.collect(t.Context())
 	got := parseExposition(t, render(t, col))
-	want := map[string]bool{nameBuildInfo: true, nameUptime: true, nameDownloadStreams: true, nameHTTPRequests: true}
+	want := map[string]bool{nameBuildInfo: true, nameUptime: true, nameDownloadStreams: true, nameHTTPRequests: true, nameTLSAsk: true}
 	for name := range got {
 		if !want[name] {
 			t.Errorf("unexpected family %s without sources", name)

@@ -336,12 +336,19 @@ func (s *Server) instream(conn net.Conn, br *bufio.Reader) {
 	mode, limit := s.mode, s.sizeLimit
 	s.mu.Unlock()
 
+	// The scan is recorded before the final reply is written, so that a
+	// client that got its reply always finds it in Scans; a stream cut
+	// short is recorded on return.
 	var sc Scan
-	defer func() {
-		s.mu.Lock()
-		s.scans = append(s.scans, sc)
-		s.mu.Unlock()
-	}()
+	var once sync.Once
+	record := func() {
+		once.Do(func() {
+			s.mu.Lock()
+			s.scans = append(s.scans, sc)
+			s.mu.Unlock()
+		})
+	}
+	defer record()
 	overLimit := false
 	for {
 		if mode == ModeCloseMidStream && (len(sc.Chunks) > 0 || sc.Complete) {
@@ -370,6 +377,7 @@ func (s *Server) instream(conn net.Conn, br *bufio.Reader) {
 			reply(conn, ReplySizeLimit)
 		}
 	}
+	record()
 	switch {
 	case overLimit:
 		// Already answered.

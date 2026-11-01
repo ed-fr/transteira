@@ -180,6 +180,9 @@ type envConfig struct {
 	streams  StreamCounter
 	// metrics and status are Deps.Metrics and Deps.Status.
 	metrics, status http.Handler
+	// tlsAskAllowed and tlsAsk are Deps.TLSAskAllowedIPs and Deps.TLSAsk.
+	tlsAskAllowed []netip.Prefix
+	tlsAsk        TLSAskCounter
 }
 
 func newEnv(t *testing.T, c envConfig) *env {
@@ -217,6 +220,8 @@ func newEnv(t *testing.T, c envConfig) *env {
 		Metrics:             c.metrics,
 		Status:              c.status,
 		Streams:             c.streams,
+		TLSAskAllowedIPs:    c.tlsAskAllowed,
+		TLSAsk:              c.tlsAsk,
 		Spec:                []byte("openapi: 3.1.0\n"),
 		WebUI:               c.webUI,
 		Logger:              slog.New(slog.NewJSONHandler(e.appLog, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -1198,10 +1203,9 @@ func TestSupervisionRoutes(t *testing.T) {
 			}
 		}
 	}
-	// Without handlers, the paths fall to the 404 problem; so does
-	// TLSAskPath until it is implemented (since API 1.2).
+	// Without handlers, the paths fall to the 404 problem.
 	e = newEnv(t, envConfig{})
-	for _, path := range []string{MetricsPath, StatusPath, TLSAskPath + "?domain=" + hostA} {
+	for _, path := range []string{MetricsPath, StatusPath} {
 		if rec := e.do(t, http.MethodGet, path, hostUnknown, nil); rec.Code != http.StatusNotFound {
 			t.Errorf("%s without handler = %d", path, rec.Code)
 		}

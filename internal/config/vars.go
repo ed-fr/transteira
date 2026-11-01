@@ -21,6 +21,7 @@ const (
 	EnvMasterKeyNewFile         = "TT_MASTER_KEY_NEW_FILE"
 	EnvTrustedProxies           = "TT_TRUSTED_PROXIES"
 	EnvListenAddr               = "TT_LISTEN_ADDR"
+	EnvTLSAskAllowedIPs         = "TT_TLS_ASK_ALLOWED_IPS"
 	EnvLogLevel                 = "TT_LOG_LEVEL"
 	EnvMaintenance              = "TT_MAINTENANCE"
 	EnvAdminHosts               = "TT_ADMIN_HOSTS"
@@ -242,6 +243,16 @@ func Variables() []Var {
 				"must never sit inside a tenant's internal IP range. A request from a trusted " +
 				"proxy without a valid X-Forwarded-For / X-Real-IP is treated as coming from " +
 				"an unknown client (fail closed). Empty means no proxy is trusted.",
+		},
+		{
+			Name: EnvTLSAskAllowedIPs, Group: "Network",
+			Description: "Comma-separated list of IP addresses or CIDR prefixes of the reverse " +
+				"proxies allowed to call /tls/ask, the permission asked before obtaining an " +
+				"on-demand certificate (Caddy on_demand_tls): 200 for the FQDN of a tenant, 404 " +
+				"otherwise. Compared with the direct peer address, never with X-Forwarded-For; " +
+				"a request carrying a relay header is refused. Same limits as " +
+				EnvTrustedProxies + ": list the proxy by its exact address. Empty (default): " +
+				"the endpoint is disabled and answers 404.",
 		},
 		{
 			Name: EnvListenAddr, Group: "Network", Default: DefaultListenAddr,

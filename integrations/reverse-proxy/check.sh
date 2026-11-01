@@ -2,7 +2,8 @@
 # Validates the reverse proxy configurations of integrations/reverse-proxy with
 # the real proxies, in Docker (make proxy-configs-check):
 #
-#   - Caddy:   caddy validate and caddy fmt (formatting) on the Caddyfile;
+#   - Caddy:   caddy validate and caddy fmt (formatting) on the Caddyfile and on
+#              Caddyfile.on-demand, and the (transteira) snippet identical in both;
 #   - Nginx:   nginx -t on transteira.conf, with throwaway certificates;
 #   - Apache:  httpd -t on transteira.conf included in the stock httpd.conf,
 #              with throwaway certificates;
@@ -68,14 +69,23 @@ LIVE=$(hostpath "$TMP/live")
 
 # --- Caddy ------------------------------------------------------------------------
 echo "proxy-configs-check: Caddy"
-CADDYFILE=$(hostpath "$DIR/caddy/Caddyfile")
-"$docker" run --rm -v "$CADDYFILE:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
-	caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >"$TMP/caddy.log" 2>&1 ||
-	{ cat "$TMP/caddy.log" >&2; fail "caddy validate"; }
-grep -q '"level":"warn"' "$TMP/caddy.log" && { cat "$TMP/caddy.log" >&2; fail "caddy validate reported warnings"; }
-"$docker" run --rm -v "$CADDYFILE:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
-	caddy fmt --diff /etc/caddy/Caddyfile >"$TMP/caddyfmt.log" 2>&1 ||
-	{ cat "$TMP/caddyfmt.log" >&2; fail "Caddyfile is not formatted (caddy fmt --overwrite)"; }
+for name in Caddyfile Caddyfile.on-demand; do
+	CADDYFILE=$(hostpath "$DIR/caddy/$name")
+	"$docker" run --rm -v "$CADDYFILE:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
+		caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >"$TMP/caddy.log" 2>&1 ||
+		{ cat "$TMP/caddy.log" >&2; fail "caddy validate $name"; }
+	grep -q '"level":"warn"' "$TMP/caddy.log" && { cat "$TMP/caddy.log" >&2; fail "caddy validate $name reported warnings"; }
+	"$docker" run --rm -v "$CADDYFILE:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" \
+		caddy fmt --diff /etc/caddy/Caddyfile >"$TMP/caddyfmt.log" 2>&1 ||
+		{ cat "$TMP/caddyfmt.log" >&2; fail "$name is not formatted (caddy fmt --overwrite)"; }
+done
+# The (transteira) snippet must be identical in both files.
+snippet() { awk '/^\(transteira\) \{$/ { p = 1 } p { print } p && /^\}$/ { exit }' "$1" | tr -d '\r'; }
+snippet "$DIR/caddy/Caddyfile" >"$TMP/snippet.ref"
+snippet "$DIR/caddy/Caddyfile.on-demand" >"$TMP/snippet.od"
+[ -s "$TMP/snippet.ref" ] || fail "the (transteira) snippet was not found in caddy/Caddyfile"
+diff "$TMP/snippet.ref" "$TMP/snippet.od" >&2 ||
+	fail "the (transteira) snippet of caddy/Caddyfile.on-demand differs from caddy/Caddyfile (see diff above)"
 
 # --- Nginx ------------------------------------------------------------------------
 echo "proxy-configs-check: Nginx"

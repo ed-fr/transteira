@@ -643,6 +643,7 @@ func TestRunWarnsBroadTrustedProxies(t *testing.T) {
 		netip.MustParsePrefix("192.0.2.0/24"), netip.MustParsePrefix("198.51.0.0/16"),
 		netip.MustParsePrefix("2001:db8::/48"), netip.MustParsePrefix("2001:db8:1::/64"),
 	}
+	cfg.TLSAskAllowedIPs = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.30.0.10/32")}
 	s := start(t, cfg)
 	if code, _ := s.get(t, "/healthz", "x"); code == 0 {
 		t.Fatal("no answer")
@@ -653,6 +654,9 @@ func TestRunWarnsBroadTrustedProxies(t *testing.T) {
 	logs := s.logs.String()
 	if n := strings.Count(logs, "broad trusted proxy prefix"); n != 2 {
 		t.Errorf("%d broad prefix warnings, want 2: %s", n, logs)
+	}
+	if n := strings.Count(logs, "broad /tls/ask prefix"); n != 1 || !strings.Contains(logs, `"prefix":"10.0.0.0/8"`) {
+		t.Errorf("%d broad /tls/ask warnings, want 1 for 10.0.0.0/8: %s", n, logs)
 	}
 	for _, p := range []string{"198.51.0.0/16", "2001:db8::/48"} {
 		if !strings.Contains(logs, `"prefix":"`+p+`"`) {

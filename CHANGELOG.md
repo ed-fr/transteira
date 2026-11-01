@@ -57,6 +57,22 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The creation of a provisioning token notifies the super admins: system mail
   `provisioning_token_created` and instance webhook event `provisioning_token.created` (never the
   secret).
+- On-demand TLS for Caddy: `GET /tls/ask?domain=<fqdn>` answers `200` for the FQDN of a tenant (setup
+  or active) and `404` for anything else, so that Caddy obtains the certificate of a tenant created
+  through the provisioning API at its first handshake. Disabled until `TT_TLS_ASK_ALLOWED_IPS` (Caddy's
+  exact address, same validation as `TT_TRUSTED_PROXIES`) is set; only the direct TCP peer is
+  considered and any request carrying a relay header (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`,
+  `X-Forwarded-Host`, `X-Forwarded-Proto`, `Via`) is refused. Its own rate limit per proxy
+  (200/s, burst 400), outside the global per-IP limit. Counted by the Prometheus metric `transteira_tls_ask_total{result="allowed|unknown|refused"}`.
+  New `integrations/reverse-proxy/caddy/Caddyfile.on-demand` (checked by `make proxy-configs-check`,
+  with its `transteira` snippet kept identical to the reference one); the four reverse proxy
+  configurations now refuse `/tls/ask` with `404` on all public hosts. Documentation: Caddy and
+  provisioning guides, wildcard certificate alternative for Nginx, Traefik and Apache.
+
+### Fixed
+- HTTP antivirus engine with a raw body: a scan could fail at random as "answered before reading
+  the whole content" when the engine answered quickly, because an empty write after the content
+  waited on the request pipe. Empty framing is no longer written.
 
 ## [1.1.0] - 2026-10-31
 

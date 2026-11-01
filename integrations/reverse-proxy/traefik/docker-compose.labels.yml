@@ -22,7 +22,7 @@ services:
       - "traefik.http.middlewares.transteira-compress.compress.encodings=zstd,gzip"
       - "traefik.http.middlewares.transteira-compress.compress.includedcontenttypes=text/html,text/css,text/javascript,application/javascript,application/json,application/problem+json,image/svg+xml"
 
-      - "traefik.http.routers.transteira.rule=Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)"
+      - "traefik.http.routers.transteira.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && !PathPrefix(`/tls/ask`)"
       - "traefik.http.routers.transteira.priority=10"
       - "traefik.http.routers.transteira.entrypoints=websecure"
       - "traefik.http.routers.transteira.tls.certresolver=letsencrypt"

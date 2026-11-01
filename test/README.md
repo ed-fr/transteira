@@ -124,7 +124,9 @@ one. Use `make e2e` to avoid it.
    are "not scanned"), tenant and system SMTP to Mailpit, and waits for `/healthz`.
 4. Writes `.run/caddy/Caddyfile` with that port and (re)creates the `caddy`
    service: `tls internal` for `admin.localhost`, `entity-a.localhost`,
-   `entity-b.localhost`, buffering off, long timeouts.
+   `entity-b.localhost`, buffering off, long timeouts, and a catch-all site with on-demand
+   certificates whose `ask` is the server's `/tls/ask` (`TT_TLS_ASK_ALLOWED_IPS` is the
+   trusted proxy list; `specs/tls-on-demand.spec.ts`).
 5. Seeds through the admin API (`support/seed.ts`): setup + TOTP, entities A and
    B (internal networks, domain `example.com`, SMTP to Mailpit), a delegated
    admin of A without TOTP, an API token of A. Everything is written to

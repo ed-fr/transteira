@@ -7,9 +7,11 @@
 
 http:
   routers:
-    # Everything that is not matched by a more specific router below.
+    # Everything that is not matched by a more specific router below, except
+    # /tls/ask (Caddy's on-demand TLS endpoint, never published: T-277), which
+    # gets Traefik's own 404 on every host.
     transteira:
-      rule: "Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)"
+      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && !PathPrefix(`/tls/ask`)"
       priority: 10
       entryPoints: [websecure]
       service: transteira
@@ -55,10 +57,12 @@ http:
 
     # Monitoring endpoints (/metrics, /status) are token protected but should
     # not be published on the tenant FQDNs (threat model T-191). To serve them
-    # on the admin host only, change the rule of the "transteira" router above to:
-    #   Host(`admin.transfer.example.com`) ||
-    #   ((Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`))
-    #    && !PathRegexp(`^/(metrics|status)/?$`))
+    # on the admin host only, change the rule of the "transteira" router above to
+    # (mind the parentheses: && binds tighter than ||):
+    #   (Host(`admin.transfer.example.com`) ||
+    #    ((Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`))
+    #     && !PathRegexp(`^/(metrics|status)/?$`)))
+    #   && !PathPrefix(`/tls/ask`)
     # Tenant hosts then get Traefik's own 404 for these two paths. See
     # README.md.
 

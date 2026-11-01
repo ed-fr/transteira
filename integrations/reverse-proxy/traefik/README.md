@@ -67,6 +67,18 @@ automatically.
 Routers and priorities: `transteira` (priority 10) catches everything; the
 three path routers (priority 100) take precedence for their paths.
 
+## Certificates for new tenants
+
+Traefik has no on-demand certificate mechanism (no equivalent of Caddy's `ask`
+endpoint) and requests one certificate per `Host()`. When tenants are created
+often, use a wildcard certificate: a `certResolver` with a `dnsChallenge` and, on
+the `transteira` router, `tls.domains` with `main: "*.transfer.example.com"`.
+`/tls/ask` is excluded from the rule of the `transteira` router (`&& !PathPrefix(`/tls/ask`)`,
+in the file and in the labels): Traefik answers its own `404` on every host (threat model
+T-277). Keep that clause when you add a host, and mind the parentheses: `&&` binds tighter
+than `||`. See
+[On-demand certificates](../README.md#on-demand-certificates-tlsask).
+
 ## Limits
 
 - The token routes are **absent** from the access log (no status code, no

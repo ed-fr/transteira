@@ -57,6 +57,9 @@ func renderMetrics(b *bytes.Buffer, s *snapshot, v countersView) {
 	for i, class := range httpClasses {
 		e.add(nameHTTPRequests, formatUint(v.http[i]), class)
 	}
+	for i, result := range tlsAskResults {
+		e.add(nameTLSAsk, formatUint(v.tlsAsk[i]), result)
+	}
 	if s.hasWebhook {
 		e.add(nameWebhookDeliveries, formatUint(s.webhook.delivered), "delivered")
 		e.add(nameWebhookDeliveries, formatUint(s.webhook.failed), "failed")

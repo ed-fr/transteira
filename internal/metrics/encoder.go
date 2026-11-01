@@ -56,6 +56,7 @@ const (
 	nameDiskAlert            = "transteira_disk_alert"
 	nameDownloadStreams      = "transteira_download_streams"
 	nameHTTPRequests         = "transteira_http_requests_total"
+	nameTLSAsk               = "transteira_tls_ask_total"
 	nameWebhookDeliveries    = "transteira_webhook_deliveries_total"
 	nameEventsDropped        = "transteira_events_dropped_total"
 	nameSyslogMessages       = "transteira_syslog_messages_total"
@@ -98,6 +99,7 @@ var catalog = []Desc{
 	{nameDiskAlert, Gauge, "Whether the disk space alert is raised (1) or not (0).", nil},
 	{nameDownloadStreams, Gauge, "Download streams in progress.", nil},
 	{nameHTTPRequests, Counter, "HTTP requests, per status class.", []string{labelClass}},
+	{nameTLSAsk, Counter, "Answers of /tls/ask to the reverse proxy, per result.", []string{labelResult}},
 	{nameWebhookDeliveries, Counter, "Webhook deliveries, per result.", []string{labelResult}},
 	{nameEventsDropped, Counter, "Internal events dropped because a subscriber queue was full, per subscriber.", []string{labelSubscriber}},
 	{nameSyslogMessages, Counter, "Syslog messages, per result.", []string{labelResult}},

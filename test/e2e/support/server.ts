@@ -153,6 +153,8 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
     TT_ADMIN_HOSTS: HOSTS.admin,
     TT_LISTEN_ADDR: `${host}:${port}`,
     TT_TRUSTED_PROXIES: trustedProxies(),
+    // Caddy calls /tls/ask from the same address it proxies from.
+    TT_TLS_ASK_ALLOWED_IPS: trustedProxies(),
     TT_CLAMAV_ADDR: opts.clamavAddr,
     TT_CLAMAV_MAX_SCAN_BYTES: String(CLAMAV_MAX_SCAN_BYTES),
     // Tenant SMTP servers point at Mailpit on loopback, denied by default (SSRF protection).

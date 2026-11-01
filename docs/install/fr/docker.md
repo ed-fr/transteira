@@ -124,6 +124,13 @@ Les fichiers compose de proxy fournis donnent au proxy l’adresse fixe
 d’autres services, ajoutez le bloc de site TransTeira à sa configuration et assurez-vous
 qu’il a une adresse fixe sur le réseau `proxy`.
 
+Pour un prestataire qui crée les entités par l’API de provisionnement, la variante
+`Caddyfile.on-demand` obtient le certificat d’un nouveau nom au premier échange TLS, après avoir
+interrogé TransTeira (`/tls/ask`, activé par `TT_TLS_ASK_ALLOWED_IPS`, à régler sur l’adresse de
+Caddy) : aucune modification du proxy à chaque entité. Nginx, Traefik et Apache n’ont pas
+d’équivalent : utilisez un certificat wildcard (challenge DNS-01). Voir
+[Certificats à la demande](../../../integrations/reverse-proxy/README.md#on-demand-certificates-tlsask).
+
 Les certificats ne peuvent être émis qu’une fois que les enregistrements DNS se résolvent ; tant que
 TransTeira ne tourne pas, le proxy répond `502` pour ses noms.
 

@@ -55,6 +55,17 @@ func TestCountersHTTPAndStreams(t *testing.T) {
 	}
 }
 
+func TestCountersTLSAsk(t *testing.T) {
+	t.Parallel()
+	c := NewCounters()
+	for _, r := range []string{TLSAskAllowed, TLSAskUnknown, TLSAskUnknown, TLSAskRefused, TLSAskRefused, TLSAskRefused, "", "other"} {
+		c.TLSAsk(r)
+	}
+	if got, want := c.view().tlsAsk, [3]uint64{1, 2, 3}; got != want {
+		t.Fatalf("tlsAsk = %v, want %v", got, want)
+	}
+}
+
 func TestCountersConcurrent(t *testing.T) {
 	t.Parallel()
 	c := NewCounters()

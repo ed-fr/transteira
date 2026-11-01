@@ -86,6 +86,7 @@ func TestLoadDefaults(t *testing.T) {
 		{"DeleteAfterDownloadGrace", c.DeleteAfterDownloadGrace, 15 * time.Minute},
 		{"ClamAV", c.ClamAV, ClamAVAddr{Network: "tcp", Address: DefaultClamAVAddr}},
 		{"BroadTrustedProxies", len(c.BroadTrustedProxies()), 0},
+		{"BroadTLSAskAllowedIPs", len(c.BroadTLSAskAllowedIPs()), 0},
 		{"SMTPTimeout", c.SMTPTimeout, 30 * time.Second},
 		{"MailQueueSize", c.MailQueueSize, 1000},
 		{
@@ -211,10 +212,11 @@ func TestLoadValid(t *testing.T) {
 		{
 			name: "network settings",
 			vars: map[string]string{
-				EnvTrustedProxies: "172.18.0.2, 10.0.0.0/8,,2001:db8:1234::/48, ::ffff:192.0.2.1",
-				EnvListenAddr:     "127.0.0.1:9000",
-				EnvAdminHosts:     "Admin.Example.com., transfer.entity-a.example.com,admin.example.com",
-				EnvClamAVAddr:     "unix:/run/clamav/clamd.sock",
+				EnvTrustedProxies:   "172.18.0.2, 10.0.0.0/8,,2001:db8:1234::/48, ::ffff:192.0.2.1",
+				EnvTLSAskAllowedIPs: "172.30.0.10, 2001:db8::10",
+				EnvListenAddr:       "127.0.0.1:9000",
+				EnvAdminHosts:       "Admin.Example.com., transfer.entity-a.example.com,admin.example.com",
+				EnvClamAVAddr:       "unix:/run/clamav/clamd.sock",
 			},
 			check: func(t *testing.T, c *Config) {
 				t.Helper()
@@ -224,6 +226,13 @@ func TestLoadValid(t *testing.T) {
 				}
 				if !slices.Equal(c.TrustedProxies, want) {
 					t.Errorf("TrustedProxies = %v, want %v", c.TrustedProxies, want)
+				}
+				wantAsk := []netip.Prefix{netip.MustParsePrefix("172.30.0.10/32"), netip.MustParsePrefix("2001:db8::10/128")}
+				if !slices.Equal(c.TLSAskAllowedIPs, wantAsk) {
+					t.Errorf("TLSAskAllowedIPs = %v, want %v", c.TLSAskAllowedIPs, wantAsk)
+				}
+				if broad := c.BroadTLSAskAllowedIPs(); len(broad) != 0 {
+					t.Errorf("BroadTLSAskAllowedIPs = %v", broad)
 				}
 				if c.ListenAddr != "127.0.0.1:9000" {
 					t.Errorf("ListenAddr = %q", c.ListenAddr)
@@ -542,6 +551,8 @@ func TestLoadInvalid(t *testing.T) {
 		{"proxy host bits", map[string]string{EnvTrustedProxies: "10.0.0.1/8"}, []string{EnvTrustedProxies}},
 		{"proxy zone", map[string]string{EnvTrustedProxies: "fe80::1%eth0"}, []string{EnvTrustedProxies}},
 		{"proxy bad prefix", map[string]string{EnvTrustedProxies: "10.0.0.0/33"}, []string{EnvTrustedProxies}},
+		{"tls ask bad prefix", map[string]string{EnvTLSAskAllowedIPs: "172.30.0.10,caddy"}, []string{EnvTLSAskAllowedIPs}},
+		{"tls ask too broad", map[string]string{EnvTLSAskAllowedIPs: "0.0.0.0/1,128.0.0.0/1"}, []string{EnvTLSAskAllowedIPs}},
 		{"listen no port", map[string]string{EnvListenAddr: "localhost"}, []string{EnvListenAddr}},
 		{"listen port 0", map[string]string{EnvListenAddr: ":0"}, []string{EnvListenAddr}},
 		{"listen port text", map[string]string{EnvListenAddr: ":http"}, []string{EnvListenAddr}},
@@ -948,5 +959,14 @@ func TestBoolVarDefault(t *testing.T) {
 				t.Errorf("problems = %v, want problem: %v", l.problems, tc.bad)
 			}
 		})
+	}
+}
+
+func TestBroadTLSAskAllowedIPs(t *testing.T) {
+	t.Parallel()
+	c := mustLoad(t, map[string]string{EnvTLSAskAllowedIPs: "10.0.0.0/8, 172.30.0.10, 2001:db8::/48"})
+	want := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("2001:db8::/48")}
+	if got := c.BroadTLSAskAllowedIPs(); !slices.Equal(got, want) {
+		t.Fatalf("BroadTLSAskAllowedIPs() = %v, want %v", got, want)
 	}
 }

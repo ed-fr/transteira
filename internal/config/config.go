@@ -182,6 +182,10 @@ type Config struct {
 	// through X-Forwarded-For / X-Real-IP. Empty means none. Load refuses a
 	// list that is too broad (see [ValidateTrustedProxies]).
 	TrustedProxies []netip.Prefix
+	// TLSAskAllowedIPs lists the reverse proxies allowed to call /tls/ask,
+	// compared with the direct peer address. Empty disables the endpoint.
+	// Load refuses a list that is too broad, as for TrustedProxies.
+	TLSAskAllowedIPs []netip.Prefix
 	// ListenAddr is the host:port the HTTP server listens on.
 	ListenAddr string
 	// AdminHosts lists the dedicated hosts serving the administration
@@ -689,6 +693,11 @@ func (l *loader) loadNetwork(c *Config) {
 		l.fail(EnvTrustedProxies, "%v", err)
 	} else if err := ValidateTrustedProxies(c.TrustedProxies); err != nil {
 		l.failErr(EnvTrustedProxies, err)
+	}
+	if c.TLSAskAllowedIPs, err = parsePrefixes(l.get(EnvTLSAskAllowedIPs)); err != nil {
+		l.fail(EnvTLSAskAllowedIPs, "%v", err)
+	} else if err := ValidateTrustedProxies(c.TLSAskAllowedIPs); err != nil {
+		l.failErr(EnvTLSAskAllowedIPs, err)
 	}
 	c.ListenAddr = l.getOr(EnvListenAddr, DefaultListenAddr)
 	if err := validateHostPort(c.ListenAddr, false); err != nil {

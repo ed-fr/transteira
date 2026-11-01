@@ -18,7 +18,8 @@ else) and `*.transfer.example.com` for the entities.
 - [3. Create an entity](#3-create-an-entity)
 - [4. List and follow your entities](#4-list-and-follow-your-entities)
 - [5. Errors](#5-errors)
-- [6. What happens next, and who is responsible for what](#6-what-happens-next-and-who-is-responsible-for-what)
+- [6. Certificates for the new tenants](#6-certificates-for-the-new-tenants)
+- [7. What happens next, and who is responsible for what](#7-what-happens-next-and-who-is-responsible-for-what)
 
 ## 1. What a provisioning token is
 
@@ -74,7 +75,7 @@ Give the secret to the MSP through a secure channel, never by plain e-mail or ch
 
 `POST /api/v1/provisioning/tenants` creates an entity and its first delegated admin in one
 transaction. The entity is created in the **setup** state (see
-[below](#6-what-happens-next-and-who-is-responsible-for-what)).
+[below](#7-what-happens-next-and-who-is-responsible-for-what)).
 
 | Field | Required | Remarks |
 |---|---|---|
@@ -211,7 +212,18 @@ tokens from it are answered `429` (and logged) for a while, a valid token still 
 accepted; the failures are also counted by the fail2ban and CrowdSec rules of the instance,
 which may block the address.
 
-## 6. What happens next, and who is responsible for what
+## 6. Certificates for the new tenants
+
+A new entity answers only once its host name has a certificate at the reverse proxy. With Caddy,
+use the [`Caddyfile.on-demand`](../../integrations/reverse-proxy/caddy/README.md#on-demand-certificates)
+variant: point the DNS of the entities (a wildcard record under your suffix, or one record per
+entity) at the proxy, set `TT_TLS_ASK_ALLOWED_IPS` on TransTeira to Caddy's address, and Caddy
+obtains the certificate at the first handshake after the entity is created, because TransTeira
+confirms that the name is a tenant (`GET /tls/ask`). The endpoint is never reachable from outside.
+Mind the ACME rate limits of Let's Encrypt (prefer a wildcard certificate when you can). With
+Nginx, Traefik or Apache, use a wildcard certificate (DNS-01 challenge) or add each FQDN by hand.
+
+## 7. What happens next, and who is responsible for what
 
 **The entity starts in setup.** It does not accept deposits yet. TransTeira mails a single-use
 activation link to the delegated admin through the system SMTP server. The link is **never

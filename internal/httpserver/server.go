@@ -19,11 +19,12 @@
 //  5. security headers;
 //  6. rate limit per client IP: the asset limit for the build files of
 //     the web interface (GET and HEAD under /assets/, any Host), the
-//     global limit for every other request;
+//     global limit for every other request but /tls/ask, which has its
+//     own limit per allowed proxy (TLSAskRate);
 //  7. routes outside any tenant: exactly /healthz, /api/openapi.yaml,
-//     /metrics, /status and /tls/ask (the last one, since API 1.2,
-//     answers a 404 Problem until it is implemented, as when
-//     TT_TLS_ASK_ALLOWED_IPS is unset);
+//     /metrics, /status and /tls/ask (the last one since API 1.2: an
+//     empty 200 or 404 for the reverse proxy, 404 to every request while
+//     TT_TLS_ASK_ALLOWED_IPS is unset, see tlsAskHandler);
 //  8. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
 //     tenant resolution: it serves /api/v1/admin/*, /api/v1/version and,
@@ -114,6 +115,15 @@ const (
 	// UnknownHostInterval is the interval at which one client IP regains a
 	// token for requests carrying an unknown Host (5 per minute).
 	UnknownHostInterval = 12 * time.Second
+	// TLSAskRate is the sustained number of /tls/ask lookups per second
+	// allowed for one reverse proxy (direct peer in TT_TLS_ASK_ALLOWED_IPS).
+	// /tls/ask is not charged to the global limiter: it has this limit of
+	// its own, applied after the peer check, so that the proxy's asks never
+	// share a bucket with other requests (T-279). Each lookup of an
+	// unknown name may cost a database query.
+	TLSAskRate rate.Limit = 200
+	// TLSAskBurst is the burst allowed for one reverse proxy on /tls/ask.
+	TLSAskBurst = 400
 	// UnknownHostBurst is the number of unknown-host requests one client IP
 	// may make at once before being throttled.
 	UnknownHostBurst = 10
@@ -436,6 +446,13 @@ type Deps struct {
 	// outside any tenant like /healthz. Nil leaves the path to the 404
 	// fallback.
 	Metrics, Status http.Handler
+	// TLSAskAllowedIPs lists the reverse proxies allowed to call
+	// TLSAskPath (config.Config.TLSAskAllowedIPs), compared with the direct
+	// peer address. Empty, the endpoint answers 404 to every request.
+	TLSAskAllowedIPs []netip.Prefix
+	// TLSAsk counts the answers of TLSAskPath (*metrics.Counters); nil
+	// disables the counting.
+	TLSAsk TLSAskCounter
 	// Logger is the application logger; nil discards.
 	Logger *slog.Logger
 }
@@ -447,8 +464,10 @@ type options struct {
 	globalLimiter      middleware.Limiter
 	assetLimiter       middleware.Limiter
 	unknownHostLimiter middleware.Limiter
-	adminAuthLimiter   middleware.Limiter
-	tokenFailures      TokenFailures
+	// tlsAskLimiter bounds the /tls/ask lookups per allowed peer.
+	tlsAskLimiter    middleware.Limiter
+	adminAuthLimiter middleware.Limiter
+	tokenFailures    TokenFailures
 	// provisioningFailures counts the invalid provisioning tokens per IP.
 	provisioningFailures TokenFailures
 	// defaultDeadline is the read and write deadline set on every request
@@ -460,6 +479,12 @@ type options struct {
 // (RequestDeadline), for tests.
 func withDefaultDeadline(d time.Duration) Option {
 	return func(o *options) { o.defaultDeadline = d }
+}
+
+// withTLSAskLimiter replaces the /tls/ask limiter (TLSAskRate and
+// TLSAskBurst), for tests.
+func withTLSAskLimiter(l middleware.Limiter) Option {
+	return func(o *options) { o.tlsAskLimiter = l }
 }
 
 // WithGlobalLimiter replaces the global per-IP limiter (GlobalRate and
@@ -511,6 +536,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		globalLimiter:        ratelimit.New(GlobalRate, GlobalBurst),
 		assetLimiter:         ratelimit.New(AssetRate, AssetBurst),
 		unknownHostLimiter:   ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
+		tlsAskLimiter:        ratelimit.New(TLSAskRate, TLSAskBurst),
 		adminAuthLimiter:     ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
 		tokenFailures:        newTokenFailures(),
 		provisioningFailures: newTokenFailures(),
@@ -624,8 +650,10 @@ func New(deps Deps, opts ...Option) http.Handler {
 	if deps.Status != nil {
 		freeMux.Handle(StatusPath, deps.Status)
 	}
-	// TLSAskPath (since API 1.2) has no handler yet: it answers the 404
-	// Problem of the fallback, whatever the Host.
+	// TLSAskPath (since API 1.2) answers an empty 404 while
+	// TT_TLS_ASK_ALLOWED_IPS is unset (see tlsAskHandler).
+	adminHosts := newHostSet(deps.AdminHosts)
+	freeMux.Handle(TLSAskPath, newTLSAskHandler(deps.TLSAskAllowedIPs, o.tlsAskLimiter, deps.Resolver, adminHosts, deps.TLSAsk, logger))
 	tenantFree := withProblemFallback(freeMux)
 
 	// Tenant-scoped routes. The bare APIBaseURL would otherwise be
@@ -657,7 +685,6 @@ func New(deps Deps, opts ...Option) http.Handler {
 		rejectUncleanAPIPaths,
 	)
 
-	adminHosts := newHostSet(deps.AdminHosts)
 	provisioningTokens := newProvisioningAuth(deps.Provisioning, o.provisioningFailures, events, logger)
 	adminScoped := newAdminHandler(deps, ui, eh, events, o.adminAuthLimiter, provisioningTokens, logger)
 
@@ -693,7 +720,7 @@ func New(deps Deps, opts ...Option) http.Handler {
 		// the asset limiter for the build files of the web interface, the
 		// global limiter for everything else.
 		middleware.RateLimitIf(o.globalLimiter, events, ScopeGlobal, func(r *http.Request) bool {
-			return !isAssetRequest(r)
+			return !isAssetRequest(r) && r.URL.Path != TLSAskPath
 		}),
 		middleware.RateLimitIf(o.assetLimiter, events, ScopeAssets, isAssetRequest),
 	)

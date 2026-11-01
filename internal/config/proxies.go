@@ -64,8 +64,23 @@ func ValidateTrustedProxies(prefixes []netip.Prefix) error {
 // They are accepted, but the application warns about them at start-up
 // because every host inside them is trusted to report the client IP.
 func (c *Config) BroadTrustedProxies() []netip.Prefix {
+	return broadPrefixes(c.TrustedProxies)
+}
+
+// BroadTLSAskAllowedIPs returns the prefixes of TLSAskAllowedIPs wider
+// than [WarnTrustedPrefixBitsIPv4] (IPv4) or [WarnTrustedPrefixBitsIPv6]
+// (IPv6). They are accepted, but the application warns about them at
+// start-up because every host inside them may ask /tls/ask directly and
+// enumerate the tenants.
+func (c *Config) BroadTLSAskAllowedIPs() []netip.Prefix {
+	return broadPrefixes(c.TLSAskAllowedIPs)
+}
+
+// broadPrefixes returns the prefixes of list wider than the warning
+// limits of their family.
+func broadPrefixes(list []netip.Prefix) []netip.Prefix {
 	var broad []netip.Prefix
-	for _, p := range c.TrustedProxies {
+	for _, p := range list {
 		limit := WarnTrustedPrefixBitsIPv6
 		if p.Addr().Is4() {
 			limit = WarnTrustedPrefixBitsIPv4

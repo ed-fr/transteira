@@ -18,6 +18,9 @@ import { CADDY_DIR, COMPOSE_FILE, HOSTS, HTTPS_PORT, ORIGINS } from './env';
  * every test then has its own client IP, so the per-IP limits of the server (global rate limit,
  * verification codes per IP) do not couple parallel tests, and a test can simulate a client
  * outside the internal ranges. The header itself is never forwarded to the server.
+ *
+ * Any other server name gets a certificate on demand (internal CA), after the server's /tls/ask
+ * answered 200 for it, as with the on-demand variant of the reference configuration.
  */
 export function caddyfile(serverPort: number): string {
   const upstream = (realIp: string) => `reverse_proxy host.docker.internal:${serverPort} {
@@ -35,6 +38,9 @@ export function caddyfile(serverPort: number): string {
 	local_certs
 	auto_https disable_redirects
 	admin off
+	on_demand_tls {
+		ask http://host.docker.internal:${serverPort}/tls/ask
+	}
 }
 
 ${HOSTS.admin}, ${HOSTS.a}, ${HOSTS.b} {
@@ -46,6 +52,14 @@ ${HOSTS.admin}, ${HOSTS.a}, ${HOSTS.b} {
 	handle {
 		${upstream('{remote_host}')}
 	}
+}
+
+# Any other name: certificate on demand, if the server's /tls/ask says it is a tenant FQDN.
+https:// {
+	tls internal {
+		on_demand
+	}
+	${upstream('{remote_host}')}
 }
 `;
 }

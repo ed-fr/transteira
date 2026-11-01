@@ -457,7 +457,7 @@ func (c *HTTPClient) framing() (head, tail []byte, contentType string) {
 // writeBody writes head, exactly size bytes of r and tail to w. A content
 // shorter or longer than size gives ErrSource.
 func writeBody(w io.Writer, r io.Reader, size int64, head, tail []byte) error {
-	if _, err := w.Write(head); err != nil {
+	if err := writeFraming(w, head); err != nil {
 		return err
 	}
 	src := &sourceReader{r: r}
@@ -478,7 +478,19 @@ func writeBody(w io.Writer, r io.Reader, size int64, head, tail []byte) error {
 	case !errors.Is(err, io.EOF):
 		return fmt.Errorf("%w: %w", ErrSource, err)
 	}
-	_, err := w.Write(tail)
+	return writeFraming(w, tail)
+}
+
+// writeFraming writes the multipart framing b, and nothing when it is
+// empty (raw body): a zero-length Write on an io.Pipe still waits for a
+// Read, which the transport never makes once it has read Content-Length
+// bytes, so the write would only end when the pipe is closed after the
+// response, and the scan would wrongly fail as answered early.
+func writeFraming(w io.Writer, b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
+	_, err := w.Write(b)
 	return err
 }
 

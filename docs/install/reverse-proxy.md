@@ -137,6 +137,12 @@ When you create a tenant in the administration, also:
 
 Until then, the proxy refuses the new name and the tenant is unreachable.
 
+With Caddy, a provider that creates tenants through the provisioning API can skip steps 2 and 3:
+the `Caddyfile.on-demand` variant obtains the certificate at the first handshake, after asking
+TransTeira (`/tls/ask`, enabled by `TT_TLS_ASK_ALLOWED_IPS`, set to Caddy's address). Nginx,
+Traefik and Apache have no equivalent: use a wildcard certificate (DNS-01 challenge). See
+[On-demand certificates](../../integrations/reverse-proxy/README.md#on-demand-certificates-tlsask).
+
 ## Restricting the admin host
 
 The administration is served only on `TT_ADMIN_HOSTS`. You can restrict that

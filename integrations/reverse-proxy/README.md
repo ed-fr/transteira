@@ -7,7 +7,7 @@ terminates TLS for every tenant FQDN and for the admin host, then forwards to
 
 | Proxy | Folder | Certificates | Notes |
 |---|---|---|---|
-| **Caddy** (reference) | [`caddy/`](caddy/) | Automatic (ACME), one per FQDN | Shortest configuration, used by the deployment smoke test and the 20 GB test. Token redaction in the access log by a log filter. |
+| **Caddy** (reference) | [`caddy/`](caddy/) | Automatic (ACME), one per FQDN | Shortest configuration, used by the deployment smoke test and the 20 GB test. Token redaction in the access log by a log filter. `Caddyfile.on-demand` obtains certificates for new tenants on demand (see [On-demand certificates](#on-demand-certificates-tlsask)). |
 | Nginx | [`nginx/`](nginx/) | certbot (webroot), one certificate for all FQDNs | Needs nginx 1.27.3 or later. Token redaction by a `map` in the log format. |
 | Traefik | [`traefik/`](traefik/) | Automatic (ACME), one per `Host()` | File provider or container labels. `respondingTimeouts` must be changed (60 s by default). Token routes are left out of the access log. |
 | Apache httpd | [`apache/`](apache/) | certbot (webroot), one certificate for all FQDNs | Needs 2.4.54 or later; `LimitRequestBody 0` is mandatory (1 GiB by default). Token redaction with a second log format. |
@@ -153,6 +153,31 @@ on every host name except the admin host, which stays the host that Prometheus o
 
 When you add a tenant, add its FQDN to the tenant block or list, never to the admin one. To
 restrict the admin host further, set `TT_METRICS_ALLOWED_IPS` on TransTeira.
+
+## On-demand certificates (`/tls/ask`)
+
+A provider that creates tenants through the [provisioning API](../../docs/api/provisioning.md)
+does not want to edit the proxy for each one. **Caddy only** can do without: with
+`on_demand_tls`, it asks TransTeira (`GET /tls/ask?domain=<fqdn>`) at the first TLS handshake of a
+host name, and obtains the certificate only if the answer is `200` (the name is the FQDN of a
+tenant being set up or active). Use [`caddy/Caddyfile.on-demand`](caddy/Caddyfile.on-demand),
+and set `TT_TLS_ASK_ALLOWED_IPS` to Caddy's address (the same as `TT_TRUSTED_PROXIES`); without
+it the endpoint answers `404` for everything. See [`caddy/README.md`](caddy/README.md#on-demand-certificates).
+
+Nginx, Traefik and Apache have no equivalent of an ask endpoint. For them:
+
+- a **wildcard certificate** with the DNS-01 challenge, when the tenants live under one suffix
+  (`*.transfer.example.com`): a Traefik `certResolver` with a `dnsChallenge` and `domains`
+  (`main: "*.transfer.example.com"`), or a certbot DNS plugin for Nginx and Apache; the proxy
+  then serves any name of the suffix, and TransTeira answers `421` to the unknown ones;
+- or add each new FQDN to the configuration and to the certificate by hand, as described above.
+
+`/tls/ask` is for Caddy's direct call over the `proxy` network only. The four
+configurations of this folder refuse it with `404` on every public host name, the admin host
+included, like the monitoring paths (threat model T-277): in the Caddyfiles, a matcher in each
+site block; in Nginx a `location`; in Apache a `RewriteRule`; in Traefik, a `!PathPrefix` clause
+in the rule of the `transteira` router. Whatever the proxy, TransTeira refuses a relayed request
+anyway, since it carries a relay header (`X-Forwarded-For`, `Via`...).
 
 ## Validation
 

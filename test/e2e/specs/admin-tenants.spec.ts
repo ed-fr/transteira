@@ -4,8 +4,8 @@
 // Mailpit), email templates (syntax error located, preview, reset), legal texts (published on
 // the public pages) and the creation of a delegated admin with its single-use activation link.
 //
-// Every test works on its own throwaway tenant (FQDN t-<random>.localhost, never served by
-// Caddy), except the legal text test which needs a public host: it edits the English legal
+// Every test works on its own throwaway tenant (FQDN t-<random>.localhost, never visited
+// through Caddy), except the legal text test which needs a public host: it edits the English legal
 // notice of entity A with unique content and restores the previous text at the end.
 import type { Page } from '@playwright/test';
 import crypto from 'node:crypto';

@@ -92,6 +92,15 @@ Example of a logged download:
 192.0.2.10 - - [25/Oct/2026:09:21:05 +0000] "GET /api/v1/downloads/REDACTED/files/0b3c HTTP/2.0" 200 2071 "Mozilla/5.0 …" host=transfer.entity-a.example.com rt=0.002
 ```
 
+## Certificates for new tenants
+
+Nginx has no on-demand certificate mechanism (no equivalent of Caddy's `ask`
+endpoint). When tenants are created often, use a wildcard certificate obtained
+with a certbot DNS plugin (DNS-01 challenge) for the tenants' suffix, or add
+each FQDN to the certificate by hand.
+`/tls/ask` is refused with `404` on every host (threat model T-277). See
+[On-demand certificates](../README.md#on-demand-certificates-tlsask).
+
 ## Limits
 
 - **`error_log` is not redacted**: when TransTeira is unreachable or resets a
