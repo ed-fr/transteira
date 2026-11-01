@@ -1,0 +1,13 @@
+Bonjour,
+
+L'entité Entity A & Co (transfer.entity-a.example.com), créée par l'API de provisionnement, a terminé sa configuration et est désormais active.
+
+Date : 13 octobre 2027 à 09:45 UTC
+Terminée en forçant : certains éléments obligatoires n'ont pas été faits.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par TransTeira. Merci de ne pas y répondre.

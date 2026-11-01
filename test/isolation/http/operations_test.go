@@ -289,6 +289,17 @@ var isolationCases = map[string]isolationCase{
 	"updateSystemWebhook": systemWebhook,
 	"deleteSystemWebhook": systemWebhook,
 	"testSystemWebhook":   systemWebhook,
+	// Provisioning API (provisioning_test.go, since 1.2): the tokens are
+	// instance-wide and reserved to the super admin (403 for tenant A's
+	// delegated admin); the provisioning operations are served on the admin
+	// host only and never list nor read a tenant the token did not create
+	// (tenants A and B answer 404 like an unknown one).
+	"listProvisioningTokens":  provisioningTokenOperation,
+	"createProvisioningToken": provisioningTokenOperation,
+	"revokeProvisioningToken": provisioningTokenOperation,
+	"listProvisionedTenants":  provisionedTenantOperation,
+	"provisionTenant":         provisionedTenantOperation,
+	"getProvisionedTenant":    provisionedTenantOperation,
 }
 
 // TestEveryOperationIsIsolatedOrStub is the harness itself.
@@ -588,6 +599,9 @@ type harness struct {
 	sessMu sync.Mutex
 	sess   *adminSession
 	super  *adminSession
+	// provisioning is the secret of the provisioning token of the
+	// provisioning cases (created on first use, guarded by sessMu).
+	provisioning string
 }
 
 // masterKeyLabel names the master key of the server

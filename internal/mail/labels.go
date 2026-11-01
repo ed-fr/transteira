@@ -47,6 +47,10 @@ type labels struct {
 	myTransfersIntro      string // intro of the My transfers link in the sender confirmation
 	replyNotice           string // %s: date of the original transfer, entity name, sender address
 	noEntity              string // shown when an administrator account is assigned to no entity yet
+	setupChecked          string // setup completed with every required item done
+	setupForced           string // setup completed with required items undone
+	scopeCounts           string // %d: allowed IP ranges, %d: FQDN suffixes
+	noExpiry              string // a provisioning token that never expires
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -98,6 +102,10 @@ var allLabels = map[string]*labels{
 		operatorsNotMailed:    "Contact the operator of the instance if the situation persists.",
 		waitingSummary:        "Transfers waiting for analysis: %d; entities concerned: %d.",
 		noEntity:              "no entity yet",
+		setupChecked:          "Completed: every required item was done.",
+		setupForced:           "Completed by force: some required items were not done.",
+		scopeCounts:           "%d IP range(s), %d FQDN suffix(es)",
+		noExpiry:              "never",
 		waitingUnknown:        "The number of transfers waiting could not be determined.",
 		verificationNotice:    "Before downloading, you will be asked to confirm your e-mail address with a code sent to this address.",
 		downloadedBy:          "Downloaded by: ",
@@ -141,6 +149,10 @@ var allLabels = map[string]*labels{
 		operatorsNotMailed:    "Contactez l'exploitant de l'instance si la situation persiste.",
 		waitingSummary:        "Transferts en attente d'analyse : %d ; entités concernées : %d.", //nolint:misspell // French text
 		noEntity:              "aucune entité pour le moment",
+		setupChecked:          "Terminée : tous les éléments obligatoires ont été faits.",
+		setupForced:           "Terminée en forçant : certains éléments obligatoires n'ont pas été faits.",
+		scopeCounts:           "%d plage(s) IP, %d suffixe(s) de FQDN",
+		noExpiry:              "jamais",
 		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.", //nolint:misspell // French text
 		verificationNotice:    "Avant de télécharger, il vous sera demandé de confirmer votre adresse e-mail avec un code envoyé à cette adresse.",
 		downloadedBy:          "Téléchargé par : ",

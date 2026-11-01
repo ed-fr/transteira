@@ -345,6 +345,20 @@ func (f *faultRepo) createTenant(ctx context.Context, t *tenant.Tenant, then fun
 	return f.repo.createTenant(ctx, t, then)
 }
 
+func (f *faultRepo) createProvisionedTenant(ctx context.Context, tokID string, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error) {
+	if err := f.fail("createProvisionedTenant"); err != nil {
+		return nil, err
+	}
+	return f.repo.createProvisionedTenant(ctx, tokID, t, then)
+}
+
+func (f *faultRepo) provisioningToken(ctx context.Context, tokID string) (store.ProvisioningToken, error) {
+	if err := f.fail("provisioningToken"); err != nil {
+		return store.ProvisioningToken{}, err
+	}
+	return f.repo.provisioningToken(ctx, tokID)
+}
+
 func (f *faultRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
 	if err := f.fail("updateTenant"); err != nil {
 		return nil, err

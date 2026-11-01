@@ -1,20 +1,18 @@
 package httpserver
 
 import (
-	"context"
-	"errors"
 	"io"
 	"net/http"
-	"net/netip"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/ed-fr/transteira/api"
-	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/ratelimit"
 )
 
 // provisioningOperation is an operation of the spec protected by the
@@ -68,7 +66,8 @@ func provisioningOperations(t *testing.T) []provisioningOperation {
 // absence of credential, nor a tenant API token, nor an admin session.
 func TestProvisioningFailsClosed(t *testing.T) {
 	t.Parallel()
-	e, _ := newAdminEnv(t)
+	// Far more refusals than the lockout allows come from the same client.
+	e, _ := newAdminEnv(t, WithProvisioningFailures(ratelimit.NewWindow(ratelimit.MaxWindowLimit, time.Hour)))
 	credentials := []struct {
 		name string
 		hdr  []string
@@ -78,7 +77,8 @@ func TestProvisioningFailsClosed(t *testing.T) {
 		{"tenant api token", []string{"Authorization", "Bearer tt_EXAMPLE4fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5dF"}, problem.CodeProvisioningTokenInvalid},
 		{"provisioning-like token", []string{"Authorization", "Bearer ttp_EXAMPLE4fK2xQ8mL1zV4bN7cR0tY3wE6uI9oP2aS5"}, problem.CodeProvisioningTokenInvalid},
 		{"admin session", adminAuth(), problem.CodeUnauthenticated},
-		{"empty bearer", []string{"Authorization", "Bearer "}, problem.CodeUnauthenticated},
+		{"empty bearer", []string{"Authorization", "Bearer "}, problem.CodeProvisioningTokenInvalid},
+		{"other scheme", []string{"Authorization", "Basic dXNlcjpwYXNz"}, problem.CodeProvisioningTokenInvalid},
 	}
 	for _, op := range provisioningOperations(t) {
 		for _, c := range credentials {
@@ -99,41 +99,5 @@ func TestProvisioningFailsClosed(t *testing.T) {
 		// Never served on a tenant host, whatever the credential.
 		rec := e.do(t, op.method, op.path, hostA, nil, "Authorization", "Bearer ttp_x")
 		decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
-	}
-}
-
-// fakeProvisioning accepts the token "ttp_good" only.
-type fakeProvisioning struct{}
-
-type provisioningKey struct{}
-
-func (fakeProvisioning) AuthenticateProvisioning(ctx context.Context, raw string, client netip.Addr) (context.Context, error) {
-	if raw != "ttp_good" || !client.IsValid() {
-		return nil, errors.New("refused")
-	}
-	return context.WithValue(ctx, provisioningKey{}, raw), nil
-}
-
-// TestProvisioningAuthenticator checks that the authenticator plugs in: an
-// accepted token reaches the operation (the 404 of its stub), a refused
-// one gets 401 provisioning-token-invalid.
-func TestProvisioningAuthenticator(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t, envConfig{
-		adminSessions: fakeAdminSessions{},
-		adminAPI:      admin.NewServer(admin.WithService(&fakeAdminService{}), admin.WithTenants(fakeTenantList{})),
-		provisioning:  fakeProvisioning{},
-	})
-	target := APIBaseURL + "/provisioning/tenants"
-	rec := e.do(t, http.MethodGet, target, hostAdmin, nil, "Authorization", "bearer ttp_good")
-	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
-	rec = e.do(t, http.MethodGet, target, hostAdmin, nil, "Authorization", "Bearer ttp_bad")
-	decodeProblem(t, rec, http.StatusUnauthorized, problem.CodeProvisioningTokenInvalid)
-	rec = e.do(t, http.MethodGet, target, hostAdmin, nil, "Authorization", "Basic dXNlcjpwYXNz")
-	decodeProblem(t, rec, http.StatusUnauthorized, problem.CodeUnauthenticated)
-	// The admin operations are not affected by the provisioning check.
-	rec = e.do(t, http.MethodGet, APIBaseURL+"/admin/setup", hostAdmin, nil)
-	if rec.Code != http.StatusOK {
-		t.Errorf("admin setup status %d", rec.Code)
 	}
 }

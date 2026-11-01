@@ -23,23 +23,38 @@ import (
 // Abuse detection operations (since 1.1, CLAUDE.md sections 15 and 10): the
 // thresholds of a tenant and the abuse reports of its recipients.
 
-// thresholdsPath is the end of the path of the abuse thresholds, whose
-// update needs the raw body (see CaptureThresholdsBody).
-const thresholdsPath = "/abuse-thresholds"
+// apiBase is the base path of the API (OpenAPI servers), under which the
+// admin router mounts the generated routes.
+const apiBase = "/api/v1"
 
-// rawBodyKey is the context key of the raw body of an abuse thresholds
-// update.
+// rawBodyRoutes are the route patterns (method and full path, as set in
+// Request.Pattern by the generated router) of the operations whose handler
+// reads the raw body (see CaptureRawBody): the abuse thresholds update and,
+// since API 1.2, the creation of a provisioning token and of a tenant by a
+// provisioning token.
+var rawBodyRoutes = map[string]bool{
+	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/abuse-thresholds": true,
+	http.MethodPost + " " + apiBase + "/admin/provisioning-tokens":                true,
+	http.MethodPost + " " + apiBase + "/provisioning/tenants":                     true,
+}
+
+// rawBodyKey is the context key of the raw body of an operation that reads
+// it (see CaptureRawBody).
 type rawBodyKey struct{}
 
-// CaptureThresholdsBody is a middleware keeping the raw body of the abuse
-// thresholds update in the request context, and only that one: every
-// member of the body is required, and the generated type cannot tell a
-// member that is absent from one that is null. The body is read after the
-// body limit middleware, so it is bounded; it is handed back unchanged to
-// the generated decoder.
-func CaptureThresholdsBody(next http.Handler) http.Handler {
+// rawBodyWanted reports whether the handler of r reads its raw body: its
+// matched route pattern is exactly one of rawBodyRoutes.
+func rawBodyWanted(r *http.Request) bool { return rawBodyRoutes[r.Pattern] }
+
+// CaptureRawBody is a middleware keeping in the request context the raw
+// body of the operations whose handler reads it, and only those (see
+// rawBodyWanted): every member of the abuse thresholds body is required,
+// and the provisioning bodies refuse unknown members, which the generated
+// types cannot tell. The body is read after the body limit middleware, so
+// it is bounded; it is handed back unchanged to the generated decoder.
+func CaptureRawBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || !strings.HasSuffix(r.URL.Path, thresholdsPath) || r.Body == nil {
+		if r.Body == nil || !rawBodyWanted(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -106,9 +121,9 @@ func checkThresholdMembers(raw []byte) error {
 	return nil
 }
 
-// errNoThresholdsBody reports a server built without CaptureThresholdsBody:
+// errNoThresholdsBody reports a server built without CaptureRawBody:
 // a wiring error, answered 500.
-var errNoThresholdsBody = errors.New("admin: raw body of the abuse thresholds missing (CaptureThresholdsBody not installed)")
+var errNoThresholdsBody = errors.New("admin: raw body of the abuse thresholds missing (CaptureRawBody not installed)")
 
 // GetAbuseThresholds returns the abuse detection settings of a tenant.
 func (s *Server) GetAbuseThresholds(ctx context.Context, req gen.GetAbuseThresholdsRequestObject) (gen.GetAbuseThresholdsResponseObject, error) {

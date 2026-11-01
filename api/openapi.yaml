@@ -6806,7 +6806,8 @@ paths:
         as the login (`429 rate-limited`); the 5th wrong code of the session ends it. The role and
         the body are checked before the code, so that a refused request consumes no attempt.
         Reserved to the super admin. Audited as `provisioning_token.created` (never with the
-        secret).
+        secret); the super admins are notified by the system SMTP and the instance-wide webhooks
+        (event `provisioning_token.created`, never with the secret).
       security:
         - adminSession: []
           csrfToken: []
@@ -6933,15 +6934,20 @@ paths:
         the request is `503 system-smtp-unavailable` and nothing is created. The FQDN must end
         with one of the `allowedFqdnSuffixes` of the token, `storageQuotaBytes` must not exceed its
         `maxStorageQuotaBytes`, `maxTransferBytes` (default the token's cap, else 20 GiB) its
-        `maxTransferBytes`, and the token must not have reached `maxTenants` live tenants:
+        `maxTransferBytes`, and the token must not have reached `maxTenants` tenants (those being
+        deleted still count until their deletion completes):
         otherwise `403 provisioning-scope-exceeded`, with the refused field in `errors`. An FQDN or
         a username already used is `409 already-exists`, as for `createTenant`; an unknown
-        background preset `422 unknown-background-preset`. At most 30 creations per hour per
-        token (`429 rate-limited`). Served on the admin host only (`404` on a tenant FQDN). Only
-        the Bearer provisioning token authenticates it: session cookies are ignored and no CSRF
-        token is checked. Audited as `tenant.provisioned` (actor the token), `admin.created` and
-        `admin.invited`; the `tenant.provisioned` event also goes to the instance-wide webhooks
-        and, by the system SMTP, to the super admins.
+        background preset `422 unknown-background-preset`. At most 30 attempts per hour per
+        token, whatever their outcome (refused ones included), and at most 30 creations per hour
+        per token (`429 rate-limited` with `Retry-After`). A token revoked or expired since the
+        request was accepted is `401 provisioning-token-invalid` with the `invalid_token`
+        challenge. Served on the admin host only (`404` on a tenant FQDN). Only the Bearer
+        provisioning token authenticates it: session cookies are ignored and no CSRF token is
+        checked. Audited as `tenant.provisioned` (actor the token), `admin.created` and
+        `admin.invited`; a refused creation is audited as `tenant.provision_refused` (without
+        tenant, actor the token) with its reason code only. The `tenant.provisioned` event also
+        goes to the instance-wide webhooks and, by the system SMTP, to the super admins.
       security:
         - provisioningToken: []
       requestBody:
@@ -9271,7 +9277,11 @@ components:
         `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
         `provisioning_token`, actor the token identifier) names the created tenant;
         `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
-        the secret.
+        the secret; `tenant.provision_refused` (without tenant, actor kind `provisioning_token`,
+        actor and object the token identifier) carries only `details.reason`: `already_exists`,
+        `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
+        `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
+        expired since the request was accepted), never the request (FQDN, username, address).
       enum:
         - transfer.created
         - transfer.finalized
@@ -9359,6 +9369,7 @@ components:
         - admin.invited
         - tenant.setup_completed
         - tenant.provisioned
+        - tenant.provision_refused
         - provisioning_token.created
         - provisioning_token.revoked
     AuditEvent:
@@ -9701,8 +9712,8 @@ components:
         allowedFqdnSuffixes: { $ref: '#/components/schemas/FqdnSuffixes' }
         maxStorageQuotaBytes: { type: integer, format: int64, minimum: 1, description: Highest storage quota of a tenant created with the token. }
         maxTransferBytes: { type: [integer, 'null'], format: int64, minimum: 1, maximum: 21474836480, description: "Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB." }
-        maxTenants: { type: integer, minimum: 1, description: Highest number of live tenants created with the token. }
-        tenantsCreated: { type: integer, minimum: 0, description: Live tenants created with the token. }
+        maxTenants: { type: integer, minimum: 1, description: "Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes)." }
+        tenantsCreated: { type: integer, minimum: 0, description: "Tenants created with the token that still exist: the live ones and those being deleted (a tenant being deleted counts until its deletion completes, although `listProvisionedTenants` already leaves it out)." }
         createdBy: { type: string, description: "Identifier (`adm_...`) of the super admin who created it; the interface resolves the name." }
         createdAt: { type: string, format: date-time }
         lastUsedAt: { type: [string, 'null'], format: date-time, description: "Last successful use; updated at most once a minute." }
@@ -9742,7 +9753,7 @@ components:
         allowedFqdnSuffixes: { $ref: '#/components/schemas/FqdnSuffixes' }
         maxStorageQuotaBytes: { type: integer, format: int64, minimum: 1 }
         maxTransferBytes: { type: [integer, 'null'], format: int64, minimum: 1, maximum: 21474836480 }
-        maxTenants: { type: integer, minimum: 1, description: Highest number of live tenants created with the token. }
+        maxTenants: { type: integer, minimum: 1, description: "Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes)." }
         expiresAt: { type: [string, 'null'], format: date-time }
         code: { type: string, pattern: '^[0-9]{6}$', description: "Current TOTP code of the super admin (re-confirmation, as `TotpCode.code`); exactly one of `code` or `recoveryCode`." }
         recoveryCode: { type: string, maxLength: 32, description: "Recovery code instead of `code` (consumed and audited)." }
@@ -10198,8 +10209,10 @@ components:
         `tenant.provisioned` (a tenant was created through the provisioning API) and
         `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
         state); these two carry `tenant` and
-        are also mailed to the super admins through the system SMTP. `webhook.test` is only
-        sent by the test operations and cannot be subscribed to.
+        are also mailed to the super admins through the system SMTP. Also since 1.2,
+        `provisioning_token.created` (a super admin created a provisioning token, without
+        `tenant`, never with the secret), also mailed to the super admins through the system
+        SMTP. `webhook.test` is only sent by the test operations and cannot be subscribed to.
       enum:
         - virus.detected
         - abuse.threshold_exceeded
@@ -10217,6 +10230,7 @@ components:
         - master_key.rotation_failed
         - tenant.provisioned
         - tenant.setup_completed
+        - provisioning_token.created
         - webhook.test
     WebhookErrorCategory:
       type: string
@@ -10335,7 +10349,7 @@ components:
             name: { type: string }
         counts:
           type: object
-          description: "Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage."
+          description: "Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage, `{cidrCount, suffixCount, maxTenants, maxStorageQuotaBytes}` for `provisioning_token.created`."
           additionalProperties: { type: number }
         adminUrl: { type: string, format: uri, description: Page of the administration where the event can be examined. }
         addresses:

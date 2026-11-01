@@ -1,0 +1,90 @@
+{
+  "list": {
+    "caption": "Jetons de provisionnement",
+    "create": "Créer un jeton de provisionnement",
+    "empty": "Aucun jeton de provisionnement pour le moment.",
+    "columns": {
+      "name": "Nom",
+      "prefix": "Préfixe",
+      "cidrs": "Plages IP autorisées",
+      "suffixes": "Suffixes de FQDN autorisés",
+      "tenants": "Entités créées",
+      "caps": "Plafonds",
+      "created": "Création",
+      "lastUsed": "Dernière utilisation",
+      "expires": "Expiration",
+      "status": "Statut",
+      "actions": "Actions"
+    },
+    "quotaCap": "Quota jusqu’à {size}",
+    "transferCap": "Limite par envoi jusqu’à {size}",
+    "transferNoCap": "Limite par envoi : pas de plafond sous 20 Gio",
+    "createdBy": "{date} par {admin}",
+    "neverUsed": "Jamais utilisé",
+    "noExpiry": "Jamais",
+    "lastUsedNote": "La dernière utilisation est enregistrée au plus une fois par minute et par jeton : elle peut avoir jusqu’à une minute de retard.",
+    "revoke": "Révoquer"
+  },
+  "form": {
+    "title": "Créer un jeton de provisionnement",
+    "legend": "Réglages du jeton",
+    "intro": "Le jeton ne peut être utilisé que depuis les plages autorisées et ne crée que des entités dont l’adresse se termine par un suffixe autorisé, dans les plafonds ci-dessous.",
+    "name": {
+      "label": "Nom",
+      "hint": "Pour reconnaître le jeton, par exemple l’infogéreur à qui il est remis."
+    },
+    "cidrs": {
+      "label": "Plages IP autorisées",
+      "hint": "Une plage par ligne (CIDR). Les plages 0.0.0.0/0 et ::/0 sont refusées."
+    },
+    "suffixes": {
+      "label": "Suffixes de FQDN autorisés",
+      "hint": "Un suffixe par ligne, commençant par un point, avec au moins deux niveaux (.transfer.example.com)."
+    },
+    "maxTenants": {
+      "label": "Nombre maximal d’entités",
+      "hint": "Plus grand nombre d’entités actives créées avec ce jeton."
+    },
+    "quota": {
+      "label": "Quota de stockage maximal par entité",
+      "hint": "Aucune entité créée avec le jeton ne peut recevoir un quota plus grand."
+    },
+    "transfer": {
+      "label": "Limite par envoi maximale (facultatif)",
+      "hint": "Laissez vide pour ne pas plafonner sous 20 Gio."
+    },
+    "expiry": {
+      "label": "Date d’expiration (facultatif)",
+      "hint": "Le jeton cesse de fonctionner à la fin de ce jour. Laissez vide pour un jeton sans expiration."
+    },
+    "committed": {
+      "value": "Stockage engagé par ce jeton : {size} (nombre maximal d’entités multiplié par le quota maximal).",
+      "unknown": "Stockage engagé par ce jeton : saisissez le nombre d’entités et le quota pour le voir.",
+      "large": "Stockage engagé par ce jeton : très élevé (au-delà de ce qui peut être affiché exactement).",
+      "note": "C’est le volume qui pourrait être alloué ; vérifiez que votre disque peut l’accueillir."
+    },
+    "confirm": "Pour confirmer, saisissez le code actuel de votre application d’authentification.",
+    "confirmRecovery": "Pour confirmer, saisissez l’un de vos codes de récupération. Il ne peut servir qu’une fois.",
+    "submit": "Créer le jeton",
+    "created": "Jeton de provisionnement créé."
+  },
+  "secret": {
+    "title": "Jeton de provisionnement {name} créé",
+    "text": "Copiez ce jeton maintenant et remettez-le à l’infogéreur par un canal de confiance, jamais en clair par mail.",
+    "label": "Jeton de provisionnement",
+    "closed": "Le jeton a été créé."
+  },
+  "revoke": {
+    "title": "Révoquer le jeton {name} ?",
+    "text": "Le jeton cesse de fonctionner immédiatement. Les entités qu’il a déjà créées sont conservées. Cette action est irréversible.",
+    "confirm": "Révoquer le jeton",
+    "done": "Le jeton {name} est révoqué."
+  },
+  "errors": {
+    "catchAll": "Une plage qui autorise toutes les adresses est refusée.",
+    "suffixDot": "Le suffixe doit commencer par un point (.transfer.example.com).",
+    "suffixInvalid": "Saisissez un suffixe de domaine d’au moins deux niveaux (.transfer.example.com).",
+    "maxTenants": "Saisissez un nombre entier de 1 à {max}.",
+    "notFound": "Ce jeton n’existe plus."
+  }
+}

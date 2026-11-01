@@ -186,7 +186,9 @@ func noStore(next http.Handler) http.Handler {
 // all before the body is read. The provisioning operations get instead,
 // right after the deadlines, their provisioning token check (401,
 // provisioningAuth).
-func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.SecurityEvents, limiter middleware.Limiter, logger *slog.Logger) http.Handler {
+func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.SecurityEvents, limiter middleware.Limiter,
+	provisioningTokens *provisioningAuth, logger *slog.Logger,
+) http.Handler {
 	api := deps.AdminAPI
 	if api == nil {
 		api = admin.NewServer()
@@ -208,8 +210,9 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 		Middlewares: []gen.MiddlewareFunc{
 			// Innermost: after the body limit and the media type checks, it keeps
 			// the raw body of the abuse thresholds update (every member of it is
-			// required, which the generated type cannot tell).
-			admin.CaptureThresholdsBody,
+			// required) and of the provisioning creations (unknown members are
+			// refused), which the generated types cannot tell.
+			admin.CaptureRawBody,
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.AdminCSRF(sessions, adminSessionRequired),
@@ -219,7 +222,7 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 			// The provisioning operations (since API 1.2) are refused here,
 			// before any session, CSRF, body or handler, unless their
 			// provisioning token is accepted (fail closed).
-			provisioningAuth(deps.Provisioning),
+			provisioningTokens.middleware,
 			deadlineMiddleware(logger),
 		},
 		ErrorHandlerFunc: eh.paramError,
@@ -228,8 +231,7 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 	mux := http.NewServeMux()
 	mux.Handle(AdminPrefix+"/", api404)
 	mux.Handle(APIBaseURL+"/version", api404)
-	// The provisioning operations (since API 1.2) answer the 404 Problem of
-	// their stubs until they are implemented.
+	// The provisioning operations (since API 1.2), on the admin hosts only.
 	mux.Handle(ProvisioningPrefix+"/", api404)
 	docs := adminDocsHandler(sessions, logger)
 	mux.Handle(DocsPath, docs)

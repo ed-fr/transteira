@@ -97,8 +97,9 @@ func (h errorHandlers) requestError(w http.ResponseWriter, r *http.Request, err 
 }
 
 // responseError handles the errors returned by the operations: a stub
-// answers 404 not-found, a Problem is rendered as is, and anything else is
-// a 500 internal-error whose cause is only logged.
+// answers 404 not-found, a Problem is rendered as is (a
+// provisioning-token-invalid one with the invalid_token Bearer challenge),
+// and anything else is a 500 internal-error whose cause is only logged.
 //
 // When the error comes from writing the response (a Visit method failing
 // mid-stream) after the response has started, a Problem can no longer be
@@ -135,6 +136,12 @@ func (h errorHandlers) responseError(w http.ResponseWriter, r *http.Request, err
 		return
 	}
 	p := problem.From(err)
+	if p.Code == problem.CodeProvisioningTokenInvalid {
+		// A provisioning token refused by the operation itself (revoked or
+		// expired since the middleware accepted it) gets the same
+		// challenge as one refused by the middleware (RFC 6750).
+		w.Header().Set("WWW-Authenticate", challengeInvalidToken)
+	}
 	if p.Status >= http.StatusInternalServerError {
 		level := slog.LevelError
 		switch {

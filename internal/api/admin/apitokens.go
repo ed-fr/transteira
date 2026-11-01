@@ -223,6 +223,14 @@ func decodeAPITokenUpdate(raw []byte) (apitoken.UpdateInput, error) {
 // that name is longer than maxEchoedMemberLen bytes. It returns nil when
 // every member is known.
 func rejectUnknownMembers(members map[string]json.RawMessage, fields []string) error {
+	return rejectUnknownMembersAt("", members, fields)
+}
+
+// rejectUnknownMembersAt is rejectUnknownMembers for the members of the
+// object at the JSON pointer prefix ("" for the body): the pointer of an
+// unknown member is under prefix, and a name too long to be echoed names
+// the object (prefix) itself.
+func rejectUnknownMembersAt(prefix string, members map[string]json.RawMessage, fields []string) error {
 	var unknown []string
 	for name := range members {
 		if !slices.Contains(fields, name) {
@@ -232,9 +240,9 @@ func rejectUnknownMembers(members map[string]json.RawMessage, fields []string) e
 	if len(unknown) == 0 {
 		return nil
 	}
-	field := ""
+	field := prefix
 	if name := slices.Min(unknown); len(name) <= maxEchoedMemberLen {
-		field = "/" + pointerEscape(name)
+		field = prefix + "/" + pointerEscape(name)
 	}
 	return validationFailed(field, fieldInvalidFormat)
 }

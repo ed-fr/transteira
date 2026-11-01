@@ -179,50 +179,14 @@ func TestAuthenticateLastUse(t *testing.T) {
 	ev.repo.touchErr = nil
 
 	// Revoking forgets the throttling of the token.
-	svc.mu.Lock()
-	_, tracked := svc.touched[c.Token.ID]
-	svc.mu.Unlock()
-	if !tracked {
+	if !svc.touches.Tracked(c.Token.ID) {
 		t.Fatal("token not tracked")
 	}
 	if err := svc.Revoke(ctx, ev.super, ev.a.ID, c.Token.ID, adminIP); err != nil {
 		t.Fatal(err)
 	}
-	svc.mu.Lock()
-	_, tracked = svc.touched[c.Token.ID]
-	svc.mu.Unlock()
-	if tracked {
+	if svc.touches.Tracked(c.Token.ID) {
 		t.Error("revoked token still tracked")
-	}
-}
-
-func TestDueBounded(t *testing.T) {
-	s := newService(nil, Options{MaxTracked: 3, TouchInterval: time.Minute})
-	t0 := testStart
-	for i, k := range []string{"a", "b", "c"} {
-		if !s.due(k, t0.Add(time.Duration(i)*time.Second)) {
-			t.Fatalf("first use of %s not due", k)
-		}
-	}
-	// Full, nothing stale: the memory is cleared to admit the new token.
-	if !s.due("d", t0.Add(5*time.Second)) || len(s.touched) != 1 {
-		t.Fatalf("full map: %v", s.touched)
-	}
-	if s.due("d", t0.Add(6*time.Second)) {
-		t.Fatal("d due again within the interval")
-	}
-	s.due("e", t0.Add(10*time.Second))
-	s.due("f", t0.Add(70*time.Second))
-	// Full: d and e are stale at 75 s and dropped, f is kept.
-	if !s.due("g", t0.Add(75*time.Second)) || len(s.touched) != 2 {
-		t.Fatalf("stale entries not dropped: %v", s.touched)
-	}
-	if _, ok := s.touched["f"]; !ok {
-		t.Fatalf("fresh entry dropped: %v", s.touched)
-	}
-	// A known token is never evicted for itself.
-	if s.due("f", t0.Add(80*time.Second)) {
-		t.Fatal("f due again within the interval")
 	}
 }
 

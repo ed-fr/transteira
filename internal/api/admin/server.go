@@ -14,7 +14,9 @@
 // internal/keyrotation, and the alert webhooks of the tenants and of the
 // instance (section 12.4) over internal/webhookadmin, and the running
 // version with the check for a newer release (V1.2) over
-// internal/updatecheck.
+// internal/updatecheck, and the provisioning tokens of the super admin
+// with the provisioning API of the service providers (V1.2) over
+// internal/provisioning.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -125,6 +127,9 @@ type Server struct {
 	// updates serves the check for a newer release; nil until
 	// WithUpdateCheck.
 	updates UpdateCheckService
+	// provisioning manages the provisioning tokens and serves the
+	// provisioning API; nil until WithProvisioningService.
+	provisioning ProvisioningService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

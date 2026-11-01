@@ -86,6 +86,7 @@ describe('admin routes', () => {
     ['/admin/system/webhooks', '/system/webhooks', 'super', 'system-webhooks'],
     ['/admin/system/audit', '/system/audit', 'super', 'system-audit'],
     ['/admin/system/master-key', '/system/master-key', 'super', 'system-master-key'],
+    ['/admin/system/provisioning-tokens', '/system/provisioning-tokens', 'super', 'system-settings'],
     ['/admin/system/unknown', '*', 'any', 'admin'],
     ['/admin/help', '/help', 'any', undefined],
     ['/admin/help/tenants', '/help/:topic', 'any', undefined],
@@ -135,6 +136,7 @@ describe('admin routes', () => {
       '/system/webhooks',
       '/system/audit',
       '/system/master-key',
+      '/system/provisioning-tokens',
     ]);
   });
 

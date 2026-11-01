@@ -27,7 +27,7 @@ const validThresholdsJSON = `{"maxDailyBytesPerSender":1073741824,"maxDailyTrans
 	`"officeHours":{"start":"08:00","end":"24:00","weekdays":[1,2,3,4,5]},"timeZone":"Europe/Paris",` +
 	`"maxInvitationsPerInviter":10,"externalMaxDailyBytes":null,"externalMaxDailyDeposits":5}`
 
-// thresholdsCtx returns ctx carrying raw as CaptureThresholdsBody does.
+// thresholdsCtx returns ctx carrying raw as CaptureRawBody does.
 func thresholdsCtx(ctx context.Context, raw string) context.Context {
 	return context.WithValue(ctx, rawBodyKey{}, []byte(raw))
 }
@@ -146,7 +146,7 @@ func TestAbuseThresholdsUpdateErrors(t *testing.T) {
 		t.Errorf("service error: %+v", p.Errors)
 	}
 	svc.err, svc.errAt = nil, ""
-	// No body, and a server without CaptureThresholdsBody.
+	// No body, and a server without CaptureRawBody.
 	_, err := s.UpdateAbuseThresholds(ctx, gen.UpdateAbuseThresholdsRequestObject{TenantId: "ten_a"})
 	expectProblem(t, err, problem.CodeValidationFailed)
 	if err := update(ctx, validThresholdsJSON); !errors.Is(err, errNoThresholdsBody) {
@@ -190,35 +190,41 @@ func TestThresholdsConversions(t *testing.T) {
 	}
 }
 
-func TestCaptureThresholdsBody(t *testing.T) {
+func TestCaptureRawBody(t *testing.T) {
 	t.Parallel()
 	var gotRaw []byte
 	var haveRaw bool
 	var gotBody string
-	h := CaptureThresholdsBody(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	h := CaptureRawBody(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		gotRaw, haveRaw = r.Context().Value(rawBodyKey{}).([]byte)
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
 	}))
-	run := func(method, path, body string) {
+	const thresholds = "/api/v1/admin/tenants/{tenantId}/abuse-thresholds"
+	run := func(method, pattern, body string) {
 		gotRaw, haveRaw, gotBody = nil, false, ""
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(method, path, strings.NewReader(body)))
+		r := httptest.NewRequest(method, "/api/v1/admin/tenants/ten_a/abuse-thresholds", strings.NewReader(body))
+		r.Pattern = method + " " + pattern
+		h.ServeHTTP(httptest.NewRecorder(), r)
 	}
-	run(http.MethodPut, "/api/v1/admin/tenants/ten_a/abuse-thresholds", `{"a":1}`)
+	run(http.MethodPut, thresholds, `{"a":1}`)
 	if !haveRaw || string(gotRaw) != `{"a":1}` || gotBody != `{"a":1}` {
 		t.Errorf("captured %q (%v), downstream body %q", gotRaw, haveRaw, gotBody)
 	}
 	// Only the thresholds update is captured.
-	run(http.MethodGet, "/api/v1/admin/tenants/ten_a/abuse-thresholds", "")
-	run(http.MethodPut, "/api/v1/admin/tenants/ten_a/recipient-rules", `{}`)
+	run(http.MethodGet, thresholds, "")
+	run(http.MethodPut, "/api/v1/admin/tenants/{tenantId}/recipient-rules", `{}`)
+	// Only the full pattern: a route merely ending like it is not captured.
+	run(http.MethodPut, "/api/v1/other/{tenantId}/abuse-thresholds", `{}`)
 	if haveRaw || gotBody != `{}` {
 		t.Errorf("another operation captured: %v %q", haveRaw, gotBody)
 	}
 	// A body that cannot be read fails the same way downstream.
 	r := httptest.NewRequest(http.MethodPut, "/api/v1/admin/tenants/ten_a/abuse-thresholds", nil)
+	r.Pattern = http.MethodPut + " " + thresholds
 	r.Body = io.NopCloser(&failingReader{err: io.ErrUnexpectedEOF})
 	var readErr error
-	CaptureThresholdsBody(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	CaptureRawBody(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, readErr = io.ReadAll(r.Body)
 	})).ServeHTTP(httptest.NewRecorder(), r)
 	if !errors.Is(readErr, io.ErrUnexpectedEOF) {
@@ -226,9 +232,10 @@ func TestCaptureThresholdsBody(t *testing.T) {
 	}
 	// No body at all.
 	r = httptest.NewRequest(http.MethodPut, "/api/v1/admin/tenants/ten_a/abuse-thresholds", nil)
+	r.Pattern = http.MethodPut + " " + thresholds
 	r.Body = nil
 	called := false
-	CaptureThresholdsBody(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })).ServeHTTP(httptest.NewRecorder(), r)
+	CaptureRawBody(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })).ServeHTTP(httptest.NewRecorder(), r)
 	if !called {
 		t.Error("request without body not passed on")
 	}
@@ -300,7 +307,7 @@ func TestAbuseReportHandlers(t *testing.T) {
 }
 
 // TestAbuseThresholdsThroughTheChain runs the update through the generated
-// strict handler with CaptureThresholdsBody installed, as the admin router
+// strict handler with CaptureRawBody installed, as the admin router
 // does: an absent member is refused, a complete body passes.
 func TestAbuseThresholdsThroughTheChain(t *testing.T) {
 	t.Parallel()
@@ -308,10 +315,11 @@ func TestAbuseThresholdsThroughTheChain(t *testing.T) {
 	mux := http.NewServeMux()
 	base := ctxWith(store.SessionAuthenticated, delegated)
 	gen.HandlerWithOptions(gen.NewStrictHandler(tenantServer(svc), nil), gen.StdHTTPServerOptions{
+		BaseURL:    apiBase,
 		BaseRouter: mux,
 		// The last middleware is the outermost: the session, then the capture.
 		Middlewares: []gen.MiddlewareFunc{
-			CaptureThresholdsBody,
+			CaptureRawBody,
 			func(next http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { next.ServeHTTP(w, r.WithContext(base)) })
 			},
@@ -322,7 +330,7 @@ func TestAbuseThresholdsThroughTheChain(t *testing.T) {
 	})
 	put := func(body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPut, "/admin/tenants/ten_a/abuse-thresholds", strings.NewReader(body))
+		r := httptest.NewRequest(http.MethodPut, apiBase+"/admin/tenants/ten_a/abuse-thresholds", strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 		mux.ServeHTTP(rec, r)
 		return rec

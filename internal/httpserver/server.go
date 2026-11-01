@@ -449,6 +449,8 @@ type options struct {
 	unknownHostLimiter middleware.Limiter
 	adminAuthLimiter   middleware.Limiter
 	tokenFailures      TokenFailures
+	// provisioningFailures counts the invalid provisioning tokens per IP.
+	provisioningFailures TokenFailures
 	// defaultDeadline is the read and write deadline set on every request
 	// before tenant resolution, rate limiting and routing.
 	defaultDeadline time.Duration
@@ -491,6 +493,13 @@ func WithAPITokenFailures(f TokenFailures) Option {
 	return func(o *options) { o.tokenFailures = f }
 }
 
+// WithProvisioningFailures replaces the per-IP counter of invalid
+// provisioning tokens (same settings as the API tokens, own counter), for
+// tests.
+func WithProvisioningFailures(f TokenFailures) Option {
+	return func(o *options) { o.provisioningFailures = f }
+}
+
 // New builds the HTTP handler of the application. It panics when a
 // required dependency is missing or an admin host is malformed, which are
 // wiring errors.
@@ -499,12 +508,13 @@ func New(deps Deps, opts ...Option) http.Handler {
 		panic("httpserver: New requires a resolver, a security log and a health service")
 	}
 	o := options{
-		globalLimiter:      ratelimit.New(GlobalRate, GlobalBurst),
-		assetLimiter:       ratelimit.New(AssetRate, AssetBurst),
-		unknownHostLimiter: ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
-		adminAuthLimiter:   ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
-		tokenFailures:      newTokenFailures(),
-		defaultDeadline:    RequestDeadline,
+		globalLimiter:        ratelimit.New(GlobalRate, GlobalBurst),
+		assetLimiter:         ratelimit.New(AssetRate, AssetBurst),
+		unknownHostLimiter:   ratelimit.New(rate.Every(UnknownHostInterval), UnknownHostBurst),
+		adminAuthLimiter:     ratelimit.New(rate.Every(AdminAuthInterval), AdminAuthBurst),
+		tokenFailures:        newTokenFailures(),
+		provisioningFailures: newTokenFailures(),
+		defaultDeadline:      RequestDeadline,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -648,7 +658,8 @@ func New(deps Deps, opts ...Option) http.Handler {
 	)
 
 	adminHosts := newHostSet(deps.AdminHosts)
-	adminScoped := newAdminHandler(deps, ui, eh, events, o.adminAuthLimiter, logger)
+	provisioningTokens := newProvisioningAuth(deps.Provisioning, o.provisioningFailures, events, logger)
+	adminScoped := newAdminHandler(deps, ui, eh, events, o.adminAuthLimiter, provisioningTokens, logger)
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

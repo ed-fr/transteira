@@ -94,6 +94,20 @@ func goldenData() map[string]any {
 			Username: "jane.doe", TenantNames: []string{"Entity A & Co", "Entity B"}, AdminHost: "admin.transfer.example.com",
 			Link: "https://admin.transfer.example.com/admin/activate#tta_golden", ExpiresAt: goldenExpiry,
 		},
+		TemplateTenantProvisioned: TenantProvisionedData{
+			TokenName: "Managed provider", TokenPrefix: "ttp_AbCd", TenantName: "Entity A & Co",
+			FQDN: "transfer.entity-a.example.com", AdminUsername: "jane.doe", ClientIP: "203.0.113.10",
+			At: goldenOutage, AdminLink: goldenAdminLink,
+		},
+		TemplateTenantSetupCompleted: TenantSetupCompletedData{
+			TenantName: "Entity A & Co", FQDN: "transfer.entity-a.example.com", At: goldenOutage,
+			Forced: true, AdminLink: goldenAdminLink,
+		},
+		TemplateProvisioningTokenCreated: ProvisioningTokenCreatedData{
+			TokenName: "Managed provider & Co", TokenPrefix: "ttp_AbCd", CreatedBy: "root", ClientIP: "203.0.113.10",
+			At: goldenOutage, CIDRCount: 2, SuffixCount: 3, MaxTenants: 50, MaxStorageQuotaBytes: 1 << 40,
+			ExpiresAt: goldenExpiry, AdminLink: goldenAdminLink + "/system/provisioning-tokens",
+		},
 		TemplateAntivirusAlert: AntivirusAlertData{
 			Since: goldenOutage, WaitingTransfers: 12, Tenants: 3, AdminLink: goldenAdminLink,
 		},
@@ -139,7 +153,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,admin_invitation,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,quota_reached,quota_warning,recipient_verification_code,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,admin_invitation,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,provisioning_token_created,quota_reached,quota_warning,recipient_verification_code,tenant_provisioned,tenant_setup_completed,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -323,6 +337,81 @@ func TestTemplatesAdminInvitation(t *testing.T) {
 	}
 	if v, err := Variables("admin-invitation"); err != nil || len(v) != 5 || !v[0].Required || !v[2].Required {
 		t.Errorf("Variables(admin-invitation) = %+v, %v", v, err)
+	}
+}
+
+func TestTemplatesTenantProvisioning(t *testing.T) {
+	prov := goldenData()[TemplateTenantProvisioned].(TenantProvisionedData)
+	def := keyDefs[TemplateTenantProvisioned]
+	vals, ok := def.values(labelsFor("en"), "en", prov)
+	if !ok || vals["token_name"].text != "Managed provider" || vals["tenant_name"].text != "Entity A & Co" ||
+		vals["fqdn"].text != "transfer.entity-a.example.com" || vals["client_ip"].text != "203.0.113.10" ||
+		vals["created_at"].text != "October 13, 2027 at 09:45 UTC" || vals["admin_link"].text != goldenAdminLink {
+		t.Errorf("provisioned values: %+v", vals)
+	}
+	if _, ok := def.values(labelsFor("en"), "en", DiskAlertData{}); ok {
+		t.Error("provisioned values accepted another data type")
+	}
+	hostile := prov
+	hostile.TokenName = "to\u202eken\r\nname"
+	if vals, _ := def.values(labelsFor("en"), "en", hostile); vals["token_name"].text != "token name" {
+		t.Errorf("hostile token name: %q", vals["token_name"].text)
+	}
+
+	done := goldenData()[TemplateTenantSetupCompleted].(TenantSetupCompletedData)
+	doneDef := keyDefs[TemplateTenantSetupCompleted]
+	for forced, want := range map[bool]string{true: "by force", false: "every required item was done"} {
+		done.Forced = forced
+		vals, ok := doneDef.values(labelsFor("en"), "en", done)
+		if !ok || !strings.Contains(vals["setup_outcome"].text, want) || vals["tenant_name"].text != "Entity A & Co" {
+			t.Errorf("setup completed values (forced=%v): %+v", forced, vals)
+		}
+	}
+	if _, ok := doneDef.values(labelsFor("en"), "en", DiskAlertData{}); ok {
+		t.Error("setup completed values accepted another data type")
+	}
+	for _, lang := range i18n.Supported() {
+		m, err := Render(TemplateTenantProvisioned, lang, prov)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Text, "transfer.entity-a.example.com") ||
+			!strings.Contains(m.Text, "203.0.113.10") || !strings.Contains(m.Text, "jane.doe") {
+			t.Errorf("%s provisioned: %v\n%s", lang, err, m.Text)
+		}
+		m, err = Render(TemplateTenantSetupCompleted, lang, done)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Text, "transfer.entity-a.example.com") {
+			t.Errorf("%s setup completed: %v\n%s", lang, err, m.Text)
+		}
+	}
+}
+
+func TestTemplatesProvisioningTokenCreated(t *testing.T) {
+	data := goldenData()[TemplateProvisioningTokenCreated].(ProvisioningTokenCreatedData)
+	def := keyDefs[TemplateProvisioningTokenCreated]
+	vals, ok := def.values(labelsFor("en"), "en", data)
+	if !ok || vals["token_name"].text != "Managed provider & Co" || vals["token_prefix"].text != "ttp_AbCd" ||
+		vals["created_by"].text != "root" || vals["client_ip"].text != "203.0.113.10" ||
+		vals["created_at"].text != "October 13, 2027 at 09:45 UTC" ||
+		vals["token_scope"].text != "2 IP range(s), 3 FQDN suffix(es)" || vals["max_tenants"].text != "50" ||
+		vals["max_storage_quota"].text != "1.0\u00a0TB" || vals["expires_at"].text != "October 20, 2027 at 08:30 UTC" ||
+		vals["admin_link"].text != goldenAdminLink+"/system/provisioning-tokens" {
+		t.Errorf("token created values: %+v", vals)
+	}
+	if _, ok := def.values(labelsFor("en"), "en", DiskAlertData{}); ok {
+		t.Error("token created values accepted another data type")
+	}
+	hostile := data
+	hostile.TokenName, hostile.ExpiresAt = "to\u202eken\r\nname", time.Time{}
+	for lang, never := range map[string]string{"en": "never", "fr": "jamais"} {
+		vals, _ := def.values(labelsFor(lang), lang, hostile)
+		if vals["token_name"].text != "token name" || vals["expires_at"].text != never {
+			t.Errorf("%s hostile or no expiry: %q %q", lang, vals["token_name"].text, vals["expires_at"].text)
+		}
+	}
+	for _, lang := range i18n.Supported() {
+		m, err := Render(TemplateProvisioningTokenCreated, lang, data)
+		if err != nil || strings.Count(m.HTML, "<a ") != 1 || !strings.Contains(m.Text, "ttp_AbCd") ||
+			!strings.Contains(m.Text, "203.0.113.10") || !strings.Contains(m.Text, "/system/provisioning-tokens") {
+			t.Errorf("%s token created: %v\n%s", lang, err, m.Text)
+		}
 	}
 }
 

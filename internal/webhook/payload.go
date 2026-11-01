@@ -61,6 +61,7 @@ var titles = map[events.Type]string{
 	events.MasterKeyRotationFailed:    "Master key rotation failed",
 	events.TenantProvisioned:          "Entity created by provisioning",
 	events.TenantSetupCompleted:       "Entity setup completed",
+	events.ProvisioningTokenCreated:   "Provisioning token created",
 	events.WebhookTest:                "Test event",
 }
 

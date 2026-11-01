@@ -219,6 +219,7 @@ const (
 	AuditActionTenantDeletionStarted        AuditAction = "tenant.deletion_started"
 	AuditActionTenantLegalUpdated           AuditAction = "tenant.legal_updated"
 	AuditActionTenantNetworkUpdated         AuditAction = "tenant.network_updated"
+	AuditActionTenantProvisionRefused       AuditAction = "tenant.provision_refused"
 	AuditActionTenantProvisioned            AuditAction = "tenant.provisioned"
 	AuditActionTenantRecipientRulesUpdated  AuditAction = "tenant.recipient_rules_updated"
 	AuditActionTenantSetupCompleted         AuditAction = "tenant.setup_completed"
@@ -377,6 +378,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionTenantLegalUpdated:
 		return true
 	case AuditActionTenantNetworkUpdated:
+		return true
+	case AuditActionTenantProvisionRefused:
 		return true
 	case AuditActionTenantProvisioned:
 		return true
@@ -1505,6 +1508,7 @@ const (
 	WebhookEventTypeMaintenanceEnabled         WebhookEventType = "maintenance.enabled"
 	WebhookEventTypeMasterKeyRotationCompleted WebhookEventType = "master_key.rotation_completed"
 	WebhookEventTypeMasterKeyRotationFailed    WebhookEventType = "master_key.rotation_failed"
+	WebhookEventTypeProvisioningTokenCreated   WebhookEventType = "provisioning_token.created"
 	WebhookEventTypeQuotaReached               WebhookEventType = "quota.reached"
 	WebhookEventTypeQuotaWarning               WebhookEventType = "quota.warning"
 	WebhookEventTypeTenantProvisioned          WebhookEventType = "tenant.provisioned"
@@ -1537,6 +1541,8 @@ func (e WebhookEventType) Valid() bool {
 	case WebhookEventTypeMasterKeyRotationCompleted:
 		return true
 	case WebhookEventTypeMasterKeyRotationFailed:
+		return true
+	case WebhookEventTypeProvisioningTokenCreated:
 		return true
 	case WebhookEventTypeQuotaReached:
 		return true
@@ -2338,7 +2344,11 @@ type ApiTokenUpdate = json.RawMessage
 // `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
 // `provisioning_token`, actor the token identifier) names the created tenant;
 // `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
-// the secret.
+// the secret; `tenant.provision_refused` (without tenant, actor kind `provisioning_token`,
+// actor and object the token identifier) carries only `details.reason`: `already_exists`,
+// `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
+// `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
+// expired since the request was accepted), never the request (FQDN, username, address).
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -2389,7 +2399,11 @@ type AuditEvent struct {
 	// `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
 	// `provisioning_token`, actor the token identifier) names the created tenant;
 	// `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
-	// the secret.
+	// the secret; `tenant.provision_refused` (without tenant, actor kind `provisioning_token`,
+	// actor and object the token identifier) carries only `details.reason`: `already_exists`,
+	// `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
+	// `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
+	// expired since the request was accepted), never the request (FQDN, username, address).
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id string `json:"id"`
@@ -3391,7 +3405,7 @@ type ProvisioningToken struct {
 	// MaxStorageQuotaBytes Highest storage quota of a tenant created with the token.
 	MaxStorageQuotaBytes int64 `json:"maxStorageQuotaBytes"`
 
-	// MaxTenants Highest number of live tenants created with the token.
+	// MaxTenants Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes).
 	MaxTenants int `json:"maxTenants"`
 
 	// MaxTransferBytes Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB.
@@ -3404,7 +3418,7 @@ type ProvisioningToken struct {
 	// RevokedAt Revocation date; a revoked token is refused immediately.
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 
-	// TenantsCreated Live tenants created with the token.
+	// TenantsCreated Tenants created with the token that still exist: the live ones and those being deleted (a tenant being deleted counts until its deletion completes, although `listProvisionedTenants` already leaves it out).
 	TenantsCreated int `json:"tenantsCreated"`
 }
 
@@ -3428,7 +3442,7 @@ type ProvisioningTokenCreate struct {
 	ExpiresAt            *time.Time `json:"expiresAt,omitempty"`
 	MaxStorageQuotaBytes int64      `json:"maxStorageQuotaBytes"`
 
-	// MaxTenants Highest number of live tenants created with the token.
+	// MaxTenants Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes).
 	MaxTenants       int    `json:"maxTenants"`
 	MaxTransferBytes *int64 `json:"maxTransferBytes,omitempty"`
 	Name             string `json:"name"`
@@ -3466,7 +3480,7 @@ type ProvisioningTokenCreated struct {
 	// MaxStorageQuotaBytes Highest storage quota of a tenant created with the token.
 	MaxStorageQuotaBytes int64 `json:"maxStorageQuotaBytes"`
 
-	// MaxTenants Highest number of live tenants created with the token.
+	// MaxTenants Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes).
 	MaxTenants int `json:"maxTenants"`
 
 	// MaxTransferBytes Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB.
@@ -3479,7 +3493,7 @@ type ProvisioningTokenCreated struct {
 	// RevokedAt Revocation date; a revoked token is refused immediately.
 	RevokedAt *time.Time `json:"revokedAt,omitempty"`
 
-	// TenantsCreated Live tenants created with the token.
+	// TenantsCreated Tenants created with the token that still exist: the live ones and those being deleted (a tenant being deleted counts until its deletion completes, although `listProvisionedTenants` already leaves it out).
 	TenantsCreated int `json:"tenantsCreated"`
 
 	// Token Secret value (`ttp_` followed by 43 base62 characters), returned only once.
@@ -4398,7 +4412,7 @@ type WebhookEvent struct {
 	// AdminUrl Page of the administration where the event can be examined.
 	AdminUrl *string `json:"adminUrl,omitempty"`
 
-	// Counts Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage.
+	// Counts Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage, `{cidrCount, suffixCount, maxTenants, maxStorageQuotaBytes}` for `provisioning_token.created`.
 	Counts map[string]float32 `json:"counts"`
 
 	// Id Event identifier (`evt_` + ULID).
@@ -4421,8 +4435,10 @@ type WebhookEvent struct {
 	// `tenant.provisioned` (a tenant was created through the provisioning API) and
 	// `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
 	// state); these two carry `tenant` and
-	// are also mailed to the super admins through the system SMTP. `webhook.test` is only
-	// sent by the test operations and cannot be subscribed to.
+	// are also mailed to the super admins through the system SMTP. Also since 1.2,
+	// `provisioning_token.created` (a super admin created a provisioning token, without
+	// `tenant`, never with the secret), also mailed to the super admins through the system
+	// SMTP. `webhook.test` is only sent by the test operations and cannot be subscribed to.
 	Type WebhookEventType `json:"type"`
 }
 
@@ -4438,8 +4454,10 @@ type WebhookEventSeverity string
 // `tenant.provisioned` (a tenant was created through the provisioning API) and
 // `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
 // state); these two carry `tenant` and
-// are also mailed to the super admins through the system SMTP. `webhook.test` is only
-// sent by the test operations and cannot be subscribed to.
+// are also mailed to the super admins through the system SMTP. Also since 1.2,
+// `provisioning_token.created` (a super admin created a provisioning token, without
+// `tenant`, never with the secret), also mailed to the super admins through the system
+// SMTP. `webhook.test` is only sent by the test operations and cannot be subscribed to.
 type WebhookEventType string
 
 // WebhookKind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.

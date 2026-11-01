@@ -36,6 +36,7 @@ import TransferList from './screens/ops/TransferList.svelte';
 import GlobalAudit from './screens/system/GlobalAudit.svelte';
 import Maintenance from './screens/system/Maintenance.svelte';
 import MasterKey from './screens/system/MasterKey.svelte';
+import ProvisioningTokens from './screens/system/ProvisioningTokens.svelte';
 import SystemOverview from './screens/system/SystemOverview.svelte';
 import SystemSettings from './screens/system/SystemSettings.svelte';
 import SystemWebhooks from './screens/system/SystemWebhooks.svelte';
@@ -364,6 +365,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminSystem.masterKey.title',
     access: 'super',
     helpTopic: 'system-master-key',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/provisioning-tokens',
+    component: ProvisioningTokens,
+    titleKey: 'adminSystem.provisioning.title',
+    access: 'super',
+    helpTopic: 'system-settings',
     systemNav: true,
   },
   { pattern: '/help', component: Help, titleKey: 'common.help.title', access: 'any' },

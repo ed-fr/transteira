@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"time"
 
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/store"
@@ -64,43 +63,11 @@ func (s *Service) Authenticate(ctx context.Context, tid tenant.ID, header string
 	if !netpolicy.Contains(tok.AllowedCIDRs, clientIP) {
 		return p, ErrIPNotAllowed
 	}
-	if s.due(tok.ID, now) {
+	if s.touches.Due(tok.ID, now) {
 		if err := s.repo.touch(ctx, tid, tok.ID, now); err != nil {
 			s.logger.WarnContext(ctx, "api token last use not recorded", slog.String("tenant", string(tid)),
 				slog.String("token", tok.ID), slog.String("error", err.Error()))
 		}
 	}
 	return p, nil
-}
-
-// due reports whether the use of token tokID at now must be recorded, and
-// remembers it when so: the first use seen by this process, then at most
-// one per TouchInterval. The memory is bounded by MaxTracked: when it is
-// full, the entries older than the interval are dropped, and if none is,
-// all of them (the next uses are then recorded again, which is harmless).
-func (s *Service) due(tokID string, now time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if last, ok := s.touched[tokID]; ok && now.Sub(last) < s.touchInterval && !now.Before(last) {
-		return false
-	}
-	if _, ok := s.touched[tokID]; !ok && len(s.touched) >= s.maxTracked {
-		for k, at := range s.touched {
-			if now.Sub(at) >= s.touchInterval {
-				delete(s.touched, k)
-			}
-		}
-		if len(s.touched) >= s.maxTracked {
-			clear(s.touched)
-		}
-	}
-	s.touched[tokID] = now
-	return true
-}
-
-// forget drops the throttling memory of token tokID (revoked).
-func (s *Service) forget(tokID string) {
-	s.mu.Lock()
-	delete(s.touched, tokID)
-	s.mu.Unlock()
 }

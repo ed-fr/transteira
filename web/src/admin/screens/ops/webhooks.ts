@@ -89,6 +89,7 @@ export const SYSTEM_WEBHOOK_EVENTS: readonly WebhookEventType[] = [
   'master_key.rotation_failed',
   'tenant.provisioned',
   'tenant.setup_completed',
+  'provisioning_token.created',
 ];
 
 /** Events a webhook of scope may subscribe to. */

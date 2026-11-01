@@ -149,7 +149,8 @@
       "antivirus_disabled": "Antivirus désactivé pour l’entité",
       "antivirus_enabled": "Antivirus activé pour l’entité",
       "setup_completed": "Configuration de l’entité terminée",
-      "provisioned": "Entité créée par provisionnement"
+      "provisioned": "Entité créée par provisionnement",
+      "provision_refused": "Création d’entité par provisionnement refusée"
     },
     "config": {
       "updated": "Paramètres système modifiés"

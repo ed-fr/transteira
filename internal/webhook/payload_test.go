@@ -342,3 +342,21 @@ func TestSafeText(t *testing.T) {
 		}
 	}
 }
+
+// TestProvisioningEventTitles checks that the provisioning events, which only the
+// instance-wide webhooks receive, have a human-readable title.
+func TestProvisioningEventTitles(t *testing.T) {
+	want := map[events.Type]string{
+		events.TenantProvisioned:        "Entity created by provisioning",
+		events.TenantSetupCompleted:     "Entity setup completed",
+		events.ProvisioningTokenCreated: "Provisioning token created",
+	}
+	for typ, title := range want {
+		if got := titles[typ]; got != title {
+			t.Errorf("title of %s = %q, want %q", typ, got, title)
+		}
+		if !events.IsSystem(typ) {
+			t.Errorf("%s is not a system event", typ)
+		}
+	}
+}

@@ -42,6 +42,9 @@
       "provisioned": "Entity created by provisioning",
       "setup_completed": "Entity setup completed"
     },
+    "provisioning_token": {
+      "created": "Provisioning token created"
+    },
     "webhook": {
       "test": "Test event"
     }

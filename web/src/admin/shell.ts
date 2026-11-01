@@ -174,6 +174,7 @@ export const SYSTEM_SECTIONS = [
   'webhooks',
   'audit',
   'masterKey',
+  'provisioning',
 ] as const;
 
 /** A section of the system administration. */
@@ -197,6 +198,7 @@ const SYSTEM_SEGMENTS: Record<SystemSection, string> = {
   webhooks: '/webhooks',
   audit: '/audit',
   masterKey: '/master-key',
+  provisioning: '/provisioning-tokens',
 };
 
 /** Application path of a section of the system administration ("/system" for the overview). */

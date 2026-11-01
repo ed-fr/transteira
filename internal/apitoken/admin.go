@@ -307,7 +307,7 @@ func (s *Service) Revoke(ctx context.Context, p adminauth.Principal, tid tenant.
 		return fmt.Errorf("apitoken: revoke: %w", err)
 	}
 	if revoked {
-		s.forget(tok.ID)
+		s.touches.Forget(tok.ID)
 		s.record(ctx, p, ip, tid, audit.ActionAPITokenRevoked, tok.ID, nameDetail(tok.Name))
 	}
 	return nil

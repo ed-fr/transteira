@@ -62,6 +62,22 @@ const (
 	// template key for it, so no entity can customize it; data:
 	// [AdminInvitationData].
 	TemplateAdminInvitation = "admin_invitation"
+	// TemplateTenantProvisioned tells the super administrators that an
+	// entity was created through the provisioning API (V1.2, threat model
+	// T-272). Like [TemplateDiskAlert], it is an instance mail sent through
+	// the system SMTP server, never a tenant template; data:
+	// [TenantProvisionedData].
+	TemplateTenantProvisioned = "tenant_provisioned"
+	// TemplateTenantSetupCompleted tells the super administrators that an
+	// entity created through the provisioning API finished its setup. Like
+	// [TemplateTenantProvisioned], it is an instance mail; data:
+	// [TenantSetupCompletedData].
+	TemplateTenantSetupCompleted = "tenant_setup_completed"
+	// TemplateProvisioningTokenCreated tells the super administrators that a
+	// provisioning token was created (V1.2, threat model T-275). Like
+	// [TemplateTenantProvisioned], it is an instance mail; data:
+	// [ProvisioningTokenCreatedData].
+	TemplateProvisioningTokenCreated = "provisioning_token_created"
 	// TemplateAntivirusUnavailable tells the delegated administrators of an
 	// entity (else the super administrators) that the antivirus has stopped
 	// responding while transfers of the entity wait for analysis (tenant
@@ -381,6 +397,81 @@ type AdminInvitationData struct {
 	// ExpiresAt is the end of validity of the link (72 hours), formatted
 	// with [FormatDateTime].
 	ExpiresAt time.Time
+}
+
+// TenantProvisionedData is the data of [TemplateTenantProvisioned]. It holds
+// no secret: neither the token secret nor any activation link. The mail
+// engine strips control and bidirectional characters from every text value.
+type TenantProvisionedData struct {
+	// TokenName is the name the super admin gave to the provisioning token.
+	TokenName string
+	// TokenPrefix is the non-secret display prefix of the token.
+	TokenPrefix string
+	// TenantName is the display name of the created entity.
+	TenantName string
+	// FQDN is the host name of the created entity.
+	FQDN string
+	// AdminUsername is the login of the delegated admin invited for the
+	// entity.
+	AdminUsername string
+	// ClientIP is the address the creation request came from.
+	ClientIP string
+	// At is the creation time, formatted with [FormatDateTime].
+	At time.Time
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
+}
+
+// TenantSetupCompletedData is the data of [TemplateTenantSetupCompleted]. It
+// holds no secret.
+type TenantSetupCompletedData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// FQDN is the host name of the entity.
+	FQDN string
+	// At is the completion time, formatted with [FormatDateTime].
+	At time.Time
+	// Forced tells whether the setup was completed with required items
+	// still undone (forced by the delegated admin) rather than checked.
+	Forced bool
+	// AdminLink is the absolute URL of the administration console, built
+	// from the configured admin host, never from a request Host. It carries
+	// no token.
+	AdminLink string
+}
+
+// ProvisioningTokenCreatedData is the data of
+// [TemplateProvisioningTokenCreated]. It holds no secret: never the token
+// secret nor its hash, only its non-secret display prefix. The mail engine
+// strips control and bidirectional characters from every text value.
+type ProvisioningTokenCreatedData struct {
+	// TokenName is the name the super admin gave to the token.
+	TokenName string
+	// TokenPrefix is the non-secret display prefix of the token.
+	TokenPrefix string
+	// CreatedBy is the login of the super admin who created the token.
+	CreatedBy string
+	// ClientIP is the address the creation request came from.
+	ClientIP string
+	// At is the creation time, formatted with [FormatDateTime].
+	At time.Time
+	// CIDRCount and SuffixCount are the numbers of allowed IP ranges and
+	// FQDN suffixes of the token.
+	CIDRCount   int
+	SuffixCount int
+	// MaxTenants is the number of live entities the token may create.
+	MaxTenants int
+	// MaxStorageQuotaBytes caps the storage quota of each entity it
+	// creates, formatted with [FormatSize].
+	MaxStorageQuotaBytes int64
+	// ExpiresAt is the expiry of the token, zero when it never expires.
+	ExpiresAt time.Time
+	// AdminLink is the absolute URL of the provisioning tokens page, built
+	// from the configured admin host, never from a request Host. It
+	// carries no token.
+	AdminLink string
 }
 
 // AntivirusAlertData is the data of [TemplateAntivirusAlert]. It holds no

@@ -149,7 +149,8 @@
       "antivirus_disabled": "Antivirus disabled for the entity",
       "antivirus_enabled": "Antivirus enabled for the entity",
       "setup_completed": "Entity setup completed",
-      "provisioned": "Entity created by provisioning"
+      "provisioned": "Entity created by provisioning",
+      "provision_refused": "Entity creation by provisioning refused"
     },
     "config": {
       "updated": "System settings updated"

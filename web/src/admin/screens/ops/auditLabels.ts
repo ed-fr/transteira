@@ -107,6 +107,7 @@ export const AUDIT_ACTION_GROUPS = [
       'tenant.antivirus_enabled',
       'tenant.setup_completed',
       'tenant.provisioned',
+      'tenant.provision_refused',
       'webhook.created',
       'webhook.updated',
       'webhook.deleted',

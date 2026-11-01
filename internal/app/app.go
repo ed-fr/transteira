@@ -51,6 +51,7 @@ import (
 	"github.com/ed-fr/transteira/internal/mytransfers"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/provisioning"
 	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
 	"github.com/ed-fr/transteira/internal/securitylog"
@@ -532,10 +533,24 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	// The resolver of the HTTP tenant middleware is invalidated by the
 	// tenant configuration after every change of a tenant row.
 	resolver := tenant.NewResolver(db.Tenants())
+	// The super admins are told by system mail of every tenant created
+	// through the provisioning API and of its setup completion (P50).
+	provisioningNotices := sysMail.provisioning(cfg, db.Admins().SuperAdminContacts, logger)
 	tenants, err := tenantadmin.New(db, tenantadmin.Options{
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
 		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled, Admins: admins,
+		Events: bus, Notifier: provisioningNotices,
+	})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	// The provisioning API (V1.2, decisions P48 to P50): the tokens of the
+	// super admin and the tenant creations of the service providers, on the
+	// admin hosts only.
+	provisioner, err := provisioning.New(db, provisioning.Options{
+		Confirmer: admins, Tenants: tenants, AdminHosts: cfg.AdminHosts, Audit: auditLog, Events: bus,
+		Notifier: provisioningNotices, Logger: logger,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -662,8 +677,9 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
-			admin.WithUpdateCheck(updates)),
+			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner)),
 		AdminSessions:       admins,
+		Provisioning:        httpserver.NewProvisioningAuthenticator(provisioner),
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
 		DownloadIdleTimeout: cfg.DownloadIdleTimeout,
 		Spec:                api.OpenAPISpec,

@@ -37,12 +37,15 @@ const (
 	ActorAPIToken AuditActorKind = "api_token"
 	// ActorSystem is TransTeira itself (cleanup task, local command...).
 	ActorSystem AuditActorKind = "system"
+	// ActorProvisioningToken is a provisioning token (since 1.2; Actor: its
+	// record ID "prv_...").
+	ActorProvisioningToken AuditActorKind = "provisioning_token"
 )
 
 // valid reports whether k is a known actor kind.
 func (k AuditActorKind) valid() bool {
 	switch k {
-	case ActorAdmin, ActorDepositor, ActorRecipient, ActorAPIToken, ActorSystem:
+	case ActorAdmin, ActorDepositor, ActorRecipient, ActorAPIToken, ActorSystem, ActorProvisioningToken:
 		return true
 	}
 	return false

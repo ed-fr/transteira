@@ -63,6 +63,13 @@ func (s *SecurityEvents) MetricsTokenInvalid(ctx context.Context, ip netip.Addr)
 	s.write(ctx, securitylog.Event{Type: securitylog.MetricsTokenInvalid, IP: ip})
 }
 
+// ProvisioningTokenInvalid records a provisioning_token_invalid event: a
+// provisioning token refused on the admin host, whatever the reason,
+// outside any tenant (written "-"). The token itself is never written.
+func (s *SecurityEvents) ProvisioningTokenInvalid(ctx context.Context, ip netip.Addr) {
+	s.write(ctx, securitylog.Event{Type: securitylog.ProvisioningTokenInvalid, IP: ip})
+}
+
 // DepositRefused records a deposit_refused event with its reason (one of
 // the securitylog Reason* deposit values).
 func (s *SecurityEvents) DepositRefused(ctx context.Context, ip netip.Addr, tenantFQDN, reason string) {

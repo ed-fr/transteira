@@ -65,6 +65,11 @@ const (
 	// AccessLinkInvalid: an unknown, expired or already used "My transfers"
 	// access link was presented (since 1.1, decision P38).
 	AccessLinkInvalid EventType = "access_link_invalid"
+	// ProvisioningTokenInvalid: an empty, malformed, unknown, revoked or expired
+	// provisioning token, or one used from outside its address ranges, was
+	// presented to the provisioning API on the admin host (since 1.2, threat
+	// model T-267). Same line format as APITokenInvalid; the tenant is "-".
+	ProvisioningTokenInvalid EventType = "provisioning_token_invalid"
 )
 
 // Well-known field keys.

@@ -14,6 +14,7 @@ import (
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/branding"
+	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/store"
@@ -147,12 +148,22 @@ type Options struct {
 	// "none": no tenant then has its antivirus effective
 	// (TenantView.AntivirusEffective).
 	AntivirusDisabled bool
+	// Events receives the tenant.setup_completed system event of a tenant
+	// created through the provisioning API (since V1.2); nil publishes
+	// nothing.
+	Events events.Publisher
+	// Notifier tells the super admins that a tenant created through the
+	// provisioning API completed its setup (since V1.2, P50); nil tells
+	// nobody.
+	Notifier ProvisioningNotifier
 }
 
 // AdminCreator creates the first delegated admin of a new tenant inside the
 // transaction creating it. *adminauth.Service implements it.
 type AdminCreator interface {
 	CreateDelegatedAdminTx(ctx context.Context, tx *store.SystemTx, p adminauth.Principal, t *tenant.Tenant,
+		in adminauth.DelegatedAdmin, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
+	CreateProvisionedAdminTx(ctx context.Context, tx *store.SystemTx, actor adminauth.AuditActor, t *tenant.Tenant,
 		in adminauth.DelegatedAdmin, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
 }
 
@@ -175,6 +186,10 @@ type Service struct {
 	avDisabled bool
 	// admins is Options.Admins.
 	admins AdminCreator
+	// events is Options.Events, never nil.
+	events events.Publisher
+	// notifier is Options.Notifier, nil for none.
+	notifier ProvisioningNotifier
 	// favicons generates the favicons of an uploaded logo
 	// (branding.GenerateFavicons; replaceable in tests).
 	favicons func(ctx context.Context, logoPNG []byte) (branding.Favicons, error)
@@ -213,6 +228,8 @@ func New(db *store.DB, opts Options) (*Service, error) {
 		dnsTimeout: opts.DNSTimeout,
 		avDisabled: opts.AntivirusDisabled,
 		admins:     opts.Admins,
+		events:     events.OrDiscard(opts.Events),
+		notifier:   opts.Notifier,
 		favicons:   branding.GenerateFavicons,
 		propose:    textproposals.Propose,
 	}

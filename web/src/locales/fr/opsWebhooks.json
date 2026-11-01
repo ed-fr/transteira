@@ -42,6 +42,9 @@
       "provisioned": "Entité créée par provisionnement",
       "setup_completed": "Configuration de l’entité terminée"
     },
+    "provisioning_token": {
+      "created": "Jeton de provisionnement créé"
+    },
     "webhook": {
       "test": "Événement de test"
     }

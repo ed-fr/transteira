@@ -240,32 +240,11 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 		return TenantCreated{}, err
 	}
 	if in.DelegatedAdmin != nil && s.admins == nil {
-		return TenantCreated{}, errors.New("tenantadmin: no admin creator configured")
+		return TenantCreated{}, errNoAdminCreator
 	}
-	name, err := checkName(in.Name)
+	nt, err := s.newTenant(in)
 	if err != nil {
 		return TenantCreated{}, err
-	}
-	fqdn, err := s.checkFQDN(in.FQDN)
-	if err != nil {
-		return TenantCreated{}, err
-	}
-	if !tenant.IsLanguage(in.DefaultLanguage) {
-		return TenantCreated{}, invalid(FieldDefaultLanguage, "unsupported language")
-	}
-	if in.StorageQuotaBytes <= 0 {
-		return TenantCreated{}, invalid(FieldStorageQuotaBytes, "must be positive")
-	}
-	maxBytes, ceiling, err := createLimits(in)
-	if err != nil {
-		return TenantCreated{}, err
-	}
-	preset, err := storedPreset(in.BackgroundPreset)
-	if err != nil {
-		return TenantCreated{}, err
-	}
-	if !in.SetupState.Valid() {
-		return TenantCreated{}, invalid(FieldSetupState, "must be setup or active")
 	}
 	var (
 		invited *InvitedAdmin
@@ -281,18 +260,9 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 			return nil
 		}
 	}
-	t, err := s.repo.createTenant(ctx, &tenant.Tenant{
-		Name: name, FQDN: fqdn, DefaultLanguage: in.DefaultLanguage, StorageQuotaBytes: in.StorageQuotaBytes,
-		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset, SetupState: in.SetupState,
-	}, then)
-	switch {
-	case errors.Is(err, store.ErrConflict), errors.Is(err, adminauth.ErrAlreadyExists):
-		return TenantCreated{}, ErrAlreadyExists
-	case errors.Is(err, adminauth.ErrInvalid), errors.Is(err, adminauth.ErrSystemSMTPUnavailable),
-		errors.Is(err, adminauth.ErrUnauthenticated), errors.Is(err, adminauth.ErrForbidden):
-		return TenantCreated{}, err
-	case err != nil:
-		return TenantCreated{}, fmt.Errorf("tenantadmin: create tenant: %w", err)
+	t, err := s.repo.createTenant(ctx, nt, then)
+	if err != nil {
+		return TenantCreated{}, createError("create tenant", err)
 	}
 	s.invalidate(t.ID, t.FQDN)
 	s.record(ctx, p, ip, t.ID, ActionTenantCreated, map[string]any{
@@ -303,6 +273,60 @@ func (s *Service) CreateTenant(ctx context.Context, p adminauth.Principal, in Te
 		return TenantCreated{}, err
 	}
 	return TenantCreated{TenantView: v, DelegatedAdmin: invited}, nil
+}
+
+// errNoAdminCreator reports a tenant creation with a delegated admin while
+// no AdminCreator is configured.
+var errNoAdminCreator = errors.New("tenantadmin: no admin creator configured")
+
+// newTenant validates in and returns the tenant to insert: name, normalized
+// FQDN (never an admin host), language, storage quota, transfer limit and
+// ceiling, background preset and setup state.
+func (s *Service) newTenant(in TenantCreate) (*tenant.Tenant, error) {
+	name, err := checkName(in.Name)
+	if err != nil {
+		return nil, err
+	}
+	fqdn, err := s.checkFQDN(in.FQDN)
+	if err != nil {
+		return nil, err
+	}
+	if !tenant.IsLanguage(in.DefaultLanguage) {
+		return nil, invalid(FieldDefaultLanguage, "unsupported language")
+	}
+	if in.StorageQuotaBytes <= 0 {
+		return nil, invalid(FieldStorageQuotaBytes, "must be positive")
+	}
+	maxBytes, ceiling, err := createLimits(in)
+	if err != nil {
+		return nil, err
+	}
+	preset, err := storedPreset(in.BackgroundPreset)
+	if err != nil {
+		return nil, err
+	}
+	if !in.SetupState.Valid() {
+		return nil, invalid(FieldSetupState, "must be setup or active")
+	}
+	return &tenant.Tenant{
+		Name: name, FQDN: fqdn, DefaultLanguage: in.DefaultLanguage, StorageQuotaBytes: in.StorageQuotaBytes,
+		MaxTransferBytes: maxBytes, MaxTransferCeiling: ceiling, BackgroundPreset: preset, SetupState: in.SetupState,
+	}, nil
+}
+
+// createError maps an error of a tenant creation with its first delegated
+// admin: an FQDN or username taken is ErrAlreadyExists, the errors of the
+// account creation pass through, and any other is wrapped (the store
+// errors of a provisioned creation stay testable with errors.Is).
+func createError(op string, err error) error {
+	switch {
+	case errors.Is(err, store.ErrConflict), errors.Is(err, adminauth.ErrAlreadyExists):
+		return ErrAlreadyExists
+	case errors.Is(err, adminauth.ErrInvalid), errors.Is(err, adminauth.ErrSystemSMTPUnavailable),
+		errors.Is(err, adminauth.ErrUnauthenticated), errors.Is(err, adminauth.ErrForbidden):
+		return err
+	}
+	return fmt.Errorf("tenantadmin: %s: %w", op, err)
 }
 
 // createLimits returns the transfer limit and ceiling of a new tenant.

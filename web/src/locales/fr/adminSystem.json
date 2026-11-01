@@ -6,7 +6,8 @@
     "settings": "Paramètres",
     "webhooks": "Webhooks",
     "audit": "Journal d’audit",
-    "masterKey": "Clé maître"
+    "masterKey": "Clé maître",
+    "provisioning": "Jetons de provisionnement"
   },
   "overview": {
     "title": "Vue d’ensemble du système",
@@ -37,5 +38,9 @@
     "textSince": "Le mode maintenance est actif depuis le {date} : les nouveaux dépôts sont refusés sur toutes les entités.",
     "environment": "(imposé par l’environnement)",
     "manage": "Gérer le mode maintenance"
+  },
+  "provisioning": {
+    "title": "Jetons de provisionnement",
+    "intro": "Jetons permettant à un infogéreur de créer des entités par l’API, dans un périmètre borné : plages d’adresses, suffixes de domaine, nombre d’entités et stockage."
   }
 }

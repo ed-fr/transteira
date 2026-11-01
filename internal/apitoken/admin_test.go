@@ -33,11 +33,11 @@ func TestNew(t *testing.T) {
 		t.Errorf("New(nil) = %v", err)
 	}
 	s := newService(nil, Options{TouchInterval: time.Second, MaxTracked: 3})
-	if s.touchInterval != time.Second || s.maxTracked != 3 || s.now == nil || s.logger == nil {
+	if s.touches.Interval() != time.Second || s.touches.MaxTracked() != 3 || s.now == nil || s.logger == nil {
 		t.Errorf("newService options = %+v", s)
 	}
 	s = newService(nil, Options{})
-	if s.touchInterval != DefaultTouchInterval || s.maxTracked != DefaultMaxTracked {
+	if s.touches.Interval() != DefaultTouchInterval || s.touches.MaxTracked() != DefaultMaxTracked {
 		t.Errorf("newService defaults = %+v", s)
 	}
 }

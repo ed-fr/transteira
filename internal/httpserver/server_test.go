@@ -1270,6 +1270,25 @@ func TestNoRedirectUnderAPI(t *testing.T) {
 	}
 }
 
+// TestResponseErrorProvisioningChallenge checks that a provisioning token
+// refused by the operation (revoked between the middleware and the
+// creation) answers with the invalid_token challenge, and that other
+// problems do not carry it.
+func TestResponseErrorProvisioningChallenge(t *testing.T) {
+	t.Parallel()
+	h := errorHandlers{logger: slog.New(slog.DiscardHandler)}
+	rec := httptest.NewRecorder()
+	h.responseError(rec, httptest.NewRequest(http.MethodPost, "/", nil), problem.New(problem.CodeProvisioningTokenInvalid))
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") != challengeInvalidToken {
+		t.Errorf("status %d, challenge %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	rec = httptest.NewRecorder()
+	h.responseError(rec, httptest.NewRequest(http.MethodPost, "/", nil), problem.New(problem.CodeNotFound))
+	if got := rec.Header().Get("WWW-Authenticate"); got != "" {
+		t.Errorf("challenge on another problem: %q", got)
+	}
+}
+
 func TestResponseErrorClientGone(t *testing.T) {
 	t.Parallel()
 	var logs lockedBuffer

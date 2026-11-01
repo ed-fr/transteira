@@ -81,6 +81,11 @@ const (
 	// left the setup state (since API 1.2). A system event that names its
 	// tenant.
 	TenantSetupCompleted Type = "tenant.setup_completed"
+	// ProvisioningTokenCreated: a super admin created a provisioning token
+	// (since API 1.2, threat model T-275). A system event without tenant;
+	// its counters give the scope of the token (cidrCount, suffixCount,
+	// maxTenants, maxStorageQuotaBytes), never its secret.
+	ProvisioningTokenCreated Type = "provisioning_token.created"
 	// WebhookTest: a test delivery requested by an admin. It is only sent
 	// by the webhook test operations and can never be subscribed to.
 	WebhookTest Type = "webhook.test"
@@ -100,7 +105,7 @@ func SystemTypes() []Type {
 	return []Type{
 		DiskAlertRaised, DiskAlertCleared, AntivirusAlertRaised, AntivirusAlertCleared,
 		MaintenanceEnabled, MaintenanceDisabled, MasterKeyRotationCompleted, MasterKeyRotationFailed,
-		TenantProvisioned, TenantSetupCompleted,
+		TenantProvisioned, TenantSetupCompleted, ProvisioningTokenCreated,
 	}
 }
 
@@ -267,6 +272,8 @@ const (
 	AdminPathMasterKey = "/admin/system/master-key"
 	// AdminPathSystemWebhooks is the page of the instance-wide webhooks.
 	AdminPathSystemWebhooks = "/admin/system/webhooks"
+	// AdminPathProvisioningTokens is the page of the provisioning tokens.
+	AdminPathProvisioningTokens = "/admin/system/provisioning-tokens"
 )
 
 // AdminPathTenantWebhooks returns the path of the webhook page of tenant

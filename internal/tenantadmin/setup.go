@@ -120,8 +120,10 @@ func (s *Service) GetSetup(ctx context.Context, p adminauth.Principal, tid tenan
 // the review of the mail templates (optional item). A tenant already active
 // answers ErrSetupComplete. The completion is audited as
 // tenant.setup_completed with details forced (and, when forced, the keys of
-// the required items still missing). It returns the checklist of the
-// active tenant.
+// the required items still missing). For a tenant created through the
+// provisioning API, the tenant.setup_completed system event is also
+// published and the super admins notified (Options.Events,
+// Options.Notifier; P50). It returns the checklist of the active tenant.
 func (s *Service) CompleteSetup(ctx context.Context, p adminauth.Principal, tid tenant.ID, force, mailTemplatesReviewed bool,
 	ip netip.Addr,
 ) (Setup, error) {
@@ -164,6 +166,7 @@ func (s *Service) CompleteSetup(ctx context.Context, p adminauth.Principal, tid 
 		details["missing"] = missing
 	}
 	s.record(ctx, p, ip, done.ID, ActionTenantSetupCompleted, details)
+	s.setupCompleted(ctx, done, force && len(missing) > 0, ip)
 	return s.checklist(ctx, done)
 }
 

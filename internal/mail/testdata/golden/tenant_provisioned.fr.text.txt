@@ -1,0 +1,19 @@
+Bonjour,
+
+Une entité a été créée par l'API de provisionnement.
+
+Entité : Entity A & Co
+Adresse : transfer.entity-a.example.com
+Admin délégué invité : jane.doe
+Jeton de provisionnement : Managed provider (ttp_AbCd)
+Requête depuis : 203.0.113.10
+Date : 13 octobre 2027 à 09:45 UTC
+
+L'entité reste en cours de configuration jusqu'à ce que son admin délégué termine l'assistant. Si vous ne reconnaissez pas cette création, révoquez le jeton dans l'administration.
+
+Administration :
+
+https://admin.transfer.example.com/admin
+
+-- 
+Ce message a été envoyé automatiquement par TransTeira. Merci de ne pas y répondre.

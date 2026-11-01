@@ -319,6 +319,58 @@ var keyDefs = map[string]keyDef{
 			Link: "https://admin.transfer.example.com/admin/activate#act_sample", ExpiresAt: sampleTime.Add(72 * time.Hour),
 		},
 	},
+	TemplateTenantProvisioned: {
+		vars: []varSpec{
+			{"token_name", VarText, true, "Name of the provisioning token that created the entity."},
+			{"token_prefix", VarText, false, "Non-secret display prefix of the provisioning token."},
+			{"tenant_name", VarText, true, "Name of the created entity."},
+			{"fqdn", VarText, true, "Host name of the created entity."},
+			{"admin_username", VarText, false, "Login of the delegated admin invited for the entity."},
+			{"client_ip", VarText, false, "Address the creation request came from."},
+			{"created_at", VarText, false, "Date and time of the creation."},
+			adminLinkVar,
+		},
+		values: tenantProvisionedValues,
+		sample: TenantProvisionedData{
+			TokenName: "Managed provider", TokenPrefix: "ttp_AbCd", TenantName: sampleTenant,
+			FQDN: "transfer.entity-a.example.com", AdminUsername: "jane.doe", ClientIP: "203.0.113.10",
+			At: sampleTime, AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
+	TemplateTenantSetupCompleted: {
+		vars: []varSpec{
+			{"tenant_name", VarText, true, "Name of the entity."},
+			{"fqdn", VarText, true, "Host name of the entity."},
+			{"completed_at", VarText, false, "Date and time the setup was completed."},
+			{"setup_outcome", VarText, false, "Whether every required item was done or the setup was forced."},
+			adminLinkVar,
+		},
+		values: tenantSetupCompletedValues,
+		sample: TenantSetupCompletedData{
+			TenantName: sampleTenant, FQDN: "transfer.entity-a.example.com", At: sampleTime,
+			AdminLink: "https://admin.transfer.example.com/admin",
+		},
+	},
+	TemplateProvisioningTokenCreated: {
+		vars: []varSpec{
+			{"token_name", VarText, true, "Name of the provisioning token."},
+			{"token_prefix", VarText, false, "Non-secret display prefix of the provisioning token."},
+			{"created_by", VarText, false, "Login of the super admin who created the token."},
+			{"client_ip", VarText, false, "Address the creation request came from."},
+			{"created_at", VarText, false, "Date and time of the creation."},
+			{"token_scope", VarText, false, "Numbers of allowed IP ranges and FQDN suffixes of the token."},
+			{"max_tenants", VarText, false, "Number of entities the token may create."},
+			{"max_storage_quota", VarText, false, "Largest storage quota of an entity the token creates."},
+			{"expires_at", VarText, false, "Expiry of the token, or that it never expires."},
+			adminLinkVar,
+		},
+		values: provisioningTokenCreatedValues,
+		sample: ProvisioningTokenCreatedData{
+			TokenName: "Managed provider", TokenPrefix: "ttp_AbCd", CreatedBy: "root", ClientIP: "203.0.113.10",
+			At: sampleTime, CIDRCount: 1, SuffixCount: 2, MaxTenants: 50, MaxStorageQuotaBytes: 1 << 40,
+			AdminLink: "https://admin.transfer.example.com/admin/system/provisioning-tokens",
+		},
+	},
 	TemplateAntivirusAlert: {
 		vars: []varSpec{
 			outageSinceVar,
@@ -684,6 +736,72 @@ func adminInvitationValues(l *labels, lang string, data any) (map[string]value, 
 		"activation_link": urlValue(d.Link),
 		"admin_host":      textValue(cleanInline(d.AdminHost)),
 		"expires_at":      textValue(FormatDateTime(lang, d.ExpiresAt)),
+	}, true
+}
+
+// tenantProvisionedValues returns the variables of the tenant_provisioned
+// template from a TenantProvisionedData. Every text loses its control and
+// bidirectional characters (T-80).
+func tenantProvisionedValues(_ *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(TenantProvisionedData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"token_name":     textValue(cleanInline(d.TokenName)),
+		"token_prefix":   textValue(cleanInline(d.TokenPrefix)),
+		"tenant_name":    textValue(cleanInline(d.TenantName)),
+		"fqdn":           textValue(cleanInline(d.FQDN)),
+		"admin_username": textValue(cleanInline(d.AdminUsername)),
+		"client_ip":      textValue(cleanInline(d.ClientIP)),
+		"created_at":     textValue(FormatDateTime(lang, d.At)),
+		"admin_link":     urlValue(d.AdminLink),
+	}, true
+}
+
+// tenantSetupCompletedValues returns the variables of the
+// tenant_setup_completed template from a TenantSetupCompletedData.
+func tenantSetupCompletedValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(TenantSetupCompletedData)
+	if !ok {
+		return nil, false
+	}
+	outcome := l.setupChecked
+	if d.Forced {
+		outcome = l.setupForced
+	}
+	return map[string]value{
+		"tenant_name":   textValue(cleanInline(d.TenantName)),
+		"fqdn":          textValue(cleanInline(d.FQDN)),
+		"completed_at":  textValue(FormatDateTime(lang, d.At)),
+		"setup_outcome": textValue(outcome),
+		"admin_link":    urlValue(d.AdminLink),
+	}, true
+}
+
+// provisioningTokenCreatedValues returns the variables of the
+// provisioning_token_created template from a ProvisioningTokenCreatedData.
+// Every text loses its control and bidirectional characters (T-80).
+func provisioningTokenCreatedValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(ProvisioningTokenCreatedData)
+	if !ok {
+		return nil, false
+	}
+	expires := l.noExpiry
+	if !d.ExpiresAt.IsZero() {
+		expires = FormatDateTime(lang, d.ExpiresAt)
+	}
+	return map[string]value{
+		"token_name":        textValue(cleanInline(d.TokenName)),
+		"token_prefix":      textValue(cleanInline(d.TokenPrefix)),
+		"created_by":        textValue(cleanInline(d.CreatedBy)),
+		"client_ip":         textValue(cleanInline(d.ClientIP)),
+		"created_at":        textValue(FormatDateTime(lang, d.At)),
+		"token_scope":       textValue(fmt.Sprintf(l.scopeCounts, d.CIDRCount, d.SuffixCount)),
+		"max_tenants":       textValue(strconv.Itoa(d.MaxTenants)),
+		"max_storage_quota": textValue(FormatSize(lang, d.MaxStorageQuotaBytes)),
+		"expires_at":        textValue(expires),
+		"admin_link":        urlValue(d.AdminLink),
 	}, true
 }
 

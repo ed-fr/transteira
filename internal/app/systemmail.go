@@ -4,13 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"sync"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/avalert"
 	"github.com/ed-fr/transteira/internal/config"
 	"github.com/ed-fr/transteira/internal/diskalert"
+	"github.com/ed-fr/transteira/internal/events"
+	"github.com/ed-fr/transteira/internal/i18n"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenantadmin"
 )
 
 // systemQueueSize bounds the system mail queue: it only carries the disk
@@ -156,4 +161,128 @@ func (im *invitationMailer) SendInvitation(ctx context.Context, m adminauth.Invi
 	msg.To = []string{m.To}
 	im.mailer.Send(ctx, []mail.Job{{TenantID: diskalert.MailTenantID, Template: mail.TemplateAdminInvitation, Settings: im.settings, Message: msg}},
 		slog.String("template", mail.TemplateAdminInvitation))
+}
+
+// provisioningNotifier tells the super admins, through the system mail
+// channel, that a tenant was created through the provisioning API, that
+// such a tenant completed its setup (tenantadmin.ProvisioningNotifier,
+// threat model P50) or that a provisioning token was created (T-275). Each super admin gets the mail in their language; the
+// link of the mail is built from the configured admin host, never from a
+// request Host.
+type provisioningNotifier struct {
+	mailer   diskalert.Mailer
+	settings mail.Settings
+	// contacts lists the super admins to notify
+	// (store.Admins.SuperAdminContacts).
+	contacts func(ctx context.Context) ([]store.AdminContact, error)
+	// adminBase is the base URL of the administration (adminBaseURL).
+	adminBase string
+	logger    *slog.Logger
+	// render renders a mail template (mail.Render; a field for the tests).
+	render func(name, lang string, data any) (mail.Message, error)
+}
+
+// provisioning returns the provisioning notifier of the system mail
+// channel, nil when system mail is disabled (no tenant can then be
+// provisioned, and a setup completion is not mailed).
+func (s *systemMail) provisioning(cfg *config.Config, contacts func(context.Context) ([]store.AdminContact, error),
+	logger *slog.Logger,
+) tenantadmin.ProvisioningNotifier {
+	if s.retrier == nil {
+		return nil
+	}
+	return &provisioningNotifier{
+		mailer: s.retrier, settings: s.settings, contacts: contacts, adminBase: adminBaseURL(cfg), logger: logger,
+		render: mail.Render,
+	}
+}
+
+// TenantProvisioned mails the tenant_provisioned notice of n.
+func (p *provisioningNotifier) TenantProvisioned(ctx context.Context, n tenantadmin.ProvisioningNotice) {
+	p.send(ctx, mail.TemplateTenantProvisioned, tenantAttr(n), mail.TenantProvisionedData{
+		TokenName: n.TokenName, TokenPrefix: n.TokenPrefix, TenantName: n.TenantName, FQDN: n.FQDN,
+		AdminUsername: n.AdminUsername, ClientIP: ipText(n.ClientIP), At: n.At, AdminLink: p.adminLink(n),
+	})
+}
+
+// TenantSetupCompleted mails the tenant_setup_completed notice of n.
+func (p *provisioningNotifier) TenantSetupCompleted(ctx context.Context, n tenantadmin.ProvisioningNotice) {
+	p.send(ctx, mail.TemplateTenantSetupCompleted, tenantAttr(n), mail.TenantSetupCompletedData{
+		TenantName: n.TenantName, FQDN: n.FQDN, At: n.At, Forced: n.Forced, AdminLink: p.adminLink(n),
+	})
+}
+
+// TokenCreated mails the provisioning_token_created notice of n (threat
+// model T-275), with the link to the provisioning tokens page.
+func (p *provisioningNotifier) TokenCreated(ctx context.Context, n tenantadmin.ProvisioningTokenNotice) {
+	p.send(ctx, mail.TemplateProvisioningTokenCreated, slog.String("token", n.TokenID), mail.ProvisioningTokenCreatedData{
+		TokenName: n.TokenName, TokenPrefix: n.TokenPrefix, CreatedBy: n.CreatedBy, ClientIP: ipText(n.ClientIP),
+		At: n.At, CIDRCount: n.CIDRCount, SuffixCount: n.SuffixCount, MaxTenants: n.MaxTenants,
+		MaxStorageQuotaBytes: n.MaxStorageQuotaBytes, ExpiresAt: n.ExpiresAt,
+		AdminLink: p.adminBase + events.AdminPathProvisioningTokens,
+	})
+}
+
+// tenantAttr is the log attribute naming the tenant of n.
+func tenantAttr(n tenantadmin.ProvisioningNotice) slog.Attr {
+	return slog.String("tenant", string(n.TenantID))
+}
+
+// ipText returns ip as text, "" when it is invalid.
+func ipText(ip netip.Addr) string {
+	if !ip.IsValid() {
+		return ""
+	}
+	return ip.String()
+}
+
+// adminLink returns the link to the page of the tenant of n in the
+// administration.
+func (p *provisioningNotifier) adminLink(n tenantadmin.ProvisioningNotice) string {
+	return p.adminBase + tenantadmin.AdminPathTenant(n.TenantID)
+}
+
+// send renders template with data in the language of each super admin and
+// queues one mail per super admin; subject is the log attribute naming the
+// tenant or token concerned. The failures are logged, never returned: the
+// tenant or token is already created or active.
+func (p *provisioningNotifier) send(ctx context.Context, template string, subject slog.Attr, data any) {
+	attrs := []any{slog.String("template", template), subject}
+	contacts, err := p.contacts(ctx)
+	if err != nil {
+		p.logger.ErrorContext(ctx, "provisioning notice not mailed: list the super admins", append(attrs, slog.Any("error", err))...)
+		return
+	}
+	// byLang holds the message of each language, nil when it failed to
+	// render: its recipients are skipped, the others still mailed.
+	byLang := make(map[string]*mail.Message, 2)
+	jobs := make([]mail.Job, 0, len(contacts))
+	for _, c := range contacts {
+		lang := c.Language
+		if !i18n.IsSupported(lang) {
+			lang = i18n.Default
+		}
+		rendered, ok := byLang[lang]
+		if !ok {
+			msg, err := p.render(template, lang, data)
+			if err != nil {
+				p.logger.ErrorContext(ctx, "provisioning notice not mailed: render failed",
+					append(attrs, slog.String("language", lang), slog.Any("error", err))...)
+			} else {
+				rendered = &msg
+			}
+			byLang[lang] = rendered
+		}
+		if rendered == nil {
+			continue
+		}
+		msg := *rendered
+		msg.To = []string{c.Email}
+		jobs = append(jobs, mail.Job{TenantID: diskalert.MailTenantID, Template: template, Settings: p.settings, Message: msg})
+	}
+	if len(jobs) == 0 {
+		p.logger.WarnContext(ctx, "provisioning notice not mailed: no recipient", attrs...)
+		return
+	}
+	p.mailer.Send(ctx, jobs, slog.String("template", template))
 }

@@ -1,0 +1,13 @@
+Hello,
+
+The entity Entity A & Co (transfer.entity-a.example.com), created through the provisioning API, has finished its setup and is now active.
+
+Date: October 13, 2027 at 09:45 UTC
+Completed by force: some required items were not done.
+
+Administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by TransTeira. Please do not reply to it.

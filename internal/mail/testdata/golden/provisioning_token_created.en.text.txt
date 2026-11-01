@@ -1,0 +1,21 @@
+Hello,
+
+A provisioning token was created. Whoever holds it can create entities through the provisioning API, within its scope.
+
+Token: Managed provider & Co (ttp_AbCd)
+Created by: root
+Request from: 203.0.113.10
+Date: October 13, 2027 at 09:45 UTC
+Scope: 2 IP range(s), 3 FQDN suffix(es)
+Maximum number of entities: 50
+Maximum storage quota per entity: 1.0 TB
+Expires: October 20, 2027 at 08:30 UTC
+
+If you do not recognize this creation, revoke the token in the administration.
+
+Provisioning tokens:
+
+https://admin.transfer.example.com/admin/system/provisioning-tokens
+
+-- 
+This message was sent automatically by TransTeira. Please do not reply to it.

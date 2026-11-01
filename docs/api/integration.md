@@ -14,7 +14,8 @@ The reference is the OpenAPI specification:
   admins (also on the tenant FQDNs, without authentication, when the operator sets
   `TT_API_DOCS_PUBLIC=true`).
 
-Error codes are described in [errors.md](errors.md). The examples use fictitious hosts:
+Error codes are described in [errors.md](errors.md). Managed service providers that create
+entities by script should read [provisioning.md](provisioning.md). The examples use fictitious hosts:
 `transfer.entity-a.example.com` for the tenant, `admin.transfer.example.com` for the
 administration.
 

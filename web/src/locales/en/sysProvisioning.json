@@ -1,0 +1,90 @@
+{
+  "list": {
+    "caption": "Provisioning tokens",
+    "create": "Create a provisioning token",
+    "empty": "No provisioning token yet.",
+    "columns": {
+      "name": "Name",
+      "prefix": "Prefix",
+      "cidrs": "Allowed IP ranges",
+      "suffixes": "Allowed FQDN suffixes",
+      "tenants": "Entities created",
+      "caps": "Caps",
+      "created": "Created",
+      "lastUsed": "Last used",
+      "expires": "Expires",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "quotaCap": "Quota up to {size}",
+    "transferCap": "Per-transfer limit up to {size}",
+    "transferNoCap": "Per-transfer limit: no cap below 20 GiB",
+    "createdBy": "{date} by {admin}",
+    "neverUsed": "Never used",
+    "noExpiry": "Never",
+    "lastUsedNote": "The last use is recorded at most once a minute per token: it may lag behind by up to a minute.",
+    "revoke": "Revoke"
+  },
+  "form": {
+    "title": "Create a provisioning token",
+    "legend": "Token settings",
+    "intro": "The token can only be used from the allowed ranges and only creates entities whose address ends with an allowed suffix, within the caps below.",
+    "name": {
+      "label": "Name",
+      "hint": "To recognise the token, for example the service provider it is given to."
+    },
+    "cidrs": {
+      "label": "Allowed IP ranges",
+      "hint": "One range per line (CIDR). The ranges 0.0.0.0/0 and ::/0 are refused."
+    },
+    "suffixes": {
+      "label": "Allowed FQDN suffixes",
+      "hint": "One suffix per line, starting with a dot, with at least two labels (.transfer.example.com)."
+    },
+    "maxTenants": {
+      "label": "Maximum number of entities",
+      "hint": "Highest number of live entities created with this token."
+    },
+    "quota": {
+      "label": "Highest storage quota per entity",
+      "hint": "No entity created with the token can get a larger quota."
+    },
+    "transfer": {
+      "label": "Highest per-transfer limit (optional)",
+      "hint": "Leave empty for no cap below 20 GiB."
+    },
+    "expiry": {
+      "label": "Expiry date (optional)",
+      "hint": "The token stops working at the end of this day. Leave empty for a token that never expires."
+    },
+    "committed": {
+      "value": "Storage committed by this token: {size} (maximum number of entities times highest quota).",
+      "unknown": "Storage committed by this token: enter the number of entities and the quota to see it.",
+      "large": "Storage committed by this token: very large (more than can be shown exactly).",
+      "note": "This is the volume that could be allocated; check that your disk can host it."
+    },
+    "confirm": "To confirm, enter the current code of your authenticator app.",
+    "confirmRecovery": "To confirm, enter one of your recovery codes. It can be used only once.",
+    "submit": "Create the token",
+    "created": "Provisioning token created."
+  },
+  "secret": {
+    "title": "Provisioning token {name} created",
+    "text": "Copy this token now and give it to the service provider through a trusted channel, never in clear by mail.",
+    "label": "Provisioning token",
+    "closed": "The token was created."
+  },
+  "revoke": {
+    "title": "Revoke the token {name}?",
+    "text": "The token stops working immediately. The entities it already created are kept. This cannot be undone.",
+    "confirm": "Revoke the token",
+    "done": "The token {name} is revoked."
+  },
+  "errors": {
+    "catchAll": "A range that allows any address is refused.",
+    "suffixDot": "The suffix must start with a dot (.transfer.example.com).",
+    "suffixInvalid": "Enter a domain suffix with at least two labels (.transfer.example.com).",
+    "maxTenants": "Enter a whole number from 1 to {max}.",
+    "notFound": "This token no longer exists."
+  }
+}

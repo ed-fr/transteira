@@ -91,6 +91,7 @@ describe('system navigation', () => {
       '/system/webhooks',
       '/system/audit',
       '/system/master-key',
+      '/system/provisioning-tokens',
     ]);
   });
 
@@ -104,9 +105,9 @@ describe('system navigation', () => {
       exact: true,
     });
     expect(links.at(-1)).toEqual({
-      section: 'masterKey',
-      path: '/system/master-key',
-      labelKey: 'adminSystem.nav.masterKey',
+      section: 'provisioning',
+      path: '/system/provisioning-tokens',
+      labelKey: 'adminSystem.nav.provisioning',
       exact: false,
     });
     expect(links.filter((l) => l.exact)).toHaveLength(1);

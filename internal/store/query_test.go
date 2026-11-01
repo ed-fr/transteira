@@ -830,7 +830,7 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                        reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                     reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
@@ -988,6 +988,22 @@ var systemAllowlist = map[string]string{
 	`SELECT value, updated_at FROM system_state WHERE key = ?`: reasonSystemState,
 	`INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) ` +
 		`ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`: reasonSystemState,
+	// Provisioning tokens (0023): instance table, and the tenants of a
+	// token, always filtered on provisioned_by (T-270).
+	`INSERT INTO provisioning_tokens (id, name, prefix, token_hash, allowed_cidrs, allowed_fqdn_suffixes, ` +
+		`max_storage_quota_bytes, max_transfer_bytes, max_tenants, created_by, created_at, expires_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: reasonProvisioning,
+	`SELECT ` + provisioningTokenCountedColumns + ` FROM provisioning_tokens WHERE id = ?`:                        reasonProvisioning,
+	`SELECT ` + provisioningTokenColumns + ` FROM provisioning_tokens WHERE id = ?`:                               reasonProvisioning,
+	`SELECT ` + provisioningTokenColumns + ` FROM provisioning_tokens WHERE token_hash = ?`:                       reasonProvisioning,
+	`SELECT ` + provisioningTokenCountedColumns + ` FROM provisioning_tokens ORDER BY created_at DESC, id DESC`:   reasonProvisioning,
+	`UPDATE provisioning_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`:                           reasonProvisioning,
+	`UPDATE provisioning_tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: reasonProvisioning,
+	`SELECT count(*) FROM tenants WHERE provisioned_by = ?`:                                                       reasonProvisioning,
+	`SELECT count(*), COALESCE(min(created_at), 0) FROM tenants WHERE provisioned_by = ? AND created_at > ?`:      reasonProvisioning,
+	`SELECT ` + provisionedTenantColumns + ` FROM tenants t WHERE t.provisioned_by = ? AND t.status = 'active' ` +
+		`ORDER BY t.created_at DESC, t.id DESC`: reasonProvisioning,
+	`SELECT ` + provisionedTenantColumns + ` FROM tenants t WHERE t.provisioned_by = ? AND t.id = ? AND t.status = 'active'`: reasonProvisioning,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

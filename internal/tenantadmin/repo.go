@@ -18,6 +18,8 @@ type repo interface {
 	getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
 	listTenants(ctx context.Context, opts store.TenantListOptions) (store.Page[*tenant.Tenant], error)
 	createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error)
+	createProvisionedTenant(ctx context.Context, tokID string, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error)
+	provisioningToken(ctx context.Context, tokID string) (store.ProvisioningToken, error)
 	updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error)
 	setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error
 	setSMTPTested(ctx context.Context, tid tenant.ID, version time.Time) error
@@ -105,6 +107,14 @@ func (r *storeRepo) listTenants(ctx context.Context, opts store.TenantListOption
 
 func (r *storeRepo) createTenant(ctx context.Context, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error) {
 	return r.db.Tenants().CreateWith(ctx, t, then)
+}
+
+func (r *storeRepo) createProvisionedTenant(ctx context.Context, tokID string, t *tenant.Tenant, then func(tx *store.SystemTx, t *tenant.Tenant) error) (*tenant.Tenant, error) {
+	return r.db.Tenants().CreateProvisioned(ctx, tokID, t, then)
+}
+
+func (r *storeRepo) provisioningToken(ctx context.Context, tokID string) (store.ProvisioningToken, error) {
+	return r.db.ProvisioningTokens().Get(ctx, tokID)
 }
 
 func (r *storeRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {

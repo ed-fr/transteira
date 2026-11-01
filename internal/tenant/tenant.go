@@ -180,6 +180,10 @@ type Tenant struct {
 	// engine is not "none" as well (antivirusEffective). It is read at
 	// finalization (decision D8).
 	AntivirusEnabled bool
+	// ProvisionedBy is the identifier ("prv_" + ULID) of the provisioning
+	// token that created the tenant, "" for a tenant created by a super
+	// admin (V1.2). It is set at creation only, by the store.
+	ProvisionedBy string
 	// CreatedAt is the creation time.
 	CreatedAt time.Time
 	// UpdatedAt is the time of the last modification.

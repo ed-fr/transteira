@@ -64,6 +64,8 @@ transteira/
 │   ├── filename/                    # Assainissement des noms de fichiers (P8) et noms uniques dans le ZIP
 │   ├── textsafe/                    # Caractères qui masquent ou déguisent du texte (contrôle, bidi, invisibles) :
 │   │                                # définition unique, retrait dans les messages, refus dans les noms (filename)
+│   ├── touchthrottle/               # Limitation des écritures de dernière utilisation des jetons (API, provisionnement) :
+│   │                                # au plus une par minute et par jeton, mémoire bornée
 │   ├── download/                    # Accès par jeton, mot de passe et blocage, cookie de déverrouillage, fichier avec
 │   │                                # Range, archive, suivi des plages servies et premier téléchargement
 │   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
@@ -286,7 +288,7 @@ transteira/
 │                                    # (V1.1 : grafana/, zabbix/)
 │
 ├── docs/
-│   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md
+│   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md, provisioning.md (API de provisionnement)
 │   ├── user/
 │   │   ├── README.md                # Index des guides (une ligne par guide, en anglais et en français)
 │   │   ├── fr/                      # depositor.md, recipient.md, delegated-admin.md, super-admin.md (en français)

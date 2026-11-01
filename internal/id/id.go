@@ -95,6 +95,10 @@ const (
 	// AbuseReport identifies an abuse report filed from a download page
 	// (since 1.1, OpenAPI AbuseReportId).
 	AbuseReport Prefix = "abr"
+	// ProvisioningToken identifies a provisioning token record (since 1.2,
+	// OpenAPI ProvisioningTokenId), not the secret itself ("ttp_" +
+	// base62).
+	ProvisioningToken Prefix = "prv"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

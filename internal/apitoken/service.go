@@ -6,23 +6,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
-	"sync"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/touchthrottle"
 )
 
 // Defaults of the [Options].
 const (
 	// DefaultTouchInterval is the minimum delay between two recordings of
 	// the last use of a token.
-	DefaultTouchInterval = time.Minute
+	DefaultTouchInterval = touchthrottle.DefaultInterval
 	// DefaultMaxTracked bounds the number of tokens whose last recording
 	// is remembered in memory.
-	DefaultMaxTracked = 10000
+	DefaultMaxTracked = touchthrottle.DefaultMaxTracked
 )
 
 // repo is the persistence used by the service: the store repositories
@@ -98,16 +98,11 @@ type Options struct {
 // Service manages and authenticates the API tokens. It is safe for
 // concurrent use.
 type Service struct {
-	repo          repo
-	logger        *slog.Logger
-	now           func() time.Time
-	touchInterval time.Duration
-	maxTracked    int
-
-	// mu guards touched: token ID -> time of the last recording of its
-	// use by this process.
-	mu      sync.Mutex
-	touched map[string]time.Time
+	repo   repo
+	logger *slog.Logger
+	now    func() time.Time
+	// touches throttles the recordings of the last use of each token.
+	touches *touchthrottle.Throttle
 }
 
 // errMissingDB reports a [New] call without a database.
@@ -124,20 +119,13 @@ func New(db *store.DB, opts Options) (*Service, error) {
 // newService returns the service over r.
 func newService(r repo, opts Options) *Service {
 	s := &Service{
-		repo: r, logger: opts.Logger, now: opts.Now, touchInterval: opts.TouchInterval, maxTracked: opts.MaxTracked,
-		touched: map[string]time.Time{},
+		repo: r, logger: opts.Logger, now: opts.Now, touches: touchthrottle.New(opts.TouchInterval, opts.MaxTracked),
 	}
 	if s.logger == nil {
 		s.logger = slog.Default()
 	}
 	if s.now == nil {
 		s.now = time.Now
-	}
-	if s.touchInterval <= 0 {
-		s.touchInterval = DefaultTouchInterval
-	}
-	if s.maxTracked <= 0 {
-		s.maxTracked = DefaultMaxTracked
 	}
 	return s
 }

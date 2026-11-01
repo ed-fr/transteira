@@ -3487,7 +3487,8 @@ export interface paths {
          *     as the login (`429 rate-limited`); the 5th wrong code of the session ends it. The role and
          *     the body are checked before the code, so that a refused request consumes no attempt.
          *     Reserved to the super admin. Audited as `provisioning_token.created` (never with the
-         *     secret).
+         *     secret); the super admins are notified by the system SMTP and the instance-wide webhooks
+         *     (event `provisioning_token.created`, never with the secret).
          */
         post: operations["createProvisioningToken"];
         delete?: never;
@@ -3546,15 +3547,20 @@ export interface paths {
          *     the request is `503 system-smtp-unavailable` and nothing is created. The FQDN must end
          *     with one of the `allowedFqdnSuffixes` of the token, `storageQuotaBytes` must not exceed its
          *     `maxStorageQuotaBytes`, `maxTransferBytes` (default the token's cap, else 20 GiB) its
-         *     `maxTransferBytes`, and the token must not have reached `maxTenants` live tenants:
+         *     `maxTransferBytes`, and the token must not have reached `maxTenants` tenants (those being
+         *     deleted still count until their deletion completes):
          *     otherwise `403 provisioning-scope-exceeded`, with the refused field in `errors`. An FQDN or
          *     a username already used is `409 already-exists`, as for `createTenant`; an unknown
-         *     background preset `422 unknown-background-preset`. At most 30 creations per hour per
-         *     token (`429 rate-limited`). Served on the admin host only (`404` on a tenant FQDN). Only
-         *     the Bearer provisioning token authenticates it: session cookies are ignored and no CSRF
-         *     token is checked. Audited as `tenant.provisioned` (actor the token), `admin.created` and
-         *     `admin.invited`; the `tenant.provisioned` event also goes to the instance-wide webhooks
-         *     and, by the system SMTP, to the super admins.
+         *     background preset `422 unknown-background-preset`. At most 30 attempts per hour per
+         *     token, whatever their outcome (refused ones included), and at most 30 creations per hour
+         *     per token (`429 rate-limited` with `Retry-After`). A token revoked or expired since the
+         *     request was accepted is `401 provisioning-token-invalid` with the `invalid_token`
+         *     challenge. Served on the admin host only (`404` on a tenant FQDN). Only the Bearer
+         *     provisioning token authenticates it: session cookies are ignored and no CSRF token is
+         *     checked. Audited as `tenant.provisioned` (actor the token), `admin.created` and
+         *     `admin.invited`; a refused creation is audited as `tenant.provision_refused` (without
+         *     tenant, actor the token) with its reason code only. The `tenant.provisioned` event also
+         *     goes to the instance-wide webhooks and, by the system SMTP, to the super admins.
          */
         post: operations["provisionTenant"];
         delete?: never;
@@ -4750,10 +4756,14 @@ export interface components {
          *     `tenant.setup_completed` carries `details.forced`; `tenant.provisioned` (actor kind
          *     `provisioning_token`, actor the token identifier) names the created tenant;
          *     `provisioning_token.created` and `provisioning_token.revoked` (without tenant) never carry
-         *     the secret.
+         *     the secret; `tenant.provision_refused` (without tenant, actor kind `provisioning_token`,
+         *     actor and object the token identifier) carries only `details.reason`: `already_exists`,
+         *     `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
+         *     `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
+         *     expired since the request was accepted), never the request (FQDN, username, address).
          * @enum {string}
          */
-        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "provisioning_token.created" | "provisioning_token.revoked";
+        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked";
         AuditEvent: {
             id: string;
             /** Format: date-time */
@@ -5042,9 +5052,9 @@ export interface components {
              * @description Highest per-transfer limit of a tenant created with the token; `null` for no cap below 20 GiB.
              */
             maxTransferBytes?: number | null;
-            /** @description Highest number of live tenants created with the token. */
+            /** @description Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes). */
             maxTenants: number;
-            /** @description Live tenants created with the token. */
+            /** @description Tenants created with the token that still exist: the live ones and those being deleted (a tenant being deleted counts until its deletion completes, although `listProvisionedTenants` already leaves it out). */
             tenantsCreated: number;
             /** @description Identifier (`adm_...`) of the super admin who created it; the interface resolves the name. */
             createdBy: string;
@@ -5096,7 +5106,7 @@ export interface components {
             maxStorageQuotaBytes: number;
             /** Format: int64 */
             maxTransferBytes?: number | null;
-            /** @description Highest number of live tenants created with the token. */
+            /** @description Highest number of tenants created with the token that still exist, counted as `tenantsCreated` (tenants being deleted included, until their deletion completes). */
             maxTenants: number;
             /** Format: date-time */
             expiresAt?: string | null;
@@ -5496,11 +5506,13 @@ export interface components {
          *     `tenant.provisioned` (a tenant was created through the provisioning API) and
          *     `tenant.setup_completed` (a tenant created through the provisioning API left the `setup`
          *     state); these two carry `tenant` and
-         *     are also mailed to the super admins through the system SMTP. `webhook.test` is only
-         *     sent by the test operations and cannot be subscribed to.
+         *     are also mailed to the super admins through the system SMTP. Also since 1.2,
+         *     `provisioning_token.created` (a super admin created a provisioning token, without
+         *     `tenant`, never with the secret), also mailed to the super admins through the system
+         *     SMTP. `webhook.test` is only sent by the test operations and cannot be subscribed to.
          * @enum {string}
          */
-        WebhookEventType: "virus.detected" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "quota.warning" | "quota.reached" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_completed" | "master_key.rotation_failed" | "tenant.provisioned" | "tenant.setup_completed" | "webhook.test";
+        WebhookEventType: "virus.detected" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "quota.warning" | "quota.reached" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_completed" | "master_key.rotation_failed" | "tenant.provisioned" | "tenant.setup_completed" | "provisioning_token.created" | "webhook.test";
         /**
          * @description Since 1.1. Coarse cause of a failed delivery; no address, port, banner or body is ever reported: `dns` (name not resolved), `refused_network` (address denied by the network guard), `connect`, `tls`, `timeout`, `http_status` (non-2xx answer).
          * @enum {string}
@@ -5615,7 +5627,7 @@ export interface components {
                 id: string;
                 name: string;
             };
-            /** @description Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage. */
+            /** @description Counters of the event, for example `{files}` for `virus.detected`, `{value, threshold}` for an abuse threshold, `{usedRatio, threshold}` for a quota or disk alert, `{waitingTransfers, outageSeconds}` for an antivirus outage, `{cidrCount, suffixCount, maxTenants, maxStorageQuotaBytes}` for `provisioning_token.created`. */
             counts: {
                 [key: string]: number;
             };
@@ -14243,7 +14255,7 @@ export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<c
 export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code"];
 export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "provisioning_token.created", "provisioning_token.revoked"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked"];
 export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
@@ -14259,7 +14271,7 @@ export const recipientVerificationStartPurposeValues: ReadonlyArray<FlattenedDee
 export const abuseReportCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportCategory"]> = ["malware", "phishing", "illegal_content", "spam", "unknown_sender", "other"];
 export const abuseReportStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportStatus"]> = ["open", "closed"];
 export const webhookKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookKind"]> = ["teams", "slack", "generic"];
-export const webhookEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookEventType"]> = ["virus.detected", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "quota.warning", "quota.reached", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_completed", "master_key.rotation_failed", "tenant.provisioned", "tenant.setup_completed", "webhook.test"];
+export const webhookEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookEventType"]> = ["virus.detected", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "quota.warning", "quota.reached", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_completed", "master_key.rotation_failed", "tenant.provisioned", "tenant.setup_completed", "provisioning_token.created", "webhook.test"];
 export const webhookErrorCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookErrorCategory"]> = ["dns", "refused_network", "connect", "tls", "timeout", "http_status"];
 export const webhookEventSeverityValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["WebhookEvent"]["severity"]> = ["info", "warning", "critical"];
 export const componentsParametersTusResumableHeaderValues: ReadonlyArray<FlattenedDeepRequired<components>["parameters"]["TusResumableHeader"]> = ["1.0.0"];

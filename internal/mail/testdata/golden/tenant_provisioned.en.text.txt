@@ -1,0 +1,19 @@
+Hello,
+
+An entity was created through the provisioning API.
+
+Entity: Entity A & Co
+Address: transfer.entity-a.example.com
+Delegated admin invited: jane.doe
+Provisioning token: Managed provider (ttp_AbCd)
+Request from: 203.0.113.10
+Date: October 13, 2027 at 09:45 UTC
+
+The entity is in setup until its delegated admin completes the wizard. If you do not recognize this creation, revoke the token in the administration.
+
+Administration:
+
+https://admin.transfer.example.com/admin
+
+-- 
+This message was sent automatically by TransTeira. Please do not reply to it.

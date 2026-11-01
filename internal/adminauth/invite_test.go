@@ -658,3 +658,92 @@ func TestInviteRecordsForcedTOTP(t *testing.T) {
 		}
 	})
 }
+
+// createProvisionedWith creates a tenant provisioned by the token actor
+// with its delegated admin.
+func (ev *env) createProvisionedWith(t *testing.T, actor AuditActor, fqdn string, in DelegatedAdmin) (*tenant.Tenant, Account, Activation, error) {
+	t.Helper()
+	var (
+		acc  Account
+		link Activation
+	)
+	tn, err := ev.db.Tenants().CreateWith(context.Background(), &tenant.Tenant{
+		SetupState: tenant.SetupStateSetup,
+		Name:       "Prov " + fqdn, FQDN: fqdn, DefaultLanguage: "en", MaxTransferBytes: 1 << 30, StorageQuotaBytes: 100 << 30,
+	}, func(tx *store.SystemTx, created *tenant.Tenant) error {
+		var err error
+		acc, link, err = ev.svc.CreateProvisionedAdminTx(context.Background(), tx, actor, created, in, ipA)
+		return err
+	})
+	return tn, acc, link, err
+}
+
+func TestCreateProvisionedAdminTx(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		ev := newEnv(t, e)
+		ev.mustSetup(t)
+		actor := AuditActor{Kind: store.ActorProvisioningToken, ID: "prv_01JABCT1V2W3X4Y5Z6A7B8C9D0"}
+		good := DelegatedAdmin{Username: "prov.admin", Email: "it@entity-p.example.com", Language: "fr"}
+		gone := func(fqdn string) {
+			t.Helper()
+			if _, err := ev.db.Tenants().TenantByFQDN(ctx, fqdn); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("tenant %s exists after a failure: %v", fqdn, err)
+			}
+		}
+
+		// The actor must be a provisioning token.
+		for _, bad := range []AuditActor{{}, {Kind: store.ActorAdmin, ID: "root"}, {Kind: store.ActorProvisioningToken}} {
+			_, _, _, err := ev.createProvisionedWith(t, bad, "p1.example.com", good)
+			wantErr(t, "actor", err, errProvisioningActor)
+		}
+		// The copy delivery is not allowed, an unknown one is invalid.
+		in := good
+		in.Delivery = store.DeliveryCopy
+		_, _, _, err := ev.createProvisionedWith(t, actor, "p1.example.com", in)
+		var na *NotAllowedError
+		if !errors.As(err, &na) || na.Field != FieldDelivery || !errors.Is(err, ErrInvalid) {
+			t.Errorf("copy = %v", err)
+		}
+		in.Delivery = "pigeon"
+		_, _, _, err = ev.createProvisionedWith(t, actor, "p1.example.com", in)
+		wantInvalid(t, "unknown delivery", err, FieldDelivery)
+		// Without the system SMTP nothing is created, even with no delivery.
+		_, _, _, err = ev.createProvisionedWith(t, actor, "p1.example.com", good)
+		wantErr(t, "no smtp", err, ErrSystemSMTPUnavailable)
+		gone("p1.example.com")
+
+		// The link is mailed, never returned, and the token is the actor.
+		mailer := ev.withMailer()
+		tn, acc, link, err := ev.createProvisionedWith(t, actor, "p2.example.com", good)
+		if err != nil {
+			t.Fatalf("provisioned = %v", err)
+		}
+		im := mailer.last(t)
+		if link.URL != "" || link.Delivery != store.DeliveryMail || mailer.count() != 1 || im.To != good.Email ||
+			acc.Username != "prov.admin" || !slices.Equal(acc.TenantIDs, []tenant.ID{tn.ID}) || !acc.RequireTOTP {
+			t.Errorf("account = %+v link = %+v mail = %+v", acc, link, im)
+		}
+		page, err := ev.db.AuditEvents().List(ctx, store.AuditFilter{Limit: store.MaxPageSize})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := 0
+		for _, it := range page.Items {
+			if (it.Action == "admin.created" || it.Action == "admin.invited") && it.ObjectID == acc.ID {
+				found++
+				if it.ActorKind != store.ActorProvisioningToken || it.Actor != actor.ID {
+					t.Errorf("%s actor = %s %s", it.Action, it.ActorKind, it.Actor)
+				}
+			}
+		}
+		if found != 2 {
+			t.Errorf("audit events of the provisioned admin = %d, want 2", found)
+		}
+		// An explicit mail delivery is accepted too.
+		in = DelegatedAdmin{Username: "prov.two", Email: "two@entity-p.example.com", Language: "en", Delivery: store.DeliveryMail}
+		if _, _, _, err := ev.createProvisionedWith(t, actor, "p3.example.com", in); err != nil {
+			t.Errorf("explicit mail = %v", err)
+		}
+	})
+}

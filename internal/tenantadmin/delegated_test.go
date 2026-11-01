@@ -171,6 +171,12 @@ func (f fakeAdminCreator) CreateDelegatedAdminTx(context.Context, *store.SystemT
 	return adminauth.Account{}, adminauth.Activation{}, f.err
 }
 
+func (f fakeAdminCreator) CreateProvisionedAdminTx(context.Context, *store.SystemTx, adminauth.AuditActor, *tenant.Tenant,
+	adminauth.DelegatedAdmin, netip.Addr,
+) (adminauth.Account, adminauth.Activation, error) {
+	return adminauth.Account{}, adminauth.Activation{}, f.err
+}
+
 func TestCreateTenantDelegatedAdminErrors(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ctx := context.Background()

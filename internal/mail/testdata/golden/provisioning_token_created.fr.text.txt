@@ -1,0 +1,21 @@
+Bonjour,
+
+Un jeton de provisionnement a été créé. Son détenteur peut créer des entités par l'API de provisionnement, dans la limite de sa portée.
+
+Jeton : Managed provider & Co (ttp_AbCd)
+Créé par : root
+Requête depuis : 203.0.113.10
+Date : 13 octobre 2027 à 09:45 UTC
+Portée : 2 plage(s) IP, 3 suffixe(s) de FQDN
+Nombre maximal d'entités : 50
+Quota de stockage maximal par entité : 1,0 To
+Expiration : 20 octobre 2027 à 08:30 UTC
+
+Si vous ne reconnaissez pas cette création, révoquez le jeton dans l'administration.
+
+Jetons de provisionnement :
+
+https://admin.transfer.example.com/admin/system/provisioning-tokens
+
+-- 
+Ce message a été envoyé automatiquement par TransTeira. Merci de ne pas y répondre.

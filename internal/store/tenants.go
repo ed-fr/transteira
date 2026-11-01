@@ -25,7 +25,7 @@ const (
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
 	`status, primary_color, accent_color, has_logo, has_background, background_preset, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
-	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, created_at, updated_at`
+	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, created_at, updated_at, provisioned_by`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
@@ -33,7 +33,7 @@ var (
 	qTenantInsert = systemQuery(
 		// The setup state is always written explicitly, from the Go value
 		// (migration 0022 drops its default on PostgreSQL, T-261).
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -181,16 +181,17 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 		t                  tenant.Tenant
 		tid, status, setup string
 		created, updated   int64
-		preset             sql.NullString
+		preset, provBy     sql.NullString
 		tested, reviewed   sql.NullInt64
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
-		&setup, &tested, &reviewed, &created, &updated); err != nil {
+		&setup, &tested, &reviewed, &created, &updated, &provBy); err != nil {
 		return nil, err
 	}
 	t.BackgroundPreset = preset.String // NULL is the default preset, ""
+	t.ProvisionedBy = provBy.String    // NULL for a tenant created by a super admin
 	t.ID = tenant.ID(tid)
 	t.Status = tenant.Status(status)
 	t.SetupState = tenant.SetupState(setup)
@@ -231,6 +232,18 @@ func (r *Tenants) Create(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 // wrapped. then must not start another transaction; it may register
 // [SystemTx.AfterCommit] hooks.
 func (r *Tenants) CreateWith(ctx context.Context, t *tenant.Tenant, then func(tx *SystemTx, created *tenant.Tenant) error) (*tenant.Tenant, error) {
+	if t.ProvisionedBy != "" {
+		return nil, invalid("only a provisioned creation names its provisioning token")
+	}
+	return r.create(ctx, t, nil, then)
+}
+
+// create implements CreateWith and CreateProvisioned: before the insertion,
+// inside the transaction, it runs guard when not nil (the checks of a
+// provisioned creation under the provisioning lock).
+func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *SystemTx) error,
+	then func(tx *SystemTx, created *tenant.Tenant) error,
+) (*tenant.Tenant, error) {
 	if !t.ID.IsZero() {
 		return nil, invalid("tenant id is assigned by the store")
 	}
@@ -255,11 +268,16 @@ func (r *Tenants) CreateWith(ctx context.Context, t *tenant.Tenant, then func(tx
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
 	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
+		if guard != nil {
+			if err := guard(tx); err != nil {
+				return err
+			}
+		}
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, presetArg(c.BackgroundPreset), c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
 			c.AllowTransferReply, c.AntivirusEnabled, string(c.SetupState), nil, nil,
-			toMillis(now), toMillis(now))
+			toMillis(now), toMillis(now), nullText(c.ProvisionedBy))
 		if err != nil {
 			return err
 		}

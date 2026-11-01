@@ -45,6 +45,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
   setup-incomplete` listing the missing items; `force` for the super admin only); there is no way
   back. `GET /admin/tenants/{id}/text-proposals/{document}/{language}` proposes a legal notice or
   privacy policy filled with the tenant configuration, never saved.
+- Provisioning API for managed service providers: provisioning tokens (`ttp_`), created by the
+  super admin with a TOTP re-confirmation and bound to IP ranges, FQDN suffixes and caps, create
+  entities in the setup state with their first delegated admin through
+  `POST /api/v1/provisioning/tenants` (list and follow with `GET`); the activation link is mailed
+  and never returned; at most 30 creation attempts and 30 creations per hour per token, every
+  refused creation audited as `tenant.provision_refused` (reason code only). New security log
+  event `provisioning_token_invalid` (counted by the shipped
+  fail2ban and CrowdSec rules), gitleaks rule for `ttp_` tokens, system mails `tenant_provisioned`
+  and `tenant_setup_completed` for the super admins, guide `docs/api/provisioning.md`.
+- The creation of a provisioning token notifies the super admins: system mail
+  `provisioning_token_created` and instance webhook event `provisioning_token.created` (never the
+  secret).
 
 ## [1.1.0] - 2026-10-31
 

@@ -299,6 +299,14 @@ func (s *Service) Invite(ctx context.Context, p Principal, adminID string, inv I
 	return accountOf(invited), link, nil
 }
 
+// AuditActor identifies who acts in the audit events of an account
+// creation that is not made by an administrator session: a provisioning
+// token (Kind [store.ActorProvisioningToken], ID its "prv_" identifier).
+type AuditActor struct {
+	Kind store.AuditActorKind
+	ID   string
+}
+
 // CreateDelegatedAdminTx creates, inside tx (the transaction creating the
 // tenant t), the first delegated admin of t for the super admin of p, from
 // clientIP: a new account assigned to t only, TOTP required, with an
@@ -316,6 +324,44 @@ func (s *Service) CreateDelegatedAdminTx(ctx context.Context, tx *store.SystemTx
 	if err := manager(p); err != nil {
 		return Account{}, Activation{}, err
 	}
+	return s.createDelegatedAdminTx(ctx, tx, AuditActor{Kind: store.ActorAdmin, ID: p.Admin.Username}, t, in, clientIP)
+}
+
+// errProvisioningActor reports a provisioned admin creation without a
+// provisioning token as its actor (a programming error).
+var errProvisioningActor = errors.New("adminauth: a provisioned admin needs a provisioning token actor")
+
+// CreateProvisionedAdminTx is [Service.CreateDelegatedAdminTx] for a tenant
+// created through the provisioning API by the token actor (Kind
+// store.ActorProvisioningToken), which is recorded as the actor of the
+// admin.created and admin.invited events. The activation link is always
+// mailed through the system SMTP, never returned (T-272): in.Delivery must
+// be empty or mail, else a *NotAllowedError on FieldDelivery, and without a
+// system SMTP it returns ErrSystemSMTPUnavailable. The other errors are
+// those of CreateDelegatedAdminTx, without the role checks: the caller
+// authenticated the token. The caller must roll tx back on any error, so
+// that nothing is created.
+func (s *Service) CreateProvisionedAdminTx(ctx context.Context, tx *store.SystemTx, actor AuditActor, t *tenant.Tenant, in DelegatedAdmin, clientIP netip.Addr) (Account, Activation, error) {
+	if actor.Kind != store.ActorProvisioningToken || actor.ID == "" {
+		return Account{}, Activation{}, errProvisioningActor
+	}
+	switch in.Delivery {
+	case "", store.DeliveryMail:
+	case store.DeliveryCopy:
+		return Account{}, Activation{}, &NotAllowedError{Field: FieldDelivery}
+	default:
+		return Account{}, Activation{}, invalid(FieldDelivery)
+	}
+	if s.mailer == nil {
+		return Account{}, Activation{}, ErrSystemSMTPUnavailable
+	}
+	in.Delivery = store.DeliveryMail
+	return s.createDelegatedAdminTx(ctx, tx, actor, t, in, clientIP)
+}
+
+// createDelegatedAdminTx implements CreateDelegatedAdminTx and
+// CreateProvisionedAdminTx, recording actor in the audit events.
+func (s *Service) createDelegatedAdminTx(ctx context.Context, tx *store.SystemTx, actor AuditActor, t *tenant.Tenant, in DelegatedAdmin, clientIP netip.Addr) (Account, Activation, error) {
 	username, err := store.NormalizeUsername(in.Username)
 	if err != nil {
 		return Account{}, Activation{}, invalid(FieldUsername)
@@ -350,11 +396,12 @@ func (s *Service) CreateDelegatedAdminTx(ctx context.Context, tx *store.SystemTx
 		return Account{}, Activation{}, fmt.Errorf("adminauth: create delegated admin: %w", err)
 	}
 	for _, ev := range []audit.Event{
-		adminEvent(p.Admin.Username, clientIP, audit.ActionAdminCreated, a.ID, map[string]any{
+		adminEvent(actor.ID, clientIP, audit.ActionAdminCreated, a.ID, map[string]any{
 			"username": a.Username, "role": string(a.Role), "tenant_ids": a.TenantIDs, "require_totp": a.RequireTOTP,
 		}),
-		invitedEvent(p.Admin.Username, clientIP, a, link, in.Language, false),
+		invitedEvent(actor.ID, clientIP, a, link, in.Language, false),
 	} {
+		ev.ActorKind = actor.Kind
 		if err := r.audit(ctx, ev); err != nil {
 			return Account{}, Activation{}, fmt.Errorf("adminauth: create delegated admin: %w", err)
 		}

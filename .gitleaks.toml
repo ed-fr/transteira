@@ -19,6 +19,21 @@ regexes = [
   '''^tt_EXAMPLE[A-Za-z0-9]*$''',
 ]
 
+[[rules]]
+id = "transteira-provisioning-token"
+description = "TransTeira provisioning token"
+regex = '''\bttp_[0-9A-Za-z]{43}\b'''
+keywords = ["ttp_"]
+
+# Example provisioning tokens use the unmistakably fake shape "ttp_EXAMPLE" followed by base62
+# characters; only that shape is allowed, anywhere.
+[[rules.allowlists]]
+description = "Fake example provisioning tokens (ttp_EXAMPLE...)"
+regexTarget = "match"
+regexes = [
+  '''^ttp_EXAMPLE[A-Za-z0-9]*$''',
+]
+
 # The API specification (and the web types generated from it, which copy its descriptions) and
 # the documentation contain fake passwords and keys in their examples. Only the generic rule is relaxed there; every other rule still applies.
 [[allowlists]]
@@ -28,6 +43,18 @@ paths = [
   '''^api/openapi\.yaml$''',
   '''^web/src/shared/api/schema\.ts$''',
   '''^docs/''',
+]
+
+# Provisioning token record identifiers ("prv_" + ULID) are public identifiers, never secrets
+# (the secret is "ttp_..."); their ULID is reported by the generic rule. Only that exact shape
+# is allowed, and only for the generic rule.
+[[allowlists]]
+description = "Provisioning token identifiers (prv_ + ULID), not secrets"
+targetRules = ["generic-api-key"]
+# The generic rule matches the key and the quotes too: the identifier is its secret group.
+regexTarget = "secret"
+regexes = [
+  '''^prv_[0-9A-HJKMNP-TV-Z]{26}$''',
 ]
 
 [[allowlists]]
