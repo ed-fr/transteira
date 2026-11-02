@@ -38,6 +38,8 @@ Un envoi se déroule en quatre étapes, détaillées ci-dessous :
 
 Ce que voient vos destinataires est décrit dans [Télécharger les fichiers](topic:download).
 
+> **Note** Une nouvelle entité reste fermée tant que son administrateur n’a pas terminé de la configurer. D’ici là, la page affiche **Service en cours de mise en service** et aucun dépôt n’est possible : revenez un peu plus tard, ou contactez votre administrateur.
+
 <!-- topic: deposit-identify -->
 ### Vous identifier par un code
 

@@ -36,6 +36,8 @@ Une fois vérifié, votre accès dure environ une heure dans ce navigateur. Ensu
 
 > **À savoir** Si vous n’avez pas encore téléchargé les fichiers, vous recevez un mail de rappel la veille de l’expiration du transfert. Il contient votre lien personnel.
 
+> **Note** Une entité encore en cours de mise en service refuse aussi les téléchargements : la page affiche alors **Service en cours de mise en service**. C’est temporaire et ne concerne qu’une entité qui n’a pas encore été ouverte ; revenez un peu plus tard, ou demandez à l’expéditeur.
+
 <!-- topic: download-password -->
 ### Transfert protégé
 

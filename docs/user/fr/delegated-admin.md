@@ -17,7 +17,7 @@ Dans vos entités, vous pouvez modifier presque tout. Quelques réglages sont r�
 
 Votre compte est créé par un super administrateur, qui vous transmet ensuite un lien d’activation pour choisir votre mot de passe.
 
-TransTeira n’envoie jamais ce lien par mail : le super administrateur vous le remet en main propre, par messagerie instantanée ou par téléphone. Le lien est valable 72 heures et ne fonctionne qu’une fois.
+Le super administrateur vous remet ce lien en main propre, par messagerie instantanée ou par téléphone, ou demande à TransTeira de vous l’envoyer par mail. Dans les deux cas, le lien est valable 72 heures et ne fonctionne qu’une fois. Un lien envoyé par mail arrive dans votre langue et n’est affiché nulle part ailleurs ; avec lui, la double authentification est obligatoire pour votre compte. Si vous recevez une seconde invitation, utilisez uniquement la dernière : chaque nouvelle invitation révoque le lien précédent.
 
 1. Ouvrez le lien. La page **Activation de votre compte** s’affiche.
 2. Saisissez votre mot de passe dans **Nouveau mot de passe**, puis de nouveau dans **Confirmez le mot de passe**. La règle est rappelée sous le champ : **Au moins 12 caractères. Une phrase de passe est facile à retenir et difficile à deviner.**
@@ -26,7 +26,7 @@ TransTeira n’envoie jamais ce lien par mail : le super administrateur vous le 
 
 ![Page d’activation avec les champs du nouveau mot de passe et de sa confirmation](../screenshots/fr/admin-activation.png)
 
-Si la page affiche **Lien d’activation invalide**, le lien a expiré, a déjà servi ou a été copié de façon incomplète. Demandez-en un nouveau à un super administrateur.
+Si la page affiche **Lien d’activation invalide**, le lien a expiré, a déjà servi ou a été copié de façon incomplète. Demandez-en un nouveau à un super administrateur (un nouveau lien révoque le précédent).
 
 <!-- topic: login -->
 ## Se connecter
@@ -138,6 +138,27 @@ Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez
 
 Les écrans de configuration déterminent l’apparence et le comportement des pages publiques de l’entité. Les modifications s’appliquent immédiatement aux pages publiques, et chacune est enregistrée dans le [journal d’audit](topic:tenant-audit).
 
+<!-- topic: tenant-setup -->
+### Assistant de configuration
+
+Une nouvelle entité démarre à l’état **En cours de mise en service**. L’assistant de configuration (écran **Mise en service**) liste ce qui reste à configurer avant d’ouvrir l’entité au public.
+
+Il apparaît à deux endroits : sur la [page d’accueil](topic:admin), un avertissement **Mise en service à terminer** propose **Commencer la mise en service de** suivi du nom de l’entité ; et dans la navigation de l’entité, qui affiche le badge **En cours de mise en service** et un lien **Mise en service**. Tant que l’entité n’est pas ouverte, le public ne voit que le message « Service en cours de mise en service » et tout dépôt, téléchargement et invitation est refusé.
+
+La liste **Étapes de la mise en service** est calculée d’après la configuration réelle de l’entité ; chaque étape indique **Fait** ou **À faire**, et **Obligatoire** ou **Facultatif**.
+
+- **Logo** et **Couleurs** (facultatifs) : voir [Habillage](topic:tenant-branding).
+- **Messagerie (SMTP)** (obligatoire) : la configuration doit avoir été testée avec succès avec **Envoyer un mail de test** depuis sa dernière modification. Voir [Messagerie (SMTP)](topic:tenant-smtp).
+- **Plages d’adresses IP internes** et **Domaines de messagerie internes** (obligatoires) : au moins un de chaque. Voir [Réseau](topic:tenant-network).
+- **Mentions légales** et **Politique de confidentialité** (obligatoires) : rédigées dans la langue par défaut de l’entité, sans aucune mention `[À compléter : …]` (ou `[To complete: …]`). Voir [Mentions légales](topic:tenant-legal).
+- **Modèles de mails** (facultatif) : cochez **J’ai relu les modèles de mails** une fois les modèles relus ou adaptés (voir [Modèles de mails](topic:tenant-templates)) ; cela est enregistré à la fin de la mise en service.
+
+Chaque étape propose un lien **Configurer** vers l’écran correspondant. Sur cet écran, **Retour à la mise en service** vous ramène à la liste. Une étape passe à **Fait** dès que la configuration la satisfait : vous pouvez revenir à la liste dans l’ordre de votre choix.
+
+Dans l’éditeur d’un document légal, **Utiliser le texte proposé** remplit l’éditeur avec un texte préparé d’après la configuration de l’entité (nom, adresse, durées des transferts, durées de conservation, cookies, antivirus). Si l’éditeur contient déjà du texte, TransTeira demande confirmation avant de le remplacer. Rien n’est enregistré tant que vous n’avez pas cliqué sur **Enregistrer**. La proposition est un point de départ, pas un avis juridique : faites-la relire par votre délégué à la protection des données ou par un juriste. Chaque information que TransTeira ne peut pas connaître est marquée `[À compléter : …]` (en anglais `[To complete: …]`) ; l’éditeur compte les mentions restantes, et l’étape n’est **Fait** que lorsqu’il n’en reste plus dans la langue par défaut.
+
+Lorsque toutes les étapes obligatoires sont **Fait**, cliquez sur **Terminer la mise en service**. Sinon le bouton reste désactivé et la liste indique les étapes obligatoires restantes. L’entité est alors ouverte : les dépôts et les téléchargements deviennent possibles. Cette action est irréversible : une entité ne revient jamais à l’état de mise en service. Seul le super administrateur peut forcer l’ouverture malgré des étapes manquantes ; ce n’est pas possible pour vous.
+
 <!-- topic: tenant-general -->
 ### Général
 
@@ -166,13 +187,17 @@ La section **Contraste** contrôle chaque paire de couleurs utilisée par l’in
 
 ![Écran Habillage avec les couleurs, le contrôle de contraste et l’aperçu de la page publique](../screenshots/fr/admin-tenant-branding.png)
 
+**Bibliothèque d’images de fond** : sous l’image de fond, choisissez l’une des images fournies avec TransTeira et cliquez sur **Appliquer**. Une image de fond que vous téléversez vous-même est prioritaire : le choix de la bibliothèque ne s’applique qu’après la suppression de votre image, et l’écran l’indique.
+
 **Logo** (affiché en haut des pages publiques) et **Image de fond** (affichée en plein écran derrière la zone de dépôt) :
 
 1. Cliquez sur **Choisir une image** et sélectionnez un fichier PNG, JPEG ou WebP : 5 Mo au plus pour le logo, 10 Mo pour l’image de fond.
 2. Vérifiez l’aperçu, puis cliquez sur **Envoyer l’image**.
 3. Pour retirer une image, cliquez sur **Supprimer l’image**.
 
-Chaque image est réencodée par TransTeira, ce qui supprime ses métadonnées et tout contenu caché. Les fichiers SVG sont refusés. Une très grande photo peut être refusée à cause de ses dimensions : réduisez-la à 3840 pixels sur son plus grand côté (convertissez d’abord une image WebP en JPEG). Sans image de fond, une image par défaut est utilisée.
+Chaque image est réencodée par TransTeira, ce qui supprime ses métadonnées et tout contenu caché. Les fichiers SVG sont refusés. Une très grande photo peut être refusée à cause de ses dimensions : réduisez-la à 3840 pixels sur son plus grand côté (convertissez d’abord une image WebP en JPEG). Sans image de fond, l’image de la bibliothèque que vous avez choisie ou, à défaut, une image par défaut est utilisée.
+
+**Favicon** : l’icône affichée dans l’onglet du navigateur est générée automatiquement à partir du logo que vous téléversez (format PNG, en plusieurs tailles), sans rien à configurer. Sans logo, l’icône de TransTeira est utilisée. Remplacer ou supprimer le logo met à jour le favicon.
 
 <!-- topic: tenant-network -->
 ### Réseau

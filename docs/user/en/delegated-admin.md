@@ -17,7 +17,7 @@ Within your entities, you can change almost everything. A few settings are reser
 
 Your account is created by a super administrator, who then hands you an activation link to choose your password.
 
-TransTeira never sends this link by email: the super administrator gives it to you in person, by instant messaging or by phone. The link is valid for 72 hours and works only once.
+The super administrator hands you this link in person, by instant messaging or by phone, or has TransTeira mail it to you. In both cases the link is valid for 72 hours and works only once. A mailed link arrives in your language and is never displayed elsewhere; with it, two-factor authentication is mandatory for your account. If you receive a second invitation, use only the latest: each new invitation revokes the previous link.
 
 1. Open the link. The page **Activate your account** appears.
 2. Type your password in **New password**, then again in **Confirm the password**. The rule is shown under the field: **At least 12 characters. A passphrase is easy to remember and hard to guess.**
@@ -26,7 +26,7 @@ TransTeira never sends this link by email: the super administrator gives it to y
 
 ![Activation page with the new password and confirmation fields](../screenshots/en/admin-activation.png)
 
-If the page shows **Invalid activation link**, the link has expired, has already been used or was copied incompletely. Ask a super administrator for a new one.
+If the page shows **Invalid activation link**, the link has expired, has already been used or was copied incompletely. Ask a super administrator for a new one (a new link revokes the previous one).
 
 <!-- topic: login -->
 ## Signing in
@@ -138,6 +138,27 @@ The filters of the lists are kept in the page address, so you can bookmark a fil
 
 The configuration screens set how the public pages of the entity look and behave. Changes apply immediately to the public pages, and each one is recorded in the [audit log](topic:tenant-audit).
 
+<!-- topic: tenant-setup -->
+### Setup wizard
+
+A new entity starts in the **Being set up** state. The Setup wizard lists what remains to be configured before the entity is opened to the public.
+
+It appears in two places: on the [Home page](topic:admin), a **Setup to complete** warning offers **Start the setup of** followed by the name of the entity; and in the navigation of the entity, which shows the **Being set up** badge and a **Setup** link. Until the entity is opened, the public sees only the message "Service being set up" and every deposit, download and invitation is refused.
+
+The **Setup steps** list is computed from the real configuration of the entity; each step shows **Done** or **To do**, and **Required** or **Optional**.
+
+- **Logo** and **Colours** (optional): see [Branding](topic:tenant-branding).
+- **Mail (SMTP)** (required): the settings must have been tested successfully with **Send a test email** since their last change. See [Mail (SMTP)](topic:tenant-smtp).
+- **Internal IP ranges** and **Internal mail domains** (required): at least one of each. See [Network](topic:tenant-network).
+- **Legal notice** and **Privacy policy** (required): written in the default language of the entity, with no `[To complete: …]` (or `[À compléter : …]`) marker left. See [Legal information](topic:tenant-legal).
+- **Mail templates** (optional): tick **I reviewed the mail templates** once you have reviewed or adapted them (see [Email templates](topic:tenant-templates)); this is recorded when the setup is finished.
+
+Each step has a **Configure** link to the matching screen. On that screen, **Back to setup** takes you back to the list. A step changes to **Done** as soon as the configuration satisfies it, so you can come back to the list in any order.
+
+In the editor of a legal document, **Use the proposed text** fills the editor with a text prepared from the configuration of the entity (name, address, transfer durations, retention periods, cookies, antivirus). If the editor already contains text, TransTeira asks before replacing it. Nothing is saved until you click **Save**. The proposal is a starting point, not legal advice: have it reviewed by your data protection officer or a lawyer. Every piece of information that TransTeira cannot know is marked `[To complete: …]` (in French `[À compléter : …]`); the editor counts the markers that remain, and the step is **Done** only when none is left in the default language.
+
+When all the required steps are **Done**, click **Finish setup**. Otherwise the button stays disabled and the list tells you which required steps remain. The entity is then open: deposits and downloads become possible. This cannot be undone: an entity never goes back to the setup state. Only the super administrator can force the opening with missing steps; you cannot.
+
 <!-- topic: tenant-general -->
 ### General
 
@@ -166,13 +187,17 @@ The **Contrast** section checks each pair of colors used by the interface. The r
 
 ![Branding screen with the colors, the contrast check and the preview of the public page](../screenshots/en/admin-tenant-branding.png)
 
+**Background library**: under the background image, choose one of the images supplied with TransTeira and click **Apply**. A background image you upload yourself takes precedence: the library choice applies only once your image has been deleted, and the screen says so.
+
 **Logo** (shown at the top of the public pages) and **Background image** (shown full screen behind the deposit area):
 
 1. Click **Choose an image** and select a PNG, JPEG or WebP file: at most 5 MB for the logo and 10 MB for the background.
 2. Check the preview, then click **Upload the image**.
 3. To remove an image, click **Delete the image**.
 
-Every image is re-encoded by TransTeira, which removes its metadata and any hidden content. SVG files are refused. A very large photo may be refused because of its dimensions: reduce it to 3840 pixels on its longest side (convert a WebP image to JPEG first). Without a background image, a default image is used.
+Every image is re-encoded by TransTeira, which removes its metadata and any hidden content. SVG files are refused. A very large photo may be refused because of its dimensions: reduce it to 3840 pixels on its longest side (convert a WebP image to JPEG first). Without a background image, the library image you chose or, failing that, a default image is used.
+
+**Favicon**: the icon shown in the browser tab is generated automatically from the logo you upload (PNG format, in several sizes), and there is nothing to configure. Without a logo, the TransTeira icon is used. Replacing or deleting the logo updates the favicon.
 
 <!-- topic: tenant-network -->
 ### Network

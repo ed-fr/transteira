@@ -119,7 +119,7 @@ export const routes: readonly AdminRoute[] = [
     component: TenantSetup,
     titleKey: 'adminTenants.nav.setup',
     access: 'auth',
-    helpTopic: 'tenant-general',
+    helpTopic: 'tenant-setup',
     tenantNav: true,
   },
   {
@@ -372,7 +372,7 @@ export const routes: readonly AdminRoute[] = [
     component: ProvisioningTokens,
     titleKey: 'adminSystem.provisioning.title',
     access: 'super',
-    helpTopic: 'system-settings',
+    helpTopic: 'system-provisioning',
     systemNav: true,
   },
   { pattern: '/help', component: Help, titleKey: 'common.help.title', access: 'any' },

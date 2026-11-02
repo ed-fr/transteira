@@ -1,13 +1,13 @@
 # TransTeira
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: stable.** Version 1.1.0 delivers the V1 scope (the core) and the V1.1 scope
-> (operations); see [Versions](#versions) for what comes next.
+> **Status: stable.** Version 1.2.0 delivers the V1 scope (the core), the V1.1 scope
+> (operations) and the V1.2 scope (onboarding); see [Versions](#versions) for what comes next.
 
 ## Highlights
 
@@ -57,6 +57,19 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
   (clamd, ICAP, generic HTTP API) with an EICAR self-test ([guide](docs/operations/antivirus.md)).
 - **Documentation (V1.1)**: user guides personalised with each entity's real rules, with a
   printable version.
+- **Setting up an entity (V1.2)**: a new entity starts in a setup state with a checklist computed
+  from its real configuration (tested SMTP, IP ranges and domains, legal texts) and proposed legal
+  notice and privacy policy; it is opened to the public only when the setup is complete.
+- **Delegated admin invitation (V1.2)**: the activation link of a new delegated admin is mailed
+  through the system SMTP, and an entity can be created together with its first admin.
+- **Branding (V1.2)**: a library of eight background images chosen per entity (or at creation),
+  and a favicon generated from each entity's logo.
+- **Provisioning API (V1.2)**: provisioning tokens let a managed service provider create entities
+  in the setup state, with automatic TLS certificates through Caddy on-demand TLS
+  ([guide](docs/api/provisioning.md)).
+- **Updates (V1.2)**: the running version is shown in the administration, and the super admin is
+  told when a newer release exists (daily check, never an automatic update; `TT_UPDATE_CHECK=false`
+  turns off every outbound connection).
 
 ## How it works
 
@@ -215,6 +228,8 @@ Every variable, with its default and its limits, is documented in [`.env.example
   running instance
 - [API integration guide](docs/api/integration.md): API tokens and scripted, resumable uploads
   with tus (bash/curl and PowerShell examples); [error codes](docs/api/errors.md)
+- [Provisioning API guide](docs/api/provisioning.md): provisioning tokens, creating entities for
+  managed service providers, on-demand TLS
 - [Project structure](docs/architecture/project-structure.md)
 - [Web interface](web/README.md): build, development loop, dependency policy, CSP rules
 - [Threat model (STRIDE, in French)](docs/security/threat-model.md)
@@ -298,7 +313,8 @@ returned by `/api/v1/version` and `/healthz` and printed by `transteira version`
 | Scope | Content |
 |---|---|
 | V1, the core (1.0) | Core transfer, security, administration and API features. |
-| **V1.1, operations** (1.1, current) | Everything listed above. |
+| V1.1, operations (1.1) | Monitoring, abuse detection, sharing controls, "My transfers", dark mode, antivirus engines. |
+| **V1.2, onboarding** (1.2, current) | Everything listed above. |
 | V2, enterprise (planned) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
 
 The API reserves the paths and fields of these later scopes, so they are planned as minor

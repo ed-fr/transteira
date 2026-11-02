@@ -78,6 +78,12 @@
     "path": "{lang}/admin-privacy.png"
   },
   {
+    "name": "admin-provisioning-tokens",
+    "screen": "admin /admin/system/provisioning-tokens",
+    "profile": "super-admin",
+    "path": "{lang}/admin-provisioning-tokens.png"
+  },
+  {
     "name": "admin-stats",
     "screen": "admin /admin/tenants/:id/stats",
     "profile": "delegated-admin",
@@ -172,6 +178,12 @@
     "screen": "admin /admin/tenants/:id/recipient-rules",
     "profile": "delegated-admin",
     "path": "{lang}/admin-tenant-recipient-rules.png"
+  },
+  {
+    "name": "admin-tenant-setup",
+    "screen": "admin /admin/tenants/:id/setup (entity in setup)",
+    "profile": "super-admin",
+    "path": "{lang}/admin-tenant-setup.png"
   },
   {
     "name": "admin-tenant-smtp",

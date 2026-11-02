@@ -155,6 +155,16 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'admin-system-audit', screen: 'admin /admin/system/audit', profile: 'super-admin' },
   { name: 'admin-system-master-key', screen: 'admin /admin/system/master-key', profile: 'super-admin' },
   {
+    name: 'admin-provisioning-tokens',
+    screen: 'admin /admin/system/provisioning-tokens',
+    profile: 'super-admin',
+  },
+  {
+    name: 'admin-tenant-setup',
+    screen: 'admin /admin/tenants/:id/setup (entity in setup)',
+    profile: 'super-admin',
+  },
+  {
     name: 'admin-system-webhooks',
     screen: 'admin /admin/system/webhooks',
     profile: 'super-admin',

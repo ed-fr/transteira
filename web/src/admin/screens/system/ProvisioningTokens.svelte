@@ -281,7 +281,7 @@
 
 <div class="tt-title-row">
   <h1 tabindex="-1" bind:this={heading}>{t('adminSystem.provisioning.title')}</h1>
-  <HelpIcon topic="system-settings" title={t('adminSystem.provisioning.title')} {nav} />
+  <HelpIcon topic="system-provisioning" title={t('adminSystem.provisioning.title')} {nav} />
 </div>
 <p>{t('adminSystem.provisioning.intro')}</p>
 

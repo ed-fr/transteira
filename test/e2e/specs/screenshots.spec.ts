@@ -891,6 +891,7 @@ test.describe('super admin', () => {
     ['admin-system-settings', '/admin/system/settings', 'adminSystem.settings.title'],
     ['admin-system-audit', '/admin/system/audit', 'adminSystem.audit.title'],
     ['admin-system-master-key', '/admin/system/master-key', 'adminSystem.masterKey.title'],
+    ['admin-provisioning-tokens', '/admin/system/provisioning-tokens', 'adminSystem.provisioning.title'],
   ];
 
   test('home, entities, administrators and system screens', async ({ newContext }) => {
@@ -901,6 +902,36 @@ test.describe('super admin', () => {
         await page.goto(`${ORIGINS.admin}${url}`);
         await heading(page, lang, key);
         await shoot(page, lang, name);
+      }
+    }
+  });
+
+  test('setup wizard of an entity in setup', async ({ newContext }) => {
+    const api = superAdminApi();
+    const names = { en: 'Example subsidiary', fr: 'Filiale exemple' };
+    for (const lang of LANGS) {
+      // A throwaway entity in the setup state (entities A and B are open), deleted afterwards.
+      const t = await api.ok<{ id: string }>(
+        'POST',
+        '/admin/tenants',
+        {
+          name: names[lang],
+          fqdn: `setup-${lang}.localhost`,
+          defaultLanguage: lang,
+          setupState: 'setup',
+          storageQuotaBytes: 1 << 30,
+          maxTransferBytes: 1 << 30,
+          maxTransferCeiling: 1 << 30,
+        },
+        [201],
+      );
+      try {
+        const page = await openPage(newContext, lang, STORAGE_SUPER);
+        await page.goto(`${ORIGINS.admin}/admin/tenants/${t.id}/setup`);
+        await heading(page, lang, 'setup.wizard.title');
+        await shoot(page, lang, 'admin-tenant-setup');
+      } finally {
+        await api.call('DELETE', `/admin/tenants/${t.id}?confirm=${encodeURIComponent(names[lang])}`);
       }
     }
   });

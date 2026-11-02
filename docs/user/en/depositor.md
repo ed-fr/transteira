@@ -38,6 +38,8 @@ Sending files takes four steps, described in detail below:
 
 What your recipients see is described in [Downloading the files](topic:download).
 
+> **Note** A new entity stays closed until its administrator has finished configuring it. Until then the page shows **Service being set up** and no deposit is possible: come back a little later, or contact your administrator.
+
 <!-- topic: deposit-identify -->
 ### Identifying yourself with a code
 

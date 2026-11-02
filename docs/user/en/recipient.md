@@ -36,6 +36,8 @@ Once verified, your access lasts about an hour in this browser. After that, the 
 
 > **Note** If you have not downloaded the files, you receive a reminder email the day before the transfer expires. It contains your personal link.
 
+> **Note** An entity that is still being set up refuses downloads too: the page then shows **Service being set up**. This is temporary and only concerns an entity that has not been opened yet; come back a little later, or ask the sender.
+
 <!-- topic: download-password -->
 ### Protected transfer
 

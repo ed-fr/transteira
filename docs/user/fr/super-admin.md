@@ -1,6 +1,6 @@
 # Guide du super administrateur
 
-Ce guide s’adresse à l’exploitant de l’instance TransTeira. En tant que super administrateur, vous pouvez faire tout ce que fait un administrateur délégué, sur toutes les entités : les écrans communs sont décrits dans le guide de l’administrateur délégué, par exemple [Se connecter](topic:login), [Mon compte](topic:account), [Entités](topic:tenants) et [Transferts](topic:tenant-transfers). Ce guide couvre ce que vous seul pouvez faire : le premier lancement, la création des entités et des comptes administrateurs, les écrans du système, le mode maintenance et la clé maître. Votre navigation principale comporte donc deux entrées de plus, **Administrateurs** et **Système**. La documentation publique personnalisée de chaque entité (version imprimable comprise) est décrite dans [Documentation de l’entité](topic:tenant-docs).
+Ce guide s’adresse à l’exploitant de l’instance TransTeira. En tant que super administrateur, vous pouvez faire tout ce que fait un administrateur délégué, sur toutes les entités : les écrans communs sont décrits dans le guide de l’administrateur délégué, par exemple [Se connecter](topic:login), [Mon compte](topic:account), [Entités](topic:tenants) et [Transferts](topic:tenant-transfers). Ce guide couvre ce que vous seul pouvez faire : le premier lancement, la création et l’ouverture des entités, les comptes administrateurs, les écrans du système, les jetons de provisionnement, le mode maintenance et la clé maître. Votre navigation principale comporte donc deux entrées de plus, **Administrateurs** et **Système**. La documentation publique personnalisée de chaque entité (version imprimable comprise) est décrite dans [Documentation de l’entité](topic:tenant-docs).
 
 <!-- topic: setup -->
 ## Premier lancement
@@ -43,7 +43,7 @@ La liste des entités fonctionne comme décrit dans [Entités](topic:tenants), a
 <!-- topic: tenant-create -->
 ### Créer une entité
 
-Une entité est une organisation (filiale, service) qui dispose de son adresse publique, de son habillage et de ses réglages propres. Avant de la créer, vérifiez que son adresse (FQDN) pointe vers le reverse proxy dans le DNS et que le reverse proxy la sert avec un certificat.
+Une entité est une organisation (filiale, service) qui dispose de son adresse publique, de son habillage et de ses réglages propres. Avant de la créer, vérifiez que son adresse (FQDN) pointe vers le reverse proxy dans le DNS et que le reverse proxy la sert avec un certificat (avec Caddy, le certificat peut aussi être obtenu à la demande, voir [Jetons de provisionnement](topic:system-provisioning)).
 
 Sur la page **Entités**, cliquez sur **Créer une entité**, puis remplissez le formulaire.
 
@@ -55,17 +55,28 @@ Sur la page **Entités**, cliquez sur **Créer une entité**, puis remplissez le
 - **Quota de stockage** : l’espace total que les transferts de l’entité peuvent occuper. Les nouveaux dépôts sont bloqués lorsqu’il est atteint.
 - **Plafond de la taille par envoi** : la taille la plus grande que les administrateurs délégués peuvent choisir, 20 Go au plus.
 - **Taille maximale par envoi** : la taille réellement autorisée pour un envoi, dans la limite du plafond.
+- **Image de fond** : l’image affichée derrière les pages publiques, choisie parmi les images fournies avec TransTeira (celle par défaut est présélectionnée). Vous pourrez la changer plus tard dans la **Bibliothèque d’images de fond** de l’écran [Habillage](topic:tenant-branding) ; une image téléversée est prioritaire sur ce choix.
+- **Premier administrateur délégué** : facultatif. Cochez **Créer dès maintenant l’administrateur délégué**, puis saisissez un **Identifiant**, une **Adresse électronique** et la **Remise du lien d’activation**. L’administrateur est rattaché à cette seule entité et est invité comme décrit dans [Créer un administrateur délégué](topic:admin-create).
 
-Cliquez sur **Créer l’entité**. Les autres réglages se configurent ensuite, dans cet ordre :
+Cliquez sur **Créer l’entité**. L’entité est créée **en cours de mise en service** : son **Statut** est **En cours de mise en service** dans la liste jusqu’à la fin de la mise en service. Entre-temps, ses pages publiques n’affichent qu’un message indiquant que l’entité est en cours de configuration, et les dépôts, les invitations et les jetons d’API sont refusés. Cela évite que des utilisateurs se servent d’une entité qui enverrait des mails incomplets ou afficherait des textes légaux inachevés. L’entité s’ouvre lorsque son assistant de mise en service est terminé, ou lorsque vous forcez l’ouverture (voir [Mise en service d’une entité](topic:tenant-setup-super)).
 
-1. [Réseau](topic:tenant-network) : les plages d’adresses IP et les domaines de messagerie internes, sans lesquels personne n’est interne.
-2. [Messagerie (SMTP)](topic:tenant-smtp) : sans elle, l’entité n’envoie aucun mail ; envoyez un mail de test et contrôlez les enregistrements DNS.
-3. [Habillage](topic:tenant-branding) : logo, couleurs et image de fond.
-4. [Mentions légales](topic:tenant-legal) : mentions légales et politique de confidentialité.
-5. [Modèles de mails](topic:tenant-templates) : facultatif, les modèles par défaut fonctionnent tels quels.
-6. [Domaines destinataires](topic:tenant-recipient-rules) et [Niveaux de confidentialité](topic:tenant-confidentiality) : facultatifs ; par défaut, tout domaine destinataire est autorisé et l’entité dispose de niveaux de confidentialité par défaut. Les administrateurs délégués peuvent les ajuster.
-   La réponse aux transferts, désactivée par défaut, se règle sur l’écran [Réseau](topic:tenant-network) : lisez-y les risques (hameçonnage, quotas des externes, audit) avant de l’activer.
-7. Rattachez un administrateur délégué à l’entité, voir [Créer un administrateur délégué](topic:admin-create).
+Sans administrateur délégué, vous arrivez aussitôt sur la mise en service de l’entité, pour la configurer vous-même. Avec un administrateur délégué, un message confirme la création et l’invitation, et **Configurer l’entité** ouvre la mise en service. L’administrateur délégué peut aussi faire la configuration, avec la même liste (voir [Mise en service d’une entité](topic:tenant-setup)).
+
+<!-- topic: tenant-setup-super -->
+### Mise en service d’une entité
+
+L’assistant de mise en service d’une entité est l’entrée **Mise en service** de sa navigation (le bouton **Configurer** de la liste mène à l’entité, et une entité en cours de mise en service est aussi signalée sur votre page d’accueil, avec un bouton pour lancer sa mise en service). Il affiche une liste calculée à partir de la configuration réelle de l’entité : chaque étape est **Fait** ou **À faire**, **Obligatoire** ou **Facultatif**, et son bouton **Configurer** mène à l’écran correspondant. Les étapes sont :
+
+![Assistant de mise en service d’une entité en cours de mise en service, avec son badge et la liste des étapes faites ou à faire, obligatoires ou facultatives](../screenshots/fr/admin-tenant-setup.png)
+
+- obligatoires : **Messagerie (SMTP)** (réglages testés avec succès depuis leur dernière modification), **Plages d’adresses IP internes**, **Domaines de messagerie internes**, **Mentions légales** et **Politique de confidentialité** (rédigées dans la langue par défaut de l’entité, sans marqueur « À compléter » restant) ;
+- facultatives : **Logo**, **Couleurs** et **Modèles de mails**, qui compte comme fait dès que vous cochez **J’ai relu les modèles de mails**.
+
+Chaque étape est détaillée dans le guide de l’administrateur délégué, voir [Mise en service d’une entité](topic:tenant-setup).
+
+Quand toutes les étapes obligatoires sont faites, cliquez sur **Terminer la mise en service** : l’entité s’ouvre et ses pages publiques fonctionnent. En tant que super administrateur, vous pouvez aussi cliquer sur **Forcer l’ouverture**, qui ouvre l’entité même s’il manque des étapes obligatoires ; une confirmation rappelle qu’elle pourrait alors envoyer des mails ou afficher des textes incomplets. Un administrateur délégué ne peut pas forcer l’ouverture. L’ouverture est consignée dans le [journal d’audit](topic:tenant-audit), et, pour une entité créée par l’[API de provisionnement](topic:system-provisioning), vous en êtes averti par mail et par les webhooks de l’instance.
+
+> **À savoir** Il n’y a pas de retour en arrière : une fois ouverte, une entité ne revient jamais à l’état de mise en service. La liste reste consultable à titre d’information.
 
 <!-- topic: tenant-general-super -->
 ### Réglages réservés au super administrateur
@@ -106,7 +117,16 @@ Un administrateur délégué ne gère que les entités que vous rattachez à son
 - **Entités rattachées** : sélectionnez au moins une entité.
 - **Exiger la double authentification** : recommandé et coché par défaut. La personne devra la configurer lors de l’activation du compte et ne pourra pas la désactiver.
 
-Cliquez sur **Créer l’administrateur**. Le compte est créé sans mot de passe, et un **Lien d’activation** s’affiche **une seule fois** : TransTeira ne l’envoie jamais par mail. Cliquez sur **Copier le lien** et transmettez-le par un autre canal que la messagerie habituelle (de vive voix, par messagerie instantanée ou par téléphone), car toute personne qui l’obtient peut définir le mot de passe du compte. Cliquez ensuite sur **J’ai transmis le lien**. Le lien est valable 72 heures et ne sert qu’une fois ; ce que la personne en fait est décrit dans [Activer votre compte](topic:activation).
+Choisissez comment la personne reçoit le lien d’activation, sous **Remise du lien d’activation** :
+
+- **Envoyer par courriel à l’administrateur** : le lien part de la messagerie système de l’instance (les variables `TT_SYSTEM_SMTP_*`, voir `.env.example`), dans la **Langue du courriel** que vous choisissez, et il ne vous est **jamais affiché**. La double authentification devient alors obligatoire pour le compte : **Exiger la double authentification** est coché et ne peut pas être modifié.
+- **Afficher le lien à copier et le transmettre moi-même** : le lien vous est affiché à la place, comme décrit ci-dessous.
+
+Lorsqu’aucun serveur SMTP système n’est configuré, la remise par courriel est refusée avec un message vous invitant à choisir l’autre option.
+
+Cliquez sur **Créer l’administrateur**. Le compte est créé sans mot de passe. Avec la remise par courriel, un message confirme **Invitation envoyée** à l’adresse, avec la date jusqu’à laquelle le lien est valable ; le lien lui-même ne peut pas être retrouvé. Avec l’autre option, un **Lien d’activation** s’affiche **une seule fois** : cliquez sur **Copier le lien** et transmettez-le par un autre canal que la messagerie habituelle (de vive voix, par messagerie instantanée ou par téléphone), car toute personne qui l’obtient peut définir le mot de passe du compte. Cliquez ensuite sur **J’ai transmis le lien**. Le lien est valable 72 heures et ne sert qu’une fois ; ce que la personne en fait est décrit dans [Activer votre compte](topic:activation).
+
+Pour émettre un nouveau lien pour un compte pas encore activé (le courriel n’est pas arrivé, le lien a expiré), cliquez sur **Renvoyer l’invitation…** sur sa ligne, choisissez la remise comme ci-dessus, puis cliquez sur **Envoyer l’invitation**. Les liens précédents sont révoqués, le nouveau est valable 72 heures, et 5 invitations par heure au plus peuvent être envoyées pour un même compte. L’action n’est plus proposée une fois le compte activé. Pour un compte de super administrateur, le lien n’est jamais envoyé par courriel : il vous est affiché.
 
 <!-- topic: admin-edit -->
 ### Modifier un compte
@@ -129,7 +149,7 @@ Si vous êtes le seul super administrateur et que vous avez perdu votre appareil
 
 ## Système
 
-L’entrée **Système** regroupe les réglages de toute l’instance. Sa sous-navigation comporte six écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit** et **Clé maître**. Les administrateurs délégués ne la voient pas.
+L’entrée **Système** regroupe les réglages de toute l’instance. Sa sous-navigation comporte sept écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit**, **Clé maître** et **Jetons de provisionnement**. Les administrateurs délégués ne la voient pas.
 
 <!-- topic: system-overview -->
 ### Vue d’ensemble du système
@@ -194,7 +214,7 @@ Cliquez sur **Enregistrer**. Les mails d’alerte partent par le serveur SMTP sy
 <!-- topic: system-webhooks -->
 ### Webhooks de l’instance
 
-Les webhooks de l’instance envoient les alertes de toute l’instance vers un canal Microsoft Teams ou Slack, ou vers tout destinataire JSON, en plus des mails d’alerte. Ils fonctionnent comme les [webhooks d’une entité](topic:tenant-webhooks), avec d’autres événements : **Alerte d’espace disque**, **Espace disque revenu à la normale**, **Antivirus indisponible**, **Antivirus de nouveau disponible**, **Mode maintenance activé**, **Mode maintenance désactivé**, **Rotation de la clé maître terminée** et **Échec de la rotation de la clé maître**. Ils ne reçoivent jamais les événements d’une entité, qui se configurent dans chaque entité. L’instance peut avoir 20 webhooks au plus.
+Les webhooks de l’instance envoient les alertes de toute l’instance vers un canal Microsoft Teams ou Slack, ou vers tout destinataire JSON, en plus des mails d’alerte. Ils fonctionnent comme les [webhooks d’une entité](topic:tenant-webhooks), avec d’autres événements : **Alerte d’espace disque**, **Espace disque revenu à la normale**, **Antivirus indisponible**, **Antivirus de nouveau disponible**, **Mode maintenance activé**, **Mode maintenance désactivé**, **Rotation de la clé maître terminée**, **Échec de la rotation de la clé maître**, **Entité créée par provisionnement**, **Configuration de l’entité terminée** et **Jeton de provisionnement créé**. Les trois derniers concernent le provisionnement des entités, voir [Jetons de provisionnement](topic:system-provisioning). Ils ne reçoivent jamais les événements d’une entité, qui se configurent dans chaque entité. L’instance peut avoir 20 webhooks au plus.
 
 ![Liste des webhooks de l’instance avec leur état et leur dernier envoi](../screenshots/fr/admin-system-webhooks.png)
 
@@ -211,7 +231,33 @@ Le journal d’audit global regroupe les événements d’audit de toutes les en
 
 ![Journal d’audit global avec le filtre Entité et la colonne Entité](../screenshots/fr/admin-system-audit.png)
 
-Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque, alertes antivirus et rotations de la clé maître. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les événements sont conservés 12 mois.
+Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque, alertes antivirus, rotations de la clé maître et jetons de provisionnement (**Jeton de provisionnement créé** et **Jeton de provisionnement révoqué**). Les événements d’une entité comprennent désormais **Configuration de l’entité terminée**, **Entité créée par provisionnement** et **Création d’entité par provisionnement refusée**, et l’envoi d’une invitation à un administrateur délégué est consigné sous **Administrateur invité**. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les événements sont conservés 12 mois.
+
+<!-- topic: system-provisioning -->
+### Jetons de provisionnement
+
+Un jeton de provisionnement permet à un infogéreur de créer des entités par l’API, sans aucun accès à l’administration. L’écran **Jetons de provisionnement** liste les jetons avec leur **Nom**, **Préfixe**, **Plages IP autorisées**, **Suffixes de FQDN autorisés**, **Entités créées**, **Plafonds**, **Création**, **Dernière utilisation**, **Expiration** et **Statut**. Les jetons révoqués restent listés. Le côté technique, pour l’infogéreur, est décrit dans `docs/api/provisioning.md`.
+
+![Écran des jetons de provisionnement avec son introduction et le bouton de création d’un jeton](../screenshots/fr/admin-provisioning-tokens.png)
+
+Pour créer un jeton, cliquez sur **Créer un jeton de provisionnement** et remplissez le formulaire :
+
+- **Nom** : pour reconnaître le jeton, par exemple l’infogéreur à qui il est remis.
+- **Plages IP autorisées** : une plage par ligne (CIDR), les adresses depuis lesquelles l’infogéreur se connecte. Une plage qui autorise toutes les adresses est refusée.
+- **Suffixes de FQDN autorisés** : un suffixe par ligne, commençant par un point, par exemple `.transfer.example.com`. Le jeton ne crée que des entités dont l’adresse se termine par l’un d’eux.
+- **Nombre maximal d’entités** : le plus grand nombre d’entités actives créées avec ce jeton.
+- **Quota de stockage maximal par entité** et, facultativement, **Limite par envoi maximale**.
+- **Date d’expiration** (facultatif) : le jeton cesse de fonctionner à la fin de ce jour.
+
+Une note indique le stockage engagé par le jeton (nombre d’entités multiplié par le quota) : vérifiez que votre disque peut l’accueillir. Pour confirmer, saisissez le code actuel de votre application d’authentification, ou l’un de vos codes de récupération, bien que vous soyez connecté, puis cliquez sur **Créer le jeton**. Le secret, qui commence par `ttp_`, s’affiche **une seule fois** : copiez-le et remettez-le à l’infogéreur par un canal de confiance, jamais en clair par mail. S’il est perdu, créez un autre jeton et révoquez le premier.
+
+Pour révoquer un jeton, cliquez sur **Révoquer** sur sa ligne et saisissez son nom exact pour confirmer. Le jeton cesse de fonctionner aussitôt ; les entités qu’il a déjà créées sont conservées.
+
+La création d’un jeton avertit tous les super administrateurs, par mail et par les webhooks de l’instance (**Jeton de provisionnement créé**, jamais le secret), pour qu’un jeton créé depuis une session volée ne passe pas inaperçu. La création et la révocation sont consignées dans le [journal d’audit global](topic:system-audit).
+
+Une entité créée avec un jeton est créée **en cours de mise en service** (voir [Créer une entité](topic:tenant-create)), avec son premier administrateur délégué, qui est invité par mail : le lien d’activation n’est jamais renvoyé à l’infogéreur, l’invitation exige donc le serveur SMTP système (`TT_SYSTEM_SMTP_*`). Vous êtes averti par mail et par webhook lorsqu’une entité est créée ainsi et lorsque sa mise en service est terminée. L’infogéreur ne peut ensuite ni voir ni modifier l’entité, ni l’ouvrir : c’est l’administrateur délégué qui termine la mise en service (voir [Mise en service d’une entité](topic:tenant-setup)).
+
+**Certificats.** Une entité créée par l’API a besoin d’un certificat pour son adresse dès qu’elle existe. Avec Caddy, l’exploitant peut le faire obtenir à la demande, à la première visite : utilisez `integrations/reverse-proxy/caddy/Caddyfile.on-demand` et définissez `TT_TLS_ASK_ALLOWED_IPS` avec l’adresse exacte de Caddy sur le réseau du proxy. Caddy demande alors à TransTeira si le nom appartient à une entité avant de réclamer le certificat. Sans cette variable, le point d’accès est désactivé et aucun certificat n’est émis ainsi. Avec de nombreuses entités sous un même domaine, un certificat générique évite les limites de Let’s Encrypt. Voir `docs/api/provisioning.md`.
 
 <!-- topic: system-master-key -->
 ### Clé maître

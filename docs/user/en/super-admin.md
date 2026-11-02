@@ -1,6 +1,6 @@
 # Super administrator guide
 
-This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation of entities and administrator accounts, the system screens, maintenance mode and the master key. Your main navigation therefore has two extra entries, **Administrators** and **System**. The customised public documentation of each entity (printable version included) is described in [Entity user documentation](topic:tenant-docs).
+This guide is for the operator of the TransTeira instance. As super administrator, you can do everything a delegated administrator does, on every entity: the common screens are described in the delegated administrator guide, for example [Signing in](topic:login), [My account](topic:account), [Entities](topic:tenants) and [Transfers](topic:tenant-transfers). This guide covers what only you can do: the first launch, the creation and opening of entities, administrator accounts, the system screens, provisioning tokens, maintenance mode and the master key. Your main navigation therefore has two extra entries, **Administrators** and **System**. The customised public documentation of each entity (printable version included) is described in [Entity user documentation](topic:tenant-docs).
 
 <!-- topic: setup -->
 ## First launch
@@ -43,7 +43,7 @@ The list of entities works as described in [Entities](topic:tenants), with one e
 <!-- topic: tenant-create -->
 ### Creating an entity
 
-An entity is an organisation (subsidiary, department) with its own public address, branding and settings. Before creating it, make sure its address (FQDN) points to the reverse proxy in the DNS and that the reverse proxy serves it with a certificate.
+An entity is an organisation (subsidiary, department) with its own public address, branding and settings. Before creating it, make sure its address (FQDN) points to the reverse proxy in the DNS and that the reverse proxy serves it with a certificate (with Caddy, the certificate can also be obtained on demand, see [Provisioning tokens](topic:system-provisioning)).
 
 On the **Entities** page, click **Create an entity**, then fill in the form.
 
@@ -55,17 +55,28 @@ On the **Entities** page, click **Create an entity**, then fill in the form.
 - **Storage quota**: the total space the transfers of the entity may use. New deposits are blocked when it is reached.
 - **Ceiling of the size per transfer**: the largest size the delegated administrators may choose, at most 20 GB.
 - **Maximum size per transfer**: the size actually allowed for a transfer, up to the ceiling.
+- **Background image**: the image shown behind the public pages, chosen among the images supplied with TransTeira (the default one is preselected). You can change it later in the **Background library** of the [Branding](topic:tenant-branding) screen; an uploaded image takes precedence over this choice.
+- **First delegated administrator**: optional. Tick **Create the delegated administrator now**, then enter a **Username**, an **Email address** and the **Delivery of the activation link**. The administrator is attached to this entity only and is invited as described in [Creating a delegated administrator](topic:admin-create).
 
-Click **Create the entity**. The other settings are configured afterwards, in this order:
+Click **Create the entity**. The entity is created **being set up**: its **Status** is **Being set up** in the list until the setup is complete. Meanwhile, its public pages only show a message saying that the entity is being configured, and deposits, invitations and API tokens are refused. This keeps users away from an entity that would send incomplete emails or show unfinished legal texts. The entity opens when its setup wizard is completed, or when you force the opening (see [Setup of an entity](topic:tenant-setup-super)).
 
-1. [Network](topic:tenant-network): the internal IP address ranges and email domains, without which nobody is internal.
-2. [Mail (SMTP)](topic:tenant-smtp): without it the entity sends no email; send a test email and check the DNS records.
-3. [Branding](topic:tenant-branding): logo, colors and background image.
-4. [Legal information](topic:tenant-legal): legal notice and privacy policy.
-5. [Email templates](topic:tenant-templates): optional, the default templates work as they are.
-6. [Recipient domains](topic:tenant-recipient-rules) and [Confidentiality levels](topic:tenant-confidentiality): optional; by default, any recipient domain is allowed and the entity has default confidentiality levels. Delegated administrators can adjust them.
-   Replying to transfers, off by default, is set on the [Network](topic:tenant-network) screen: read the risks there (phishing, external quotas, audit) before turning it on.
-7. Attach a delegated administrator to the entity, see [Creating a delegated administrator](topic:admin-create).
+Without a delegated administrator, you are taken to the setup of the entity right away, to configure it yourself. With one, a message confirms the creation and the invitation, and **Configure the entity** opens the setup. The delegated administrator can do the configuration too, with the same checklist (see [Setup of an entity](topic:tenant-setup)).
+
+<!-- topic: tenant-setup-super -->
+### Setup of an entity
+
+The setup wizard of an entity is the **Setup** entry of its navigation (the **Configure** button of the list leads to the entity, and an entity being set up is also announced on your home page with a button to start its setup). It shows a checklist computed from the real configuration of the entity: each step is **Done** or **To do**, **Required** or **Optional**, and its **Configure** button leads to the matching screen. The steps are:
+
+![Setup wizard of an entity being set up, with its badge and the list of setup steps marked done or to do, required or optional](../screenshots/en/admin-tenant-setup.png)
+
+- required: **Mail (SMTP)** (settings tested successfully since their last change), **Internal IP ranges**, **Internal mail domains**, **Legal notice** and **Privacy policy** (written in the default language of the entity, with no "To complete" marker left);
+- optional: **Logo**, **Colours** and **Mail templates**, which counts as done once you tick **I reviewed the mail templates**.
+
+Each step is detailed in the guide of the delegated administrator, see [Setup of an entity](topic:tenant-setup).
+
+When all the required steps are done, click **Finish setup**: the entity opens and its public pages work. As super administrator you can also click **Force opening**, which opens the entity even if required steps are missing; a confirmation reminds you that it could then send incomplete emails or show incomplete texts. A delegated administrator cannot force the opening. The opening is recorded in the [audit log](topic:tenant-audit), and, for an entity created through the [provisioning API](topic:system-provisioning), you are notified of it by mail and by the instance webhooks.
+
+> **Note** There is no way back: once open, an entity never returns to the setup state. The checklist stays available for information.
 
 <!-- topic: tenant-general-super -->
 ### Settings reserved to the super administrator
@@ -106,7 +117,16 @@ A delegated administrator manages only the entities you attach to their account.
 - **Attached entities**: select at least one entity.
 - **Require two-factor authentication**: recommended and ticked by default. The person will have to configure it when activating the account and will not be able to disable it.
 
-Click **Create the administrator**. The account is created without a password, and an **Activation link** is shown **once**: TransTeira never sends it by email. Click **Copy the link** and hand it over through another channel than the usual email (in person, by instant messaging or by phone), since anyone who gets it can set the password of the account. Then click **I have handed over the link**. The link is valid 72 hours and works once; what the person does with it is described in [Activating your account](topic:activation).
+Choose how the person receives the activation link, under **Delivery of the activation link**:
+
+- **Send by mail to the administrator**: the link is sent from the system mailbox of the instance (the `TT_SYSTEM_SMTP_*` variables, see `.env.example`), in the **Language of the mail** you choose, and it is **never shown** to you. Two-factor authentication then becomes mandatory for the account: **Require two-factor authentication** is ticked and cannot be changed.
+- **Show the link to copy and hand over myself**: the link is shown to you instead, as described below.
+
+When no system SMTP server is configured, the mail delivery is refused with a message telling you to choose the other option.
+
+Click **Create the administrator**. The account is created without a password. With the mail delivery, a message confirms **Invitation sent** to the address, with the date until which the link is valid; the link itself cannot be retrieved. With the other one, an **Activation link** is shown **once**: click **Copy the link** and hand it over through another channel than the usual email (in person, by instant messaging or by phone), since anyone who gets it can set the password of the account. Then click **I have handed over the link**. The link is valid 72 hours and works once; what the person does with it is described in [Activating your account](topic:activation).
+
+To issue a new link for an account that is not activated yet (the mail did not arrive, the link expired), click **Send the invitation again…** on its row, choose the delivery as above, then click **Send the invitation**. The previous links are revoked, the new one is valid 72 hours, and at most 5 invitations per hour can be sent for the same account. The action is not offered once the account is activated. For a super administrator account, the link is never sent by mail: it is shown to you.
 
 <!-- topic: admin-edit -->
 ### Editing an account
@@ -129,7 +149,7 @@ If you are the only super administrator and lost your device, sign in with a rec
 
 ## System
 
-The **System** entry gathers the settings of the whole instance. Its sub-navigation has six screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log** and **Master key**. Delegated administrators do not see it.
+The **System** entry gathers the settings of the whole instance. Its sub-navigation has seven screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Master key** and **Provisioning tokens**. Delegated administrators do not see it.
 
 <!-- topic: system-overview -->
 ### System overview
@@ -194,7 +214,7 @@ Click **Save**. The alert mails go through the system SMTP server of the instanc
 <!-- topic: system-webhooks -->
 ### Instance webhooks
 
-The instance webhooks send the alerts of the whole instance to a Microsoft Teams or Slack channel, or to any JSON receiver, in addition to the alert emails. They work like the [webhooks of an entity](topic:tenant-webhooks), with other events: **Disk space alert**, **Disk space back to normal**, **Antivirus unavailable**, **Antivirus available again**, **Maintenance mode on**, **Maintenance mode off**, **Master key rotation completed** and **Master key rotation failed**. They never receive the events of an entity, which are configured in each entity. The instance can have at most 20 webhooks.
+The instance webhooks send the alerts of the whole instance to a Microsoft Teams or Slack channel, or to any JSON receiver, in addition to the alert emails. They work like the [webhooks of an entity](topic:tenant-webhooks), with other events: **Disk space alert**, **Disk space back to normal**, **Antivirus unavailable**, **Antivirus available again**, **Maintenance mode on**, **Maintenance mode off**, **Master key rotation completed**, **Master key rotation failed**, **Entity created by provisioning**, **Entity setup completed** and **Provisioning token created**. The last three concern the provisioning of entities, see [Provisioning tokens](topic:system-provisioning). They never receive the events of an entity, which are configured in each entity. The instance can have at most 20 webhooks.
 
 ![List of the instance webhooks with their status and last delivery](../screenshots/en/admin-system-webhooks.png)
 
@@ -211,7 +231,33 @@ The global audit log gathers the audit events of every entity and of the instanc
 
 ![Global audit log with the Entity filter and the Entity column](../screenshots/en/admin-system-audit.png)
 
-With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts, antivirus alerts and master key rotations. With an entity selected, only the events of that entity are shown. Events are kept 12 months.
+With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts, antivirus alerts, master key rotations and provisioning tokens (**Provisioning token created** and **Provisioning token revoked**). The events of an entity now include **Entity setup completed**, **Entity created by provisioning** and **Entity creation by provisioning refused**, and the sending of an invitation to a delegated administrator is recorded as **Administrator invited**. With an entity selected, only the events of that entity are shown. Events are kept 12 months.
+
+<!-- topic: system-provisioning -->
+### Provisioning tokens
+
+A provisioning token lets a managed service provider create entities by the API, without any access to the administration. The **Provisioning tokens** screen lists the tokens with their **Name**, **Prefix**, **Allowed IP ranges**, **Allowed FQDN suffixes**, **Entities created**, **Caps**, **Created**, **Last used**, **Expires** and **Status**. Revoked tokens stay listed. The technical side, for the provider, is in `docs/api/provisioning.md`.
+
+![Provisioning tokens screen with its introduction and the button to create a token](../screenshots/en/admin-provisioning-tokens.png)
+
+To create a token, click **Create a provisioning token** and fill in the form:
+
+- **Name**: to recognise the token, for example the service provider it is given to.
+- **Allowed IP ranges**: one range per line (CIDR), the addresses the provider connects from. A range that allows any address is refused.
+- **Allowed FQDN suffixes**: one suffix per line, starting with a dot, for example `.transfer.example.com`. The token only creates entities whose address ends with one of them.
+- **Maximum number of entities**: the highest number of live entities created with this token.
+- **Highest storage quota per entity** and, optionally, **Highest per-transfer limit**.
+- **Expiry date** (optional): the token stops working at the end of this day.
+
+A note shows the storage committed by the token (number of entities times quota): check that your disk can host it. To confirm, enter the current code of your authenticator app, or one of your recovery codes, even though you are signed in, then click **Create the token**. The secret, which starts with `ttp_`, is shown **once**: copy it and give it to the provider through a trusted channel, never in clear by mail. If it is lost, create another token and revoke the first.
+
+To revoke a token, click **Revoke** on its row and type its exact name to confirm. The token stops working at once; the entities it already created are kept.
+
+Creating a token notifies all the super administrators, by mail and by the instance webhooks (**Provisioning token created**, never the secret), so that a token created from a stolen session does not go unnoticed. The creation and the revocation are recorded in the [global audit log](topic:system-audit).
+
+An entity created with a token is created **being set up** (see [Creating an entity](topic:tenant-create)), together with its first delegated administrator, who is invited by mail: the activation link is never returned to the provider, so the invitation needs the system SMTP server (`TT_SYSTEM_SMTP_*`). You are notified by mail and by webhook when an entity is created this way and when its setup is completed. The provider can neither see nor change the entity afterwards, nor open it: the delegated administrator completes the setup (see [Setup of an entity](topic:tenant-setup)).
+
+**Certificates.** An entity created by the API needs a certificate for its address as soon as it exists. With Caddy, the operator can have it obtained on demand at the first visit: use `integrations/reverse-proxy/caddy/Caddyfile.on-demand` and set `TT_TLS_ASK_ALLOWED_IPS` to the exact address of Caddy on the proxy network. Caddy then asks TransTeira whether the name belongs to an entity before requesting the certificate. Without this variable, the endpoint is disabled and no certificate is issued this way. With many entities under one domain, a wildcard certificate avoids the Let's Encrypt limits. See `docs/api/provisioning.md`.
 
 <!-- topic: system-master-key -->
 ### Master key

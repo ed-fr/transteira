@@ -6,14 +6,30 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-02
+
+The V1.2 scope of the specification (CLAUDE.md section 2, "onboarding"), on top of 1.0 and 1.1:
+per-entity favicon, setup state and wizard for a new entity with proposed legal texts, library
+of background images and choice of the background at creation, delegated admin invited by mail,
+provisioning API for managed service providers with on-demand TLS for Caddy, and display of the
+version with an update check. Validated by `make check` and `make check-full` (unit, integration,
+contract, tenant isolation, fuzzing, end-to-end on SQLite and PostgreSQL, automated 20 GB test).
+
+Human trial of the new features on a Docker installation upgraded from 1.1.0 (migrations 0022
+to 0025 applied at start-up), behind Caddy with on-demand TLS and its internal CA, mails captured
+by Mailpit: version display and update check, entity creation with a background from the library
+and a delegated admin invited by mail, activation with mandatory TOTP and re-sent invitation, setup
+wizard (SMTP test, network ranges and domains, proposed legal texts, favicon from the logo, opening),
+provisioning by `ttp_` token with the notification mails and a certificate issued on the first visit
+of the new entity, no certificate for an unknown name. All checks passed.
+
 ### Added
 
-- Design of version 1.2 ("onboarding"): OpenAPI specification 1.2.0 (16 new operations: update
-  check, background presets, tenant setup state and wizard checklist, proposed legal texts,
-  delegated admin invitation by mail, provisioning API for managed service providers, on-demand
-  TLS `ask` endpoint), answered by stubs until implemented; data model
-  (`docs/architecture/data-model-v1.2.md`) and migrations 0022 to 0025; threat model 1.2 draft
-  (T-244 to T-280, decisions P47 to P54).
+- OpenAPI specification 1.2.0 (16 new operations: update check, background presets, tenant setup
+  state and wizard checklist, proposed legal texts, delegated admin invitation by mail,
+  provisioning API for managed service providers, on-demand TLS `ask` endpoint), data model
+  (`docs/architecture/data-model-v1.2.md`) and migrations 0022 to 0025. Threat model 1.2: T-244 to
+  T-280, decisions P47 to P54.
 - Version and update check: the running version is shown in the administration footer; the super
   admin sees the outcome of a daily check of the latest TransTeira release on GitHub (a notice
   and a "Check now" button, never an automatic update). Only the version and the release link are
@@ -45,6 +61,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
   setup-incomplete` listing the missing items; `force` for the super admin only); there is no way
   back. `GET /admin/tenants/{id}/text-proposals/{document}/{language}` proposes a legal notice or
   privacy policy filled with the tenant configuration, never saved.
+- Setup wizard (administration): an entity created from the administration always starts in the
+  setup state and opens on its wizard, a guided checklist linking to the existing screens (each
+  with a link back); the legal screens offer the proposed texts, whose `[To complete: …]` markers
+  must be replaced before the item is done; the delegated admin sees a call to action on the home
+  page and the entity lists show a setup badge. The public pages of an entity in setup show a
+  message instead of the deposit form. User guides: new sections "Setup wizard" and "Provisioning
+  tokens", entity creation and delegated admin invitation rewritten (French and English), with
+  screenshots.
 - Provisioning API for managed service providers: provisioning tokens (`ttp_`), created by the
   super admin with a TOTP re-confirmation and bound to IP ranges, FQDN suffixes and caps, create
   entities in the setup state with their first delegated admin through
@@ -1039,6 +1063,7 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/ed-fr/transteira/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ed-fr/transteira/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ed-fr/transteira/releases/tag/v1.0.0
