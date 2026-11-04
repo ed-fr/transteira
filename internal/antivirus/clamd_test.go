@@ -125,11 +125,17 @@ func TestPingContextCanceled(t *testing.T) {
 	ln := tcpListener(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	accepted := make(chan struct{})
-	fakeClamd(t, ln, func(net.Conn) { close(accepted); <-release })
+	// Canceled once the command arrived, so that Ping waits for the reply:
+	// a cancellation during the dial would end Ping before the I/O does.
+	received := make(chan struct{})
+	fakeClamd(t, ln, func(c net.Conn) {
+		_, _ = io.ReadFull(c, make([]byte, len(pingCommand)))
+		close(received)
+		<-release
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { <-accepted; cancel() }()
+	go func() { <-received; cancel() }()
 	err := NewClient("tcp", ln.Addr().String(), WithTimeout(time.Minute)).Ping(ctx)
 	if err == nil {
 		t.Fatal("Ping succeeded after cancellation")

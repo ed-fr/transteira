@@ -495,6 +495,13 @@ type icapExchange struct {
 
 // run starts the sender, reads the reply and maps it to a Result.
 func (x *icapExchange) run(request []byte, preview int64, overall time.Time) (Result, error) {
+	// The overall read deadline is set before the sender starts: a sender
+	// failing at once shortens it (below), which a later call would undo,
+	// leaving the reply wait until the scan timeout.
+	if err := x.sc.setReadDeadline(overall); err != nil {
+		x.finished = true // no sender to wait for
+		return Result{}, x.readFailure(err)
+	}
 	go func() {
 		err := x.sender.run(request, preview, x.cont, x.quit)
 		x.done <- err
@@ -508,9 +515,6 @@ func (x *icapExchange) run(request []byte, preview int64, overall time.Time) (Re
 			_ = x.sc.setReadDeadline(earliest(time.Now().Add(earlyReplyWait), overall))
 		}
 	}()
-	if err := x.sc.setReadDeadline(overall); err != nil {
-		return Result{}, x.readFailure(err)
-	}
 	br := bufio.NewReaderSize(x.sc.conn, 32<<10)
 	head, err := readICAPHead(br)
 	if err != nil {

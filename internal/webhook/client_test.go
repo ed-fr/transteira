@@ -448,11 +448,14 @@ func TestSendFailures(t *testing.T) {
 	if res := c.Send(ctx, tg, testEvent()); res.Category != CategoryConnect {
 		t.Errorf("connect: %+v", res)
 	}
-	// Timeout.
+	// Timeout. The receiver never answers: on seeing the client leave it
+	// aborts the response (a handler that returns would send 200, which a
+	// loaded machine may deliver right after the deadline, as a success).
 	slow := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		_, _ = io.Copy(io.Discard, req.Body)
 		select {
 		case <-req.Context().Done():
+			panic(http.ErrAbortHandler)
 		case <-time.After(5 * time.Second):
 		}
 	}))

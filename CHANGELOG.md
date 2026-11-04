@@ -21,6 +21,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
     Caddy now starts before the server. Documented in `test/README.md`.
 - Update check: a response body cut by the timeout is reported as a network failure instead of
   a parse error (`TestCheckTimeout` was flaky under a heavy CPU load).
+- ICAP antivirus: when the request could not be sent and the server stayed silent, the scan
+  could wait for the whole scan timeout instead of failing within a second as unavailable. The
+  overall read deadline is now set before the sender starts, so the shorter wait it sets on a
+  write failure is never undone (seen under the race detector on a loaded machine).
+- Webhook tests: the slow receiver of the timeout case aborts its response instead of answering
+  200 once the client has left, which a loaded machine could deliver as a success.
+- clamd tests: `TestPingContextCanceled` cancels once the fake clamd received the command, so
+  that the cancellation always reaches the pending read (it could land during the dial and
+  leave the I/O unblocking path uncovered, below the 100 % threshold of `internal/antivirus`).
 
 ### Changed
 
