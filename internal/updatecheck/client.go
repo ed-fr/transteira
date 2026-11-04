@@ -107,7 +107,15 @@ func newClient(o clientOptions) *client {
 
 // fetch requests the latest release and returns what is kept of it, or
 // the category of the failure.
+//
+// The check carries its own deadline, the same as the client's Timeout:
+// a body cut by the timeout may still end cleanly when the server closes
+// its chunked response on seeing the client leave (io.ReadAll then
+// returns a truncated body without error). Whatever ends after the
+// deadline is a network failure, never a parse error.
 func (c *client) fetch(ctx context.Context) (Release, Category) {
+	ctx, cancel := context.WithTimeout(ctx, c.http.Timeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, http.NoBody)
 	if err != nil {
 		return Release{}, CategoryNetwork
@@ -124,7 +132,8 @@ func (c *client) fetch(ctx context.Context) (Release, Category) {
 		return Release{}, CategoryHTTP
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
-	if err != nil {
+	// A body cut by the timeout can end cleanly: the deadline decides.
+	if err != nil || ctx.Err() != nil {
 		return Release{}, CategoryNetwork
 	}
 	if len(body) > MaxBody {

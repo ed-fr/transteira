@@ -19,6 +19,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
     trusts the Caddy container's address instead of the whole compose subnet, whose gateway is
     the source of the browser's connections (downloads were refused with "client IP unknown").
     Caddy now starts before the server. Documented in `test/README.md`.
+- Update check: a response body cut by the timeout is reported as a network failure instead of
+  a parse error (`TestCheckTimeout` was flaky under a heavy CPU load).
 
 ### Changed
 
