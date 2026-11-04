@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/textproto"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1204,5 +1205,20 @@ func TestICAPOptionsCanceledWhileWaiting(t *testing.T) {
 	assertUnavailable(t, err)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Scan = %v, want context.Canceled", err)
+	}
+}
+
+// TestScanConnWriteAfterExpiry checks that a write started after the expiry
+// of the exchange never revives the connection: the write deadline stays in
+// the past, so the write fails at once instead of blocking on the peer.
+func TestScanConnWriteAfterExpiry(t *testing.T) {
+	client, server := net.Pipe()
+	defer func() { _ = server.Close() }()
+	defer func() { _ = client.Close() }()
+	s := &scanConn{conn: client}
+	s.expire()
+	err := s.writeStream([]byte("chunk"), time.Minute, time.Now().Add(time.Hour))
+	if !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("writeStream after expiry = %v, want a deadline error", err)
 	}
 }

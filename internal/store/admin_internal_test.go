@@ -506,7 +506,7 @@ func TestAdminSchemaConstraints(t *testing.T) {
 		rejected := map[string]string{
 			"super admin without totp": insert + `('adm_1', 'a', 'a@example.com', 'super_admin', false, false, 0, 0)`,
 			"totp without secret":      insert + `('adm_2', 'b', 'b@example.com', 'delegated_admin', true, true, 0, 0)`,
-			"unknown role":             insert + `('adm_3', 'c', 'c@example.com', 'auditor', true, false, 0, 0)`,
+			"unknown role":             insert + `('adm_3', 'c', 'c@example.com', 'reader', true, false, 0, 0)`,
 		}
 		for name, q := range rejected {
 			if _, err := rawSystemExec(ctx, db, q); err == nil {
@@ -515,6 +515,11 @@ func TestAdminSchemaConstraints(t *testing.T) {
 		}
 		if _, err := rawSystemExec(ctx, db, insert+`('adm_4', 'd', 'd@example.com', 'super_admin', true, false, 0, 0)`); err != nil {
 			t.Fatal(err)
+		}
+		// Since 0026: the auditor role, which may opt out of TOTP like a
+		// delegated admin.
+		if _, err := rawSystemExec(ctx, db, insert+`('adm_6', 'f', 'f@example.com', 'auditor', false, false, 0, 0)`); err != nil {
+			t.Errorf("auditor refused: %v", err)
 		}
 		if _, err := rawSystemExec(ctx, db, insert+`('adm_5', 'd', 'e@example.com', 'super_admin', true, false, 0, 0)`); !errors.Is(classify(err), ErrConflict) {
 			t.Errorf("duplicate username: %v", err)

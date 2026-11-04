@@ -109,7 +109,9 @@ type dialect struct {
 	// verifyRLS lists the tenant-scoped tables of the current schema (with a
 	// tenant_id column), plus the tenants registry and the system tables
 	// (master keys, rotations, system secrets, administrator tables,
-	// instance settings and webhooks), lacking ENABLE and FORCE row-level security or a policy.
+	// instance settings and webhooks, provisioning tokens, instance state,
+	// SSO identities and proof signing keys), lacking ENABLE and FORCE
+	// row-level security or a policy.
 	verifyRLS string
 }
 
@@ -177,7 +179,8 @@ var postgresDialect = &dialect{
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
 		  AND (c.relname IN ('tenants', 'master_keys', 'key_rotations', 'system_secrets', 'admins',
 		        'admin_sessions', 'admin_recovery_codes', 'admin_activations', 'admin_login_failures',
-		        'system_settings', 'system_webhooks', 'provisioning_tokens', 'system_state') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
+		        'system_settings', 'system_webhooks', 'provisioning_tokens', 'system_state',
+		        'admin_identities', 'proof_signing_keys') OR EXISTS (SELECT 1 FROM pg_catalog.pg_attribute a
 		        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped))
 		  AND NOT (c.relrowsecurity AND c.relforcerowsecurity
 		        AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid))

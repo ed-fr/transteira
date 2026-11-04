@@ -251,6 +251,36 @@ const (
 	// volume, large transfer to external addresses, off hours), with the
 	// same actor and details as ActionAbuseThresholdExceeded.
 	ActionAbuseUnusualActivity Action = "abuse.unusual_activity"
+	// ActionAdminIdentityLinked: a single sign-on identity was pinned to an
+	// administrator account on its first SSO login (since 2.0).
+	ActionAdminIdentityLinked Action = "admin.identity_linked"
+	// ActionAdminIdentityUnlinked: the super admin unpinned an identity (since 2.0).
+	ActionAdminIdentityUnlinked Action = "admin.identity_unlinked"
+	// ActionTenantSSOUpdated: the single sign-on configuration of a tenant was
+	// changed; details hold member names only (since 2.0).
+	ActionTenantSSOUpdated Action = "tenant.sso_updated"
+	// ActionTenantSSODeleted: the single sign-on configuration was removed (since 2.0).
+	ActionTenantSSODeleted Action = "tenant.sso_deleted"
+	// ActionTenantExported: the configuration of a tenant was exported (since 2.0).
+	ActionTenantExported Action = "tenant.exported"
+	// ActionTenantImported: a tenant was created from an exported configuration (since 2.0).
+	ActionTenantImported Action = "tenant.imported"
+	// ActionDropLinkCreated: a permanent drop link was created (since 2.0).
+	ActionDropLinkCreated Action = "drop_link.created"
+	// ActionDropLinkUpdated: a permanent drop link was changed (since 2.0).
+	ActionDropLinkUpdated Action = "drop_link.updated"
+	// ActionDropLinkRotated: the token of a drop link was replaced (since 2.0).
+	ActionDropLinkRotated Action = "drop_link.rotated"
+	// ActionDropLinkRevoked: a permanent drop link was revoked (since 2.0).
+	ActionDropLinkRevoked Action = "drop_link.revoked"
+	// ActionTransferProofDownloaded: a proof of deposit or delivery was downloaded (since 2.0).
+	ActionTransferProofDownloaded Action = "transfer.proof_downloaded"
+	// ActionTransferLinkReissued: the sender of a link-only transfer issued a
+	// new download link (since 2.0).
+	ActionTransferLinkReissued Action = "transfer.link_reissued"
+	// ActionProofKeyCreated: a proof signing key was created (system, without
+	// tenant; since 2.0).
+	ActionProofKeyCreated Action = "proof_key.created"
 )
 
 // ActorAntivirus is the system actor (store.ActorSystem) of the events of
@@ -307,6 +337,13 @@ const (
 	// ObjectMasterKeyRotation is a master key rotation (object ID: its
 	// "rot_" ID).
 	ObjectMasterKeyRotation = "master_key_rotation"
+	// ObjectDropLink is a permanent drop link (object ID: its "drl_" ID,
+	// never the token; since 2.0).
+	ObjectDropLink = "drop_link"
+	// ObjectAdminIdentity is a pinned single sign-on identity (since 2.0).
+	ObjectAdminIdentity = "admin_identity"
+	// ObjectProofKey is a proof signing key (object ID: its "psk_" ID).
+	ObjectProofKey = "proof_key"
 	// ObjectWebhook is a webhook (object ID: its "whk_" ID, never its URL).
 	ObjectWebhook = "webhook"
 )

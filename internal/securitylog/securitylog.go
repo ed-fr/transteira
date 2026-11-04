@@ -70,6 +70,12 @@ const (
 	// presented to the provisioning API on the admin host (since 1.2, threat
 	// model T-267). Same line format as APITokenInvalid; the tenant is "-".
 	ProvisioningTokenInvalid EventType = "provisioning_token_invalid"
+	// SSOFailed: a single sign-on login failed (since 2.0); field reason=
+	// state_invalid|token_invalid|account_unknown|identity_mismatch|mfa_missing|issuer_error.
+	SSOFailed EventType = "sso_failed"
+	// DropLinkInvalid: an unknown, revoked or disabled permanent drop link was
+	// presented (since 2.0).
+	DropLinkInvalid EventType = "drop_link_invalid"
 )
 
 // Well-known field keys.
@@ -113,6 +119,16 @@ const (
 	ReasonBlocklist = "blocklist"
 	// ReasonInvitation: missing, unknown or expired invitation.
 	ReasonInvitation = "invitation"
+)
+
+// Well-known values of the reason field of SSOFailed (since 2.0).
+const (
+	ReasonStateInvalid     = "state_invalid"
+	ReasonTokenInvalid     = "token_invalid"
+	ReasonAccountUnknown   = "account_unknown"
+	ReasonIdentityMismatch = "identity_mismatch"
+	ReasonMFAMissing       = "mfa_missing"
+	ReasonIssuerError      = "issuer_error"
 )
 
 // Format limits.

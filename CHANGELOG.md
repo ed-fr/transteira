@@ -6,6 +6,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Design of version 2.0 ("enterprise"): OpenAPI specification 2.0.0, still `/api/v1` and
+  additive only (23 new operations: auditor role and security events in the database, OpenID
+  Connect single sign-on per tenant, signed proofs of deposit and delivery with their public
+  keys, tenant configuration export and import, permanent drop links, link-only transfers,
+  optional end-to-end encryption); the new operations answer `404 not-found` and the new
+  request members `400 validation-failed` (`not-supported`) until implemented; data model
+  (`docs/architecture/data-model-v2.md`) and migrations 0026 to 0029 on both engines; threat
+  model 2.0 draft (T-281 to T-336, decisions P55 to P68). The design was validated on
+  2026-11-04 and every open point decided (explicit `admins.sso_only`, revoked drop links purged
+  after 12 months, proofs kept 12 months after the fact).
+
 ## [1.2.1] - 2026-11-04
 
 Patch release: a fix of the ICAP antivirus client (a scan whose request could not be sent to a

@@ -158,7 +158,7 @@ func rowCounts(ctx context.Context, t *testing.T, db *DB) map[string]int64 {
 }
 
 // TestMigrationV11Upgrade applies the V1.1 migrations (0014 to 0021, then the
-// V1.2 ones, 0022 to 0025) on a
+// V1.2 ones, 0022 to 0025, and the V2 ones, 0026 to 0029) on a
 // database at 0013 holding V1 data: no row is lost (in particular no
 // cascade from the rebuilt transfers and system_secrets tables), the
 // columns keep their values, the backfills are right, the foreign keys,
@@ -180,7 +180,7 @@ func TestMigrationV11Upgrade(t *testing.T) {
 		before := rowCounts(ctx, t, db)
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 12 {
+		if n, err := db.Migrate(ctx); err != nil || n != 16 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -407,7 +407,7 @@ func checkSQLiteIntegrity(ctx context.Context, t *testing.T, db *DB) {
 	assertSQLiteConnState(ctx, t, db)
 	// Every index of the rebuilt tables is back.
 	rows, err := db.write.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL
-		AND tbl_name IN ('transfers', 'transfer_files', 'deposit_sessions', 'system_secrets', 'verification_challenges')`)
+		AND tbl_name IN ('transfers', 'transfer_files', 'deposit_sessions', 'system_secrets', 'verification_challenges', 'admins')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,10 +421,11 @@ func checkSQLiteIntegrity(ctx context.Context, t *testing.T, db *DB) {
 	}
 	_ = rows.Close()
 	want := []string{
-		"deposit_sessions_email_idx", "deposit_sessions_expires_idx", "deposit_sessions_reply_idx", "deposit_sessions_tenant_id_idx",
+		"admins_role_idx",
+		"deposit_sessions_drop_link_idx", "deposit_sessions_email_idx", "deposit_sessions_expires_idx", "deposit_sessions_reply_idx", "deposit_sessions_tenant_id_idx",
 		"system_secrets_key_id_idx", "transfer_files_tenant_id_idx",
 		"transfers_delete_after_idx", "transfers_download_token_global_idx", "transfers_download_token_idx",
-		"transfers_download_token_key_idx", "transfers_ended_idx", "transfers_expiry_idx", "transfers_idempotency_idx",
+		"transfers_download_token_key_idx", "transfers_drop_link_idx", "transfers_ended_idx", "transfers_expiry_idx", "transfers_idempotency_idx",
 		"transfers_invitation_idx", "transfers_rejected_idx", "transfers_reminder_idx", "transfers_scanning_idx",
 		"transfers_sender_created_idx", "transfers_sender_status_idx", "transfers_status_idx", "transfers_tenant_created_idx",
 		"transfers_token_idempotency_idx", "transfers_token_status_idx", "transfers_uploading_idx",
@@ -488,7 +489,7 @@ func openFaultEmpty(ctx context.Context, t *testing.T, fsys fstest.MapFS) (*DB, 
 // TestMigrationV11FailureKeepsData makes the recording of 0014 fail after
 // its body ran (sqlite-fault driver): the whole migration rolls back, the
 // V1 data is intact, and the writer connection enforces foreign keys again.
-// The retry then applies 0014 to 0025.
+// The retry then applies 0014 to 0029.
 func TestMigrationV11FailureKeepsData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -514,7 +515,7 @@ func TestMigrationV11FailureKeepsData(t *testing.T) {
 	if n := rawInt(ctx, t, db, `SELECT count(*) FROM pragma_table_info('transfers') WHERE name = 'link_mode'`); n != 0 {
 		t.Error("the failed 0014 left its columns behind")
 	}
-	if n, err := db.Migrate(ctx); err != nil || n != 12 {
+	if n, err := db.Migrate(ctx); err != nil || n != 16 {
 		t.Fatalf("retry = %d, %v", n, err)
 	}
 	if after := rowCounts(ctx, t, db); !mapsEqualInt(before, after) {
@@ -732,7 +733,7 @@ func TestMigration0021Upgrade(t *testing.T) {
 		}
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 5 {
+		if n, err := db.Migrate(ctx); err != nil || n != 9 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		if e.Driver == "sqlite" {

@@ -319,6 +319,13 @@ export interface paths {
          *     eligible. With the option off, every address outside the ranges gets the generic
          *     `403 deposit-not-allowed`.
          *
+         *     Since 2.0, `dropLinkToken` (exclusive with `invitationToken`) starts a deposit through a
+         *     permanent drop link: the e-mail code is required **every time** (recognition cookie
+         *     neither honoured nor set), the session kind is `drop_link`, the recipients of the
+         *     transfers are forced to the link's, and the external quotas, the abuse detection and the
+         *     blocklist apply. An unknown, revoked or disabled link is `404 drop-link-invalid` (security
+         *     log `drop_link_invalid`).
+         *
          *     Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
          *     Refused deposits are written to the security log.
          */
@@ -458,6 +465,21 @@ export interface paths {
          *       still be available, here and again at finalization (`410 transfer-gone`);
          *     - the expiry reminder is mailed the day before expiry to the recipients who have not
          *       downloaded yet, unless the remaining lifetime at availability is under 36 hours.
+         *
+         *     Since 2.0:
+         *     - `linkOnly` creates a link-only transfer (no mail to the recipients, who become optional;
+         *       the link is returned once by `finalizeTransfer`): `403 link-only-forbidden` when the
+         *       tenant or the level does not allow it, `400 link-only-conflict` with
+         *       `recipientVerification`;
+         *     - `endToEndEncrypted` declares files encrypted in the browser (`encryptedMetadata` on every
+         *       file, generic names, ciphertext sizes): `403 e2e-forbidden` when the policy of the tenant
+         *       or level forbids it, `400 e2e-required` when it is required and the member is false;
+         *       the server still encrypts the ciphertext at rest and computes its own SHA-256 of it, and
+         *       checks the framing of each upload while streaming (magic, header, chunk lengths, final
+         *       chunk): a malformed one is refused with `400 e2e-format-invalid` at the tus upload;
+         *     - a deposit session of kind `drop_link` addresses the transfer to the recipients of the
+         *       link, with its validity and level (end-to-end encryption is refused there in 2.0: `403 e2e-forbidden`) (`recipients` and `expiryDays` must then match them
+         *       or be omitted).
          */
         post: operations["createTransfer"];
         delete?: never;
@@ -543,6 +565,13 @@ export interface paths {
          *     `not_scanned_disabled` (audited `antivirus.scans_released`). Infected files are **erased** (their key is
          *     destroyed, then their content), and the sender is alerted; their entries stay in the file
          *     list for the sender's information.
+         *
+         *     Since 2.0: for a link-only transfer (`linkOnly`) the answer carries `downloadUrl`, **once**:
+         *     the link is never retrievable afterwards and no recipient is mailed (the sender's
+         *     confirmation mail has no link). For an end-to-end encrypted transfer, the files get
+         *     `scanStatus: not_scanned_e2e` (no analysis), and the
+         *     server computes the SHA-256 of the ciphertext it stores; the recipient mail carries the link
+         *     without the key (`#k=`), which only the sender's browser knows.
          *
          *     When at least one file can be delivered, the transfer becomes `available`: the recipients
          *     receive the link, a QR code (inline CID) and the SHA-256 fingerprints, the sender a
@@ -665,6 +694,62 @@ export interface paths {
          * @description Used by the invitation landing page. Reveals only what the invited person needs.
          */
         get: operations["getInvitation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/drop-links/{dropToken}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.0. Token of a permanent drop link (`ttd_...`).
+                 * @example ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+                 */
+                dropToken: components["parameters"]["DropToken"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Check a permanent drop link
+         * @description Since 2.0. Used by the landing page of a permanent drop link (a fixed address given to
+         *     third parties to send files to a service). Reveals only what the depositor needs: the
+         *     label, the validity of the transfers and the confidentiality level; never the recipients.
+         *     An unknown, revoked or disabled link gets the same `404 drop-link-invalid`, written to the
+         *     security log (`drop_link_invalid`). The deposit itself starts with `startDepositSession`
+         *     and its `dropLinkToken`: the e-mail code is required at every use.
+         */
+        get: operations["getPublicDropLink"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proof-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public keys that verify the proofs of deposit and delivery
+         * @description Since 2.0. Lists the Ed25519 public keys of the instance, active and retired, that sign
+         *     the proofs of deposit and delivery. Answered on the FQDN of a known tenant and on the
+         *     admin host(s), with the same list everywhere (the keys belong to the instance); an
+         *     unknown FQDN gets `421 unknown-tenant` like every tenant endpoint. A proof
+         *     names its key by `keyId`; a retired key still verifies the proofs it signed. The offline
+         *     check is `transteira proof verify <file.pdf>` (documented, no API).
+         */
+        get: operations["listProofKeys"];
         put?: never;
         post?: never;
         delete?: never;
@@ -844,7 +929,9 @@ export interface paths {
          *     transfer, 8 per client per tenant; `429` with `Retry-After`). Since 1.1, files keep their
          *     folder `path` inside the archive (duplicate names resolved per folder), and the
          *     per-recipient tracking, recipient verification and `maxDownloads` rules of
-         *     `downloadFile` apply (the archive counts as one download start).
+         *     `downloadFile` apply (the archive counts as one download start). Since 2.0, an end-to-end
+         *     encrypted transfer has no server archive: `409 e2e-archive-unavailable` (the browser builds the
+         *     ZIP after decrypting the files).
          */
         get: operations["downloadArchive"];
         put?: never;
@@ -1190,6 +1277,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/transfers/{transferId}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Proof of deposit or delivery of one of my transfers (PDF)
+         * @description Since 2.0. Returns the timestamped, signed statement of a transfer of the session address
+         *     (same scope as `getMyTransfer`, `404` for any other) as a PDF: sender, recipients, files
+         *     with their SHA-256 and scan status, deposit date, expiry and first download date. The
+         *     statement (`statement.json`, a `ProofStatement` in canonical JSON, RFC 8785) and its
+         *     Ed25519 signature (`statement.sig`) are embedded in the PDF as attached files. `deposit`
+         *     is written at the end of the antivirus analysis; `delivery` records are written at first
+         *     downloads (the first of the transfer, then the first of each recipient for per-recipient
+         *     links: `recipient` selects it) and are immutable, never updated. Before the fact exists, or
+         *     after the 12 months the proof is kept (even when the transfer is deleted), the answer is
+         *     `404 proof-not-available`. Audited as `transfer.proof_downloaded`.
+         */
+        get: operations["getMyTransferProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/transfers/{transferId}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a new download link for a link-only transfer
+         * @description Since 2.0. For a link-only transfer (`linkOnly`) of the session address whose link was lost
+         *     (for example the answer of `finalizeTransfer` never reached the sender): issues a fresh
+         *     download link, returned once, and revokes the previous link token. `409 state-conflict`
+         *     for any other transfer or a transfer that is not available. Audited as
+         *     `transfer.link_reissued`. `finalizeTransfer` stays idempotent and never returns the link a
+         *     second time.
+         */
+        post: operations["reissueMyTransferLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/transfers/{transferId}/extension": {
         parameters: {
             query?: never;
@@ -1271,7 +1424,9 @@ export interface paths {
          * First factor - username and password
          * @description On success, sets a pre-auth session cookie whose `status` tells the next step. A full
          *     session is never granted on password alone. Failures are rate limited and written to the
-         *     security log; the response does not reveal whether the username exists.
+         *     security log; the response does not reveal whether the username exists. Since 2.0, when the
+         *     password is right but the single sign-on of a tenant of the account is `enforced`, the
+         *     answer is `403 sso-required`: the account must use `startAdminOidcLogin`.
          */
         post: operations["adminLogin"];
         delete?: never;
@@ -1314,6 +1469,97 @@ export interface paths {
          * @description Revokes the admin session server side and clears the session cookie.
          */
         post: operations["adminLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Login methods offered by the admin host
+         * @description Since 2.0. Tells the login page which methods to show: `password` is always true; `sso` is
+         *     true when at least one tenant has its single sign-on enabled. Neither the tenants nor
+         *     their e-mail domains are listed (the page asks for an e-mail address, see
+         *     `startAdminOidcLogin`).
+         */
+        get: operations["getAdminAuthMethods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/oidc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a single sign-on login (OpenID Connect)
+         * @description Since 2.0. Routes the e-mail domain to the single sign-on configuration of one tenant and
+         *     returns the identity provider URL to redirect the browser to (authorization code flow
+         *     with PKCE S256, `state` and `nonce`). The flow context is kept in a signed technical
+         *     cookie of the admin host, valid 10 minutes and usable once. The redirect URI registered at
+         *     the provider is `https://<admin host>/api/v1/admin/auth/oidc/callback`.
+         *
+         *     The answer is the same `404 sso-not-available` whether the domain is unknown or its SSO is
+         *     disabled (no oracle). Rate limited per client IP like the other login steps. A super admin
+         *     never signs in through SSO: the local password with TOTP stays their way in.
+         */
+        post: operations["startAdminOidcLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Redirect target of the identity provider
+         * @description Since 2.0. The browser lands here after the identity provider. The server checks the flow
+         *     cookie, `state`, the PKCE verifier, the ID token (signature, issuer, audience, `nonce`,
+         *     expiry) and, when the tenant requires it, that `amr` contains `mfa`; then it matches the
+         *     account (see "Single sign-on" in the guide: pre-created `delegated_admin` or `auditor`
+         *     account of the tenant whose SSO was used, e-mail domain among the tenant's
+         *     `emailDomains`, identity pinned on the first login, afterwards matched by issuer and
+         *     subject only; Entra ID subjects are per application, so an identity is keyed by issuer,
+         *     client ID and subject). On success it sets the admin session cookie directly in the
+         *     `authenticated` state (MFA is delegated to the provider; audit `admin.login` with
+         *     `method: oidc`, and `admin.identity_linked` on the first login) and redirects with
+         *     `303 See Other` to the administration interface. The session records the issuer, the
+         *     client ID and whether MFA was proven: it reaches only the tenants of the account whose
+         *     SSO configuration is enabled with that issuer and client ID and whose `requireMfa` that
+         *     login satisfied.
+         *
+         *     This operation never answers JSON to the browser: **every failure is a `303` to the login
+         *     page** with `?error=<code>`, the code being `sso-mfa-required`, `sso-not-available`,
+         *     `rate-limited` or, for every other failure (invalid state, token, unknown account,
+         *     identity mismatch, provider error), the generic `invalid-credentials`. Each failure is
+         *     written to the security log as `sso_failed` with its reason (`state_invalid`,
+         *     `token_invalid`, `account_unknown`, `identity_mismatch`, `mfa_missing`, `issuer_error`).
+         */
+        get: operations["completeAdminOidcLogin"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1468,6 +1714,11 @@ export interface paths {
          *       (`delegatedAdmin.activationUrl`, the default `copy` delivery), as for `createAdmin`. A username already used is `409 already-exists`; `delivery: mail`
          *       without a system SMTP is `503 system-smtp-unavailable`, and nothing is created.
          *       Audited as `tenant.created`, `admin.created` and `admin.invited`.
+         *
+         *     Since 2.0, `delegatedAdmin.delivery: none` is refused: a new tenant has no single
+         *     sign-on configured yet, so its first delegated admin always needs an activation link.
+         *     Until single sign-on is implemented, the refusal is the interim one
+         *     (`400 validation-failed`, field `/delegatedAdmin/delivery`, code `not-supported`).
          */
         post: operations["createTenant"];
         delete?: never;
@@ -1533,8 +1784,9 @@ export interface paths {
          *     A delegated admin may only change `defaultLanguage`, set `maxTransferBytes` at most to
          *     `maxTransferCeiling` (the ceiling set by the super admin) and, since 1.1, switch
          *     `allowRemoteInternalDeposit`, `allowTransferReply` and `webhookIncludeAddresses`. Changing `name`, `fqdn`,
-         *     `storageQuotaBytes`, `maxTransferCeiling` or `antivirusEnabled`, or setting
-         *     `maxTransferBytes` above the ceiling, is refused with `403 forbidden` and changes nothing.
+         *     `storageQuotaBytes`, `maxTransferCeiling` or `antivirusEnabled` (and, since 2.0,
+         *     `linkOnlyAllowed` or `e2ePolicy`), or setting `maxTransferBytes` above the ceiling, is
+         *     refused with `403 forbidden` and changes nothing.
          *
          *     Since 1.2, `setupState` is read only here: it is refused with `400 validation-failed`
          *     (unknown member) and only changes from `setup` to `active` through `completeTenantSetup`,
@@ -1546,6 +1798,14 @@ export interface paths {
          *     as `tenant.antivirus_disabled` or `tenant.antivirus_enabled`. `antivirusEffective` (read
          *     only) tells whether files of the tenant are really analysed: false when the tenant flag
          *     is off or the instance runs with `TT_ANTIVIRUS_ENGINE=none`.
+         *
+         *     Since 2.0, `linkOnlyAllowed` and `e2ePolicy` are super admin only, like
+         *     `antivirusEnabled`: an end-to-end encrypted file is never scanned, so `e2ePolicy:
+         *     required` amounts to turning the antivirus off for the tenant. A change is audited as
+         *     `tenant.updated` with the member names. Until these members are implemented, the super
+         *     admin gets the interim `400 validation-failed` (code `not-supported`); a delegated admin
+         *     of the tenant gets `403 forbidden` as for `antivirusEnabled`, and an admin outside the
+         *     tenant `404 not-found`.
          */
         patch: operations["updateTenant"];
         trace?: never;
@@ -2858,6 +3118,336 @@ export interface paths {
         patch: operations["updateAbuseReport"];
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Single sign-on configuration of the tenant
+         * @description Since 2.0. Returns the OpenID Connect configuration of the tenant; the client secret is
+         *     write-only (`hasClientSecret`). `404 not-found` when the tenant has none. Readable by the
+         *     super admin, the delegated admins of the tenant and, read-only, an auditor; only the super
+         *     admin may change it.
+         */
+        get: operations["getTenantSso"];
+        /**
+         * Create or replace the single sign-on configuration
+         * @description Since 2.0. Stores the configuration: the client secret is sealed with the master key like
+         *     the SMTP password (covered by its rotation); absent, the stored one is kept (required on
+         *     the first write and whenever `issuer` or `clientId` changes, else
+         *     `400 validation-failed`, field `/clientSecret`, code `required`). The issuer must be an `https` URL; for Microsoft Entra ID a
+         *     tenant-specific issuer is required, the multi-tenant `common`, `organizations` and
+         *     `consumers` ones are refused (`422 sso-issuer-not-allowed`). An e-mail domain can be
+         *     routed to one tenant only on the whole instance (`409 sso-domain-conflict`). With
+         *     `enforced`, the local password login is refused (`403 sso-required`) for the delegated
+         *     admins and auditors attached to the tenant. Audited as `tenant.sso_updated` (changed
+         *     member names only, never the secret). **Super admin only** (`403 forbidden` for a
+         *     delegated admin, `403 read-only-role` for an auditor): the configuration decides who may
+         *     sign in as an admin. An SSO session reaches a tenant only while the tenant's configuration
+         *     is enabled, has the same issuer **and** client ID as the login, and, when it requires
+         *     MFA, the login carried it (recorded on the session); any other tenant of the account
+         *     answers `404 not-found` to that session.
+         */
+        put: operations["putTenantSso"];
+        post?: never;
+        /**
+         * Remove the single sign-on configuration
+         * @description Since 2.0. Removes the configuration, its sealed secret and the routing of its e-mail
+         *     domains. Pinned identities stay but are unusable; accounts created without activation
+         *     link (`delivery: none`) can no longer sign in until reconfigured. Audited as
+         *     `tenant.sso_deleted`. Super admin only.
+         */
+        delete: operations["deleteTenantSso"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/sso/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test the single sign-on discovery
+         * @description Since 2.0. Fetches the discovery document of the stored issuer (`/.well-known/openid-configuration`,
+         *     TLS 1.2 or later verified, short timeout, no redirect followed) and checks that it names
+         *     the same issuer and the endpoints needed. It never signs anyone in and never sends the
+         *     client secret. Failure is a result (`success: false`) with a category (`error`, closed
+         *     list, never a remote text), not an error. Super admin only.
+         */
+        post: operations["testTenantSso"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Export the configuration of the tenant
+         * @description Since 2.0. Returns the configuration as a JSON document (`TenantConfigExport`,
+         *     `schemaVersion` 1) to create a tenant by duplicating this one (`importTenant`): general
+         *     settings, network rules, recipient domain rules, confidentiality levels, abuse thresholds,
+         *     mail templates, legal texts, webhooks (name, kind and events only: no URL, no secret, disabled), blocklist,
+         *     colours and background preset, and with `includeBranding=true` the logo and background
+         *     image (base64, existing size limits). **Never exported:** the SMTP password and user
+         *     name, webhook secrets and URLs, API tokens, admins, provisioning data, transfers,
+         *     addresses, invitations, audit and the whole single sign-on configuration. Super admin and delegated admin of the tenant; not an
+         *     auditor. Audited as `tenant.exported`.
+         */
+        get: operations["exportTenantConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a tenant from an exported configuration (super admin)
+         * @description Since 2.0. Creates a tenant in the `setup` state from `name`, `fqdn`, a storage quota and
+         *     a `TenantConfigExport` document, in one transaction. Validation is strict: an unknown
+         *     member, a value out of its limits or a duplicate is refused with `422 import-invalid`
+         *     whose first entry of `errors` carries the JSON pointer of the first error
+         *     (`field`); a `schemaVersion` this server does not read is `422 import-schema-unsupported`.
+         *     A document with a duplicate JSON key is refused too (`import-invalid`). The body is limited
+         *     to 32 MiB (`413 payload-too-large`). The webhooks are not recreated (their URLs are not
+         *     exported); there is no single sign-on in an export. An optional first
+         *     delegated admin is created as for `createTenant`. Reserved to the super admin. Audited as
+         *     `tenant.imported` (the name of the source tenant in the details).
+         */
+        post: operations["importTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/drop-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the permanent drop links of the tenant
+         * @description Since 2.0. Lists the drop links (never their token: it is shown at creation and by
+         *     `rotateDropLink` only). Readable by the delegated admins of the tenant, the super admin
+         *     and, read-only, an auditor.
+         */
+        get: operations["listDropLinks"];
+        put?: never;
+        /**
+         * Create a permanent drop link
+         * @description Since 2.0. Creates a fixed address a service gives to third parties to send files to its
+         *     `recipients` (internal addresses, each in the tenant's internal domains). The token
+         *     (`ttd_...`) is returned once, here, and stored as a SHA-256 hash. Depositors through a
+         *     link prove their address by code at every use; the transfers are addressed to the link's
+         *     recipients, with the link's validity and level, and are subject to the external quotas,
+         *     the abuse detection and the blocklist. At most 100 links per tenant
+         *     (`409 drop-link-limit-reached`). Delegated admin of the tenant and super admin. Audited as
+         *     `drop_link.created`.
+         */
+        post: operations["createDropLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/drop-links/{dropLinkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One permanent drop link
+         * @description Since 2.0. Returns one drop link, without its token. Same readers as `listDropLinks`.
+         */
+        get: operations["getDropLink"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a permanent drop link
+         * @description Since 2.0. Revokes the link for good (`revokedAt`); its token is dead at once. Transfers
+         *     already deposited are not affected. A revoked link stays listed. Audited as
+         *     `drop_link.revoked`. Delegated admin of the tenant and super admin.
+         */
+        delete: operations["deleteDropLink"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a permanent drop link
+         * @description Since 2.0. JSON Merge Patch of `label`, `recipients`, `validityDays`,
+         *     `confidentialityLevel` (`null` goes back to the tenant default level) and `enabled`; `null`
+         *     is refused on the other members and an unknown member is refused. A disabled link answers
+         *     like an unknown one. Audited as `drop_link.updated`. Delegated admin of the tenant and
+         *     super admin.
+         */
+        patch: operations["updateDropLink"];
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/drop-links/{dropLinkId}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace the token of a permanent drop link
+         * @description Since 2.0. Issues a new token, shown once in the answer; the previous one is dead at
+         *     once. A revoked link cannot be rotated (`409 state-conflict`). Audited as
+         *     `drop_link.rotated`. Delegated admin of the tenant and super admin.
+         */
+        post: operations["rotateDropLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Security events of the tenant (12-month retention)
+         * @description Since 2.0. Returns the security events of the tenant, most recent first: the lines the
+         *     security log writes for fail2ban and CrowdSec, also kept in the database for 12 months so
+         *     that an auditor can read them without shell access. Each event carries its type, an
+         *     optional reason, the client IP and the tenant, never an e-mail address. Only the events of
+         *     this tenant (never those without tenant). Readable by the delegated admins of the tenant,
+         *     the super admin and an auditor. The log file format is unchanged.
+         */
+        get: operations["listTenantSecurityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/transfers/{transferId}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Proof of deposit or delivery of a transfer (PDF)
+         * @description Since 2.0. Same document as `getMyTransferProof`, for an admin of the tenant: delegated
+         *     admin, super admin and auditor. The proof outlives the transfer (kept 12 months from the
+         *     fact, erased by a data-subject erasure naming the address). `404 proof-not-available`
+         *     before the fact exists or after the retention; `404 not-found` outside the admin's
+         *     tenants. Audited as `transfer.proof_downloaded` (actor, kind).
+         */
+        get: operations["getTenantTransferProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/admins": {
         parameters: {
             query?: never;
@@ -2893,6 +3483,12 @@ export interface paths {
          *     `POST /admin/activation` of the activation page, never by opening the link; an account
          *     invited by mail must enroll TOTP to finish its activation, whatever `requireTotp`.
          *     Audited as `admin.created` and `admin.invited` (details `delivery`, never the link).
+         *
+         *     Since 2.0: `role: auditor` creates a read-only account on the given `tenantIds` (like a
+         *     delegated admin, `requireTotp` true by default). `invitation.delivery: none` creates an
+         *     account **without activation link or password**, which can only sign in through single
+         *     sign-on; it is accepted only for delegated admins and auditors whose tenants all have their
+         *     single sign-on enabled (`409 sso-not-configured` otherwise).
          */
         post: operations["createAdmin"];
         delete?: never;
@@ -3003,6 +3599,40 @@ export interface paths {
          */
         post: operations["inviteAdmin"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/admins/{adminId}/identities/{identityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Admin account identifier.
+                 * @example adm_01JABCG1H2J3K415M6N7P8Q9R0
+                 */
+                adminId: components["parameters"]["AdminId"];
+                /**
+                 * @description Since 2.0. Identifier of a pinned single sign-on identity.
+                 * @example aid_01JABCJ1K2M3N4P5Q6R7S8T9V0
+                 */
+                identityId: components["parameters"]["IdentityId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unpin the single sign-on identity of an account (super admin)
+         * @description Since 2.0. Removes an identity (issuer and subject) pinned on its first SSO login, so that
+         *     the account is pinned again, on the next SSO login, to the identity matching its e-mail
+         *     address. Used when a person changes provider account. Reserved to the super admin.
+         *     Audited as `admin.identity_unlinked`.
+         */
+        delete: operations["deleteAdminIdentity"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3378,6 +4008,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/system/security-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Instance-wide security events (super admin)
+         * @description Since 2.0. Returns the security events of the whole instance, most recent first, including
+         *     the events without tenant (unknown FQDN, provisioning token, admin login). With
+         *     `tenantId`, only the events of that tenant. Reserved to the super admin: `403 forbidden`
+         *     for any other admin.
+         */
+        get: operations["listGlobalSecurityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/system/webhooks": {
         parameters: {
             query?: never;
@@ -3644,7 +4297,7 @@ export interface components {
             /** @description Request identifier (also in the `X-Request-Id` header and in logs). */
             instance?: string;
             code: components["schemas"]["ProblemCode"];
-            /** @description Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met), and since 1.2 `setup-incomplete` (`field` is the key of a required setup item not done, `code` is `not-done`) and `provisioning-scope-exceeded` (the field outside the scope of the token). */
+            /** @description Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met), and since 1.2 `setup-incomplete` (`field` is the key of a required setup item not done, `code` is `not-done`) and `provisioning-scope-exceeded` (the field outside the scope of the token), and since 2.0 `import-invalid` (`field` is the JSON pointer of the first error in the imported document), `sso-domain-conflict` and `sso-issuer-not-allowed` (the field concerned). */
             errors?: {
                 field: string;
                 code: string;
@@ -3666,7 +4319,7 @@ export interface components {
          * @description Stable error code. See `docs/api/errors.md`.
          * @enum {string}
          */
-        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "internal-error";
+        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "internal-error";
         /**
          * @description Supported UI language (ISO 639-1). New languages may be added.
          * @enum {string}
@@ -3765,6 +4418,8 @@ export interface components {
         DepositSessionStart: {
             email: components["schemas"]["Email"];
             invitationToken?: string;
+            /** @description Since 2.0. Token of a permanent drop link; exclusive with `invitationToken`. */
+            dropLinkToken?: string;
         };
         VerificationChallenge: {
             challengeId: string;
@@ -3780,10 +4435,10 @@ export interface components {
          * @description `internal`: internal IP and domain. `external`: invited external.
          *     Since 1.1: `internal_remote` (address of an internal domain already verified from the
          *     internal network, depositing from outside with a code each time), `reply` (recipient
-         *     replying to a transfer). Reserved for V2: `drop_link`.
+         *     replying to a transfer). Since 2.0: `drop_link` (depositor through a permanent drop link).
          * @enum {string}
          */
-        DepositorKind: "internal" | "external" | "internal_remote" | "reply";
+        DepositorKind: "internal" | "external" | "internal_remote" | "reply" | "drop_link";
         DepositSession: {
             email: components["schemas"]["Email"];
             kind: components["schemas"]["DepositorKind"];
@@ -3800,6 +4455,11 @@ export interface components {
                 invitedBy: components["schemas"]["Email"];
                 /** Format: date-time */
                 expiresAt: string;
+            };
+            /** @description Since 2.0. Present for a `drop_link` session. */
+            dropLink?: {
+                label: string;
+                validityDays: components["schemas"]["ExpiryDays"];
             };
             /** @description Since 1.1. Present for a `reply` session. */
             reply?: {
@@ -3834,9 +4494,11 @@ export interface components {
          *     `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
          *     (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
          *     `not_scanned_too_large`.
+         *     `not_scanned_e2e` (since 2.0): end-to-end encrypted file, which the server cannot read;
+         *     delivered unscanned and flagged like `not_scanned_too_large`.
          * @enum {string}
          */
-        ScanStatus: "pending" | "scanning" | "clean" | "infected" | "not_scanned_too_large" | "not_scanned_encrypted" | "scan_error" | "not_scanned_disabled";
+        ScanStatus: "pending" | "scanning" | "clean" | "infected" | "not_scanned_too_large" | "not_scanned_encrypted" | "scan_error" | "not_scanned_disabled" | "not_scanned_e2e";
         FileDeclaration: {
             /** @description Original file name (UTF-8). Stored in the database only; never used on disk. Control and bidirectional characters are rejected. */
             name: string;
@@ -3845,6 +4507,8 @@ export interface components {
             mediaType?: string;
             expectedSha256?: components["schemas"]["Sha256"];
             path?: components["schemas"]["FilePath"];
+            /** @description Since 2.0. Required for an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then a generic name (`file-<n>.tte2`) and `size` the size of the ciphertext. */
+            encryptedMetadata?: components["schemas"]["EncryptedMetadata"];
         };
         /**
          * @description Since 1.1. Relative folder of the file inside the transfer (folders dropped in the
@@ -3868,7 +4532,7 @@ export interface components {
              *     not empty, and the blocklist applies to it.
              */
             senderEmail?: components["schemas"]["Email"];
-            /** @description Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient). */
+            /** @description Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient) and for drop link depositors (the recipients of the link). */
             recipients?: components["schemas"]["Email"][];
             /** @description Plain text; never interpreted as HTML. */
             message?: string;
@@ -3891,6 +4555,18 @@ export interface components {
             maxDownloads?: number | null;
             /** @description Since 1.1. Key of one of the tenant's confidentiality levels; the tenant default level when omitted. */
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelKey"];
+            /**
+             * @description Since 2.0. Link-only transfer (one shared link, never per-recipient links): no mail is sent to the recipients; the download link is returned once, in the answer of `finalizeTransfer` (`downloadUrl`), and never again. Needs the tenant's `linkOnlyAllowed` and the level's (`403 link-only-forbidden`); incompatible with `recipientVerification` (`400 link-only-conflict`).
+             * @default false
+             */
+            linkOnly?: boolean;
+            /** @description Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB). Required in place of `message` when `endToEndEncrypted` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise. */
+            encryptedMessage?: string;
+            /**
+             * @description Since 2.0. The files are encrypted in the browser: every file declares its `encryptedMetadata`, the key stays in the link fragment `#k=` and never reaches the server. Needs the tenant and level `e2ePolicy` (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false). No antivirus, no server archive.
+             * @default false
+             */
+            endToEndEncrypted?: boolean;
         };
         SenderFile: {
             id: string;
@@ -3910,6 +4586,7 @@ export interface components {
             uploadUrl?: string;
             uploadOffset?: components["schemas"]["ByteSize"];
             path?: components["schemas"]["FilePath"];
+            encryptedMetadata?: components["schemas"]["EncryptedMetadata"];
         };
         SenderTransfer: {
             id: string;
@@ -3939,7 +4616,9 @@ export interface components {
              *     shared link (created before 1.1). Since 1.1, absent for new transfers (the type is
              *     unchanged, so strict 1.0 clients keep working): each recipient
              *     has their own link, mailed to them only and never returned to the sender or to an API
-             *     token; follow them with `recipientTracking`.
+             *     token; follow them with `recipientTracking`. Since 2.0, the one exception is a
+             *     link-only transfer (`linkOnly`): its link is returned **once**, in the answer of
+             *     `finalizeTransfer`, and never by any other operation.
              */
             downloadUrl?: string;
             files: components["schemas"]["SenderFile"][];
@@ -3956,6 +4635,12 @@ export interface components {
              *     their link.
              */
             recipientTracking?: components["schemas"]["RecipientTracking"][];
+            /** @description Since 2.0. Link-only transfer. */
+            linkOnly?: boolean;
+            /** @description Since 2.0. The files are encrypted in the browser. */
+            endToEndEncrypted?: boolean;
+            /** @description Since 2.0. The message of an end-to-end encrypted transfer, as sent. */
+            encryptedMessage?: string;
         };
         /** @enum {string} */
         InvitationStatus: "pending" | "used" | "expired" | "revoked";
@@ -4003,6 +4688,7 @@ export interface components {
             scanStatus: components["schemas"]["ScanStatus"];
             downloadUrl: string;
             path?: components["schemas"]["FilePath"];
+            encryptedMetadata?: components["schemas"]["EncryptedMetadata"];
         };
         PublicTransfer: {
             senderEmail: components["schemas"]["Email"];
@@ -4040,6 +4726,10 @@ export interface components {
             replyAllowed?: boolean;
             /** @description Since 1.1. The transfer is a reply sent from outside the entity by a recipient of an earlier transfer (`startTransferReply`): `senderEmail` was verified by code, but the files come from an external sender. Absent while `locked`; never repliable. */
             reply?: boolean;
+            /** @description Since 2.0. The message of an end-to-end encrypted transfer, encrypted (`message` is absent): the browser decrypts it with the key of the link fragment. */
+            encryptedMessage?: string;
+            /** @description Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`. */
+            endToEndEncrypted?: boolean;
         };
         SetupStatus: {
             setupRequired: boolean;
@@ -4059,7 +4749,7 @@ export interface components {
         };
         LoginState: {
             /**
-             * @description Reserved for V2 - `sso_redirect`.
+             * @description `sso_redirect` is not used: single sign-on has its own operations (`startAdminOidcLogin`).
              * @enum {string}
              */
             status: "totp_required" | "totp_enrollment_required" | "password_change_required" | "authenticated";
@@ -4098,10 +4788,12 @@ export interface components {
             password: components["schemas"]["AdminPassword"];
         };
         /**
-         * @description Reserved for V2 - `auditor` (read-only on assigned tenants).
+         * @description `super_admin`, `delegated_admin`. Since 2.0, `auditor`: read-only on the tenants it is
+         *     attached to (like a delegated admin, through `tenantIds`), `403 read-only-role` on any
+         *     write; created, changed and deleted by the super admin only.
          * @enum {string}
          */
-        AdminRole: "super_admin" | "delegated_admin";
+        AdminRole: "super_admin" | "delegated_admin" | "auditor";
         TenantRef: {
             id: string;
             name: string;
@@ -4134,6 +4826,10 @@ export interface components {
             lastLoginAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Since 2.0. True for an account created without a local password (delivery `none`): it can only sign in through single sign-on. Never true for a super admin. */
+            readonly ssoOnly?: boolean;
+            /** @description Since 2.0. Single sign-on identities pinned to the account (see `deleteAdminIdentity`). */
+            readonly identities?: components["schemas"]["AdminIdentity"][];
         };
         /** @description An admin account with its new single-use activation link, returned once by `resetAdminCredentials` (and by `createAdmin` until 1.1, see `AdminCreated`). Only a hash of the link token is stored; this link is never sent by email. */
         AdminWithActivation: components["schemas"]["Admin"] & {
@@ -4162,10 +4858,10 @@ export interface components {
             invitation?: components["schemas"]["AdminInvitation"];
         };
         /**
-         * @description Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour).
+         * @description Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour). Since 2.0, `none`: no activation link is issued, the account has no password and signs in through single sign-on only; accepted by `createAdmin` only for delegated admins and auditors whose tenants all have their single sign-on enabled (`409 sso-not-configured` otherwise). With `none`, `activationUrl` is absent and `activationExpiresAt` is the creation time of the account.
          * @enum {string}
          */
-        InvitationDelivery: "mail" | "copy";
+        InvitationDelivery: "mail" | "copy" | "none";
         /**
          * @description Since 1.2. Delivery of the activation link of an admin. Without `delivery`, `copy` (the 1.1
          *     behaviour); `mail` must be asked for explicitly and needs the system SMTP
@@ -4199,7 +4895,7 @@ export interface components {
         /**
          * @description Changes of an account; absent fields are left unchanged. Promoting to `super_admin`
          *     requires an activated account with TOTP enabled and clears the tenant assignments (a super
-         *     admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Nobody
+         *     admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Since 2.0, the role `auditor` is a valid target (it requires `tenantIds` like `delegated_admin`; promoting an auditor to `super_admin` follows the same rules). Nobody
          *     can disable or demote their own account, and the last usable super admin (not disabled,
          *     activated, TOTP enabled) can be neither disabled nor demoted (`409 state-conflict`).
          */
@@ -4262,6 +4958,13 @@ export interface components {
             readonly antivirusEffective?: boolean;
             /** @description Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`. */
             readonly setupState?: components["schemas"]["TenantSetupState"];
+            /**
+             * @description Since 2.0. Senders may create link-only transfers (`linkOnly`); a confidentiality level may forbid them. Changed by the super admin only.
+             * @default false
+             */
+            linkOnlyAllowed?: boolean;
+            /** @description Since 2.0. End-to-end encryption policy of the tenant (`forbidden` by default). Changed by the super admin only: end-to-end encrypted files are never scanned by the antivirus. */
+            e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
         TenantList: {
             items: components["schemas"]["Tenant"][];
@@ -4305,7 +5008,8 @@ export interface components {
          *     assigned to that tenant only, TOTP required, activation link valid 72 hours delivered as
          *     `AdminInvitation` says (`copy` when `delivery` is absent; `language` is also the language
          *     of the mail). With `provisionTenant`, the delivery is always `mail`: `delivery` must be
-         *     absent or `mail`.
+         *     absent or `mail`. The delivery `none` (since 2.0) is refused by `createTenant`
+         *     (`400 validation-failed`, code `not-supported`): a new tenant has no single sign-on yet.
          */
         NewDelegatedAdmin: {
             username: components["schemas"]["Username"];
@@ -4364,6 +5068,10 @@ export interface components {
             antivirusEnabled?: boolean;
             /** @description Since 1.1. */
             webhookIncludeAddresses?: boolean;
+            /** @description Since 2.0. Super admin only. */
+            linkOnlyAllowed?: boolean;
+            /** @description Since 2.0. Super admin only. */
+            e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
         ContrastResult: {
             /**
@@ -4570,10 +5278,10 @@ export interface components {
             bodyText: string;
         };
         /**
-         * @description Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`.
+         * @description Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Since 2.0: `drop_link` (deposit through a permanent drop link).
          * @enum {string}
          */
-        TransferOrigin: "internal" | "external" | "api" | "internal_remote" | "reply";
+        TransferOrigin: "internal" | "external" | "api" | "internal_remote" | "reply" | "drop_link";
         AdminTransfer: {
             id: string;
             status: components["schemas"]["TransferStatus"];
@@ -4601,6 +5309,12 @@ export interface components {
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
             /** @description Since 1.1. For a reply, the original transfer. */
             replyToTransferId?: string;
+            /** @description Since 2.0. For a deposit through a permanent drop link (`origin: drop_link`), the link. */
+            dropLinkId?: string;
+            /** @description Since 2.0. */
+            linkOnly?: boolean;
+            /** @description Since 2.0. */
+            endToEndEncrypted?: boolean;
         };
         AdminTransferDetail: components["schemas"]["AdminTransfer"] & {
             /** @description Client IP address of the sender when the transfer was created. Absent or null when unknown: transfers created before this field existed. */
@@ -4766,9 +5480,18 @@ export interface components {
          *     `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
          *     `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
          *     expired since the request was accepted), never the request (FQDN, username, address).
+         *     Since 2.0: `admin.login` carries `details.method` (`oidc` for a single sign-on login);
+         *     `admin.identity_linked` and `admin.identity_unlinked` name the account and the issuer, never the
+         *     subject; `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
+         *     only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
+         *     source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
+         *     token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
+         *     `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
+         *     `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
+         *     identifier; a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
          * @enum {string}
          */
-        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked";
+        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "transfer.link_reissued";
         AuditEvent: {
             id: string;
             /** Format: date-time */
@@ -5243,6 +5966,13 @@ export interface components {
             forceDeleteAfterFirstDownload: boolean;
             /** @description Cap of `maxDownloads` (applied when the sender sets none or more); null for none. */
             maxDownloads: number | null;
+            /**
+             * @description Since 2.0. The level allows link-only transfers (`linkOnly`); a level may forbid them. Absent means true.
+             * @default true
+             */
+            linkOnlyAllowed?: boolean;
+            /** @description Since 2.0. End-to-end encryption policy of the level; null or absent: the tenant's. Set by the admins of the tenant (delegated admins included), it can only tighten the tenant policy, never loosen it: a tenant `forbidden` stays forbidden at every level, and a tenant `required` is a floor that every level keeps (a level `allowed` or `forbidden` is then ignored, the effective policy stays `required`). With a tenant `allowed`, a level may set `forbidden` or `required`. */
+            e2ePolicy?: components["schemas"]["E2ePolicy"] | null;
         };
         /** @description Since 1.1. A confidentiality level of a tenant, as managed by its admins. */
         ConfidentialityLevel: {
@@ -5275,6 +6005,348 @@ export interface components {
             key: components["schemas"]["ConfidentialityLevelKey"];
             label: string;
             rules?: components["schemas"]["ConfidentialityRules"];
+        };
+        /** @description Since 2.0. Login methods offered by the admin host. */
+        AuthMethods: {
+            /** @description Always true (the local password with TOTP is the fallback of the super admin). */
+            password: boolean;
+            /** @description At least one tenant has its single sign-on enabled. */
+            sso: boolean;
+        };
+        /** @description Since 2.0. Start of a single sign-on login. */
+        OidcStart: {
+            email: components["schemas"]["Email"];
+        };
+        /** @description Since 2.0. Where to send the browser. */
+        OidcRedirect: {
+            /**
+             * Format: uri
+             * @description Authorization endpoint of the identity provider
+             */
+            redirectUrl: string;
+        };
+        /** @description Since 2.0. OpenID Connect configuration of a tenant. The client secret is never returned. */
+        TenantSso: {
+            enabled: boolean;
+            /**
+             * Format: uri
+             * @description `https` issuer URL; tenant-specific for Entra ID.
+             */
+            issuer: string;
+            clientId: string;
+            hasClientSecret: boolean;
+            /** @description E-mail domains routed to this configuration (exact match, lower case); a domain belongs to one tenant on the whole instance. */
+            emailDomains: string[];
+            /** @description When true, the local password login is refused (`403 sso-required`) for the delegated admins and auditors attached to the tenant. */
+            enforced: boolean;
+            /** @description The ID token `amr` must contain `mfa`, else `sso-mfa-required`. */
+            requireMfa: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description Since 2.0. Replacement of the single sign-on configuration of a tenant. */
+        TenantSsoUpdate: {
+            enabled: boolean;
+            /** Format: uri */
+            issuer: string;
+            clientId: string;
+            /** @description Write-only. Required on the first write and whenever `issuer` or `clientId` differs from the stored configuration (`400 validation-failed`, field `/clientSecret`, code `required`): a secret is never carried over to another application or identity provider. Otherwise, absent keeps the stored one. */
+            clientSecret?: string;
+            emailDomains: string[];
+            /** @default false */
+            enforced?: boolean;
+            /** @default true */
+            requireMfa?: boolean;
+        };
+        /** @description Since 2.0. Result of the discovery test of an issuer. */
+        SsoTestResult: {
+            success: boolean;
+            durationMs: number;
+            /**
+             * @description How far the discovery went: `done` on success, otherwise the step that failed.
+             * @enum {string}
+             */
+            stage: "settings" | "connect" | "tls" | "discovery" | "issuer" | "endpoints" | "done" | "unknown";
+            /**
+             * @description Category of the failure, absent on success. A closed list of categories, never a
+             *     message from the network, the identity provider or the TLS library (no text of a
+             *     remote server is reflected): `dns_error` (name not resolved), `connect_error`
+             *     (connection refused or reset), `tls_error` (handshake or certificate), `timeout`,
+             *     `http_status` (the discovery document answered other than 200), `invalid_document`
+             *     (not JSON, too large or a required member missing), `issuer_mismatch` (the document
+             *     names another issuer), `missing_endpoint` (an endpoint is absent or not `https`),
+             *     `internal_error`.
+             * @enum {string}
+             */
+            error?: "dns_error" | "connect_error" | "tls_error" | "timeout" | "http_status" | "invalid_document" | "issuer_mismatch" | "missing_endpoint" | "internal_error";
+        };
+        /** @description Since 2.0. A single sign-on identity pinned to an admin account. */
+        AdminIdentity: {
+            id: string;
+            /** Format: uri */
+            issuer: string;
+            /** @description Client ID of the application the identity was pinned through (Entra ID subjects are per application). */
+            clientId: string;
+            /** @description Tenant whose SSO configuration was used on the first login. */
+            tenantId?: string;
+            /** Format: date-time */
+            linkedAt: string;
+        };
+        /** @description Since 2.0. A reissued download link of a link-only transfer. */
+        MyTransferLink: {
+            /**
+             * Format: uri
+             * @description Download page; shown once
+             */
+            downloadUrl: string;
+        };
+        /**
+         * @description Since 2.0. `deposit`: written when the transfer becomes available. `delivery`: written at the first download (and at the first download of each recipient with per-recipient links).
+         * @enum {string}
+         */
+        ProofKind: "deposit" | "delivery";
+        /** @description Since 2.0. A public key of the instance that verifies proofs. */
+        ProofKey: {
+            keyId: string;
+            /** @enum {string} */
+            algorithm: "Ed25519";
+            /** @description The 32-byte public key, base64url without padding. */
+            publicKey: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Null while the key is the active one.
+             */
+            retiredAt: string | null;
+        };
+        ProofKeyList: {
+            items: components["schemas"]["ProofKey"][];
+        };
+        /**
+         * @description Since 2.0. The statement signed by the instance, embedded in the proof PDF as
+         *     `statement.json` in canonical JSON (RFC 8785); `statement.sig` holds the Ed25519
+         *     signature (64 bytes) over those exact bytes, made with the key `keyId`. For an end-to-end
+         *     encrypted transfer, `endToEndEncrypted` is true, the file names are the generic names the
+         *     server knows and `sha256` is the hash of the ciphertext.
+         */
+        ProofStatement: {
+            /** @description Always 1 in this version. */
+            schemaVersion: number;
+            kind: components["schemas"]["ProofKind"];
+            instanceVersion: string;
+            tenant: {
+                name: string;
+                fqdn: string;
+            };
+            transferId: string;
+            senderEmail: components["schemas"]["Email"];
+            recipients: components["schemas"]["Email"][];
+            /** @description Key of the level of the transfer. */
+            confidentialityLevel?: string;
+            endToEndEncrypted: boolean;
+            files: {
+                name: string;
+                path?: string;
+                size: components["schemas"]["ByteSize"];
+                sha256: components["schemas"]["Sha256"];
+                scanStatus: components["schemas"]["ScanStatus"];
+            }[];
+            /** Format: date-time */
+            depositedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description First download, all recipients together; set in a `delivery` statement.
+             */
+            firstDownloadedAt?: string | null;
+            /** @description First download of each recipient (per-recipient links), in a `delivery` statement. */
+            recipientDownloads?: {
+                email: components["schemas"]["Email"];
+                /** Format: date-time */
+                firstDownloadedAt: string;
+            }[];
+            keyId: string;
+        };
+        /**
+         * @description Since 2.0. End-to-end encryption policy: `forbidden` (the default), `allowed` (the sender chooses) or `required`.
+         * @enum {string}
+         */
+        E2ePolicy: "forbidden" | "allowed" | "required";
+        /** @description Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it. */
+        EncryptedMetadata: string;
+        /** @description Since 2.0. What the landing page of a drop link needs. */
+        PublicDropLink: {
+            label: string;
+            validityDays: components["schemas"]["ExpiryDays"];
+            level?: components["schemas"]["ConfidentialityLevelRef"];
+        };
+        /** @description Since 2.0. A permanent drop link, without its token. */
+        DropLink: {
+            id: string;
+            label: string;
+            /** @description Internal addresses the deposits are addressed to. */
+            recipients: components["schemas"]["Email"][];
+            validityDays: components["schemas"]["ExpiryDays"];
+            /** @description Key of the level applied to the deposits; null for the tenant default. */
+            confidentialityLevel?: string | null;
+            enabled: boolean;
+            /** @description Identifier of the admin who created the link. */
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            lastUsedAt?: string | null;
+            /** Format: date-time */
+            revokedAt?: string | null;
+        };
+        /** @description Since 2.0. Creation of a permanent drop link. */
+        DropLinkCreate: {
+            label: string;
+            recipients: components["schemas"]["Email"][];
+            validityDays: components["schemas"]["ExpiryDays"];
+            /** @description Key of a level of the tenant; the tenant default when absent. */
+            confidentialityLevel?: components["schemas"]["ConfidentialityLevelKey"];
+            /** @default true */
+            enabled?: boolean;
+        };
+        /** @description Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` only. */
+        DropLinkUpdate: {
+            label?: string;
+            recipients?: components["schemas"]["Email"][];
+            validityDays?: components["schemas"]["ExpiryDays"];
+            confidentialityLevel?: string | null;
+            enabled?: boolean;
+        };
+        /** @description Since 2.0. A drop link with its token, present only in the answers of `createDropLink` and `rotateDropLink`. */
+        DropLinkCreated: components["schemas"]["DropLink"] & {
+            /** @description Shown once; only its SHA-256 is stored. */
+            token: string;
+        };
+        DropLinkList: {
+            items: components["schemas"]["DropLink"][];
+        };
+        /**
+         * @description Since 2.0. Type of a security event, the `event=` token of the security log. New types may
+         *     be added within the API version: clients must accept unknown values.
+         * @enum {string}
+         */
+        SecurityEventType: "verification_code_invalid" | "transfer_password_invalid" | "admin_login_failed" | "api_token_invalid" | "unknown_fqdn" | "deposit_refused" | "rate_limited" | "metrics_token_invalid" | "access_link_invalid" | "provisioning_token_invalid" | "sso_failed" | "drop_link_invalid";
+        /** @description Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address. */
+        SecurityEvent: {
+            id: string;
+            /** Format: date-time */
+            occurredAt: string;
+            type: components["schemas"]["SecurityEventType"];
+            /** @description The `reason` field of the line (for example `password`, `state_invalid`), when it has one. */
+            reason?: string;
+            /** @description Real client IP, or `-` when unknown. */
+            ip: string;
+            /** @description Tenant of the event; null for an event without tenant. */
+            tenantId?: string | null;
+            /** @description Identical events (same type, reason, IP and tenant) coalesced in a short window into this entry. */
+            occurrences?: number;
+            /**
+             * Format: date-time
+             * @description Time of the last coalesced occurrence; absent when `occurrences` is 1.
+             */
+            lastSeenAt?: string;
+        };
+        SecurityEventList: {
+            items: components["schemas"]["SecurityEvent"][];
+            nextCursor?: components["schemas"]["PageCursor"];
+        };
+        /** @description Since 2.0. A branding image of an export. */
+        ExportedAsset: {
+            mediaType: string;
+            /** @description Content */
+            dataBase64: string;
+        };
+        /**
+         * @description Since 2.0. Exported configuration of a tenant, to create another one (`importTenant`).
+         *     Strict on import: an unknown member is refused. Never holds a secret (see
+         *     `exportTenantConfig`).
+         */
+        TenantConfigExport: {
+            /** @description Always 1 in this version. */
+            schemaVersion: number;
+            /** Format: date-time */
+            exportedAt: string;
+            /** @description Version of the instance that exported. */
+            sourceVersion: string;
+            /** @description General settings, without the storage quota. */
+            settings?: {
+                defaultLanguage?: components["schemas"]["Language"];
+                /** Format: int64 */
+                maxTransferBytes?: number;
+                /** Format: int64 */
+                maxTransferCeiling?: number;
+                allowRemoteInternalDeposit?: boolean;
+                allowTransferReply?: boolean;
+                webhookIncludeAddresses?: boolean;
+                linkOnlyAllowed?: boolean;
+                e2ePolicy?: components["schemas"]["E2ePolicy"];
+            };
+            branding?: {
+                primaryColor?: components["schemas"]["HexColor"];
+                accentColor?: components["schemas"]["HexColor"];
+                backgroundPreset?: components["schemas"]["BackgroundPresetId"];
+                logo?: components["schemas"]["ExportedAsset"];
+                background?: components["schemas"]["ExportedAsset"];
+            };
+            network?: components["schemas"]["NetworkRules"];
+            /** @description Server, port, security and sender; never the user name nor the password. */
+            smtp?: {
+                host: string;
+                port: number;
+                security: components["schemas"]["SmtpSecurity"];
+                fromAddress: components["schemas"]["Email"];
+                fromName?: string | null;
+            };
+            recipientRules?: components["schemas"]["RecipientRules"];
+            confidentialityLevels?: components["schemas"]["ConfidentialityLevelList"];
+            abuseThresholds?: components["schemas"]["AbuseThresholds"];
+            /** @description The customised templates only. */
+            emailTemplates?: {
+                key: components["schemas"]["EmailTemplateKey"];
+                language: components["schemas"]["Language"];
+                subject: string;
+                bodyHtml: string;
+                bodyText: string;
+            }[];
+            legalDocuments?: {
+                /** @enum {string} */
+                document: "legal-notice" | "privacy-policy";
+                language: components["schemas"]["Language"];
+                markdown: string;
+            }[];
+            /** @description For information: name, kind and events. Never the URL nor the secret; not recreated by an import. */
+            webhooks?: {
+                name: string;
+                kind: components["schemas"]["WebhookKind"];
+                events: components["schemas"]["WebhookEventType"][];
+                /** @enum {boolean} */
+                enabled: false;
+            }[];
+            blocklist?: {
+                kind: components["schemas"]["BlocklistKind"];
+                value: string;
+                comment?: string;
+            }[];
+        };
+        /** @description Since 2.0. Creation of a tenant from an exported configuration. */
+        TenantImport: {
+            name: string;
+            fqdn: components["schemas"]["Fqdn"];
+            /** Format: int64 */
+            storageQuotaBytes: number;
+            config: components["schemas"]["TenantConfigExport"];
+            delegatedAdmin?: components["schemas"]["NewDelegatedAdmin"];
         };
         RecipientVerificationStart: {
             /**
@@ -5359,6 +6431,10 @@ export interface components {
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelRef"];
             /** @description Recipients who downloaded at least one file (per-recipient links only; 0 otherwise). */
             downloadedBy: number;
+            /** @description Since 2.0. Link-only transfer (its link cannot be retrieved). */
+            linkOnly?: boolean;
+            /** @description Since 2.0. The files are encrypted in the browser. */
+            endToEndEncrypted?: boolean;
         };
         MyTransferDetail: components["schemas"]["MyTransfer"] & {
             message?: string;
@@ -5806,7 +6882,8 @@ export interface components {
         /**
          * @description The authenticated admin's role or tenants do not allow the operation (`forbidden`), or the
          *     CSRF check of this unsafe method failed (`csrf-invalid`: missing or wrong `X-CSRF-Token`,
-         *     cross-site `Origin` or `Sec-Fetch-Site`).
+         *     cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor attempting any write gets
+         *     `403 read-only-role`.
          */
         AdminForbidden: {
             headers: {
@@ -5943,6 +7020,136 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Since 2.0. Single sign-on is not available for this e-mail address. The answer is the same
+         *     whether the domain is unknown or its single sign-on disabled.
+         */
+        SsoNotAvailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-not-available",
+                 *       "title": "Single sign-on not available",
+                 *       "status": 404,
+                 *       "code": "sso-not-available"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.0. An e-mail domain of the configuration is already routed to the single sign-on of another tenant. */
+        SsoDomainConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-domain-conflict",
+                 *       "title": "Domain already used by another single sign-on",
+                 *       "status": 409,
+                 *       "code": "sso-domain-conflict",
+                 *       "errors": [
+                 *         {
+                 *           "field": "/emailDomains/0",
+                 *           "code": "already-exists"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.0. The issuer is a multi-tenant Entra ID endpoint (`common`, `organizations`, `consumers`) or otherwise not acceptable; a tenant-specific issuer is required. */
+        SsoIssuerNotAllowed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-issuer-not-allowed",
+                 *       "title": "Issuer not allowed",
+                 *       "status": 422,
+                 *       "code": "sso-issuer-not-allowed",
+                 *       "errors": [
+                 *         {
+                 *           "field": "/issuer",
+                 *           "code": "not-allowed"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.0. The proof does not exist yet (the fact it proves has not happened) or is past its 12-month retention. */
+        ProofNotAvailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#proof-not-available",
+                 *       "title": "Proof not available",
+                 *       "status": 404,
+                 *       "code": "proof-not-available"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Since 2.0. The imported configuration is refused: `import-invalid` (the first entry of
+         *     `errors` holds the JSON pointer of the first error) or `import-schema-unsupported`
+         *     (`schemaVersion` unknown to this server).
+         */
+        ImportInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.0. The drop link is unknown, revoked or disabled (the same answer), written to the security log as `drop_link_invalid`. */
+        DropLinkInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#drop-link-invalid",
+                 *       "title": "Drop link not valid",
+                 *       "status": 404,
+                 *       "code": "drop-link-invalid"
+                 *     }
+                 */
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Since 2.0. The tenant already has 100 drop links. */
+        DropLinkLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#drop-link-limit-reached",
+                 *       "title": "Drop link limit reached",
+                 *       "status": 409,
+                 *       "code": "drop-link-limit-reached"
+                 *     }
+                 */
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
@@ -6349,6 +7556,36 @@ export interface components {
          */
         ProvisioningTokenId: string;
         /**
+         * @description Since 2.0. Token of a permanent drop link (`ttd_...`).
+         * @example ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+         */
+        DropToken: string;
+        /**
+         * @description Since 2.0. Drop link identifier.
+         * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+         */
+        DropLinkId: string;
+        /**
+         * @description Since 2.0. Identifier of a pinned single sign-on identity.
+         * @example aid_01JABCJ1K2M3N4P5Q6R7S8T9V0
+         */
+        IdentityId: string;
+        /**
+         * @description Since 2.0. Which proof: `deposit` or `delivery`.
+         * @example deposit
+         */
+        ProofKind: components["schemas"]["ProofKind"];
+        /**
+         * @description Since 2.0. With `kind=delivery` on a transfer with per-recipient links: the recipient whose first download is proved. Absent, the first delivery of the transfer.
+         * @example carol@customer.example.net
+         */
+        ProofRecipient: components["schemas"]["Email"];
+        /**
+         * @description Since 2.0. Filter by security event type. The list is extensible: any value of the form `^[a-z][a-z0-9_]*$` is accepted, and an unknown type matches no event.
+         * @example verification_code_invalid
+         */
+        SecurityEventType: components["schemas"]["SecurityEventType"];
+        /**
          * @description Since 1.1. Abuse report identifier.
          * @example abr_01JABCR3S4T5V6W7X8Y9Z0A1B2
          */
@@ -6418,6 +7655,13 @@ export interface components {
          * @example __Host-tt_deposit=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
          */
         ClearDepositCookie: string;
+        /**
+         * @description Since 2.0. Sets the signed technical cookie holding the state, nonce and PKCE verifier of
+         *     one single sign-on flow, on the admin host only: valid 10 minutes, `SameSite=Lax` (the provider redirects the browser back), used once (enforced
+         *     on the server side too), cleared by the callback.
+         * @example __Host-tt_oidc=of_Qm4Zx7...; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax
+         */
+        SetOidcFlowCookie: string;
         /**
          * @description Sets the admin session cookie, on the admin host only. Its `Max-Age` is the life left to
          *     the session, at most 5 minutes while a login step (TOTP or enrollment) is awaited.
@@ -6923,6 +8167,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             403: components["responses"]["DepositForbidden"];
+            404: components["responses"]["DropLinkInvalid"];
             410: components["responses"]["InvitationGone"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
@@ -7172,7 +8417,19 @@ export interface operations {
                     "application/json": components["schemas"]["SenderTransfer"];
                 };
             };
-            400: components["responses"]["ValidationFailed"];
+            /**
+             * @description The request is invalid (`validation-failed`). Since 2.0: `link-only-conflict`
+             *     (`linkOnly` with `recipientVerification`) and `e2e-required` (end-to-end encryption is required by
+             *     the policy of the tenant or level).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             401: components["responses"]["DepositUnauthenticated"];
             /**
              * @description The depositor is not allowed to deposit (`deposit-not-allowed`: eligibility is checked
@@ -7183,7 +8440,8 @@ export interface operations {
              *     Since 1.1: a recipient is refused by the recipient domain rules
              *     (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
              *     (`abuse-threshold-blocked`). A reply is refused (`reply-not-allowed`) when replies are
-             *     disabled or the original sender can no longer be replied to.
+             *     disabled or the original sender can no longer be replied to. Since 2.0: `link-only-forbidden`
+             *     and `e2e-forbidden` (policy of the tenant or level).
              */
             403: {
                 headers: {
@@ -7787,6 +9045,83 @@ export interface operations {
             503: components["responses"]["TenantInSetup"];
         };
     };
+    getPublicDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.0. Token of a permanent drop link (`ttd_...`).
+                 * @example ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+                 */
+                dropToken: components["parameters"]["DropToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Valid drop link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "label": "Supplier invoices",
+                     *       "validityDays": 7,
+                     *       "level": {
+                     *         "key": "internal",
+                     *         "label": "Internal"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["PublicDropLink"];
+                };
+            };
+            404: components["responses"]["DropLinkInvalid"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    listProofKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Keys, most recent first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "keyId": "psk_01JABCP1Q2R3S4T5V6W7X8Y9Z0",
+                     *           "algorithm": "Ed25519",
+                     *           "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                     *           "createdAt": "2026-11-04T09:00:00Z",
+                     *           "retiredAt": null
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ProofKeyList"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getDownload: {
         parameters: {
             query?: never;
@@ -8009,6 +9344,23 @@ export interface operations {
             };
             401: components["responses"]["DownloadLocked"];
             404: components["responses"]["NotFound"];
+            /** @description Since 2.0. The transfer is end-to-end encrypted: no archive is built by the server. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#e2e-archive-unavailable",
+                     *       "title": "Archive unavailable for an end-to-end encrypted transfer",
+                     *       "status": 409,
+                     *       "code": "e2e-archive-unavailable"
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             410: components["responses"]["DownloadGone"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["TooManyStreams"];
@@ -8691,6 +10043,91 @@ export interface operations {
             503: components["responses"]["TenantInSetup"];
         };
     };
+    getMyTransferProof: {
+        parameters: {
+            query: {
+                /**
+                 * @description Since 2.0. Which proof: `deposit` or `delivery`.
+                 * @example deposit
+                 */
+                kind: components["parameters"]["ProofKind"];
+                /**
+                 * @description Since 2.0. With `kind=delivery` on a transfer with per-recipient links: the recipient whose first download is proved. Absent, the first delivery of the transfer.
+                 * @example carol@customer.example.net
+                 */
+                recipient?: components["parameters"]["ProofRecipient"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proof as a PDF attachment. */
+            200: {
+                headers: {
+                    "Content-Disposition": components["headers"]["ContentDispositionAttachment"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    "X-Content-Type-Options": components["headers"]["NoSniff"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /** @example <binary data> */
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["ProofNotAvailable"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    reissueMyTransferLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new link, shown once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "downloadUrl": "https://transfer.entity-a.example.com/d/dl_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["MyTransferLink"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
     extendMyTransfer: {
         parameters: {
             query?: never;
@@ -8915,7 +10352,15 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["InvalidCredentials"];
-            403: components["responses"]["CsrfInvalid"];
+            /** @description The CSRF check failed (`csrf-invalid`), or, since 2.0, the account must sign in through single sign-on (`sso-required`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
@@ -8975,6 +10420,129 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["CsrfInvalid"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getAdminAuthMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Available methods. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "password": true,
+                     *       "sso": true
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AuthMethods"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    startAdminOidcLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "email": "admin@entity-a.example.com"
+                 *     }
+                 */
+                "application/json": components["schemas"]["OidcStart"];
+            };
+        };
+        responses: {
+            /** @description URL of the identity provider to redirect to; the flow cookie is set. */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetOidcFlowCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "redirectUrl": "https://login.example.com/tenant-id/oauth2/v2.0/authorize?client_id=app&response_type=code&state=st_x&code_challenge_method=S256"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OidcRedirect"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["SsoNotAvailable"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    completeAdminOidcLogin: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Authorization code issued by the identity provider.
+                 * @example 0.AXEA8rJ2
+                 */
+                code?: string;
+                /**
+                 * @description State of the flow, checked against the flow cookie.
+                 * @example st_Kd83jLm0Qp2Zx7Vb
+                 */
+                state?: string;
+                /**
+                 * @description Issuer of the authorization response (RFC 9207), sent by providers that support it.
+                 *     Optional; when present it must equal the issuer of the flow exactly, else the login
+                 *     fails (`sso_failed`, reason `issuer_error`) before the code is redeemed (mix-up
+                 *     defence).
+                 * @example https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0
+                 */
+                iss?: string;
+                /**
+                 * @description Error code sent by the identity provider (access denied, ...).
+                 * @example access_denied
+                 */
+                error?: string;
+                /** @description Provider error text; never shown, only logged after cleaning. */
+                error_description?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Redirect to the administration interface (success; the session cookie is set) or to
+             *     the login page with `?error=<code>` (failure).
+             */
+            303: {
+                headers: {
+                    /**
+                     * @description Administration interface, or login page with the error code.
+                     * @example /admin/login?error=invalid-credentials
+                     */
+                    Location?: string;
+                    "Set-Cookie": components["headers"]["SetAdminCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -12558,6 +14126,744 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    getTenantSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSO configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "enabled": true,
+                     *       "issuer": "https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0",
+                     *       "clientId": "7f3c9a10-0000-4000-8000-00000000c0de",
+                     *       "hasClientSecret": true,
+                     *       "emailDomains": [
+                     *         "entity-a.example.com"
+                     *       ],
+                     *       "enforced": false,
+                     *       "requireMfa": true,
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-04T09:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantSso"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    putTenantSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": true,
+                 *       "issuer": "https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0",
+                 *       "clientId": "7f3c9a10-0000-4000-8000-00000000c0de",
+                 *       "clientSecret": "client-secret-from-the-provider",
+                 *       "emailDomains": [
+                 *         "entity-a.example.com"
+                 *       ],
+                 *       "enforced": false,
+                 *       "requireMfa": true
+                 *     }
+                 */
+                "application/json": components["schemas"]["TenantSsoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved configuration. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "enabled": true,
+                     *       "issuer": "https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0",
+                     *       "clientId": "7f3c9a10-0000-4000-8000-00000000c0de",
+                     *       "hasClientSecret": true,
+                     *       "emailDomains": [
+                     *         "entity-a.example.com"
+                     *       ],
+                     *       "enforced": false,
+                     *       "requireMfa": true,
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-04T09:05:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantSso"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SsoDomainConflict"];
+            422: components["responses"]["SsoIssuerNotAllowed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTenantSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuration removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    testTenantSso: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Result of the discovery. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SsoTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    exportTenantConfig: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Include the logo and background image files (default false).
+                 * @example false
+                 */
+                includeBranding?: boolean;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The configuration, as a downloadable JSON file. */
+            200: {
+                headers: {
+                    "Content-Disposition": components["headers"]["ContentDispositionAttachment"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "schemaVersion": 1,
+                     *       "exportedAt": "2026-11-04T10:00:00Z",
+                     *       "sourceVersion": "2.0.0",
+                     *       "settings": {
+                     *         "defaultLanguage": "fr",
+                     *         "maxTransferBytes": 21474836480,
+                     *         "maxTransferCeiling": 21474836480,
+                     *         "allowRemoteInternalDeposit": false,
+                     *         "allowTransferReply": true,
+                     *         "webhookIncludeAddresses": false,
+                     *         "linkOnlyAllowed": false,
+                     *         "e2ePolicy": "forbidden"
+                     *       },
+                     *       "branding": {
+                     *         "primaryColor": "#1F4E79",
+                     *         "accentColor": "#C55A11",
+                     *         "backgroundPreset": "ocean"
+                     *       },
+                     *       "network": {
+                     *         "internalCidrs": [
+                     *           "10.10.0.0/16"
+                     *         ],
+                     *         "internalDomains": [
+                     *           "entity-a.example.com"
+                     *         ]
+                     *       },
+                     *       "recipientRules": {
+                     *         "allowedDomains": [],
+                     *         "deniedDomains": [
+                     *           "mail.example.org"
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantConfigExport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    importTenant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "name": "Entity C",
+                 *       "fqdn": "transfer.entity-c.example.com",
+                 *       "storageQuotaBytes": 1099511627776,
+                 *       "config": {
+                 *         "schemaVersion": 1,
+                 *         "exportedAt": "2026-11-04T10:00:00Z",
+                 *         "sourceVersion": "2.0.0",
+                 *         "settings": {
+                 *           "defaultLanguage": "fr",
+                 *           "maxTransferBytes": 21474836480
+                 *         },
+                 *         "network": {
+                 *           "internalCidrs": [
+                 *             "10.30.0.0/16"
+                 *           ],
+                 *           "internalDomains": [
+                 *             "entity-c.example.com"
+                 *           ]
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["TenantImport"];
+            };
+        };
+        responses: {
+            /** @description Tenant created in the `setup` state. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "ten_01JAB00000000000000ENT3TYC",
+                     *       "name": "Entity C",
+                     *       "fqdn": "transfer.entity-c.example.com",
+                     *       "defaultLanguage": "fr",
+                     *       "maxTransferBytes": 21474836480,
+                     *       "maxTransferCeiling": 21474836480,
+                     *       "status": "active",
+                     *       "storageQuotaBytes": 1099511627776,
+                     *       "storageUsedBytes": 0,
+                     *       "setupState": "setup",
+                     *       "createdAt": "2026-11-04T10:05:00Z",
+                     *       "updatedAt": "2026-11-04T10:05:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["TenantCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["AlreadyExists"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["ImportInvalid"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listDropLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Drop links, most recent first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "drl_01JABCD1E2F3G4H5J6K7M8N9P0",
+                     *           "label": "Supplier invoices",
+                     *           "recipients": [
+                     *             "accounting@entity-a.example.com"
+                     *           ],
+                     *           "validityDays": 7,
+                     *           "confidentialityLevel": "internal",
+                     *           "enabled": true,
+                     *           "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
+                     *           "createdAt": "2026-11-04T09:00:00Z",
+                     *           "updatedAt": "2026-11-04T09:00:00Z",
+                     *           "lastUsedAt": null,
+                     *           "revokedAt": null
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DropLinkList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "label": "Supplier invoices",
+                 *       "recipients": [
+                 *         "accounting@entity-a.example.com"
+                 *       ],
+                 *       "validityDays": 7,
+                 *       "confidentialityLevel": "internal"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DropLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Drop link created; its token is shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "drl_01JABCD1E2F3G4H5J6K7M8N9P0",
+                     *       "label": "Supplier invoices",
+                     *       "recipients": [
+                     *         "accounting@entity-a.example.com"
+                     *       ],
+                     *       "validityDays": 7,
+                     *       "confidentialityLevel": "internal",
+                     *       "enabled": true,
+                     *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-04T09:00:00Z",
+                     *       "token": "ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DropLinkCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["DropLinkLimitReached"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The drop link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "drl_01JABCD1E2F3G4H5J6K7M8N9P0",
+                     *       "label": "Supplier invoices",
+                     *       "recipients": [
+                     *         "accounting@entity-a.example.com"
+                     *       ],
+                     *       "validityDays": 7,
+                     *       "confidentialityLevel": "internal",
+                     *       "enabled": true,
+                     *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-04T09:00:00Z",
+                     *       "lastUsedAt": "2026-11-05T14:12:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DropLink"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Link revoked (or already revoked). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["DropLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated drop link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "drl_01JABCD1E2F3G4H5J6K7M8N9P0",
+                     *       "label": "Supplier invoices",
+                     *       "recipients": [
+                     *         "accounting@entity-a.example.com"
+                     *       ],
+                     *       "validityDays": 7,
+                     *       "enabled": false,
+                     *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-05T15:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DropLink"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    rotateDropLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.0. Drop link identifier.
+                 * @example drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                 */
+                dropLinkId: components["parameters"]["DropLinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The drop link with its new token, shown once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "drl_01JABCD1E2F3G4H5J6K7M8N9P0",
+                     *       "label": "Supplier invoices",
+                     *       "recipients": [
+                     *         "accounting@entity-a.example.com"
+                     *       ],
+                     *       "validityDays": 7,
+                     *       "enabled": true,
+                     *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
+                     *       "createdAt": "2026-11-04T09:00:00Z",
+                     *       "updatedAt": "2026-11-05T15:30:00Z",
+                     *       "token": "ttd_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["DropLinkCreated"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTenantSecurityEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Since 2.0. Filter by security event type. The list is extensible: any value of the form `^[a-z][a-z0-9_]*$` is accepted, and an unknown type matches no event.
+                 * @example verification_code_invalid
+                 */
+                type?: components["parameters"]["SecurityEventType"];
+                /**
+                 * @description Start of the period (inclusive).
+                 * @example 2026-11-01T00:00:00Z
+                 */
+                from?: string;
+                /**
+                 * @description End of the period (inclusive).
+                 * @example 2026-11-04T23:59:59Z
+                 */
+                to?: string;
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Security events (most recent first). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "sev_01JABCS1T2V3W4X5Y6Z7A8B9C0",
+                     *           "occurredAt": "2026-11-04T08:15:00Z",
+                     *           "type": "verification_code_invalid",
+                     *           "ip": "203.0.113.7",
+                     *           "tenantId": "ten_01JAB00000000000000ENT1TYA"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecurityEventList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTenantTransferProof: {
+        parameters: {
+            query: {
+                /**
+                 * @description Since 2.0. Which proof: `deposit` or `delivery`.
+                 * @example deposit
+                 */
+                kind: components["parameters"]["ProofKind"];
+                /**
+                 * @description Since 2.0. With `kind=delivery` on a transfer with per-recipient links: the recipient whose first download is proved. Absent, the first delivery of the transfer.
+                 * @example carol@customer.example.net
+                 */
+                recipient?: components["parameters"]["ProofRecipient"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Transfer identifier.
+                 * @example trf_01JABCD8E3W5Q2Z7K9M4N6P0RS
+                 */
+                transferId: components["parameters"]["TransferId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proof as a PDF attachment. */
+            200: {
+                headers: {
+                    "Content-Disposition": components["headers"]["ContentDispositionAttachment"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    "X-Content-Type-Options": components["headers"]["NoSniff"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /** @example <binary data> */
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["ProofNotAvailable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listAdmins: {
         parameters: {
             query?: {
@@ -12894,6 +15200,39 @@ export interface operations {
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["SystemSmtpUnavailable"];
+        };
+    };
+    deleteAdminIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Admin account identifier.
+                 * @example adm_01JABCG1H2J3K415M6N7P8Q9R0
+                 */
+                adminId: components["parameters"]["AdminId"];
+                /**
+                 * @description Since 2.0. Identifier of a pinned single sign-on identity.
+                 * @example aid_01JABCJ1K2M3N4P5Q6R7S8T9V0
+                 */
+                identityId: components["parameters"]["IdentityId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Identity unpinned. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     listBackgroundPresets: {
@@ -13592,6 +15931,73 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listGlobalSecurityEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Filter by tenant; events without tenant are then excluded.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId?: string;
+                /**
+                 * @description Since 2.0. Filter by security event type. The list is extensible: any value of the form `^[a-z][a-z0-9_]*$` is accepted, and an unknown type matches no event.
+                 * @example verification_code_invalid
+                 */
+                type?: components["parameters"]["SecurityEventType"];
+                /**
+                 * @description Start of the period (inclusive).
+                 * @example 2026-11-01T00:00:00Z
+                 */
+                from?: string;
+                /**
+                 * @description End of the period (inclusive).
+                 * @example 2026-11-04T23:59:59Z
+                 */
+                to?: string;
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Security events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "sev_01JABCS3T4V5W6X7Y8Z9A0B1C2",
+                     *           "occurredAt": "2026-11-04T07:00:00Z",
+                     *           "type": "unknown_fqdn",
+                     *           "ip": "198.51.100.23"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecurityEventList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listSystemWebhooks: {
         parameters: {
             query?: never;
@@ -14232,21 +16638,21 @@ type ReadonlyArray<T> = [
 ] extends [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
-export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "internal-error"];
+export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "internal-error"];
 export const languageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Language"]> = ["fr", "en"];
 export const healthStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Health"]["status"]> = ["ok", "degraded"];
 export const componentHealthValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComponentHealth"]> = ["ok", "unavailable"];
 export const versionInfoApiVersionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["VersionInfo"]["apiVersion"]> = ["v1"];
 export const publicTenantLegalDocumentsValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["PublicTenant"]["legalDocuments"]> = ["legal-notice", "privacy-policy"];
 export const legalDocumentDocumentValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LegalDocument"]["document"]> = ["legal-notice", "privacy-policy"];
-export const depositorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DepositorKind"]> = ["internal", "external", "internal_remote", "reply"];
+export const depositorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DepositorKind"]> = ["internal", "external", "internal_remote", "reply", "drop_link"];
 export const expiryDaysValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ExpiryDays"]> = [1, 7, 30];
 export const transferStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferStatus"]> = ["uploading", "scanning", "available", "rejected", "expired", "deleted"];
-export const scanStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ScanStatus"]> = ["pending", "scanning", "clean", "infected", "not_scanned_too_large", "not_scanned_encrypted", "scan_error", "not_scanned_disabled"];
+export const scanStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ScanStatus"]> = ["pending", "scanning", "clean", "infected", "not_scanned_too_large", "not_scanned_encrypted", "scan_error", "not_scanned_disabled", "not_scanned_e2e"];
 export const invitationStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InvitationStatus"]> = ["pending", "used", "expired", "revoked"];
 export const loginStateStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["LoginState"]["status"]> = ["totp_required", "totp_enrollment_required", "password_change_required", "authenticated"];
-export const adminRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminRole"]> = ["super_admin", "delegated_admin"];
-export const invitationDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InvitationDelivery"]> = ["mail", "copy"];
+export const adminRoleValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminRole"]> = ["super_admin", "delegated_admin", "auditor"];
+export const invitationDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InvitationDelivery"]> = ["mail", "copy", "none"];
 export const tenantStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Tenant"]["status"]> = ["active", "deleting"];
 export const tenantSetupStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantSetupState"]> = ["setup", "active"];
 export const contrastResultPairValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ContrastResult"]["pair"]> = ["primary-on-light", "accent-on-light", "text-on-primary", "primary-on-dark", "accent-on-dark"];
@@ -14258,9 +16664,9 @@ export const smtpTestResultStageValues: ReadonlyArray<FlattenedDeepRequired<comp
 export const dnsRecordCheckStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DnsRecordCheck"]["status"]> = ["ok", "warning", "missing", "error"];
 export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MailDnsCheck"]["dkim"]["status"]> = ["ok", "warning", "missing", "error"];
 export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code"];
-export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply"];
+export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply", "drop_link"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "transfer.link_reissued"];
 export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
@@ -14272,6 +16678,13 @@ export const antivirusSelfTestTriggerValues: ReadonlyArray<FlattenedDeepRequired
 export const updateCheckLastErrorValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["UpdateCheck"]["lastError"]> = ["none", "network", "http", "parse"];
 export const instanceStatusStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["InstanceStatus"]["status"]> = ["ok", "degraded"];
 export const tenantFeaturesAntivirusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantFeatures"]["antivirus"]> = ["enabled", "disabled"];
+export const ssoTestResultStageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SsoTestResult"]["stage"]> = ["settings", "connect", "tls", "discovery", "issuer", "endpoints", "done", "unknown"];
+export const ssoTestResultErrorValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SsoTestResult"]["error"]> = ["dns_error", "connect_error", "tls_error", "timeout", "http_status", "invalid_document", "issuer_mismatch", "missing_endpoint", "internal_error"];
+export const proofKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProofKind"]> = ["deposit", "delivery"];
+export const proofKeyAlgorithmValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProofKey"]["algorithm"]> = ["Ed25519"];
+export const e2ePolicyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["E2ePolicy"]> = ["forbidden", "allowed", "required"];
+export const securityEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecurityEventType"]> = ["verification_code_invalid", "transfer_password_invalid", "admin_login_failed", "api_token_invalid", "unknown_fqdn", "deposit_refused", "rate_limited", "metrics_token_invalid", "access_link_invalid", "provisioning_token_invalid", "sso_failed", "drop_link_invalid"];
+export const tenantConfigExportLegalDocumentsDocumentValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantConfigExport"]["legalDocuments"]["document"]> = ["legal-notice", "privacy-policy"];
 export const recipientVerificationStartPurposeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RecipientVerificationStart"]["purpose"]> = ["download", "reply"];
 export const abuseReportCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportCategory"]> = ["malware", "phishing", "illegal_content", "spam", "unknown_sender", "other"];
 export const abuseReportStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportStatus"]> = ["open", "closed"];

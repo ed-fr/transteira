@@ -102,7 +102,7 @@ func TestCreateAdminInvitation(t *testing.T) {
 			TenantIds: &tids, Invitation: inv,
 		}
 	}
-	mail, cp, fr := gen.Mail, gen.Copy, gen.Language("fr")
+	mail, cp, fr := gen.InvitationDeliveryMail, gen.InvitationDeliveryCopy, gen.Language("fr")
 
 	// Copy, explicit or by default: the link is returned once.
 	for _, inv := range []*gen.AdminInvitation{nil, {}, {Delivery: &cp}} {
@@ -112,7 +112,7 @@ func TestCreateAdminInvitation(t *testing.T) {
 			t.Fatalf("invitation %+v: %v", inv, err)
 		}
 		got := resp.(gen.CreateAdmin201JSONResponse)
-		if got.InvitationDelivery != gen.Copy || got.ActivationUrl == nil || *got.ActivationUrl == "" {
+		if got.InvitationDelivery != gen.InvitationDeliveryCopy || got.ActivationUrl == nil || *got.ActivationUrl == "" {
 			t.Errorf("invitation %+v: answer %+v", inv, got)
 		}
 		if in := svc.args["Create"][1].(adminauth.AdminCreate); in.Invitation.Delivery != "" && in.Invitation.Delivery != store.DeliveryCopy {
@@ -127,7 +127,7 @@ func TestCreateAdminInvitation(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := resp.(gen.CreateAdmin201JSONResponse)
-	if got.InvitationDelivery != gen.Mail || got.ActivationUrl != nil || got.ActivationExpiresAt.IsZero() {
+	if got.InvitationDelivery != gen.InvitationDeliveryMail || got.ActivationUrl != nil || got.ActivationExpiresAt.IsZero() {
 		t.Errorf("mail answer %+v", got)
 	}
 	if in := svc.args["Create"][1].(adminauth.AdminCreate); in.Invitation != (adminauth.Invitation{Delivery: store.DeliveryMail, Language: "fr"}) {
@@ -142,7 +142,7 @@ func TestCreateAdminInvitation(t *testing.T) {
 func TestInviteAdmin(t *testing.T) {
 	t.Parallel()
 	ctx := ctxWith(store.SessionAuthenticated, superRoot)
-	mail, fr := gen.Mail, gen.Language("fr")
+	mail, fr := gen.InvitationDeliveryMail, gen.Language("fr")
 
 	// No body: the defaults (copy).
 	svc := &fakeService{}
@@ -151,7 +151,7 @@ func TestInviteAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := resp.(gen.InviteAdmin200JSONResponse)
-	if got.InvitationDelivery != gen.Copy || got.ActivationUrl == nil || *got.ActivationUrl == "" {
+	if got.InvitationDelivery != gen.InvitationDeliveryCopy || got.ActivationUrl == nil || *got.ActivationUrl == "" {
 		t.Errorf("copy answer %+v", got)
 	}
 	if !reflect.DeepEqual(svc.args["Invite"], []any{"as_01", "adm_deleg", adminauth.Invitation{}, clientIP}) {
@@ -167,7 +167,7 @@ func TestInviteAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = resp.(gen.InviteAdmin200JSONResponse)
-	if got.InvitationDelivery != gen.Mail || got.ActivationUrl != nil {
+	if got.InvitationDelivery != gen.InvitationDeliveryMail || got.ActivationUrl != nil {
 		t.Errorf("mail answer %+v", got)
 	}
 	if !reflect.DeepEqual(svc.args["Invite"], []any{"as_01", "adm_deleg", adminauth.Invitation{Delivery: store.DeliveryMail, Language: "fr"}, clientIP}) {
@@ -206,7 +206,7 @@ func TestInviteAdmin(t *testing.T) {
 func TestCreateTenantDelegatedAdmin(t *testing.T) {
 	t.Parallel()
 	ctx := ctxWith(store.SessionAuthenticated, superRoot)
-	mail := gen.Mail
+	mail := gen.InvitationDeliveryMail
 	body := func(delivery *gen.InvitationDelivery) *gen.TenantCreate {
 		return &gen.TenantCreate{
 			Name: "Entity B", Fqdn: "transfer.entity-b.example.com", DefaultLanguage: "en", StorageQuotaBytes: 1 << 40,
@@ -227,7 +227,7 @@ func TestCreateTenantDelegatedAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := resp.(gen.CreateTenant201JSONResponse)
-	if d := got.DelegatedAdmin; d == nil || d.Id != "adm_new" || d.InvitationDelivery != gen.Copy ||
+	if d := got.DelegatedAdmin; d == nil || d.Id != "adm_new" || d.InvitationDelivery != gen.InvitationDeliveryCopy ||
 		d.ActivationUrl == nil || *d.ActivationUrl == "" || !d.ActivationExpiresAt.Equal(expires) {
 		t.Errorf("copy answer %+v", got.DelegatedAdmin)
 	}
@@ -246,7 +246,7 @@ func TestCreateTenantDelegatedAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = resp.(gen.CreateTenant201JSONResponse)
-	if d := got.DelegatedAdmin; d == nil || d.InvitationDelivery != gen.Mail || d.ActivationUrl != nil {
+	if d := got.DelegatedAdmin; d == nil || d.InvitationDelivery != gen.InvitationDeliveryMail || d.ActivationUrl != nil {
 		t.Errorf("mail answer %+v", got.DelegatedAdmin)
 	}
 	if in := svc.args["CreateTenant"][1].(tenantadmin.TenantCreate); in.DelegatedAdmin.Delivery != store.DeliveryMail {
@@ -293,13 +293,13 @@ func TestCreateTenantDelegatedAdmin(t *testing.T) {
 // the mail delivery hides the URL.
 func TestDeliveryOf(t *testing.T) {
 	t.Parallel()
-	if d, url := deliveryOf(adminauth.Activation{Delivery: store.DeliveryMail, URL: "x"}); d != gen.Mail || url != nil {
+	if d, url := deliveryOf(adminauth.Activation{Delivery: store.DeliveryMail, URL: "x"}); d != gen.InvitationDeliveryMail || url != nil {
 		t.Errorf("mail: %v %v", d, url)
 	}
-	if d, url := deliveryOf(adminauth.Activation{Delivery: store.DeliveryCopy}); d != gen.Copy || url == nil || *url != "" {
+	if d, url := deliveryOf(adminauth.Activation{Delivery: store.DeliveryCopy}); d != gen.InvitationDeliveryCopy || url == nil || *url != "" {
 		t.Errorf("copy without URL: %v %v", d, url)
 	}
-	if d, url := deliveryOf(adminauth.Activation{URL: "u"}); d != gen.Copy || url == nil || *url != "u" {
+	if d, url := deliveryOf(adminauth.Activation{URL: "u"}); d != gen.InvitationDeliveryCopy || url == nil || *url != "u" {
 		t.Errorf("copy: %v %v", d, url)
 	}
 }

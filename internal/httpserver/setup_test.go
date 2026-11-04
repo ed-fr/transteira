@@ -63,6 +63,12 @@ var setupDecisions = map[string]setupDecision{
 	"finalizeTransfer":             setupRefused,
 	"createInvitation":             setupRefused,
 	"getInvitation":                setupRefused,
+	"getPublicDropLink":            setupRefused,
+	"getMyTransferProof":           setupRefused,
+	"reissueMyTransferLink":        setupRefused,
+	// Wired outside any tenant when implemented (the keys belong to the
+	// instance, like /healthz): then setupOutsideTenant.
+	"listProofKeys":                setupRefused,
 	"getDownload":                  setupRefused,
 	"unlockDownload":               setupRefused,
 	"downloadFile":                 setupRefused,
@@ -174,7 +180,11 @@ func sendOperation(t *testing.T, e *env, op setupOperation) (int, http.Header, s
 	} else {
 		body = strings.NewReader("")
 	}
-	rec := e.do(t, op.method, pathParam.ReplaceAllString(op.path, "x"), hostA, body,
+	target := pathParam.ReplaceAllString(op.path, "x")
+	if op.id == "getMyTransferProof" {
+		target += "?kind=deposit" // required query parameter
+	}
+	rec := e.do(t, op.method, target, hostA, body,
 		"Content-Type", ct, "Tus-Resumable", "1.0.0", "Upload-Offset", "0")
 	return rec.Code, rec.Header(), rec.Body.String()
 }

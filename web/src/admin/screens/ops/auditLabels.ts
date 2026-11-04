@@ -29,6 +29,7 @@ export type AuditGroupId =
   | 'blocklist'
   | 'tokens'
   | 'privacy'
+  | 'dropLinks'
   | 'tenant'
   | 'accounts'
   | 'instance';
@@ -54,6 +55,8 @@ export const AUDIT_ACTION_GROUPS = [
       'transfer.reminder_sent',
       'transfer.reply_created',
       'transfer.recipient_refused',
+      'transfer.proof_downloaded',
+      'transfer.link_reissued',
     ],
   },
   {
@@ -82,6 +85,10 @@ export const AUDIT_ACTION_GROUPS = [
   },
   { id: 'blocklist', actions: ['blocklist.updated'] },
   {
+    id: 'dropLinks',
+    actions: ['drop_link.created', 'drop_link.updated', 'drop_link.rotated', 'drop_link.revoked'],
+  },
+  {
     id: 'tokens',
     actions: ['api_token.created', 'api_token.updated', 'api_token.used', 'api_token.revoked'],
   },
@@ -108,6 +115,10 @@ export const AUDIT_ACTION_GROUPS = [
       'tenant.setup_completed',
       'tenant.provisioned',
       'tenant.provision_refused',
+      'tenant.sso_updated',
+      'tenant.sso_deleted',
+      'tenant.exported',
+      'tenant.imported',
       'webhook.created',
       'webhook.updated',
       'webhook.deleted',
@@ -135,6 +146,8 @@ export const AUDIT_ACTION_GROUPS = [
       'admin.totp_reset_local',
       'admin.password_reset_local',
       'admin.invited',
+      'admin.identity_linked',
+      'admin.identity_unlinked',
     ],
   },
   {
@@ -155,6 +168,7 @@ export const AUDIT_ACTION_GROUPS = [
       'master_key.rotation_failed',
       'provisioning_token.created',
       'provisioning_token.revoked',
+      'proof_key.created',
     ],
   },
 ] as const satisfies readonly AuditActionGroup[];
@@ -185,6 +199,9 @@ export const AUDIT_OBJECT_KINDS = [
   'master_key_rotation',
   'system',
   'provisioning_token',
+  'drop_link',
+  'admin_identity',
+  'proof_key',
 ] as const;
 
 /** Prefix of the pseudonym that replaces an erased address (GDPR erasure). */

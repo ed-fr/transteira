@@ -49,6 +49,12 @@ const (
 	adminTOTPConfirmPattern = http.MethodPost + " " + AdminPrefix + "/me/totp/confirm"
 	adminActivationPattern  = http.MethodPost + " " + AdminPrefix + "/activation"
 	adminVersionPattern     = http.MethodGet + " " + APIBaseURL + "/version"
+	// The single sign-on login (since API 2.0), served without an admin
+	// session: the methods the login page offers, the start of a flow and the
+	// redirect target of the identity provider.
+	adminAuthMethodsPattern  = http.MethodGet + " " + AdminPrefix + "/auth/methods"
+	adminOIDCStartPattern    = http.MethodPost + " " + AdminPrefix + "/auth/oidc/start"
+	adminOIDCCallbackPattern = http.MethodGet + " " + AdminPrefix + "/auth/oidc/callback"
 )
 
 // adminOpenRoutes are the operations of the admin router served without an
@@ -58,11 +64,14 @@ const (
 // cross-site page must not be able to drive a login (login CSRF) nor burn
 // the failure counters of a victim's IP.
 var adminOpenRoutes = map[string]bool{
-	adminSetupStatusPattern: true,
-	adminSetupPattern:       true,
-	adminLoginPattern:       true,
-	adminActivationPattern:  true,
-	adminVersionPattern:     true,
+	adminSetupStatusPattern:  true,
+	adminSetupPattern:        true,
+	adminLoginPattern:        true,
+	adminActivationPattern:   true,
+	adminVersionPattern:      true,
+	adminAuthMethodsPattern:  true,
+	adminOIDCStartPattern:    true,
+	adminOIDCCallbackPattern: true,
 }
 
 // adminAuthRoutes are the login steps, and the TOTP enrollment
@@ -74,6 +83,10 @@ var adminAuthRoutes = map[string]bool{
 	adminTOTPPattern:        true,
 	adminTOTPConfirmPattern: true,
 	adminActivationPattern:  true,
+	// The single sign-on login steps (since API 2.0): like the password
+	// login, limited per client IP.
+	adminOIDCStartPattern:    true,
+	adminOIDCCallbackPattern: true,
 }
 
 // adminSessionRequired reports whether the matched admin operation

@@ -62,7 +62,10 @@
     "master_key_rotation": "Rotation de la clé maître",
     "system": "Système",
     "webhook": "Webhook",
-    "provisioning_token": "Jeton de provisionnement"
+    "provisioning_token": "Jeton de provisionnement",
+    "drop_link": "Lien de dépôt",
+    "admin_identity": "Identité de connexion",
+    "proof_key": "Clé de signature des preuves"
   },
   "groups": {
     "transfers": "Transferts",
@@ -75,7 +78,8 @@
     "privacy": "Données personnelles",
     "tenant": "Configuration de l’entité",
     "accounts": "Administrateurs et connexion",
-    "instance": "Instance"
+    "instance": "Instance",
+    "dropLinks": "Liens de dépôt"
   },
   "actions": {
     "transfer": {
@@ -88,7 +92,9 @@
       "extended": "Transfert prolongé",
       "reminder_sent": "Rappel d’expiration envoyé",
       "reply_created": "Réponse à un transfert commencée",
-      "recipient_refused": "Destinataire refusé par les règles de domaines"
+      "recipient_refused": "Destinataire refusé par les règles de domaines",
+      "proof_downloaded": "Preuve téléchargée",
+      "link_reissued": "Lien de téléchargement réémis"
     },
     "file": {
       "infected": "Virus détecté",
@@ -127,7 +133,9 @@
       "activated": "Compte d’administrateur activé",
       "totp_reset_local": "Double authentification réinitialisée depuis le serveur",
       "password_reset_local": "Mot de passe réinitialisé depuis le serveur",
-      "invited": "Administrateur invité"
+      "invited": "Administrateur invité",
+      "identity_linked": "Identité de connexion rattachée",
+      "identity_unlinked": "Identité de connexion détachée"
     },
     "tenant": {
       "created": "Entité créée",
@@ -150,7 +158,11 @@
       "antivirus_enabled": "Antivirus activé pour l’entité",
       "setup_completed": "Configuration de l’entité terminée",
       "provisioned": "Entité créée par provisionnement",
-      "provision_refused": "Création d’entité par provisionnement refusée"
+      "provision_refused": "Création d’entité par provisionnement refusée",
+      "sso_updated": "Authentification unique modifiée",
+      "sso_deleted": "Authentification unique supprimée",
+      "exported": "Configuration exportée",
+      "imported": "Entité créée depuis une configuration importée"
     },
     "config": {
       "updated": "Paramètres système modifiés"
@@ -208,6 +220,15 @@
     "provisioning_token": {
       "created": "Jeton de provisionnement créé",
       "revoked": "Jeton de provisionnement révoqué"
+    },
+    "drop_link": {
+      "created": "Lien de dépôt créé",
+      "updated": "Lien de dépôt modifié",
+      "rotated": "Jeton du lien de dépôt remplacé",
+      "revoked": "Lien de dépôt révoqué"
+    },
+    "proof_key": {
+      "created": "Clé de signature des preuves créée"
     }
   }
 }

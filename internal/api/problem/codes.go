@@ -132,6 +132,42 @@ const (
 	// CodeProvisioningScopeExceeded means the request is outside the scope
 	// of the provisioning token (since 1.2).
 	CodeProvisioningScopeExceeded Code = "provisioning-scope-exceeded"
+	// CodeReadOnlyRole means the admin has the read-only auditor role and attempted a write (since 2.0).
+	CodeReadOnlyRole Code = "read-only-role"
+	// CodeSSORequired means the account must sign in through single sign-on, its tenant enforcing it (since 2.0).
+	CodeSSORequired Code = "sso-required"
+	// CodeSSONotAvailable means no enabled single sign-on matches the e-mail address, the same answer for an unknown domain and a disabled one (since 2.0).
+	CodeSSONotAvailable Code = "sso-not-available"
+	// CodeSSONotConfigured means an account without activation link was asked for while a tenant of the account has no enabled single sign-on (since 2.0).
+	CodeSSONotConfigured Code = "sso-not-configured"
+	// CodeSSOIssuerNotAllowed means the issuer of a single sign-on configuration is a multi-tenant endpoint or otherwise unacceptable (since 2.0).
+	CodeSSOIssuerNotAllowed Code = "sso-issuer-not-allowed"
+	// CodeSSODomainConflict means an e-mail domain is already routed to another tenant's single sign-on (since 2.0).
+	CodeSSODomainConflict Code = "sso-domain-conflict"
+	// CodeSSOMFARequired means the identity provider did not assert multi-factor authentication while the tenant requires it (since 2.0).
+	CodeSSOMFARequired Code = "sso-mfa-required"
+	// CodeProofNotAvailable means the proof does not exist yet or is past its retention (since 2.0).
+	CodeProofNotAvailable Code = "proof-not-available"
+	// CodeImportInvalid means the imported tenant configuration is refused; the first error carries the JSON pointer of the first problem (since 2.0).
+	CodeImportInvalid Code = "import-invalid"
+	// CodeImportSchemaUnsupported means the schemaVersion of the imported configuration is not read by this server (since 2.0).
+	CodeImportSchemaUnsupported Code = "import-schema-unsupported"
+	// CodeDropLinkInvalid means the permanent drop link is unknown, revoked or disabled, the same answer for each (since 2.0).
+	CodeDropLinkInvalid Code = "drop-link-invalid"
+	// CodeDropLinkLimitReached means the tenant already has the maximum number of drop links (since 2.0).
+	CodeDropLinkLimitReached Code = "drop-link-limit-reached"
+	// CodeLinkOnlyForbidden means the tenant or the confidentiality level does not allow link-only transfers (since 2.0).
+	CodeLinkOnlyForbidden Code = "link-only-forbidden"
+	// CodeLinkOnlyConflict means linkOnly was combined with recipientVerification (since 2.0).
+	CodeLinkOnlyConflict Code = "link-only-conflict"
+	// CodeE2EForbidden means the policy of the tenant or level forbids end-to-end encryption (since 2.0).
+	CodeE2EForbidden Code = "e2e-forbidden"
+	// CodeE2ERequired means the policy of the tenant or level requires end-to-end encryption (since 2.0).
+	CodeE2ERequired Code = "e2e-required"
+	// CodeE2EArchiveUnavailable means the server cannot build the ZIP of an end-to-end encrypted transfer (since 2.0).
+	CodeE2EArchiveUnavailable Code = "e2e-archive-unavailable"
+	// CodeE2EFormatInvalid means an end-to-end encrypted upload is not a well-formed TTE2 stream (since 2.0).
+	CodeE2EFormatInvalid Code = "e2e-format-invalid"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -201,6 +237,24 @@ var catalog = map[Code]Definition{
 	CodeUpdateCheckDisabled:           {http.StatusConflict, "Update check disabled"},
 	CodeProvisioningTokenInvalid:      {http.StatusUnauthorized, "Invalid provisioning token"},
 	CodeProvisioningScopeExceeded:     {http.StatusForbidden, "Outside the provisioning token scope"},
+	CodeReadOnlyRole:                  {http.StatusForbidden, "Read-only role"},
+	CodeSSORequired:                   {http.StatusForbidden, "Single sign-on required"},
+	CodeSSONotAvailable:               {http.StatusNotFound, "Single sign-on not available"},
+	CodeSSONotConfigured:              {http.StatusConflict, "Single sign-on not configured"},
+	CodeSSOIssuerNotAllowed:           {http.StatusUnprocessableEntity, "Issuer not allowed"},
+	CodeSSODomainConflict:             {http.StatusConflict, "Domain already used by another single sign-on"},
+	CodeSSOMFARequired:                {http.StatusForbidden, "Multi-factor authentication required"},
+	CodeProofNotAvailable:             {http.StatusNotFound, "Proof not available"},
+	CodeImportInvalid:                 {http.StatusUnprocessableEntity, "Invalid configuration file"},
+	CodeImportSchemaUnsupported:       {http.StatusUnprocessableEntity, "Configuration version not supported"},
+	CodeDropLinkInvalid:               {http.StatusNotFound, "Drop link not valid"},
+	CodeDropLinkLimitReached:          {http.StatusConflict, "Drop link limit reached"},
+	CodeLinkOnlyForbidden:             {http.StatusForbidden, "Link-only transfers not allowed"},
+	CodeLinkOnlyConflict:              {http.StatusBadRequest, "Link-only incompatible with recipient verification"},
+	CodeE2EForbidden:                  {http.StatusForbidden, "End-to-end encryption not allowed"},
+	CodeE2ERequired:                   {http.StatusBadRequest, "End-to-end encryption required"},
+	CodeE2EArchiveUnavailable:         {http.StatusConflict, "Archive unavailable for an end-to-end encrypted transfer"},
+	CodeE2EFormatInvalid:              {http.StatusBadRequest, "Malformed end-to-end encrypted upload"},
 	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 

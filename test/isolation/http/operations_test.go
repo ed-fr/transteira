@@ -840,6 +840,12 @@ func stillStub(t *testing.T, h *harness, op operation) {
 	t.Helper()
 	for _, host := range []string{hostA, hostB} {
 		resp := h.send(t, op, host)
+		if resp.status == http.StatusUnauthorized && strings.HasPrefix(op.template, "/me/") {
+			// A "My transfers" stub is behind the session middleware, which
+			// refuses the request without session before the stub, the same
+			// way under every tenant.
+			continue
+		}
 		if resp.status != http.StatusNotFound {
 			t.Fatalf("%s under %s: status %d, want 404 from the stub; body %s", op, host, resp.status, resp.body)
 		}

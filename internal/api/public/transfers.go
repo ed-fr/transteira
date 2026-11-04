@@ -3,6 +3,7 @@ package public
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/api/apiutil"
@@ -97,6 +98,9 @@ func (s *Server) CreateTransfer(ctx context.Context, req gen.CreateTransferReque
 	if req.Body == nil {
 		return nil, validationFailed(transfer.FieldFiles, transfer.CodeRequired)
 	}
+	if prob := unsupportedTransferCreate(req.Body); prob != nil {
+		return nil, prob
+	}
 	d, err := s.transfers.Create(ctx, t, sender, createRequest(req.Body), deref(req.Params.IdempotencyKey))
 	if err != nil {
 		return nil, transferError(err)
@@ -145,6 +149,29 @@ func (s *Server) FinalizeTransfer(ctx context.Context, req gen.FinalizeTransferR
 		return nil, transferError(err)
 	}
 	return gen.FinalizeTransfer202JSONResponse(transferBody(d)), nil
+}
+
+// unsupportedTransferCreate refuses the members of TransferCreate added by
+// API 2.0 that are not implemented yet (linkOnly, endToEndEncrypted,
+// encryptedMessage and the encryptedMetadata of a file) with a 400
+// validation-failed naming the first one present, or returns nil. A false
+// boolean is the default and harmless.
+func unsupportedTransferCreate(b *gen.TransferCreate) *problem.Problem {
+	if deref(b.LinkOnly) {
+		return validationFailed("/linkOnly", fieldNotSupported)
+	}
+	if deref(b.EndToEndEncrypted) {
+		return validationFailed("/endToEndEncrypted", fieldNotSupported)
+	}
+	if b.EncryptedMessage != nil {
+		return validationFailed("/encryptedMessage", fieldNotSupported)
+	}
+	for i, f := range b.Files {
+		if f.EncryptedMetadata != nil {
+			return validationFailed(fmt.Sprintf("/files/%d/encryptedMetadata", i), fieldNotSupported)
+		}
+	}
+	return nil
 }
 
 // createRequest converts the OpenAPI TransferCreate body.

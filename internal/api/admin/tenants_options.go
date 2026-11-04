@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
@@ -36,6 +37,20 @@ func (s *Server) UpdateConfidentialityLevels(ctx context.Context, req gen.Update
 	}
 	in := make([]tenantadmin.ConfidentialityLevel, len(req.Body.Items))
 	for i, l := range req.Body.Items {
+		// The link-only and end-to-end policies of API 2.0 are not implemented
+		// yet: refused rather than silently dropped.
+		field := ""
+		switch {
+		case l.Rules.LinkOnlyAllowed != nil:
+			field = "linkOnlyAllowed"
+		case l.Rules.E2ePolicy != nil:
+			field = "e2ePolicy"
+		}
+		if field != "" {
+			if prob := unsupportedInTenant(p, req.TenantId, fmt.Sprintf("/items/%d/rules/%s", i, field)); prob != nil {
+				return nil, prob
+			}
+		}
 		in[i] = tenantadmin.ConfidentialityLevel{
 			Key: l.Key, Labels: l.Labels, Descriptions: deref(l.Descriptions), IsDefault: l.IsDefault,
 			Rules: tenantadmin.ConfidentialityRules{

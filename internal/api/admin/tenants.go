@@ -199,6 +199,14 @@ func (s *Server) CreateTenant(ctx context.Context, req gen.CreateTenantRequestOb
 		return nil, validationFailed(tenantadmin.FieldName, fieldRequired)
 	}
 	b := req.Body
+	// A new tenant has no single sign-on yet: its first delegated admin can
+	// never be created without an activation link (API 2.0). Refused with the
+	// interim not-supported until single sign-on is implemented. Checked for
+	// the super admin only, so that another admin keeps its 403 from the
+	// service.
+	if d := b.DelegatedAdmin; d != nil && d.Delivery != nil && *d.Delivery == gen.InvitationDeliveryNone && p.Admin.Role == store.RoleSuperAdmin {
+		return nil, validationFailed("/delegatedAdmin/delivery", fieldNotSupported)
+	}
 	state := tenant.SetupStateActive
 	if b.SetupState != nil {
 		state = tenant.SetupState(*b.SetupState)
@@ -245,6 +253,9 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 	if req.Body == nil {
 		return nil, validationFailed("", fieldRequired)
 	}
+	if prob := unsupportedTenantPatch(p, req.TenantId, *req.Body); prob != nil {
+		return nil, prob
+	}
 	in, err := decodeTenantUpdate(*req.Body)
 	if err != nil {
 		return nil, err
@@ -254,6 +265,34 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 		return nil, tenantError(err)
 	}
 	return gen.UpdateTenant200JSONResponse(tenantBody(v)), nil
+}
+
+// unsupportedTenantPatchFields are the members of TenantUpdate added by API
+// 2.0 that are not implemented yet, in the order they are reported.
+var unsupportedTenantPatchFields = []string{"linkOnlyAllowed", "e2ePolicy"}
+
+// unsupportedTenantPatch refuses a member of API 2.0 that is not
+// implemented yet, before the unknown-member check. These members are
+// super admin only, like antivirusEnabled: an admin outside the tenant gets
+// nothing here (the service answers its 404), another admin of the tenant
+// gets 403 forbidden as the service gives for antivirusEnabled, and the
+// super admin the 400 validation-failed (not-supported). A body that is not
+// an object is left to decodeTenantUpdate.
+func unsupportedTenantPatch(p adminauth.Principal, tid string, raw []byte) *problem.Problem {
+	var members map[string]json.RawMessage
+	if json.Unmarshal(raw, &members) != nil {
+		return nil
+	}
+	for _, name := range unsupportedTenantPatchFields {
+		if _, ok := members[name]; ok {
+			prob := unsupportedInTenant(p, tid, "/"+name)
+			if prob != nil && p.Admin.Role != store.RoleSuperAdmin {
+				return problem.New(problem.CodeForbidden)
+			}
+			return prob
+		}
+	}
+	return nil
 }
 
 // tenantPatch is the OpenAPI TenantUpdate, decoded by the handler itself
@@ -270,6 +309,11 @@ type tenantPatch struct {
 	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit"`
 	AllowTransferReply         *bool   `json:"allowTransferReply"`
 	AntivirusEnabled           *bool   `json:"antivirusEnabled"`
+	// LinkOnlyAllowed and E2EPolicy (API 2.0) are known members so that a
+	// tenant outside the admin's scope answers its 404; they are refused
+	// earlier (unsupportedTenantPatch) for an admin of the tenant.
+	LinkOnlyAllowed *bool   `json:"linkOnlyAllowed"`
+	E2EPolicy       *string `json:"e2ePolicy"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
@@ -277,6 +321,7 @@ type tenantPatch struct {
 var tenantPatchFields = []string{
 	"name", "fqdn", "defaultLanguage", "storageQuotaBytes", "maxTransferBytes", "maxTransferCeiling",
 	"webhookIncludeAddresses", "allowRemoteInternalDeposit", "allowTransferReply", "antivirusEnabled",
+	"linkOnlyAllowed", "e2ePolicy",
 }
 
 // decodeTenantUpdate decodes a tenant merge patch: a JSON object whose

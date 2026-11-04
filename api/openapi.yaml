@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: TransTeira API
-  version: 1.2.0
+  version: 2.0.0
   summary: Multi-tenant, self-hosted large file transfer.
   description: |
     TransTeira is a self-hosted, multi-tenant file transfer service (WeTransfer-like)
@@ -235,13 +235,54 @@ info:
       returned to the token holder (`503 system-smtp-unavailable` when no system SMTP is
       configured).
 
-    ## Roadmap reservations (not part of 1.2)
-    The following path prefixes and fields are **reserved** so that later versions do not
-    require a breaking change:
-    - V2: `/admin/auth/oidc/*`, `/admin/tenants/{tenantId}/sso`, `/admin/tenants/{tenantId}/drop-links`,
-      `/admin/tenants/{tenantId}/export`, `/admin/tenants/import`, `/transfers/{transferId}/proof`;
-      admin role `auditor`; depositor kind and transfer origin `drop_link`; transfer fields
-      `linkOnly`, `endToEndEncrypted`.
+    ## Version 2.0 additions
+    Version 2.0 only adds paths, optional members and values of enumerations to `/api/v1`; every
+    operation, member and value marked "Since 2.0." is absent from a 1.2 server (a 1.2 server
+    answers `404 not-found` on the new paths and refuses the new request members). A 1.2 client
+    sees no behaviour change.
+    - **Auditor role** (`AdminRole` value `auditor`): read-only access, on the tenants it is
+      attached to, to the tenant summary, the audit events, the security events
+      (`/admin/tenants/{tenantId}/security-events`), the statistics, the transfer list and detail
+      (metadata only) and the proofs of deposit and delivery. Any write answers
+      `403 read-only-role`; a read outside its tenants stays `404 not-found`. An auditor never
+      reads or changes the SMTP settings, API tokens, webhooks, blocklist, network rules, mail
+      templates, legal texts, data subjects, abuse reports, invitations or the export of a
+      tenant. Auditors are created, changed and deleted by the super admin only.
+    - **Single sign-on, OpenID Connect** (Entra ID compatible), per tenant:
+      `/admin/tenants/{tenantId}/sso`, login through `/admin/auth/oidc/start` and
+      `/admin/auth/oidc/callback`, available methods at `/admin/auth/methods`. Accounts are
+      created beforehand by the super admin, never on the fly; a super admin never uses SSO.
+      The identity of an account is pinned on its first SSO login
+      (`DELETE /admin/admins/{adminId}/identities/{identityId}` unpins it).
+    - **Proof of deposit and delivery**: a PDF signed by the instance (Ed25519) for the sender
+      (`/me/transfers/{transferId}/proof`) and the admins
+      (`/admin/tenants/{tenantId}/transfers/{transferId}/proof`); the public keys are listed by
+      `GET /proof-keys`.
+    - **Export and import of a tenant configuration**:
+      `/admin/tenants/{tenantId}/export` and `POST /admin/tenants/import`. Secrets are never
+      exported.
+    - **Permanent drop links**: `/admin/tenants/{tenantId}/drop-links` (admin side),
+      `GET /drop-links/{dropToken}` and `dropLinkToken` of `startDepositSession` (depositor
+      side); depositor kind and transfer origin `drop_link`.
+    - **Link-only transfers**: `linkOnly` of `createTransfer` (always one shared link, never per-recipient links); the link is returned once, in the
+      answer of `finalizeTransfer`, and is never mailed to recipients.
+    - **End-to-end encryption** (optional): `endToEndEncrypted`, `encryptedMetadata`; the
+      transfer key stays in the fragment of the link and never reaches the server. Such files
+      are not scanned by the antivirus (`scanStatus: not_scanned_e2e`) and have no server-side archive (`409 e2e-archive-unavailable`).
+    - **Security events in the database**: the security log lines are also readable by admins
+      (`/admin/tenants/{tenantId}/security-events`, `/admin/system/security-events`).
+    - **Policies**: `linkOnlyAllowed` and `e2ePolicy` on the tenant and, per level, in the
+      confidentiality rules.
+
+    **Compatibility:** no member is removed, retyped or newly required. Interim: until each
+    feature is implemented, a 2.0 server refuses its new optional request members with
+    `400 validation-failed` and the field code `not-supported`, and its new operations answer
+    `404 not-found` like any unimplemented operation.
+
+    ## Roadmap reservations (not part of 2.0)
+    The following path prefix and fields are **reserved** so that later versions do not require a
+    breaking change:
+    - V2.1 (secrets shared once, encrypted in the browser): the prefix `/secrets`.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
@@ -795,6 +836,13 @@ paths:
         eligible. With the option off, every address outside the ranges gets the generic
         `403 deposit-not-allowed`.
 
+        Since 2.0, `dropLinkToken` (exclusive with `invitationToken`) starts a deposit through a
+        permanent drop link: the e-mail code is required **every time** (recognition cookie
+        neither honoured nor set), the session kind is `drop_link`, the recipients of the
+        transfers are forced to the link's, and the external quotas, the abuse detection and the
+        blocklist apply. An unknown, revoked or disabled link is `404 drop-link-invalid` (security
+        log `drop_link_invalid`).
+
         Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
         Refused deposits are written to the security log.
       security: []
@@ -813,6 +861,9 @@ paths:
               invited:
                 summary: External user with an invitation
                 value: { email: bob@partner.example.org, invitationToken: inv_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ }
+              dropLink:
+                summary: Third party through a permanent drop link (since 2.0)
+                value: { email: supplier@partner.example.org, dropLinkToken: ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ }
       responses:
         '201':
           description: Internal address already verified and recognized on this browser; deposit session created.
@@ -840,6 +891,7 @@ paths:
                 attemptsRemaining: 2
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/DepositForbidden' }
+        '404': { $ref: '#/components/responses/DropLinkInvalid' }
         '410': { $ref: '#/components/responses/InvitationGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -1049,6 +1101,21 @@ paths:
           still be available, here and again at finalization (`410 transfer-gone`);
         - the expiry reminder is mailed the day before expiry to the recipients who have not
           downloaded yet, unless the remaining lifetime at availability is under 36 hours.
+
+        Since 2.0:
+        - `linkOnly` creates a link-only transfer (no mail to the recipients, who become optional;
+          the link is returned once by `finalizeTransfer`): `403 link-only-forbidden` when the
+          tenant or the level does not allow it, `400 link-only-conflict` with
+          `recipientVerification`;
+        - `endToEndEncrypted` declares files encrypted in the browser (`encryptedMetadata` on every
+          file, generic names, ciphertext sizes): `403 e2e-forbidden` when the policy of the tenant
+          or level forbids it, `400 e2e-required` when it is required and the member is false;
+          the server still encrypts the ciphertext at rest and computes its own SHA-256 of it, and
+          checks the framing of each upload while streaming (magic, header, chunk lengths, final
+          chunk): a malformed one is refused with `400 e2e-format-invalid` at the tus upload;
+        - a deposit session of kind `drop_link` addresses the transfer to the recipients of the
+          link, with its validity and level (end-to-end encryption is refused there in 2.0: `403 e2e-forbidden`) (`recipients` and `expiryDays` must then match them
+          or be omitted).
       security:
         - depositSession: []
           csrfToken: []
@@ -1093,6 +1160,21 @@ paths:
                   files:
                     - { name: budget-2027.xlsx, path: finance/2027, size: 1048576 }
                     - { name: notes.txt, path: finance, size: 2048 }
+              linkOnly:
+                summary: Link-only transfer, no mail to recipients (since 2.0)
+                value:
+                  expiryDays: 7
+                  linkOnly: true
+                  files:
+                    - { name: report.pdf, size: 2097152 }
+              endToEnd:
+                summary: End-to-end encrypted transfer (since 2.0)
+                value:
+                  recipients: [carol@customer.example.net]
+                  expiryDays: 7
+                  endToEndEncrypted: true
+                  files:
+                    - { name: file-1.tte2, size: 15728936, encryptedMetadata: AbC1_dEf2-gHi3JkLmNoPqRsTuVwXyZ0 }
       responses:
         '201':
           description: Transfer created; upload the files with tus, then finalize.
@@ -1131,7 +1213,35 @@ paths:
                     uploadUrl: /api/v1/uploads/upl_2Bc5Df8Gh1Jk4Lm7Np0Qr3St
                     uploadOffset: 0
                     scanStatus: pending
-        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '400':
+          description: |
+            The request is invalid (`validation-failed`). Since 2.0: `link-only-conflict`
+            (`linkOnly` with `recipientVerification`) and `e2e-required` (end-to-end encryption is required by
+            the policy of the tenant or level).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                validationFailed:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#validation-failed
+                    title: Validation failed
+                    status: 400
+                    code: validation-failed
+                    errors:
+                      - { field: /expiryDays, code: invalid-format }
+                linkOnlyConflict:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#link-only-conflict
+                    title: Link-only incompatible with recipient verification
+                    status: 400
+                    code: link-only-conflict
+                e2eRequired:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#e2e-required
+                    title: End-to-end encryption required
+                    status: 400
+                    code: e2e-required
         '401': { $ref: '#/components/responses/DepositUnauthenticated' }
         '403':
           description: |
@@ -1143,7 +1253,8 @@ paths:
             Since 1.1: a recipient is refused by the recipient domain rules
             (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
             (`abuse-threshold-blocked`). A reply is refused (`reply-not-allowed`) when replies are
-            disabled or the original sender can no longer be replied to.
+            disabled or the original sender can no longer be replied to. Since 2.0: `link-only-forbidden`
+            and `e2e-forbidden` (policy of the tenant or level).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -1169,6 +1280,18 @@ paths:
                     title: Reply not allowed
                     status: 403
                     code: reply-not-allowed
+                linkOnlyForbidden:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#link-only-forbidden
+                    title: Link-only transfers not allowed
+                    status: 403
+                    code: link-only-forbidden
+                e2eForbidden:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#e2e-forbidden
+                    title: End-to-end encryption not allowed
+                    status: 403
+                    code: e2e-forbidden
                 depositNotAllowed:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#deposit-not-allowed
@@ -1359,6 +1482,13 @@ paths:
         `not_scanned_disabled` (audited `antivirus.scans_released`). Infected files are **erased** (their key is
         destroyed, then their content), and the sender is alerted; their entries stay in the file
         list for the sender's information.
+
+        Since 2.0: for a link-only transfer (`linkOnly`) the answer carries `downloadUrl`, **once**:
+        the link is never retrievable afterwards and no recipient is mailed (the sender's
+        confirmation mail has no link). For an end-to-end encrypted transfer, the files get
+        `scanStatus: not_scanned_e2e` (no analysis), and the
+        server computes the SHA-256 of the ciphertext it stores; the recipient mail carries the link
+        without the key (`#k=`), which only the sender's browser knows.
 
         When at least one file can be delivered, the transfer becomes `available`: the recipients
         receive the link, a QR code (inline CID) and the SHA-256 fingerprints, the sender a
@@ -1691,6 +1821,67 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/TenantInSetup' }
 
+  /drop-links/{dropToken}:
+    parameters:
+      - $ref: '#/components/parameters/DropToken'
+    get:
+      tags: [Invitations]
+      operationId: getPublicDropLink
+      summary: Check a permanent drop link
+      description: |
+        Since 2.0. Used by the landing page of a permanent drop link (a fixed address given to
+        third parties to send files to a service). Reveals only what the depositor needs: the
+        label, the validity of the transfers and the confidentiality level; never the recipients.
+        An unknown, revoked or disabled link gets the same `404 drop-link-invalid`, written to the
+        security log (`drop_link_invalid`). The deposit itself starts with `startDepositSession`
+        and its `dropLinkToken`: the e-mail code is required at every use.
+      security: []
+      responses:
+        '200':
+          description: Valid drop link.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicDropLink' }
+              example:
+                label: Supplier invoices
+                validityDays: 7
+                level: { key: internal, label: Internal }
+        '404': { $ref: '#/components/responses/DropLinkInvalid' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
+
+  /proof-keys:
+    get:
+      tags: [Meta]
+      operationId: listProofKeys
+      summary: Public keys that verify the proofs of deposit and delivery
+      description: |
+        Since 2.0. Lists the Ed25519 public keys of the instance, active and retired, that sign
+        the proofs of deposit and delivery. Answered on the FQDN of a known tenant and on the
+        admin host(s), with the same list everywhere (the keys belong to the instance); an
+        unknown FQDN gets `421 unknown-tenant` like every tenant endpoint. A proof
+        names its key by `keyId`; a retired key still verifies the proofs it signed. The offline
+        check is `transteira proof verify <file.pdf>` (documented, no API).
+      security: []
+      responses:
+        '200':
+          description: Keys, most recent first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProofKeyList' }
+              example:
+                items:
+                  - keyId: psk_01JABCP1Q2R3S4T5V6W7X8Y9Z0
+                    algorithm: Ed25519
+                    publicKey: 11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo
+                    createdAt: '2026-11-04T09:00:00Z'
+                    retiredAt: null
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   # ---------------------------------------------------------------------------
   # Downloads (recipient side)
   # ---------------------------------------------------------------------------
@@ -2015,7 +2206,9 @@ paths:
         transfer, 8 per client per tenant; `429` with `Retry-After`). Since 1.1, files keep their
         folder `path` inside the archive (duplicate names resolved per folder), and the
         per-recipient tracking, recipient verification and `maxDownloads` rules of
-        `downloadFile` apply (the archive counts as one download start).
+        `downloadFile` apply (the archive counts as one download start). Since 2.0, an end-to-end
+        encrypted transfer has no server archive: `409 e2e-archive-unavailable` (the browser builds the
+        ZIP after decrypting the files).
       security:
         - {}
         - downloadGrant: []
@@ -2037,6 +2230,16 @@ paths:
               example: "<binary data>"
         '401': { $ref: '#/components/responses/DownloadLocked' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: "Since 2.0. The transfer is end-to-end encrypted: no archive is built by the server."
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#e2e-archive-unavailable
+                title: Archive unavailable for an end-to-end encrypted transfer
+                status: 409
+                code: e2e-archive-unavailable
         '410': { $ref: '#/components/responses/DownloadGone' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '429': { $ref: '#/components/responses/TooManyStreams' }
@@ -2693,6 +2896,81 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/TenantInSetup' }
 
+  /me/transfers/{transferId}/proof:
+    parameters:
+      - $ref: '#/components/parameters/TransferId'
+    get:
+      tags: [My transfers]
+      operationId: getMyTransferProof
+      summary: Proof of deposit or delivery of one of my transfers (PDF)
+      description: |
+        Since 2.0. Returns the timestamped, signed statement of a transfer of the session address
+        (same scope as `getMyTransfer`, `404` for any other) as a PDF: sender, recipients, files
+        with their SHA-256 and scan status, deposit date, expiry and first download date. The
+        statement (`statement.json`, a `ProofStatement` in canonical JSON, RFC 8785) and its
+        Ed25519 signature (`statement.sig`) are embedded in the PDF as attached files. `deposit`
+        is written at the end of the antivirus analysis; `delivery` records are written at first
+        downloads (the first of the transfer, then the first of each recipient for per-recipient
+        links: `recipient` selects it) and are immutable, never updated. Before the fact exists, or
+        after the 12 months the proof is kept (even when the transfer is deleted), the answer is
+        `404 proof-not-available`. Audited as `transfer.proof_downloaded`.
+      security:
+        - myTransfersSession: []
+      parameters:
+        - $ref: '#/components/parameters/ProofKind'
+        - $ref: '#/components/parameters/ProofRecipient'
+      responses:
+        '200':
+          description: The proof as a PDF attachment.
+          headers:
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+              # The signed statement embedded in the PDF (statement.json).
+              x-embedded-statement: { $ref: '#/components/schemas/ProofStatement' }
+              example: "<binary data>"
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/ProofNotAvailable' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
+
+  /me/transfers/{transferId}/link:
+    parameters:
+      - $ref: '#/components/parameters/TransferId'
+    post:
+      tags: [My transfers]
+      operationId: reissueMyTransferLink
+      summary: Issue a new download link for a link-only transfer
+      description: |
+        Since 2.0. For a link-only transfer (`linkOnly`) of the session address whose link was lost
+        (for example the answer of `finalizeTransfer` never reached the sender): issues a fresh
+        download link, returned once, and revokes the previous link token. `409 state-conflict`
+        for any other transfer or a transfer that is not available. Audited as
+        `transfer.link_reissued`. `finalizeTransfer` stays idempotent and never returns the link a
+        second time.
+      security:
+        - myTransfersSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: The new link, shown once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyTransferLink' }
+              example: { downloadUrl: 'https://transfer.entity-a.example.com/d/dl_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '421': { $ref: '#/components/responses/UnknownTenant' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/TenantInSetup' }
+
   /me/transfers/{transferId}/extension:
     parameters:
       - $ref: '#/components/parameters/TransferId'
@@ -2879,7 +3157,9 @@ paths:
       description: |
         On success, sets a pre-auth session cookie whose `status` tells the next step. A full
         session is never granted on password alone. Failures are rate limited and written to the
-        security log; the response does not reveal whether the username exists.
+        security log; the response does not reveal whether the username exists. Since 2.0, when the
+        password is right but the single sign-on of a tenant of the account is `enforced`, the
+        answer is `403 sso-required`: the account must use `startAdminOidcLogin`.
       security: []
       requestBody:
         required: true
@@ -2898,7 +3178,24 @@ paths:
               example: { status: totp_required, csrfToken: csrf_Ab12Cd34Ef56Gh78 }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
-        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '403':
+          description: The CSRF check failed (`csrf-invalid`), or, since 2.0, the account must sign in through single sign-on (`sso-required`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                csrfInvalid:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#csrf-invalid
+                    title: Invalid CSRF token
+                    status: 403
+                    code: csrf-invalid
+                ssoRequired:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-required
+                    title: Single sign-on required
+                    status: 403
+                    code: sso-required
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2950,6 +3247,136 @@ paths:
             Set-Cookie: { $ref: '#/components/headers/ClearAdminCookie' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/auth/methods:
+    get:
+      tags: [Admin auth]
+      operationId: getAdminAuthMethods
+      summary: Login methods offered by the admin host
+      description: |
+        Since 2.0. Tells the login page which methods to show: `password` is always true; `sso` is
+        true when at least one tenant has its single sign-on enabled. Neither the tenants nor
+        their e-mail domains are listed (the page asks for an e-mail address, see
+        `startAdminOidcLogin`).
+      security: []
+      responses:
+        '200':
+          description: Available methods.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthMethods' }
+              example: { password: true, sso: true }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/auth/oidc/start:
+    post:
+      tags: [Admin auth]
+      operationId: startAdminOidcLogin
+      summary: Start a single sign-on login (OpenID Connect)
+      description: |
+        Since 2.0. Routes the e-mail domain to the single sign-on configuration of one tenant and
+        returns the identity provider URL to redirect the browser to (authorization code flow
+        with PKCE S256, `state` and `nonce`). The flow context is kept in a signed technical
+        cookie of the admin host, valid 10 minutes and usable once. The redirect URI registered at
+        the provider is `https://<admin host>/api/v1/admin/auth/oidc/callback`.
+
+        The answer is the same `404 sso-not-available` whether the domain is unknown or its SSO is
+        disabled (no oracle). Rate limited per client IP like the other login steps. A super admin
+        never signs in through SSO: the local password with TOTP stays their way in.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OidcStart' }
+            example: { email: admin@entity-a.example.com }
+      responses:
+        '200':
+          description: URL of the identity provider to redirect to; the flow cookie is set.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetOidcFlowCookie' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OidcRedirect' }
+              example:
+                redirectUrl: https://login.example.com/tenant-id/oauth2/v2.0/authorize?client_id=app&response_type=code&state=st_x&code_challenge_method=S256
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/CsrfInvalid' }
+        '404': { $ref: '#/components/responses/SsoNotAvailable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/auth/oidc/callback:
+    get:
+      tags: [Admin auth]
+      operationId: completeAdminOidcLogin
+      summary: Redirect target of the identity provider
+      description: |
+        Since 2.0. The browser lands here after the identity provider. The server checks the flow
+        cookie, `state`, the PKCE verifier, the ID token (signature, issuer, audience, `nonce`,
+        expiry) and, when the tenant requires it, that `amr` contains `mfa`; then it matches the
+        account (see "Single sign-on" in the guide: pre-created `delegated_admin` or `auditor`
+        account of the tenant whose SSO was used, e-mail domain among the tenant's
+        `emailDomains`, identity pinned on the first login, afterwards matched by issuer and
+        subject only; Entra ID subjects are per application, so an identity is keyed by issuer,
+        client ID and subject). On success it sets the admin session cookie directly in the
+        `authenticated` state (MFA is delegated to the provider; audit `admin.login` with
+        `method: oidc`, and `admin.identity_linked` on the first login) and redirects with
+        `303 See Other` to the administration interface. The session records the issuer, the
+        client ID and whether MFA was proven: it reaches only the tenants of the account whose
+        SSO configuration is enabled with that issuer and client ID and whose `requireMfa` that
+        login satisfied.
+
+        This operation never answers JSON to the browser: **every failure is a `303` to the login
+        page** with `?error=<code>`, the code being `sso-mfa-required`, `sso-not-available`,
+        `rate-limited` or, for every other failure (invalid state, token, unknown account,
+        identity mismatch, provider error), the generic `invalid-credentials`. Each failure is
+        written to the security log as `sso_failed` with its reason (`state_invalid`,
+        `token_invalid`, `account_unknown`, `identity_mismatch`, `mfa_missing`, `issuer_error`).
+      security: []
+      parameters:
+        - name: code
+          in: query
+          description: Authorization code issued by the identity provider.
+          schema: { type: string, maxLength: 2048 }
+          example: 0.AXEA8rJ2
+        - name: state
+          in: query
+          description: State of the flow, checked against the flow cookie.
+          schema: { type: string, maxLength: 256 }
+          example: st_Kd83jLm0Qp2Zx7Vb
+        - name: iss
+          in: query
+          description: |
+            Issuer of the authorization response (RFC 9207), sent by providers that support it.
+            Optional; when present it must equal the issuer of the flow exactly, else the login
+            fails (`sso_failed`, reason `issuer_error`) before the code is redeemed (mix-up
+            defence).
+          schema: { type: string, format: uri, maxLength: 512 }
+          example: https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0
+        - name: error
+          in: query
+          description: Error code sent by the identity provider (access denied, ...).
+          schema: { type: string, maxLength: 128 }
+          example: access_denied
+        - name: error_description
+          in: query
+          description: Provider error text; never shown, only logged after cleaning.
+          schema: { type: string, maxLength: 1024 }
+      responses:
+        '303':
+          description: |
+            Redirect to the administration interface (success; the session cookie is set) or to
+            the login page with `?error=<code>` (failure).
+          headers:
+            Location:
+              description: Administration interface, or login page with the error code.
+              schema: { type: string }
+              example: /admin/login?error=invalid-credentials
+            Set-Cookie: { $ref: '#/components/headers/SetAdminCookie' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/me:
@@ -3202,6 +3629,11 @@ paths:
           (`delegatedAdmin.activationUrl`, the default `copy` delivery), as for `createAdmin`. A username already used is `409 already-exists`; `delivery: mail`
           without a system SMTP is `503 system-smtp-unavailable`, and nothing is created.
           Audited as `tenant.created`, `admin.created` and `admin.invited`.
+
+        Since 2.0, `delegatedAdmin.delivery: none` is refused: a new tenant has no single
+        sign-on configured yet, so its first delegated admin always needs an activation link.
+        Until single sign-on is implemented, the refusal is the interim one
+        (`400 validation-failed`, field `/delegatedAdmin/delivery`, code `not-supported`).
       security:
         - adminSession: []
           csrfToken: []
@@ -3336,8 +3768,9 @@ paths:
         A delegated admin may only change `defaultLanguage`, set `maxTransferBytes` at most to
         `maxTransferCeiling` (the ceiling set by the super admin) and, since 1.1, switch
         `allowRemoteInternalDeposit`, `allowTransferReply` and `webhookIncludeAddresses`. Changing `name`, `fqdn`,
-        `storageQuotaBytes`, `maxTransferCeiling` or `antivirusEnabled`, or setting
-        `maxTransferBytes` above the ceiling, is refused with `403 forbidden` and changes nothing.
+        `storageQuotaBytes`, `maxTransferCeiling` or `antivirusEnabled` (and, since 2.0,
+        `linkOnlyAllowed` or `e2ePolicy`), or setting `maxTransferBytes` above the ceiling, is
+        refused with `403 forbidden` and changes nothing.
 
         Since 1.2, `setupState` is read only here: it is refused with `400 validation-failed`
         (unknown member) and only changes from `setup` to `active` through `completeTenantSetup`,
@@ -3349,6 +3782,14 @@ paths:
         as `tenant.antivirus_disabled` or `tenant.antivirus_enabled`. `antivirusEffective` (read
         only) tells whether files of the tenant are really analysed: false when the tenant flag
         is off or the instance runs with `TT_ANTIVIRUS_ENGINE=none`.
+
+        Since 2.0, `linkOnlyAllowed` and `e2ePolicy` are super admin only, like
+        `antivirusEnabled`: an end-to-end encrypted file is never scanned, so `e2ePolicy:
+        required` amounts to turning the antivirus off for the tenant. A change is audited as
+        `tenant.updated` with the member names. Until these members are implemented, the super
+        admin gets the interim `400 validation-failed` (code `not-supported`); a delegated admin
+        of the tenant gets `403 forbidden` as for `antivirusEnabled`, and an admin outside the
+        tenant `404 not-found`.
       security:
         - adminSession: []
           csrfToken: []
@@ -5565,6 +6006,562 @@ paths:
   # ---------------------------------------------------------------------------
   # Admin - system (super admin)
   # ---------------------------------------------------------------------------
+  /admin/tenants/{tenantId}/sso:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: getTenantSso
+      summary: Single sign-on configuration of the tenant
+      description: |
+        Since 2.0. Returns the OpenID Connect configuration of the tenant; the client secret is
+        write-only (`hasClientSecret`). `404 not-found` when the tenant has none. Readable by the
+        super admin, the delegated admins of the tenant and, read-only, an auditor; only the super
+        admin may change it.
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: SSO configuration.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantSso' }
+              example:
+                enabled: true
+                issuer: https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0
+                clientId: 7f3c9a10-0000-4000-8000-00000000c0de
+                hasClientSecret: true
+                emailDomains: [entity-a.example.com]
+                enforced: false
+                requireMfa: true
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-04T09:00:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Admin tenants]
+      operationId: putTenantSso
+      summary: Create or replace the single sign-on configuration
+      description: |
+        Since 2.0. Stores the configuration: the client secret is sealed with the master key like
+        the SMTP password (covered by its rotation); absent, the stored one is kept (required on
+        the first write and whenever `issuer` or `clientId` changes, else
+        `400 validation-failed`, field `/clientSecret`, code `required`). The issuer must be an `https` URL; for Microsoft Entra ID a
+        tenant-specific issuer is required, the multi-tenant `common`, `organizations` and
+        `consumers` ones are refused (`422 sso-issuer-not-allowed`). An e-mail domain can be
+        routed to one tenant only on the whole instance (`409 sso-domain-conflict`). With
+        `enforced`, the local password login is refused (`403 sso-required`) for the delegated
+        admins and auditors attached to the tenant. Audited as `tenant.sso_updated` (changed
+        member names only, never the secret). **Super admin only** (`403 forbidden` for a
+        delegated admin, `403 read-only-role` for an auditor): the configuration decides who may
+        sign in as an admin. An SSO session reaches a tenant only while the tenant's configuration
+        is enabled, has the same issuer **and** client ID as the login, and, when it requires
+        MFA, the login carried it (recorded on the session); any other tenant of the account
+        answers `404 not-found` to that session.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantSsoUpdate' }
+            example:
+              enabled: true
+              issuer: https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0
+              clientId: 7f3c9a10-0000-4000-8000-00000000c0de
+              clientSecret: client-secret-from-the-provider
+              emailDomains: [entity-a.example.com]
+              enforced: false
+              requireMfa: true
+      responses:
+        '200':
+          description: Saved configuration.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantSso' }
+              example:
+                enabled: true
+                issuer: https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0
+                clientId: 7f3c9a10-0000-4000-8000-00000000c0de
+                hasClientSecret: true
+                emailDomains: [entity-a.example.com]
+                enforced: false
+                requireMfa: true
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-04T09:05:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SsoDomainConflict' }
+        '422': { $ref: '#/components/responses/SsoIssuerNotAllowed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Admin tenants]
+      operationId: deleteTenantSso
+      summary: Remove the single sign-on configuration
+      description: |
+        Since 2.0. Removes the configuration, its sealed secret and the routing of its e-mail
+        domains. Pinned identities stay but are unusable; accounts created without activation
+        link (`delivery: none`) can no longer sign in until reconfigured. Audited as
+        `tenant.sso_deleted`. Super admin only.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Configuration removed. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/sso/test:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      tags: [Admin tenants]
+      operationId: testTenantSso
+      summary: Test the single sign-on discovery
+      description: |
+        Since 2.0. Fetches the discovery document of the stored issuer (`/.well-known/openid-configuration`,
+        TLS 1.2 or later verified, short timeout, no redirect followed) and checks that it names
+        the same issuer and the endpoints needed. It never signs anyone in and never sends the
+        client secret. Failure is a result (`success: false`) with a category (`error`, closed
+        list, never a remote text), not an error. Super admin only.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: Result of the discovery.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SsoTestResult' }
+              examples:
+                success:
+                  value: { success: true, durationMs: 182, stage: done }
+                tlsFailure:
+                  value: { success: false, durationMs: 41, stage: tls, error: tls_error }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/export:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin tenants]
+      operationId: exportTenantConfig
+      summary: Export the configuration of the tenant
+      description: |
+        Since 2.0. Returns the configuration as a JSON document (`TenantConfigExport`,
+        `schemaVersion` 1) to create a tenant by duplicating this one (`importTenant`): general
+        settings, network rules, recipient domain rules, confidentiality levels, abuse thresholds,
+        mail templates, legal texts, webhooks (name, kind and events only: no URL, no secret, disabled), blocklist,
+        colours and background preset, and with `includeBranding=true` the logo and background
+        image (base64, existing size limits). **Never exported:** the SMTP password and user
+        name, webhook secrets and URLs, API tokens, admins, provisioning data, transfers,
+        addresses, invitations, audit and the whole single sign-on configuration. Super admin and delegated admin of the tenant; not an
+        auditor. Audited as `tenant.exported`.
+      security:
+        - adminSession: []
+      parameters:
+        - name: includeBranding
+          in: query
+          description: Include the logo and background image files (default false).
+          schema: { type: boolean, default: false }
+          example: false
+      responses:
+        '200':
+          description: The configuration, as a downloadable JSON file.
+          headers:
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantConfigExport' }
+              example:
+                schemaVersion: 1
+                exportedAt: '2026-11-04T10:00:00Z'
+                sourceVersion: 2.0.0
+                settings:
+                  defaultLanguage: fr
+                  maxTransferBytes: 21474836480
+                  maxTransferCeiling: 21474836480
+                  allowRemoteInternalDeposit: false
+                  allowTransferReply: true
+                  webhookIncludeAddresses: false
+                  linkOnlyAllowed: false
+                  e2ePolicy: forbidden
+                branding: { primaryColor: '#1F4E79', accentColor: '#C55A11', backgroundPreset: ocean }
+                network: { internalCidrs: [10.10.0.0/16], internalDomains: [entity-a.example.com] }
+                recipientRules: { allowedDomains: [], deniedDomains: [mail.example.org] }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/import:
+    post:
+      tags: [Admin tenants]
+      operationId: importTenant
+      summary: Create a tenant from an exported configuration (super admin)
+      description: |
+        Since 2.0. Creates a tenant in the `setup` state from `name`, `fqdn`, a storage quota and
+        a `TenantConfigExport` document, in one transaction. Validation is strict: an unknown
+        member, a value out of its limits or a duplicate is refused with `422 import-invalid`
+        whose first entry of `errors` carries the JSON pointer of the first error
+        (`field`); a `schemaVersion` this server does not read is `422 import-schema-unsupported`.
+        A document with a duplicate JSON key is refused too (`import-invalid`). The body is limited
+        to 32 MiB (`413 payload-too-large`). The webhooks are not recreated (their URLs are not
+        exported); there is no single sign-on in an export. An optional first
+        delegated admin is created as for `createTenant`. Reserved to the super admin. Audited as
+        `tenant.imported` (the name of the source tenant in the details).
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantImport' }
+            example:
+              name: Entity C
+              fqdn: transfer.entity-c.example.com
+              storageQuotaBytes: 1099511627776
+              config:
+                schemaVersion: 1
+                exportedAt: '2026-11-04T10:00:00Z'
+                sourceVersion: 2.0.0
+                settings: { defaultLanguage: fr, maxTransferBytes: 21474836480 }
+                network: { internalCidrs: [10.30.0.0/16], internalDomains: [entity-c.example.com] }
+      responses:
+        '201':
+          description: Tenant created in the `setup` state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantCreated' }
+              example:
+                id: ten_01JAB00000000000000ENT3TYC
+                name: Entity C
+                fqdn: transfer.entity-c.example.com
+                defaultLanguage: fr
+                maxTransferBytes: 21474836480
+                maxTransferCeiling: 21474836480
+                status: active
+                storageQuotaBytes: 1099511627776
+                storageUsedBytes: 0
+                setupState: setup
+                createdAt: '2026-11-04T10:05:00Z'
+                updatedAt: '2026-11-04T10:05:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/AlreadyExists' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/ImportInvalid' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/drop-links:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listDropLinks
+      summary: List the permanent drop links of the tenant
+      description: |
+        Since 2.0. Lists the drop links (never their token: it is shown at creation and by
+        `rotateDropLink` only). Readable by the delegated admins of the tenant, the super admin
+        and, read-only, an auditor.
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Drop links, most recent first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DropLinkList' }
+              example:
+                items:
+                  - id: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                    label: Supplier invoices
+                    recipients: [accounting@entity-a.example.com]
+                    validityDays: 7
+                    confidentialityLevel: internal
+                    enabled: true
+                    createdBy: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                    createdAt: '2026-11-04T09:00:00Z'
+                    updatedAt: '2026-11-04T09:00:00Z'
+                    lastUsedAt: null
+                    revokedAt: null
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Admin operations]
+      operationId: createDropLink
+      summary: Create a permanent drop link
+      description: |
+        Since 2.0. Creates a fixed address a service gives to third parties to send files to its
+        `recipients` (internal addresses, each in the tenant's internal domains). The token
+        (`ttd_...`) is returned once, here, and stored as a SHA-256 hash. Depositors through a
+        link prove their address by code at every use; the transfers are addressed to the link's
+        recipients, with the link's validity and level, and are subject to the external quotas,
+        the abuse detection and the blocklist. At most 100 links per tenant
+        (`409 drop-link-limit-reached`). Delegated admin of the tenant and super admin. Audited as
+        `drop_link.created`.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DropLinkCreate' }
+            example:
+              label: Supplier invoices
+              recipients: [accounting@entity-a.example.com]
+              validityDays: 7
+              confidentialityLevel: internal
+      responses:
+        '201':
+          description: Drop link created; its token is shown once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DropLinkCreated' }
+              example:
+                id: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                label: Supplier invoices
+                recipients: [accounting@entity-a.example.com]
+                validityDays: 7
+                confidentialityLevel: internal
+                enabled: true
+                createdBy: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-04T09:00:00Z'
+                token: ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/DropLinkLimitReached' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/drop-links/{dropLinkId}:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/DropLinkId'
+    get:
+      tags: [Admin operations]
+      operationId: getDropLink
+      summary: One permanent drop link
+      description: "Since 2.0. Returns one drop link, without its token. Same readers as `listDropLinks`."
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: The drop link.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DropLink' }
+              example:
+                id: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                label: Supplier invoices
+                recipients: [accounting@entity-a.example.com]
+                validityDays: 7
+                confidentialityLevel: internal
+                enabled: true
+                createdBy: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-04T09:00:00Z'
+                lastUsedAt: '2026-11-05T14:12:00Z'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Admin operations]
+      operationId: updateDropLink
+      summary: Change a permanent drop link
+      description: |
+        Since 2.0. JSON Merge Patch of `label`, `recipients`, `validityDays`,
+        `confidentialityLevel` (`null` goes back to the tenant default level) and `enabled`; `null`
+        is refused on the other members and an unknown member is refused. A disabled link answers
+        like an unknown one. Audited as `drop_link.updated`. Delegated admin of the tenant and
+        super admin.
+      security:
+        - adminSession: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DropLinkUpdate' }
+            example: { enabled: false }
+      responses:
+        '200':
+          description: Updated drop link.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DropLink' }
+              example:
+                id: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                label: Supplier invoices
+                recipients: [accounting@entity-a.example.com]
+                validityDays: 7
+                enabled: false
+                createdBy: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-05T15:00:00Z'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Admin operations]
+      operationId: deleteDropLink
+      summary: Revoke a permanent drop link
+      description: |
+        Since 2.0. Revokes the link for good (`revokedAt`); its token is dead at once. Transfers
+        already deposited are not affected. A revoked link stays listed. Audited as
+        `drop_link.revoked`. Delegated admin of the tenant and super admin.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Link revoked (or already revoked). }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/drop-links/{dropLinkId}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/DropLinkId'
+    post:
+      tags: [Admin operations]
+      operationId: rotateDropLink
+      summary: Replace the token of a permanent drop link
+      description: |
+        Since 2.0. Issues a new token, shown once in the answer; the previous one is dead at
+        once. A revoked link cannot be rotated (`409 state-conflict`). Audited as
+        `drop_link.rotated`. Delegated admin of the tenant and super admin.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '200':
+          description: The drop link with its new token, shown once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DropLinkCreated' }
+              example:
+                id: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+                label: Supplier invoices
+                recipients: [accounting@entity-a.example.com]
+                validityDays: 7
+                enabled: true
+                createdBy: adm_01JABCG1H2J3K415M6N7P8Q9R0
+                createdAt: '2026-11-04T09:00:00Z'
+                updatedAt: '2026-11-05T15:30:00Z'
+                token: ttd_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StateConflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/security-events:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+    get:
+      tags: [Admin operations]
+      operationId: listTenantSecurityEvents
+      summary: Security events of the tenant (12-month retention)
+      description: |
+        Since 2.0. Returns the security events of the tenant, most recent first: the lines the
+        security log writes for fail2ban and CrowdSec, also kept in the database for 12 months so
+        that an auditor can read them without shell access. Each event carries its type, an
+        optional reason, the client IP and the tenant, never an e-mail address. Only the events of
+        this tenant (never those without tenant). Readable by the delegated admins of the tenant,
+        the super admin and an auditor. The log file format is unchanged.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/SecurityEventType'
+        - name: from
+          in: query
+          description: "Start of the period (inclusive)."
+          schema: { type: string, format: date-time }
+          example: '2026-11-01T00:00:00Z'
+        - name: to
+          in: query
+          description: "End of the period (inclusive)."
+          schema: { type: string, format: date-time }
+          example: '2026-11-04T23:59:59Z'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Security events (most recent first).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityEventList' }
+              example:
+                items:
+                  - id: sev_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                    occurredAt: '2026-11-04T08:15:00Z'
+                    type: verification_code_invalid
+                    ip: 203.0.113.7
+                    tenantId: ten_01JAB00000000000000ENT1TYA
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/tenants/{tenantId}/transfers/{transferId}/proof:
+    parameters:
+      - $ref: '#/components/parameters/TenantId'
+      - $ref: '#/components/parameters/TransferId'
+    get:
+      tags: [Admin operations]
+      operationId: getTenantTransferProof
+      summary: Proof of deposit or delivery of a transfer (PDF)
+      description: |
+        Since 2.0. Same document as `getMyTransferProof`, for an admin of the tenant: delegated
+        admin, super admin and auditor. The proof outlives the transfer (kept 12 months from the
+        fact, erased by a data-subject erasure naming the address). `404 proof-not-available`
+        before the fact exists or after the retention; `404 not-found` outside the admin's
+        tenants. Audited as `transfer.proof_downloaded` (actor, kind).
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ProofKind'
+        - $ref: '#/components/parameters/ProofRecipient'
+      responses:
+        '200':
+          description: The proof as a PDF attachment.
+          headers:
+            Content-Disposition: { $ref: '#/components/headers/ContentDispositionAttachment' }
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+              # The signed statement embedded in the PDF (statement.json).
+              x-embedded-statement: { $ref: '#/components/schemas/ProofStatement' }
+              example: "<binary data>"
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/ProofNotAvailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /admin/admins:
     get:
       tags: [Admin system]
@@ -5623,6 +6620,12 @@ paths:
         `POST /admin/activation` of the activation page, never by opening the link; an account
         invited by mail must enroll TOTP to finish its activation, whatever `requireTotp`.
         Audited as `admin.created` and `admin.invited` (details `delivery`, never the link).
+
+        Since 2.0: `role: auditor` creates a read-only account on the given `tenantIds` (like a
+        delegated admin, `requireTotp` true by default). `invitation.delivery: none` creates an
+        account **without activation link or password**, which can only sign in through single
+        sign-on; it is accepted only for delegated admins and auditors whose tenants all have their
+        single sign-on enabled (`409 sso-not-configured` otherwise).
       security:
         - adminSession: []
           csrfToken: []
@@ -5909,6 +6912,29 @@ paths:
                     code: state-conflict
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/SystemSmtpUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/admins/{adminId}/identities/{identityId}:
+    parameters:
+      - $ref: '#/components/parameters/AdminId'
+      - $ref: '#/components/parameters/IdentityId'
+    delete:
+      tags: [Admin system]
+      operationId: deleteAdminIdentity
+      summary: Unpin the single sign-on identity of an account (super admin)
+      description: |
+        Since 2.0. Removes an identity (issuer and subject) pinned on its first SSO login, so that
+        the account is pinned again, on the next SSO login, to the identity matching its e-mail
+        address. Used when a person changes provider account. Reserved to the super admin.
+        Audited as `admin.identity_unlinked`.
+      security:
+        - adminSession: []
+          csrfToken: []
+      responses:
+        '204': { description: Identity unpinned. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/background-presets:
@@ -6568,6 +7594,54 @@ paths:
                     ip: 10.10.1.5
                     action: maintenance.enabled
                     object: { kind: system, id: maintenance }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/system/security-events:
+    get:
+      tags: [Admin system]
+      operationId: listGlobalSecurityEvents
+      summary: Instance-wide security events (super admin)
+      description: |
+        Since 2.0. Returns the security events of the whole instance, most recent first, including
+        the events without tenant (unknown FQDN, provisioning token, admin login). With
+        `tenantId`, only the events of that tenant. Reserved to the super admin: `403 forbidden`
+        for any other admin.
+      security:
+        - adminSession: []
+      parameters:
+        - name: tenantId
+          in: query
+          description: "Filter by tenant; events without tenant are then excluded."
+          schema: { type: string, pattern: '^ten_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+          example: ten_01JAB00000000000000ENT1TYA
+        - $ref: '#/components/parameters/SecurityEventType'
+        - name: from
+          in: query
+          description: "Start of the period (inclusive)."
+          schema: { type: string, format: date-time }
+          example: '2026-11-01T00:00:00Z'
+        - name: to
+          in: query
+          description: "End of the period (inclusive)."
+          schema: { type: string, format: date-time }
+          example: '2026-11-04T23:59:59Z'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Security events.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecurityEventList' }
+              example:
+                items:
+                  - id: sev_01JABCS3T4V5W6X7Y8Z9A0B1C2
+                    occurredAt: '2026-11-04T07:00:00Z'
+                    type: unknown_fqdn
+                    ip: 198.51.100.23
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -7278,6 +8352,48 @@ components:
       required: true
       schema: { type: string, pattern: '^prv_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
       example: prv_01JABCT1V2W3X4Y5Z6A7B8C9D0
+    DropToken:
+      name: dropToken
+      in: path
+      required: true
+      description: "Since 2.0. Token of a permanent drop link (`ttd_...`)."
+      schema: { type: string, pattern: '^ttd_[A-Za-z0-9]{22,43}$' }
+      example: ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+    DropLinkId:
+      name: dropLinkId
+      in: path
+      required: true
+      description: "Since 2.0. Drop link identifier."
+      schema: { type: string, pattern: '^drl_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+      example: drl_01JABCD1E2F3G4H5J6K7M8N9P0
+    IdentityId:
+      name: identityId
+      in: path
+      required: true
+      description: "Since 2.0. Identifier of a pinned single sign-on identity."
+      schema: { type: string, pattern: '^aid_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+      example: aid_01JABCJ1K2M3N4P5Q6R7S8T9V0
+    ProofKind:
+      name: kind
+      in: query
+      required: true
+      description: "Since 2.0. Which proof: `deposit` or `delivery`."
+      schema: { $ref: '#/components/schemas/ProofKind' }
+      example: deposit
+    ProofRecipient:
+      name: recipient
+      in: query
+      required: false
+      description: "Since 2.0. With `kind=delivery` on a transfer with per-recipient links: the recipient whose first download is proved. Absent, the first delivery of the transfer."
+      schema: { $ref: '#/components/schemas/Email' }
+      example: carol@customer.example.net
+    SecurityEventType:
+      name: type
+      in: query
+      required: false
+      description: "Since 2.0. Filter by security event type. The list is extensible: any value of the form `^[a-z][a-z0-9_]*$` is accepted, and an unknown type matches no event."
+      schema: { $ref: '#/components/schemas/SecurityEventType' }
+      example: verification_code_invalid
     AbuseReportId:
       name: reportId
       in: path
@@ -7352,6 +8468,13 @@ components:
       description: Expires the deposit session cookie.
       schema: { type: string }
       example: __Host-tt_deposit=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict
+    SetOidcFlowCookie:
+      description: |
+        Since 2.0. Sets the signed technical cookie holding the state, nonce and PKCE verifier of
+        one single sign-on flow, on the admin host only: valid 10 minutes, `SameSite=Lax` (the provider redirects the browser back), used once (enforced
+        on the server side too), cleared by the callback.
+      schema: { type: string }
+      example: __Host-tt_oidc=of_Qm4Zx7...; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax
     SetAdminCookie:
       description: |
         Sets the admin session cookie, on the admin host only. Its `Max-Age` is the life left to
@@ -7501,7 +8624,8 @@ components:
       description: |
         The authenticated admin's role or tenants do not allow the operation (`forbidden`), or the
         CSRF check of this unsafe method failed (`csrf-invalid`: missing or wrong `X-CSRF-Token`,
-        cross-site `Origin` or `Sec-Fetch-Site`).
+        cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor attempting any write gets
+        `403 read-only-role`.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -7518,6 +8642,12 @@ components:
                 title: Invalid CSRF token
                 status: 403
                 code: csrf-invalid
+            readOnlyRole:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#read-only-role
+                title: Read-only role
+                status: 403
+                code: read-only-role
     DepositForbidden:
       description: |
         Deposit not allowed. For public deposits the code is always the generic
@@ -7674,6 +8804,95 @@ components:
                 title: Invalid provisioning token
                 status: 401
                 code: provisioning-token-invalid
+    SsoNotAvailable:
+      description: |
+        Since 2.0. Single sign-on is not available for this e-mail address. The answer is the same
+        whether the domain is unknown or its single sign-on disabled.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-not-available
+            title: Single sign-on not available
+            status: 404
+            code: sso-not-available
+    SsoDomainConflict:
+      description: Since 2.0. An e-mail domain of the configuration is already routed to the single sign-on of another tenant.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-domain-conflict
+            title: Domain already used by another single sign-on
+            status: 409
+            code: sso-domain-conflict
+            errors:
+              - { field: /emailDomains/0, code: already-exists }
+    SsoIssuerNotAllowed:
+      description: Since 2.0. The issuer is a multi-tenant Entra ID endpoint (`common`, `organizations`, `consumers`) or otherwise not acceptable; a tenant-specific issuer is required.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#sso-issuer-not-allowed
+            title: Issuer not allowed
+            status: 422
+            code: sso-issuer-not-allowed
+            errors:
+              - { field: /issuer, code: not-allowed }
+    ProofNotAvailable:
+      description: Since 2.0. The proof does not exist yet (the fact it proves has not happened) or is past its 12-month retention.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#proof-not-available
+            title: Proof not available
+            status: 404
+            code: proof-not-available
+    ImportInvalid:
+      description: |
+        Since 2.0. The imported configuration is refused: `import-invalid` (the first entry of
+        `errors` holds the JSON pointer of the first error) or `import-schema-unsupported`
+        (`schemaVersion` unknown to this server).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            invalid:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#import-invalid
+                title: Invalid configuration file
+                status: 422
+                code: import-invalid
+                errors:
+                  - { field: /config/settings/maxTransferBytes, code: out-of-range }
+            schemaUnsupported:
+              value:
+                type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#import-schema-unsupported
+                title: Configuration version not supported
+                status: 422
+                code: import-schema-unsupported
+    DropLinkInvalid:
+      description: Since 2.0. The drop link is unknown, revoked or disabled (the same answer), written to the security log as `drop_link_invalid`.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#drop-link-invalid
+            title: Drop link not valid
+            status: 404
+            code: drop-link-invalid
+    DropLinkLimitReached:
+      description: Since 2.0. The tenant already has 100 drop links.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#drop-link-limit-reached
+            title: Drop link limit reached
+            status: 409
+            code: drop-link-limit-reached
     UnknownBackgroundPreset:
       description: Since 1.2. The background preset is not one of `listBackgroundPresets`.
       content:
@@ -7918,7 +9137,7 @@ components:
         code: { $ref: '#/components/schemas/ProblemCode' }
         errors:
           type: array
-          description: "Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met), and since 1.2 `setup-incomplete` (`field` is the key of a required setup item not done, `code` is `not-done`) and `provisioning-scope-exceeded` (the field outside the scope of the token)."
+          description: "Field-level errors: `validation-failed`, and since 1.1 `recipient-domain-refused` (the refused recipients) and `confidentiality-rule-violated` (the rules not met), and since 1.2 `setup-incomplete` (`field` is the key of a required setup item not done, `code` is `not-done`) and `provisioning-scope-exceeded` (the field outside the scope of the token), and since 2.0 `import-invalid` (`field` is the JSON pointer of the first error in the imported document), `sso-domain-conflict` and `sso-issuer-not-allowed` (the field concerned)."
           items:
             type: object
             required: [field, code]
@@ -7990,6 +9209,24 @@ components:
         - update-check-disabled
         - provisioning-token-invalid
         - provisioning-scope-exceeded
+        - read-only-role
+        - sso-required
+        - sso-not-available
+        - sso-not-configured
+        - sso-issuer-not-allowed
+        - sso-domain-conflict
+        - sso-mfa-required
+        - proof-not-available
+        - import-invalid
+        - import-schema-unsupported
+        - drop-link-invalid
+        - drop-link-limit-reached
+        - link-only-forbidden
+        - link-only-conflict
+        - e2e-forbidden
+        - e2e-required
+        - e2e-archive-unavailable
+        - e2e-format-invalid
         - internal-error
     Language:
       type: string
@@ -8117,6 +9354,7 @@ components:
       properties:
         email: { $ref: '#/components/schemas/Email' }
         invitationToken: { type: string, pattern: '^inv_[A-Za-z0-9]{22,43}$' }
+        dropLinkToken: { type: string, pattern: '^ttd_[A-Za-z0-9]{22,43}$', description: "Since 2.0. Token of a permanent drop link; exclusive with `invitationToken`." }
       additionalProperties: false
     VerificationChallenge:
       type: object
@@ -8139,8 +9377,8 @@ components:
         `internal`: internal IP and domain. `external`: invited external.
         Since 1.1: `internal_remote` (address of an internal domain already verified from the
         internal network, depositing from outside with a code each time), `reply` (recipient
-        replying to a transfer). Reserved for V2: `drop_link`.
-      enum: [internal, external, internal_remote, reply]
+        replying to a transfer). Since 2.0: `drop_link` (depositor through a permanent drop link).
+      enum: [internal, external, internal_remote, reply, drop_link]
     DepositSession:
       type: object
       required: [email, kind, csrfToken, expiresAt, limits, canInvite]
@@ -8163,6 +9401,13 @@ components:
           properties:
             invitedBy: { $ref: '#/components/schemas/Email' }
             expiresAt: { type: string, format: date-time }
+        dropLink:
+          type: object
+          description: Since 2.0. Present for a `drop_link` session.
+          required: [label, validityDays]
+          properties:
+            label: { type: string }
+            validityDays: { $ref: '#/components/schemas/ExpiryDays' }
         reply:
           type: object
           description: Since 1.1. Present for a `reply` session.
@@ -8204,7 +9449,9 @@ components:
         `not_scanned_disabled` (since 1.1): the antivirus is disabled for the instance
         (`TT_ANTIVIRUS_ENGINE=none`) or for the tenant; delivered unscanned and flagged like
         `not_scanned_too_large`.
-      enum: [pending, scanning, clean, infected, not_scanned_too_large, not_scanned_encrypted, scan_error, not_scanned_disabled]
+        `not_scanned_e2e` (since 2.0): end-to-end encrypted file, which the server cannot read;
+        delivered unscanned and flagged like `not_scanned_too_large`.
+      enum: [pending, scanning, clean, infected, not_scanned_too_large, not_scanned_encrypted, scan_error, not_scanned_disabled, not_scanned_e2e]
     FileDeclaration:
       type: object
       required: [name, size]
@@ -8218,6 +9465,7 @@ components:
         mediaType: { type: string, maxLength: 255, description: Informational only; downloads are always served as `application/octet-stream`. }
         expectedSha256: { $ref: '#/components/schemas/Sha256' }
         path: { $ref: '#/components/schemas/FilePath' }
+        encryptedMetadata: { allOf: [{ $ref: '#/components/schemas/EncryptedMetadata' }], description: "Since 2.0. Required for an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then a generic name (`file-<n>.tte2`) and `size` the size of the ciphertext." }
       additionalProperties: false
     FilePath:
       type: string
@@ -8248,7 +9496,7 @@ components:
             not empty, and the blocklist applies to it.
         recipients:
           type: array
-          description: Mandatory for internal depositors and API tokens; ignored for invited externals (the inviter is the recipient).
+          description: "Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient) and for drop link depositors (the recipients of the link)."
           minItems: 1
           maxItems: 100
           uniqueItems: true
@@ -8278,6 +9526,20 @@ components:
         confidentialityLevel:
           allOf: [{ $ref: '#/components/schemas/ConfidentialityLevelKey' }]
           description: "Since 1.1. Key of one of the tenant's confidentiality levels; the tenant default level when omitted."
+        linkOnly:
+          type: boolean
+          default: false
+          description: "Since 2.0. Link-only transfer (one shared link, never per-recipient links): no mail is sent to the recipients; the download link is returned once, in the answer of `finalizeTransfer` (`downloadUrl`), and never again. Needs the tenant's `linkOnlyAllowed` and the level's (`403 link-only-forbidden`); incompatible with `recipientVerification` (`400 link-only-conflict`)."
+        encryptedMessage:
+          type: string
+          minLength: 1
+          maxLength: 32768
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: "Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB). Required in place of `message` when `endToEndEncrypted` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise."
+        endToEndEncrypted:
+          type: boolean
+          default: false
+          description: "Since 2.0. The files are encrypted in the browser: every file declares its `encryptedMetadata`, the key stays in the link fragment `#k=` and never reaches the server. Needs the tenant and level `e2ePolicy` (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false). No antivirus, no server archive."
       additionalProperties: false
     SenderFile:
       type: object
@@ -8300,6 +9562,7 @@ components:
         uploadUrl: { type: string, description: tus upload URL (only while the transfer is `uploading`). }
         uploadOffset: { $ref: '#/components/schemas/ByteSize' }
         path: { $ref: '#/components/schemas/FilePath' }
+        encryptedMetadata: { $ref: '#/components/schemas/EncryptedMetadata' }
     SenderTransfer:
       type: object
       required: [id, status, senderEmail, recipients, expiryDays, passwordProtected, deleteAfterFirstDownload, totalBytes, createdAt, files]
@@ -8330,7 +9593,9 @@ components:
             shared link (created before 1.1). Since 1.1, absent for new transfers (the type is
             unchanged, so strict 1.0 clients keep working): each recipient
             has their own link, mailed to them only and never returned to the sender or to an API
-            token; follow them with `recipientTracking`.
+            token; follow them with `recipientTracking`. Since 2.0, the one exception is a
+            link-only transfer (`linkOnly`): its link is returned **once**, in the answer of
+            `finalizeTransfer`, and never by any other operation.
         files: { type: array, items: { $ref: '#/components/schemas/SenderFile' } }
         recipientVerification: { type: boolean, description: "Since 1.1. Recipients must prove their address by code before downloading." }
         maxDownloads: { type: [integer, 'null'], minimum: 1, maximum: 1000, description: "Since 1.1. Maximum number of download starts; null for no limit." }
@@ -8343,6 +9608,9 @@ components:
             links: the tracking status of each recipient (verification and download dates), never
             their link.
           items: { $ref: '#/components/schemas/RecipientTracking' }
+        linkOnly: { type: boolean, description: "Since 2.0. Link-only transfer." }
+        endToEndEncrypted: { type: boolean, description: "Since 2.0. The files are encrypted in the browser." }
+        encryptedMessage: { type: string, description: "Since 2.0. The message of an end-to-end encrypted transfer, as sent." }
 
     # --- Invitations ------------------------------------------------------
     InvitationStatus:
@@ -8414,6 +9682,7 @@ components:
           description: '`clean`, or `not_scanned_too_large` / `not_scanned_encrypted` / `not_scanned_disabled` (since 1.1; delivered unscanned: the page must say so).'
         downloadUrl: { type: string }
         path: { $ref: '#/components/schemas/FilePath' }
+        encryptedMetadata: { $ref: '#/components/schemas/EncryptedMetadata' }
     PublicTransfer:
       type: object
       required: [senderEmail, expiresAt, passwordProtected, locked]
@@ -8444,6 +9713,8 @@ components:
         confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef', description: "Since 1.1. Confidentiality level chosen by the sender, absent while `locked`." }
         replyAllowed: { type: boolean, description: "Since 1.1. The recipient may send files back to the sender (`startTransferReply`); absent while `locked`." }
         reply: { type: boolean, description: "Since 1.1. The transfer is a reply sent from outside the entity by a recipient of an earlier transfer (`startTransferReply`): `senderEmail` was verified by code, but the files come from an external sender. Absent while `locked`; never repliable." }
+        encryptedMessage: { type: string, description: "Since 2.0. The message of an end-to-end encrypted transfer, encrypted (`message` is absent): the browser decrypts it with the key of the link fragment." }
+        endToEndEncrypted: { type: boolean, description: "Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`." }
 
     # --- Admin auth -------------------------------------------------------
     SetupStatus:
@@ -8482,7 +9753,7 @@ components:
         status:
           type: string
           x-extensible-enum: true
-          description: Reserved for V2 - `sso_redirect`.
+          description: "`sso_redirect` is not used: single sign-on has its own operations (`startAdminOidcLogin`)."
           enum: [totp_required, totp_enrollment_required, password_change_required, authenticated]
         csrfToken: { type: string }
     TotpCode:
@@ -8538,8 +9809,11 @@ components:
     AdminRole:
       type: string
       x-extensible-enum: true
-      description: Reserved for V2 - `auditor` (read-only on assigned tenants).
-      enum: [super_admin, delegated_admin]
+      description: |
+        `super_admin`, `delegated_admin`. Since 2.0, `auditor`: read-only on the tenants it is
+        attached to (like a delegated admin, through `tenantIds`), `403 read-only-role` on any
+        write; created, changed and deleted by the super admin only.
+      enum: [super_admin, delegated_admin, auditor]
     TenantRef:
       type: object
       required: [id, name, fqdn]
@@ -8574,6 +9848,8 @@ components:
         disabled: { type: boolean }
         lastLoginAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }
+        ssoOnly: { type: boolean, readOnly: true, description: "Since 2.0. True for an account created without a local password (delivery `none`): it can only sign in through single sign-on. Never true for a super admin." }
+        identities: { type: array, readOnly: true, description: "Since 2.0. Single sign-on identities pinned to the account (see `deleteAdminIdentity`).", items: { $ref: '#/components/schemas/AdminIdentity' } }
     AdminWithActivation:
       description: An admin account with its new single-use activation link, returned once by `resetAdminCredentials` (and by `createAdmin` until 1.1, see `AdminCreated`). Only a hash of the link token is stored; this link is never sent by email.
       allOf:
@@ -8606,8 +9882,8 @@ components:
     InvitationDelivery:
       type: string
       x-extensible-enum: true
-      description: "Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour)."
-      enum: [mail, copy]
+      description: "Since 1.2. How an activation link reaches the admin: `mail` through the system SMTP (the link is then never returned), `copy` returned once in the response for the super admin to hand over (the 1.1 behaviour). Since 2.0, `none`: no activation link is issued, the account has no password and signs in through single sign-on only; accepted by `createAdmin` only for delegated admins and auditors whose tenants all have their single sign-on enabled (`409 sso-not-configured` otherwise). With `none`, `activationUrl` is absent and `activationExpiresAt` is the creation time of the account."
+      enum: [mail, copy, none]
     AdminInvitation:
       type: object
       description: |
@@ -8642,7 +9918,7 @@ components:
       description: |
         Changes of an account; absent fields are left unchanged. Promoting to `super_admin`
         requires an activated account with TOTP enabled and clears the tenant assignments (a super
-        admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Nobody
+        admin reaches every tenant); demoting to `delegated_admin` requires `tenantIds`. Since 2.0, the role `auditor` is a valid target (it requires `tenantIds` like `delegated_admin`; promoting an auditor to `super_admin` follows the same rules). Nobody
         can disable or demote their own account, and the last usable super admin (not disabled,
         activated, TOTP enabled) can be neither disabled nor demoted (`409 state-conflict`).
       properties:
@@ -8693,6 +9969,8 @@ components:
           allOf: [{ $ref: '#/components/schemas/TenantSetupState' }]
           readOnly: true
           description: "Since 1.2. Read only: `setup` until the setup is completed (`completeTenantSetup`), `active` afterwards; tenants created before 1.2 are `active`."
+        linkOnlyAllowed: { type: boolean, default: false, description: "Since 2.0. Senders may create link-only transfers (`linkOnly`); a confidentiality level may forbid them. Changed by the super admin only." }
+        e2ePolicy: { allOf: [{ $ref: '#/components/schemas/E2ePolicy' }], description: "Since 2.0. End-to-end encryption policy of the tenant (`forbidden` by default). Changed by the super admin only: end-to-end encrypted files are never scanned by the antivirus." }
     TenantList:
       type: object
       required: [items]
@@ -8736,7 +10014,8 @@ components:
         assigned to that tenant only, TOTP required, activation link valid 72 hours delivered as
         `AdminInvitation` says (`copy` when `delivery` is absent; `language` is also the language
         of the mail). With `provisionTenant`, the delivery is always `mail`: `delivery` must be
-        absent or `mail`.
+        absent or `mail`. The delivery `none` (since 2.0) is refused by `createTenant`
+        (`400 validation-failed`, code `not-supported`): a new tenant has no single sign-on yet.
       required: [username, email, language]
       properties:
         username: { $ref: '#/components/schemas/Username' }
@@ -8784,6 +10063,8 @@ components:
         allowTransferReply: { type: boolean, description: "Since 1.1." }
         antivirusEnabled: { type: boolean, description: "Since 1.1. Super admin only." }
         webhookIncludeAddresses: { type: boolean, description: "Since 1.1." }
+        linkOnlyAllowed: { type: boolean, description: "Since 2.0. Super admin only." }
+        e2ePolicy: { allOf: [{ $ref: '#/components/schemas/E2ePolicy' }], description: "Since 2.0. Super admin only." }
       additionalProperties: false
     ContrastResult:
       type: object
@@ -9056,8 +10337,8 @@ components:
     TransferOrigin:
       type: string
       x-extensible-enum: true
-      description: "Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Reserved for V2: `drop_link`."
-      enum: [internal, external, api, internal_remote, reply]
+      description: "Since 1.1: `internal_remote` (internal address depositing from outside), `reply` (recipient replying to a transfer). Since 2.0: `drop_link` (deposit through a permanent drop link)."
+      enum: [internal, external, api, internal_remote, reply, drop_link]
     AdminTransfer:
       type: object
       required: [id, status, origin, senderEmail, recipients, fileCount, totalBytes, passwordProtected, deleteAfterFirstDownload, createdAt, downloadCount]
@@ -9084,6 +10365,9 @@ components:
         maxDownloads: { type: [integer, 'null'], minimum: 1, maximum: 1000, description: "Since 1.1. Null for no limit." }
         confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef' }
         replyToTransferId: { type: string, description: "Since 1.1. For a reply, the original transfer." }
+        dropLinkId: { type: string, description: "Since 2.0. For a deposit through a permanent drop link (`origin: drop_link`), the link." }
+        linkOnly: { type: boolean, description: "Since 2.0." }
+        endToEndEncrypted: { type: boolean, description: "Since 2.0." }
     AdminTransferDetail:
       allOf:
         - $ref: '#/components/schemas/AdminTransfer'
@@ -9287,6 +10571,15 @@ components:
         `scope_exceeded`, `invalid`, `rate_limited` (recorded at most once a minute per token),
         `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
         expired since the request was accepted), never the request (FQDN, username, address).
+        Since 2.0: `admin.login` carries `details.method` (`oidc` for a single sign-on login);
+        `admin.identity_linked` and `admin.identity_unlinked` name the account and the issuer, never the
+        subject; `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
+        only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
+        source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
+        token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
+        `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
+        `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
+        identifier; a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
       enum:
         - transfer.created
         - transfer.finalized
@@ -9377,6 +10670,19 @@ components:
         - tenant.provision_refused
         - provisioning_token.created
         - provisioning_token.revoked
+        - admin.identity_linked
+        - admin.identity_unlinked
+        - tenant.sso_updated
+        - tenant.sso_deleted
+        - tenant.exported
+        - tenant.imported
+        - drop_link.created
+        - drop_link.updated
+        - drop_link.rotated
+        - drop_link.revoked
+        - transfer.proof_downloaded
+        - proof_key.created
+        - transfer.link_reissued
     AuditEvent:
       type: object
       required: [id, occurredAt, actor, action, object]
@@ -9897,6 +11203,12 @@ components:
         internalRecipientsOnly: { type: boolean, description: "Recipients must belong to the tenant's internal domains (exact match)." }
         forceDeleteAfterFirstDownload: { type: boolean }
         maxDownloads: { type: [integer, 'null'], minimum: 1, maximum: 1000, description: "Cap of `maxDownloads` (applied when the sender sets none or more); null for none." }
+        linkOnlyAllowed: { type: boolean, default: true, description: "Since 2.0. The level allows link-only transfers (`linkOnly`); a level may forbid them. Absent means true." }
+        e2ePolicy:
+          description: "Since 2.0. End-to-end encryption policy of the level; null or absent: the tenant's. Set by the admins of the tenant (delegated admins included), it can only tighten the tenant policy, never loosen it: a tenant `forbidden` stays forbidden at every level, and a tenant `required` is a floor that every level keeps (a level `allowed` or `forbidden` is then ignored, the effective policy stays `required`). With a tenant `allowed`, a level may set `forbidden` or `required`."
+          oneOf:
+            - $ref: '#/components/schemas/E2ePolicy'
+            - type: 'null'
       additionalProperties: false
     ConfidentialityLevel:
       type: object
@@ -9945,6 +11257,415 @@ components:
         key: { $ref: '#/components/schemas/ConfidentialityLevelKey' }
         label: { type: string }
         rules: { $ref: '#/components/schemas/ConfidentialityRules' }
+
+    # --- Version 2.0 ------------------------------------------------------
+    AuthMethods:
+      type: object
+      description: Since 2.0. Login methods offered by the admin host.
+      required: [password, sso]
+      properties:
+        password: { type: boolean, description: Always true (the local password with TOTP is the fallback of the super admin). }
+        sso: { type: boolean, description: At least one tenant has its single sign-on enabled. }
+    OidcStart:
+      type: object
+      description: Since 2.0. Start of a single sign-on login.
+      required: [email]
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+      additionalProperties: false
+    OidcRedirect:
+      type: object
+      description: Since 2.0. Where to send the browser.
+      required: [redirectUrl]
+      properties:
+        redirectUrl: { type: string, format: uri, description: Authorization endpoint of the identity provider, with the flow parameters. }
+    TenantSso:
+      type: object
+      description: Since 2.0. OpenID Connect configuration of a tenant. The client secret is never returned.
+      required: [enabled, issuer, clientId, hasClientSecret, emailDomains, enforced, requireMfa, createdAt, updatedAt]
+      properties:
+        enabled: { type: boolean }
+        issuer: { type: string, format: uri, minLength: 9, maxLength: 512, description: "`https` issuer URL; tenant-specific for Entra ID." }
+        clientId: { type: string, minLength: 1, maxLength: 255 }
+        hasClientSecret: { type: boolean }
+        emailDomains:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          description: E-mail domains routed to this configuration (exact match, lower case); a domain belongs to one tenant on the whole instance.
+          items: { type: string, minLength: 1, maxLength: 253 }
+        enforced: { type: boolean, description: "When true, the local password login is refused (`403 sso-required`) for the delegated admins and auditors attached to the tenant." }
+        requireMfa: { type: boolean, description: "The ID token `amr` must contain `mfa`, else `sso-mfa-required`." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TenantSsoUpdate:
+      type: object
+      description: Since 2.0. Replacement of the single sign-on configuration of a tenant.
+      required: [enabled, issuer, clientId, emailDomains]
+      properties:
+        enabled: { type: boolean }
+        issuer: { type: string, format: uri, minLength: 9, maxLength: 512 }
+        clientId: { type: string, minLength: 1, maxLength: 255 }
+        clientSecret: { type: string, minLength: 1, maxLength: 1024, description: "Write-only. Required on the first write and whenever `issuer` or `clientId` differs from the stored configuration (`400 validation-failed`, field `/clientSecret`, code `required`): a secret is never carried over to another application or identity provider. Otherwise, absent keeps the stored one." }
+        emailDomains:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 253 }
+        enforced: { type: boolean, default: false }
+        requireMfa: { type: boolean, default: true }
+      additionalProperties: false
+    SsoTestResult:
+      type: object
+      description: Since 2.0. Result of the discovery test of an issuer.
+      required: [success, durationMs, stage]
+      properties:
+        success: { type: boolean }
+        durationMs: { type: integer }
+        stage:
+          type: string
+          x-extensible-enum: true
+          enum: [settings, connect, tls, discovery, issuer, endpoints, done, unknown]
+          description: "How far the discovery went: `done` on success, otherwise the step that failed."
+        error:
+          type: string
+          x-extensible-enum: true
+          enum: [dns_error, connect_error, tls_error, timeout, http_status, invalid_document, issuer_mismatch, missing_endpoint, internal_error]
+          description: |
+            Category of the failure, absent on success. A closed list of categories, never a
+            message from the network, the identity provider or the TLS library (no text of a
+            remote server is reflected): `dns_error` (name not resolved), `connect_error`
+            (connection refused or reset), `tls_error` (handshake or certificate), `timeout`,
+            `http_status` (the discovery document answered other than 200), `invalid_document`
+            (not JSON, too large or a required member missing), `issuer_mismatch` (the document
+            names another issuer), `missing_endpoint` (an endpoint is absent or not `https`),
+            `internal_error`.
+    AdminIdentity:
+      type: object
+      description: Since 2.0. A single sign-on identity pinned to an admin account.
+      required: [id, issuer, clientId, linkedAt]
+      properties:
+        id: { type: string }
+        issuer: { type: string, format: uri, maxLength: 512 }
+        clientId: { type: string, maxLength: 255, description: "Client ID of the application the identity was pinned through (Entra ID subjects are per application)." }
+        tenantId: { type: string, description: Tenant whose SSO configuration was used on the first login. }
+        linkedAt: { type: string, format: date-time }
+    MyTransferLink:
+      type: object
+      description: Since 2.0. A reissued download link of a link-only transfer.
+      required: [downloadUrl]
+      properties:
+        downloadUrl: { type: string, format: uri, description: Download page; shown once, the previous link is revoked. }
+    ProofKind:
+      type: string
+      x-extensible-enum: true
+      description: "Since 2.0. `deposit`: written when the transfer becomes available. `delivery`: written at the first download (and at the first download of each recipient with per-recipient links)."
+      enum: [deposit, delivery]
+    ProofKey:
+      type: object
+      description: Since 2.0. A public key of the instance that verifies proofs.
+      required: [keyId, algorithm, publicKey, createdAt, retiredAt]
+      properties:
+        keyId: { type: string, pattern: '^psk_[0-7][0-9A-HJKMNP-TV-Z]{25}$' }
+        algorithm: { type: string, enum: [Ed25519] }
+        publicKey: { type: string, description: "The 32-byte public key, base64url without padding." }
+        createdAt: { type: string, format: date-time }
+        retiredAt: { type: [string, 'null'], format: date-time, description: "Null while the key is the active one." }
+    ProofKeyList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProofKey' } }
+    ProofStatement:
+      type: object
+      description: |
+        Since 2.0. The statement signed by the instance, embedded in the proof PDF as
+        `statement.json` in canonical JSON (RFC 8785); `statement.sig` holds the Ed25519
+        signature (64 bytes) over those exact bytes, made with the key `keyId`. For an end-to-end
+        encrypted transfer, `endToEndEncrypted` is true, the file names are the generic names the
+        server knows and `sha256` is the hash of the ciphertext.
+      required: [schemaVersion, kind, instanceVersion, tenant, transferId, senderEmail, recipients, endToEndEncrypted, files, depositedAt, expiresAt, keyId]
+      properties:
+        schemaVersion: { type: integer, minimum: 1, maximum: 1, description: Always 1 in this version. }
+        kind: { $ref: '#/components/schemas/ProofKind' }
+        instanceVersion: { type: string }
+        tenant:
+          type: object
+          required: [name, fqdn]
+          properties:
+            name: { type: string }
+            fqdn: { type: string }
+        transferId: { type: string }
+        senderEmail: { $ref: '#/components/schemas/Email' }
+        recipients: { type: array, items: { $ref: '#/components/schemas/Email' } }
+        confidentialityLevel: { type: string, description: Key of the level of the transfer. }
+        endToEndEncrypted: { type: boolean }
+        files:
+          type: array
+          items:
+            type: object
+            required: [name, size, sha256, scanStatus]
+            properties:
+              name: { type: string }
+              path: { type: string }
+              size: { $ref: '#/components/schemas/ByteSize' }
+              sha256: { $ref: '#/components/schemas/Sha256' }
+              scanStatus: { $ref: '#/components/schemas/ScanStatus' }
+        depositedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        firstDownloadedAt: { type: [string, 'null'], format: date-time, description: "First download, all recipients together; set in a `delivery` statement." }
+        recipientDownloads:
+          type: array
+          description: First download of each recipient (per-recipient links), in a `delivery` statement.
+          items:
+            type: object
+            required: [email, firstDownloadedAt]
+            properties:
+              email: { $ref: '#/components/schemas/Email' }
+              firstDownloadedAt: { type: string, format: date-time }
+        keyId: { type: string }
+    E2ePolicy:
+      type: string
+      x-extensible-enum: true
+      description: "Since 2.0. End-to-end encryption policy: `forbidden` (the default), `allowed` (the sender chooses) or `required`."
+      enum: [forbidden, allowed, required]
+    EncryptedMetadata:
+      type: string
+      minLength: 1
+      maxLength: 5462
+      pattern: '^[A-Za-z0-9_-]+$'
+      description: "Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it."
+    PublicDropLink:
+      type: object
+      description: Since 2.0. What the landing page of a drop link needs.
+      required: [label, validityDays]
+      properties:
+        label: { type: string }
+        validityDays: { $ref: '#/components/schemas/ExpiryDays' }
+        level: { $ref: '#/components/schemas/ConfidentialityLevelRef' }
+    DropLink:
+      type: object
+      description: Since 2.0. A permanent drop link, without its token.
+      required: [id, label, recipients, validityDays, enabled, createdBy, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        label: { type: string, minLength: 1, maxLength: 100 }
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          description: Internal addresses the deposits are addressed to.
+          items: { $ref: '#/components/schemas/Email' }
+        validityDays: { $ref: '#/components/schemas/ExpiryDays' }
+        confidentialityLevel: { type: [string, 'null'], description: "Key of the level applied to the deposits; null for the tenant default." }
+        enabled: { type: boolean }
+        createdBy: { type: string, description: Identifier of the admin who created the link. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+    DropLinkCreate:
+      type: object
+      description: Since 2.0. Creation of a permanent drop link.
+      required: [label, recipients, validityDays]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 100 }
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Email' }
+        validityDays: { $ref: '#/components/schemas/ExpiryDays' }
+        confidentialityLevel: { allOf: [{ $ref: '#/components/schemas/ConfidentialityLevelKey' }], description: "Key of a level of the tenant; the tenant default when absent." }
+        enabled: { type: boolean, default: true }
+      additionalProperties: false
+    DropLinkUpdate:
+      type: object
+      description: "Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` only."
+      # Decoded by the handler itself, which must tell a null field from an absent one.
+      x-go-type: json.RawMessage
+      properties:
+        label: { type: string, minLength: 1, maxLength: 100 }
+        recipients:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Email' }
+        validityDays: { $ref: '#/components/schemas/ExpiryDays' }
+        confidentialityLevel: { type: [string, 'null'] }
+        enabled: { type: boolean }
+      additionalProperties: false
+    DropLinkCreated:
+      description: Since 2.0. A drop link with its token, present only in the answers of `createDropLink` and `rotateDropLink`.
+      allOf:
+        - $ref: '#/components/schemas/DropLink'
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, pattern: '^ttd_[A-Za-z0-9]{22,43}$', description: "Shown once; only its SHA-256 is stored." }
+    DropLinkList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DropLink' } }
+    SecurityEventType:
+      type: string
+      x-extensible-enum: true
+      pattern: '^[a-z][a-z0-9_]*$'
+      maxLength: 64
+      description: |
+        Since 2.0. Type of a security event, the `event=` token of the security log. New types may
+        be added within the API version: clients must accept unknown values.
+      enum:
+        - verification_code_invalid
+        - transfer_password_invalid
+        - admin_login_failed
+        - api_token_invalid
+        - unknown_fqdn
+        - deposit_refused
+        - rate_limited
+        - metrics_token_invalid
+        - access_link_invalid
+        - provisioning_token_invalid
+        - sso_failed
+        - drop_link_invalid
+    SecurityEvent:
+      type: object
+      description: Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address.
+      required: [id, occurredAt, type, ip]
+      properties:
+        id: { type: string }
+        occurredAt: { type: string, format: date-time }
+        type: { $ref: '#/components/schemas/SecurityEventType' }
+        reason: { type: string, description: "The `reason` field of the line (for example `password`, `state_invalid`), when it has one." }
+        ip: { type: string, description: "Real client IP, or `-` when unknown." }
+        tenantId: { type: [string, 'null'], description: Tenant of the event; null for an event without tenant. }
+        occurrences: { type: integer, minimum: 1, description: "Identical events (same type, reason, IP and tenant) coalesced in a short window into this entry." }
+        lastSeenAt: { type: string, format: date-time, description: "Time of the last coalesced occurrence; absent when `occurrences` is 1." }
+    SecurityEventList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/SecurityEvent' } }
+        nextCursor: { $ref: '#/components/schemas/PageCursor' }
+    ExportedAsset:
+      type: object
+      description: Since 2.0. A branding image of an export.
+      required: [mediaType, dataBase64]
+      properties:
+        mediaType: { type: string, maxLength: 255 }
+        dataBase64: { type: string, description: Content, base64 (standard alphabet); within the size limits of the branding files. }
+      additionalProperties: false
+    TenantConfigExport:
+      type: object
+      description: |
+        Since 2.0. Exported configuration of a tenant, to create another one (`importTenant`).
+        Strict on import: an unknown member is refused. Never holds a secret (see
+        `exportTenantConfig`).
+      required: [schemaVersion, exportedAt, sourceVersion]
+      properties:
+        schemaVersion: { type: integer, minimum: 1, maximum: 1, description: Always 1 in this version. }
+        exportedAt: { type: string, format: date-time }
+        sourceVersion: { type: string, description: Version of the instance that exported. }
+        settings:
+          type: object
+          description: General settings, without the storage quota.
+          properties:
+            defaultLanguage: { $ref: '#/components/schemas/Language' }
+            maxTransferBytes: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+            maxTransferCeiling: { type: integer, format: int64, minimum: 1, maximum: 21474836480 }
+            allowRemoteInternalDeposit: { type: boolean }
+            allowTransferReply: { type: boolean }
+            webhookIncludeAddresses: { type: boolean }
+            linkOnlyAllowed: { type: boolean }
+            e2ePolicy: { $ref: '#/components/schemas/E2ePolicy' }
+          additionalProperties: false
+        branding:
+          type: object
+          properties:
+            primaryColor: { $ref: '#/components/schemas/HexColor' }
+            accentColor: { $ref: '#/components/schemas/HexColor' }
+            backgroundPreset: { $ref: '#/components/schemas/BackgroundPresetId' }
+            logo: { $ref: '#/components/schemas/ExportedAsset' }
+            background: { $ref: '#/components/schemas/ExportedAsset' }
+          additionalProperties: false
+        network: { $ref: '#/components/schemas/NetworkRules' }
+        smtp:
+          type: object
+          description: Server, port, security and sender; never the user name nor the password.
+          required: [host, port, security, fromAddress]
+          properties:
+            host: { type: string, maxLength: 253 }
+            port: { type: integer, minimum: 1, maximum: 65535 }
+            security: { $ref: '#/components/schemas/SmtpSecurity' }
+            fromAddress: { $ref: '#/components/schemas/Email' }
+            fromName: { type: [string, 'null'], maxLength: 100 }
+          additionalProperties: false
+        recipientRules: { $ref: '#/components/schemas/RecipientRules' }
+        confidentialityLevels: { $ref: '#/components/schemas/ConfidentialityLevelList' }
+        abuseThresholds: { $ref: '#/components/schemas/AbuseThresholds' }
+        emailTemplates:
+          type: array
+          description: The customised templates only.
+          items:
+            type: object
+            required: [key, language, subject, bodyHtml, bodyText]
+            properties:
+              key: { $ref: '#/components/schemas/EmailTemplateKey' }
+              language: { $ref: '#/components/schemas/Language' }
+              subject: { type: string, maxLength: 255 }
+              bodyHtml: { type: string, maxLength: 100000 }
+              bodyText: { type: string, maxLength: 100000 }
+            additionalProperties: false
+        legalDocuments:
+          type: array
+          items:
+            type: object
+            required: [document, language, markdown]
+            properties:
+              document: { type: string, enum: [legal-notice, privacy-policy] }
+              language: { $ref: '#/components/schemas/Language' }
+              markdown: { type: string, maxLength: 100000 }
+            additionalProperties: false
+        webhooks:
+          type: array
+          description: "For information: name, kind and events. Never the URL nor the secret; not recreated by an import."
+          items:
+            type: object
+            required: [name, kind, events, enabled]
+            properties:
+              name: { type: string, minLength: 1, maxLength: 100 }
+              kind: { $ref: '#/components/schemas/WebhookKind' }
+              events: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/WebhookEventType' } }
+              enabled: { type: boolean, enum: [false] }
+            additionalProperties: false
+        blocklist:
+          type: array
+          items:
+            type: object
+            required: [kind, value]
+            properties:
+              kind: { $ref: '#/components/schemas/BlocklistKind' }
+              value: { type: string, minLength: 1, maxLength: 320 }
+              comment: { type: string, maxLength: 500 }
+            additionalProperties: false
+      additionalProperties: false
+    TenantImport:
+      type: object
+      description: Since 2.0. Creation of a tenant from an exported configuration.
+      required: [name, fqdn, storageQuotaBytes, config]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        fqdn: { $ref: '#/components/schemas/Fqdn' }
+        storageQuotaBytes: { type: integer, format: int64, minimum: 1 }
+        config: { $ref: '#/components/schemas/TenantConfigExport' }
+        delegatedAdmin: { $ref: '#/components/schemas/NewDelegatedAdmin' }
+      additionalProperties: false
 
     # --- Recipients (since 1.1) ------------------------------------------------
     RecipientVerificationStart:
@@ -10038,6 +11759,8 @@ components:
         recipientVerification: { type: boolean }
         confidentialityLevel: { $ref: '#/components/schemas/ConfidentialityLevelRef' }
         downloadedBy: { type: integer, minimum: 0, description: "Recipients who downloaded at least one file (per-recipient links only; 0 otherwise)." }
+        linkOnly: { type: boolean, description: "Since 2.0. Link-only transfer (its link cannot be retrieved)." }
+        endToEndEncrypted: { type: boolean, description: "Since 2.0. The files are encrypted in the browser." }
     MyTransferDetail:
       allOf:
         - $ref: '#/components/schemas/MyTransfer'

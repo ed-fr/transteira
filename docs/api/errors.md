@@ -79,7 +79,14 @@ use to ban the client IP.
   language or with forbidden characters (`/message/<lang>`); `PATCH /admin/system/settings`
   refuses `diskAlertThreshold: null` (`not-nullable`), a threshold outside 0.50 to 0.99 and an
   unknown member. These body checks come after the role check: another administrator gets
-  `403 forbidden` whatever the body.
+  `403 forbidden` whatever the body. Since 2.0, a member of a feature that the server does not
+  implement yet (for example `role: auditor`, `linkOnly`, `endToEndEncrypted`, `dropLinkToken`,
+  `invitation.delivery: none`, `linkOnlyAllowed`, `e2ePolicy`) is refused with the field code
+  `not-supported` on its pointer rather than ignored (`createTenant` with
+  `delegatedAdmin.delivery: none` included). Also since 2.0, `PUT /admin/tenants/{tenantId}/sso`
+  without `clientSecret` while `issuer` or `clientId` differs from the stored configuration is
+  refused with `required` on `/clientSecret`: a stored secret is never carried over to another
+  application or identity provider.
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -641,6 +648,150 @@ use to ban the client IP.
 - **Meaning:** the request is outside the scope of the provisioning token: the FQDN does not end with one of its allowed suffixes, the storage quota or the per-transfer limit exceeds its caps, or the token already created its maximum number of entities. `errors` names the refused field (`/fqdn`, `/storageQuotaBytes`, `/maxTransferBytes`, or an empty pointer for the number of entities).
 - **Typical endpoints:** `POST /provisioning/tenants`.
 - **What to do:** stay within the scope of the token, or ask the super admin to widen it (a new token).
+
+### read-only-role
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.0.
+- **Meaning:** an admin with the read-only `auditor` role attempted a write (any `POST`, `PUT`, `PATCH` or `DELETE` on an entity). Reads outside the tenants of the auditor stay `404 not-found`.
+- **Typical endpoints:** every write operation of `/admin/tenants/{tenantId}/...`.
+- **What to do:** use an account with a delegated admin or super admin role.
+
+### sso-required
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.0.
+- **Meaning:** the password of the account is right but a tenant of the account enforces single sign-on (`enforced`): the local password login is refused.
+- **Typical endpoints:** `POST /admin/auth/login`.
+- **What to do:** sign in with single sign-on (`POST /admin/auth/oidc/start`). The super admin never uses single sign-on.
+
+### sso-not-available
+
+- **HTTP status:** 404 Not Found
+- **Since:** 2.0.
+- **Meaning:** single sign-on is not available for this e-mail address. The answer is identical when the domain is unknown and when its single sign-on is disabled, so that it never tells which domains are configured.
+- **Typical endpoints:** `POST /admin/auth/oidc/start`.
+- **What to do:** use the password login, or ask the administrators to enable single sign-on.
+
+### sso-not-configured
+
+- **HTTP status:** 409 Conflict
+- **Since:** 2.0.
+- **Meaning:** an account without activation link (`invitation.delivery: none`) was asked for, but a tenant of the account has no enabled single sign-on: such an account could never sign in.
+- **Typical endpoints:** `POST /admin/admins`.
+- **What to do:** enable the single sign-on of the tenants first, or create the account with a `copy` or `mail` activation link.
+
+### sso-issuer-not-allowed
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 2.0.
+- **Meaning:** the issuer of the single sign-on configuration is not acceptable: it is not an `https` URL, or it is a multi-tenant Microsoft Entra ID endpoint (`common`, `organizations`, `consumers`). `errors` names `/issuer`.
+- **Typical endpoints:** `PUT /admin/tenants/{tenantId}/sso`.
+- **What to do:** use the tenant-specific issuer of the identity provider (for Entra ID, `https://login.microsoftonline.com/<directory id>/v2.0`).
+
+### sso-domain-conflict
+
+- **HTTP status:** 409 Conflict
+- **Since:** 2.0.
+- **Meaning:** an e-mail domain of the configuration is already routed to the single sign-on of another entity (a domain belongs to one entity on the whole instance). `errors` names the domain (`/emailDomains/<n>`).
+- **Typical endpoints:** `PUT /admin/tenants/{tenantId}/sso`.
+- **What to do:** remove the domain, or free it from the other entity first.
+
+### sso-mfa-required
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.0.
+- **Meaning:** the identity provider did not assert multi-factor authentication (`amr` without `mfa`) while the entity requires it (`requireMfa`). Reported to the login page as `?error=sso-mfa-required`.
+- **Typical endpoints:** `GET /admin/auth/oidc/callback`.
+- **What to do:** enable multi-factor authentication for the account at the identity provider, or ask the administrators to relax `requireMfa`.
+
+### proof-not-available
+
+- **HTTP status:** 404 Not Found
+- **Since:** 2.0.
+- **Meaning:** the proof of deposit or delivery does not exist: the fact it proves has not happened yet (no download for a delivery proof), or it is past its 12-month retention.
+- **Typical endpoints:** `GET /me/transfers/{transferId}/proof`, `GET /admin/tenants/{tenantId}/transfers/{transferId}/proof`.
+- **What to do:** retry after the fact, or use the copy of the proof kept when it was issued.
+
+### import-invalid
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 2.0.
+- **Meaning:** the imported entity configuration is refused: unknown member, value out of its limits, duplicate. The first entry of `errors` holds the JSON pointer of the first error in the request body (for example `/config/settings/maxTransferBytes`). Nothing is created.
+- **Typical endpoints:** `POST /admin/tenants/import`.
+- **What to do:** fix the document at the pointed place; export again from the source entity if needed.
+
+### import-schema-unsupported
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 2.0.
+- **Meaning:** the `schemaVersion` of the imported configuration is not read by this server (for example a file exported by a newer version).
+- **Typical endpoints:** `POST /admin/tenants/import`.
+- **What to do:** export again with a version of TransTeira that matches the target instance, or update the target.
+
+### drop-link-invalid
+
+- **HTTP status:** 404 Not Found
+- **Since:** 2.0.
+- **Meaning:** the permanent drop link is unknown, revoked or disabled. The three cases give the same answer, and the refusal is written to the security log (`drop_link_invalid`).
+- **Typical endpoints:** `GET /drop-links/{dropToken}`, `POST /deposit-sessions`.
+- **What to do:** ask the owner of the service for a valid link.
+
+### drop-link-limit-reached
+
+- **HTTP status:** 409 Conflict
+- **Since:** 2.0.
+- **Meaning:** the entity already has the maximum number of permanent drop links (100).
+- **Typical endpoints:** `POST /admin/tenants/{tenantId}/drop-links`.
+- **What to do:** revoke a link that is no longer used.
+
+### link-only-forbidden
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.0.
+- **Meaning:** a link-only transfer (`linkOnly`) was asked for but the entity (`linkOnlyAllowed`) or the confidentiality level of the transfer does not allow it.
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** send the transfer normally, with recipients, or choose a level that allows link-only transfers.
+
+### link-only-conflict
+
+- **HTTP status:** 400 Bad Request
+- **Since:** 2.0.
+- **Meaning:** `linkOnly` was combined with `recipientVerification`: a recipient cannot prove an address when no link is sent to them.
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** drop one of the two options.
+
+### e2e-forbidden
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.0.
+- **Meaning:** end-to-end encryption (`endToEndEncrypted`) was asked for but the policy of the entity or of the confidentiality level forbids it.
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** send the transfer without end-to-end encryption.
+
+### e2e-required
+
+- **HTTP status:** 400 Bad Request
+- **Since:** 2.0.
+- **Meaning:** the policy of the entity or of the confidentiality level requires end-to-end encryption and the transfer was created without it.
+- **Typical endpoints:** `POST /transfers`.
+- **What to do:** encrypt the files in the browser and set `endToEndEncrypted` (the web interface does it by itself).
+
+### e2e-archive-unavailable
+
+- **HTTP status:** 409 Conflict
+- **Since:** 2.0.
+- **Meaning:** the transfer is end-to-end encrypted: the server cannot read the files, so it cannot build the ZIP archive. The browser builds it after decrypting the files.
+- **Typical endpoints:** `GET /downloads/{linkToken}/archive`.
+- **What to do:** download the files one by one and decrypt them, or use the web page, which builds the archive locally.
+
+### e2e-format-invalid
+
+- **HTTP status:** 400 Bad Request
+- **Since:** 2.0.
+- **Meaning:** the upload of an end-to-end encrypted file is not a well-formed `TTE2` stream: the server checks the magic, the header, the chunk lengths and the final chunk while streaming and refuses the upload.
+- **Typical endpoints:** `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`.
+- **What to do:** encrypt the file again in the browser (the web interface does it by itself) and restart its upload.
 
 ### internal-error
 

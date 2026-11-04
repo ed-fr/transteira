@@ -47,7 +47,7 @@ func (t *SystemTx) lock(ctx context.Context, name lockName) error {
 }
 
 // AdminRole is the role of an administrator (OpenAPI AdminRole). V2 adds
-// "auditor", with a migration of the role constraint.
+// "auditor" (migration 0026 widens the role constraint).
 type AdminRole string
 
 // Administrator roles.
@@ -56,6 +56,10 @@ const (
 	RoleSuperAdmin AdminRole = "super_admin"
 	// RoleDelegatedAdmin administers the tenants it is attached to.
 	RoleDelegatedAdmin AdminRole = "delegated_admin"
+	// RoleAuditor reads, without any write, the tenants it is attached to
+	// (V2). The database accepts it since migration 0026; the store
+	// validation accepts it once the auditor feature is implemented.
+	RoleAuditor AdminRole = "auditor"
 )
 
 // Limits of the administrator fields.

@@ -347,6 +347,8 @@ var routePolicies = map[string]routePolicy{
 	http.MethodGet + " " + APIBaseURL + "/me/transfers/{transferId}":            mePolicy(false),
 	http.MethodDelete + " " + APIBaseURL + "/me/transfers/{transferId}":         mePolicy(true),
 	http.MethodPost + " " + APIBaseURL + "/me/transfers/{transferId}/extension": mePolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/me/transfers/{transferId}/proof":      mePolicy(false),
+	http.MethodPost + " " + APIBaseURL + "/me/transfers/{transferId}/link":      mePolicy(true),
 	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":             sessionPolicy(false),
 	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current":          sessionPolicy(true),
 	http.MethodPost + " " + APIBaseURL + "/invitations":                         sessionPolicy(true),

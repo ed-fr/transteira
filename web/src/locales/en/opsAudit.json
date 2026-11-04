@@ -62,7 +62,10 @@
     "master_key_rotation": "Master key rotation",
     "system": "System",
     "webhook": "Webhook",
-    "provisioning_token": "Provisioning token"
+    "provisioning_token": "Provisioning token",
+    "drop_link": "Drop link",
+    "admin_identity": "Sign-in identity",
+    "proof_key": "Proof signing key"
   },
   "groups": {
     "transfers": "Transfers",
@@ -75,7 +78,8 @@
     "privacy": "Personal data",
     "tenant": "Entity configuration",
     "accounts": "Administrators and sign-in",
-    "instance": "Instance"
+    "instance": "Instance",
+    "dropLinks": "Drop links"
   },
   "actions": {
     "transfer": {
@@ -88,7 +92,9 @@
       "extended": "Transfer extended",
       "reminder_sent": "Expiry reminder sent",
       "reply_created": "Reply to a transfer started",
-      "recipient_refused": "Recipient refused by the domain rules"
+      "recipient_refused": "Recipient refused by the domain rules",
+      "proof_downloaded": "Proof downloaded",
+      "link_reissued": "Download link reissued"
     },
     "file": {
       "infected": "Virus detected",
@@ -127,7 +133,9 @@
       "activated": "Administrator account activated",
       "totp_reset_local": "Two-factor authentication reset from the server",
       "password_reset_local": "Password reset from the server",
-      "invited": "Administrator invited"
+      "invited": "Administrator invited",
+      "identity_linked": "Sign-in identity linked",
+      "identity_unlinked": "Sign-in identity unlinked"
     },
     "tenant": {
       "created": "Entity created",
@@ -150,7 +158,11 @@
       "antivirus_enabled": "Antivirus enabled for the entity",
       "setup_completed": "Entity setup completed",
       "provisioned": "Entity created by provisioning",
-      "provision_refused": "Entity creation by provisioning refused"
+      "provision_refused": "Entity creation by provisioning refused",
+      "sso_updated": "Single sign-on updated",
+      "sso_deleted": "Single sign-on removed",
+      "exported": "Configuration exported",
+      "imported": "Entity created from an imported configuration"
     },
     "config": {
       "updated": "System settings updated"
@@ -208,6 +220,15 @@
     "provisioning_token": {
       "created": "Provisioning token created",
       "revoked": "Provisioning token revoked"
+    },
+    "drop_link": {
+      "created": "Drop link created",
+      "updated": "Drop link updated",
+      "rotated": "Drop link token replaced",
+      "revoked": "Drop link revoked"
+    },
+    "proof_key": {
+      "created": "Proof signing key created"
     }
   }
 }

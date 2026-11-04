@@ -377,3 +377,33 @@ func TestHostSet(t *testing.T) {
 	}()
 	newHostSet([]string{"bad host"})
 }
+
+// The single sign-on login operations of API 2.0 are open (no admin
+// session), unimplemented ones answer their stub 404 rather than 401, the
+// start is a login step (Origin check, per-IP limit) and the callback, a
+// cross-site redirect target by nature, is limited but never refused for
+// its origin.
+func TestAdminOIDCRoutes(t *testing.T) {
+	t.Parallel()
+	e, _ := newAdminEnv(t)
+	sameOrigin := []string{"Sec-Fetch-Site", "same-origin"}
+	for _, tc := range []struct{ method, target string }{
+		{http.MethodGet, "/api/v1/admin/auth/methods"},
+		{http.MethodGet, "/api/v1/admin/auth/oidc/callback?code=c&state=s"},
+	} {
+		rec := e.do(t, tc.method, tc.target, hostAdmin, nil)
+		decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	}
+	rec := e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader(`{"email":"a@entity-a.example.com"}`),
+		append([]string{"Content-Type", "application/json"}, sameOrigin...)...)
+	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	rec = e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader(`{"email":"a@entity-a.example.com"}`),
+		"Content-Type", "application/json", "Sec-Fetch-Site", "cross-site")
+	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+
+	e, _ = newAdminEnv(t, WithAdminAuthLimiter(denyLimiter{}))
+	rec = e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader("{}"), "Content-Type", "application/json")
+	decodeProblem(t, rec, http.StatusTooManyRequests, problem.CodeRateLimited)
+	rec = e.do(t, http.MethodGet, "/api/v1/admin/auth/oidc/callback?code=c&state=s", hostAdmin, nil, "Sec-Fetch-Site", "cross-site")
+	decodeProblem(t, rec, http.StatusTooManyRequests, problem.CodeRateLimited)
+}

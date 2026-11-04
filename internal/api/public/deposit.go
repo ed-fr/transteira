@@ -38,6 +38,11 @@ const (
 	fieldInvalidEmail  = "invalid-email"
 	fieldInvalidFormat = "invalid-format"
 	fieldRequired      = "required"
+	// fieldNotSupported is a member of API 2.0 that this server does not
+	// implement yet (drop link, link-only, end-to-end encryption): refused
+	// rather than ignored (fail closed), so that a client never believes it
+	// was applied.
+	fieldNotSupported = "not-supported"
 )
 
 // technicalCookie returns the Set-Cookie value of a technical cookie: host
@@ -161,6 +166,9 @@ func (s *Server) StartDepositSession(ctx context.Context, req gen.StartDepositSe
 	}
 	if req.Body == nil {
 		return nil, validationFailed(deposit.FieldEmail, fieldRequired)
+	}
+	if req.Body.DropLinkToken != nil {
+		return nil, validationFailed("/dropLinkToken", fieldNotSupported)
 	}
 	invitation := ""
 	if req.Body.InvitationToken != nil {
