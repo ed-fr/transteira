@@ -29,6 +29,11 @@ export interface ServerOptions {
   clamavAddr: string;
   /** Extra TT_* variables (they override the defaults). */
   env?: Record<string, string>;
+  /**
+   * Port on listenHost(), reserved beforehand with freePort (Caddy is started first, see
+   * global-setup.ts); a free port is taken when it is absent.
+   */
+  port?: number;
 }
 
 /** A running server. */
@@ -133,7 +138,7 @@ export async function startServer(opts: ServerOptions): Promise<RunningServer> {
   writeSecret(setupTokenFile, setupToken);
 
   const host = listenHost();
-  const port = await freePort(host);
+  const port = opts.port ?? (await freePort(host));
   const database: Record<string, string> =
     E2E_DB === 'postgres'
       ? { TT_DB_DRIVER: 'postgres', TT_DB_DSN: PG.appDsn, TT_DB_MIGRATE_DSN: PG.migrateDsn }

@@ -71,17 +71,20 @@ function compose(args: string[]): void {
   });
 }
 
-/** Writes the Caddyfile, (re)creates the Caddy container and waits until it proxies. */
-export async function startCaddy(serverPort: number): Promise<void> {
+/**
+ * Writes the Caddyfile and (re)creates the Caddy container, before the server starts: on Linux
+ * the server trusts the address of that container only (see trustedProxies in env.ts), known
+ * once it runs. Until the server listens, Caddy answers 502; waitCaddy waits for the proxying.
+ */
+export function launchCaddy(serverPort: number): void {
   fs.mkdirSync(CADDY_DIR, { recursive: true });
   fs.writeFileSync(path.join(CADDY_DIR, 'Caddyfile'), caddyfile(serverPort));
   // --force-recreate: a container left by an earlier run would keep the previous port.
   compose(['up', '-d', '--force-recreate', 'caddy']);
-  await waitProxied();
 }
 
 /** Polls the admin host through Caddy until the server answers /healthz. */
-async function waitProxied(timeoutMs = 30_000): Promise<void> {
+export async function waitCaddy(timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let last = 'no answer';
   while (Date.now() < deadline) {

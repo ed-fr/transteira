@@ -94,27 +94,57 @@ export const COMPOSE_NETWORK = process.env.E2E_COMPOSE_NETWORK ?? 'transteira-te
 
 const isLinux = process.platform === 'linux';
 
-/** Runs `docker network inspect` and returns the first IPAM value of the given field. */
-function inspectNetwork(network: string, field: 'Gateway' | 'Subnet'): string {
+/**
+ * IPv4 address of the running Caddy container on COMPOSE_NETWORK (launchCaddy in caddy.ts
+ * must have started it).
+ */
+function caddyAddress(): string {
+  let out: string;
+  try {
+    const id = execFileSync(
+      'docker',
+      ['compose', '-f', COMPOSE_FILE, '--profile', 'e2e', 'ps', '-q', 'caddy'],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    ).trim();
+    if (!id) throw new Error('no running Caddy container');
+    out = execFileSync(
+      'docker',
+      [
+        'inspect',
+        id,
+        '--format',
+        `{{with index .NetworkSettings.Networks "${COMPOSE_NETWORK}"}}{{.IPAddress}}{{end}}`,
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    ).trim();
+  } catch (e) {
+    throw new Error(`cannot read the address of the Caddy container: ${(e as Error).message}`);
+  }
+  if (!out) throw new Error(`the Caddy container has no IPv4 address on the network "${COMPOSE_NETWORK}"`);
+  return out;
+}
+
+/** IPv4 gateway of the default Docker bridge (`docker network inspect bridge`). */
+function bridgeGateway(): string {
   let out: string;
   try {
     out = execFileSync(
       'docker',
-      ['network', 'inspect', network, '--format', `{{range .IPAM.Config}}{{.${field}}} {{end}}`],
+      ['network', 'inspect', 'bridge', '--format', '{{range .IPAM.Config}}{{.Gateway}} {{end}}'],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     );
   } catch (e) {
-    throw new Error(
-      `cannot inspect the Docker network "${network}" (run "make test-env-up" first): ${(e as Error).message}`,
-    );
+    throw new Error(`cannot inspect the default Docker bridge (is Docker running?): ${(e as Error).message}`);
   }
-  // IPv4 first: the server listens on, and trusts, IPv4 addresses of the bridge networks.
-  const values = out.split(/\s+/).filter(Boolean);
-  const v4 = values.find((v) => !v.includes(':'));
-  if (!v4)
-    throw new Error(
-      `the Docker network "${network}" has no IPv4 ${field.toLowerCase()} (got "${out.trim()}")`,
-    );
+  // IPv4 first: the server listens on, and trusts, IPv4 addresses.
+  const v4 = out
+    .split(/\s+/)
+    .filter(Boolean)
+    .find((v) => !v.includes(':'));
+  if (!v4) throw new Error(`the default Docker bridge has no IPv4 gateway (got "${out.trim()}")`);
   return v4;
 }
 
@@ -139,21 +169,64 @@ function memoized(name: string, compute: () => string): string {
  * E2E_LISTEN_HOST overrides it.
  */
 export function listenHost(): string {
-  return memoized('E2E_LISTEN_HOST', () => (isLinux ? inspectNetwork('bridge', 'Gateway') : '127.0.0.1'));
+  return memoized('E2E_LISTEN_HOST', () => (isLinux ? bridgeGateway() : '127.0.0.1'));
 }
 
 /**
  * Trusted proxies (TT_TRUSTED_PROXIES): the addresses whose X-Forwarded-For / X-Real-IP the
  * server believes. Loopback on Docker Desktop, where both Caddy's connections and the API
  * helpers arrive. On Linux, Caddy's connections come from its address on the compose network
- * (no NAT for traffic to a host address), so only that network's subnet is trusted, plus the
- * listening address itself, which is the source of the API helpers' direct calls; never the
- * whole private range. E2E_TRUSTED_PROXIES overrides it.
+ * (no NAT for traffic to a host address), so that address is trusted (a /32: the network's
+ * gateway, the source of the browser's connections that Docker forwards to Caddy's published
+ * port, must stay untrusted, or the client address Caddy forwards for them would be dropped),
+ * plus the source of the API helpers' direct calls: the listening address itself, and the
+ * address Docker Engine's masquerade rule rewrites it to when there is one (see
+ * helperSourceAddress); never a whole network. Caddy must be running (launchCaddy) when it is
+ * first computed. E2E_TRUSTED_PROXIES overrides it.
  */
 export function trustedProxies(): string {
-  return memoized('E2E_TRUSTED_PROXIES', () =>
-    isLinux ? `${listenHost()}/32,${inspectNetwork(COMPOSE_NETWORK, 'Subnet')}` : '127.0.0.1,::1',
-  );
+  return memoized('E2E_TRUSTED_PROXIES', () => {
+    if (!isLinux) return '127.0.0.1,::1';
+    const listen = listenHost();
+    const seen = helperSourceAddress(listen);
+    const helpers = seen === listen ? [`${listen}/32`] : [`${listen}/32`, `${seen}/32`];
+    return [...helpers, `${caddyAddress()}/32`].join(',');
+  });
+}
+
+/**
+ * Source address the server sees for a connection made from this host to host:port, measured
+ * with a throwaway listener on host (in a child process, the callers being synchronous).
+ * Docker Engine on Linux masquerades every packet whose source is in the default bridge subnet
+ * and which does not leave through docker0 (rule `ip saddr 172.17.0.0/16 oifname != docker0
+ * masquerade`): a call from the host to the bridge gateway goes through lo, and arrives with
+ * the address of the host's outgoing interface instead of the gateway's. Docker Desktop has no
+ * such rule. The address is measured, never assumed, so that nothing depends on the host.
+ */
+function helperSourceAddress(host: string): string {
+  // With `node -e`, process.argv[1] is the first argument after the script: the host.
+  const script = `
+    const net = require('node:net');
+    const srv = net.createServer((sock) => {
+      process.stdout.write(sock.remoteAddress.replace(/^::ffff:/, ''));
+      sock.destroy();
+      srv.close();
+    });
+    srv.listen(0, process.argv[1], () => net.connect(srv.address().port, process.argv[1]).on('error', () => {}));
+    setTimeout(() => process.exit(1), 5000).unref();
+  `;
+  let out: string;
+  try {
+    out = execFileSync(process.execPath, ['-e', script, host], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    }).trim();
+  } catch (e) {
+    throw new Error(`cannot measure the source address of a connection to ${host}: ${(e as Error).message}`);
+  }
+  if (!out) throw new Error(`no source address measured for a connection to ${host}`);
+  return out;
 }
 
 /**

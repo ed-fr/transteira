@@ -4,13 +4,21 @@
 import { chromium, type FullConfig } from '@playwright/test';
 import fs from 'node:fs';
 import { saveStorageStates } from './support/auth';
-import { startCaddy, stopCaddy } from './support/caddy';
-import { E2E_DB, RM_TREE, RUN_DIR, RUNTIME_FILE, newTempRoot } from './support/env';
+import { launchCaddy, stopCaddy, waitCaddy } from './support/caddy';
+import {
+  E2E_DB,
+  RM_TREE,
+  RUN_DIR,
+  RUNTIME_FILE,
+  listenHost,
+  newTempRoot,
+  trustedProxies,
+} from './support/env';
 import { startFakeClamd } from './support/fakeclamd';
 import { resetE2EDatabase } from './support/postgres';
 import { OWNED_LOCK_ENV, acquireLock } from './support/runlock';
 import { seed } from './support/seed';
-import { killStale, startServer } from './support/server';
+import { freePort, killStale, startServer } from './support/server';
 import { saveState } from './support/state';
 
 /** What the fallback teardown needs to clean up. */
@@ -66,11 +74,16 @@ export default async function globalSetup(_config: FullConfig): Promise<() => Pr
   };
 
   try {
-    server = await startServer({ root, clamavAddr: clamd.address });
+    // Caddy first: on Linux the server trusts the address of its container (env.ts). The port is
+    // free when reserved but not held while Caddy starts: another process taking it in those
+    // seconds makes the server fail to bind and the run fail at once (accepted: rare, and loud).
+    const port = await freePort(listenHost());
+    launchCaddy(port);
+    server = await startServer({ root, clamavAddr: clamd.address, port });
     runtime.serverPid = server.pid;
     fs.writeFileSync(RUNTIME_FILE, JSON.stringify(runtime));
-    log(`server up on port ${server.port}`);
-    await startCaddy(server.port);
+    log(`server up on port ${server.port}; trusted proxies ${trustedProxies()}`);
+    await waitCaddy();
     log('Caddy up');
 
     const state = await seed(server.port, server.setupToken, clamd.address, E2E_DB);

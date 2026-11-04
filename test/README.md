@@ -144,11 +144,29 @@ Caddy runs in Docker and reaches the server on the host through `host.docker.int
   the server listens on `127.0.0.1` and trusts `127.0.0.1,::1` only.
 - Linux: `host.docker.internal` is the gateway of the default Docker bridge (`host-gateway`,
   read with `docker network inspect bridge`, usually `172.17.0.1`). The server listens on that
-  address only, never on every interface, and the API helpers call it there. It trusts that
-  address (`/32`, the source of the helpers' direct calls) and the subnet of the compose
-  network Caddy is attached to (`transteira-test_default`, read with `docker network inspect`;
-  Caddy's connections to a host address are not translated), never the whole `172.16.0.0/12`.
-  The values are computed once in the runner and inherited by the workers.
+  address only, never on every interface, and the API helpers call it there. It trusts the
+  source of the helpers' direct calls (see below) and the address of the Caddy container on
+  the compose network (`transteira-test_default`, read with `docker inspect`; Caddy's
+  connections to a host address are not translated), as `/32` entries, never a whole
+  network. Caddy is therefore started before the server (on the port reserved for it). The
+  values are computed once in the runner and inherited by the workers.
+
+Source of the helpers' direct calls on Linux: Docker Engine installs the masquerade rule
+`ip saddr 172.17.0.0/16 oifname != docker0 masquerade`. A call from the host to the bridge
+gateway leaves through `lo`, not `docker0`, so it matches: the server sees the address of the
+host's outgoing interface (for example the LAN address of `eth0`), not `172.17.0.1`, and would
+refuse the `X-Real-IP` of the helpers (`ip-not-allowed` on token deposits, wrong client IP
+elsewhere). Docker Desktop has no such rule. `trustedProxies()` therefore measures that source
+before the server starts (a throwaway listener on the gateway address, one connection to it)
+and trusts it as a `/32` next to the gateway when it differs. Nothing is assumed about the
+host and its firewall is left untouched; `E2E_TRUSTED_PROXIES` still overrides the whole list.
+
+Why not the whole compose subnet: with Docker Engine, the browser's connections to the port
+Caddy publishes on `127.0.0.1` reach Caddy from the gateway of the compose network (for example
+`172.18.0.1`). A request without the test header `X-E2E-Client-IP` (a file download started by
+Chromium does not carry it) is forwarded with that gateway as the client address; if the subnet
+were trusted, the server would take it for one more proxy and find no client address at all
+(`download: client IP unknown`, the download is canceled).
 
 ### Writing a test
 
@@ -230,8 +248,8 @@ run `make screenshots`, then commit the images and the manifest.
 | `E2E_RETRIES` | `0` | Retries (traces then recorded on the first retry). |
 | `E2E_HTTPS_PORT` | `443` | Port Caddy publishes on `127.0.0.1`. |
 | `E2E_LISTEN_HOST` | `127.0.0.1` (Linux: the Docker bridge gateway) | Server listen address, also used by the API helpers (Caddy reaches it through `host.docker.internal`). |
-| `E2E_TRUSTED_PROXIES` | `127.0.0.1,::1` (Linux: the bridge gateway `/32` and the compose network subnet) | `TT_TRUSTED_PROXIES` of the server: where Caddy's connections and the helpers' calls arrive from. |
-| `E2E_COMPOSE_NETWORK` | `transteira-test_default` | Docker network of Caddy, whose subnet is trusted on Linux. |
+| `E2E_TRUSTED_PROXIES` | `127.0.0.1,::1` (Linux: the bridge gateway, the measured source of the helpers' calls when Docker masquerades it, and the Caddy container, each as `/32`) | `TT_TRUSTED_PROXIES` of the server: where Caddy's connections and the helpers' calls arrive from. |
+| `E2E_COMPOSE_NETWORK` | `transteira-test_default` | Docker network of Caddy, whose address on it is trusted on Linux. |
 | `E2E_POSTGRES_DSN`, `E2E_POSTGRES_MIGRATE_DSN` | app / owner roles on `transteira_e2e` | PostgreSQL DSNs of the server. |
 | `E2E_MAILPIT_API`, `E2E_MAILPIT_SMTP_PORT` | `http://127.0.0.1:58025`, `51025` | Mailpit. |
 | `E2E_SERVER_BINARY` | `bin/transteira` | Server binary (copied to a `.exe` on Windows). |
@@ -333,7 +351,7 @@ git-ignored `.cache/bigfile.stamp`); `make check-full` always runs it, before ev
 |---|---|
 | `make bigfile` | Build the image (`make docker`), then run the test on both engines (5 GiB each; 20 GiB with `BIGFILE=1`). |
 | `make bigfile BIGFILE_BYTES=1073741824 BIGFILE_DBS=sqlite` | Quick run: 1 GiB, one engine (about 3 minutes). |
-| `make check-full` | `make check` with the test forced at 20 GiB (`BIGFILE=1`). **Required before every release.** |
+| `make check-full` | `make check` with the test forced at 20 GiB (`BIGFILE=1`) and the Go tests under the race detector (`-race`, when gcc is available, with `TEST_TIMEOUT=90m`: it slows them five to ten times). **Required before every release.** |
 | `make check BIGFILE=0` | Skip it even if its chain changed (prints a reminder). **Never before a release.** |
 | `make bigfile-clean` | Remove what a failed `BIGFILE_KEEP=1` run left (`transteira-bigfile-*` only). |
 

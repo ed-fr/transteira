@@ -12,7 +12,7 @@ import (
 // copy) to stable storage. A file system that does not support it
 // (EINVAL) is not an error.
 func syncDir(path string) error {
-	d, err := os.Open(path)
+	d, err := os.Open(path) //nolint:gosec // G304: a backup directory under the operator-set TT_BACKUP_DIR, never user input
 	if err != nil {
 		return err
 	}

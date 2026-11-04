@@ -269,7 +269,7 @@ make hooks         # install the pre-push secret scan (gitleaks)
 make check         # every quality gate: web checks and build, format, vet, lint, govulncheck,
                    # OpenAPI lint, tests, coverage, end-to-end tests, then the 5 GB test when
                    # the big-file chain changed; prints the duration of every gate
-make check-full    # make check with the test forced at 20 GB (before every release)
+make check-full    # make check with the test forced at 20 GB and the Go race detector (before every release)
 make bigfile       # 5 GB upload and download through Caddy, cut and resumed (both engines)
 make build         # build the web interface, then the binary that embeds it (bin/)
 make web-install   # install the web dependencies from the lockfile (npm ci --ignore-scripts)

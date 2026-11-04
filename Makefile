@@ -11,8 +11,12 @@ SPECTRAL    := npx --yes @stoplight/spectral-cli@6.15.0
 COVERPROFILE := coverage.out
 BIN_DIR     := bin
 
-# The race detector needs cgo and a C compiler; enable it only when one is available.
-RACE := $(if $(shell command -v gcc 2>/dev/null),-race,)
+# Race detector: off in `make check` (it slows the tests five to ten times: more than 30 minutes
+# for test/integration alone), on in `make check-full` when a C compiler is available (it needs
+# cgo), with a longer timeout. `make check RACE=-race TEST_TIMEOUT=90m` forces it.
+RACE         ?=
+RACE_IF_CC   := $(if $(shell command -v gcc 2>/dev/null),-race,)
+TEST_TIMEOUT ?= 30m
 
 GITLEAKS    := $(GO) run github.com/zricethezav/gitleaks/v8@v8.30.1
 
@@ -29,7 +33,7 @@ TEST_MAILPIT_API  ?= http://127.0.0.1:58025
 # npm audit queries the npm registry: `make check NPM_AUDIT=0` skips it when offline (never before a release).
 NPM_AUDIT         ?= 1
 # The 10-minute default timeout of go test is too short for the slowest packages on a loaded machine.
-GO_TEST           := $(GO) test $(RACE) -timeout=30m -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
+GO_TEST           := $(GO) test $(RACE) -timeout=$(TEST_TIMEOUT) -shuffle=on -count=1 -covermode=atomic -coverprofile=$(COVERPROFILE) ./...
 
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # SemVer without the leading "v": the exact tag of HEAD when there is one, a dev version otherwise.
@@ -194,8 +198,11 @@ check: ## Run every quality gate (must be green before each commit; 20 GB test w
 		echo "make check: ALL GREEN"; \
 	fi
 
-check-full: ## make check with the 20 GB test forced at full size (before every release)
-	@$(MAKE) --no-print-directory check BIGFILE=1
+check-full: ## make check with the 20 GB test forced at full size and the race detector (before every release)
+	@if [ -z "$(RACE_IF_CC)" ]; then \
+		echo "make check-full: WARNING: no C compiler (gcc), the Go tests run WITHOUT the race detector"; \
+	fi
+	@$(MAKE) --no-print-directory check BIGFILE=1 RACE='$(RACE_IF_CC)' TEST_TIMEOUT=90m
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
 # no dependency install script is ever executed.

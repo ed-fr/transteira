@@ -6,6 +6,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `make check` on Linux with Docker Engine (it had only run on Docker Desktop so far):
+  - gosec G304 on the Unix-only `syncDir` (`internal/lifecycle/syncdir_other.go`), never linted
+    on Windows because of its build constraint, and a test for its two error paths (100 %
+    coverage of `internal/lifecycle` on Linux too);
+  - `TestCleanupBackup` no longer misses its nightly copy on a slow start (backup time computed
+    as late as possible, 15 s ahead instead of 5 s);
+  - end-to-end tests: the source of the helpers' direct calls, rewritten by Docker Engine's
+    masquerade rule for the default bridge, is measured and trusted as a `/32`; the server
+    trusts the Caddy container's address instead of the whole compose subnet, whose gateway is
+    the source of the browser's connections (downloads were refused with "client IP unknown").
+    Caddy now starts before the server. Documented in `test/README.md`.
+
+### Changed
+
+- The Go race detector runs in `make check-full` (with a 90-minute test timeout) instead of
+  `make check`, where it was enabled whenever gcc was found and pushed the tests past their
+  30-minute timeout on Linux. `make check RACE=-race TEST_TIMEOUT=90m` still forces it.
+
 ## [1.2.0] - 2026-11-02
 
 The V1.2 scope of the specification (CLAUDE.md section 2, "onboarding"), on top of 1.0 and 1.1:

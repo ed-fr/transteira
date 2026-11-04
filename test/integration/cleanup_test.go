@@ -360,11 +360,13 @@ func TestCleanupOrphans(t *testing.T) {
 }
 
 // TestCleanupBackup: with SQLite, the nightly copy is written at
-// TT_BACKUP_TIME (moved five seconds ahead), reopens and passes quick_check,
+// TT_BACKUP_TIME (moved fifteen seconds ahead), reopens and passes quick_check,
 // and the rotation keeps TT_BACKUP_KEEP copies; with PostgreSQL the task
 // is left to the dedicated container, which the log says once.
 func TestCleanupBackup(t *testing.T) {
 	t.Parallel()
+	// backupDelay stays well below waitTimeout (60 s), the time allowed for the copy.
+	const backupDelay = 15 * time.Second
 	forEngine(t, func(t *testing.T, e storetest.Engine) {
 		if e.Driver == config.DriverPostgres {
 			s := startServer(t, e, serverOptions{})
@@ -375,9 +377,12 @@ func TestCleanupBackup(t *testing.T) {
 			}
 			return
 		}
-		now := time.Now().UTC()
-		at := now.Sub(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)) + 5*time.Second
 		s := startServer(t, e, serverOptions{lifecycle: func(lo *lifecycle.Options) {
+			// Computed as late as possible, with a margin covering a slow
+			// start (race detector, loaded machine): a time already past
+			// when the sweeper starts would move the run to the next day.
+			now := time.Now().UTC()
+			at := now.Sub(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)) + backupDelay
 			lo.BackupTime, lo.BackupKeep = at%(24*time.Hour), 2
 			// The older copies are created before the first run.
 			for _, f := range []string{
