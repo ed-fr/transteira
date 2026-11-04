@@ -6,6 +6,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-04
+
+Patch release: a fix of the ICAP antivirus client (a scan whose request could not be sent to a
+silent server waited for the whole scan timeout), a fix of the update check classification, and
+`make check` / `make check-full` made green on Linux with Docker Engine, where they had never run.
+No API, configuration or database change. Validated by `make check-full` (race detector, 20 GB
+test) on Linux with Docker Engine.
+
 ### Fixed
 
 - `make check` on Linux with Docker Engine (it had only run on Docker Desktop so far):
@@ -30,6 +38,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - clamd tests: `TestPingContextCanceled` cancels once the fake clamd received the command, so
   that the cancellation always reaches the pending read (it could land during the dial and
   leave the I/O unblocking path uncovered, below the 100 % threshold of `internal/antivirus`).
+  The ICAP regression test now also fails if the scan is not cut short after a failed send.
 
 ### Changed
 
@@ -1094,7 +1103,8 @@ The detailed list of the changes made during the development of the V1 follows.
   contact your administrator."), revealing nothing about the blocklist. The "not available"
   page remains for `403 invitation-not-allowed` (depositor not internal).
 
-[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/ed-fr/transteira/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/ed-fr/transteira/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/ed-fr/transteira/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ed-fr/transteira/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ed-fr/transteira/releases/tag/v1.0.0

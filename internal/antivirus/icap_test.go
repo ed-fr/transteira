@@ -780,9 +780,16 @@ func TestICAPScanExchangeFailures(t *testing.T) {
 			}
 			return c
 		}
-		c := scriptedICAPClient(t, optionsOK, wrap, hold(t))
+		// Within earlyReplyWait plus a margin for a loaded machine, far from
+		// the scan timeout, which an overwritten read deadline would reach.
+		const scanTimeout = 30 * time.Second
+		c := scriptedICAPClient(t, optionsOK, wrap, hold(t), WithICAPScanTimeout(scanTimeout))
+		start := time.Now()
 		_, err := icapScan(t, c, data)
 		assertUnavailable(t, err)
+		if d := time.Since(start); d >= scanTimeout/2 {
+			t.Errorf("Scan returned after %v: the reply wait was not shortened", d)
+		}
 	})
 	t.Run("write deadline cannot be set", func(t *testing.T) {
 		wrap := func(n int, c net.Conn) net.Conn {

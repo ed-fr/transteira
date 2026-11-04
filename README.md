@@ -1,12 +1,12 @@
 # TransTeira
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: stable.** Version 1.2.0 delivers the V1 scope (the core), the V1.1 scope
+> **Status: stable.** Version 1.2.1 delivers the V1 scope (the core), the V1.1 scope
 > (operations) and the V1.2 scope (onboarding); see [Versions](#versions) for what comes next.
 
 ## Highlights
