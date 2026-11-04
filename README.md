@@ -1,5 +1,7 @@
 # TransTeira
 
+**English** | [Français](README.fr.md)
+
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
 
