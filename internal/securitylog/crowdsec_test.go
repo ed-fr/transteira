@@ -142,7 +142,7 @@ func TestCrowdsecScenariosCoverCatalogue(t *testing.T) {
 	t.Parallel()
 	var bf []string
 	for _, e := range allEvents {
-		if e != UnknownFQDN {
+		if e != UnknownFQDN && !slices.Contains(ownFilterEvents, e) {
 			bf = append(bf, string(e))
 		}
 	}

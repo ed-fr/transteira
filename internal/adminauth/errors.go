@@ -55,6 +55,24 @@ var (
 	// ErrNoClientIP reports a call without a valid client IP, which the
 	// login limits need (500: the HTTP layer always provides one).
 	ErrNoClientIP = errors.New("adminauth: no client ip")
+	// ErrSSORequired reports a right password of a delegated admin or an
+	// auditor attached to a tenant that enforces single sign-on (403
+	// sso-required, threat T-292). It is only returned after the password
+	// was verified, at the cost of any login.
+	ErrSSORequired = errors.New("adminauth: single sign-on required")
+	// ErrSSONotAvailable reports a single sign-on start for an e-mail
+	// domain routed to no enabled configuration, unknown or disabled alike,
+	// or whose provider cannot be reached (404 sso-not-available, T-296);
+	// on the callback, a service without single sign-on.
+	ErrSSONotAvailable = errors.New("adminauth: single sign-on not available")
+	// ErrSSONotConfigured reports an account without activation link
+	// (delivery none) asked for while one of its tenants has no enabled
+	// single sign-on (409 sso-not-configured).
+	ErrSSONotConfigured = errors.New("adminauth: single sign-on not configured")
+	// ErrSSOFailed reports a failed single sign-on callback. The error is an
+	// *[SSOError] carrying the reason of the sso_failed security event; the
+	// HTTP layer redirects to the login page with a code of a closed list.
+	ErrSSOFailed = errors.New("adminauth: single sign-on failed")
 )
 
 // Conflicts, each matching [ErrStateConflict] (409 state-conflict).
@@ -76,6 +94,10 @@ var (
 	// ErrAccountDisabled reports a credentials reset of a disabled
 	// account, whose activation link could not be used: enable it first.
 	ErrAccountDisabled = fmt.Errorf("%w: the account is disabled", ErrStateConflict)
+	// ErrSSOOnlyEnforced reports an activation link asked for a single
+	// sign-on only account while one of its tenants enforces single
+	// sign-on (threat T-292): such an account must never get a password.
+	ErrSSOOnlyEnforced = fmt.Errorf("%w: no activation link for a single sign-on only account while single sign-on is enforced", ErrStateConflict)
 )
 
 // Fields named by an [InvalidError], as JSON pointers of the request
@@ -123,6 +145,22 @@ func (e *RateLimitError) Error() string {
 
 // Is makes errors.Is(err, ErrRateLimited) true.
 func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
+
+// SSOError reports a failed single sign-on callback. It matches
+// [ErrSSOFailed].
+type SSOError struct {
+	// Reason is the reason of the sso_failed security event, a value of a
+	// closed list: securitylog.ReasonStateInvalid, ReasonTokenInvalid,
+	// ReasonAccountUnknown, ReasonIdentityMismatch, ReasonMFAMissing or
+	// ReasonIssuerError.
+	Reason string
+}
+
+// Error implements error.
+func (e *SSOError) Error() string { return "adminauth: single sign-on failed: " + e.Reason }
+
+// Is makes errors.Is(err, ErrSSOFailed) true.
+func (e *SSOError) Is(target error) bool { return target == ErrSSOFailed }
 
 // retryAfter returns the delay until until, rounded up to the second, at
 // least one second.

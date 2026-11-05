@@ -159,11 +159,18 @@ func (s *Service) checkPassword(ctx context.Context, username string, a *store.A
 // failure writes an admin_login_failed security event, every lock a
 // rate_limited one.
 //
+// Since 2.0, a right password of a delegated admin or an auditor attached
+// to at least one tenant whose single sign-on is enforced opens no session:
+// ErrSSORequired, after the password check and at the same cost, audited
+// as admin.login_failed (reason sso_required) but not counted as a failure
+// nor written to the security log (the password was right). A single
+// sign-on only account has no password: it fails like a wrong password.
+//
 // It returns an *InvalidError for an over-long username or password,
 // ErrNoClientIP for an invalid clientIP, a *RateLimitError while locked or
-// when this failure sets a lock, and ErrInvalidCredentials for an unknown
-// username, a wrong password, a disabled account or one not yet activated,
-// without telling them apart.
+// when this failure sets a lock, ErrSSORequired, and ErrInvalidCredentials
+// for an unknown username, a wrong password, a disabled account or one not
+// yet activated, without telling them apart.
 func (s *Service) Login(ctx context.Context, username, password string, clientIP netip.Addr) (Session, error) {
 	switch {
 	case utf8.RuneCountInString(username) > MaxUsernameLen:
@@ -183,6 +190,16 @@ func (s *Service) Login(ctx context.Context, username, password string, clientIP
 	}
 	if err := s.checkPassword(ctx, username, account, password, clientIP); err != nil {
 		return Session{}, err
+	}
+	// Only a right password reaches the enforcement check, so that the
+	// answer tells nothing more than any right password (T-292).
+	enforced, err := s.ssoEnforced(ctx, a)
+	switch {
+	case err != nil:
+		return Session{}, err
+	case enforced:
+		s.record(ctx, adminEvent(a.Username, clientIP, audit.ActionAdminLoginFailed, a.ID, map[string]any{"reason": reasonSSORequired}))
+		return Session{}, ErrSSORequired
 	}
 	state := stateFor(a)
 	sess, err := s.openSession(ctx, a.ID, state, clientIP)

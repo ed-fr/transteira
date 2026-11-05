@@ -77,6 +77,8 @@ const (
 	EnvWebhookAllowNetworks     = "TT_WEBHOOK_ALLOW_NETWORKS"
 	EnvWebhookAllowHTTPNetworks = "TT_WEBHOOK_ALLOW_HTTP_NETWORKS"
 	EnvWebhookDenyNetworks      = "TT_WEBHOOK_DENY_NETWORKS"
+	EnvSSOUseProxy              = "TT_SSO_USE_PROXY"
+	EnvSSOAllowNetworks         = "TT_SSO_ALLOW_NETWORKS"
 	EnvSyslogAddr               = "TT_SYSLOG_ADDR"
 	EnvSyslogProtocol           = "TT_SYSLOG_PROTOCOL"
 	EnvSyslogStreams            = "TT_SYSLOG_STREAMS"
@@ -159,6 +161,18 @@ type Var struct {
 	Required bool
 	// Secret is true when the value is sensitive and must never be logged.
 	Secret bool
+}
+
+// groupSSO is the .env.example section of the single sign-on variables.
+const groupSSO = "Single sign-on (OpenID Connect, since 2.0)"
+
+// groupIntros are the paragraphs written at the top of a .env.example
+// section, after its title.
+var groupIntros = map[string]string{
+	groupSSO: "The identity provider of an entity (issuer, client ID, secret) is configured by the " +
+		"super admin in the administration, not here: see docs/operations/sso.md. These two " +
+		"variables only set how the server reaches the provider (discovery document, signing " +
+		"keys, token endpoint).",
 }
 
 // Variables returns the documentation of every environment variable read by
@@ -633,6 +647,28 @@ func Variables() []Var {
 				EnvWebhookAllowHTTPNetworks + ". Empty (default): only the built-in deny list applies.",
 		},
 		{
+			Name: EnvSSOUseProxy, Group: groupSSO, Default: "false",
+			Description: "true: the OpenID Connect client goes through the HTTPS_PROXY / NO_PROXY proxy of " +
+				"the container. Default false: the client ignores HTTPS_PROXY and connects directly. With " +
+				"the proxy, the egress guard (the same as the webhooks') only sees the proxy address, not " +
+				"the real destination, which the proxy then reaches on its own: enable it only when the " +
+				"container has no direct Internet access, and restrict the destinations at the proxy.",
+		},
+		{
+			Name: EnvSSOAllowNetworks, Group: groupSSO,
+			Description: "Comma-separated list of IP addresses or CIDR prefixes that the identity provider " +
+				"may use although the built-in deny list refuses them, e.g. an on-premises ADFS or " +
+				"Keycloak on a private network. Same rules as " + EnvWebhookAllowNetworks + ": the " +
+				"built-in deny list is checked on the address resolved at connection time (protection " +
+				"against server-side request forgery and DNS rebinding) and refuses the private ranges " +
+				"of RFC 1918, the shared address space 100.64.0.0/10, unique local IPv6 addresses and " +
+				"the other reserved ranges listed there; this variable opens them. Its core (unspecified " +
+				"and link-local addresses, including the cloud metadata addresses, multicast, reserved " +
+				"ranges and the networks of the container itself) can never be opened, and a prefix " +
+				"overlapping it is refused at startup. Open the narrowest prefix that holds the " +
+				"provider. Empty (default): the provider must have a public address.",
+		},
+		{
 			Name: EnvSyslogAddr, Group: "Syslog",
 			Description: "host:port of the syslog server (SIEM) receiving a copy of the audit and " +
 				"security logs in RFC 5424 format. Empty (default): the export is disabled and the " +
@@ -705,6 +741,12 @@ func WriteEnvExample(w io.Writer) error {
 		if v.Group != group {
 			group = v.Group
 			write("\n" + rule + "# " + group + "\n" + rule)
+			if intro := groupIntros[group]; intro != "" {
+				write("\n")
+				for _, line := range wrap(intro, commentWidth-2) {
+					write("# " + line + "\n")
+				}
+			}
 		}
 		write("\n")
 		for _, line := range wrap(v.Description, commentWidth-2) {

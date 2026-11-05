@@ -76,6 +76,27 @@ var (
 	// readers were active: deleted data may remain in the SQLite WAL until
 	// the next [DB.ScrubDeleted]. It is not fatal.
 	ErrScrubBusy = errors.New("store: wal checkpoint incomplete, deleted data may remain in the wal")
+	// ErrSSODomainConflict reports an e-mail domain already routed to the
+	// single sign-on configuration of another tenant (OpenAPI
+	// sso-domain-conflict): a domain leads to one configuration at most on
+	// the whole instance. It matches ErrConflict too. Nothing is changed.
+	ErrSSODomainConflict = fmt.Errorf("%w: e-mail domain routed to another tenant's single sign-on", ErrConflict)
+	// ErrSSOIssuerNotAllowed reports a single sign-on issuer that accepts
+	// the users of any directory (Entra ID /common, /organizations,
+	// /consumers) or a template issuer ("{tenantid}"), refused by threat
+	// T-288 (OpenAPI sso-issuer-not-allowed). It matches ErrInvalid too.
+	ErrSSOIssuerNotAllowed = fmt.Errorf("%w: single sign-on issuer not allowed", ErrInvalid)
+	// ErrSSOSecretRequired reports a single sign-on configuration write
+	// that needs a new client secret: an enabled configuration without
+	// secret, or a change of issuer or client ID keeping the stored secret
+	// (a secret is never carried over to another application, T-287). It
+	// matches ErrInvalid too. Nothing is changed.
+	ErrSSOSecretRequired = fmt.Errorf("%w: a new single sign-on client secret is required", ErrInvalid)
+	// ErrIdentityConflict reports a single sign-on identity that cannot be
+	// pinned: its (issuer, client ID, subject) is already pinned to an
+	// account, or the account already has an identity for that (issuer,
+	// client ID). It matches ErrConflict too. Nothing is changed.
+	ErrIdentityConflict = fmt.Errorf("%w: single sign-on identity already pinned", ErrConflict)
 )
 
 // retiredKeyMessage is the message of the SQLite trigger rejecting a

@@ -243,3 +243,30 @@ func TestMACMyTransfersPurposes(t *testing.T) {
 		t.Errorf("access-rate MAC is not deterministic: %x, %x, %v", a, b, err)
 	}
 }
+
+// TestMACOIDCFlowPurpose checks the single sign-on flow purpose (since
+// 2.0): its wire name is stable, it is a valid purpose, and a MAC under it
+// verifies only under it, never under the CSRF purposes.
+func TestMACOIDCFlowPurpose(t *testing.T) {
+	t.Parallel()
+	if MACPurposeOIDCFlow != "oidc-flow" {
+		t.Fatalf("purpose name changed: %q", MACPurposeOIDCFlow)
+	}
+	k := testKey(t)
+	flow, state := []byte("of_flowid"), []byte("state")
+	m, err := k.MAC(MACPurposeOIDCFlow, flow, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeOIDCFlow, m, flow, state); !ok || err != nil {
+		t.Errorf("VerifyMAC(oidc-flow) = %v, %v", ok, err)
+	}
+	if ok, err := k.VerifyMAC(MACPurposeOIDCFlow, m, flow, []byte("other")); ok || err != nil {
+		t.Errorf("a flow MAC verifies with another state: %v, %v", ok, err)
+	}
+	for _, p := range []MACPurpose{MACPurposeCSRF, MACPurposeAdminCSRF, MACPurposeMeCSRF} {
+		if ok, err := k.VerifyMAC(p, m, flow, state); ok || err != nil {
+			t.Errorf("a flow MAC verifies under %s: %v, %v", p, ok, err)
+		}
+	}
+}

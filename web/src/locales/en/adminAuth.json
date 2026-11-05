@@ -190,5 +190,24 @@
         "forbidden": "Two-factor authentication is required for your account: it cannot be disabled."
       }
     }
+  },
+  "sso": {
+    "title": "Single sign-on",
+    "intro": "Use your organisation account instead of a local password. Enter your work email address: you are then sent to your identity provider.",
+    "email": {
+      "label": "Work email address",
+      "hint": "The address of your administrator account, for example name@entity-a.example.com."
+    },
+    "submit": "Sign in with single sign-on",
+    "submitting": "Redirecting…",
+    "badRedirect": "The identity provider answered with an address that cannot be used. Contact the instance administrator.",
+    "passwordRefused": "Your entity requires single sign-on: password sign-in is refused for your account. Use the single sign-on form below.",
+    "errors": {
+      "generic": "Single sign-on failed. Try again, or contact your administrator.",
+      "sso-mfa-required": "The identity provider did not confirm multi-factor authentication, which is required. Sign in again with a second factor.",
+      "sso-not-available": "Single sign-on is not available for this address.",
+      "rate-limited": "Too many attempts. Try again in a few minutes.",
+      "invalid-credentials": "Single sign-on failed. Check that you used your work account, or contact your administrator."
+    }
   }
 }

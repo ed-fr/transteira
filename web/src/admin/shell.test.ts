@@ -208,16 +208,24 @@ describe('redirectTarget', () => {
 describe('role-aware navigation', () => {
   it('limits an auditor to the consultation sections, in one group', () => {
     const links = tenantLinks('ten_1', 'auditor');
-    expect(links.map((l) => l.section)).toEqual(['general', 'transfers', 'audit', 'security', 'stats']);
+    expect(links.map((l) => l.section)).toEqual([
+      'general',
+      'sso',
+      'transfers',
+      'audit',
+      'security',
+      'stats',
+    ]);
     expect(links.map((l) => l.path)).toEqual([
       '/tenants/ten_1/general',
+      '/tenants/ten_1/sso',
       '/tenants/ten_1/transfers',
       '/tenants/ten_1/audit',
       '/tenants/ten_1/security-events',
       '/tenants/ten_1/stats',
     ]);
     expect(links[0]?.labelKey).toBe('adminTenants.nav.summary');
-    expect(links.map((l) => l.group)).toEqual(Array(5).fill('consultation'));
+    expect(links.map((l) => l.group)).toEqual(Array(6).fill('consultation'));
     const groups = tenantLinkGroups('ten_1', 'auditor');
     expect(groups).toHaveLength(1);
     expect(groups[0]?.labelKey).toBe('adminOps.nav.groupConsultation');
@@ -226,7 +234,7 @@ describe('role-aware navigation', () => {
 
   it('gives no configuration section to an auditor', () => {
     const sections = tenantLinks('ten_1', 'auditor').map((l) => l.section) as string[];
-    for (const config of TENANT_CONFIG_SECTIONS.filter((s) => s !== 'general')) {
+    for (const config of TENANT_CONFIG_SECTIONS.filter((s) => s !== 'general' && s !== 'sso')) {
       expect(sections).not.toContain(config);
     }
     for (const op of ['invitations', 'blocklist', 'abuseReports', 'tokens', 'webhooks', 'privacy']) {

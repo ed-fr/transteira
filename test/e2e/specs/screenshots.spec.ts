@@ -460,6 +460,34 @@ function webhookVolatile(page: Page): Locator[] {
   return [page.locator('.tt-webhooks__hint'), page.locator('.tt-webhooks__when')];
 }
 
+/**
+ * Single sign-on configuration of entity A shown by the screens: an enabled configuration with a
+ * stored secret (nothing contacts the provider; the identifiers are fictitious).
+ */
+const SSO_CONFIG = {
+  enabled: true,
+  issuer: 'https://login.example.com/11111111-2222-3333-4444-555555555555/v2.0',
+  clientId: '7f3c9a10-0000-4000-8000-00000000c0de',
+  clientSecret: 'fictitious-secret-for-the-screenshots',
+  emailDomains: ['example.com'],
+  enforced: false,
+  requireMfa: true,
+};
+
+/**
+ * Runs capture with the single sign-on configuration of entity tenantId stored, and removes it
+ * afterwards (the other screens show the instance without single sign-on).
+ */
+async function withSso(tenantId: string, capture: () => Promise<void>): Promise<void> {
+  const api = superAdminApi();
+  await api.ok('PUT', `/admin/tenants/${tenantId}/sso`, SSO_CONFIG, [200]);
+  try {
+    await capture();
+  } finally {
+    await api.ok('DELETE', `/admin/tenants/${tenantId}/sso`, undefined, [204]);
+  }
+}
+
 /** Lets the screen settle, then writes docs/user/screenshots/<lang>/<name>.png. */
 async function shoot(
   page: Page,
@@ -730,6 +758,21 @@ test.describe('delegated admin', () => {
     }
   });
 
+  test('sign-in screen with single sign-on', async ({ newContext, state }) => {
+    await withSso(state.tenants.a.id, async () => {
+      for (const lang of LANGS) {
+        const page = await openPage(newContext, lang);
+        await page.goto(`${ORIGINS.admin}/admin/login`);
+        await heading(page, lang, 'adminAuth.login.title');
+        // The single sign-on section appears once the login methods are known.
+        await expect(
+          page.getByRole('heading', { level: 2, name: msg(lang, 'adminAuth.sso.title'), exact: true }),
+        ).toBeVisible();
+        await shoot(page, lang, 'admin-login-sso');
+      }
+    });
+  });
+
   test('account activation', async ({ newContext }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);
@@ -904,6 +947,20 @@ test.describe('super admin', () => {
         await shoot(page, lang, name);
       }
     }
+  });
+
+  test('single sign-on of an entity', async ({ newContext, state }) => {
+    await withSso(state.tenants.a.id, async () => {
+      for (const lang of LANGS) {
+        const page = await openPage(newContext, lang, STORAGE_SUPER);
+        await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/sso`);
+        await heading(page, lang, 'adminTenants.sso.title');
+        await expect(page.getByLabel(startsWith(msg(lang, 'adminTenants.sso.issuer.label')))).toHaveValue(
+          SSO_CONFIG.issuer,
+        );
+        await shoot(page, lang, 'admin-tenant-sso');
+      }
+    });
   });
 
   test('setup wizard of an entity in setup', async ({ newContext }) => {

@@ -37,6 +37,23 @@ and the project follows [Semantic Versioning](https://semver.org/).
   tenant's own events to its delegated admins, its auditors and the super admin (never an event
   without tenant, row-level security on PostgreSQL); `listGlobalSecurityEvents` the whole
   instance to the super admin, with an optional tenant filter.
+- OpenID Connect single sign-on of delegated admins and auditors, per entity (threats T-286 to
+  T-297, decisions P57 to P59): configured by the super admin only (issuer, client ID, client
+  secret sealed with the master key and rewrapped by its rotation, e-mail domains among the
+  internal domains of the entity and unique on the instance, `enforced`, `requireMfa`), with a
+  discovery test; authorization code flow with PKCE S256, `state` and `nonce`, confidential
+  client, redirect URI `https://<admin host>/api/v1/admin/auth/oidc/callback`. Accounts are
+  created in advance (optionally `delivery: none`, single sign-on only, no password); the first
+  login links by verified e-mail, then the identity is pinned on (issuer, client ID, subject) and
+  the super admin can unpin it. The super admin never uses single sign-on. An SSO session reaches
+  only the entities with the same issuer and client ID whose `requireMfa` the login satisfied;
+  `enforced` refuses the local password (`403 sso-required`). Microsoft Entra ID needs a
+  tenant-specific issuer and, for `requireMfa`, the optional claim `amr`. New variables
+  `TT_SSO_USE_PROXY` and `TT_SSO_ALLOW_NETWORKS`; security log event `sso_failed` with a reason,
+  counted by a separate fail2ban jail and CrowdSec scenario with a higher threshold; audit
+  `admin.login` (`method: oidc`), `admin.identity_linked`, `admin.identity_unlinked`,
+  `tenant.sso_updated`, `tenant.sso_deleted`. Guide: `docs/operations/sso.md` (French:
+  `docs/operations/fr/sso.md`).
 
 ## [1.2.1] - 2026-11-04
 

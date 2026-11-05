@@ -42,6 +42,17 @@ type repo interface {
 	// wrapTx returns the txRepo of tx, a transaction opened by another
 	// service (the tenant creation).
 	wrapTx(tx *store.SystemTx) txRepo
+
+	// Single sign-on (since 2.0).
+	ssoAnyEnabled(ctx context.Context) (bool, error)
+	ssoRoute(ctx context.Context, domain string) (store.TenantSSO, error)
+	ssoGet(ctx context.Context, tid tenant.ID) (store.TenantSSO, error)
+	ssoForAdmin(ctx context.Context, adminID string) ([]store.TenantSSO, error)
+	adminsByEmail(ctx context.Context, email string, tid tenant.ID) ([]store.Admin, error)
+	findIdentity(ctx context.Context, issuer, clientID, subject string) (store.AdminIdentity, error)
+	identityForAdmin(ctx context.Context, adminID, issuer, clientID string) (store.AdminIdentity, error)
+	identities(ctx context.Context, adminID string) ([]store.AdminIdentity, error)
+	touchIdentity(ctx context.Context, identityID string, at time.Time) error
 }
 
 // txRepo is the part of the store used inside a system transaction.
@@ -67,6 +78,12 @@ type txRepo interface {
 	audit(ctx context.Context, ev audit.Event) error
 	// afterCommit runs fn once the transaction committed, never otherwise.
 	afterCommit(fn func())
+
+	// Single sign-on identities (since 2.0).
+	linkIdentity(ctx context.Context, a store.AdminIdentity) (store.AdminIdentity, error)
+	listIdentities(ctx context.Context, adminID string) ([]store.AdminIdentity, error)
+	deleteIdentity(ctx context.Context, adminID, identityID string) (store.AdminIdentity, error)
+	deleteSSOSessions(ctx context.Context, adminID, issuer, clientID string) (int64, error)
 }
 
 // storeRepo implements repo over a *store.DB.
@@ -153,6 +170,42 @@ func (r storeRepo) audit(ctx context.Context, ev audit.Event) error { return r.w
 
 func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	return r.db.Tenants().Get(ctx, tid)
+}
+
+func (r storeRepo) ssoAnyEnabled(ctx context.Context) (bool, error) {
+	return r.db.SSOSettings().AnyEnabled(ctx)
+}
+
+func (r storeRepo) ssoRoute(ctx context.Context, domain string) (store.TenantSSO, error) {
+	return r.db.SSOSettings().RouteDomain(ctx, domain)
+}
+
+func (r storeRepo) ssoGet(ctx context.Context, tid tenant.ID) (store.TenantSSO, error) {
+	return r.db.SSOSettings().Get(ctx, tid)
+}
+
+func (r storeRepo) ssoForAdmin(ctx context.Context, adminID string) ([]store.TenantSSO, error) {
+	return r.db.SSOSettings().ForAdmin(ctx, adminID)
+}
+
+func (r storeRepo) adminsByEmail(ctx context.Context, email string, tid tenant.ID) ([]store.Admin, error) {
+	return r.db.Admins().ByEmailInTenant(ctx, email, tid)
+}
+
+func (r storeRepo) findIdentity(ctx context.Context, issuer, clientID, subject string) (store.AdminIdentity, error) {
+	return r.db.AdminIdentities().Find(ctx, issuer, clientID, subject)
+}
+
+func (r storeRepo) identityForAdmin(ctx context.Context, adminID, issuer, clientID string) (store.AdminIdentity, error) {
+	return r.db.AdminIdentities().ForAdmin(ctx, adminID, issuer, clientID)
+}
+
+func (r storeRepo) identities(ctx context.Context, adminID string) ([]store.AdminIdentity, error) {
+	return r.db.AdminIdentities().List(ctx, adminID)
+}
+
+func (r storeRepo) touchIdentity(ctx context.Context, identityID string, at time.Time) error {
+	return r.db.AdminIdentities().Touch(ctx, identityID, at)
 }
 
 func (r storeRepo) wrapTx(tx *store.SystemTx) txRepo {
@@ -247,3 +300,19 @@ func (r storeTxRepo) audit(ctx context.Context, ev audit.Event) error {
 }
 
 func (r storeTxRepo) afterCommit(fn func()) { r.tx.AfterCommit(fn) }
+
+func (r storeTxRepo) linkIdentity(ctx context.Context, a store.AdminIdentity) (store.AdminIdentity, error) {
+	return r.db.AdminIdentities().LinkTx(ctx, r.tx, a)
+}
+
+func (r storeTxRepo) listIdentities(ctx context.Context, adminID string) ([]store.AdminIdentity, error) {
+	return r.db.AdminIdentities().ListTx(ctx, r.tx, adminID)
+}
+
+func (r storeTxRepo) deleteIdentity(ctx context.Context, adminID, identityID string) (store.AdminIdentity, error) {
+	return r.db.AdminIdentities().DeleteTx(ctx, r.tx, adminID, identityID)
+}
+
+func (r storeTxRepo) deleteSSOSessions(ctx context.Context, adminID, issuer, clientID string) (int64, error) {
+	return r.db.AdminSessions().DeleteSSOForAdminTx(ctx, r.tx, adminID, issuer, clientID)
+}

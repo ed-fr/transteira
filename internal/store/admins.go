@@ -141,6 +141,12 @@ type Admin struct {
 	// CredentialsChangedAt is when the password or the TOTP enrollment last
 	// changed, zero if never.
 	CredentialsChangedAt time.Time
+	// SSOOnly marks an account created without a local password (OpenAPI
+	// delivery "none", Admin.ssoOnly): it signs in through single sign-on
+	// only. It requires no PasswordHash and is never set for a super admin
+	// (migration 0026 checks). Setting a password (an activation after a
+	// later activation link) clears it.
+	SSOOnly bool
 }
 
 // usableSuperAdmin reports whether a counts towards the last super admin
@@ -152,19 +158,26 @@ func (a Admin) usableSuperAdmin() bool {
 
 // adminColumns is the column list read by the admin queries.
 const adminColumns = `id, username, email, role, password_hash, totp_secret_id, totp_enabled, totp_last_counter,
-	pending_totp_secret_id, require_totp, disabled, language, created_at, updated_at, last_login_at, credentials_changed_at`
+	pending_totp_secret_id, require_totp, disabled, language, created_at, updated_at, last_login_at, credentials_changed_at,
+	sso_only`
 
 // Statements of the Admins repository.
 var (
 	qAdminInsert = systemQuery(
 		`INSERT INTO admins (id, username, email, role, password_hash, require_totp, disabled, language,
-			created_at, updated_at, credentials_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			created_at, updated_at, credentials_changed_at, sso_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonAdminAccounts)
 	qAdminGet = systemQuery(
 		`SELECT `+adminColumns+` FROM admins WHERE id = ?`,
 		reasonAdminAccounts)
 	qAdminByUsername = systemQuery(
 		`SELECT `+adminColumns+` FROM admins WHERE username = ?`,
+		reasonAdminAccounts)
+	// qAdminByEmailInTenant selects the accounts with a mail address attached
+	// to a tenant (the first single sign-on login, threat T-286).
+	qAdminByEmailInTenant = systemQuery(
+		`SELECT a.id FROM admins a JOIN admin_tenants t ON t.admin_id = a.id
+		WHERE a.email = ? AND t.tenant_id = ? ORDER BY a.id`,
 		reasonAdminAccounts)
 	qAdminList = systemQuery(
 		`SELECT `+adminColumns+` FROM admins WHERE id > ? ORDER BY id LIMIT ?`,
@@ -173,7 +186,7 @@ var (
 		`UPDATE admins SET email = ?, role = ?, require_totp = ?, disabled = ?, language = ?, updated_at = ? WHERE id = ?`,
 		reasonAdminAccounts)
 	qAdminSetPassword = systemQuery(
-		`UPDATE admins SET password_hash = ?, credentials_changed_at = ?, updated_at = ? WHERE id = ?`,
+		`UPDATE admins SET password_hash = ?, sso_only = (sso_only AND ?), credentials_changed_at = ?, updated_at = ? WHERE id = ?`,
 		reasonAdminAccounts)
 	qAdminSetPending = systemQuery(
 		`UPDATE admins SET pending_totp_secret_id = ?, updated_at = ? WHERE id = ?`,
@@ -304,6 +317,10 @@ func normalizeAdmin(a *Admin) error {
 		return invalid("password hash must be a PHC string of at most %d printable characters", MaxPasswordHashLen)
 	case a.Language != "" && !tenant.IsLanguage(a.Language):
 		return invalid("unsupported language")
+	case a.SSOOnly && a.PasswordHash != "":
+		return invalid("a single sign-on only account has no password")
+	case a.SSOOnly && a.Role == RoleSuperAdmin:
+		return invalid("a super admin cannot be a single sign-on only account")
 	}
 	if a.Role == RoleSuperAdmin {
 		a.RequireTOTP = true
@@ -330,7 +347,7 @@ func scanAdmin(sc interface{ Scan(...any) error }) (Admin, error) {
 		lastLogin, credsChanged sql.NullInt64
 	)
 	if err := sc.Scan(&a.ID, &a.Username, &a.Email, &role, &hash, &secret, &a.TOTPEnabled, &counter, &pending,
-		&a.RequireTOTP, &a.Disabled, &lang, &created, &updated, &lastLogin, &credsChanged); err != nil {
+		&a.RequireTOTP, &a.Disabled, &lang, &created, &updated, &lastLogin, &credsChanged, &a.SSOOnly); err != nil {
 		return Admin{}, err
 	}
 	a.Role = AdminRole(role)
@@ -397,8 +414,10 @@ func (r *Admins) Create(ctx context.Context, a Admin) (Admin, error) {
 // CreateTx validates a, assigns it an ID and timestamps, and stores it
 // inside tx. The caller sets Username, Email, Role, TenantIDs, RequireTOTP
 // (forced for a super admin), Disabled, Language and, for an account
-// created with a password (setup), PasswordHash; the TOTP fields and the
-// times are ignored. It returns the stored admin, ErrInvalid for a
+// created with a password (setup), PasswordHash, or SSOOnly for an account
+// signing in through single sign-on only (delivery "none": no password,
+// and the caller creates no activation link; refused for a super admin);
+// the TOTP fields and the times are ignored. It returns the stored admin, ErrInvalid for a
 // malformed field, ErrConflict when the username is taken and ErrNotFound
 // when a tenant does not exist.
 func (r *Admins) CreateTx(ctx context.Context, tx *SystemTx, a Admin) (Admin, error) {
@@ -422,7 +441,7 @@ func (r *Admins) create(ctx context.Context, tx *SystemTx, a Admin) (Admin, erro
 	out := Admin{
 		ID: newID, Username: a.Username, Email: a.Email, Role: a.Role, TenantIDs: a.TenantIDs,
 		PasswordHash: a.PasswordHash, TOTPLastCounter: -1, RequireTOTP: a.RequireTOTP, Disabled: a.Disabled,
-		Language: a.Language, CreatedAt: now, UpdatedAt: now,
+		Language: a.Language, CreatedAt: now, UpdatedAt: now, SSOOnly: a.SSOOnly,
 	}
 	var creds any
 	if a.PasswordHash != "" {
@@ -430,7 +449,7 @@ func (r *Admins) create(ctx context.Context, tx *SystemTx, a Admin) (Admin, erro
 		creds = toMillis(now)
 	}
 	if _, err := tx.Exec(ctx, qAdminInsert, out.ID, out.Username, out.Email, string(out.Role), nullText(out.PasswordHash),
-		out.RequireTOTP, out.Disabled, nullText(out.Language), toMillis(now), toMillis(now), creds); err != nil {
+		out.RequireTOTP, out.Disabled, nullText(out.Language), toMillis(now), toMillis(now), creds, out.SSOOnly); err != nil {
 		return Admin{}, err
 	}
 	if err := replaceTenants(ctx, tx, out.ID, out.TenantIDs); err != nil {
@@ -475,6 +494,48 @@ func (r *Admins) GetByUsername(ctx context.Context, username string) (Admin, err
 		return err
 	})
 	return a, err
+}
+
+// ByEmailInTenant returns, in ID order, the administrators whose mail
+// address is email (normalized first, like the stored addresses) and who
+// are attached to tenant tid, with their tenants, whatever their role or
+// state: the single sign-on login matches an account on its first login
+// by the verified address of the identity provider and checks the role
+// and the state itself (threat T-286). Mail addresses are not unique: the
+// caller decides what several matches mean. A malformed address or tenant
+// ID yields an empty list.
+func (r *Admins) ByEmailInTenant(ctx context.Context, email string, tid tenant.ID) ([]Admin, error) {
+	e, err := NormalizeEmail(email)
+	if err != nil || tid.Validate() != nil {
+		return nil, nil
+	}
+	var out []Admin
+	err = r.read(ctx, "get admins by email", func(tx *SystemTx) error {
+		rows, err := tx.Query(ctx, qAdminByEmailInTenant, e, string(tid))
+		if err != nil {
+			return err
+		}
+		ids, err := collect(rows, func(r *sql.Rows) (string, error) {
+			var s string
+			err := r.Scan(&s)
+			return s, err
+		})
+		if err != nil {
+			return err
+		}
+		for _, adminID := range ids {
+			a, err := getAdmin(ctx, tx, qAdminGet, adminID)
+			if err != nil {
+				return err
+			}
+			out = append(out, a)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // AdminListOptions selects a page of administrators.
@@ -570,7 +631,10 @@ func (r *Admins) Update(ctx context.Context, adminID string, u AdminUpdate) (Adm
 // administrators lock, so that the caller can tell exactly what changed.
 // It enforces the last super admin rule: disabling or demoting the last
 // usable super admin returns ErrLastSuperAdmin. Promoting an account that
-// is not activated or has no TOTP enabled returns ErrPromotionRefused. It
+// is not activated (a single sign-on only account included) or has no TOTP
+// enabled returns ErrPromotionRefused; a promotion deletes every single
+// sign-on identity of the account in tx (threat T-293: list them first
+// with [AdminIdentities.ListTx] to audit them). It
 // also returns ErrNotFound for an unknown admin or tenant and ErrInvalid
 // for a malformed field or an inconsistent result (a super admin with
 // tenants, a delegated admin or an auditor without any).
@@ -613,14 +677,25 @@ func (r *Admins) update(ctx context.Context, tx *SystemTx, adminID string, u Adm
 	if u.Language != nil {
 		next.Language = *u.Language
 	}
+	promoted := cur.Role != RoleSuperAdmin && next.Role == RoleSuperAdmin
+	// A single sign-on only account has no password: its promotion is
+	// refused as such rather than as an invalid combination of fields.
+	if promoted && cur.SSOOnly {
+		return Admin{}, Admin{}, ErrPromotionRefused
+	}
 	if err := normalizeAdmin(&next); err != nil {
 		return Admin{}, Admin{}, err
 	}
-	if cur.Role != RoleSuperAdmin && next.Role == RoleSuperAdmin && (cur.PasswordHash == "" || !cur.TOTPEnabled) {
+	if promoted && (cur.PasswordHash == "" || !cur.TOTPEnabled) {
 		return Admin{}, Admin{}, ErrPromotionRefused
 	}
 	if cur.usableSuperAdmin() && !next.usableSuperAdmin() {
 		if err := guardLastSuperAdmin(ctx, tx); err != nil {
+			return Admin{}, Admin{}, err
+		}
+	}
+	if promoted {
+		if _, err := deleteIdentitiesByAdmin(ctx, tx, adminID); err != nil {
 			return Admin{}, Admin{}, err
 		}
 	}
@@ -660,7 +735,8 @@ func (r *Admins) SetPassword(ctx context.Context, adminID, hash string) error {
 
 // SetPasswordTx stores hash as the password of adminID inside tx and sets
 // CredentialsChangedAt. An empty hash removes the password (credentials
-// reset: the account must be activated again). It returns ErrNotFound for
+// reset: the account must be activated again). A password clears SSOOnly:
+// an account activated with a password is no longer single sign-on only. It returns ErrNotFound for
 // an unknown admin and ErrInvalid for a malformed hash.
 func (r *Admins) SetPasswordTx(ctx context.Context, tx *SystemTx, adminID, hash string) error {
 	if err := r.setPassword(ctx, tx, adminID, hash); err != nil {
@@ -675,7 +751,7 @@ func (r *Admins) setPassword(ctx context.Context, tx *SystemTx, adminID, hash st
 		return invalid("password hash must be a PHC string of at most %d printable characters", MaxPasswordHashLen)
 	}
 	now := toMillis(r.db.now())
-	res, err := tx.Exec(ctx, qAdminSetPassword, nullText(hash), now, now, adminID)
+	res, err := tx.Exec(ctx, qAdminSetPassword, nullText(hash), hash == "", now, now, adminID)
 	if err != nil {
 		return err
 	}

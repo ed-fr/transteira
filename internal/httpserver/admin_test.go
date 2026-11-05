@@ -16,6 +16,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
+	"github.com/ed-fr/transteira/internal/oidc"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -101,6 +102,22 @@ func (*fakeAdminService) Login(_ context.Context, username, _ string, ip netip.A
 func (f *fakeAdminService) Logout(_ context.Context, p adminauth.Principal, _ netip.Addr) error {
 	f.loggedOut = append(f.loggedOut, p.SessionID)
 	return nil
+}
+
+func (*fakeAdminService) Methods(context.Context) (adminauth.AuthMethods, error) {
+	return adminauth.AuthMethods{Password: true, SSO: true}, nil
+}
+
+func (*fakeAdminService) StartSSO(context.Context, string, netip.Addr) (adminauth.SSOStart, error) {
+	return adminauth.SSOStart{RedirectURL: "https://login.example.com/authorize", Cookie: "of_ok.mac"}, nil
+}
+
+// CompleteSSO succeeds for the flow cookie of_ok.mac only.
+func (*fakeAdminService) CompleteSSO(_ context.Context, cb adminauth.SSOCallback, _ netip.Addr) (adminauth.Session, error) {
+	if cb.Cookie != "of_ok.mac" {
+		return adminauth.Session{}, &adminauth.SSOError{Reason: "state_invalid"}
+	}
+	return adminauth.Session{Token: "as_sso", CSRFToken: "csrf_sso", State: store.SessionAuthenticated, ExpiresAt: time.Now().Add(time.Hour)}, nil
 }
 
 // fakeTenantList lists and gets one tenant.
@@ -462,27 +479,49 @@ func TestHostSet(t *testing.T) {
 }
 
 // The single sign-on login operations of API 2.0 are open (no admin
-// session), unimplemented ones answer their stub 404 rather than 401, the
-// start is a login step (Origin check, per-IP limit) and the callback, a
-// cross-site redirect target by nature, is limited but never refused for
-// its origin.
+// session); the start is a login step (Origin check, per-IP limit) and the
+// callback, a cross-site redirect target by nature, is limited but never
+// refused for its origin. The callback reads the flow cookie and always
+// expires it, next to the session cookie of a success; nothing is cached.
 func TestAdminOIDCRoutes(t *testing.T) {
 	t.Parallel()
 	e, _ := newAdminEnv(t)
 	sameOrigin := []string{"Sec-Fetch-Site", "same-origin"}
-	for _, tc := range []struct{ method, target string }{
-		{http.MethodGet, "/api/v1/admin/auth/methods"},
-		{http.MethodGet, "/api/v1/admin/auth/oidc/callback?code=c&state=s"},
-	} {
-		rec := e.do(t, tc.method, tc.target, hostAdmin, nil)
-		decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	rec := e.do(t, http.MethodGet, "/api/v1/admin/auth/methods", hostAdmin, nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"sso":true`) {
+		t.Errorf("methods = %d %s", rec.Code, rec.Body)
 	}
-	rec := e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader(`{"email":"a@entity-a.example.com"}`),
+	rec = e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader(`{"email":"a@entity-a.example.com"}`),
 		append([]string{"Content-Type", "application/json"}, sameOrigin...)...)
-	decodeProblem(t, rec, http.StatusNotFound, problem.CodeNotFound)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Set-Cookie"), oidc.FlowCookieName+"=of_ok.mac;") {
+		t.Errorf("start = %d %v", rec.Code, rec.Header())
+	}
 	rec = e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader(`{"email":"a@entity-a.example.com"}`),
 		"Content-Type", "application/json", "Sec-Fetch-Site", "cross-site")
 	decodeProblem(t, rec, http.StatusForbidden, problem.CodeCSRFInvalid)
+
+	clear := oidc.ClearFlowCookie().String()
+	for _, tc := range []struct {
+		name, cookie, location string
+		cookies                int
+	}{
+		{"success", oidc.FlowCookieName + "=of_ok.mac", "/admin/", 2},
+		{"no flow cookie", "", "/admin/login?error=invalid-credentials", 1},
+	} {
+		hdr := []string{"Sec-Fetch-Site", "cross-site"}
+		if tc.cookie != "" {
+			hdr = append(hdr, "Cookie", tc.cookie)
+		}
+		rec = e.do(t, http.MethodGet, "/api/v1/admin/auth/oidc/callback?code=c&state=s", hostAdmin, nil, hdr...)
+		cookies := rec.Header().Values("Set-Cookie")
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != tc.location || len(cookies) != tc.cookies ||
+			cookies[len(cookies)-1] != clear || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: %d %v", tc.name, rec.Code, rec.Header())
+		}
+		if tc.cookies == 2 && !strings.HasPrefix(cookies[0], middleware.AdminCookie+"=as_sso;") {
+			t.Errorf("%s: session cookie %q", tc.name, cookies[0])
+		}
+	}
 
 	e, _ = newAdminEnv(t, WithAdminAuthLimiter(denyLimiter{}))
 	rec = e.do(t, http.MethodPost, "/api/v1/admin/auth/oidc/start", hostAdmin, strings.NewReader("{}"), "Content-Type", "application/json")

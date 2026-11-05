@@ -1172,3 +1172,51 @@ func TestAdminsAuditor(t *testing.T) {
 		wantErr(t, "Update(auditor to super, not activated)", err, store.ErrPromotionRefused)
 	})
 }
+
+// TestAdminsByEmailInTenant checks the lookup of the first single sign-on
+// login: the accounts with the address attached to the tenant, whatever
+// their role or state, in ID order, and nothing for a malformed argument.
+func TestAdminsByEmailInTenant(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		t.Parallel()
+		db := openDB(t, e)
+		ta := newTenant(t, db, "transfer.entity-a.example.com")
+		tb := newTenant(t, db, "transfer.entity-b.example.com")
+		repo := db.Admins()
+		one := newDelegated(t, db, "one", ta.ID, tb.ID)
+		two := newDelegated(t, db, "two", ta.ID)
+		other := newDelegated(t, db, "other", tb.ID)
+		got, err := repo.ByEmailInTenant(ctx, "ONE@example.com", ta.ID)
+		if err != nil || len(got) != 1 || got[0].ID != one.ID || len(got[0].TenantIDs) != 2 {
+			t.Fatalf("ByEmailInTenant(one, a) = %+v, %v", got, err)
+		}
+		if got, err := repo.ByEmailInTenant(ctx, "two@example.com", tb.ID); err != nil || len(got) != 0 {
+			t.Errorf("ByEmailInTenant(two, b) = %+v, %v", got, err)
+		}
+		if got, err := repo.ByEmailInTenant(ctx, "other@example.com", tb.ID); err != nil || len(got) != 1 || got[0].ID != other.ID {
+			t.Errorf("ByEmailInTenant(other, b) = %+v, %v", got, err)
+		}
+		// Two accounts sharing an address are both returned.
+		if _, err := repo.Update(ctx, two.ID, store.AdminUpdate{Email: ptr("one@example.com")}); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := repo.ByEmailInTenant(ctx, "one@example.com", ta.ID); err != nil || len(got) != 2 {
+			t.Errorf("ByEmailInTenant(shared) = %+v, %v", got, err)
+		}
+		for _, tc := range []struct {
+			email string
+			tid   tenant.ID
+		}{{"nope", ta.ID}, {"one@example.com", "bogus"}} {
+			if got, err := repo.ByEmailInTenant(ctx, tc.email, tc.tid); err != nil || got != nil {
+				t.Errorf("ByEmailInTenant(%q, %q) = %+v, %v", tc.email, tc.tid, got, err)
+			}
+		}
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		if _, err := repo.ByEmailInTenant(canceled, "one@example.com", ta.ID); err == nil {
+			t.Error("ByEmailInTenant(canceled) succeeded")
+		}
+	})
+}

@@ -5,12 +5,16 @@
   // password gives one generic message that never tells whether the account exists; a lock
   // (429) counts down. The flash message of the session (expired, signed out) is shown until the
   // first submission.
+  // Single sign-on (since 2.0): when GET /admin/auth/methods says it is available, a second form
+  // asks for the e-mail address and sends the browser to the identity provider (the URL is only
+  // followed when it is https). The callback comes back here with ?error=<code>: only the
+  // codes of a closed list are translated, any other value gives a generic message.
   // Once authenticated, the navigation guard goes to the return path (safeNext of ?next=).
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Spinner, TextField, announce } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminSession } from '../../api';
+  import { adminApi, adminSession } from '../../api';
   import { createFormState } from '../../auth/formState.svelte';
   import type { AuthFlash } from '../../auth/machine';
   import {
@@ -21,6 +25,7 @@
     validateLogin,
     type FlowView,
   } from '../../auth/views';
+  import { isSafeRedirectUrl, ssoEmailError, ssoLoginErrorKey, ssoStartFailure } from '../../auth/sso';
   import PasswordField from '../../components/PasswordField.svelte';
   import RecoveryCodes from '../../components/RecoveryCodes.svelte';
   import TotpEnroll from '../../components/TotpEnroll.svelte';
@@ -37,7 +42,7 @@
   };
 
   const uid = $props.id();
-  const ids = { username: `${uid}-username`, password: `${uid}-password` };
+  const ids = { username: `${uid}-username`, password: `${uid}-password`, ssoEmail: `${uid}-sso-email` };
   const form = createFormState({ announce: (m) => announce(renderMessage(m, t) ?? '', 'assertive') });
   let username = $state('');
   let password = $state('');
@@ -46,12 +51,18 @@
   // Set by the first submission: the flash message of the session (e.g. "signed out") then
   // gives way to the result of the attempt.
   let attempted = $state(false);
+  let ssoAvailable = $state(false);
+  let ssoEmail = $state('');
+  const ssoForm = createFormState({ announce: (m) => announce(renderMessage(m, t) ?? '', 'assertive') });
 
   const view = $derived(flowView(adminSession.state, 'login'));
   const flash = $derived<AuthFlash | undefined>(
     adminSession.state.kind === 'anonymous' && !attempted ? adminSession.state.flash : undefined,
   );
   const general = $derived(renderMessage(form.general, t));
+  const ssoGeneral = $derived(renderMessage(ssoForm.general, t));
+  // Message of the ?error= parameter of the callback, shown until a new attempt.
+  const callbackErrorKey = $derived(attempted ? undefined : ssoLoginErrorKey(nav.current.search));
   const summary = $derived(
     summaryEntries(
       form.fields,
@@ -95,6 +106,48 @@
     }
   }
 
+  async function startSso(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (ssoForm.blocked) {
+      return;
+    }
+    attempted = true;
+    if (!ssoForm.check({ email: ssoEmailError(ssoEmail) })) {
+      await tick();
+      document.getElementById(ids.ssoEmail)?.focus();
+      return;
+    }
+    ssoForm.busy = true;
+    try {
+      const res = await adminApi.post('/admin/auth/oidc/start', { body: { email: ssoEmail.trim() } });
+      const url = res.data.redirectUrl;
+      if (!isSafeRedirectUrl(url)) {
+        ssoForm.fail({ general: { key: 'adminAuth.sso.badRedirect' }, fields: {} });
+        return;
+      }
+      ssoForm.clear();
+      globalThis.location.assign(url);
+    } catch (err) {
+      ssoForm.fail(ssoStartFailure(describeError(i18n, err)));
+    } finally {
+      ssoForm.busy = false;
+    }
+  }
+
+  async function loadMethods(): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/auth/methods');
+      ssoAvailable = res.data.sso;
+    } catch {
+      // The password form always works: without the answer, the single sign-on is not offered.
+      ssoAvailable = false;
+    }
+  }
+
+  onMount(() => {
+    void loadMethods();
+  });
+
   async function backToLogin(): Promise<void> {
     try {
       await adminSession.logout();
@@ -108,6 +161,7 @@
   onDestroy(() => {
     password = '';
     form.dispose();
+    ssoForm.dispose();
   });
 </script>
 
@@ -142,6 +196,9 @@
     <Alert severity={flash === 'loggedOut' ? 'success' : 'warning'}>
       <p>{t(FLASH_KEYS[flash])}</p>
     </Alert>
+  {/if}
+  {#if callbackErrorKey !== undefined}
+    <Alert severity="error"><p>{t(callbackErrorKey)}</p></Alert>
   {/if}
   <p>{t('adminAuth.login.intro')}</p>
   <ErrorSummary entries={summary} />
@@ -181,4 +238,47 @@
     </div>
   </form>
   <p class="tt-text-muted tt-text-sm">{t('adminAuth.login.forgotten')}</p>
+  {#if ssoAvailable}
+    <section class="tt-sso" aria-labelledby="{uid}-sso-title">
+      <h2 id="{uid}-sso-title">{t('adminAuth.sso.title')}</h2>
+      <p>{t('adminAuth.sso.intro')}</p>
+      {#if ssoGeneral !== undefined}
+        <Alert severity="error" live={!ssoForm.locked}>{ssoGeneral}</Alert>
+      {/if}
+      <form class="tt-stack" novalidate onsubmit={startSso}>
+        <TextField
+          id={ids.ssoEmail}
+          type="email"
+          label={t('adminAuth.sso.email.label')}
+          hint={t('adminAuth.sso.email.hint')}
+          autocomplete="email"
+          autocapitalize="off"
+          spellcheck={false}
+          maxlength={254}
+          required
+          error={renderMessage(ssoForm.fields['email'], t)}
+          bind:value={ssoEmail}
+        />
+        <div>
+          <Button
+            type="submit"
+            variant="secondary"
+            loading={ssoForm.busy}
+            loadingLabel={t('adminAuth.sso.submitting')}
+            disabled={ssoForm.remaining > 0}
+          >
+            {t('adminAuth.sso.submit')}
+          </Button>
+        </div>
+      </form>
+    </section>
+  {/if}
 {/if}
+
+<style>
+  .tt-sso {
+    margin-top: var(--tt-space-6);
+    padding-top: var(--tt-space-4);
+    border-top: var(--tt-border-width) solid var(--tt-border);
+  }
+</style>

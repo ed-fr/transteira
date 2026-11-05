@@ -2732,8 +2732,9 @@ type ApiTokenUpdate = json.RawMessage
 // `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
 // expired since the request was accepted), never the request (FQDN, username, address).
 // Since 2.0: `admin.login` carries `details.method` (`oidc` for a single sign-on login);
-// `admin.identity_linked` and `admin.identity_unlinked` name the account and the issuer, never the
-// subject; `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
+// `admin.identity_linked` and `admin.identity_unlinked` name the account, the issuer and the client ID, never the
+// subject (`admin.identity_unlinked` carries `details.identity_id`, `issuer`, `client_id` and `reason`:
+// `unpinned`, `promoted`, `sso_changed` or `email_changed`); `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
 // only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
 // source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
 // token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
@@ -2796,8 +2797,9 @@ type AuditEvent struct {
 	// `system_smtp_unavailable`, `unknown_background_preset` or `token_unusable` (revoked or
 	// expired since the request was accepted), never the request (FQDN, username, address).
 	// Since 2.0: `admin.login` carries `details.method` (`oidc` for a single sign-on login);
-	// `admin.identity_linked` and `admin.identity_unlinked` name the account and the issuer, never the
-	// subject; `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
+	// `admin.identity_linked` and `admin.identity_unlinked` name the account, the issuer and the client ID, never the
+	// subject (`admin.identity_unlinked` carries `details.identity_id`, `issuer`, `client_id` and `reason`:
+	// `unpinned`, `promoted`, `sso_changed` or `email_changed`); `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
 	// only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
 	// source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
 	// token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
@@ -3276,7 +3278,7 @@ type ExpiryDays int
 
 // ExportedAsset Since 2.0. A branding image of an export.
 type ExportedAsset struct {
-	// DataBase64 Content
+	// DataBase64 Content, base64 (standard alphabet); within the size limits of the branding files.
 	DataBase64 string `json:"dataBase64"`
 	MediaType  string `json:"mediaType"`
 }

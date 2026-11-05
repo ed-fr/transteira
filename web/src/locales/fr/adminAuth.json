@@ -190,5 +190,24 @@
         "forbidden": "La double authentification est obligatoire pour votre compte : elle ne peut pas être désactivée."
       }
     }
+  },
+  "sso": {
+    "title": "Authentification unique",
+    "intro": "Utilisez le compte de votre organisation à la place d’un mot de passe local. Saisissez votre adresse e-mail professionnelle : vous êtes alors redirigé vers votre fournisseur d’identité.",
+    "email": {
+      "label": "Adresse e-mail professionnelle",
+      "hint": "L’adresse de votre compte d’administration, par exemple nom@entite-a.example.com."
+    },
+    "submit": "Se connecter avec l’authentification unique",
+    "submitting": "Redirection…",
+    "badRedirect": "Le fournisseur d’identité a répondu avec une adresse inutilisable. Contactez l’administrateur de l’instance.",
+    "passwordRefused": "Votre entité impose l’authentification unique : la connexion par mot de passe est refusée pour votre compte. Utilisez le formulaire d’authentification unique ci-dessous.",
+    "errors": {
+      "generic": "L’authentification unique a échoué. Réessayez, ou contactez votre administrateur.",
+      "sso-mfa-required": "Le fournisseur d’identité n’a pas confirmé l’authentification multifacteur, qui est exigée. Reconnectez-vous avec un second facteur.",
+      "sso-not-available": "L’authentification unique n’est pas disponible pour cette adresse.",
+      "rate-limited": "Trop de tentatives. Réessayez dans quelques minutes.",
+      "invalid-credentials": "L’authentification unique a échoué. Vérifiez que vous avez utilisé votre compte professionnel, ou contactez votre administrateur."
+    }
   }
 }

@@ -51,6 +51,7 @@ import (
 	"github.com/ed-fr/transteira/internal/mytransfers"
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/oidc"
 	"github.com/ed-fr/transteira/internal/provisioning"
 	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
@@ -468,9 +469,17 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Notifier: notifier, Mail: mailQueue, Opener: vault,
 	},
 		lifecycleOptions(cfg, &o, logger))
+	// One OpenID Connect client and one set of pending flows per process
+	// (single sign-on of the admins, since 2.0): the flows live in memory
+	// (decision A4), their expired entries purged periodically.
+	ssoClient, ssoFlows, err := newSSO(cfg, keys)
+	if err != nil {
+		return err
+	}
+	purgeFlows(ctx, ssoFlows, SSOFlowPurgeInterval)
 	admins, err := newAdminService(ctx, cfg, db, adminDeps{
 		keys: keys, vault: vault, hasher: passwords, seclog: secLog, audit: auditLog,
-		mailer: sysMail.invitations(cfg, logger),
+		mailer: sysMail.invitations(cfg, logger), flows: ssoFlows, secrets: vault,
 	}, logger)
 	if err != nil {
 		return err
@@ -547,7 +556,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		AdminHosts: cfg.AdminHosts, SMTPDenyNetworks: cfg.SMTPDenyNetworks,
 		Vault: vault, Assets: assetStore{files: files}, Eraser: sweeper, Mailer: smtpSender, Cache: resolver,
 		Logger: logger, Audit: auditLog, AntivirusDisabled: avDisabled, Admins: admins,
-		Events: bus, Notifier: provisioningNotices,
+		Events: bus, Notifier: provisioningNotices, SSOTester: ssoClient,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -796,6 +805,10 @@ type adminDeps struct {
 	// mailer sends the invitation mails through the system SMTP; nil
 	// without one.
 	mailer adminauth.Mailer
+	// flows runs the single sign-on flows; secrets unseals the client
+	// secrets of the tenants.
+	flows   adminauth.SSOFlows
+	secrets adminauth.SecretOpener
 }
 
 // newAdminService builds the administrator authentication service, with
@@ -835,11 +848,55 @@ func newAdminService(ctx context.Context, cfg *config.Config, db *store.DB, d ad
 	svc, err := adminauth.New(db, d.keys, d.vault, d.hasher, d.seclog, adminauth.Options{
 		IdleTimeout: cfg.AdminSessionIdleTimeout, MaxAge: cfg.AdminSessionMaxAge,
 		SetupToken: setupToken, AdminBaseURL: baseURL, Logger: logger, Audit: d.audit, Mailer: d.mailer,
+		SSOFlows: d.flows, Secrets: d.secrets,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("app: %w", err)
 	}
 	return svc, nil
+}
+
+// SSOFlowPurgeInterval is the period of the purge of the expired single
+// sign-on flows (each start purges them too; this bounds the memory held
+// by flows never completed when no login starts).
+const SSOFlowPurgeInterval = time.Minute
+
+// newSSO builds the OpenID Connect client of the process, behind the
+// egress guard of the webhooks (threat T-295): the built-in deny list,
+// opened by TT_SSO_ALLOW_NETWORKS, and its core (static core and the
+// networks of the container), which nothing opens; HTTPS_PROXY only with
+// TT_SSO_USE_PROXY. It also returns the pending flows, whose cookie MAC is
+// keyed by the master key. An allowed network overlapping the core refuses
+// the start.
+func newSSO(cfg *config.Config, keys oidc.Keys) (*oidc.Client, *oidc.Flows, error) {
+	core, err := netpolicy.WebhookDenyNetworks()
+	if err != nil {
+		return nil, nil, fmt.Errorf("app: single sign-on egress policy: %w", err)
+	}
+	if err := netpolicy.CheckWebhookAllow(cfg.SSOAllowNetworks, nil, core); err != nil {
+		return nil, nil, fmt.Errorf("app: %s: %w", config.EnvSSOAllowNetworks, err)
+	}
+	guard := netpolicy.NewDialGuardPolicy("sso", netpolicy.Policy{
+		Deny: netpolicy.BuiltinWebhookDenyNetworks(), Allow: cfg.SSOAllowNetworks, Always: core,
+	}, nil)
+	client := oidc.NewClient(oidc.Options{Guard: guard, UseProxy: cfg.SSOUseProxy})
+	return client, oidc.NewFlows(client, keys), nil
+}
+
+// purgeFlows purges the expired flows every interval until ctx ends.
+func purgeFlows(ctx context.Context, flows *oidc.Flows, interval time.Duration) {
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				flows.Purge()
+			}
+		}
+	}()
 }
 
 // adminBaseURL returns the absolute URL of the first admin host, the base

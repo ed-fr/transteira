@@ -31,28 +31,6 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	tids := []string{"ten_a"}
 	none, mail := gen.InvitationDeliveryNone, gen.InvitationDeliveryMail
 
-	// Admin creation: the delivery none (single sign-on, not implemented
-	// yet).
-	for name, tc := range map[string]struct {
-		body  gen.AdminCreate
-		field string
-	}{
-		"delivery none": {gen.AdminCreate{
-			Username: "sso.a", Email: "sso@entity-a.example.com", Role: gen.DelegatedAdmin, TenantIds: &tids,
-			Invitation: &gen.AdminInvitation{Delivery: &none},
-		}, "/invitation/delivery"},
-	} {
-		svc := &fakeService{}
-		_, err := newServer(svc, &fakeTenants{}).CreateAdmin(super, gen.CreateAdminRequestObject{Body: &tc.body})
-		wantNotSupported(t, name, err, tc.field)
-		if len(svc.calls) != 0 {
-			t.Errorf("%s: the service was called: %v", name, svc.calls)
-		}
-		// Another admin keeps its 403 from the service.
-		svc = &fakeService{err: adminauth.ErrForbidden}
-		_, err = newServer(svc, &fakeTenants{}).CreateAdmin(deleg, gen.CreateAdminRequestObject{Body: &tc.body})
-		expectProblem(t, err, problem.CodeForbidden)
-	}
 	// The mail delivery of a delegated admin is implemented.
 	svc := &fakeService{mailed: true}
 	if _, err := newServer(svc, &fakeTenants{}).CreateAdmin(super, gen.CreateAdminRequestObject{Body: &gen.AdminCreate{

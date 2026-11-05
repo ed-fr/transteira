@@ -1,0 +1,22 @@
+# Single sign-on failures against TransTeira (event sso_failed, since 2.0), per
+# client IP. Kept apart from ed-fr/transteira-bf with a HIGHER capacity: a
+# stale browser tab or a bookmarked callback URL ends with
+# reason="state_invalid" without any attack, so a few failures are normal.
+# 30 events in a burst (capacity 29, one event leaks every 30 seconds) trigger it.
+type: leaky
+name: ed-fr/transteira-sso-bf
+description: "Detect repeated single sign-on failures against TransTeira"
+filter: "evt.Meta.log_type == 'transteira_security' && evt.Meta.transteira_event == 'sso_failed'"
+groupby: evt.Meta.source_ip
+capacity: 29
+leakspeed: 30s
+blackhole: 5m
+labels:
+  service: transteira
+  confidence: 2
+  spoofable: 0
+  classification:
+    - attack.T1110
+  label: "TransTeira single sign-on failures"
+  behavior: "http:bruteforce"
+  remediation: true

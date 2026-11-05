@@ -175,6 +175,69 @@ func (f faultRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, e
 	return f.repo.tenant(ctx, tid)
 }
 
+func (f faultRepo) ssoAnyEnabled(ctx context.Context) (bool, error) {
+	if err := f.fail("ssoAnyEnabled"); err != nil {
+		return false, err
+	}
+	return f.repo.ssoAnyEnabled(ctx)
+}
+
+func (f faultRepo) ssoRoute(ctx context.Context, domain string) (store.TenantSSO, error) {
+	if err := f.fail("ssoRoute"); err != nil {
+		return store.TenantSSO{}, err
+	}
+	return f.repo.ssoRoute(ctx, domain)
+}
+
+func (f faultRepo) ssoGet(ctx context.Context, tid tenant.ID) (store.TenantSSO, error) {
+	if err := f.fail("ssoGet"); err != nil {
+		return store.TenantSSO{}, err
+	}
+	return f.repo.ssoGet(ctx, tid)
+}
+
+func (f faultRepo) ssoForAdmin(ctx context.Context, adminID string) ([]store.TenantSSO, error) {
+	if err := f.fail("ssoForAdmin"); err != nil {
+		return nil, err
+	}
+	return f.repo.ssoForAdmin(ctx, adminID)
+}
+
+func (f faultRepo) adminsByEmail(ctx context.Context, email string, tid tenant.ID) ([]store.Admin, error) {
+	if err := f.fail("adminsByEmail"); err != nil {
+		return nil, err
+	}
+	return f.repo.adminsByEmail(ctx, email, tid)
+}
+
+func (f faultRepo) findIdentity(ctx context.Context, issuer, clientID, subject string) (store.AdminIdentity, error) {
+	if err := f.fail("findIdentity"); err != nil {
+		return store.AdminIdentity{}, err
+	}
+	return f.repo.findIdentity(ctx, issuer, clientID, subject)
+}
+
+func (f faultRepo) identityForAdmin(ctx context.Context, adminID, issuer, clientID string) (store.AdminIdentity, error) {
+	if err := f.fail("identityForAdmin"); err != nil {
+		return store.AdminIdentity{}, err
+	}
+	return f.repo.identityForAdmin(ctx, adminID, issuer, clientID)
+}
+
+func (f faultRepo) identities(ctx context.Context, adminID string) ([]store.AdminIdentity, error) {
+	if err := f.fail("identities"); err != nil {
+		return nil, err
+	}
+	return f.repo.identities(ctx, adminID)
+}
+
+func (f faultRepo) touchIdentity(ctx context.Context, identityID string, at time.Time) error {
+	if err := f.fail("touchIdentity"); err != nil {
+		return err
+	}
+	return f.repo.touchIdentity(ctx, identityID, at)
+}
+
 func (f faultRepo) wrapTx(tx *store.SystemTx) txRepo {
 	return faultTx{tx: f.repo.wrapTx(tx), fails: f.fails}
 }
@@ -366,4 +429,32 @@ func (ev *env) withKeys() func() {
 	real := ev.svc.keys
 	ev.svc.keys = &faultKeys{Keys: real, err: errFault}
 	return func() { ev.svc.keys = real }
+}
+
+func (f faultTx) linkIdentity(ctx context.Context, a store.AdminIdentity) (store.AdminIdentity, error) {
+	if err := f.fail("linkIdentity"); err != nil {
+		return store.AdminIdentity{}, err
+	}
+	return f.tx.linkIdentity(ctx, a)
+}
+
+func (f faultTx) listIdentities(ctx context.Context, adminID string) ([]store.AdminIdentity, error) {
+	if err := f.fail("listIdentities"); err != nil {
+		return nil, err
+	}
+	return f.tx.listIdentities(ctx, adminID)
+}
+
+func (f faultTx) deleteIdentity(ctx context.Context, adminID, identityID string) (store.AdminIdentity, error) {
+	if err := f.fail("deleteIdentity"); err != nil {
+		return store.AdminIdentity{}, err
+	}
+	return f.tx.deleteIdentity(ctx, adminID, identityID)
+}
+
+func (f faultTx) deleteSSOSessions(ctx context.Context, adminID, issuer, clientID string) (int64, error) {
+	if err := f.fail("deleteSSOSessions"); err != nil {
+		return 0, err
+	}
+	return f.tx.deleteSSOSessions(ctx, adminID, issuer, clientID)
 }

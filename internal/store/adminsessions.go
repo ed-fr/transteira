@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // AdminSessionState is the state of an administrator session.
@@ -30,6 +31,21 @@ func (s AdminSessionState) valid() bool {
 	return s == SessionTOTPRequired || s == SessionTOTPEnrollmentRequired || s == SessionAuthenticated
 }
 
+// AdminAuthMethod is how an administrator session was opened (migration
+// 0027, brief amendment A1).
+type AdminAuthMethod string
+
+// Session authentication methods.
+const (
+	// AuthPassword: the local password, then TOTP (every session before
+	// 2.0).
+	AuthPassword AdminAuthMethod = "password"
+	// AuthOIDC: an OpenID Connect single sign-on login, opened directly in
+	// SessionAuthenticated (the second factor is delegated to the
+	// provider and recorded in SSOMFA).
+	AuthOIDC AdminAuthMethod = "oidc"
+)
+
 // Limits of the recovery codes.
 const (
 	// MaxRecoveryCodes bounds the recovery codes of an administrator.
@@ -38,7 +54,7 @@ const (
 
 // adminSessionColumns is the column list read by the session queries.
 const adminSessionColumns = `id, token_hash, admin_id, state, created_at, last_seen_at, expires_at, state_expires_at,
-	totp_failures, client_ip`
+	totp_failures, client_ip, auth_method, sso_issuer, sso_client_id, sso_mfa`
 
 // Statements of the AdminSessions, AdminRecoveryCodes and AdminActivations
 // repositories. A session is valid while "expires_at > now AND
@@ -46,7 +62,7 @@ const adminSessionColumns = `id, token_hash, admin_id, state, created_at, last_s
 // state_expires_at > now)", the three arguments following that order.
 var (
 	qAdminSessionInsert = systemQuery(
-		`INSERT INTO admin_sessions (`+adminSessionColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO admin_sessions (`+adminSessionColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonAdminAuth)
 	qAdminSessionGet = systemQuery(
 		`SELECT `+adminSessionColumns+` FROM admin_sessions WHERE token_hash = ?
@@ -69,6 +85,18 @@ var (
 		reasonAdminAuth)
 	qAdminSessionDeleteByAdmin = systemQuery(
 		`DELETE FROM admin_sessions WHERE admin_id = ? AND id <> ?`,
+		reasonAdminAuth)
+	// qAdminSessionDeleteSSO revokes the single sign-on sessions opened
+	// through an (issuer, client ID) pair by the accounts attached to a
+	// tenant.
+	qAdminSessionDeleteSSO = systemQuery(
+		`DELETE FROM admin_sessions WHERE auth_method = 'oidc' AND sso_issuer = ? AND sso_client_id = ?
+		AND admin_id IN (SELECT admin_id FROM admin_tenants WHERE tenant_id = ?)`,
+		reasonAdminAuth)
+	// qAdminSessionDeleteSSOForAdmin revokes the single sign-on sessions
+	// of one account opened through an (issuer, client ID) pair.
+	qAdminSessionDeleteSSOForAdmin = systemQuery(
+		`DELETE FROM admin_sessions WHERE admin_id = ? AND auth_method = 'oidc' AND sso_issuer = ? AND sso_client_id = ?`,
 		reasonAdminAuth)
 	qAdminSessionPurge = systemQuery(
 		`DELETE FROM admin_sessions WHERE id IN (SELECT id FROM admin_sessions
@@ -183,6 +211,18 @@ type AdminSession struct {
 	TOTPFailures int
 	// ClientIP is the client IP at creation (the zero Addr if unknown).
 	ClientIP netip.Addr
+	// AuthMethod is how the session was opened: AuthPassword when empty on
+	// creation. An AuthOIDC session is created in SessionAuthenticated.
+	AuthMethod AdminAuthMethod
+	// SSOIssuer and SSOClientID are the issuer and the client ID of the
+	// single sign-on login (AuthOIDC only, "" otherwise). The session
+	// reaches a tenant only while the tenant's configuration admits them
+	// ([TenantSSO.Admits]).
+	SSOIssuer   string
+	SSOClientID string
+	// SSOMFA records whether the ID token of the login proved a
+	// multi-factor authentication (AuthOIDC only, false otherwise).
+	SSOMFA bool
 }
 
 // AdminSessions is the repository of administrator sessions. Its
@@ -253,6 +293,10 @@ func (r *AdminSessions) create(ctx context.Context, tx *SystemTx, s AdminSession
 	if err := checkStateExpiry(s.State, s.StateExpiresAt); err != nil {
 		return err
 	}
+	method, issuer, clientID, mfa, err := sessionAuth(s)
+	if err != nil {
+		return err
+	}
 	var ip any
 	if s.ClientIP.IsValid() {
 		ip, _ = ipText(s.ClientIP)
@@ -261,9 +305,31 @@ func (r *AdminSessions) create(ctx context.Context, tx *SystemTx, s AdminSession
 	if !s.StateExpiresAt.IsZero() {
 		stateExpires = toMillis(s.StateExpiresAt)
 	}
-	_, err := tx.Exec(ctx, qAdminSessionInsert, s.ID, s.TokenHash, s.AdminID, string(s.State), toMillis(created),
-		toMillis(seen), toMillis(s.ExpiresAt), stateExpires, 0, ip)
+	_, err = tx.Exec(ctx, qAdminSessionInsert, s.ID, s.TokenHash, s.AdminID, string(s.State), toMillis(created),
+		toMillis(seen), toMillis(s.ExpiresAt), stateExpires, 0, ip, string(method), issuer, clientID, mfa)
 	return err
+}
+
+// sessionAuth validates the authentication method of s and returns the
+// values of auth_method, sso_issuer, sso_client_id and sso_mfa (NULL for
+// a password session, as the constraints of migration 0027 require).
+func sessionAuth(s AdminSession) (AdminAuthMethod, any, any, any, error) {
+	switch s.AuthMethod {
+	case "", AuthPassword:
+		if s.SSOIssuer != "" || s.SSOClientID != "" || s.SSOMFA {
+			return "", nil, nil, nil, invalid("a password session has no single sign-on fields")
+		}
+		return AuthPassword, nil, nil, nil, nil
+	case AuthOIDC:
+		switch {
+		case s.State != SessionAuthenticated:
+			return "", nil, nil, nil, invalid("a single sign-on session is created authenticated")
+		case !validIdentityKey(s.SSOIssuer, s.SSOClientID):
+			return "", nil, nil, nil, invalid("malformed single sign-on issuer or client id")
+		}
+		return AuthOIDC, s.SSOIssuer, s.SSOClientID, s.SSOMFA, nil
+	}
+	return "", nil, nil, nil, invalid("unknown session authentication method")
 }
 
 // GetByTokenHash returns the session whose cookie token hashes to hash,
@@ -281,11 +347,14 @@ func (r *AdminSessions) GetByTokenHash(ctx context.Context, hash []byte, now tim
 			state                  string
 			created, seen, expires int64
 			stateExpires           sql.NullInt64
-			ip                     sql.NullString
+			ip, issuer, clientID   sql.NullString
+			method                 string
+			mfa                    sql.NullBool
 		)
 		err := tx.QueryRow(ctx, qAdminSessionGet, append([]any{hash}, validity(now, idle)...)...).Scan(&s.ID, &s.TokenHash,
-			&s.AdminID, &state, &created, &seen, &expires, &stateExpires, &s.TOTPFailures, &ip)
+			&s.AdminID, &state, &created, &seen, &expires, &stateExpires, &s.TOTPFailures, &ip, &method, &issuer, &clientID, &mfa)
 		s.State = AdminSessionState(state)
+		s.AuthMethod, s.SSOIssuer, s.SSOClientID, s.SSOMFA = AdminAuthMethod(method), issuer.String, clientID.String, mfa.Bool
 		s.CreatedAt, s.LastSeenAt, s.ExpiresAt = fromMillis(created), fromMillis(seen), fromMillis(expires)
 		s.StateExpiresAt, s.ClientIP = nullMillis(stateExpires), parseIP(ip.String)
 		return err
@@ -412,6 +481,65 @@ func deleteSessionsByAdmin(ctx context.Context, tx *SystemTx, adminID, exceptID 
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// DeleteSSOForTenant revokes single sign-on sessions in its own
+// transaction (see [AdminSessions.DeleteSSOForTenantTx]).
+func (r *AdminSessions) DeleteSSOForTenant(ctx context.Context, tid tenant.ID, issuer, clientID string) (int64, error) {
+	var n int64
+	err := r.db.authWrite(ctx, "revoke sso sessions", func(tx *SystemTx) error {
+		var err error
+		n, err = deleteSSOSessions(ctx, tx, tid, issuer, clientID)
+		return err
+	})
+	return n, err
+}
+
+// DeleteSSOForTenantTx revokes, inside tx, the single sign-on (AuthOIDC)
+// sessions opened through (issuer, clientID) by the accounts attached to
+// tenant tid, and returns how many it deleted. The caller runs it, with
+// the previous pair, when the configuration of tid is disabled, deleted,
+// or changes its issuer or its client ID (threats T-287, T-291). Password
+// sessions and the sessions of other pairs are never touched. A session of
+// an account also attached to another tenant trusting the same pair is
+// revoked too (the account signs in again): the access layer would keep it
+// out of tid anyway, revocation is the second line.
+func (r *AdminSessions) DeleteSSOForTenantTx(ctx context.Context, tx *SystemTx, tid tenant.ID, issuer, clientID string) (int64, error) {
+	n, err := deleteSSOSessions(ctx, tx, tid, issuer, clientID)
+	if err != nil {
+		return 0, wrap("revoke sso sessions", err)
+	}
+	return n, nil
+}
+
+// deleteSSOSessions implements DeleteSSOForTenantTx, returning raw errors.
+func deleteSSOSessions(ctx context.Context, tx *SystemTx, tid tenant.ID, issuer, clientID string) (int64, error) {
+	if tid.Validate() != nil {
+		return 0, invalid("malformed tenant id")
+	}
+	res, err := tx.Exec(ctx, qAdminSessionDeleteSSO, issuer, clientID, string(tid))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// DeleteSSOForAdminTx revokes, inside tx, the single sign-on (AuthOIDC)
+// sessions of the account adminID opened through (issuer, clientID), and
+// returns how many it deleted. The caller runs it when an identity of that
+// pair is unpinned from the account (OpenAPI deleteAdminIdentity): the
+// sessions it opened go with it. Password sessions and the sessions of
+// other pairs or accounts are never touched.
+func (r *AdminSessions) DeleteSSOForAdminTx(ctx context.Context, tx *SystemTx, adminID, issuer, clientID string) (int64, error) {
+	res, err := tx.Exec(ctx, qAdminSessionDeleteSSOForAdmin, adminID, issuer, clientID)
+	if err != nil {
+		return 0, wrap("revoke account sso sessions", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, wrap("revoke account sso sessions", err)
+	}
+	return n, nil
 }
 
 // Purge deletes the sessions invalid at now (absolute expiry, idle timeout

@@ -84,6 +84,12 @@ func serviceError(err error) error {
 		return problem.New(problem.CodeSystemSMTPUnavailable)
 	case errors.Is(err, adminauth.ErrStateConflict):
 		return problem.New(problem.CodeStateConflict)
+	case errors.Is(err, adminauth.ErrSSORequired):
+		return problem.New(problem.CodeSSORequired)
+	case errors.Is(err, adminauth.ErrSSONotAvailable):
+		return problem.New(problem.CodeSSONotAvailable)
+	case errors.Is(err, adminauth.ErrSSONotConfigured):
+		return problem.New(problem.CodeSSONotConfigured)
 	default:
 		return err
 	}

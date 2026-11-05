@@ -153,6 +153,23 @@ func (f *fakeService) Activate(_ context.Context, token, password string, ip net
 	return session(store.SessionTOTPEnrollmentRequired), f.record("Activate", token, password, ip)
 }
 
+func (f *fakeService) Methods(context.Context) (adminauth.AuthMethods, error) {
+	return adminauth.AuthMethods{Password: true, SSO: true}, f.record("Methods")
+}
+
+func (f *fakeService) StartSSO(_ context.Context, email string, ip netip.Addr) (adminauth.SSOStart, error) {
+	return adminauth.SSOStart{RedirectURL: "https://login.example.com/authorize?state=s", Cookie: "of_flow.mac"},
+		f.record("StartSSO", email, ip)
+}
+
+func (f *fakeService) CompleteSSO(_ context.Context, cb adminauth.SSOCallback, ip netip.Addr) (adminauth.Session, error) {
+	return session(store.SessionAuthenticated), f.record("CompleteSSO", cb, ip)
+}
+
+func (f *fakeService) DeleteIdentity(_ context.Context, p adminauth.Principal, adminID, identityID string, ip netip.Addr) error {
+	return f.record("DeleteIdentity", p.SessionID, adminID, identityID, ip)
+}
+
 // fakeTenants holds ten_a and ten_b; ten_gone is unknown; ten_boom fails.
 type fakeTenants struct {
 	listErr error

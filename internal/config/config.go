@@ -286,6 +286,15 @@ type Config struct {
 	// in addition to the built-in deny list; it wins over the allow lists.
 	WebhookDenyNetworks []netip.Prefix
 
+	// SSOUseProxy makes the OpenID Connect client go through the proxy of
+	// the environment (TT_SSO_USE_PROXY, decision A5); it ignores it by
+	// default.
+	SSOUseProxy bool
+	// SSOAllowNetworks lists the networks the identity providers may use
+	// although the built-in deny list of the webhooks refuses them
+	// (TT_SSO_ALLOW_NETWORKS, threat T-295).
+	SSOAllowNetworks []netip.Prefix
+
 	// Syslog is the RFC 5424 export of the audit and security logs
 	// (decision P41). It is disabled when its Addr is empty.
 	Syslog SyslogConfig
@@ -441,6 +450,7 @@ func Load(getenv func(string) string, opts ...Option) (*Config, error) {
 	l.loadAntivirus(c)
 	l.loadMaintenance(c)
 	l.loadWebhooks(c)
+	l.loadSSO(c)
 	l.loadSyslog(c)
 	l.loadMetrics(c)
 	if len(l.problems) > 0 {
@@ -923,6 +933,24 @@ func (l *loader) loadWebhooks(c *Config) {
 		l.fail(EnvWebhookAllowNetworks, "%v", err)
 	} else if err := netpolicy.CheckWebhookAllow(c.WebhookAllowNetworks, c.WebhookAllowHTTPNetworks, core); err != nil {
 		l.fail(EnvWebhookAllowHTTPNetworks, "%v (list it in %s too)", err, EnvWebhookAllowNetworks)
+	}
+}
+
+// loadSSO reads how the OpenID Connect client reaches the identity
+// providers: the proxy switch, and the networks opened in the egress
+// policy shared with the webhooks; an allowed network overlapping its
+// static core is refused (the networks of the container, also part of the
+// core, are checked when the application builds the client).
+func (l *loader) loadSSO(c *Config) {
+	c.SSOUseProxy = l.boolVar(EnvSSOUseProxy)
+	p, err := parsePrefixes(l.get(EnvSSOAllowNetworks))
+	if err != nil {
+		l.fail(EnvSSOAllowNetworks, "%v", err)
+		return
+	}
+	c.SSOAllowNetworks = p
+	if err := netpolicy.CheckWebhookAllow(p, nil, netpolicy.WebhookAlwaysDenyNetworks()); err != nil {
+		l.fail(EnvSSOAllowNetworks, "%v", err)
 	}
 }
 

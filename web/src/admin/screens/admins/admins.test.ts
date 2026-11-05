@@ -25,6 +25,8 @@ import {
   asInvitationLanguage,
   canInvite,
   canMailInvitation,
+  identityRows,
+  isSsoOnly,
   CREATABLE_ROLES,
   needsTenants,
   defaultInvitationLanguage,
@@ -260,6 +262,7 @@ describe('adminRow', () => {
       tenants: 'A',
       totp: 'enabled',
       status: 'active',
+      ssoOnly: false,
       lastLogin: 'D(2026-10-19T08:30:00Z)',
       self: true,
     });
@@ -646,5 +649,65 @@ describe('accountErrorMessage', () => {
     expect(
       accountErrorMessage({ code: undefined, message: 'Network' }, delegated(), { kind: 'reset' }, 'me', t),
     ).toBe('Network');
+  });
+});
+
+describe('single sign-on accounts', () => {
+  it('recognises an account without local password', () => {
+    expect(isSsoOnly(delegated())).toBe(false);
+    expect(isSsoOnly(delegated({ ssoOnly: true }))).toBe(true);
+  });
+
+  it('shows an SSO-only account as active unless disabled, and offers no invitation for it', () => {
+    const sso = delegated({ ssoOnly: true, activated: false });
+    expect(accountStatus(sso)).toBe('active');
+    expect(accountStatus({ ...sso, disabled: true })).toBe('disabled');
+    expect(canInvite(sso)).toBe(false);
+  });
+
+  it('flags the row of an SSO-only account', () => {
+    const ctx = { names: new Map<string, string>(), meId: undefined, t, formatDate: (iso: string) => iso };
+    expect(adminRow(delegated({ ssoOnly: true }), ctx).ssoOnly).toBe(true);
+    expect(adminRow(delegated(), ctx).ssoOnly).toBe(false);
+  });
+
+  it('creates an account without activation link and without local second factor', () => {
+    const body = createBody({
+      ...emptyCreateForm('fr'),
+      username: 'admin.b',
+      email: 'b@example.com',
+      tenantIds: ['ten_a'],
+      requireTotp: true,
+      delivery: 'none',
+    });
+    expect(body.invitation).toEqual({ delivery: 'none' });
+    expect(body.requireTotp).toBe(false);
+  });
+
+  it('lists the pinned identities, oldest first, with formatted dates', () => {
+    const rows = identityRows(
+      delegated({
+        identities: [
+          {
+            id: 'idn_2',
+            issuer: 'https://login.example.com/b/v2.0',
+            clientId: 'c2',
+            linkedAt: '2026-11-03T10:00:00Z',
+          },
+          {
+            id: 'idn_1',
+            issuer: 'https://login.example.com/a/v2.0',
+            clientId: 'c1',
+            linkedAt: '2026-11-01T10:00:00Z',
+          },
+        ],
+      }),
+      (iso) => `on ${iso.slice(0, 10)}`,
+    );
+    expect(rows.map((r) => [r.id, r.linkedAt])).toEqual([
+      ['idn_1', 'on 2026-11-01'],
+      ['idn_2', 'on 2026-11-03'],
+    ]);
+    expect(identityRows(delegated(), (iso) => iso)).toEqual([]);
   });
 });

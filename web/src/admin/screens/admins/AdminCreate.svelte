@@ -150,6 +150,11 @@
       addGuard={(guard) => nav.addGuard(guard)}
       ondone={finish}
     />
+  {:else if created.delivery === 'none'}
+    <Alert severity="info" live={false}>
+      <p>{t('adminAccounts.invitation.noneDone', { email: created.account.email })}</p>
+    </Alert>
+    <p><Button onclick={finish}>{t('adminAccounts.invitation.sent.done')}</Button></p>
   {:else if created.delivery === 'mail'}
     <InvitationSent
       email={created.account.email}
@@ -218,19 +223,22 @@
           error={errorFor(errors, `${ids.tenants}-0`)}
         />
       {/if}
-      <Checkbox
-        id={ids.requireTotp}
-        label={t('adminAccounts.form.requireTotp.label')}
-        hint={form.delivery === 'mail'
-          ? t('adminAccounts.form.requireTotp.mailHint')
-          : t('adminAccounts.form.requireTotp.hint')}
-        disabled={form.delivery === 'mail'}
-        bind:checked={
-          () => form.requireTotp || form.delivery === 'mail', (value) => (form.requireTotp = value)
-        }
-      />
+      {#if form.delivery !== 'none'}
+        <Checkbox
+          id={ids.requireTotp}
+          label={t('adminAccounts.form.requireTotp.label')}
+          hint={form.delivery === 'mail'
+            ? t('adminAccounts.form.requireTotp.mailHint')
+            : t('adminAccounts.form.requireTotp.hint')}
+          disabled={form.delivery === 'mail'}
+          bind:checked={
+            () => form.requireTotp || form.delivery === 'mail', (value) => (form.requireTotp = value)
+          }
+        />
+      {/if}
       <InvitationFields
         idPrefix={ids.invitation}
+        allowNone
         bind:delivery={form.delivery}
         bind:language={form.language}
       />

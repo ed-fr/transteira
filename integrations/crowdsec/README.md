@@ -14,6 +14,7 @@ The log format and the event catalogue are specified in
 | `parsers/s01-parse/transteira-logs.yaml` | `parsers/s01-parse/transteira-logs.yaml` |
 | `scenarios/transteira-bf.yaml` | `scenarios/transteira-bf.yaml` |
 | `scenarios/transteira-fqdn-scan.yaml` | `scenarios/transteira-fqdn-scan.yaml` |
+| `scenarios/transteira-sso-bf.yaml` | `scenarios/transteira-sso-bf.yaml` (optional, since 2.0) |
 
 The parser relies on `crowdsecurity/non-syslog` (stage `s00-raw`, installed by
 default) to turn the `type: transteira` acquisition label into
@@ -41,8 +42,15 @@ timestamp.
 |---|---|---|
 | `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `metrics_token_invalid`, `access_link_invalid`, `provisioning_token_invalid`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
 | `ed-fr/transteira-fqdn-scan` | `unknown_fqdn` | 10 events in a burst, one leaks every 30 s |
+| `ed-fr/transteira-sso-bf` | `sso_failed` (since 2.0) | 30 events in a burst, one leaks every 30 s |
 
-Both carry `remediation: true`: a decision (ban, 4 h by default profile) is
+`ed-fr/transteira-sso-bf` has a much higher threshold than the brute force
+scenario on purpose: a stale browser tab or a bookmarked callback URL ends
+with `reason="state_invalid"` without any attack, so a few single sign-on
+failures are normal. Skip this file if single sign-on is not used. See
+[Single sign-on](../../docs/operations/sso.md).
+
+All carry `remediation: true`: a decision (ban, 4 h by default profile) is
 created on overflow.
 
 TransTeira throttles its own `rate_limited` lines (at most one per client and

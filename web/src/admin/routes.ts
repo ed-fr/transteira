@@ -56,6 +56,7 @@ import TenantNetwork from './screens/tenants/TenantNetwork.svelte';
 import TenantRecipientRules from './screens/tenants/TenantRecipientRules.svelte';
 import TenantSetup from './screens/tenants/TenantSetup.svelte';
 import TenantSmtp from './screens/tenants/TenantSmtp.svelte';
+import TenantSso from './screens/tenants/TenantSso.svelte';
 import type { AdminScreenComponent } from './screens/types';
 
 /** Base path of the admin application. */
@@ -178,6 +179,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminTenants.smtp.title',
     access: 'auth',
     helpTopic: 'tenant-smtp',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/sso',
+    component: TenantSso,
+    titleKey: 'adminTenants.sso.title',
+    access: 'auth',
+    helpTopic: 'tenant-sso',
     tenantNav: true,
   },
   {

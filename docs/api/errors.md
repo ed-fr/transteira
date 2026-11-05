@@ -86,7 +86,9 @@ use to ban the client IP.
   `delegatedAdmin.delivery: none` included). Also since 2.0, `PUT /admin/tenants/{tenantId}/sso`
   without `clientSecret` while `issuer` or `clientId` differs from the stored configuration is
   refused with `required` on `/clientSecret`: a stored secret is never carried over to another
-  application or identity provider.
+  application or identity provider. An e-mail domain of the single sign-on configuration that is not one of the tenant's
+  internal mail domains is refused with `not-internal-domain` on
+  `/emailDomains/<n>`.
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 

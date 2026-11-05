@@ -134,6 +134,10 @@
       "copy": {
         "label": "Afficher le lien à copier et le transmettre moi-même",
         "hint": "Le lien est affiché une seule fois. Transmettez-le par un autre canal que le courriel."
+      },
+      "none": {
+        "label": "Authentification unique uniquement, sans lien d’activation",
+        "hint": "Aucun mot de passe n’est créé : le compte se connecte par authentification unique. Chaque entité du compte doit avoir l’authentification unique activée."
       }
     },
     "language": {
@@ -154,6 +158,27 @@
       "rateLimited": "Trop d’invitations pour ce compte. Réessayez plus tard.",
       "rateLimitedIn": "Trop d’invitations pour ce compte. Réessayez dans {delay}.",
       "conflict": "Ce compte ne peut pas recevoir d’invitation dans son état actuel (désactivé ou déjà activé). Rechargez la page."
+    },
+    "noneDone": "Le compte a été créé sans lien d’activation. {email} se connecte par authentification unique."
+  },
+  "sso": {
+    "badge": "SSO uniquement",
+    "badgeHint": "Pas de mot de passe local : se connecte par authentification unique.",
+    "signIn": "Mode de connexion",
+    "unpinned": "Identité désépinglée.",
+    "identities": {
+      "title": "Identités d’authentification unique épinglées",
+      "none": "Aucune identité épinglée. La première connexion par authentification unique épingle à ce compte l’identité du compte du fournisseur.",
+      "intro": "Une identité est épinglée au compte lors de sa première connexion par authentification unique ; ensuite, seule cette identité est acceptée. Désépinglez-la lorsque la personne change de compte chez le fournisseur : la connexion suivante épingle à nouveau l’identité correspondant à l’adresse e-mail.",
+      "issuer": "Émetteur",
+      "clientId": "Identifiant client",
+      "linkedAt": "Épinglée le",
+      "unpin": "Désépingler"
+    },
+    "unpin": {
+      "confirmTitle": "Désépingler une identité de {username} ?",
+      "confirmText": "Le compte sera épinglé de nouveau, à sa prochaine connexion par authentification unique, à l’identité correspondant à son adresse e-mail.",
+      "confirmAction": "Désépingler"
     }
   }
 }

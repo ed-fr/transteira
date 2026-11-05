@@ -229,8 +229,9 @@ func invitedEvent(actor string, ip netip.Addr, a store.Admin, link Activation, l
 // a *NotAllowedError on FieldDelivery for the mail delivery of a super
 // admin account, ErrSystemSMTPUnavailable for the mail delivery without a
 // system SMTP, ErrNotFound for an unknown account, ErrAccountDisabled for a
-// disabled one, ErrAdminAlreadyActive for an activated one and a
-// *RateLimitError beyond the limit.
+// disabled one, ErrSSOOnlyEnforced for a single sign-on only account while
+// one of its tenants enforces single sign-on (T-292), ErrAdminAlreadyActive
+// for an activated one and a *RateLimitError beyond the limit.
 func (s *Service) Invite(ctx context.Context, p Principal, adminID string, inv Invitation, clientIP netip.Addr) (Account, Activation, error) {
 	if err := manager(p); err != nil {
 		return Account{}, Activation{}, err
@@ -247,6 +248,9 @@ func (s *Service) Invite(ctx context.Context, p Principal, adminID string, inv I
 		return Account{}, Activation{}, ErrNotFound
 	case err != nil:
 		return Account{}, Activation{}, fmt.Errorf("adminauth: read admin: %w", err)
+	}
+	if err := s.checkLinkAllowed(ctx, cur); err != nil {
+		return Account{}, Activation{}, err
 	}
 	tenants, err := s.tenantInfos(ctx, cur.TenantIDs)
 	if err != nil {

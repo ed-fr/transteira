@@ -91,6 +91,26 @@ On the [General](topic:tenant-general) screen of an entity, you can change the s
 
 > **Note** The sum of the quotas may exceed the size of the disk. Watch the disk use in the [System overview](topic:system-overview).
 
+<!-- topic: sso-setup -->
+### Single sign-on of an entity
+
+Only you can configure single sign-on (OpenID Connect) for an entity; delegated administrators and auditors see the configuration in read-only mode. On the entity, open **Single sign-on** and fill in:
+
+![Single sign-on screen of an entity with the enable box, the issuer and the client ID](../screenshots/en/admin-tenant-sso.png)
+
+- **Issuer**: the `https` address of the identity provider. For Microsoft Entra ID, use the issuer of your directory, `login.microsoftonline.com/<directory id>/v2.0`, preceded by `https://`; the multi-tenant addresses `common`, `organizations` and `consumers` are refused.
+- **Client ID** and **Client secret**: those of the application registered at the provider, with the redirect address `https://<administration host>/api/v1/admin/auth/oidc/callback`. The secret is never shown again; leave the field empty to keep the stored one. It is required again when the issuer or the client ID changes.
+- **Email domains**: the domains whose administrators sign in through this provider. Each must be one of the **internal email domains** of the entity and cannot be used by another entity.
+- **Require multi-factor authentication**: ticked by default. The provider must then state that a second factor was used; for Entra ID this needs the optional claim `amr` on the ID token and, ideally, a Conditional Access policy requiring MFA. Without it, sign-ins fail with **sso-mfa-required**. This setting alone governs the second factor of single sign-on logins: the "TOTP required" setting of the account does not apply to them.
+- **Enforce single sign-on**: refuses the password sign-in of the delegated administrators and auditors of the entity. Their existing password sessions no longer reach the entity either, until they sign in through single sign-on. You are never affected.
+- **Enable single sign-on**: turns the feature on for the entity.
+
+Click **Test** before enabling: it checks that the provider can be reached and answers consistently, without signing anyone in. Changing the issuer or the client ID closes the single sign-on sessions of the entity and unpins the identities pinned for the previous provider (unless another entity of the account still uses it). Disabling or deleting the configuration closes the single sign-on sessions but keeps the pinned identities: they are unusable until a configuration with the same issuer and client ID returns.
+
+If the provider is down while single sign-on is enforced, sign in with your own account (you never use single sign-on: your password and second factor always work), untick **Enforce single sign-on** on the entity and save. Delegated administrators who have a password can then sign in again. Tick it again once the provider is back.
+
+The full procedure, the Entra ID and Keycloak steps and the troubleshooting are in `docs/operations/sso.md`.
+
 <!-- topic: tenant-delete -->
 ### Deleting an entity
 
@@ -137,6 +157,13 @@ Click **Edit** on the row of an account to change its email address, its attache
 - **Account disabled**: the account can no longer sign in and its open sessions are closed.
 
 Changing the entities, the role or the disabled state also closes the sessions of the account. On your own account, these actions are not offered: use [My account](topic:account) for your password and your authentication device.
+
+<!-- topic: admin-sso -->
+### Accounts that sign in with single sign-on
+
+Accounts are always created by you, never by a sign-in. In the form to create a delegated administrator or an auditor, the delivery **Single sign-on only, no activation link** creates an account **without password**: the person can only sign in through single sign-on. It is offered only when every attached entity has its single sign-on enabled. It is not possible for a super administrator.
+
+On the first single sign-on, the account is found by its verified email address and the identity of the person at the provider is **pinned** to it. From then on only this identity is accepted: someone else presenting the same address is refused. When a person changes account at the provider, open the account with **Edit**, where the **Pinned single sign-on identities** are listed, and click **Unpin** on the identity; the next sign-in pins the identity matching the email address, so check first that it is the same person. Unpinning an identity also closes the sessions opened through it, and changing the email address of an account unpins its identities. Pinning and unpinning are recorded in the audit log.
 
 <!-- topic: admin-reset -->
 ### Lost password or device

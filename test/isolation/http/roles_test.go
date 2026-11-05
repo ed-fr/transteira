@@ -71,6 +71,7 @@ var auditorExpect = map[string]auditorClass{
 	// Audit reads of an attached tenant.
 	"getTenant":                tenantRead,
 	"getTenantStats":           tenantRead,
+	"getTenantSso":             tenantRead,
 	"getTenantTransfer":        tenantRead,
 	"getTenantTransferProof":   tenantRead,
 	"listTenantAuditEvents":    tenantRead,
@@ -134,7 +135,6 @@ var auditorExpect = map[string]auditorClass{
 	"getRecipientRules":           refused,
 	"getSmtpSettings":             refused,
 	"getTenantSetup":              refused,
-	"getTenantSso":                refused,
 	"getTextProposal":             refused,
 	"listEmailTemplates":          refused,
 	"previewEmailTemplate":        refused,

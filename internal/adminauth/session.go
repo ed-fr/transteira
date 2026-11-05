@@ -18,8 +18,19 @@ import (
 // enforces the state: [RequireAuthenticated] for every operation but the
 // login steps.
 //
+// A single sign-on session (store.AuthOIDC) reaches only the tenants of
+// its account whose current single sign-on configuration admits it: the
+// configuration is read on every request, and the tenants it no longer
+// admits are removed from Principal.Admin.TenantIDs (threats T-287,
+// T-291). Such a session of a super admin is refused. Conversely, a
+// password session of a delegated admin or an auditor never reaches a
+// tenant whose usable single sign-on is enforced (T-292), whatever the way
+// it was opened (activation link, session older than the enforcement,
+// password reset).
+//
 // It returns ErrUnauthenticated for a malformed, unknown, expired or
-// revoked token, and for a session of a disabled or deleted account.
+// revoked token, for a session of a disabled or deleted account, and for a
+// single sign-on session of a super admin.
 func (s *Service) Resolve(ctx context.Context, rawToken string) (Principal, error) {
 	if !validToken(SessionTokenPrefix, rawToken) {
 		return Principal{}, ErrUnauthenticated
@@ -42,6 +53,14 @@ func (s *Service) Resolve(ctx context.Context, rawToken string) (Principal, erro
 	case a.Disabled:
 		return Principal{}, ErrUnauthenticated
 	}
+	if sess.AuthMethod == store.AuthOIDC {
+		a, err = s.ssoScope(ctx, a, sess)
+	} else {
+		a, err = s.passwordScope(ctx, a)
+	}
+	if err != nil {
+		return Principal{}, err
+	}
 	err = s.repo.touchSession(ctx, sess.ID, now, s.idle)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -55,7 +74,7 @@ func (s *Service) Resolve(ctx context.Context, rawToken string) (Principal, erro
 	}
 	return Principal{
 		SessionID: sess.ID, State: sess.State, CSRFToken: csrf, ExpiresAt: sess.ExpiresAt,
-		Admin: accountOf(a), tokenHash: hash,
+		Admin: accountOf(a), AuthMethod: sess.AuthMethod, tokenHash: hash,
 	}, nil
 }
 

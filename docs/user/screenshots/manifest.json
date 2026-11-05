@@ -72,6 +72,12 @@
     "path": "{lang}/admin-login.png"
   },
   {
+    "name": "admin-login-sso",
+    "screen": "admin /admin/login (single sign-on offered: e-mail address field)",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-login-sso.png"
+  },
+  {
     "name": "admin-privacy",
     "screen": "admin /admin/tenants/:id/privacy (search result)",
     "profile": "delegated-admin",
@@ -190,6 +196,12 @@
     "screen": "admin /admin/tenants/:id/smtp",
     "profile": "delegated-admin",
     "path": "{lang}/admin-tenant-smtp.png"
+  },
+  {
+    "name": "admin-tenant-sso",
+    "screen": "admin /admin/tenants/:id/sso (single sign-on configuration of an entity)",
+    "profile": "super-admin",
+    "path": "{lang}/admin-tenant-sso.png"
   },
   {
     "name": "admin-tenant-template-editor",

@@ -134,6 +134,10 @@
       "copy": {
         "label": "Show the link to copy and hand over myself",
         "hint": "The link is shown once. Hand it over through another channel than email."
+      },
+      "none": {
+        "label": "Single sign-on only, no activation link",
+        "hint": "No password is created: the account signs in through single sign-on. Every entity of the account must have single sign-on enabled."
       }
     },
     "language": {
@@ -154,6 +158,27 @@
       "rateLimited": "Too many invitations for this account. Try again later.",
       "rateLimitedIn": "Too many invitations for this account. Try again in {delay}.",
       "conflict": "This account cannot receive an invitation in its current state (disabled or already activated). Reload the page."
+    },
+    "noneDone": "The account was created without an activation link. {email} signs in with single sign-on."
+  },
+  "sso": {
+    "badge": "SSO only",
+    "badgeHint": "No local password: signs in through single sign-on.",
+    "signIn": "Sign-in method",
+    "unpinned": "Identity unpinned.",
+    "identities": {
+      "title": "Pinned single sign-on identities",
+      "none": "No identity pinned yet. The first single sign-on sign-in pins the identity of the provider account to this account.",
+      "intro": "An identity is pinned to the account at its first single sign-on sign-in; afterwards only that identity is accepted. Unpin it when the person changes provider account: the next sign-in pins the identity matching the email address again.",
+      "issuer": "Issuer",
+      "clientId": "Client ID",
+      "linkedAt": "Pinned on",
+      "unpin": "Unpin"
+    },
+    "unpin": {
+      "confirmTitle": "Unpin an identity of {username}?",
+      "confirmText": "The account will be pinned again, at its next single sign-on sign-in, to the identity matching its email address.",
+      "confirmAction": "Unpin"
     }
   }
 }

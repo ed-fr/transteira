@@ -311,6 +311,8 @@ export function loginFailure(view: ErrorView): FormFailure {
       return { general: { key: 'adminAuth.login.invalid' }, fields: {} };
     case 'rate-limited':
       return rateLimited(view, 'adminAuth.login.locked');
+    case 'sso-required':
+      return { general: { key: 'adminAuth.sso.passwordRefused' }, fields: {} };
     default:
       return generic(view);
   }

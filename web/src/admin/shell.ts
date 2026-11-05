@@ -72,6 +72,7 @@ export const TENANT_CONFIG_SECTIONS = [
   'abuse',
   'confidentiality',
   'smtp',
+  'sso',
   'templates',
   'legal',
 ] as const;
@@ -98,11 +99,12 @@ export type TenantSection = (typeof TENANT_SECTIONS)[number];
 
 /**
  * Sections of a tenant an auditor (read-only role) may open, in navigation order: the summary
- * (the general view, read-only), the transfers, the audit log, the security log and the
- * statistics. No configuration section.
+ * (the general view, read-only), the single sign-on configuration (read-only), the transfers, the
+ * audit log, the security log and the statistics. No configuration section.
  */
 export const AUDITOR_TENANT_SECTIONS = [
   'general',
+  'sso',
   'transfers',
   'audit',
   'security',

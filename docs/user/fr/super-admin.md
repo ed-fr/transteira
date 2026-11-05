@@ -91,6 +91,26 @@ Sur l’écran [Général](topic:tenant-general) d’une entité, vous pouvez mo
 
 > **À savoir** La somme des quotas peut dépasser la taille du disque. Surveillez l’occupation du disque dans la [vue d’ensemble du système](topic:system-overview).
 
+<!-- topic: sso-setup -->
+### Authentification unique d’une entité
+
+Vous seul pouvez configurer l’authentification unique (OpenID Connect) d’une entité ; les administrateurs délégués et les auditeurs voient la configuration en lecture seule. Sur l’entité, ouvrez **Authentification unique** et renseignez :
+
+![Écran d’authentification unique d’une entité avec la case d’activation, l’émetteur et l’identifiant client](../screenshots/fr/admin-tenant-sso.png)
+
+- **Émetteur** : l’adresse `https` du fournisseur d’identité. Pour Microsoft Entra ID, utilisez l’émetteur de votre annuaire, `login.microsoftonline.com/<identifiant de l’annuaire>/v2.0`, précédé de `https://` ; les adresses multi-annuaires `common`, `organizations` et `consumers` sont refusées.
+- **Identifiant client** et **Secret client** : ceux de l’application inscrite chez le fournisseur, avec l’adresse de redirection `https://<hôte d’administration>/api/v1/admin/auth/oidc/callback`. Le secret n’est jamais réaffiché ; laissez le champ vide pour conserver celui qui est enregistré. Il est exigé de nouveau quand l’émetteur ou l’identifiant client change.
+- **Domaines de messagerie** : les domaines dont les administrateurs se connectent par ce fournisseur. Chacun doit être l’un des **domaines de messagerie internes** de l’entité et ne peut pas être utilisé par une autre entité.
+- **Exiger l’authentification multifacteur** : cochée par défaut. Le fournisseur doit alors indiquer qu’un second facteur a été utilisé ; pour Entra ID, cela demande la revendication facultative `amr` sur le jeton d’identité et, idéalement, une stratégie d’accès conditionnel exigeant le MFA. Sans cela, les connexions échouent avec **sso-mfa-required**. Ce réglage seul gouverne le second facteur des connexions par authentification unique : le réglage « TOTP obligatoire » du compte ne s’y applique pas.
+- **Imposer l’authentification unique** : refuse la connexion par mot de passe des administrateurs délégués et des auditeurs de l’entité. Leurs sessions par mot de passe existantes n’atteignent plus l’entité non plus, jusqu’à ce qu’ils se connectent par l’authentification unique. Vous n’êtes jamais concerné.
+- **Activer l’authentification unique** : active la fonction pour l’entité.
+
+Cliquez sur **Tester** avant d’activer : le test vérifie que le fournisseur est joignable et répond de façon cohérente, sans connecter personne. Changer l’émetteur ou l’identifiant client ferme les sessions d’authentification unique de l’entité et désépingle les identités épinglées pour l’ancien fournisseur (sauf si une autre entité du compte l’utilise encore). Désactiver ou supprimer la configuration ferme les sessions d’authentification unique mais conserve les identités épinglées : elles sont inutilisables tant qu’une configuration avec le même émetteur et le même identifiant client n’est pas revenue.
+
+Si le fournisseur est en panne alors que l’authentification unique est imposée, connectez-vous avec votre propre compte (vous n’utilisez jamais l’authentification unique : votre mot de passe et votre second facteur fonctionnent toujours), décochez **Imposer l’authentification unique** sur l’entité et enregistrez. Les administrateurs délégués qui ont un mot de passe peuvent alors se reconnecter. Recochez-la quand le fournisseur est revenu.
+
+La procédure complète, les étapes Entra ID et Keycloak et le dépannage sont dans `docs/operations/fr/sso.md`.
+
 <!-- topic: tenant-delete -->
 ### Supprimer une entité
 
@@ -137,6 +157,13 @@ Cliquez sur **Modifier** sur la ligne d’un compte pour changer son adresse él
 - **Compte désactivé** : le compte ne peut plus se connecter et ses sessions ouvertes sont fermées.
 
 Modifier les entités, le rôle ou la désactivation ferme aussi les sessions du compte. Sur votre propre compte, ces actions ne sont pas proposées : passez par [Mon compte](topic:account) pour votre mot de passe et votre appareil d’authentification.
+
+<!-- topic: admin-sso -->
+### Comptes qui se connectent par authentification unique
+
+Les comptes sont toujours créés par vous, jamais par une connexion. Dans le formulaire de création d’un administrateur délégué ou d’un auditeur, la remise **Authentification unique uniquement, sans lien d’activation** crée un compte **sans mot de passe** : la personne ne peut se connecter que par l’authentification unique. Elle n’est proposée que si toutes les entités rattachées ont leur authentification unique activée. Elle est impossible pour un super administrateur.
+
+À la première connexion unique, le compte est retrouvé par son adresse mail vérifiée et l’identité de la personne chez le fournisseur lui est **épinglée**. Ensuite, seule cette identité est acceptée : une autre personne qui présente la même adresse est refusée. Quand une personne change de compte chez le fournisseur, ouvrez le compte avec **Modifier**, où figurent les **Identités d’authentification unique épinglées**, et cliquez sur **Désépingler** sur l’identité ; la connexion suivante épingle l’identité qui correspond à l’adresse mail, vérifiez donc d’abord qu’il s’agit de la même personne. Désépingler une identité ferme aussi les sessions ouvertes par elle, et changer l’adresse mail d’un compte désépingle ses identités. L’épinglage et le désépinglage sont inscrits au journal d’audit.
 
 <!-- topic: admin-reset -->
 ### Mot de passe ou appareil perdu

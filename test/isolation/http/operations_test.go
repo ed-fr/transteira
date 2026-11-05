@@ -295,6 +295,19 @@ var isolationCases = map[string]isolationCase{
 	"updateSystemWebhook": systemWebhook,
 	"deleteSystemWebhook": systemWebhook,
 	"testSystemWebhook":   systemWebhook,
+	// Single sign-on (sso_test.go, since 2.0): the login steps are served
+	// on the admin host only and tell nothing of the tenants (T-296); the
+	// configuration of a tenant is read by its own admins only (404 for B)
+	// and written by the super admin only (T-287); the unpinning of an
+	// identity is reserved to the super admin.
+	"getAdminAuthMethods":    ssoMethods,
+	"startAdminOidcLogin":    ssoLoginStep,
+	"completeAdminOidcLogin": ssoLoginStep,
+	"getTenantSso":           tenantSsoRead,
+	"putTenantSso":           tenantSsoWrite,
+	"deleteTenantSso":        tenantSsoWrite,
+	"testTenantSso":          tenantSsoWrite,
+	"deleteAdminIdentity":    adminIdentityOp,
 	// Provisioning API (provisioning_test.go, since 1.2): the tokens are
 	// instance-wide and reserved to the super admin (403 for tenant A's
 	// delegated admin); the provisioning operations are served on the admin
@@ -662,6 +675,7 @@ func startHarness(t *testing.T, e storetest.Engine) *harness {
 	root := t.TempDir()
 	h.config = seedTenantConfig(t, db, h, filepath.Join(root, "data"))
 	h.ops = seedOperations(t, db, h.tenantA.ID, h.tenantB.ID)
+	seedSSO(t, db, h.tenantA.ID, h.tenantB.ID)
 	_ = db.Close()
 
 	env := map[string]string{

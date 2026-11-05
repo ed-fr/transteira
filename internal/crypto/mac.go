@@ -76,12 +76,17 @@ const (
 	// administrator session is never valid for a "my transfers" session
 	// and vice versa.
 	MACPurposeMeCSRF MACPurpose = "me-csrf"
+	// MACPurposeOIDCFlow keys the single sign-on flow cookie (since 2.0):
+	// the MAC of a flow ID and the state of that flow, so that the cookie
+	// binds the browser to the flow it started (login CSRF) and a flow ID
+	// alone, or a cookie with another state, is never accepted.
+	MACPurposeOIDCFlow MACPurpose = "oidc-flow"
 )
 
 // macPurposes lists every valid MACPurpose.
 var macPurposes = []MACPurpose{
 	MACPurposeOTP, MACPurposeCSRF, MACPurposeRecognition, MACPurposeDownloadGrant, MACPurposeAdminCSRF,
-	MACPurposeRecipientVerification, MACPurposeAccessRate, MACPurposeMeCSRF,
+	MACPurposeRecipientVerification, MACPurposeAccessRate, MACPurposeMeCSRF, MACPurposeOIDCFlow,
 }
 
 // deriveMACKeys derives the MAC key of every purpose from the master key

@@ -24,11 +24,20 @@
     language: InvitationLanguage;
     /** The mail delivery is offered (false for a super admin account). */
     allowMail?: boolean;
+    /** Offers "no activation link, single sign-on only" (creation of a delegated admin or auditor). */
+    allowNone?: boolean;
     /** Error message of the delivery. */
     error?: string | undefined;
   }
 
-  let { idPrefix, delivery = $bindable(), language = $bindable(), allowMail = true, error }: Props = $props();
+  let {
+    idPrefix,
+    delivery = $bindable(),
+    language = $bindable(),
+    allowMail = true,
+    allowNone = false,
+    error,
+  }: Props = $props();
 
   const languageOptions = $derived(
     INVITATION_LANGUAGES.map((code) => ({ value: code, label: languageLabel(code, locale.current) })),
@@ -44,6 +53,15 @@
       label: t('adminAccounts.invitation.delivery.copy.label'),
       hint: t('adminAccounts.invitation.delivery.copy.hint'),
     },
+    ...(allowNone
+      ? [
+          {
+            value: 'none' as const,
+            label: t('adminAccounts.invitation.delivery.none.label'),
+            hint: t('adminAccounts.invitation.delivery.none.hint'),
+          },
+        ]
+      : []),
   ]);
 </script>
 

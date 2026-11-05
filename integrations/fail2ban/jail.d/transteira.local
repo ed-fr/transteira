@@ -50,3 +50,26 @@ action = iptables-multiport[name=transteira, port="http,https", protocol=tcp, ch
 # Do NOT list the reverse proxy address here: TransTeira already writes the
 # real client IP, read from the trusted proxies only.
 ignoreip = 127.0.0.1/8 ::1 192.0.2.0/24 198.51.100.10 2001:db8:10::/48
+
+# Single sign-on failures (event sso_failed, since 2.0), with a HIGHER
+# threshold than the jail above: a stale tab, a bookmarked callback URL or a
+# provider hiccup produce reason="state_invalid" or "issuer_error" without any
+# attack. Remove this jail if single sign-on is not used.
+[transteira-sso]
+enabled  = true
+filter   = transteira-sso
+logpath  = /var/lib/docker/volumes/transteira_logs/_data/security.log
+backend  = auto
+usedns   = no
+
+# 30 failures within 10 minutes (three times the password jail).
+maxretry = 30
+findtime = 10m
+bantime  = 1h
+bantime.increment = true
+bantime.maxtime   = 1w
+
+action = iptables-multiport[name=transteira-sso, port="http,https", protocol=tcp, chain=DOCKER-USER]
+
+# Same exemptions as the jail above (internal ranges, NAT addresses, probes).
+ignoreip = 127.0.0.1/8 ::1 192.0.2.0/24 198.51.100.10 2001:db8:10::/48

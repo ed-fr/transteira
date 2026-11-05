@@ -143,7 +143,9 @@ func TestFail2banEventsMatchCatalogue(t *testing.T) {
 	got := slices.Clone(sim.event)
 	want := make([]string, 0, len(allEvents))
 	for _, e := range allEvents {
-		want = append(want, string(e))
+		if !slices.Contains(ownFilterEvents, e) {
+			want = append(want, string(e))
+		}
 	}
 	slices.Sort(got)
 	slices.Sort(want)

@@ -104,8 +104,8 @@ func (s *Service) List(ctx context.Context, p Principal, cursor string, limit in
 	return out, nil
 }
 
-// Get returns the account adminID, for the super admin of p, or
-// ErrNotFound.
+// Get returns the account adminID with its single sign-on identities, for
+// the super admin of p, or ErrNotFound.
 func (s *Service) Get(ctx context.Context, p Principal, adminID string) (Account, error) {
 	if err := manager(p); err != nil {
 		return Account{}, err
@@ -117,7 +117,7 @@ func (s *Service) Get(ctx context.Context, p Principal, adminID string) (Account
 	case err != nil:
 		return Account{}, fmt.Errorf("adminauth: read admin: %w", err)
 	}
-	return accountOf(a), nil
+	return s.withIdentities(ctx, accountOf(a))
 }
 
 // Create creates a delegated admin or an auditor for the super admin of
@@ -128,11 +128,18 @@ func (s *Service) Get(ctx context.Context, p Principal, adminID string) (Account
 // (TOTP is then mandatory). The account has no password until the link is
 // used.
 //
+// With the delivery DeliveryNone (since 2.0), no activation link is
+// issued: the account has no password, no TOTP requirement and signs in
+// through single sign-on only (SSOOnly); every tenant of the account must
+// have a usable single sign-on configuration when it is created. The
+// returned Activation then has no URL and expires at the creation time.
+//
 // It returns ErrUnauthenticated or ErrForbidden for a caller who is not an
 // authenticated super admin, an *InvalidError for a malformed field, a
 // role other than delegated_admin and auditor, no tenant or an unknown
 // tenant, ErrSystemSMTPUnavailable for the mail delivery without a system
-// SMTP and ErrAlreadyExists for a username taken.
+// SMTP, ErrSSONotConfigured for the delivery none while a tenant has no
+// usable single sign-on and ErrAlreadyExists for a username taken.
 func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clientIP netip.Addr) (Account, Activation, error) {
 	if err := manager(p); err != nil {
 		return Account{}, Activation{}, err
@@ -155,6 +162,10 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 		return Account{}, Activation{}, err
 	}
 	inv := req.Invitation
+	ssoOnly := inv.Delivery == DeliveryNone
+	if ssoOnly {
+		inv.Delivery = ""
+	}
 	if err := inv.check(FieldInvitation); err != nil {
 		return Account{}, Activation{}, err
 	}
@@ -165,8 +176,18 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	if err != nil {
 		return Account{}, Activation{}, err
 	}
+	if ssoOnly {
+		// An unknown tenant is told apart from a tenant without single
+		// sign-on.
+		if len(tenants) != len(req.TenantIDs) {
+			return Account{}, Activation{}, invalid(FieldTenantIDs)
+		}
+		if err := s.checkSSOConfigured(ctx, req.TenantIDs); err != nil {
+			return Account{}, Activation{}, err
+		}
+	}
 	lang := mailLanguage(inv, tenants)
-	requireTOTP := req.RequireTOTP == nil || *req.RequireTOTP || inv.mail()
+	requireTOTP := !ssoOnly && (req.RequireTOTP == nil || *req.RequireTOTP || inv.mail())
 	var (
 		created store.Admin
 		link    Activation
@@ -174,18 +195,24 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	err = s.repo.tx(ctx, func(tx txRepo) error {
 		a, err := tx.createAdmin(ctx, store.Admin{
 			Username: username, Email: email, Role: req.Role, TenantIDs: req.TenantIDs, RequireTOTP: requireTOTP,
+			SSOOnly: ssoOnly,
 		})
 		if err != nil {
 			return err
+		}
+		details := map[string]any{
+			"username": a.Username, "role": string(a.Role), "tenant_ids": a.TenantIDs, "require_totp": a.RequireTOTP,
+		}
+		if ssoOnly {
+			details["sso_only"] = true
+			created, link = a, Activation{Delivery: DeliveryNone, ExpiresAt: a.CreatedAt}
+			return tx.audit(ctx, adminEvent(p.Admin.Username, clientIP, audit.ActionAdminCreated, a.ID, details))
 		}
 		out, err := s.issueTx(ctx, tx, a, inv, lang, tenantNames(tenants))
 		if err != nil {
 			return err
 		}
-		ev := adminEvent(p.Admin.Username, clientIP, audit.ActionAdminCreated, a.ID, map[string]any{
-			"username": a.Username, "role": string(a.Role), "tenant_ids": a.TenantIDs, "require_totp": a.RequireTOTP,
-		})
-		if err := tx.audit(ctx, ev); err != nil {
+		if err := tx.audit(ctx, adminEvent(p.Admin.Username, clientIP, audit.ActionAdminCreated, a.ID, details)); err != nil {
 			return err
 		}
 		if err := tx.audit(ctx, invitedEvent(p.Admin.Username, clientIP, a, out, lang, false)); err != nil {
@@ -206,8 +233,15 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 }
 
 // Update changes the account adminID for the super admin of p, from
-// clientIP. Disabling the account, changing its role or tenants, or making
-// TOTP mandatory while it is not enrolled revokes its sessions. Changing
+// clientIP, and returns it with its single sign-on identities. A promotion
+// to super admin unpins every identity of the account (audit
+// admin.identity_unlinked, reason promoted); a single sign-on only account
+// cannot be promoted (ErrNotPromotable). A change of its mail address
+// unpins its identities too (reason email_changed) and revokes the single
+// sign-on sessions they opened: the next single sign-on login matches the
+// new address again (T-286). Disabling the account, changing its role or
+// tenants, or making TOTP mandatory while it is not enrolled revokes its
+// sessions. Changing
 // its role, tenants or mail address revokes its pending activation links,
 // in the same transaction: a link handed out for the former account cannot
 // open the changed one.
@@ -245,11 +279,21 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 	var next store.Admin
 	err := s.repo.tx(ctx, func(tx txRepo) error {
 		// An unknown account is told apart from an unknown tenant first.
-		if _, err := tx.admin(ctx, adminID); err != nil {
+		prev, err := tx.admin(ctx, adminID)
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				return ErrNotFound
 			}
 			return err
+		}
+		// A promotion to super admin deletes the single sign-on identities
+		// of the account (T-293): listed first, under the administrators
+		// lock, to audit exactly those.
+		var unpinned []store.AdminIdentity
+		if u.Role != nil && *u.Role == store.RoleSuperAdmin && prev.Role != store.RoleSuperAdmin {
+			if unpinned, err = tx.listIdentities(ctx, adminID); err != nil {
+				return err
+			}
 		}
 		// The store reads the account again under the administrators lock:
 		// cur and after describe exactly this change.
@@ -267,6 +311,13 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 			return err
 		}
 		next = after
+		reason := "promoted"
+		if cur.Email != after.Email && after.Role != store.RoleSuperAdmin {
+			reason = "email_changed"
+			if unpinned, err = unpinAll(ctx, tx, adminID); err != nil {
+				return err
+			}
+		}
 		changed, revoke, relink := diff(cur, after)
 		if revoke {
 			if _, err := tx.deleteSessions(ctx, adminID, ""); err != nil {
@@ -278,8 +329,16 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 				return err
 			}
 		}
-		return tx.audit(ctx, adminEvent(p.Admin.Username, clientIP, audit.ActionAdminUpdated, adminID,
-			map[string]any{"changed": changed, "sessions_revoked": revoke}))
+		if err := tx.audit(ctx, adminEvent(p.Admin.Username, clientIP, audit.ActionAdminUpdated, adminID,
+			map[string]any{"changed": changed, "sessions_revoked": revoke})); err != nil {
+			return err
+		}
+		for _, i := range unpinned {
+			if err := tx.audit(ctx, unlinkedEvent(p.Admin.Username, clientIP, adminID, i, reason)); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	switch {
 	case errors.Is(err, ErrNotFound), errors.Is(err, ErrStateConflict), errors.Is(err, ErrInvalid):
@@ -287,7 +346,26 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 	case err != nil:
 		return Account{}, fmt.Errorf("adminauth: update admin: %w", err)
 	}
-	return accountOf(next), nil
+	return s.withIdentities(ctx, accountOf(next))
+}
+
+// unpinAll unpins, inside tx, every single sign-on identity of the
+// account adminID and revokes the single sign-on sessions each opened, and
+// returns the identities unpinned (for the audit).
+func unpinAll(ctx context.Context, tx txRepo, adminID string) ([]store.AdminIdentity, error) {
+	ids, err := tx.listIdentities(ctx, adminID)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range ids {
+		if _, err := tx.deleteIdentity(ctx, adminID, i.ID); err != nil {
+			return nil, err
+		}
+		if _, err := tx.deleteSSOSessions(ctx, adminID, i.Issuer, i.ClientID); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
 }
 
 // diff returns the fields that differ between cur and next, whether the
@@ -368,14 +446,18 @@ func (s *Service) Delete(ctx context.Context, p Principal, adminID string, clien
 // It returns ErrUnauthenticated or ErrForbidden for a caller who is not an
 // authenticated super admin, ErrSelfAction for the caller's own account,
 // ErrNotFound for an unknown account, ErrAccountDisabled for a disabled
-// account and ErrLastSuperAdmin for the last usable super admin (nothing
-// is changed then).
+// account, ErrSSOOnlyEnforced for a single sign-on only account while one
+// of its tenants enforces single sign-on (T-292) and ErrLastSuperAdmin for
+// the last usable super admin (nothing is changed then).
 func (s *Service) ResetCredentials(ctx context.Context, p Principal, adminID string, clientIP netip.Addr) (Account, Activation, error) {
 	if err := manager(p); err != nil {
 		return Account{}, Activation{}, err
 	}
 	if adminID == p.Admin.ID {
 		return Account{}, Activation{}, ErrSelfAction
+	}
+	if err := s.checkLinkAllowedID(ctx, adminID); err != nil {
+		return Account{}, Activation{}, err
 	}
 	var (
 		reset store.Admin

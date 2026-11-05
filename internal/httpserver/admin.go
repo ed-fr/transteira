@@ -14,6 +14,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
+	"github.com/ed-fr/transteira/internal/oidc"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -106,6 +107,14 @@ func isProvisioningPattern(pattern string) bool {
 	_, p, _ := strings.Cut(pattern, " ")
 	return strings.HasPrefix(p, ProvisioningPrefix+"/")
 }
+
+// oidcClearCookie is the Set-Cookie value expiring the single sign-on flow
+// cookie, sent by every answer of the callback.
+var oidcClearCookie = oidc.ClearFlowCookie().String()
+
+// isOIDCCallback reports whether the matched admin operation is the single
+// sign-on callback.
+func isOIDCCallback(r *http.Request) bool { return r.Pattern == adminOIDCCallbackPattern }
 
 // adminOpenRoute reports whether the matched admin operation is served
 // without a session.
@@ -276,6 +285,9 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 			// required) and of the provisioning creations (unknown members are
 			// refused), which the generated types cannot tell.
 			admin.CaptureRawBody,
+			// The single sign-on callback (since API 2.0): the flow cookie
+			// read for the handler, and expired whatever the outcome.
+			middleware.FlowCookie(oidc.FlowCookieName, oidcClearCookie, isOIDCCallback),
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
 			middleware.AdminCSRF(sessions, adminSessionRequired),

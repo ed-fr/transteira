@@ -51,6 +51,7 @@ describe('admin routes', () => {
     ['/admin/tenants/ten_1/abuse', '/tenants/:id/abuse', 'auth', 'tenant-abuse'],
     ['/admin/tenants/ten_1/abuse-reports', '/tenants/:id/abuse-reports', 'auth', 'tenant-abuse-reports'],
     ['/admin/tenants/ten_1/smtp', '/tenants/:id/smtp', 'auth', 'tenant-smtp'],
+    ['/admin/tenants/ten_1/sso', '/tenants/:id/sso', 'auth', 'tenant-sso'],
     ['/admin/tenants/ten_1/templates', '/tenants/:id/templates', 'auth', 'tenant-templates'],
     [
       '/admin/tenants/ten_1/templates/verification_code/fr',

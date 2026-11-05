@@ -74,6 +74,11 @@ type Service interface {
 	ResetCredentials(ctx context.Context, p adminauth.Principal, adminID string, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
 	Invite(ctx context.Context, p adminauth.Principal, adminID string, inv adminauth.Invitation, clientIP netip.Addr) (adminauth.Account, adminauth.Activation, error)
 	Activate(ctx context.Context, token, password string, clientIP netip.Addr) (adminauth.Session, error)
+	// Single sign-on (since API 2.0).
+	Methods(ctx context.Context) (adminauth.AuthMethods, error)
+	StartSSO(ctx context.Context, email string, clientIP netip.Addr) (adminauth.SSOStart, error)
+	CompleteSSO(ctx context.Context, cb adminauth.SSOCallback, clientIP netip.Addr) (adminauth.Session, error)
+	DeleteIdentity(ctx context.Context, p adminauth.Principal, adminID, identityID string, clientIP netip.Addr) error
 }
 
 // Compile-time check that the authentication service fits.

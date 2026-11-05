@@ -70,6 +70,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'my-transfers-detail', screen: 'public /me (transfer details)', profile: 'depositor' },
   // Delegated admin (admin host, entity A).
   { name: 'admin-login', screen: 'admin /admin/login', profile: 'delegated-admin' },
+  {
+    name: 'admin-login-sso',
+    screen: 'admin /admin/login (single sign-on offered: e-mail address field)',
+    profile: 'delegated-admin',
+  },
   { name: 'admin-activation', screen: 'admin /admin/activate', profile: 'delegated-admin' },
   { name: 'admin-home-delegate', screen: 'admin /admin/', profile: 'delegated-admin' },
   { name: 'admin-tenant-general', screen: 'admin /admin/tenants/:id/general', profile: 'delegated-admin' },
@@ -150,6 +155,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   { name: 'admin-tenant-create', screen: 'admin /admin/tenants/new', profile: 'super-admin' },
   { name: 'admin-admins', screen: 'admin /admin/admins', profile: 'super-admin' },
   { name: 'admin-admin-create', screen: 'admin /admin/admins/new', profile: 'super-admin' },
+  {
+    name: 'admin-tenant-sso',
+    screen: 'admin /admin/tenants/:id/sso (single sign-on configuration of an entity)',
+    profile: 'super-admin',
+  },
   { name: 'admin-system', screen: 'admin /admin/system', profile: 'super-admin' },
   { name: 'admin-system-settings', screen: 'admin /admin/system/settings', profile: 'super-admin' },
   { name: 'admin-system-audit', screen: 'admin /admin/system/audit', profile: 'super-admin' },

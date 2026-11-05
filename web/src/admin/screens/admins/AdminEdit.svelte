@@ -36,6 +36,8 @@
     buildAdminPatch,
     canInvite,
     canMailInvitation,
+    identityRows,
+    isSsoOnly,
     needsTenants,
     canPromote,
     defaultInvitationLanguage,
@@ -54,6 +56,7 @@
     type Admin,
     type AdminRole,
     type EditForm,
+    type IdentityRow,
     type FieldIssue,
     type InvitationDelivery,
     type InvitationLanguage,
@@ -95,7 +98,10 @@
   let inviteHeading: HTMLElement | undefined = $state();
   let inviteButton: HTMLButtonElement | undefined = $state();
   let heading: HTMLHeadingElement | undefined = $state();
+  let unpinTarget = $state.raw<IdentityRow | undefined>(undefined);
+  let unpinOpen = $state(false);
 
+  const identities = $derived(admin === undefined ? [] : identityRows(admin, (iso) => i18n.formatDate(iso)));
   const meId = $derived(adminSession.me?.id);
   const actions = $derived(admin === undefined ? undefined : accountActions(admin, meId));
   const patch = $derived(admin !== undefined && form !== undefined ? buildAdminPatch(admin, form) : {});
@@ -299,6 +305,28 @@
     void nav.navigate('/admins');
   }
 
+  async function unpin(): Promise<string | void> {
+    const target = unpinTarget;
+    if (target === undefined) {
+      return;
+    }
+    try {
+      await adminApi.delete('/admin/admins/{adminId}/identities/{identityId}', {
+        path: { adminId, identityId: target.id },
+      });
+    } catch (err) {
+      return describeError(i18n, err).message;
+    }
+    // The pinned list is read-only on the account: reload it from the server.
+    const res = await adminApi.get('/admin/admins/{adminId}', { path: { adminId } }).catch(() => undefined);
+    if (res !== undefined) {
+      admin = res.data;
+    } else if (admin !== undefined) {
+      admin = { ...admin, identities: (admin.identities ?? []).filter((i) => i.id !== target.id) };
+    }
+    announce(t('adminAccounts.sso.unpinned'));
+  }
+
   async function linkDone(): Promise<void> {
     link = undefined;
     notice = '';
@@ -368,6 +396,13 @@
           label={t(`adminAccounts.totp.${totpStatus(admin)}`)}
         />
       </dd>
+      {#if isSsoOnly(admin)}
+        <dt>{t('adminAccounts.sso.signIn')}</dt>
+        <dd>
+          <StatusBadge variant="info" label={t('adminAccounts.sso.badge')} />
+          <span class="tt-text-sm tt-text-muted">{t('adminAccounts.sso.badgeHint')}</span>
+        </dd>
+      {/if}
       <dt>{t('adminAccounts.list.columns.lastLogin')}</dt>
       <dd>
         {admin.lastLoginAt ? i18n.formatDate(admin.lastLoginAt) : t('adminAccounts.list.never')}
@@ -434,6 +469,54 @@
       {/if}
     </FormSection>
 
+    {#if admin.role !== 'super_admin'}
+      <section aria-labelledby="{uid}-identities" class="tt-mt-6">
+        <h2 id="{uid}-identities">{t('adminAccounts.sso.identities.title')}</h2>
+        {#if identities.length === 0}
+          <p>{t('adminAccounts.sso.identities.none')}</p>
+        {:else}
+          <p>{t('adminAccounts.sso.identities.intro')}</p>
+          <div class="tt-table">
+            <div class="tt-table__scroll">
+              <table>
+                <caption class="visually-hidden">{t('adminAccounts.sso.identities.title')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('adminAccounts.sso.identities.issuer')}</th>
+                    <th scope="col">{t('adminAccounts.sso.identities.clientId')}</th>
+                    <th scope="col">{t('adminAccounts.sso.identities.linkedAt')}</th>
+                    <th scope="col">{t('adminAccounts.list.columns.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each identities as identity (identity.id)}
+                    <tr>
+                      <td class="tt-break">{identity.issuer}</td>
+                      <td class="tt-break">{identity.clientId}</td>
+                      <td>{identity.linkedAt}</td>
+                      <td>
+                        <Button
+                          variant="secondary"
+                          small
+                          onclick={() => {
+                            unpinTarget = identity;
+                            unpinOpen = true;
+                          }}
+                        >
+                          {t('adminAccounts.sso.identities.unpin')}
+                          <span class="visually-hidden"> {identity.issuer}</span>
+                        </Button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {/if}
+      </section>
+    {/if}
+
     {#if actions.reset || actions.remove}
       <section aria-labelledby="{uid}-actions">
         <h2 id="{uid}-actions">{t('admin.common.actions')}</h2>
@@ -487,6 +570,14 @@
     <p class="tt-mt-6"><a href={nav.href('/admins')} use:nav.link>{t('admin.common.back')}</a></p>
   {/if}
 
+  <ConfirmDialog
+    bind:open={unpinOpen}
+    title={t('adminAccounts.sso.unpin.confirmTitle', { username: admin.username })}
+    text={t('adminAccounts.sso.unpin.confirmText')}
+    confirmLabel={t('adminAccounts.sso.unpin.confirmAction')}
+    danger
+    onconfirm={unpin}
+  />
   <ConfirmDialog
     bind:open={resetOpen}
     title={t('adminAccounts.reset.confirmTitle', { username: admin.username })}

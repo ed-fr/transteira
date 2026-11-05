@@ -18,6 +18,7 @@ import (
 	"github.com/ed-fr/transteira/internal/branding"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/oidc"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
@@ -62,6 +63,10 @@ type TenantService interface {
 	GetSetup(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.Setup, error)
 	CompleteSetup(ctx context.Context, p adminauth.Principal, tid tenant.ID, force, mailTemplatesReviewed bool, ip netip.Addr) (tenantadmin.Setup, error)
 	TextProposal(ctx context.Context, p adminauth.Principal, tid tenant.ID, doc, lang string) (tenantadmin.TextProposal, error)
+	GetSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SSOView, error)
+	PutSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SSOUpdate, ip netip.Addr) (tenantadmin.SSOView, error)
+	DeleteSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID, ip netip.Addr) error
+	TestSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID) (oidc.TestResult, error)
 }
 
 // Compile-time check that the tenant configuration service fits.

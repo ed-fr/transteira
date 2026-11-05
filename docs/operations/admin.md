@@ -6,7 +6,8 @@ tenant: transfers, invitations, blocklist, API tokens, audit log, data
 subject rights (GDPR) and statistics, and the instance settings of the
 super admin: maintenance mode, disk alert and system SMTP server. Tenant
 configuration and quota alerts are in [Tenants](tenants.md); the master key
-rotation is in [Master key](master-key.md).
+rotation is in [Master key](master-key.md); OpenID Connect sign-in is in
+[Single sign-on](sso.md).
 
 - Variables: `TT_ADMIN_HOSTS` (required), `TT_ADMIN_SESSION_IDLE_TIMEOUT`,
   `TT_ADMIN_SESSION_MAX_AGE`, `TT_SETUP_TOKEN` / `TT_SETUP_TOKEN_FILE`,

@@ -34,7 +34,8 @@
     "recipientRules": "Domaines destinataires",
     "confidentiality": "Niveaux de confidentialité",
     "abuse": "Détection des abus",
-    "summary": "Résumé"
+    "summary": "Résumé",
+    "sso": "Authentification unique"
   },
   "fields": {
     "name": {
@@ -644,5 +645,102 @@
   },
   "abuse": {
     "title": "Détection des abus"
+  },
+  "sso": {
+    "title": "Authentification unique",
+    "form": {
+      "title": "Réglages de l’authentification unique"
+    },
+    "intro": "Permet aux administrateurs délégués et aux auditeurs de cette entité de se connecter à l’administration avec le fournisseur d’identité OpenID Connect de l’organisation (par exemple Microsoft Entra ID). L’adresse de redirection à déclarer chez le fournisseur figure dans le guide. Les super administrateurs se connectent toujours avec leur mot de passe local et la double authentification.",
+    "readOnlyIntro": "Réglages de l’authentification unique de cette entité. Seul un super administrateur peut les modifier.",
+    "notConfigured": "L’authentification unique n’est pas configurée pour cette entité.",
+    "saved": "Réglages de l’authentification unique enregistrés.",
+    "removed": "Réglages de l’authentification unique supprimés.",
+    "yes": "Oui",
+    "no": "Non",
+    "status": {
+      "label": "État",
+      "enabled": "Activée",
+      "disabled": "Désactivée"
+    },
+    "enabled": {
+      "label": "Activer l’authentification unique",
+      "hint": "Désactivée, la configuration est conservée mais plus personne ne peut s’en servir pour se connecter."
+    },
+    "issuer": {
+      "label": "Émetteur",
+      "hint": "Adresse (https) du fournisseur d’identité. Pour Microsoft Entra ID, utilisez l’émetteur de votre propre annuaire, par exemple https://<fournisseur>/<identifiant-annuaire>/v2.0. Les points d’accès multi-annuaires (common, organizations, consumers) sont refusés."
+    },
+    "clientId": {
+      "label": "Identifiant client",
+      "hint": "Identifiant de l’application déclarée chez le fournisseur."
+    },
+    "clientSecret": {
+      "label": "Secret client",
+      "hintRequired": "En écriture seule : il est stocké chiffré et n’est plus jamais affiché.",
+      "hintStored": "Laissez vide pour conserver le secret stocké. Saisissez-en un nouveau pour le remplacer."
+    },
+    "secretStored": "Un secret est enregistré",
+    "secretMissing": "Aucun secret enregistré",
+    "secretChangeNote": "Changer l’émetteur ou l’identifiant client oblige à saisir un nouveau secret : un secret n’est jamais reporté sur une autre application ou un autre fournisseur.",
+    "emailDomains": {
+      "label": "Domaines de messagerie",
+      "hint": "Un domaine par ligne, de 1 à 20, par exemple entite-a.example.com. Un administrateur se connecte avec une adresse de l’un de ces domaines. Un domaine ne peut servir qu’à une seule entité sur toute l’instance."
+    },
+    "requireMfa": {
+      "label": "Exiger l’authentification multifacteur",
+      "hint": "Le fournisseur d’identité doit prouver un second facteur. Avec Microsoft Entra ID, ajoutez la revendication facultative des méthodes d’authentification (amr) au jeton d’identité de l’application, sinon toutes les connexions sont refusées."
+    },
+    "enforced": {
+      "label": "Imposer l’authentification unique",
+      "hint": "Refuse la connexion par mot de passe local des administrateurs délégués et des auditeurs de cette entité.",
+      "warning": "Imposée : la connexion par mot de passe local sera refusée aux administrateurs délégués et aux auditeurs de cette entité, même si l’authentification unique cesse de fonctionner. Vérifiez le résultat du test et une première connexion avant de l’imposer. Votre compte de super administrateur n’est pas concerné."
+    },
+    "test": {
+      "title": "Test",
+      "intro": "Vérifie que l’émetteur enregistré répond avec un document de découverte valide. Personne n’est connecté et le secret n’est pas envoyé.",
+      "action": "Tester l’émetteur",
+      "running": "Test en cours…",
+      "saveFirst": "Le test utilise les réglages enregistrés : enregistrez d’abord vos modifications.",
+      "notSaved": "Le test ne peut pas s’exécuter : activez et enregistrez d’abord les réglages.",
+      "success": "La découverte a réussi ({ms} ms).",
+      "failure": "La découverte a échoué ({ms} ms).",
+      "stage": "Étape : {stage}.",
+      "stages": {
+        "settings": "lecture des réglages",
+        "connect": "connexion au fournisseur",
+        "tls": "connexion sécurisée (TLS)",
+        "discovery": "téléchargement du document de découverte",
+        "issuer": "vérification de l’émetteur",
+        "endpoints": "vérification des points d’accès",
+        "done": "terminé",
+        "unknown": "étape inconnue"
+      },
+      "errors": {
+        "dns_error": "Le nom du fournisseur n’a pas pu être résolu.",
+        "connect_error": "La connexion au fournisseur a été refusée ou interrompue.",
+        "tls_error": "La connexion sécurisée a échoué (certificat ou protocole).",
+        "timeout": "Le fournisseur n’a pas répondu à temps.",
+        "http_status": "Le document de découverte n’est pas servi (état HTTP inattendu).",
+        "invalid_document": "Le document de découverte n’est pas valide.",
+        "issuer_mismatch": "Le document de découverte désigne un autre émetteur.",
+        "missing_endpoint": "Un point d’accès est absent ou n’est pas servi en https.",
+        "internal_error": "Erreur interne pendant le test.",
+        "unknown": "Erreur inconnue."
+      }
+    },
+    "remove": {
+      "title": "Supprimer l’authentification unique",
+      "text": "Supprime les réglages, le secret enregistré et l’aiguillage des domaines de messagerie. Les identités épinglées restent mais deviennent inutilisables, et les comptes créés sans lien d’activation ne peuvent plus se connecter tant que l’authentification unique n’est pas reconfigurée.",
+      "action": "Supprimer l’authentification unique",
+      "confirmTitle": "Supprimer les réglages de l’authentification unique ?",
+      "confirmText": "Les administrateurs de cette entité qui se connectent par authentification unique ne pourront plus se connecter. Cette action est irréversible.",
+      "confirmAction": "Supprimer"
+    },
+    "errors": {
+      "issuerHttps": "L’émetteur doit être une adresse https.",
+      "secretRequired": "Saisissez le secret client : il est obligatoire au premier enregistrement et chaque fois que l’émetteur ou l’identifiant client change.",
+      "domainsRequired": "Saisissez au moins un domaine de messagerie."
+    }
   }
 }

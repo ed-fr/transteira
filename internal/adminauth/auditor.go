@@ -32,4 +32,7 @@ var AuditorOperations = map[string]bool{
 	"listTenantTransfers":      true,
 	"getTenantTransfer":        true,
 	"getTenantTransferProof":   true,
+	// The single sign-on configuration of an attached tenant (read only,
+	// without its secret; since 2.0).
+	"getTenantSso": true,
 }

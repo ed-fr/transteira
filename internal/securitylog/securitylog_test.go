@@ -26,8 +26,14 @@ const tenantA = "transfer.entity-a.example.com"
 var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
 	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
-	AccessLinkInvalid, ProvisioningTokenInvalid,
+	AccessLinkInvalid, ProvisioningTokenInvalid, SSOFailed,
 }
+
+// ownFilterEvents are the events counted by integrations of their own,
+// with a higher threshold, rather than by the main fail2ban filter and
+// CrowdSec brute force scenario: sso_failed (transteira-sso.conf,
+// transteira-sso-bf.yaml; a state_invalid can come from a stale tab).
+var ownFilterEvents = []EventType{SSOFailed}
 
 type goldenCase struct {
 	name  string
@@ -106,6 +112,16 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: ProvisioningTokenInvalid, IP: netip.MustParseAddr("192.0.2.15")},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.15 tenant=- event=provisioning_token_invalid`,
 		banIP: "192.0.2.15",
+	},
+	{
+		// Counted by its own filter and scenario only (ownFilterEvents):
+		// the main ones must not match it.
+		name: "sso failed",
+		ev: Event{
+			Type: SSOFailed, IP: netip.MustParseAddr("192.0.2.16"), Tenant: tenantA,
+			Fields: []Field{{KeyReason, ReasonStateInvalid}},
+		},
+		line: `2026-10-20T07:41:00.123Z ip=192.0.2.16 tenant=transfer.entity-a.example.com event=sso_failed reason="state_invalid"`,
 	},
 	{
 		name:  "unknown fqdn",

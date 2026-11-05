@@ -159,6 +159,17 @@ In the editor of a legal document, **Use the proposed text** fills the editor wi
 
 When all the required steps are **Done**, click **Finish setup**. Otherwise the button stays disabled and the list tells you which required steps remain. The entity is then open: deposits and downloads become possible. This cannot be undone: an entity never goes back to the setup state. Only the super administrator can force the opening with missing steps; you cannot.
 
+<!-- topic: tenant-sso -->
+### Single sign-on
+
+If your organization uses single sign-on (OpenID Connect, for example Microsoft Entra ID) for an entity, your account was created by a super administrator and you sign in with your organization account instead of a password. On the sign-in page, enter your work email address in the **Single sign-on** form and click **Sign in with single sign-on**, authenticate at your provider, and you arrive in the administration without a password or an authentication code of TransTeira (the second factor is the one of your provider). The first time, your account is linked to your identity at the provider.
+
+![Sign-in page of the administration with the single sign-on form below the password form](../screenshots/en/admin-login-sso.png)
+
+Your session then reaches only the entities that use the same provider; the others are not listed. If the entity enforces single sign-on, the password sign-in is refused with the message that you must use single sign-on, and an already open password session no longer reaches that entity: it disappears from your list until you sign in through single sign-on.
+
+On an entity, the **Single sign-on** screen shows the configuration in read-only mode (the secret is never shown); only a super administrator changes it. If the sign-in fails, the page shows a general message: ask a super administrator, who can read the reason in the security log. If you changed account at your provider, ask them to unpin your previous identity.
+
 <!-- topic: tenant-general -->
 ### General
 

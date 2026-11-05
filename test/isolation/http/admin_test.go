@@ -57,11 +57,14 @@ func seedAdmins(t *testing.T, db *store.DB, tidA tenant.ID) adminFixtures {
 // to a request without session and with an empty JSON body: the open
 // operations reach their handler, every other one requires a session.
 var adminHostStatus = map[string]int{
-	"getSetupStatus":   http.StatusOK,           // no admin in the harness: setup required
-	"createSuperAdmin": http.StatusBadRequest,   // empty username
-	"adminLogin":       http.StatusUnauthorized, // invalid-credentials
-	"activateAdmin":    http.StatusNotFound,     // unknown activation token
-	"":                 http.StatusUnauthorized, // any other: unauthenticated
+	"getSetupStatus":         http.StatusOK,           // no admin in the harness: setup required
+	"createSuperAdmin":       http.StatusBadRequest,   // empty username
+	"adminLogin":             http.StatusUnauthorized, // invalid-credentials
+	"activateAdmin":          http.StatusNotFound,     // unknown activation token
+	"getAdminAuthMethods":    http.StatusOK,           // the login methods, no session
+	"startAdminOidcLogin":    http.StatusBadRequest,   // validation-failed (the sample body is no address)
+	"completeAdminOidcLogin": http.StatusSeeOther,     // every failure is a redirect to the login page
+	"":                       http.StatusUnauthorized, // any other: unauthenticated
 }
 
 // adminHostOnly asserts that an administration operation answers 404

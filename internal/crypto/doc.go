@@ -54,7 +54,9 @@
 // and an expiry), the rate-limit key of the "my transfers" access link
 // requests (MACPurposeAccessRate, over a normalized address), and the CSRF
 // tokens derived from "my transfers" session tokens (MACPurposeMeCSRF,
-// distinct from the deposit and administrator CSRF purposes).
+// distinct from the deposit and administrator CSRF purposes), and the
+// single sign-on flow cookie (MACPurposeOIDCFlow, over a flow ID and the
+// state of that flow).
 //
 //	key = HKDF-SHA256(master key, salt = none, info = "transteira/v1/mac/" + purpose)
 //	MAC = HMAC-SHA256(key, lp("transteira/v1/mac") | lp(purpose) | lp(part 1) | ... | lp(part n))

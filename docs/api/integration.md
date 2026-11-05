@@ -46,6 +46,10 @@ administration.
 - **Authentication.** Send the token in every request:
   `Authorization: Bearer <token>`. No cookie and no CSRF token are needed; a cookie sent along
   is ignored. A `401` answer carries `WWW-Authenticate: Bearer`.
+- **Single sign-on is for the administration interface only.** OpenID Connect (since 2.0) lets
+  delegated admins and auditors sign in to the admin UI; it never applies to the API. API
+  tokens work as described here whatever the single sign-on settings of the entity (see
+  [Single sign-on](../operations/sso.md)).
 
 ## 1. Create an API token
 

@@ -3,7 +3,7 @@
 Bans, at the firewall of the Docker host, the client addresses that
 TransTeira reports in its security log (failed verification codes, wrong
 transfer passwords, failed admin logins, invalid API tokens, unknown FQDNs,
-refused deposits, rate limiting).
+refused deposits, rate limiting; single sign-on failures in a separate jail).
 
 The log format and the event catalogue are specified in
 [`docs/operations/security-log.md`](../../docs/operations/security-log.md).
@@ -13,7 +13,8 @@ The log format and the event catalogue are specified in
 | File | Destination on the Docker host |
 |---|---|
 | `filter.d/transteira.conf` | `/etc/fail2ban/filter.d/transteira.conf` |
-| `jail.d/transteira.local` | `/etc/fail2ban/jail.d/transteira.local` |
+| `filter.d/transteira-sso.conf` | `/etc/fail2ban/filter.d/transteira-sso.conf` (optional, since 2.0) |
+| `jail.d/transteira.local` | `/etc/fail2ban/jail.d/transteira.local` (jails `transteira` and `transteira-sso`) |
 
 ## Installation
 
@@ -112,6 +113,18 @@ administrators, not by the firewall.
 - To stop banning on an event type (for example `deposit_refused` if
   internal users often try from outside the IP ranges), remove it from
   `_events` in the filter.
+
+## Single sign-on failures
+
+Since 2.0 the `sso_failed` event (failed OpenID Connect login, with a
+`reason`) has its own filter and its own jail, `transteira-sso`, with a
+threshold three times higher (`maxretry = 30` within 10 minutes) than the
+`transteira` jail. A stale browser tab, a bookmarked callback URL or a
+double click ends with `reason="state_invalid"` without any attack, and a
+provider outage with `reason="issuer_error"`: counting them like wrong
+passwords would ban legitimate administrators. Remove the jail and the
+filter if single sign-on is not used; keep the same `ignoreip` as the main
+jail. See [Single sign-on](../../docs/operations/sso.md).
 
 ## Safety against forged lines
 

@@ -5,7 +5,6 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/api/gen"
-	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -34,7 +33,8 @@ func (s *Server) ListAdmins(ctx context.Context, req gen.ListAdminsRequestObject
 
 // CreateAdmin creates a delegated admin or an auditor and returns it with its activation
 // link, returned once or, with invitation.delivery mail, mailed through the
-// system SMTP and never returned (super admin, 201).
+// system SMTP and never returned, or, with invitation.delivery none (since
+// 2.0), without any link: a single sign-on only account (super admin, 201).
 func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObject) (gen.CreateAdminResponseObject, error) {
 	svc, p, err := s.authenticatedSession(ctx)
 	if err != nil {
@@ -42,15 +42,6 @@ func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObje
 	}
 	if req.Body == nil {
 		return nil, validationFailed(adminauth.FieldUsername, fieldRequired)
-	}
-	// The activation-free delivery of API 2.0 is not implemented yet
-	// (single sign-on): refused rather than silently replaced. Checked for
-	// the super admin only, so that another admin keeps its 403 from the
-	// service.
-	if p.Admin.Role == store.RoleSuperAdmin {
-		if prob := unsupportedAdminCreate(req.Body); prob != nil {
-			return nil, prob
-		}
 	}
 	a, link, err := svc.Create(ctx, p, adminauth.AdminCreate{
 		Username: req.Body.Username, Email: string(req.Body.Email), Role: store.AdminRole(req.Body.Role),
@@ -71,6 +62,8 @@ func (s *Server) InviteAdmin(ctx context.Context, req gen.InviteAdminRequestObje
 		return nil, err
 	}
 	if p.Admin.Role == store.RoleSuperAdmin && req.Body != nil && req.Body.Delivery != nil && *req.Body.Delivery == gen.InvitationDeliveryNone {
+		// An invitation always issues a link: delivery none belongs to
+		// createAdmin only.
 		return nil, validationFailed("/delivery", fieldNotSupported)
 	}
 	a, link, err := svc.Invite(ctx, p, req.AdminId, invitation(req.Body), middleware.ClientIP(ctx))
@@ -78,16 +71,6 @@ func (s *Server) InviteAdmin(ctx context.Context, req gen.InviteAdminRequestObje
 		return nil, serviceError(err)
 	}
 	return gen.InviteAdmin200JSONResponse(createdBody(a, link)), nil
-}
-
-// unsupportedAdminCreate refuses the members of AdminCreate added by API 2.0
-// that are not implemented yet (invitation delivery none) with a 400
-// validation-failed naming it, or returns nil.
-func unsupportedAdminCreate(b *gen.AdminCreate) *problem.Problem {
-	if b.Invitation != nil && b.Invitation.Delivery != nil && *b.Invitation.Delivery == gen.InvitationDeliveryNone {
-		return validationFailed("/invitation/delivery", fieldNotSupported)
-	}
-	return nil
 }
 
 // invitation converts an OpenAPI AdminInvitation (nil: the defaults).
@@ -210,6 +193,8 @@ func adminBody(a adminauth.Account) gen.Admin {
 		last := a.LastLoginAt
 		body.LastLoginAt = &last
 	}
+	ssoOnly := a.SSOOnly
+	body.SsoOnly, body.Identities = &ssoOnly, identitiesBody(a.Identities)
 	return body
 }
 
@@ -220,7 +205,7 @@ func withActivation(a adminauth.Account, link adminauth.Activation) gen.AdminWit
 	return gen.AdminWithActivation{
 		Id: b.Id, Username: b.Username, Email: b.Email, Role: b.Role, TenantIds: b.TenantIds,
 		TotpEnabled: b.TotpEnabled, Activated: b.Activated, RequireTotp: b.RequireTotp, Disabled: b.Disabled,
-		LastLoginAt: b.LastLoginAt, CreatedAt: b.CreatedAt,
+		LastLoginAt: b.LastLoginAt, CreatedAt: b.CreatedAt, SsoOnly: b.SsoOnly, Identities: b.Identities,
 		ActivationUrl: link.URL, ActivationExpiresAt: link.ExpiresAt,
 	}
 }
@@ -234,16 +219,19 @@ func createdBody(a adminauth.Account, link adminauth.Activation) gen.AdminCreate
 	return gen.AdminCreated{
 		Id: w.Id, Username: w.Username, Email: w.Email, Role: w.Role, TenantIds: w.TenantIds,
 		TotpEnabled: w.TotpEnabled, Activated: w.Activated, RequireTotp: w.RequireTotp, Disabled: w.Disabled,
-		LastLoginAt: w.LastLoginAt, CreatedAt: w.CreatedAt,
+		LastLoginAt: w.LastLoginAt, CreatedAt: w.CreatedAt, SsoOnly: w.SsoOnly, Identities: w.Identities,
 		InvitationDelivery: delivery, ActivationUrl: url, ActivationExpiresAt: w.ActivationExpiresAt,
 	}
 }
 
 // deliveryOf returns the delivery of link and the URL to return: nil
-// unless the link is copied.
+// unless the link is copied (no link at all for the delivery none).
 func deliveryOf(link adminauth.Activation) (gen.InvitationDelivery, *string) {
-	if link.Delivery == store.DeliveryMail {
+	switch link.Delivery {
+	case store.DeliveryMail:
 		return gen.InvitationDeliveryMail, nil
+	case adminauth.DeliveryNone:
+		return gen.InvitationDeliveryNone, nil
 	}
 	url := link.URL
 	return gen.InvitationDeliveryCopy, &url

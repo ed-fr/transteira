@@ -177,6 +177,14 @@ type Options struct {
 	// no system SMTP is configured, and the mail delivery is then refused
 	// with ErrSystemSMTPUnavailable.
 	Mailer Mailer
+	// SSOFlows runs the single sign-on flows (one *oidc.Flows per
+	// process); nil disables the single sign-on login (Methods reports it
+	// off, StartSSO and CompleteSSO answer ErrSSONotAvailable). With it,
+	// Secrets is required.
+	SSOFlows SSOFlows
+	// Secrets unseals the client secrets of the single sign-on
+	// configurations (*masterkey.Vault).
+	Secrets SecretOpener
 }
 
 // Service authenticates administrators and manages their accounts. It is
@@ -196,6 +204,8 @@ type Service struct {
 	issuer     string
 	clock      func() time.Time
 	mailer     Mailer
+	flows      SSOFlows
+	secrets    SecretOpener
 	// invites counts the links issued by Invite per account.
 	invites *ratelimit.Window
 	// Random sources and encoders, replaced by the tests.
@@ -210,11 +220,15 @@ type Service struct {
 // New returns a service over db. keys computes the CSRF tokens, vault seals
 // and opens the TOTP secrets, hasher verifies the passwords and seclog
 // receives the security events. Every dependency is required. It fails
-// when opts.AdminBaseURL is not a valid base URL.
+// when opts.AdminBaseURL is not a valid base URL, and when opts.SSOFlows
+// is set without opts.Secrets.
 func New(db *store.DB, keys Keys, vault Vault, hasher PasswordHasher, seclog SecurityLog, opts Options) (*Service, error) {
 	base, err := checkBaseURL(opts.AdminBaseURL)
 	if err != nil {
 		return nil, err
+	}
+	if opts.SSOFlows != nil && opts.Secrets == nil {
+		return nil, errors.New("adminauth: the single sign-on flows need a secret opener")
 	}
 	if opts.IdleTimeout <= 0 {
 		opts.IdleTimeout = DefaultIdleTimeout
@@ -238,6 +252,7 @@ func New(db *store.DB, keys Keys, vault Vault, hasher PasswordHasher, seclog Sec
 		repo: storeRepo{db: db, writer: audit.OrNew(opts.Audit, db)}, keys: keys, vault: vault, hasher: hasher,
 		seclog: seclog, logger: opts.Logger, idle: opts.IdleTimeout, maxAge: opts.MaxAge, stateTTL: opts.StateTTL,
 		setupToken: opts.SetupToken, baseURL: base, issuer: opts.Issuer, clock: opts.Now, mailer: opts.Mailer,
+		flows: opts.SSOFlows, secrets: opts.Secrets,
 		invites:  ratelimit.NewWindow(InviteMaxPerHour, InviteWindow, ratelimit.WithClock(opts.Now)),
 		newToken: id.NewToken, newTOTPSecret: crypto.GenerateTOTPSecret, newRecovery: crypto.GenerateRecoveryCodes,
 		qrPNG: notify.QRPNG, recoveryMAC: crypto.RecoveryCodeMAC,
@@ -307,6 +322,13 @@ type Account struct {
 	// Activated reports whether a password is set (false until the
 	// activation link is used, and after a credentials reset).
 	Activated bool
+	// SSOOnly reports an account created without activation link
+	// (delivery none): it signs in through single sign-on only.
+	SSOOnly bool
+	// Identities are the single sign-on identities pinned to the account,
+	// nil when not read (only [Service.Get] and [Service.Update] read
+	// them).
+	Identities []Identity
 	// Language is the preferred language, "" for the default.
 	Language string
 	// LastLoginAt is the last completed login, zero if none.
@@ -320,7 +342,7 @@ func accountOf(a store.Admin) Account {
 	return Account{
 		ID: a.ID, Username: a.Username, Email: a.Email, Role: a.Role, TenantIDs: a.TenantIDs,
 		TOTPEnabled: a.TOTPEnabled, RequireTOTP: a.RequireTOTP, Disabled: a.Disabled, Activated: a.PasswordHash != "",
-		Language: a.Language, LastLoginAt: a.LastLoginAt, CreatedAt: a.CreatedAt,
+		SSOOnly: a.SSOOnly, Language: a.Language, LastLoginAt: a.LastLoginAt, CreatedAt: a.CreatedAt,
 	}
 }
 
@@ -356,8 +378,13 @@ type Principal struct {
 	CSRFToken string
 	// ExpiresAt is the absolute end of the session.
 	ExpiresAt time.Time
-	// Admin is the administrator of the session.
+	// Admin is the administrator of the session. For a single sign-on
+	// session, its TenantIDs are limited to the tenants the session
+	// reaches (see [Service.Resolve]).
 	Admin Account
+	// AuthMethod is how the session was opened: store.AuthPassword or
+	// store.AuthOIDC.
+	AuthMethod store.AdminAuthMethod
 	// tokenHash is the hash of the presented token, for the rotations.
 	tokenHash []byte
 }

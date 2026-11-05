@@ -156,6 +156,10 @@ type Options struct {
 	// provisioning API completed its setup (since V1.2, P50); nil tells
 	// nobody.
 	Notifier ProvisioningNotifier
+	// SSOTester runs the discovery test of a single sign-on issuer (the
+	// shared *oidc.Client, since V2); nil answers testTenantSso with an
+	// internal error.
+	SSOTester SSOTester
 }
 
 // AdminCreator creates the first delegated admin of a new tenant inside the
@@ -190,6 +194,10 @@ type Service struct {
 	events events.Publisher
 	// notifier is Options.Notifier, nil for none.
 	notifier ProvisioningNotifier
+	// sso stores the single sign-on configurations (since V2).
+	sso ssoRepo
+	// ssoTester is Options.SSOTester, nil for none.
+	ssoTester SSOTester
 	// favicons generates the favicons of an uploaded logo
 	// (branding.GenerateFavicons; replaceable in tests).
 	favicons func(ctx context.Context, logoPNG []byte) (branding.Favicons, error)
@@ -215,8 +223,11 @@ func New(db *store.DB, opts Options) (*Service, error) {
 	if db == nil || opts.Vault == nil || opts.Assets == nil || opts.Eraser == nil || opts.Mailer == nil {
 		return nil, errMissingDependency
 	}
+	r := newStoreRepo(db, opts.Vault, opts.Audit)
 	s := &Service{
-		repo:       newStoreRepo(db, opts.Vault, opts.Audit),
+		repo:       r,
+		sso:        newSSOStore(db, opts.Vault, r.writer),
+		ssoTester:  opts.SSOTester,
 		assets:     opts.Assets,
 		eraser:     opts.Eraser,
 		mailer:     opts.Mailer,

@@ -132,9 +132,9 @@ export function invitationErrorMessage(error: InvitationErrorLike, t: Translate)
   return undefined;
 }
 
-/** Reports whether an account can be sent a new invitation: not activated and not disabled. */
-export function canInvite(admin: Pick<Admin, 'activated' | 'disabled'>): boolean {
-  return !admin.activated && !admin.disabled;
+/** Reports whether an account can be sent a new invitation: not activated, not disabled and with a local password to set (not single sign-on only). */
+export function canInvite(admin: Pick<Admin, 'activated' | 'disabled' | 'ssoOnly'>): boolean {
+  return !admin.activated && !admin.disabled && !isSsoOnly(admin);
 }
 
 /** Reports whether the activation link of an account can be mailed (not for a super admin). */
@@ -161,12 +161,47 @@ export function adminPath(id: string): string {
 /** Status of an account: disabled first, then pending activation, otherwise active. */
 export type AccountStatus = 'active' | 'disabled' | 'pendingActivation';
 
-/** Status of an account. */
-export function accountStatus(admin: Pick<Admin, 'disabled' | 'activated'>): AccountStatus {
+/** Reports whether an account can only sign in through single sign-on (no local password). */
+export function isSsoOnly(admin: Pick<Admin, 'ssoOnly'>): boolean {
+  return admin.ssoOnly === true;
+}
+
+/**
+ * Status of an account. An account without activation link (single sign-on only) has no
+ * activation to wait for: it is active unless disabled.
+ */
+export function accountStatus(admin: Pick<Admin, 'disabled' | 'activated' | 'ssoOnly'>): AccountStatus {
   if (admin.disabled) {
     return 'disabled';
   }
-  return admin.activated ? 'active' : 'pendingActivation';
+  return admin.activated || isSsoOnly(admin) ? 'active' : 'pendingActivation';
+}
+
+/** An identity pinned to an account (issuer, client ID, first login). */
+export type AdminIdentity = components['schemas']['AdminIdentity'];
+
+/** One row of the list of pinned identities. */
+export interface IdentityRow {
+  id: string;
+  issuer: string;
+  clientId: string;
+  /** Date of the first login that pinned the identity, formatted. */
+  linkedAt: string;
+}
+
+/** Rows of the pinned identities of an account, oldest first. */
+export function identityRows(
+  admin: Pick<Admin, 'identities'>,
+  formatDate: (iso: string) => string,
+): IdentityRow[] {
+  return [...(admin.identities ?? [])]
+    .sort((a, b) => a.linkedAt.localeCompare(b.linkedAt))
+    .map((identity) => ({
+      id: identity.id,
+      issuer: identity.issuer,
+      clientId: identity.clientId,
+      linkedAt: formatDate(identity.linkedAt),
+    }));
 }
 
 /** Two-factor status of an account: enabled, required but not configured yet, or not enabled. */
@@ -236,6 +271,8 @@ export interface AdminRow {
   tenants: string;
   totp: TotpStatus;
   status: AccountStatus;
+  /** The account can only sign in through single sign-on. */
+  ssoOnly: boolean;
   /** Last sign-in, formatted, or "Never". */
   lastLogin: string;
   /** The row is the account of the signed-in admin. */
@@ -256,6 +293,7 @@ export function adminRow(
     tenants: tenantLabel(admin, ctx.names, ctx.t),
     totp: totpStatus(admin),
     status: accountStatus(admin),
+    ssoOnly: isSsoOnly(admin),
     lastLogin:
       admin.lastLoginAt === undefined || admin.lastLoginAt === null
         ? ctx.t('adminAccounts.list.never')
@@ -363,8 +401,9 @@ export function createBody(form: CreateForm): AdminCreate {
     email: form.email.trim(),
     role: form.role,
     tenantIds: [...new Set(form.tenantIds)].sort(),
-    // The server forces two-factor authentication for an invitation by mail.
-    requireTotp: form.requireTotp || form.delivery === 'mail',
+    // The server forces two-factor authentication for an invitation by mail; with no activation
+    // link (single sign-on only) there is no local second factor: the provider proves it.
+    requireTotp: form.delivery === 'none' ? false : form.requireTotp || form.delivery === 'mail',
     invitation: invitationBody(form.delivery, form.language),
   };
 }

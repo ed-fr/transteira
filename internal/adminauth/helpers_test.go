@@ -195,6 +195,8 @@ type env struct {
 	seclog  *syncBuffer
 	applog  *syncBuffer
 	a, b, c *tenant.Tenant
+	// kr is the master keyring (CSRF and flow cookie MACs, vault).
+	kr *masterkey.Keyring
 }
 
 // newEnv builds an env on engine e.
@@ -217,7 +219,7 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 	t.Cleanup(kr.Close)
 	ev := &env{
 		db: db, clock: clock, hasher: &fakeHasher{}, seclog: &syncBuffer{}, applog: &syncBuffer{},
-		vault: &fakeVault{db: db, keyID: kr.CurrentID()},
+		vault: &fakeVault{db: db, keyID: kr.CurrentID()}, kr: kr,
 	}
 	ev.svc, err = New(db, kr, ev.vault, ev.hasher, securitylog.New(ev.seclog), Options{
 		SetupToken: setupToken, AdminBaseURL: baseURL + "/", Now: clock.Now, Logger: newLogger(ev.applog),

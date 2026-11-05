@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -153,4 +154,64 @@ func TestZabbixTemplate(t *testing.T) {
 		seen[id] = true
 	}
 	checkMetrics(t, raw)
+}
+
+// TestSSOFail2banFilter checks the failregex of the single sign-on filter on
+// the exact line TransTeira writes, and that it ignores other events and
+// lines without a client address.
+func TestSSOFail2banFilter(t *testing.T) {
+	content := string(readFile(t, "fail2ban/filter.d/transteira-sso.conf"))
+	m := regexp.MustCompile(`(?m)^failregex\s*=\s*(.+)$`).FindStringSubmatch(content)
+	if m == nil {
+		t.Fatal("no failregex")
+	}
+	addr := `(?P<ip>(?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*)`
+	re := regexp.MustCompile(strings.ReplaceAll(m[1], "<ADDR>", addr))
+	// fail2ban removes the matched date before applying failregex.
+	const prefix = "2026-11-05T08:12:00.123Z"
+	cases := map[string]string{
+		` ip=203.0.113.7 tenant=- event=sso_failed reason="state_invalid"`:                           "203.0.113.7",
+		` ip=2001:db8::1 tenant=transfer.entity-a.example.com event=sso_failed reason="mfa_missing"`: "2001:db8::1",
+		` ip=203.0.113.7 tenant=- event=admin_login_failed reason="password"`:                        "",
+		` ip=- tenant=- event=sso_failed reason="issuer_error"`:                                      "",
+		` ip=203.0.113.7 tenant=- event=sso_failed_other`:                                            "",
+		` ip=- tenant=- event=sso_failed x=" ip=198.51.100.9 tenant=- event=sso_failed"`:             "",
+	}
+	for line, want := range cases {
+		got := ""
+		if sub := re.FindStringSubmatch(line); sub != nil {
+			got = sub[re.SubexpIndex("ip")]
+		}
+		if got != want {
+			t.Errorf("%s%s: matched %q, want %q", prefix, line, got, want)
+		}
+	}
+}
+
+// TestSSOCrowdsecScenario checks that the single sign-on scenario parses, only
+// counts sso_failed, and has a higher capacity than the brute force scenario.
+func TestSSOCrowdsecScenario(t *testing.T) {
+	type scenario struct {
+		Name     string `yaml:"name"`
+		Filter   string `yaml:"filter"`
+		Capacity int    `yaml:"capacity"`
+	}
+	load := func(path string) scenario {
+		var sc scenario
+		if err := yaml.Unmarshal(readFile(t, path), &sc); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		return sc
+	}
+	sso := load("crowdsec/scenarios/transteira-sso-bf.yaml")
+	bf := load("crowdsec/scenarios/transteira-bf.yaml")
+	if !strings.Contains(sso.Filter, "'sso_failed'") || strings.Count(sso.Filter, "transteira_event") != 1 {
+		t.Errorf("filter %q must select sso_failed only", sso.Filter)
+	}
+	if strings.Contains(bf.Filter, "sso_failed") {
+		t.Error("the brute force scenario must not count sso_failed")
+	}
+	if sso.Capacity <= bf.Capacity {
+		t.Errorf("sso capacity %d must exceed the brute force capacity %d", sso.Capacity, bf.Capacity)
+	}
 }

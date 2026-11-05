@@ -159,6 +159,17 @@ Dans l’éditeur d’un document légal, **Utiliser le texte proposé** remplit
 
 Lorsque toutes les étapes obligatoires sont **Fait**, cliquez sur **Terminer la mise en service**. Sinon le bouton reste désactivé et la liste indique les étapes obligatoires restantes. L’entité est alors ouverte : les dépôts et les téléchargements deviennent possibles. Cette action est irréversible : une entité ne revient jamais à l’état de mise en service. Seul le super administrateur peut forcer l’ouverture malgré des étapes manquantes ; ce n’est pas possible pour vous.
 
+<!-- topic: tenant-sso -->
+### Authentification unique
+
+Si votre organisation utilise l’authentification unique (OpenID Connect, par exemple Microsoft Entra ID) pour une entité, votre compte a été créé par un super administrateur et vous vous connectez avec le compte de votre organisation au lieu d’un mot de passe. Sur la page de connexion, saisissez votre adresse e-mail professionnelle dans le formulaire **Authentification unique** et cliquez sur **Se connecter avec l’authentification unique**, authentifiez-vous chez votre fournisseur, et vous arrivez dans l’administration sans mot de passe ni code d’authentification TransTeira (le second facteur est celui de votre fournisseur). La première fois, votre compte est lié à votre identité chez le fournisseur.
+
+![Page de connexion de l’administration avec le formulaire d’authentification unique sous le formulaire de mot de passe](../screenshots/fr/admin-login-sso.png)
+
+Votre session n’ouvre alors que les entités qui utilisent le même fournisseur ; les autres ne sont pas listées. Si l’entité impose l’authentification unique, la connexion par mot de passe est refusée avec le message qui indique qu’il faut utiliser l’authentification unique, et une session par mot de passe déjà ouverte n’atteint plus cette entité : elle disparaît de votre liste jusqu’à ce que vous vous connectiez par l’authentification unique.
+
+Sur une entité, l’écran **Authentification unique** montre la configuration en lecture seule (le secret n’est jamais affiché) ; seul un super administrateur la modifie. Si la connexion échoue, la page affiche un message général : demandez à un super administrateur, qui peut lire le motif dans le journal de sécurité. Si vous avez changé de compte chez votre fournisseur, demandez-lui de désépingler votre ancienne identité.
+
 <!-- topic: tenant-general -->
 ### Général
 

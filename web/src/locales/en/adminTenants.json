@@ -34,7 +34,8 @@
     "recipientRules": "Recipient domains",
     "confidentiality": "Confidentiality levels",
     "abuse": "Abuse detection",
-    "summary": "Summary"
+    "summary": "Summary",
+    "sso": "Single sign-on"
   },
   "fields": {
     "name": {
@@ -644,5 +645,102 @@
   },
   "abuse": {
     "title": "Abuse detection"
+  },
+  "sso": {
+    "title": "Single sign-on",
+    "form": {
+      "title": "Single sign-on settings"
+    },
+    "intro": "Lets the delegated admins and auditors of this entity sign in to the administration with the OpenID Connect identity provider of the organisation (for example Microsoft Entra ID). The redirect address to register at the provider is shown in the guide. Super administrators always sign in with their local password and two-factor authentication.",
+    "readOnlyIntro": "Single sign-on settings of this entity. Only a super administrator can change them.",
+    "notConfigured": "Single sign-on is not configured for this entity.",
+    "saved": "Single sign-on settings saved.",
+    "removed": "Single sign-on settings removed.",
+    "yes": "Yes",
+    "no": "No",
+    "status": {
+      "label": "Status",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "enabled": {
+      "label": "Enable single sign-on",
+      "hint": "When disabled, the settings are kept but nobody can sign in through them."
+    },
+    "issuer": {
+      "label": "Issuer",
+      "hint": "Address (https) of the identity provider. For Microsoft Entra ID, use the issuer of your own directory, for example https://<provider>/<directory-id>/v2.0. The multi-tenant endpoints (common, organizations, consumers) are refused."
+    },
+    "clientId": {
+      "label": "Client ID",
+      "hint": "Identifier of the application registered at the provider."
+    },
+    "clientSecret": {
+      "label": "Client secret",
+      "hintRequired": "Write-only: it is stored encrypted and never shown again.",
+      "hintStored": "Leave empty to keep the stored secret. Type a new one to replace it."
+    },
+    "secretStored": "A secret is stored",
+    "secretMissing": "No secret is stored",
+    "secretChangeNote": "Changing the issuer or the client ID requires typing a new secret: a secret is never carried over to another application or provider.",
+    "emailDomains": {
+      "label": "Email domains",
+      "hint": "One domain per line, 1 to 20, for example entity-a.example.com. An administrator signs in with an address of one of these domains. A domain can be used by one entity only on the whole instance."
+    },
+    "requireMfa": {
+      "label": "Require multi-factor authentication",
+      "hint": "The identity provider must prove a second factor. With Microsoft Entra ID, add the optional authentication methods claim (amr) to the ID token of the application, otherwise every sign-in is refused."
+    },
+    "enforced": {
+      "label": "Enforce single sign-on",
+      "hint": "Refuses the local password sign-in of the delegated admins and auditors of this entity.",
+      "warning": "Enforced: the local password sign-in will be refused for the delegated admins and auditors of this entity, even if single sign-on stops working. Check the test result and a first sign-in before enforcing. Your own super administrator account is not affected."
+    },
+    "test": {
+      "title": "Test",
+      "intro": "Checks that the saved issuer answers with a valid discovery document. Nobody is signed in and the secret is not sent.",
+      "action": "Test the issuer",
+      "running": "Testing…",
+      "saveFirst": "The test uses the saved settings: save your changes first.",
+      "notSaved": "The test cannot run: enable and save the settings first.",
+      "success": "The discovery succeeded ({ms} ms).",
+      "failure": "The discovery failed ({ms} ms).",
+      "stage": "Stage: {stage}.",
+      "stages": {
+        "settings": "reading the settings",
+        "connect": "connection to the provider",
+        "tls": "secure connection (TLS)",
+        "discovery": "download of the discovery document",
+        "issuer": "check of the issuer",
+        "endpoints": "check of the endpoints",
+        "done": "done",
+        "unknown": "unknown stage"
+      },
+      "errors": {
+        "dns_error": "The provider name could not be resolved.",
+        "connect_error": "The connection to the provider was refused or reset.",
+        "tls_error": "The secure connection failed (certificate or protocol).",
+        "timeout": "The provider did not answer in time.",
+        "http_status": "The discovery document was not served (unexpected HTTP status).",
+        "invalid_document": "The discovery document is not valid.",
+        "issuer_mismatch": "The discovery document names another issuer.",
+        "missing_endpoint": "An endpoint is missing or is not served over https.",
+        "internal_error": "Internal error while testing.",
+        "unknown": "Unknown error."
+      }
+    },
+    "remove": {
+      "title": "Remove single sign-on",
+      "text": "Removes the settings, the stored secret and the routing of the email domains. Pinned identities stay but become unusable, and accounts created without an activation link cannot sign in until single sign-on is configured again.",
+      "action": "Remove single sign-on",
+      "confirmTitle": "Remove the single sign-on settings?",
+      "confirmText": "The administrators of this entity who sign in through single sign-on will no longer be able to sign in. This cannot be undone.",
+      "confirmAction": "Remove"
+    },
+    "errors": {
+      "issuerHttps": "The issuer must be an https address.",
+      "secretRequired": "Type the client secret: it is required for the first save and whenever the issuer or the client ID changes.",
+      "domainsRequired": "Enter at least one email domain."
+    }
   }
 }

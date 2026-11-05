@@ -98,6 +98,9 @@
 {/snippet}
 {#snippet statusCell(row: AdminRow)}
   <StatusBadge variant={statusVariant(row.status)} label={t(`adminAccounts.status.${row.status}`)} />
+  {#if row.ssoOnly}
+    <StatusBadge variant="info" label={t('adminAccounts.sso.badge')} />
+  {/if}
 {/snippet}
 {#snippet lastLoginCell(row: AdminRow)}{row.lastLogin}{/snippet}
 {#snippet actionsCell(row: AdminRow)}

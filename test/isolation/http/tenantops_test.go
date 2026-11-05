@@ -192,7 +192,7 @@ func (h *harness) transferOfB(t *testing.T, op operation, trID, recipient string
 func (h *harness) leaksB(extra ...string) []string {
 	return append([]string{
 		nameB, hostB, string(h.tenantB.ID), legalMarkerB, colorB, insiderB, invitedB, blockedB, auditActorB, reportMarkerB,
-		h.ops.invitationB, h.ops.entryB, h.ops.auditB,
+		h.ops.invitationB, h.ops.entryB, h.ops.auditB, ssoIssuerB, ssoClientB,
 	}, extra...)
 }
 

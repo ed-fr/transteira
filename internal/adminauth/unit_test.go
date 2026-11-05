@@ -151,7 +151,7 @@ func TestAuthorization(t *testing.T) {
 func TestAuditorOperations(t *testing.T) {
 	want := []string{
 		"adminLogout", "changeAdminPassword", "confirmTotpEnrollment", "disableTotp", "getAdminMe",
-		"getTenant", "getTenantStats", "getTenantTransfer", "getTenantTransferProof", "listTenantAuditEvents",
+		"getTenant", "getTenantSso", "getTenantStats", "getTenantTransfer", "getTenantTransferProof", "listTenantAuditEvents",
 		"listTenantSecurityEvents", "listTenantTransfers", "listTenants", "startTotpEnrollment",
 	}
 	got := make([]string, 0, len(AuditorOperations))
