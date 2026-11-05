@@ -52,6 +52,7 @@ import (
 	"github.com/ed-fr/transteira/internal/netpolicy"
 	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/oidc"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/provisioning"
 	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
@@ -454,13 +455,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
+	// One signer per process holds the proof signing key (V2, T-302): the
+	// antivirus worker writes the deposit proofs, the download service the
+	// delivery proofs, each in the transaction of its fact, and the proof
+	// service serves them.
+	proofSigner := proof.NewSigner(db, vault, auditLog, nil, logger)
 	worker := scan.New(scan.Deps{
 		DB: db, Vault: vault, Files: files, Scanner: scanner, Remover: uploads, Notifier: notifier, Mail: mailQueue,
-		Audit: auditLog, Usage: usageCounts, Outage: avAlerts, Events: bus,
+		Audit: auditLog, Usage: usageCounts, Outage: avAlerts, Events: bus, Proofs: proofSigner,
 	}, scanOptions(cfg, &o, logger))
 	downloads := download.New(download.Deps{
 		DB: db, Vault: vault, Files: files, Keys: keys, Passwords: passwords, Notifier: notifier, Mail: mailQueue,
-		SecurityLog: secLog, Usage: usageCounts, Audit: auditLog,
+		SecurityLog: secLog, Usage: usageCounts, Audit: auditLog, Proofs: proofSigner,
 	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger, Abuse: detector})
 	// The sweeper holds the antivirus worker before erasing a transfer, so
 	// that a transfer deleted while it is scanned is never made available.
@@ -681,6 +687,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
+	proofs := proof.NewService(db, proofSigner, auditLog, nil, logger, proof.WithSecurityLog(secLog))
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,
@@ -689,7 +696,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Maintenance:  maint,
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
-			public.WithTenantService(tenants), public.WithMaintenance(maint), public.WithMyTransfers(senders)),
+			public.WithTenantService(tenants), public.WithMaintenance(maint), public.WithMyTransfers(senders),
+			public.WithProofs(proofs)),
 		Sessions:    deposits,
 		MyTransfers: senders,
 		APITokens:   apiTokens,
@@ -701,7 +709,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
 			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner),
-			admin.WithSecurityEventsService(securityEventsService)),
+			admin.WithSecurityEventsService(securityEventsService), admin.WithProofService(proofs)),
 		AdminSessions:       admins,
 		Provisioning:        httpserver.NewProvisioningAuthenticator(provisioner),
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,

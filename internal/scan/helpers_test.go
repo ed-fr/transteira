@@ -19,6 +19,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/antivirus"
 	"github.com/ed-fr/transteira/internal/antivirus/antivirustest"
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/id"
@@ -26,6 +27,7 @@ import (
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -175,11 +177,11 @@ func (r faultRepo) reject(ctx context.Context, tid tenant.ID, trfID string) erro
 	return r.inner.reject(ctx, tid, trfID)
 }
 
-func (r faultRepo) makeAvailable(ctx context.Context, tid tenant.ID, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error) {
+func (r faultRepo) makeAvailable(ctx context.Context, t *tenant.Tenant, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error) {
 	if err := r.f.hit("makeAvailable"); err != nil {
 		return nil, err
 	}
-	return r.inner.makeAvailable(ctx, tid, trfID, perRecipient, tokens, now)
+	return r.inner.makeAvailable(ctx, t, trfID, perRecipient, tokens, now)
 }
 
 func (r faultRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
@@ -470,8 +472,10 @@ type env struct {
 	scanner *testScanner
 	// published receives the events of the worker.
 	published *events.Recorder
-	w         *Worker
-	a, b, c   *tenant.Tenant
+	// signer writes the deposit proofs.
+	signer  *proof.Signer
+	w       *Worker
+	a, b, c *tenant.Tenant
 }
 
 // newEnv builds an env on engine e; opts tunes the worker (short backoffs by
@@ -500,7 +504,7 @@ func newEnv(t *testing.T, e storetest.Engine, opts Options) *env {
 	ev := &env{
 		t: t, db: db, vault: vault, files: files, uploads: upload.New(db, vault, files, upload.Options{}),
 		clamd: antivirustest.New(t), queue: &fakeQueue{}, logs: &logCapture{}, f: newFaults(),
-		published: &events.Recorder{},
+		published: &events.Recorder{}, signer: proof.NewSigner(db, vault, audit.New(db), nil, nil),
 	}
 	ev.client = antivirus.NewClient(ev.clamd.Network(), ev.clamd.Addr(),
 		antivirus.WithScanTimeout(10*time.Second), antivirus.WithIdleTimeout(5*time.Second))
@@ -520,6 +524,7 @@ func newEnv(t *testing.T, e storetest.Engine, opts Options) *env {
 		DB: db, Vault: faultVault{inner: vault, f: ev.f}, Files: faultFiles{inner: files, f: ev.f},
 		Scanner: ev.scanner, Remover: faultRemover{inner: ev.uploads, f: ev.f},
 		Notifier: faultNotifier{inner: notifier, f: ev.f}, Mail: ev.queue, Events: ev.published,
+		Proofs: ev.signer,
 	}, opts)
 	ev.w.repo = faultRepo{inner: ev.w.repo, f: ev.f}
 	t.Cleanup(func() {

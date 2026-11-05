@@ -650,6 +650,23 @@ var tenantAllowlist = map[string]int{
 	// scope, written in the system scope.
 	`SELECT ` + securityEventColumns + ` FROM security_events WHERE tenant_id = ? AND at >= ? AND at <= ? ` +
 		`AND (? = '' OR event_type = ?) AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?`: 0,
+	// Transfer proofs (0028): immutable, inserted once, purged after 12
+	// months and erased by address.
+	`INSERT INTO transfer_proofs (id, tenant_id, transfer_id, kind, recipient_link_id, statement, signature, ` +
+		`key_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 1,
+	`SELECT ` + proofColumns + ` FROM transfer_proofs WHERE tenant_id = ? AND transfer_id = ? AND kind = ? ` +
+		`AND recipient_link_id IS NULL`: 0,
+	`SELECT ` + proofColumns + ` FROM transfer_proofs WHERE tenant_id = ? AND transfer_id = ? AND kind = ? ` +
+		`AND recipient_link_id = ?`: 0,
+	`SELECT id FROM transfer_proofs WHERE tenant_id = ? AND expires_at <= ? ORDER BY expires_at, id LIMIT ?`: 0,
+	`DELETE FROM transfer_proofs WHERE tenant_id = ? AND id = ? AND expires_at <= ?`:                         0,
+	`SELECT id, statement FROM transfer_proofs WHERE tenant_id = ? AND instr(lower(statement), ?) > 0 ` +
+		`AND id > ? ORDER BY id LIMIT ?`: 0,
+	`SELECT id, statement FROM transfer_proofs WHERE tenant_id = ? AND strpos(lower(statement), ?) > 0 ` +
+		`AND id > ? ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM transfer_proofs WHERE tenant_id = ? AND id = ?`: 0,
+	`SELECT ` + proofColumns + ` FROM transfer_proofs WHERE tenant_id = ? AND transfer_id = ? AND kind = 'delivery' ` +
+		`AND recipient_link_id IS NOT NULL AND id > ? ORDER BY id LIMIT ?`: 0,
 	// Operations of a tenant (0010): administrator view, GDPR erasure,
 	// usage counters and quota alerts.
 	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND transfer_id = ?`:                        0,
@@ -1049,6 +1066,11 @@ var systemAllowlist = map[string]string{
 	`DELETE FROM admin_sessions WHERE auth_method = 'oidc' AND sso_issuer = ? AND sso_client_id = ? ` +
 		`AND admin_id IN (SELECT admin_id FROM admin_tenants WHERE tenant_id = ?)`: reasonAdminAuth,
 	`DELETE FROM admin_sessions WHERE admin_id = ? AND auth_method = 'oidc' AND sso_issuer = ? AND sso_client_id = ?`: reasonAdminAuth,
+	`INSERT INTO proof_signing_keys (` + proofKeyColumns + `) VALUES (?, ?, ?, ?, NULL)`:                              reasonProofKeys,
+	`SELECT ` + proofKeyColumns + ` FROM proof_signing_keys WHERE retired_at IS NULL`:                                 reasonProofKeys,
+	`SELECT ` + proofKeyColumns + ` FROM proof_signing_keys WHERE id = ?`:                                             reasonProofKeys,
+	`SELECT ` + proofKeyColumns + ` FROM proof_signing_keys ORDER BY created_at DESC, id DESC`:                        reasonProofKeys,
+	`UPDATE proof_signing_keys SET retired_at = ? WHERE id = ? AND retired_at IS NULL`:                                reasonProofKeys,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

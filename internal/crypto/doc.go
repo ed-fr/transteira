@@ -28,8 +28,9 @@
 //
 //	version (1 byte, = 1) | nonce (12 random bytes) | AES-256-GCM ciphertext and tag
 //
-// The purposes are "dek" (PurposeDEK), "secret" (PurposeSecret) and
-// "admin-totp" (PurposeAdminTOTP). The key is HKDF-SHA256(master key, salt =
+// The purposes are "dek" (PurposeDEK), "secret" (PurposeSecret),
+// "admin-totp" (PurposeAdminTOTP), "webhook" (PurposeWebhook) and
+// "proof-signing" (PurposeProofSigning). The key is HKDF-SHA256(master key, salt =
 // none, info =
 // "transteira/v1/wrap/" + purpose). The additional authenticated data is
 // lp("transteira/v1/envelope") | lp(purpose) | lp(tenantID) | lp(rowID),

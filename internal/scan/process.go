@@ -447,7 +447,7 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 		}
 	}
 	now := w.now()
-	links, err := w.repo.makeAvailable(ctx, k.tid, k.id, perRecipient, tokens, now)
+	links, err := w.repo.makeAvailable(ctx, t, k.id, perRecipient, tokens, now)
 	if err != nil {
 		return w.failed(ctx, k, "make transfer available", err)
 	}

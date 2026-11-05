@@ -15,6 +15,7 @@ export { default as LegalContent } from './LegalContent.svelte';
 export { default as LiveRegion } from './LiveRegion.svelte';
 export { default as PageLayout } from './PageLayout.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';
+export { default as ProofsSection } from './ProofsSection.svelte';
 export { default as RadioGroup } from './RadioGroup.svelte';
 export { default as Spinner } from './Spinner.svelte';
 export { default as TextArea } from './TextArea.svelte';

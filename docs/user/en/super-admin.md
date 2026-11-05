@@ -286,6 +286,10 @@ An entity created with a token is created **being set up** (see [Creating an ent
 
 **Certificates.** An entity created by the API needs a certificate for its address as soon as it exists. With Caddy, the operator can have it obtained on demand at the first visit: use `integrations/reverse-proxy/caddy/Caddyfile.on-demand` and set `TT_TLS_ASK_ALLOWED_IPS` to the exact address of Caddy on the proxy network. Caddy then asks TransTeira whether the name belongs to an entity before requesting the certificate. Without this variable, the endpoint is disabled and no certificate is issued this way. With many entities under one domain, a wildcard certificate avoids the Let's Encrypt limits. See `docs/api/provisioning.md`.
 
+### Proof signing key
+
+Proofs of deposit and delivery (see the [delegated administrator guide](topic:tenant-proofs)) are signed by one Ed25519 key of the instance, created when the first proof is written. Its private part is sealed by the master key, so the [master key rotation](topic:master-key-rotation) covers it. There is no screen for it: on the host, `transteira proof keys` lists the keys and `transteira proof retire-key` retires the active one (suspected compromise of the database and the master key, or periodic hygiene). The private part is destroyed, the public key stays published at `/api/v1/proof-keys` so that older proofs still verify, and a new key is created with the next proof. Retiring is recorded in the audit log (`proof_key.retired`). Procedure, verification and limits: `docs/operations/proofs.md`.
+
 <!-- topic: system-master-key -->
 ### Master key
 

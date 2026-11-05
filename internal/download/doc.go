@@ -109,6 +109,15 @@
 // ErrGone. The range state is removed once the first download is recorded;
 // whoever deletes a transfer removes its state file too.
 //
+// The delivery proofs (package proof, T-302) are written in the
+// transaction that records the first download, with a signing key prepared
+// (Deps.Proofs) right before it: the overall proof at the first download
+// of the transfer, and, through recipient links, the proof of each
+// recipient at the first complete download of their link. When a proof
+// cannot be written, nothing is recorded and no mail is sent: the error is
+// logged, the range state is kept, and the next complete download records
+// the first download with its proofs.
+//
 // # Download starts and usage
 //
 // Without download limit, a download start is a GET of a file read from

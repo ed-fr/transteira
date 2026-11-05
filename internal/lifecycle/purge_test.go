@@ -1,7 +1,9 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"testing"
@@ -100,7 +102,7 @@ func TestPurgeRows(t *testing.T) {
 		if !ev.gone(oldA) || !ev.gone(oldB) || ev.gone(recentA) || ev.gone(rej) {
 			t.Fatalf("purge at the retention: %v %v %v %v", ev.gone(oldA), ev.gone(oldB), ev.gone(recentA), ev.gone(rej))
 		}
-		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 invitations=0") != 1 {
+		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		// The token hash no longer resolves: the link answers 404.
@@ -168,7 +170,7 @@ func TestPurgeRowsFailures(t *testing.T) {
 		}
 	})
 	for _, fault := range []string{
-		"listEnded", "deleteEnded", "purge:challenges", "purge:invitations",
+		"listEnded", "deleteEnded", "purge:challenges", "purge:proofs", "purge:invitations",
 		"purgeSystem:admin_sessions", "purgeSystem:audit_events", "purgeSystem:usage_counters",
 	} {
 		runEach(t, fault, func(t *testing.T, e storetest.Engine) {
@@ -309,7 +311,7 @@ func TestPurgeRowsSystem(t *testing.T) {
 		now := ev.clock.Now()
 		ev.adminRows(now)
 		ev.runTask(TaskPurgeRows)
-		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 invitations=0 "+systemCounts) != 1 {
+		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0 "+systemCounts) != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		if ev.f.called("scrub") != 1 {
@@ -429,6 +431,66 @@ func TestPurgeAbuseRows(t *testing.T) {
 		}
 		if _, err := ev.db.AbuseReports().Get(ctx, ev.a.ID, recent.ID); err != nil {
 			t.Errorf("recent report purged: %v", err)
+		}
+	})
+}
+
+// TestPurgeProofs purges the proofs once their retention is over, in every
+// tenant, and keeps the others.
+func TestPurgeProofs(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		start := ev.clock.Now()
+		sys, err := ev.db.System("test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := store.ProofKey{ID: id.New(id.ProofKey), PublicKey: bytes.Repeat([]byte{1}, store.ProofPublicKeySize)}
+		secret := store.SystemSecret{
+			ID: id.New(id.SystemSecret), Purpose: store.SecretPurposeProofSigning, KeyID: "mk_0123456789abcdef", Blob: []byte("sealed"),
+		}
+		if err := sys.Tx(ctx, func(tx *store.SystemTx) error { return ev.db.ProofKeys().CreateTx(ctx, tx, key, secret) }); err != nil {
+			t.Fatal(err)
+		}
+		statement, err := json.Marshal(map[string]any{"schemaVersion": 1, "senderEmail": "sender@entity-a.example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		insert := func(tn *tenant.Tenant, expires time.Time) string {
+			trfID := id.New(id.Transfer)
+			sc, err := ev.db.Scoped(tn.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+				return ev.db.TransferProofs().InsertTx(ctx, tx, store.TransferProof{
+					TransferID: trfID, Kind: store.ProofDeposit, Statement: statement,
+					Signature: bytes.Repeat([]byte{7}, store.ProofSignatureSize), KeyID: key.ID, ExpiresAt: expires,
+				})
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return trfID
+		}
+		shortA, shortB := insert(ev.a, start.AddDate(0, 6, 0)), insert(ev.b, start.AddDate(0, 6, 0))
+		longA := insert(ev.a, start.AddDate(1, 0, 0))
+
+		ev.clock.set(start.AddDate(0, 6, 1))
+		ev.runTask(TaskPurgeRows)
+		if ev.logs.count("proofs=2 ") != 1 {
+			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		for _, c := range []struct {
+			tn   *tenant.Tenant
+			trf  string
+			kept bool
+		}{{ev.a, shortA, false}, {ev.b, shortB, false}, {ev.a, longA, true}} {
+			_, err := ev.db.TransferProofs().Get(ctx, c.tn.ID, c.trf, store.ProofDeposit, "")
+			if c.kept != (err == nil) {
+				t.Errorf("proof %s kept = %v, Get = %v", c.trf, c.kept, err)
+			}
 		}
 	})
 }

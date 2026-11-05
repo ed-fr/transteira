@@ -281,6 +281,9 @@ const (
 	// ActionProofKeyCreated: a proof signing key was created (system, without
 	// tenant; since 2.0).
 	ActionProofKeyCreated Action = "proof_key.created"
+	// ActionProofKeyRetired: the active proof signing key was retired and its
+	// private part destroyed (system, without tenant; since 2.0).
+	ActionProofKeyRetired Action = "proof_key.retired"
 )
 
 // ActorAntivirus is the system actor (store.ActorSystem) of the events of

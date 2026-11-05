@@ -54,6 +54,34 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `admin.login` (`method: oidc`), `admin.identity_linked`, `admin.identity_unlinked`,
   `tenant.sso_updated`, `tenant.sso_deleted`. Guide: `docs/operations/sso.md` (French:
   `docs/operations/fr/sso.md`).
+- Signed proofs of deposit and delivery (threats T-298 to T-303, decision P61): a PDF signed by
+  the instance holding a readable copy of the statement and, attached, `statement.json` (RFC 8785
+  canonical JSON, schema `ProofStatement`, integers only) and `statement.sig` (Ed25519); only the
+  attached statement is authoritative and its SHA-256 is printed. The deposit proof is written at
+  the end of the antivirus analysis, in the same transaction that makes the transfer available;
+  the delivery proof at the first complete download and, for per-recipient links, at each
+  recipient's first complete download. Proofs are immutable, one per fact, kept 12 months after
+  their creation even when the transfer is deleted, erased by the data-subject erasure when they
+  name the address, and deleted with the entity. The sender downloads them from "My transfers"
+  while the transfer exists; delegated admins, the super admin and auditors from the admin
+  transfer detail, even after deletion (`transfer.proof_downloaded` in the audit log); downloads
+  are limited to 10 per minute (burst 20, `429`) per client address (per IPv4 address or per
+  IPv6 /64), shared by the sender and administration proof endpoints across tenants. One active Ed25519 instance key,
+  created at first use (`proof_key.created`), its private part sealed by the master key and
+  rewrapped by its rotation; public keys, active and retired, at `GET /api/v1/proof-keys` (also
+  answered while an entity is in setup). New commands: `transteira proof verify [--keys FILE |
+  --url https://FQDN] [--json] <proof.pdf>` (offline, no database, prints the fields of the
+  verified statement and rejects a fact later than the retirement of its key), `transteira proof
+  keys` and `transteira proof retire-key [--yes]` (private part destroyed, audit
+  `proof_key.retired`, new key at the next proof, retired public keys stay published). API:
+  `getMyTransferProof`, `getTenantTransferProof`, `listProofKeys`, new members
+  `DataSubjectSummary.proofs` and `DataSubjectEraseReport.proofsDeleted`, error
+  `proof-not-available`. No third-party timestamping (RFC 3161). Documented limits: retiring a key blocks only
+  statements whose facts are dated after it (backdated forgeries within a compromised key's
+  lifetime and old backups are an accepted residual risk: rotate the master key and retire the
+  key); a delivery proof that cannot be written rolls back the whole first-download transaction.
+  Guide:
+  `docs/operations/proofs.md` (French: `docs/operations/fr/proofs.md`); user guides updated.
 
 ## [1.2.1] - 2026-11-04
 

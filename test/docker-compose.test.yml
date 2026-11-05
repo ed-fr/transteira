@@ -29,9 +29,9 @@ services:
       - -c
       - full_page_writes=off
       # Test packages run in parallel, each with its own pools: the default
-      # 100 connections are not enough.
+      # 100 connections are not enough, nor 300 since the 2.0 proof tests.
       - -c
-      - max_connections=300
+      - max_connections=600
       # Dropping a test schema locks each of its tables and indexes; with the
       # packages running in parallel the default (64) runs out of lock slots
       # ("out of shared memory").

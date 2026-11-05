@@ -288,6 +288,14 @@ func TestDownloadFirstDownload(t *testing.T) {
 			if exists(t, statePath(t, d, tr.ID)) {
 				t.Error("the served range state is kept after the first download")
 			}
+			// app.Run wires the proof signer to the antivirus worker and
+			// to the download service: the deposit proof was written with
+			// the availability, the delivery proof with the first download.
+			for _, kind := range []store.ProofKind{store.ProofDeposit, store.ProofDelivery} {
+				if _, err := d.db.TransferProofs().Get(context.Background(), d.tenantA.ID, tr.ID, kind, ""); err != nil {
+					t.Errorf("%s proof: %v", kind, err)
+				}
+			}
 
 			// Later complete downloads send nothing more.
 			expectFile(t, "a again", r.get(t, pa, nil), "a.bin", a)

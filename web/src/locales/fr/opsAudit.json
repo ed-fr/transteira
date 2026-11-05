@@ -228,7 +228,8 @@
       "revoked": "Lien de dépôt révoqué"
     },
     "proof_key": {
-      "created": "Clé de signature des preuves créée"
+      "created": "Clé de signature des preuves créée",
+      "retired": "Clé de signature des preuves retirée"
     }
   }
 }

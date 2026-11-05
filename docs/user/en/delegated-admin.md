@@ -371,8 +371,19 @@ Open a transfer to see its **Transfer details**: status, dates, first download, 
 - Senders can also delete or extend their own transfers themselves from the "My transfers" page of the sending site (see the depositor guide), without an administrator. These actions are recorded in the [audit log](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 - **View the audit log from the day of this transfer** opens the audit log at the creation day.
 
+<!-- topic: tenant-proofs -->
+### Proofs of deposit and delivery
+
+The details of a transfer have a **Proofs** section, available to delegated administrators, super administrators and auditors. It offers PDF files signed by the instance: the **proof of deposit** (written at the end of the antivirus analysis), the **proof of delivery** (written at the first complete download) and, when recipients have personal links, one **proof of delivery** per recipient (written at that person's first complete download). A proof not written yet is shown as unavailable.
+
+Proofs are kept **12 months after they were issued, even if the transfer was deleted**, so you can still provide one for a transfer that is gone (the transfer details remain reachable for that). The sender downloads their own proofs from the "My transfers" page, only while the transfer exists. Each download is recorded in the [audit log](topic:tenant-audit) (`transfer.proof_downloaded`) and limited in rate per IP address (beyond, the page asks you to wait).
+
+The statement signed inside the PDF is authoritative, not its visible text. It lists the entity, the sender, the recipients, the files with their SHA-256 fingerprints and the dates, and no IP address. Anyone can verify it offline with `transteira proof verify` and the public keys published at `/api/v1/proof-keys` on the entity address. A proof is worth the trust placed in the operator of the instance: there is no third-party timestamping. The verification procedure and the signing key lifecycle are described in `docs/operations/proofs.md`.
+
+The [Personal data](topic:tenant-privacy) screen counts the proofs naming an address and erases them with the rest of the data.
+
 <!-- topic: tenant-invitations -->
-### Invitations
+###  Invitations
 
 The Invitations screen lists the invitations sent by internal users so that external people can deposit files for them.
 
@@ -505,13 +516,13 @@ New reports are sent by email to the delegated administrators of the entity (to 
 
 The Personal data screen answers the requests of people who want to know or erase the data linked to their email address in the entity (data subject rights, GDPR).
 
-In **Search by email address**, type the **Email address** and click **Search**. The section **Data found in this entity** summarises what is linked to it: verified address record, transfers sent and received, invitations, audit log entries.
+In **Search by email address**, type the **Email address** and click **Search**. The section **Data found in this entity** summarises what is linked to it: verified address record, transfers sent and received, invitations, proofs of deposit and delivery, audit log entries.
 
 ![Personal data search with the summary of the data found for an address](../screenshots/en/admin-privacy.png)
 
 Click **Erase all data** to erase it. The screen details the effect:
 
-- erased: verification codes, deposit sessions and the verified address; transfers sent by the address or through an invitation it received (files made unreadable, then deleted); the address in received transfers (a transfer left without recipients is deleted); invitations received (deleted) and issued (revoked); in the audit log, the address is replaced by a pseudonym;
+- erased: verification codes, deposit sessions and the verified address; transfers sent by the address or through an invitation it received (files made unreadable, then deleted); the address in received transfers (a transfer left without recipients is deleted); invitations received (deleted) and issued (revoked); proofs of deposit and delivery naming the address; in the audit log, the address is replaced by a pseudonym;
 - kept on purpose: blocklist entries, the address in the allowed senders of an API token (edit the token to remove it), IP addresses in the audit log until their 12 months are over, emails already queued, and backups, whose copies of the files become unreadable.
 
 The erasure cannot be undone. It ends with an **Erasure report**. Only this entity is affected: if the person also uses another entity, repeat the procedure there.

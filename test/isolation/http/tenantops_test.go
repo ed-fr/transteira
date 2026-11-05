@@ -261,6 +261,7 @@ func adminOperation(t *testing.T, h *harness, op operation) {
 var opsChecks = map[string]func(t *testing.T, h *harness, op operation, sess adminSession){
 	"listTenantTransfers":        checkListTransfers,
 	"getTenantTransfer":          checkGetTransfer,
+	"getTenantTransferProof":     checkGetTransferProof,
 	"deleteTenantTransfer":       checkDeleteTransfer,
 	"resendTransferNotification": checkResend,
 	"listTenantInvitations":      checkListInvitations,

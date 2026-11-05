@@ -47,6 +47,9 @@ var rowPurges = []rowPurge{
 	{"abuse_reports", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.AbuseReports().Purge(ctx, tid, now)
 	}},
+	{"proofs", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
+		return db.TransferProofs().Purge(ctx, tid, now)
+	}},
 	{"invitations", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.Invitations().Purge(ctx, tid, now)
 	}},

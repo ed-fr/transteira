@@ -5,9 +5,18 @@
   import { api } from '../../shared/api/api';
   import { ApiProblem } from '../../shared/api/client';
   import { problemMessage } from '../../shared/api/problem';
-  import { Alert, Button, Dialog, RadioGroup, Spinner, announce } from '../../shared/components';
+  import {
+    Alert,
+    Button,
+    Dialog,
+    ProofsSection,
+    RadioGroup,
+    Spinner,
+    announce,
+  } from '../../shared/components';
   import { fullName } from '../../shared/components/folders';
   import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
+  import { recipientsWithDelivery } from '../../shared/api/proof';
   import {
     extendFailure,
     extensionOptions,
@@ -304,6 +313,15 @@
       </table>
     </div>
   {/if}
+
+  <ProofsSection
+    headingId="proofs"
+    base={`/me/transfers/${encodeURIComponent(id)}`}
+    status={transfer.status}
+    delivered={transfer.downloadCount > 0}
+    recipients={recipientsWithDelivery(transfer.recipientTracking)}
+    {onexpired}
+  />
 
   <h2 class="tt-text-lg">{t('myTransfers.detail.extend.title')}</h2>
   {#if extendedNotice}

@@ -52,6 +52,8 @@ var setupDecisions = map[string]setupDecision{
 	"getPublicTenant":        setupServed,
 	"getTenantAsset":         setupServed,
 	"getTenantLegalDocument": setupServed,
+	// The public keys hold no tenant data and the operation has no 503.
+	"listProofKeys": setupServed,
 
 	"startDepositSession":          setupRefused,
 	"confirmVerificationChallenge": setupRefused,
@@ -66,9 +68,6 @@ var setupDecisions = map[string]setupDecision{
 	"getPublicDropLink":            setupRefused,
 	"getMyTransferProof":           setupRefused,
 	"reissueMyTransferLink":        setupRefused,
-	// Wired outside any tenant when implemented (the keys belong to the
-	// instance, like /healthz): then setupOutsideTenant.
-	"listProofKeys":                setupRefused,
 	"getDownload":                  setupRefused,
 	"unlockDownload":               setupRefused,
 	"downloadFile":                 setupRefused,
@@ -256,7 +255,7 @@ func TestSetupAllowlistRoutes(t *testing.T) {
 			t.Errorf("allowlist pattern %q is not a served operation (%q)", pattern, id)
 		}
 	}
-	if n := len(setupAllowed); n != 4 {
+	if n := len(setupAllowed); n != 5 {
 		t.Errorf("%d allowed patterns: the allowlist is closed, review any change (T-260)", n)
 	}
 }

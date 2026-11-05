@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/download"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/store"
 )
 
@@ -253,4 +255,44 @@ func confirmForeignVerification(t *testing.T, h *harness, op operation) {
 	wantCode(t, archive, hostA, h.call(t, archive, hostA, params, "", forged...), http.StatusUnauthorized, "recipient-verification-required")
 	unlock := h.call(t, unlockOp(), hostA, params, `{"password":"`+downloadPassword+`"}`)
 	wantCode(t, unlockOp(), hostA, unlock, http.StatusUnauthorized, "recipient-verification-required")
+}
+
+// availableTransferWithProof is availableTransfer for a transfer whose
+// proof of deposit is sealed, as the antivirus worker does when it makes
+// the transfer available (since 2.0). It returns the identifier of the
+// transfer.
+func (h *harness) availableTransferWithProof(t *testing.T) string {
+	t.Helper()
+	trfID, _ := h.availableTransfer(t, "")
+	ctx := context.Background()
+	db, err := store.Open(ctx, h.engine.Config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	kr, err := masterkey.New(masterkeytest.Key(t, masterKeyLabel), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := proof.NewSigner(db, masterkey.NewVault(db, kr, nil), audit.New(db), nil, nil)
+	sealer, err := signer.Prepare(ctx)
+	if err != nil {
+		t.Fatalf("prepare the signing key: %v", err)
+	}
+	s, err := db.Scoped(h.tenantA.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.Tx(ctx, func(tx *store.ScopedTx) error { return sealer.DepositTx(ctx, tx, h.tenantA, trfID, time.Now()) })
+	if err != nil {
+		t.Fatalf("seal the deposit proof: %v", err)
+	}
+	return trfID
+}
+
+// withKind returns op with the query parameter kind=deposit appended to its
+// path (the proof operations require it).
+func withKind(op operation) operation {
+	op.template += "?kind=deposit"
+	return op
 }

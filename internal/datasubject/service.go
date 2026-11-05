@@ -95,6 +95,9 @@ type Summary struct {
 	// SecurityEvents is always 0: the security log never records
 	// addresses.
 	SecurityEvents int
+	// Proofs counts the proofs of deposit and delivery whose signed
+	// statement names the address (since 2.0).
+	Proofs int
 }
 
 // EraseReport counts what an erasure did (schema DataSubjectEraseReport).
@@ -122,6 +125,10 @@ type EraseReport struct {
 	// its transfers, whose address was replaced by the pseudonym (since
 	// 1.1).
 	AbuseReports int
+	// ProofsDeleted counts the proofs of deposit and delivery whose signed
+	// statement names the address (sender, recipient), deleted (since
+	// 2.0).
+	ProofsDeleted int
 }
 
 // details returns the audit details of the report: counts only.
@@ -130,7 +137,7 @@ func (r EraseReport) details() map[string]any {
 		"transfersDeleted": r.TransfersDeleted, "recipientEntriesRemoved": r.RecipientEntriesRemoved,
 		"verifiedAddressDeleted": r.VerifiedAddressDeleted, "invitationsDeleted": r.InvitationsDeleted,
 		"logEntriesPseudonymised": r.LogEntriesPseudonymised, "accessLinks": r.AccessLinks,
-		"abuseReports": r.AbuseReports,
+		"abuseReports": r.AbuseReports, "proofsDeleted": r.ProofsDeleted,
 	}
 }
 
@@ -297,13 +304,18 @@ func (s *Service) Search(ctx context.Context, p adminauth.Principal, ip netip.Ad
 	if err != nil {
 		return Summary{}, fmt.Errorf("datasubject: count audit events: %w", err)
 	}
+	proofs, err := s.repo.countProofs(ctx, tid, addr)
+	if err != nil {
+		return Summary{}, fmt.Errorf("datasubject: count proofs: %w", err)
+	}
 	sum := Summary{
 		Email: addr, VerifiedAddress: verified, TransfersAsSender: len(sent), TransfersAsRecipient: len(received),
-		Invitations: invitee + inviter, AuditEvents: events,
+		Invitations: invitee + inviter, AuditEvents: events, Proofs: proofs,
 	}
 	s.record(ctx, p, ip, tid, audit.ActionDataSubjectSearched, newPseudonym(addr), map[string]any{
 		"verifiedAddress": sum.VerifiedAddress, "transfersAsSender": sum.TransfersAsSender,
 		"transfersAsRecipient": sum.TransfersAsRecipient, "invitations": sum.Invitations, "auditEvents": sum.AuditEvents,
+		"proofs": sum.Proofs,
 	})
 	return sum, nil
 }
@@ -396,13 +408,20 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 		return fmt.Errorf("datasubject: erase invitations: %w", err)
 	}
 	rep.InvitationsDeleted = int(n)
-	// 5. Abuse alerts and reports (since 1.1).
+	// 5. Proofs of deposit and delivery naming the address (since 2.0).
+	// They outlive the transfers, so they go once the transfers are gone.
+	pf, err := s.repo.eraseProofs(ctx, tid, addr)
+	if err != nil {
+		return fmt.Errorf("datasubject: erase proofs: %w", err)
+	}
+	rep.ProofsDeleted = pf
+	// 6. Abuse alerts and reports (since 1.1).
 	ab, err := s.repo.eraseAbuse(ctx, tid, addr, pseudonym)
 	if err != nil {
 		return fmt.Errorf("datasubject: erase abuse data: %w", err)
 	}
 	rep.AbuseReports = int(ab)
-	// 6. Audit log.
+	// 7. Audit log.
 	m, err := s.repo.pseudonymiseAudit(ctx, tid, addr, pseudonym)
 	if err != nil {
 		return fmt.Errorf("datasubject: pseudonymise audit events: %w", err)

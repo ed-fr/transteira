@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -271,6 +272,20 @@ func (f *faultRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, 
 	return f.repo.eraseInvitations(ctx, tid, email, pseudonym, now)
 }
 
+func (f *faultRepo) countProofs(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	if err := f.fail("countProofs"); err != nil {
+		return 0, err
+	}
+	return f.repo.countProofs(ctx, tid, email)
+}
+
+func (f *faultRepo) eraseProofs(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	if err := f.fail("eraseProofs"); err != nil {
+		return 0, err
+	}
+	return f.repo.eraseProofs(ctx, tid, email)
+}
+
 func (f *faultRepo) eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error) {
 	if err := f.fail("eraseAbuse"); err != nil {
 		return 0, err
@@ -315,10 +330,14 @@ type env struct {
 	sleeps  int
 	clock   *fakeClock
 	keys    *masterkey.Keyring
-	a, b    *tenant.Tenant
-	super   adminauth.Principal
-	adminA  adminauth.Principal
-	adminB  adminauth.Principal
+	// proofKeyID is the signing key of the proofs seeded by proofs.
+	proofKeyID string
+	// otherTrf1, otherTrf2 are the transfer IDs of the proofs not naming carol.
+	otherTrf1, otherTrf2 string
+	a, b                 *tenant.Tenant
+	super                adminauth.Principal
+	adminA               adminauth.Principal
+	adminB               adminauth.Principal
 }
 
 // newEnv builds an env on engine e.
@@ -649,4 +668,67 @@ func wantErr(t *testing.T, what string, err, target error) {
 	if !errors.Is(err, target) {
 		t.Fatalf("%s: got %v, want %v", what, err, target)
 	}
+}
+
+// proofs stores, in tn, the proofs of the fixtures of seed: a deposit naming
+// carol as sender, a delivery naming carol as a recipient and one proof
+// that does not name her. The signing key is created on first use.
+func (ev *env) proofs(tn *tenant.Tenant, sentID string) {
+	ev.t.Helper()
+	ctx := context.Background()
+	if ev.proofKeyID == "" {
+		sys, err := ev.db.System("test")
+		if err != nil {
+			ev.t.Fatal(err)
+		}
+		key := store.ProofKey{ID: id.New(id.ProofKey), PublicKey: bytes.Repeat([]byte{1}, store.ProofPublicKeySize)}
+		secret := store.SystemSecret{
+			ID: id.New(id.SystemSecret), Purpose: store.SecretPurposeProofSigning, KeyID: "mk_0123456789abcdef", Blob: []byte("sealed"),
+		}
+		if err := sys.Tx(ctx, func(tx *store.SystemTx) error { return ev.db.ProofKeys().CreateTx(ctx, tx, key, secret) }); err != nil {
+			ev.t.Fatal(err)
+		}
+		ev.proofKeyID, ev.otherTrf1, ev.otherTrf2 = key.ID, id.New(id.Transfer), id.New(id.Transfer)
+	}
+	statement := func(sender string, recipients ...string) []byte {
+		b, err := json.Marshal(map[string]any{"schemaVersion": 1, "senderEmail": sender, "recipients": recipients})
+		if err != nil {
+			ev.t.Fatal(err)
+		}
+		return b
+	}
+	sc, err := ev.db.Scoped(tn.ID)
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		for i, c := range []struct {
+			trf  string
+			kind store.ProofKind
+			st   []byte
+		}{
+			{sentID, store.ProofDeposit, statement(carol, dave)},
+			{ev.otherTrf1, store.ProofDelivery, statement(alice, carol)},
+			{ev.otherTrf2, store.ProofDeposit, statement(alice, dave)},
+		} {
+			err := ev.db.TransferProofs().InsertTx(ctx, tx, store.TransferProof{
+				TransferID: c.trf, Kind: c.kind, Statement: c.st, Signature: bytes.Repeat([]byte{byte(i + 1)}, store.ProofSignatureSize),
+				KeyID: ev.proofKeyID, ExpiresAt: testStart.AddDate(1, 0, 0),
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+}
+
+// proofExists reports whether tn holds the proof of kind kind of trfID.
+func (ev *env) proofExists(tn *tenant.Tenant, trfID string, kind store.ProofKind) bool {
+	ev.t.Helper()
+	_, err := ev.db.TransferProofs().Get(context.Background(), tn.ID, trfID, kind, "")
+	return err == nil
 }

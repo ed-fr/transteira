@@ -52,6 +52,9 @@ const (
 	adminTOTPConfirmPattern = http.MethodPost + " " + AdminPrefix + "/me/totp/confirm"
 	adminActivationPattern  = http.MethodPost + " " + AdminPrefix + "/activation"
 	adminVersionPattern     = http.MethodGet + " " + APIBaseURL + "/version"
+	// The public keys that verify the proofs (since API 2.0): the keys
+	// belong to the instance, so the admin hosts serve them too.
+	adminProofKeysPattern = http.MethodGet + " " + APIBaseURL + "/proof-keys"
 	// The single sign-on login (since API 2.0), served without an admin
 	// session: the methods the login page offers, the start of a flow and the
 	// redirect target of the identity provider.
@@ -72,6 +75,7 @@ var adminOpenRoutes = map[string]bool{
 	adminLoginPattern:        true,
 	adminActivationPattern:   true,
 	adminVersionPattern:      true,
+	adminProofKeysPattern:    true,
 	adminAuthMethodsPattern:  true,
 	adminOIDCStartPattern:    true,
 	adminOIDCCallbackPattern: true,
@@ -306,6 +310,7 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 	mux := http.NewServeMux()
 	mux.Handle(AdminPrefix+"/", api404)
 	mux.Handle(APIBaseURL+"/version", api404)
+	mux.Handle(APIBaseURL+"/proof-keys", api404)
 	// The provisioning operations (since API 1.2), on the admin hosts only.
 	mux.Handle(ProvisioningPrefix+"/", api404)
 	docs := adminDocsHandler(sessions, logger)

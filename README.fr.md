@@ -269,6 +269,7 @@ Exploitation :
 - [Supervision](docs/operations/supervision.md) (`/healthz`, `/metrics`, `/status`, tableau de bord Grafana et template Zabbix dans [integrations/](integrations/grafana/README.md))
 - [Journal de sécurité](docs/operations/security-log.md) (fail2ban, CrowdSec) et [export syslog](docs/operations/syslog.md) (journaux d'audit et de sécurité vers un SIEM)
 - [Authentification unique](docs/operations/fr/sso.md) (OpenID Connect pour les admins délégués et auditeurs : Microsoft Entra ID, Keycloak)
+- [Preuves de dépôt et de remise](docs/operations/fr/proofs.md) (preuves PDF signées, vérification hors ligne, retrait de la clé de signature)
 - [Administration](docs/operations/admin.md) (comptes, opérations sur les entités, jetons d'API,
   journal d'audit, RGPD, statistiques, mode maintenance, alerte disque, SMTP système) et [Entités](docs/operations/tenants.md) (configuration, alertes de quota)
 

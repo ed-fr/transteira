@@ -46,5 +46,15 @@
   },
   "help": {
     "title": "Help"
+  },
+  "proofs": {
+    "title": "Proofs",
+    "intro": "A proof is a PDF signed by the instance. Only the attached signed statement is authoritative; it can be verified offline with `transteira proof verify`.",
+    "deposit": "Download the proof of deposit",
+    "depositPending": "Available once the antivirus analysis is over.",
+    "delivery": "Download the proof of delivery",
+    "deliveryPending": "Available after the first download.",
+    "deliveryFor": "Download the proof of delivery for {recipient}",
+    "done": "Proof downloaded."
   }
 }

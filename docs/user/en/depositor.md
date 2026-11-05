@@ -206,6 +206,18 @@ Open a transfer to see its details: the files with their size and SHA-256 finger
 
 Use **Sign out** when you have finished, especially on a shared computer.
 
+<!-- topic: proofs -->
+### Proofs of deposit and delivery
+
+For a transfer you may need to show later that you sent the files, or that the recipients received them. Open the transfer in **My transfers**: the **Proofs** section offers PDF files signed by the service.
+
+- **Download the proof of deposit**: available once the antivirus analysis is over. It states that you deposited these files (with their SHA-256 fingerprints) for these recipients, and when.
+- **Download the proof of delivery**: available after the first download of the files. It states when they were first downloaded. When each recipient has a personal link, there is also one **proof of delivery for** each recipient, available after that person's first complete download.
+
+Keep the PDF: what makes it a proof is the signed statement attached inside it, not the text you read on the page. Anyone can check it offline with the `transteira proof verify` command and the public keys published by the service (ask your administrator for the procedure). The proofs list no IP address.
+
+You can download the proofs of a transfer only while it exists in **My transfers**. Your administrators can still provide them for 12 months after they were issued, even if you deleted the transfer. Downloads are limited in rate: if the page says there were too many requests, wait a minute.
+
 <!-- topic: invite -->
 ## Inviting an external person
 

@@ -10,6 +10,10 @@
 //	admin              Local recovery of the administrator accounts: "admin list"
 //	                   prints the accounts, "admin reset-totp <username>" removes
 //	                   the TOTP enrollment of an account and revokes its sessions.
+//	proof              Sealed proofs: "proof verify" checks a proof PDF offline against
+//	                   the published public keys (--keys FILE or --url https://FQDN),
+//	                   "proof keys" lists the signing keys, "proof retire-key"
+//	                   retires the active signing key.
 //	backup             Write a consistent copy of the SQLite database to the backup
 //	                   volume now (or to -out <file>); explains the dumps with
 //	                   PostgreSQL.
@@ -65,6 +69,7 @@ func commands() []command {
 		{"migrate", "Apply the database schema migrations (--status to only print them)", runMigrate},
 		{"rotate-master-key", "Re-wrap the stored keys with the new master key of TT_MASTER_KEY_NEW_FILE (resumable)", runRotateMasterKey},
 		{"admin", "Administrator accounts: list, reset-totp <username> (local recovery, no secret printed)", runAdmin},
+		{"proof", "Sealed proofs: verify <proof.pdf> (--keys FILE | --url https://FQDN), keys, retire-key", runProof},
 		{"backup", "Write a checked copy of the SQLite database to TT_BACKUP_DIR now (--out <file> to choose the file)", runBackup},
 		{"healthcheck", "Probe the running server and exit non-zero when unhealthy (--url to override)", runHealthcheck},
 		{"version", "Print the build version (--json for JSON output)", runVersion},

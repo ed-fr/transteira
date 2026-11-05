@@ -252,6 +252,7 @@ type opsSubjectSummary struct {
 	Invitations          int    `json:"invitations"`
 	AuditEvents          int    `json:"auditEvents"`
 	SecurityEvents       int    `json:"securityEvents"`
+	Proofs               int    `json:"proofs"`
 }
 
 // opsEraseReport is the DataSubjectEraseReport schema.
@@ -262,6 +263,7 @@ type opsEraseReport struct {
 	InvitationsDeleted      int  `json:"invitationsDeleted"`
 	LogEntriesPseudonymised int  `json:"logEntriesPseudonymised"`
 	AccessLinks             int  `json:"accessLinks"`
+	ProofsDeleted           int  `json:"proofsDeleted"`
 }
 
 // adminTransfer sends getTenantTransfer and decodes the 200 answer.

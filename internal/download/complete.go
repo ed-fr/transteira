@@ -324,6 +324,14 @@ func (s *Service) itemDone(ctx context.Context, t *tenant.Tenant, trfID, linkID,
 // recorded then), or a recipient link whose start was never recorded. On a
 // database failure it returns false, so that the caller keeps the range
 // state for a later request. The caller holds the lock of the state.
+//
+// The delivery proofs are written in the transaction that records the
+// first download (T-302): when the signing key cannot be prepared or a
+// proof cannot be written, nothing is recorded, neither the first download
+// nor the completion of the link, and no mail is sent. The bytes are
+// already served: the failure is logged as an error, the range state is
+// kept, and the next complete download records the first download with
+// its proofs (its date is then that of the later download).
 func (s *Service) downloaded(ctx context.Context, t *tenant.Tenant, d store.TransferDetails, link *store.RecipientLink) bool {
 	now := s.now()
 	var deleteAfter time.Time
@@ -335,11 +343,15 @@ func (s *Service) downloaded(ctx context.Context, t *tenant.Tenant, d store.Tran
 		err   error
 	)
 	if link == nil {
-		first, err = s.repo.markFirst(ctx, t.ID, d.ID, now, deleteAfter)
+		first, err = s.repo.markFirst(ctx, t, d.ID, now, deleteAfter)
 	} else {
-		first, err = s.repo.completeLink(ctx, t.ID, d.ID, link.ID, now, deleteAfter)
+		first, err = s.repo.completeLink(ctx, t, d.ID, link.ID, now, deleteAfter)
 	}
 	switch {
+	case errors.Is(err, errProof):
+		// Checked first: a proof failure may wrap store.ErrConflict.
+		s.log(ctx, slog.LevelError, "first download not recorded: delivery proof not written", t.ID, d.ID, slog.Any("error", err))
+		return false
 	case errors.Is(err, errLinkUnclaimed):
 		s.log(ctx, slog.LevelWarn, "download completed through a recipient link whose start was not recorded", t.ID, d.ID,
 			slog.String("link", link.ID))

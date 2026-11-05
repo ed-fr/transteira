@@ -78,6 +78,8 @@ describe('summary', () => {
     expect(hasData({ ...empty, transfersAsRecipient: 1 })).toBe(true);
     expect(hasData({ ...empty, invitations: 1 })).toBe(true);
     expect(hasData({ ...empty, auditEvents: 1 })).toBe(true);
+    expect(hasData({ ...empty, proofs: 0 })).toBe(false);
+    expect(hasData({ ...empty, proofs: 2 })).toBe(true);
   });
 
   it('builds the summary rows without the security log', () => {
@@ -101,6 +103,13 @@ describe('summary', () => {
       { id: 'auditEvents', term: 'opsPrivacy.summary.auditEvents', value: '#7' },
     ]);
     expect(summaryRows(empty, t, format)[0]?.value).toBe('opsPrivacy.no');
+  });
+
+  it('adds the proofs row when the server reports it', () => {
+    expect(summaryRows(empty, t, format).map((r) => r.id)).not.toContain('proofs');
+    const rows = summaryRows({ ...empty, proofs: 3 }, t, format);
+    expect(rows.at(-1)).toEqual({ id: 'proofs', term: 'opsPrivacy.summary.proofs', value: '#3' });
+    expect(summaryRows({ ...empty, proofs: 0 }, t, format).at(-1)?.value).toBe('#0');
   });
 
   it('builds the report rows', () => {
@@ -127,8 +136,25 @@ describe('summary', () => {
     );
   });
 
+  it('adds the proofs row of the report when the server reports it', () => {
+    const base: DataSubjectEraseReport = {
+      transfersDeleted: 0,
+      recipientEntriesRemoved: 0,
+      verifiedAddressDeleted: false,
+      invitationsDeleted: 0,
+      logEntriesPseudonymised: 0,
+    };
+    expect(reportRows(base, t, format).map((r) => r.id)).not.toContain('proofsDeleted');
+    expect(reportRows({ ...base, proofsDeleted: 2 }, t, format).at(-1)).toEqual({
+      id: 'proofsDeleted',
+      term: 'opsPrivacy.report.proofsDeleted',
+      value: '#2',
+    });
+  });
+
   it('lists what is erased and what is kept', () => {
-    expect(ERASED_KEYS.length).toBe(5);
+    expect(ERASED_KEYS.length).toBe(6);
+    expect(ERASED_KEYS).toContain('opsPrivacy.erase.erased.proofs');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.blocklist');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.backups');
   });

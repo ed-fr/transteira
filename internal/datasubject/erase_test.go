@@ -48,6 +48,7 @@ func (ev *env) seed(tn *tenant.Tenant) seeded {
 	ev.auditActor(tn, dave, 2)
 	ev.abuse(tn, carol, s.sent)
 	ev.abuse(tn, dave, s.viaInvitation)
+	ev.proofs(tn, s.sent)
 	return s
 }
 
@@ -123,7 +124,7 @@ func TestEraseEveryRole(t *testing.T) {
 		got := ev.search(ev.a, subjectInput)
 		want := Summary{
 			Email: carol, VerifiedAddress: true, TransfersAsSender: 2, TransfersAsRecipient: 5,
-			Invitations: 2, AuditEvents: 3,
+			Invitations: 2, AuditEvents: 3, Proofs: 2,
 		}
 		if got != want {
 			t.Fatalf("Search before = %+v, want %+v", got, want)
@@ -132,7 +133,7 @@ func TestEraseEveryRole(t *testing.T) {
 		rep := ev.erase(ev.a, subjectInput)
 		wantRep := EraseReport{
 			TransfersDeleted: 3, RecipientEntriesRemoved: 4, VerifiedAddressDeleted: true,
-			InvitationsDeleted: 1, LogEntriesPseudonymised: 3, AbuseReports: 1,
+			InvitationsDeleted: 1, LogEntriesPseudonymised: 3, AbuseReports: 1, ProofsDeleted: 2,
 		}
 		if rep != wantRep {
 			t.Fatalf("Erase = %+v, want %+v", rep, wantRep)
@@ -197,6 +198,13 @@ func TestEraseEveryRole(t *testing.T) {
 			t.Errorf("tenant B reports = %v", got)
 		}
 
+		// Proofs naming the address are gone, the others (and the other
+		// tenant's) stay.
+		if ev.proofExists(ev.a, s.sent, store.ProofDeposit) || ev.proofExists(ev.a, ev.otherTrf1, store.ProofDelivery) ||
+			!ev.proofExists(ev.a, ev.otherTrf2, store.ProofDeposit) || !ev.proofExists(ev.b, ev.otherTrf1, store.ProofDelivery) {
+			t.Error("proofs after erasure are not the expected ones")
+		}
+
 		// Deposit rows: carol's gone, dave's kept.
 		if _, err := ev.db.DepositSessions().GetByTokenHash(ctx, ev.a.ID, s.session, testStart); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("carol session: %v", err)
@@ -241,7 +249,7 @@ func TestEraseEveryRole(t *testing.T) {
 		}
 		if details["transfersDeleted"] != 3.0 || details["recipientEntriesRemoved"] != 4.0 ||
 			details["verifiedAddressDeleted"] != true || details["invitationsDeleted"] != 1.0 ||
-			details["logEntriesPseudonymised"] != 3.0 || details["complete"] != true {
+			details["logEntriesPseudonymised"] != 3.0 || details["proofsDeleted"] != 2.0 || details["complete"] != true {
 			t.Errorf("erased details = %v", details)
 		}
 		searched := ev.auditEvents(ev.a.ID, audit.ActionDataSubjectSearched)
@@ -424,7 +432,7 @@ func TestEraseStepFailures(t *testing.T) {
 		ev.seed(ev.a)
 		for _, m := range []string{
 			"deleteDepositRows", "deleteSenderAccess", "deleteVerified", "senderTransfers", "inviteeInvitations", "invitationTransfers",
-			"recipientTransfers", "removeRecipient", "eraseInvitations", "eraseAbuse", "pseudonymiseAudit",
+			"recipientTransfers", "removeRecipient", "eraseInvitations", "eraseProofs", "eraseAbuse", "pseudonymiseAudit",
 		} {
 			ev.faults(m)
 			_, err := ev.svc.Erase(context.Background(), ev.super, clientIP, ev.a.ID, carol)

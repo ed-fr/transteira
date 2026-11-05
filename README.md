@@ -258,6 +258,7 @@ Operation:
 - [Supervision](docs/operations/supervision.md) (`/healthz`, `/metrics`, `/status`, Grafana dashboard and Zabbix template in [integrations/](integrations/grafana/README.md))
 - [Security log](docs/operations/security-log.md) (fail2ban, CrowdSec) and [Syslog export](docs/operations/syslog.md) (audit and security logs to a SIEM)
 - [Single sign-on](docs/operations/sso.md) (OpenID Connect for delegated admins and auditors: Microsoft Entra ID, Keycloak)
+- [Proofs of deposit and delivery](docs/operations/proofs.md) (signed PDF proofs, offline verification, signing key retirement)
 - [Administration](docs/operations/admin.md) (accounts, tenant operations, API tokens, audit
   log, GDPR, statistics, maintenance mode, disk alert, system SMTP) and [Tenants](docs/operations/tenants.md) (configuration, quota alerts)
 

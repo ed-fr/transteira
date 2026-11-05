@@ -92,7 +92,7 @@ type requestKey struct{}
 var requestOperations = map[string]bool{
 	"GetDownload": true, "UnlockDownload": true, "DownloadFile": true, "DownloadArchive": true,
 	"StartRecipientVerification": true, "ConfirmRecipientVerification": true, "ReportAbuse": true,
-	"StartTransferReply": true,
+	"StartTransferReply": true, "GetMyTransferProof": true,
 }
 
 // RequestMiddleware is a strict middleware putting the HTTP request in the

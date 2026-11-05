@@ -16,12 +16,14 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
   import { describeError } from '../../../shared/api/problem';
+  import { deliveryProofAvailable, recipientsWithDelivery } from '../../../shared/api/proof';
   import {
     Alert,
     Button,
     Checkbox,
     CopyButton,
     Dialog,
+    ProofsSection,
     Spinner,
     TextArea,
     announce,
@@ -428,6 +430,15 @@
         ]}
       />
     </section>
+
+    <!-- Proofs: read-only downloads, offered to every role including the auditor. -->
+    <ProofsSection
+      headingId="{uid}-proofs"
+      base={`/admin/tenants/${encodeURIComponent(tenantId)}/transfers/${encodeURIComponent(transferId)}`}
+      status={transfer.status}
+      delivered={deliveryProofAvailable(transfer.firstDownloadedAt)}
+      recipients={recipientsWithDelivery(transfer.recipientTracking)}
+    />
 
     {#if !readOnly && (canResend(transfer.status) || canDelete(transfer.status) || resendDone !== '')}
       <section aria-labelledby="{uid}-actions">

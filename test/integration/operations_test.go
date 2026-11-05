@@ -820,6 +820,8 @@ func TestOperationsGDPR(t *testing.T) {
 		want := opsSubjectSummary{
 			Email: subject, VerifiedAddress: true, TransfersAsSender: 2, TransfersAsRecipient: 3, Invitations: 2,
 			AuditEvents: eventsA, SecurityEvents: 0,
+			// The deposit proof of each of the five transfers names the address, the deleted one too (proofs outlive their transfer).
+			Proofs: 5,
 		}
 		if sum != want || eventsA < 8 {
 			t.Errorf("search = %+v, want %+v (with at least 8 audit events)", sum, want)
@@ -831,7 +833,7 @@ func TestOperationsGDPR(t *testing.T) {
 		mustJSON(t, resp.body, &rep)
 		wantRep := opsEraseReport{
 			TransfersDeleted: 3, RecipientEntriesRemoved: 2, VerifiedAddressDeleted: true,
-			InvitationsDeleted: 1, LogEntriesPseudonymised: eventsA,
+			InvitationsDeleted: 1, LogEntriesPseudonymised: eventsA, ProofsDeleted: 5,
 		}
 		if rep != wantRep {
 			t.Errorf("erase report = %+v, want %+v", rep, wantRep)

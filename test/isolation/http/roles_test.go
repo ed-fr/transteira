@@ -337,6 +337,7 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 		auditor := h.newAuditor(t)
 		trA := h.newTransfer(t, h.colleague(t), "ivan@customer.example.net")
 		params := map[string]string{"transferId": trA.ID}
+		proofParams := map[string]string{"transferId": h.availableTransferWithProof(t)}
 		a, b := string(h.tenantA.ID), string(h.tenantB.ID)
 		var logout *operation
 		sort.Slice(adminOps, func(i, j int) bool { return adminOps[i].id < adminOps[j].id })
@@ -356,8 +357,12 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 					}
 					h.noDataOfB(t, op, "auditor of A on B", resp)
 				case tenantRead:
-					own := h.sendRole(t, auditor, op, a, params)
-					foreign := h.sendRole(t, auditor, op, b, params)
+					opParams := params
+					if op.id == "getTenantTransferProof" {
+						opParams = proofParams // the proof is sealed when the transfer becomes available
+					}
+					own := h.sendRole(t, auditor, op, a, opParams)
+					foreign := h.sendRole(t, auditor, op, b, opParams)
 					if isStub(t, op) {
 						wantCode(t, op, hostAdmin, own, http.StatusNotFound, "not-found")
 					} else if own.status < 200 || own.status > 299 {

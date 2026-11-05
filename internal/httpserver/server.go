@@ -27,7 +27,7 @@
 //     TT_TLS_ASK_ALLOWED_IPS is unset, see tlsAskHandler);
 //  8. routing by the raw Host header (never X-Forwarded-Host):
 //     - an admin host (TT_ADMIN_HOSTS) goes to the admin router, without
-//     tenant resolution: it serves /api/v1/admin/*, /api/v1/version and,
+//     tenant resolution: it serves /api/v1/admin/*, /api/v1/version, /api/v1/proof-keys and,
 //     since API 1.2, /api/v1/provisioning/* (provisioning token, no admin
 //     session),
 //     and the interactive API documentation (/api/docs) to an

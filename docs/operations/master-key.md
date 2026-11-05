@@ -34,7 +34,8 @@ TransTeira uses **envelope encryption**:
   per key, tagged with the ID of the master key that wraps it);
 - the **TOTP secrets of the administrators**, which belong to no entity, are
   wrapped the same way in a second table, `system_secrets` (one row per
-  secret, also tagged with the ID of its master key).
+  secret, also tagged with the ID of its master key); the private key that
+  signs the [proofs of deposit and delivery](proofs.md) is one of them.
 
 Consequences:
 

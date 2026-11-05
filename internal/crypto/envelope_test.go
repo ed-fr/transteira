@@ -9,7 +9,7 @@ import (
 
 func TestWrapRoundTrip(t *testing.T) {
 	k := testKey(t)
-	for _, p := range []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook} {
+	for _, p := range []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook, PurposeProofSigning} {
 		for _, pt := range [][]byte{nil, {}, []byte("smtp-password"), testDEK(7), bytes.Repeat([]byte{1}, 4096)} {
 			blob, err := k.Wrap(p, "ten_a", "wk_1", pt)
 			if err != nil {

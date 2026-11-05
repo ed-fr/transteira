@@ -206,6 +206,18 @@ Ouvrez un transfert pour en voir le détail : les fichiers avec leur taille et l
 
 Cliquez sur **Se déconnecter** quand vous avez terminé, surtout sur un ordinateur partagé.
 
+<!-- topic: proofs -->
+### Preuves de dépôt et de remise
+
+Pour un transfert, vous pouvez avoir besoin de montrer plus tard que vous avez envoyé les fichiers, ou que les destinataires les ont reçus. Ouvrez le transfert dans **Mes envois** : la section **Preuves** propose des fichiers PDF signés par le service.
+
+- **Télécharger la preuve de dépôt** : disponible une fois l’analyse antivirus terminée. Elle atteste que vous avez déposé ces fichiers (avec leurs empreintes SHA-256) pour ces destinataires, et quand.
+- **Télécharger la preuve de remise** : disponible après le premier téléchargement des fichiers. Elle atteste quand ils ont été téléchargés pour la première fois. Quand chaque destinataire a un lien personnel, il y a aussi une **preuve de remise pour** chaque destinataire, disponible après le premier téléchargement complet de cette personne.
+
+Conservez le PDF : ce qui en fait une preuve, c’est la déclaration signée jointe à l’intérieur, pas le texte que vous lisez à l’écran. Chacun peut la vérifier hors ligne avec la commande `transteira proof verify` et les clés publiques publiées par le service (demandez la procédure à votre administrateur). Les preuves ne contiennent aucune adresse IP.
+
+Vous ne pouvez télécharger les preuves d’un transfert que tant qu’il existe dans **Mes envois**. Vos administrateurs peuvent encore les fournir pendant 12 mois après leur émission, même si vous avez supprimé le transfert. Les téléchargements sont limités en fréquence : si la page signale trop de demandes, attendez une minute.
+
 <!-- topic: invite -->
 ## Inviter une personne externe
 

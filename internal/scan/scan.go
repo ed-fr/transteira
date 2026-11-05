@@ -81,7 +81,13 @@
 // deliverable file gets, in one transaction, a "dl_" token of 256 bits whose
 // SHA-256 is stored and whose raw value is sealed by the key vault (purpose
 // secret), then becomes available; its expiry restarts from that moment.
-// The link (id.DownloadURL) is built from the FQDN stored for the tenant
+// The same transaction writes its deposit proof (package proof, T-302),
+// signed with a key prepared (Deps.Proofs) right before it: no transfer is
+// available without its proof, and no proof exists for a transfer that did
+// not become available. A failure to prepare the key or to write the proof
+// rolls everything back: the transfer stays scanning, no mail is sent, and
+// its conclusion is retried with the backoff of the other failures. A
+// rejected transfer gets no deposit proof. The link (id.DownloadURL) is built from the FQDN stored for the tenant
 // (T-03), never from a request. The mails are built after the commit with
 // the SMTP settings of the transfer's tenant and enqueued; a full queue or
 // an open circuit is retried for Options.MailRetryFor. A mail that cannot be
@@ -138,6 +144,7 @@ import (
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
@@ -226,12 +233,20 @@ type OutageObserver interface {
 	ClamdUp()
 }
 
+// Proofs prepares the sealer that writes the deposit proof of a transfer
+// in the transaction that makes it available (package proof, threat model
+// T-302). *proof.Signer implements it.
+type Proofs interface {
+	Prepare(ctx context.Context) (*proof.Sealer, error)
+}
+
 // SystemActor is the actor (store.ActorSystem) of the audit events the
 // worker records.
 const SystemActor = audit.ActorAntivirus
 
 // Deps are the components the worker relies on. Every field is required,
-// except Audit, Usage and Outage (and Scanner with Options.Disabled).
+// except Audit, Usage, Outage and Proofs (and Scanner with
+// Options.Disabled).
 type Deps struct {
 	// DB stores the transfers.
 	DB *store.DB
@@ -259,6 +274,9 @@ type Deps struct {
 	// Events receives the virus.detected events, one per infected file
 	// (counts files = 1); nil publishes nothing.
 	Events events.Publisher
+	// Proofs writes the deposit proof of each transfer made available.
+	// The application always sets it; nil writes no proof (tests only).
+	Proofs Proofs
 }
 
 // Options tunes a [Worker]. Zero values select the defaults.
@@ -397,7 +415,7 @@ func New(deps Deps, opts Options) *Worker {
 		opts.Logger = slog.New(slog.DiscardHandler)
 	}
 	w := &Worker{
-		repo: storeRepo{db: deps.DB, vault: deps.Vault}, vault: deps.Vault, files: deps.Files,
+		repo: newStoreRepo(deps.DB, deps.Vault, deps.Proofs), vault: deps.Vault, files: deps.Files,
 		scanner: deps.Scanner, remover: deps.Remover, notifier: deps.Notifier,
 		audit: deps.Audit, usage: deps.Usage, observer: deps.Outage, events: events.OrDiscard(deps.Events),
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{

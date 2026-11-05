@@ -314,7 +314,7 @@ func TestStoreRepoLinkFailures(t *testing.T) {
 		if _, err := r.link(ctx, "", p.links[0].ID); err == nil {
 			t.Fatal("link of an invalid tenant")
 		}
-		if _, err := r.completeLink(ctx, ev.a.ID, p.id, unknown, now, time.Time{}); err == nil || errors.Is(err, errLinkUnclaimed) {
+		if _, err := r.completeLink(ctx, ev.a, p.id, unknown, now, time.Time{}); err == nil || errors.Is(err, errLinkUnclaimed) {
 			t.Fatalf("completion of an unknown link: %v", err)
 		}
 		ch := store.Challenge{

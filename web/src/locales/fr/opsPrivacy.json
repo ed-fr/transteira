@@ -19,6 +19,7 @@
     "transfersAsRecipient": "Transferts reçus",
     "invitations": "Invitations reçues ou émises",
     "auditEvents": "Entrées du journal d’audit",
+    "proofs": "Preuves de dépôt et de remise",
     "securityNote": "Le journal de sécurité n’enregistre jamais d’adresse mail : il n’y a rien à y effacer."
   },
   "erase": {
@@ -31,6 +32,7 @@
       "sent": "les transferts envoyés par l’adresse, ou déposés grâce à une invitation qu’elle a reçue : fichiers rendus illisibles (clés détruites) puis supprimés ;",
       "received": "les transferts reçus : l’adresse est retirée des destinataires, et un transfert qui n’a plus de destinataire est supprimé ;",
       "invitations": "les invitations qu’elle a reçues sont supprimées ; celles qu’elle a émises sont révoquées ;",
+      "proofs": "les preuves de dépôt et de remise dont la déclaration signée nomme l’adresse ;",
       "audit": "le journal d’audit : l’adresse est remplacée par un pseudonyme (erased-…)."
     },
     "keptIntro": "Ce qui est conservé volontairement :",
@@ -55,6 +57,7 @@
     "recipientEntriesRemoved": "Destinataires retirés",
     "invitationsDeleted": "Invitations supprimées",
     "logEntriesPseudonymised": "Entrées du journal d’audit pseudonymisées",
+    "proofsDeleted": "Preuves supprimées",
     "auditHint": "L’effacement est enregistré dans le journal d’audit sans l’adresse ; son pseudonyme figure dans l’objet de l’entrée.",
     "auditLink": "Voir dans le journal d’audit",
     "newSearch": "Nouvelle recherche"

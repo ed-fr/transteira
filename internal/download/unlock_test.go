@@ -239,7 +239,7 @@ func TestStoreRepoErrors(t *testing.T) {
 		if err := r.refund(ctx, bad, []store.FailureKey{trf, ip}, time.Now()); err == nil {
 			t.Error("refund on an invalid tenant")
 		}
-		if _, err := r.markFirst(ctx, bad, id.New(id.Transfer), time.Now(), time.Time{}); err == nil {
+		if _, err := r.markFirst(ctx, &tenant.Tenant{ID: bad}, id.New(id.Transfer), time.Now(), time.Time{}); err == nil {
 			t.Error("markFirst on an invalid tenant")
 		}
 	})

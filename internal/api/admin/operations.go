@@ -587,7 +587,7 @@ func (s *Server) SearchDataSubject(ctx context.Context, req gen.SearchDataSubjec
 	return gen.SearchDataSubject200JSONResponse{
 		Email: sum.Email, VerifiedAddress: sum.VerifiedAddress, TransfersAsSender: sum.TransfersAsSender,
 		TransfersAsRecipient: sum.TransfersAsRecipient, Invitations: sum.Invitations, AuditEvents: sum.AuditEvents,
-		SecurityEvents: sum.SecurityEvents,
+		SecurityEvents: sum.SecurityEvents, Proofs: &sum.Proofs,
 	}, nil
 }
 
@@ -605,7 +605,7 @@ func (s *Server) EraseDataSubject(ctx context.Context, req gen.EraseDataSubjectR
 	return gen.EraseDataSubject200JSONResponse{
 		TransfersDeleted: rep.TransfersDeleted, RecipientEntriesRemoved: rep.RecipientEntriesRemoved,
 		VerifiedAddressDeleted: rep.VerifiedAddressDeleted, InvitationsDeleted: rep.InvitationsDeleted,
-		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks, AbuseReports: &rep.AbuseReports,
+		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks, AbuseReports: &rep.AbuseReports, ProofsDeleted: &rep.ProofsDeleted,
 	}, nil
 }
 

@@ -102,6 +102,14 @@ const (
 	// SecurityEvent identifies a security event kept in the database (since
 	// 2.0, OpenAPI SecurityEvent.id).
 	SecurityEvent Prefix = "sev"
+	// ProofKey identifies a proof signing key of the instance (since 2.0,
+	// the "kid" published by GET /proof-keys and signed in every proof
+	// statement).
+	ProofKey Prefix = "psk"
+	// TransferProof identifies a signed proof of deposit or delivery
+	// (since 2.0). It is internal: proofs are addressed by transfer, kind
+	// and recipient.
+	TransferProof Prefix = "prf"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

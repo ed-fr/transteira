@@ -374,7 +374,7 @@ func TestRepoSharedTakesOneToken(t *testing.T) {
 	trfID := ev.scanning(ev.a, clean(10))
 	r := storeRepo{db: ev.db, vault: ev.vault}
 	tokA, tokB := "dl_"+strings.Repeat("a", 43), "dl_"+strings.Repeat("b", 43)
-	links, err := r.makeAvailable(context.Background(), ev.a.ID, trfID, false, []string{tokA, tokB}, time.Now())
+	links, err := r.makeAvailable(context.Background(), ev.a, trfID, false, []string{tokA, tokB}, time.Now())
 	if err == nil || links != nil || !strings.Contains(err.Error(), "one token, 2 given") {
 		t.Fatalf("makeAvailable(2 tokens) = %v, %v", links, err)
 	}

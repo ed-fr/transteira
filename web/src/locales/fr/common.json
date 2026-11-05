@@ -46,5 +46,15 @@
   },
   "help": {
     "title": "Aide"
+  },
+  "proofs": {
+    "title": "Preuves",
+    "intro": "Une preuve est un PDF signé par l'instance. Seule la déclaration signée jointe fait foi ; elle peut être vérifiée hors ligne avec `transteira proof verify`.",
+    "deposit": "Télécharger la preuve de dépôt",
+    "depositPending": "Disponible une fois l'analyse antivirus terminée.",
+    "delivery": "Télécharger la preuve de remise",
+    "deliveryPending": "Disponible après le premier téléchargement.",
+    "deliveryFor": "Télécharger la preuve de remise pour {recipient}",
+    "done": "Preuve téléchargée."
   }
 }

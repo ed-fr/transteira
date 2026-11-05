@@ -25,6 +25,7 @@ import (
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/masterkey/masterkeytest"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
@@ -175,11 +176,11 @@ func (r faultRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 	return r.inner.transfer(ctx, tid, trfID)
 }
 
-func (r faultRepo) markFirst(ctx context.Context, tid tenant.ID, trfID string, now, deleteAfter time.Time) (bool, error) {
+func (r faultRepo) markFirst(ctx context.Context, t *tenant.Tenant, trfID string, now, deleteAfter time.Time) (bool, error) {
 	if err := r.f.hit("markFirst"); err != nil {
 		return false, err
 	}
-	return r.inner.markFirst(ctx, tid, trfID, now, deleteAfter)
+	return r.inner.markFirst(ctx, t, trfID, now, deleteAfter)
 }
 
 func (r faultRepo) started(ctx context.Context, tid tenant.ID, trfID, linkID, item string, now time.Time, ev audit.Event) error {
@@ -217,11 +218,11 @@ func (r faultRepo) completeItem(ctx context.Context, tid tenant.ID, linkID, item
 	return r.inner.completeItem(ctx, tid, linkID, item, now)
 }
 
-func (r faultRepo) completeLink(ctx context.Context, tid tenant.ID, trfID, linkID string, now, deleteAfter time.Time) (bool, error) {
+func (r faultRepo) completeLink(ctx context.Context, t *tenant.Tenant, trfID, linkID string, now, deleteAfter time.Time) (bool, error) {
 	if err := r.f.hit("completeLink"); err != nil {
 		return false, err
 	}
-	return r.inner.completeLink(ctx, tid, trfID, linkID, now, deleteAfter)
+	return r.inner.completeLink(ctx, t, trfID, linkID, now, deleteAfter)
 }
 
 func (r faultRepo) latestChallenge(ctx context.Context, tid tenant.ID, linkID string) (store.Challenge, error) {
@@ -540,8 +541,10 @@ type env struct {
 	clock    *clock
 	notifier *faultNotifier
 	usage    *fakeUsage
-	svc      *Service
-	a, b, c  *tenant.Tenant
+	// signer writes the delivery proofs.
+	signer  *proof.Signer
+	svc     *Service
+	a, b, c *tenant.Tenant
 	// secrets are the tokens and file names that must never be logged.
 	secrets []string
 }
@@ -571,7 +574,8 @@ func newEnv(t *testing.T, e storetest.Engine, tune func(*Options)) *env {
 	ev := &env{
 		t: t, db: db, vault: vault, keyring: kr, files: files, queue: &fakeQueue{}, seclog: &fakeSeclog{},
 		logs: &logCapture{}, f: newFaults(), usage: &fakeUsage{},
-		clock: &clock{t: time.Now().UTC().Truncate(time.Millisecond)},
+		clock:  &clock{t: time.Now().UTC().Truncate(time.Millisecond)},
+		signer: proof.NewSigner(db, vault, audit.New(db), nil, nil),
 	}
 	ev.a = ev.newTenant(hostA, true)
 	ev.b = ev.newTenant(hostB, true)
@@ -590,6 +594,7 @@ func newEnv(t *testing.T, e storetest.Engine, tune func(*Options)) *env {
 		DB: db, Vault: faultVault{inner: vault, f: ev.f}, Files: faultFiles{inner: files, f: ev.f},
 		Keys: faultKeys{inner: kr, f: ev.f}, Passwords: faultVerifier{inner: crypto.NewPasswordHasher(2), f: ev.f},
 		Notifier: ev.notifier, Mail: ev.queue, SecurityLog: ev.seclog, Usage: ev.usage,
+		Proofs: ev.signer,
 	}, opts)
 	ev.svc.repo = faultRepo{inner: ev.svc.repo, f: ev.f}
 	// Every new range is written at once, unless a test says otherwise.

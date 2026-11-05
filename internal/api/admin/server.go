@@ -139,6 +139,9 @@ type Server struct {
 	// securityEvents lists the security events kept in the database (V2);
 	// nil until WithSecurityEventsService.
 	securityEvents SecurityEventsService
+	// proofSvc serves the proofs and their keys; nil until
+	// WithProofService.
+	proofSvc ProofService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

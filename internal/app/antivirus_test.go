@@ -121,6 +121,11 @@ func TestRunAntivirusEngineNone(t *testing.T) {
 				if d.Files[0].ScanStatus != store.ScanNotScannedDisabled {
 					t.Fatalf("file %+v", d.Files[0])
 				}
+				// The worker is wired to the proof signer: the deposit
+				// proof is written with the availability.
+				if _, err := db.TransferProofs().Get(ctx, tid, trfID, store.ProofDeposit, ""); err != nil {
+					t.Fatalf("deposit proof: %v", err)
+				}
 				break
 			}
 			if time.Now().After(deadline) {

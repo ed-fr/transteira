@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/vcode"
@@ -36,8 +37,12 @@ type repo interface {
 	refund(ctx context.Context, tid tenant.ID, keys []store.FailureKey, at time.Time) error
 	// transfer reads the transfer trfID as stored.
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
-	// markFirst records the first complete download of the transfer.
-	markFirst(ctx context.Context, tid tenant.ID, trfID string, now, deleteAfter time.Time) (bool, error)
+	// markFirst records the first complete download of the transfer trfID
+	// of tenant t and, in the same transaction, its delivery proof. It
+	// returns whether this was the first complete download, and an error
+	// wrapping errProof when the proof could not be written (nothing is
+	// recorded then).
+	markFirst(ctx context.Context, t *tenant.Tenant, trfID string, now, deleteAfter time.Time) (bool, error)
 	// started records a download start of the transfer trfID: the audit
 	// event ev, through the checks of the audit package, and one more
 	// download, in one transaction. Through the recipient link linkID ("" for
@@ -64,10 +69,13 @@ type repo interface {
 	// recipient link linkID of the transfer trfID and, in the same
 	// transaction, the first download of the transfer
 	// (store.Transfers.MarkFirstDownloadTx, deleteAfter set only once every
-	// link is complete). It returns whether this was the first complete
-	// download of the transfer, and errLinkUnclaimed for a link whose
-	// download start was never recorded.
-	completeLink(ctx context.Context, tid tenant.ID, trfID, linkID string, now, deleteAfter time.Time) (bool, error)
+	// link is complete), with the delivery proofs of the link and of the
+	// transfer that this completion establishes. It returns whether this
+	// was the first complete download of the transfer, errLinkUnclaimed for
+	// a link whose download start was never recorded, and an error wrapping
+	// errProof when a proof could not be written (nothing is recorded
+	// then).
+	completeLink(ctx context.Context, t *tenant.Tenant, trfID, linkID string, now, deleteAfter time.Time) (bool, error)
 	// latestChallenge reads the newest recipient challenge of the recipient
 	// link linkID, in whatever state it is (store.ErrNotFound when none).
 	latestChallenge(ctx context.Context, tid tenant.ID, linkID string) (store.Challenge, error)
@@ -108,8 +116,21 @@ type repo interface {
 // recorded for it.
 var errLinkUnclaimed = errors.New("download: recipient link completed without a recorded start")
 
+// errProof wraps a failure to prepare the signing key or to write a
+// delivery proof: the transaction recording the download was rolled back
+// with it (T-302).
+var errProof = errors.New("download: delivery proof not written")
+
 // errLimited aborts the transaction of a code request over a rate limit.
 var errLimited = errors.New("download: verification code rate limit reached")
+
+// sealOverall and sealRecipient write a delivery proof inside tx:
+// (*proof.Sealer).OverallDeliveryTx and RecipientDeliveryTx, replaced in
+// the tests.
+type (
+	sealOverall   func(s *proof.Sealer, ctx context.Context, tx *store.ScopedTx, t *tenant.Tenant, trfID string, now time.Time) error
+	sealRecipient func(s *proof.Sealer, ctx context.Context, tx *store.ScopedTx, t *tenant.Tenant, trfID, linkID string, now time.Time) error
+)
 
 // storeRepo implements repo over a *store.DB.
 type storeRepo struct {
@@ -117,6 +138,33 @@ type storeRepo struct {
 	// audit writes the audit events, nil when db is (a service built
 	// without a database, in the tests only).
 	audit *audit.Writer
+	// proofs prepares the sealer of the delivery proofs; nil writes none
+	// (tests only).
+	proofs    Proofs
+	overall   sealOverall
+	recipient sealRecipient
+}
+
+// newStoreRepo returns the repo of the service over db.
+func newStoreRepo(db *store.DB, w *audit.Writer, proofs Proofs) storeRepo {
+	return storeRepo{
+		db: db, audit: w, proofs: proofs,
+		overall: (*proof.Sealer).OverallDeliveryTx, recipient: (*proof.Sealer).RecipientDeliveryTx,
+	}
+}
+
+// sealer prepares the sealer of the delivery proofs, before the tenant
+// transaction opens (it may open system transactions); nil without
+// proofs.
+func (r storeRepo) sealer(ctx context.Context) (*proof.Sealer, error) {
+	if r.proofs == nil {
+		return nil, nil
+	}
+	s, err := r.proofs.Prepare(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: prepare: %w", errProof, err)
+	}
+	return s, nil
 }
 
 // auditWriter returns shared, or a writer of its own over db when shared
@@ -179,12 +227,21 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 	return r.db.Transfers().Get(ctx, tid, trfID)
 }
 
-func (r storeRepo) markFirst(ctx context.Context, tid tenant.ID, trfID string, now, deleteAfter time.Time) (bool, error) {
+func (r storeRepo) markFirst(ctx context.Context, t *tenant.Tenant, trfID string, now, deleteAfter time.Time) (bool, error) {
+	sealer, err := r.sealer(ctx)
+	if err != nil {
+		return false, err
+	}
 	var first bool
-	err := r.tx(ctx, tid, func(tx *store.ScopedTx) error {
+	err = r.tx(ctx, t.ID, func(tx *store.ScopedTx) error {
 		var err error
-		first, err = r.db.Transfers().MarkFirstDownloadTx(ctx, tx, trfID, now, deleteAfter)
-		return err
+		if first, err = r.db.Transfers().MarkFirstDownloadTx(ctx, tx, trfID, now, deleteAfter); err != nil || !first || sealer == nil {
+			return err
+		}
+		if err := r.overall(sealer, ctx, tx, t, trfID, now); err != nil {
+			return fmt.Errorf("%w: %w", errProof, err)
+		}
+		return nil
 	})
 	return first, err
 }
@@ -250,18 +307,36 @@ func (r storeRepo) completeItem(ctx context.Context, tid tenant.ID, linkID, item
 	})
 }
 
-func (r storeRepo) completeLink(ctx context.Context, tid tenant.ID, trfID, linkID string, now, deleteAfter time.Time) (bool, error) {
+func (r storeRepo) completeLink(ctx context.Context, t *tenant.Tenant, trfID, linkID string, now, deleteAfter time.Time) (bool, error) {
+	sealer, err := r.sealer(ctx)
+	if err != nil {
+		return false, err
+	}
 	var first bool
-	err := r.tx(ctx, tid, func(tx *store.ScopedTx) error {
-		_, err := r.db.RecipientLinks().CompleteTx(ctx, tx, linkID, now)
+	err = r.tx(ctx, t.ID, func(tx *store.ScopedTx) error {
+		c, err := r.db.RecipientLinks().CompleteTx(ctx, tx, linkID, now)
 		switch {
 		case errors.Is(err, store.ErrConflict):
 			return errLinkUnclaimed
 		case err != nil:
 			return err
 		}
-		first, err = r.db.Transfers().MarkFirstDownloadTx(ctx, tx, trfID, now, deleteAfter)
-		return err
+		if first, err = r.db.Transfers().MarkFirstDownloadTx(ctx, tx, trfID, now, deleteAfter); err != nil || sealer == nil {
+			return err
+		}
+		// The link is complete in tx: the overall statement of the first
+		// download of the transfer names its recipient.
+		if c.First {
+			if err := r.recipient(sealer, ctx, tx, t, trfID, linkID, now); err != nil {
+				return fmt.Errorf("%w: %w", errProof, err)
+			}
+		}
+		if first {
+			if err := r.overall(sealer, ctx, tx, t, trfID, now); err != nil {
+				return fmt.Errorf("%w: %w", errProof, err)
+			}
+		}
+		return nil
 	})
 	return first, err
 }

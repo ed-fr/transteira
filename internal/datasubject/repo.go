@@ -27,6 +27,8 @@ type repo interface {
 	deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error)
 	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error)
+	countProofs(ctx context.Context, tid tenant.ID, email string) (int, error)
+	eraseProofs(ctx context.Context, tid tenant.ID, email string) (int, error)
 	eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
 	pseudonymiseAudit(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
 	scrub(ctx context.Context) error
@@ -212,6 +214,28 @@ func (r *storeRepo) eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudo
 		}
 		var err error
 		n, err = r.db.AbuseReports().PseudonymiseTx(ctx, tx, email, pseudonym)
+		return err
+	})
+	return n, err
+}
+
+// countProofs counts the proofs of deposit and delivery whose statement
+// names email (since 2.0).
+func (r *storeRepo) countProofs(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	return r.db.TransferProofs().CountByAddress(ctx, tid, email)
+}
+
+// eraseProofs deletes the proofs of deposit and delivery whose statement
+// names email (since 2.0).
+func (r *storeRepo) eraseProofs(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	sc, err := r.db.Scoped(tid)
+	if err != nil {
+		return 0, err
+	}
+	var n int
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		var err error
+		n, err = r.db.TransferProofs().DeleteByAddressTx(ctx, tx, email)
 		return err
 	})
 	return n, err

@@ -62,10 +62,15 @@ const (
 	// entity) and rewrapped by the master key rotation like every other
 	// wrapped blob.
 	PurposeWebhook Purpose = "webhook"
+	// PurposeProofSigning wraps the Ed25519 private keys that sign the
+	// proofs of deposit and delivery (since 2.0), stored on system records
+	// (not bound to an entity) and rewrapped by the master key rotation
+	// like every other wrapped blob.
+	PurposeProofSigning Purpose = "proof-signing"
 )
 
 // purposes lists every valid Purpose.
-var purposes = []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook}
+var purposes = []Purpose{PurposeDEK, PurposeSecret, PurposeAdminTOTP, PurposeWebhook, PurposeProofSigning}
 
 // MasterKey is the master key of the instance. It never exposes its bytes:
 // every textual representation (String, GoString, Format, LogValue) only shows

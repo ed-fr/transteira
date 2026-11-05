@@ -86,6 +86,9 @@ var isolationCases = map[string]isolationCase{
 	// identical bodies under A and B and no identifier, name or host of
 	// either tenant.
 	"getVersion": sameAnswerWithoutTenantData,
+	// The public keys of the proofs belong to the instance: the same list
+	// is returned under every tenant (since 2.0).
+	"listProofKeys": sameAnswerWithoutTenantData,
 	// Served at /healthz outside any tenant (CLAUDE.md section 19): the same
 	// health report is returned whatever the Host, even unknown.
 	"getHealth": tenantAgnostic,
@@ -137,6 +140,7 @@ var isolationCases = map[string]isolationCase{
 	"endMyTransfersSession":        endWithForeignMeSession,
 	"listMyTransfers":              listMyForeignTransfers,
 	"getMyTransfer":                getMyForeignTransfer,
+	"getMyTransferProof":           getMyForeignTransferProof,
 	"deleteMyTransfer":             deleteMyForeignTransfer,
 	"extendMyTransfer":             extendMyForeignTransfer,
 	// Administration (admin_test.go): served on the admin host only, where
@@ -219,6 +223,7 @@ var isolationCases = map[string]isolationCase{
 	// searches and erasures never count, show or touch data of B.
 	"listTenantTransfers":        adminOperation,
 	"getTenantTransfer":          adminOperation,
+	"getTenantTransferProof":     adminOperation,
 	"deleteTenantTransfer":       adminOperation,
 	"resendTransferNotification": adminOperation,
 	"listTenantInvitations":      adminOperation,

@@ -211,6 +211,7 @@ const (
 	AuditActionMyTransfersLinkRequested     AuditAction = "my_transfers.link_requested"
 	AuditActionMyTransfersSignedIn          AuditAction = "my_transfers.signed_in"
 	AuditActionProofKeyCreated              AuditAction = "proof_key.created"
+	AuditActionProofKeyRetired              AuditAction = "proof_key.retired"
 	AuditActionProvisioningTokenCreated     AuditAction = "provisioning_token.created"
 	AuditActionProvisioningTokenRevoked     AuditAction = "provisioning_token.revoked"
 	AuditActionQuotaReached                 AuditAction = "quota.reached"
@@ -372,6 +373,8 @@ func (e AuditAction) Valid() bool {
 	case AuditActionMyTransfersSignedIn:
 		return true
 	case AuditActionProofKeyCreated:
+		return true
+	case AuditActionProofKeyRetired:
 		return true
 	case AuditActionProvisioningTokenCreated:
 		return true
@@ -2740,7 +2743,8 @@ type ApiTokenUpdate = json.RawMessage
 // token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
 // `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
 // `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
-// identifier; a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+// identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
+// a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -2805,7 +2809,8 @@ type AuditEvent struct {
 	// token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
 	// `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
 	// `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
-	// identifier; a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+	// identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
+	// a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id string `json:"id"`
@@ -3001,6 +3006,9 @@ type DataSubjectEraseReport struct {
 	AccessLinks             *int `json:"accessLinks,omitempty"`
 	InvitationsDeleted      int  `json:"invitationsDeleted"`
 	LogEntriesPseudonymised int  `json:"logEntriesPseudonymised"`
+
+	// ProofsDeleted Since 2.0. Proofs of deposit and delivery whose signed statement names the address, deleted.
+	ProofsDeleted           *int `json:"proofsDeleted,omitempty"`
 	RecipientEntriesRemoved int  `json:"recipientEntriesRemoved"`
 	TransfersDeleted        int  `json:"transfersDeleted"`
 	VerifiedAddressDeleted  bool `json:"verifiedAddressDeleted"`
@@ -3020,6 +3028,9 @@ type DataSubjectSummary struct {
 	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email       Email `json:"email"`
 	Invitations int   `json:"invitations"`
+
+	// Proofs Since 2.0. Proofs of deposit and delivery whose signed statement names the address (erased with it).
+	Proofs *int `json:"proofs,omitempty"`
 
 	// SecurityEvents Always 0: the security log never records e-mail addresses.
 	SecurityEvents       int  `json:"securityEvents"`
@@ -22902,6 +22913,25 @@ func (response GetTenantTransferProof404ApplicationProblemPlusJSONResponse) Visi
 	return err
 }
 
+type GetTenantTransferProof429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetTenantTransferProof429ApplicationProblemPlusJSONResponse) VisitGetTenantTransferProofResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetTenantTransferProof500ApplicationProblemPlusJSONResponse struct {
 	InternalErrorApplicationProblemPlusJSONResponse
 }
@@ -27032,6 +27062,25 @@ func (response GetMyTransferProof421ApplicationProblemPlusJSONResponse) VisitGet
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyTransferProof429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyTransferProof429ApplicationProblemPlusJSONResponse) VisitGetMyTransferProofResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
 	_, err := buf.WriteTo(w)
 	return err
 }

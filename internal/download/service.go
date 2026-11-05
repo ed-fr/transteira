@@ -20,6 +20,7 @@ import (
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/notify"
+	"github.com/ed-fr/transteira/internal/proof"
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/storage"
@@ -80,8 +81,15 @@ type SecurityLog interface {
 	Log(ev securitylog.Event) error
 }
 
+// Proofs prepares the sealer that writes the delivery proofs of a transfer
+// in the transaction that records its first download (package proof,
+// threat model T-302). *proof.Signer implements it.
+type Proofs interface {
+	Prepare(ctx context.Context) (*proof.Sealer, error)
+}
+
 // Deps are the components the service relies on. Every field is required,
-// except Usage.
+// except Usage, Audit and Proofs.
 type Deps struct {
 	// DB stores the transfers and the password failure counters.
 	DB *store.DB
@@ -111,6 +119,9 @@ type Deps struct {
 	// the events it writes; nil means a writer of its own over the
 	// database, publishing nothing.
 	Audit *audit.Writer
+	// Proofs writes the delivery proofs. The application always sets it;
+	// nil writes no proof (tests only).
+	Proofs Proofs
 }
 
 // Options tunes a [Service].
@@ -255,7 +266,7 @@ func New(deps Deps, opts Options) *Service {
 		usage = deps.Usage
 	}
 	return &Service{
-		repo: storeRepo{db: deps.DB, audit: auditWriter(deps.DB, deps.Audit)}, vault: deps.Vault, files: deps.Files, keys: deps.Keys,
+		repo: newStoreRepo(deps.DB, auditWriter(deps.DB, deps.Audit), deps.Proofs), vault: deps.Vault, files: deps.Files, keys: deps.Keys,
 		passwords: deps.Passwords, notifier: deps.Notifier, queue: deps.Mail, seclog: deps.SecurityLog, usage: usage,
 		mails: mail.NewRetrier(deps.Mail, mail.RetryOptions{
 			For: opts.MailRetryFor, Min: opts.RetryMin, Max: opts.RetryMax, Now: opts.Now, Logger: opts.Logger,

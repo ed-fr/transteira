@@ -371,8 +371,19 @@ Ouvrez un transfert pour voir son **Détail du transfert** : statut, dates, prem
 - Les expéditeurs peuvent aussi supprimer ou prolonger eux-mêmes leurs transferts depuis la page « Mes envois » du site d’envoi (voir le guide du déposant), sans passer par un administrateur. Ces actions sont tracées dans le [journal d’audit](topic:tenant-audit) (`transfer.deleted`, `transfer.extended`, `my_transfers.link_requested`, `my_transfers.signed_in`).
 - **Voir le journal d’audit depuis le jour de ce transfert** ouvre le journal d’audit au jour de sa création.
 
+<!-- topic: tenant-proofs -->
+### Preuves de dépôt et de remise
+
+Le détail d’un transfert comporte une section **Preuves**, accessible aux administrateurs délégués, aux super administrateurs et aux auditeurs. Elle propose des fichiers PDF signés par l’instance : la **preuve de dépôt** (écrite à la fin de l’analyse antivirus), la **preuve de remise** (écrite au premier téléchargement complet) et, quand les destinataires ont des liens personnels, une **preuve de remise** par destinataire (écrite à son premier téléchargement complet). Une preuve pas encore écrite est indiquée comme indisponible.
+
+Les preuves sont conservées **12 mois après leur émission, même si le transfert a été supprimé** : vous pouvez donc encore en fournir une pour un transfert disparu (le détail du transfert reste accessible pour cela). L’expéditeur télécharge ses propres preuves depuis la page « Mes envois », seulement tant que le transfert existe. Chaque téléchargement est enregistré dans le [journal d’audit](topic:tenant-audit) (`transfer.proof_downloaded`) et limité en fréquence par adresse IP (au-delà, la page demande d’attendre).
+
+La déclaration signée à l’intérieur du PDF fait foi, pas son texte visible. Elle indique l’entité, l’expéditeur, les destinataires, les fichiers avec leurs empreintes SHA-256 et les dates, sans adresse IP. Chacun peut la vérifier hors ligne avec `transteira proof verify` et les clés publiques publiées sur `/api/v1/proof-keys` à l’adresse de l’entité. Une preuve vaut la confiance accordée à l’exploitant de l’instance : il n’y a pas d’horodatage par un tiers. La procédure de vérification et le cycle de vie des clés de signature sont décrits dans `docs/operations/fr/proofs.md`.
+
+L’écran [Données personnelles](topic:tenant-privacy) compte les preuves qui nomment une adresse et les efface avec le reste des données.
+
 <!-- topic: tenant-invitations -->
-### Invitations
+###  Invitations
 
 L’écran Invitations liste les invitations émises par les utilisateurs internes pour que des personnes externes puissent leur déposer des fichiers.
 
@@ -505,13 +516,13 @@ Les nouveaux signalements sont envoyés par mail aux administrateurs délégués
 
 L’écran Données personnelles répond aux demandes des personnes qui veulent connaître ou effacer les données liées à leur adresse mail dans l’entité (exercice des droits, RGPD).
 
-Dans **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La section **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, invitations, entrées du journal d’audit.
+Dans **Recherche par adresse mail**, saisissez l’**Adresse mail** et cliquez sur **Rechercher**. La section **Données trouvées dans cette entité** résume ce qui y est lié : adresse vérifiée, transferts envoyés et reçus, invitations, preuves de dépôt et de remise, entrées du journal d’audit.
 
 ![Recherche de données personnelles avec le résumé des données trouvées pour une adresse](../screenshots/fr/admin-privacy.png)
 
 Cliquez sur **Effacer toutes les données** pour les effacer. L’écran détaille l’effet :
 
-- effacé : les codes de vérification, les sessions de dépôt et l’adresse vérifiée ; les transferts envoyés par l’adresse ou grâce à une invitation qu’elle a reçue (fichiers rendus illisibles puis supprimés) ; l’adresse dans les transferts reçus (un transfert qui n’a plus de destinataire est supprimé) ; les invitations reçues (supprimées) et émises (révoquées) ; dans le journal d’audit, l’adresse est remplacée par un pseudonyme ;
+- effacé : les codes de vérification, les sessions de dépôt et l’adresse vérifiée ; les transferts envoyés par l’adresse ou grâce à une invitation qu’elle a reçue (fichiers rendus illisibles puis supprimés) ; l’adresse dans les transferts reçus (un transfert qui n’a plus de destinataire est supprimé) ; les invitations reçues (supprimées) et émises (révoquées) ; les preuves de dépôt et de remise qui nomment l’adresse ; dans le journal d’audit, l’adresse est remplacée par un pseudonyme ;
 - conservé volontairement : les entrées de la liste de blocage, l’adresse dans les expéditeurs autorisés d’un jeton d’API (modifiez le jeton pour la retirer), les adresses IP du journal d’audit jusqu’à la fin de leurs 12 mois, les mails déjà en file d’envoi, et les sauvegardes, dont les copies des fichiers deviennent illisibles.
 
 L’effacement est irréversible. Il se termine par un **Rapport d’effacement**. Seule cette entité est concernée : si la personne utilise aussi une autre entité, recommencez la procédure dans celle-ci.

@@ -2936,6 +2936,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/ProofNotAvailable' }
         '421': { $ref: '#/components/responses/UnknownTenant' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/TenantInSetup' }
 
@@ -6562,6 +6563,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/ProofNotAvailable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /admin/admins:
@@ -8844,7 +8846,10 @@ components:
             errors:
               - { field: /issuer, code: not-allowed }
     ProofNotAvailable:
-      description: Since 2.0. The proof does not exist yet (the fact it proves has not happened) or is past its 12-month retention.
+      description: |
+        Since 2.0. `proof-not-available`: the proof does not exist yet (the fact it proves has not
+        happened) or is past its 12-month retention. `not-found`: the transfer is unknown or outside
+        the caller's scope (another sender, another tenant).
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -10583,7 +10588,8 @@ components:
         token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
         `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
         `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
-        identifier; a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+        identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
+        a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
       enum:
         - transfer.created
         - transfer.finalized
@@ -10686,6 +10692,7 @@ components:
         - drop_link.revoked
         - transfer.proof_downloaded
         - proof_key.created
+        - proof_key.retired
         - transfer.link_reissued
     AuditEvent:
       type: object
@@ -10783,6 +10790,7 @@ components:
         invitations: { type: integer }
         auditEvents: { type: integer, description: "Audit events of the tenant whose actor is the address." }
         securityEvents: { type: integer, description: "Always 0: the security log never records e-mail addresses." }
+        proofs: { type: integer, description: "Since 2.0. Proofs of deposit and delivery whose signed statement names the address (erased with it)." }
     DataSubjectEraseReport:
       type: object
       required: [transfersDeleted, recipientEntriesRemoved, verifiedAddressDeleted, invitationsDeleted, logEntriesPseudonymised]
@@ -10794,6 +10802,7 @@ components:
         logEntriesPseudonymised: { type: integer }
         abuseReports: { type: integer, description: "Since 1.1. Abuse reports pseudonymised (made by the address, or about its transfers)." }
         accessLinks: { type: integer, description: "Since 1.1. \"My transfers\" access links and sessions deleted." }
+        proofsDeleted: { type: integer, description: "Since 2.0. Proofs of deposit and delivery whose signed statement names the address, deleted." }
 
     # --- System -----------------------------------------------------------
     GlobalStats:

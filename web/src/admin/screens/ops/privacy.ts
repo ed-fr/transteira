@@ -45,6 +45,7 @@ export const ERASED_KEYS: readonly string[] = [
   'opsPrivacy.erase.erased.sent',
   'opsPrivacy.erase.erased.received',
   'opsPrivacy.erase.erased.invitations',
+  'opsPrivacy.erase.erased.proofs',
   'opsPrivacy.erase.erased.audit',
 ];
 
@@ -87,16 +88,18 @@ export function hasData(summary: DataSubjectSummary): boolean {
     summary.transfersAsSender > 0 ||
     summary.transfersAsRecipient > 0 ||
     summary.invitations > 0 ||
-    summary.auditEvents > 0
+    summary.auditEvents > 0 ||
+    (summary.proofs ?? 0) > 0
   );
 }
 
 /**
  * Rows of the search summary. The security log count is left out: it is always 0, since that
- * log never records addresses (the screen says so in a note).
+ * log never records addresses (the screen says so in a note). The proofs row, an optional field
+ * since 2.0, is shown when the server reports it.
  */
 export function summaryRows(summary: DataSubjectSummary, t: Translate, format: FormatCount): CountRow[] {
-  return [
+  const rows: CountRow[] = [
     {
       id: 'verifiedAddress',
       term: t('opsPrivacy.summary.verifiedAddress'),
@@ -115,11 +118,15 @@ export function summaryRows(summary: DataSubjectSummary, t: Translate, format: F
     { id: 'invitations', term: t('opsPrivacy.summary.invitations'), value: format(summary.invitations) },
     { id: 'auditEvents', term: t('opsPrivacy.summary.auditEvents'), value: format(summary.auditEvents) },
   ];
+  if (summary.proofs !== undefined) {
+    rows.push({ id: 'proofs', term: t('opsPrivacy.summary.proofs'), value: format(summary.proofs) });
+  }
+  return rows;
 }
 
 /** Rows of the erasure report. */
 export function reportRows(report: DataSubjectEraseReport, t: Translate, format: FormatCount): CountRow[] {
-  return [
+  const rows: CountRow[] = [
     {
       id: 'verifiedAddressDeleted',
       term: t('opsPrivacy.report.verifiedAddressDeleted'),
@@ -146,6 +153,14 @@ export function reportRows(report: DataSubjectEraseReport, t: Translate, format:
       value: format(report.logEntriesPseudonymised),
     },
   ];
+  if (report.proofsDeleted !== undefined) {
+    rows.push({
+      id: 'proofsDeleted',
+      term: t('opsPrivacy.report.proofsDeleted'),
+      value: format(report.proofsDeleted),
+    });
+  }
+  return rows;
 }
 
 /**

@@ -41,6 +41,15 @@ func TestStoreRepoEdges(t *testing.T) {
 		if _, err := r.eraseInvitations(ctx, ev.a.ID, "not an address", newPseudonym(carol), testStart); err == nil {
 			t.Error("eraseInvitations(bad address) succeeded")
 		}
+		if _, err := r.countProofs(ctx, bad, carol); err == nil {
+			t.Error("countProofs(bad tenant) succeeded")
+		}
+		if _, err := r.eraseProofs(ctx, bad, carol); err == nil {
+			t.Error("eraseProofs(bad tenant) succeeded")
+		}
+		if _, err := r.eraseProofs(ctx, ev.a.ID, "not an address"); err == nil {
+			t.Error("eraseProofs(bad address) succeeded")
+		}
 		if _, err := r.eraseAbuse(ctx, bad, carol, newPseudonym(carol)); err == nil {
 			t.Error("eraseAbuse(bad tenant) succeeded")
 		}

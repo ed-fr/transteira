@@ -169,7 +169,7 @@ func TestAdminHostIsolation(t *testing.T) {
 					continue
 				case op.id == "getHealth" || op.id == "getOpenApiSpec":
 					continue // outside any host (tenantAgnostic)
-				case op.id == "getVersion":
+				case op.id == "getVersion" || op.id == "listProofKeys":
 					admin := h.send(t, op, hostAdmin)
 					tenantA := h.send(t, op, hostA)
 					if admin.status != http.StatusOK || !bytes.Equal(admin.body, tenantA.body) {

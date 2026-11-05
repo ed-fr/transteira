@@ -30,6 +30,7 @@ administration.
 - [6. Managing tokens: list, change, revoke](#6-managing-tokens-list-change-revoke)
 - [7. Receiving webhooks](#7-receiving-webhooks)
 - [8. Monitoring endpoints](#8-monitoring-endpoints)
+- [9. Proofs of deposit and delivery](#9-proofs-of-deposit-and-delivery)
 
 ## Basics
 
@@ -1067,3 +1068,29 @@ $status = Invoke-RestMethod -Uri https://admin.transfer.example.com/status `
 
 `/metrics` works the same way and returns text: `Invoke-RestMethod -Uri .../metrics -Headers ...`
 or `curl -K - .../metrics`.
+
+## 9. Proofs of deposit and delivery
+
+Since 2.0, the instance signs a PDF proof when a transfer is deposited and when it is downloaded.
+The proof download endpoints (`getMyTransferProof` for the sender's "My transfers" session,
+`getTenantTransferProof` for administrators) are **session based**: **API tokens cannot download
+a proof**. Only one proof-related endpoint is meant for integrators and needs no authentication,
+the public keys that verify proofs:
+
+```bash
+curl -fsS https://transfer.example.com/api/v1/proof-keys
+```
+
+```powershell
+Invoke-RestMethod https://transfer.example.com/api/v1/proof-keys
+```
+
+The answer lists the Ed25519 public keys of the instance (`keyId`, `algorithm`, `publicKey` in
+base64url, `createdAt`, `retiredAt`), active and retired; retired keys stay listed so that old
+proofs keep verifying. It is served on the host of every known entity and on the admin host
+(an unknown host gets `421 unknown-tenant`) and is rate limited (`429`). A proof that does not
+exist or is past its 12-month retention answers `404` with the code `proof-not-available`
+([errors](errors.md#proof-not-available)); proof downloads are limited to 10 per minute (burst 20) per client
+address (a single IPv4 address or an IPv6 /64, shared by the sender and administration
+proof endpoints and across entities) and answer `429` beyond. To verify a proof offline, see
+[docs/operations/proofs.md](../operations/proofs.md).

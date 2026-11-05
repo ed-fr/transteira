@@ -16,8 +16,8 @@ const tusOptionsPattern = http.MethodOptions + " " + APIBaseURL + "/uploads"
 // Request.Pattern by the API router) served on the host of a tenant that is
 // still being configured (threat model T-260): the public information of the
 // tenant, its branding images and its legal texts, which the "being
-// configured" page needs, and the instance version, which holds no tenant
-// data. Every other operation of the tenant API router is refused, the
+// configured" page needs, the instance version and the public keys of the
+// proofs, which hold no tenant data. Every other operation of the tenant API router is refused, the
 // future ones included (refusal by default). The administration and the
 // routes outside any tenant (health check, metrics, status, certificate
 // check, OpenAPI document) are not served by this router.
@@ -26,6 +26,7 @@ var setupAllowed = map[string]struct{}{
 	http.MethodGet + " " + APIBaseURL + "/tenant/assets/{asset}":   {},
 	http.MethodGet + " " + APIBaseURL + "/tenant/legal/{document}": {},
 	http.MethodGet + " " + APIBaseURL + "/version":                 {},
+	http.MethodGet + " " + APIBaseURL + "/proof-keys":              {},
 }
 
 // setupMiddleware refuses with 503 every operation of the tenant API router

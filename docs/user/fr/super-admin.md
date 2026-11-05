@@ -286,6 +286,10 @@ Une entité créée avec un jeton est créée **en cours de mise en service** (v
 
 **Certificats.** Une entité créée par l’API a besoin d’un certificat pour son adresse dès qu’elle existe. Avec Caddy, l’exploitant peut le faire obtenir à la demande, à la première visite : utilisez `integrations/reverse-proxy/caddy/Caddyfile.on-demand` et définissez `TT_TLS_ASK_ALLOWED_IPS` avec l’adresse exacte de Caddy sur le réseau du proxy. Caddy demande alors à TransTeira si le nom appartient à une entité avant de réclamer le certificat. Sans cette variable, le point d’accès est désactivé et aucun certificat n’est émis ainsi. Avec de nombreuses entités sous un même domaine, un certificat générique évite les limites de Let’s Encrypt. Voir `docs/api/provisioning.md`.
 
+### Clé de signature des preuves
+
+Les preuves de dépôt et de remise (voir le [guide de l’administrateur délégué](topic:tenant-proofs)) sont signées par une clé Ed25519 de l’instance, créée à l’écriture de la première preuve. Sa partie privée est scellée par la clé maître : la [rotation de la clé maître](topic:master-key-rotation) la couvre. Il n’y a pas d’écran pour elle : sur l’hôte, `transteira proof keys` liste les clés et `transteira proof retire-key` retire la clé active (compromission suspectée de la base et de la clé maître, ou hygiène périodique). La partie privée est détruite, la clé publique reste publiée sur `/api/v1/proof-keys` pour que les anciennes preuves restent vérifiables, et une nouvelle clé est créée à la preuve suivante. Le retrait est enregistré dans le journal d’audit (`proof_key.retired`). Procédure, vérification et limites : `docs/operations/fr/proofs.md`.
+
 <!-- topic: system-master-key -->
 ### Clé maître
 

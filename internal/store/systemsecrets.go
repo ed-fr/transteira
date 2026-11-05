@@ -21,6 +21,11 @@ const SecretPurposeAdminTOTP = "admin-totp"
 // crypto.PurposeWebhook, the wrapping purpose.
 const SecretPurposeWebhook = "webhook"
 
+// SecretPurposeProofSigning is the purpose of a system secret holding the
+// Ed25519 private key of a proof signing key ([ProofKeys]). It matches
+// crypto.PurposeProofSigning, the wrapping purpose.
+const SecretPurposeProofSigning = "proof-signing"
+
 // sealedRowColumns is the column list read by the system secret queries.
 const sealedRowColumns = `id, purpose, key_id, blob, created_at`
 
@@ -53,7 +58,8 @@ type SystemSecret struct {
 	// ID is the row identifier ("ss_" + ULID). The caller assigns it,
 	// because the sealing authenticates it.
 	ID string
-	// Purpose is SecretPurposeAdminTOTP or SecretPurposeWebhook.
+	// Purpose is SecretPurposeAdminTOTP, SecretPurposeWebhook or
+	// SecretPurposeProofSigning.
 	Purpose string
 	// KeyID identifies the master key Blob is sealed under.
 	KeyID string
@@ -81,7 +87,8 @@ func validateSystemSecret(s SystemSecret) error {
 	switch {
 	case !id.Valid(id.SystemSecret, s.ID):
 		return invalid("malformed system secret id")
-	case s.Purpose != SecretPurposeAdminTOTP && s.Purpose != SecretPurposeWebhook:
+	case s.Purpose != SecretPurposeAdminTOTP && s.Purpose != SecretPurposeWebhook &&
+		s.Purpose != SecretPurposeProofSigning:
 		return invalid("unknown system secret purpose")
 	case !validMasterKeyID(s.KeyID):
 		return invalid("malformed master key id")

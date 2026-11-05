@@ -169,6 +169,7 @@ export const AUDIT_ACTION_GROUPS = [
       'provisioning_token.created',
       'provisioning_token.revoked',
       'proof_key.created',
+      'proof_key.retired',
     ],
   },
 ] as const satisfies readonly AuditActionGroup[];
