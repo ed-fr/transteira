@@ -7,7 +7,8 @@
     "webhooks": "Webhooks",
     "audit": "Audit log",
     "masterKey": "Master key",
-    "provisioning": "Provisioning tokens"
+    "provisioning": "Provisioning tokens",
+    "security": "Security log"
   },
   "overview": {
     "title": "System overview",
@@ -42,5 +43,9 @@
   "provisioning": {
     "title": "Provisioning tokens",
     "intro": "Tokens that let a managed service provider create entities through the API, within a bounded scope: address ranges, domain suffixes, number of entities and storage."
+  },
+  "security": {
+    "title": "Global security log",
+    "intro": "Security events of every entity and of the instance itself (unknown address, administrator sign-in, provisioning token) over the last 12 months. The log never contains an email address."
   }
 }

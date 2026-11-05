@@ -27,7 +27,7 @@ const (
 	// delivery of a super admin activation link.
 	fieldNotAllowed = "not-allowed"
 	// fieldNotSupported is a member of API 2.0 that this server does not
-	// implement yet (auditor role, delivery none, tenant and level policies):
+	// implement yet (delivery none, tenant and level policies):
 	// refused rather than ignored (fail closed), so that a client never
 	// believes it was applied.
 	fieldNotSupported = "not-supported"
@@ -66,6 +66,8 @@ func serviceError(err error) error {
 		return problem.New(problem.CodeInvalidCredentials)
 	case errors.Is(err, adminauth.ErrUnauthenticated):
 		return problem.New(problem.CodeUnauthenticated)
+	case errors.Is(err, adminauth.ErrReadOnlyRole):
+		return problem.New(problem.CodeReadOnlyRole)
 	case errors.Is(err, adminauth.ErrForbidden):
 		return problem.New(problem.CodeForbidden)
 	case errors.Is(err, adminauth.ErrSetupTokenInvalid):

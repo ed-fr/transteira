@@ -10,10 +10,14 @@
 //
 // Every method takes the [adminauth.Principal] of the caller and checks it
 // before anything else, request body included: an authenticated session
-// ([adminauth.RequireAuthenticated]), then [adminauth.RequireTenantAccess]
-// for the reads (lists, transfer details, tenant audit log) or
-// [adminauth.RequireTenantWrite] for the changes (delete, resend, revoke,
-// blocklist create and delete). A tenant the caller is not attached to,
+// ([adminauth.RequireAuthenticated]), then
+// [adminauth.RequireTenantAuditRead] for the reads open to the auditor
+// role (transfer list and details, tenant audit log),
+// [adminauth.RequireTenantAccess] for the other reads (invitations,
+// blocklist, abuse reports) or [adminauth.RequireTenantWrite] for the
+// changes (delete, resend, revoke, blocklist create and delete). The last
+// two answer an auditor attached to the tenant adminauth.ErrReadOnlyRole
+// (403 read-only-role, T-281). A tenant the caller is not attached to,
 // and a tenant being deleted, are answered exactly like a missing tenant
 // ([ErrNotFound]); a transfer, invitation or entry of another tenant
 // exactly like a missing one, since every store read runs in the scope of

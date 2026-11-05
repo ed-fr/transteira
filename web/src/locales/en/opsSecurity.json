@@ -1,0 +1,50 @@
+{
+  "filters": {
+    "label": "Filter the security log",
+    "globalLabel": "Filter the global security log",
+    "type": "Event type",
+    "anyType": "Any type",
+    "customType": "Other type (type its token)",
+    "customToken": "Type token",
+    "customHint": "Lowercase letters, digits and underscores, starting with a letter. For example rate_limited.",
+    "tenantHint": "With an entity selected, the events without entity are not shown."
+  },
+  "list": {
+    "caption": "Security events",
+    "globalCaption": "Security events of the instance",
+    "empty": "No security event has been recorded.",
+    "emptyFiltered": "No event matches these filters.",
+    "loaded": {
+      "one": "{count} event loaded.",
+      "other": "{count} events loaded."
+    },
+    "loadedMore": {
+      "one": "{count} event loaded, more are available.",
+      "other": "{count} events loaded, more are available."
+    },
+    "columns": {
+      "date": "Date",
+      "type": "Type",
+      "reason": "Reason",
+      "ip": "IP address",
+      "occurrences": "Occurrences"
+    },
+    "noReason": "None",
+    "noIp": "Unknown",
+    "lastSeen": "Last:"
+  },
+  "types": {
+    "verification_code_invalid": "Wrong verification code",
+    "transfer_password_invalid": "Wrong transfer password",
+    "admin_login_failed": "Failed administrator sign-in",
+    "api_token_invalid": "Invalid API token",
+    "unknown_fqdn": "Unknown address (FQDN)",
+    "deposit_refused": "Deposit refused",
+    "rate_limited": "Rate limit exceeded",
+    "metrics_token_invalid": "Invalid metrics token",
+    "access_link_invalid": "Invalid access link",
+    "provisioning_token_invalid": "Invalid provisioning token",
+    "sso_failed": "Failed single sign-on",
+    "drop_link_invalid": "Invalid drop link"
+  }
+}

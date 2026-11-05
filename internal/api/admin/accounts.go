@@ -32,7 +32,7 @@ func (s *Server) ListAdmins(ctx context.Context, req gen.ListAdminsRequestObject
 	return resp, nil
 }
 
-// CreateAdmin creates a delegated admin and returns it with its activation
+// CreateAdmin creates a delegated admin or an auditor and returns it with its activation
 // link, returned once or, with invitation.delivery mail, mailed through the
 // system SMTP and never returned (super admin, 201).
 func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObject) (gen.CreateAdminResponseObject, error) {
@@ -43,9 +43,10 @@ func (s *Server) CreateAdmin(ctx context.Context, req gen.CreateAdminRequestObje
 	if req.Body == nil {
 		return nil, validationFailed(adminauth.FieldUsername, fieldRequired)
 	}
-	// The auditor role and the activation-free delivery of API 2.0 are not
-	// implemented yet: refused rather than silently replaced. Checked for the
-	// super admin only, so that another admin keeps its 403 from the service.
+	// The activation-free delivery of API 2.0 is not implemented yet
+	// (single sign-on): refused rather than silently replaced. Checked for
+	// the super admin only, so that another admin keeps its 403 from the
+	// service.
 	if p.Admin.Role == store.RoleSuperAdmin {
 		if prob := unsupportedAdminCreate(req.Body); prob != nil {
 			return nil, prob
@@ -80,14 +81,10 @@ func (s *Server) InviteAdmin(ctx context.Context, req gen.InviteAdminRequestObje
 }
 
 // unsupportedAdminCreate refuses the members of AdminCreate added by API 2.0
-// that are not implemented yet (role auditor, invitation delivery none)
-// with a 400 validation-failed naming the first one present, or returns
-// nil.
+// that are not implemented yet (invitation delivery none) with a 400
+// validation-failed naming it, or returns nil.
 func unsupportedAdminCreate(b *gen.AdminCreate) *problem.Problem {
-	switch {
-	case b.Role == gen.Auditor:
-		return validationFailed("/role", fieldNotSupported)
-	case b.Invitation != nil && b.Invitation.Delivery != nil && *b.Invitation.Delivery == gen.InvitationDeliveryNone:
+	if b.Invitation != nil && b.Invitation.Delivery != nil && *b.Invitation.Delivery == gen.InvitationDeliveryNone {
 		return validationFailed("/invitation/delivery", fieldNotSupported)
 	}
 	return nil
@@ -130,9 +127,6 @@ func (s *Server) UpdateAdmin(ctx context.Context, req gen.UpdateAdminRequestObje
 	}
 	if req.Body == nil {
 		return nil, validationFailed("", fieldRequired)
-	}
-	if p.Admin.Role == store.RoleSuperAdmin && req.Body.Role != nil && *req.Body.Role == gen.Auditor {
-		return nil, validationFailed("/role", fieldNotSupported)
 	}
 	u := adminauth.AdminUpdate{RequireTOTP: req.Body.RequireTotp, Disabled: req.Body.Disabled}
 	if req.Body.Email != nil {

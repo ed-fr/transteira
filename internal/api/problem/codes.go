@@ -132,7 +132,7 @@ const (
 	// CodeProvisioningScopeExceeded means the request is outside the scope
 	// of the provisioning token (since 1.2).
 	CodeProvisioningScopeExceeded Code = "provisioning-scope-exceeded"
-	// CodeReadOnlyRole means the admin has the read-only auditor role and attempted a write (since 2.0).
+	// CodeReadOnlyRole means the admin has the read-only auditor role and attempted a write or a read outside its scope (since 2.0).
 	CodeReadOnlyRole Code = "read-only-role"
 	// CodeSSORequired means the account must sign in through single sign-on, its tenant enforcing it (since 2.0).
 	CodeSSORequired Code = "sso-required"

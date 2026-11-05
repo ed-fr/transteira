@@ -202,7 +202,8 @@ func (s *Service) ListTenants(ctx context.Context, p adminauth.Principal, cursor
 }
 
 // GetTenant returns tenant tid. The super admin also reaches a tenant
-// being deleted.
+// being deleted. It is the only read of the package open to the auditor
+// role, on the tenants it is attached to.
 func (s *Service) GetTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID) (TenantView, error) {
 	var (
 		t   *tenant.Tenant
@@ -211,7 +212,7 @@ func (s *Service) GetTenant(ctx context.Context, p adminauth.Principal, tid tena
 	if superAdmin(p) == nil {
 		t, err = s.tenant(ctx, tid)
 	} else {
-		t, err = s.readable(ctx, p, tid)
+		t, err = s.summaryReadable(ctx, p, tid)
 	}
 	if err != nil {
 		return TenantView{}, err

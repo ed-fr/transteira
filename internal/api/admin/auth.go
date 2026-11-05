@@ -129,8 +129,8 @@ func (s *Server) GetAdminMe(ctx context.Context, _ gen.GetAdminMeRequestObject) 
 }
 
 // tenantRefs names the tenants a manages: every tenant for a super admin,
-// its own tenants for a delegated admin (a tenant deleted meanwhile is
-// skipped).
+// its own tenants for a delegated admin or an auditor (a tenant deleted
+// meanwhile is skipped).
 func (s *Server) tenantRefs(ctx context.Context, a adminauth.Account) ([]gen.TenantRef, error) {
 	refs := []gen.TenantRef{}
 	if a.Role == store.RoleSuperAdmin {

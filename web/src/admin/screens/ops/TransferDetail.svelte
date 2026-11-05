@@ -9,6 +9,9 @@
   //   screen);
   // - delete (DELETE, optional reason); 409 while an upload runs keeps the dialog open with the
   //   delay; on success, back to the list with an announcement.
+  // An auditor (read-only role) gets the same facts and no action: the actions section is not
+  // rendered (the server answers 403 read-only-role to both calls anyway). The detail shown
+  // never holds the message of the sender, whichever the role.
   // The tenant sub-navigation is rendered by App.svelte.
   import { onDestroy, onMount, tick } from 'svelte';
   import { ApiProblem } from '../../../shared/api/client';
@@ -24,7 +27,7 @@
     announce,
   } from '../../../shared/components';
   import { formatDate, formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminApi } from '../../api';
+  import { adminApi, adminSession } from '../../api';
   import { createCountdown } from '../../auth/countdown.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
   import DataTable from '../../components/DataTable.svelte';
@@ -64,6 +67,7 @@
   const tenantId = $derived(params['id'] ?? '');
   const transferId = $derived(params['transferId'] ?? '');
   const listPath = $derived(tenantPath(tenantId, 'transfers'));
+  const readOnly = $derived(adminSession.me?.role === 'auditor');
   const formatBytes = (n: number): string => formatBinaryBytes(n, locale.current);
   const dateTime = (d: string): string => formatDate(d, { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -425,7 +429,7 @@
       />
     </section>
 
-    {#if canResend(transfer.status) || canDelete(transfer.status) || resendDone !== ''}
+    {#if !readOnly && (canResend(transfer.status) || canDelete(transfer.status) || resendDone !== '')}
       <section aria-labelledby="{uid}-actions">
         <h2 id="{uid}-actions">{t('opsTransfers.detail.actionsTitle')}</h2>
         {#if resendDone !== ''}

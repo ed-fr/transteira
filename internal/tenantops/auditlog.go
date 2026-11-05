@@ -3,6 +3,7 @@ package tenantops
 import (
 	"context"
 	"regexp"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -30,7 +31,7 @@ type AuditFilter struct {
 	// Action keeps the events of this action ("" for all).
 	Action string
 	// Actor keeps the events of this actor, a mail address or an admin
-	// username ("" for all).
+	// username ("" for all). An address is refused to an auditor (T-282).
 	Actor string
 	// From and To bound the event time, both inclusive (zero: no bound).
 	From time.Time
@@ -66,10 +67,15 @@ func checkAction(action string) error {
 // ListAuditEvents returns a page of the audit log of tenant tid, most
 // recent first: only the events of the tenant, never the events without
 // tenant nor those of another tenant. An actor given as a mail address is
-// normalized like the stored actors.
+// normalized like the stored actors. An auditor may not filter by address
+// (T-282): an actor holding "@" (never part of a username) is then
+// adminauth.ErrReadOnlyRole.
 func (s *Service) ListAuditEvents(ctx context.Context, p adminauth.Principal, tid tenant.ID, f AuditFilter) (store.Page[store.AuditEvent], error) {
-	if err := s.readable(ctx, p, tid); err != nil {
+	if _, err := s.auditReadable(ctx, p, tid); err != nil {
 		return store.Page[store.AuditEvent]{}, err
+	}
+	if p.Admin.Role == store.RoleAuditor && strings.Contains(f.Actor, "@") {
+		return store.Page[store.AuditEvent]{}, adminauth.ErrReadOnlyRole
 	}
 	if err := checkAction(f.Action); err != nil {
 		return store.Page[store.AuditEvent]{}, err

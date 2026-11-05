@@ -99,6 +99,9 @@ const (
 	// OpenAPI ProvisioningTokenId), not the secret itself ("ttp_" +
 	// base62).
 	ProvisioningToken Prefix = "prv"
+	// SecurityEvent identifies a security event kept in the database (since
+	// 2.0, OpenAPI SecurityEvent.id).
+	SecurityEvent Prefix = "sev"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

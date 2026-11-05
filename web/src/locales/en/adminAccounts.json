@@ -46,7 +46,10 @@
     },
     "role": {
       "label": "Role",
-      "hint": "A super administrator manages every entity and every account."
+      "hint": "A super administrator manages every entity and every account.",
+      "createHint": "A delegated administrator manages the attached entities. An auditor can only consult them: transfers, audit log, security log and statistics.",
+      "delegated_adminHint": "Configures and operates the attached entities.",
+      "auditorHint": "Read-only access to the attached entities, for a security officer or an audit. Cannot change anything."
     },
     "tenants": {
       "legend": "Attached entities",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/securitylog"
+	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // SecurityEvents writes the events raised by the middlewares to the
@@ -81,7 +82,15 @@ func (s *SecurityEvents) DepositRefused(ctx context.Context, ip netip.Addr, tena
 	})
 }
 
+// write logs ev. An event naming a tenant FQDN is filed under the tenant
+// of the request context when its FQDN is that one (TenantID, for the copy
+// of the security log in the database, threat model T-283); an event
+// without tenant (unknown FQDN, admin host, monitoring, provisioning)
+// stays without one.
 func (s *SecurityEvents) write(ctx context.Context, ev securitylog.Event) {
+	if t, ok := tenant.FromContext(ctx); ok && ev.Tenant != "" && t.FQDN == ev.Tenant {
+		ev.TenantID = string(t.ID)
+	}
 	if err := s.log.Log(ev); err != nil {
 		s.logger.ErrorContext(ctx, "security log write failed",
 			slog.String("event", string(ev.Type)),

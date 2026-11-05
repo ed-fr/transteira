@@ -16,7 +16,8 @@
 // version with the check for a newer release (V1.2) over
 // internal/updatecheck, and the provisioning tokens of the super admin
 // with the provisioning API of the service providers (V1.2) over
-// internal/provisioning.
+// internal/provisioning, and the security events kept in the database
+// (V2) over internal/securityevents.
 //
 // Server embeds stubs.Unimplemented, so that every operation not written
 // yet answers 404 not-found; each real method defined here replaces its
@@ -130,6 +131,9 @@ type Server struct {
 	// provisioning manages the provisioning tokens and serves the
 	// provisioning API; nil until WithProvisioningService.
 	provisioning ProvisioningService
+	// securityEvents lists the security events kept in the database (V2);
+	// nil until WithSecurityEventsService.
+	securityEvents SecurityEventsService
 	// version returns the build information (replaceable in tests).
 	version func() version.Info
 	// now is the clock deriving the Max-Age of the session cookie from the

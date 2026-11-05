@@ -25,7 +25,11 @@ const (
 	adminGoodToken    = "as_good"
 	adminPendingToken = "as_pending"
 	adminBoomToken    = "as_boom"
-	adminCSRF         = "csrf_admin"
+	// adminAuditorToken and adminAuditorPendingToken are an auditor's
+	// sessions, authenticated and awaiting its TOTP code.
+	adminAuditorToken        = "as_auditor"
+	adminAuditorPendingToken = "as_auditor_pending"
+	adminCSRF                = "csrf_admin"
 )
 
 // fakeAdminSessions knows the sessions adminGoodToken (authenticated
@@ -42,6 +46,12 @@ func (fakeAdminSessions) Resolve(_ context.Context, raw string) (adminauth.Princ
 		p.State = store.SessionAuthenticated
 	case adminPendingToken:
 		p.State = store.SessionTOTPRequired
+	case adminAuditorToken, adminAuditorPendingToken:
+		p.Admin.Username, p.Admin.Role, p.Admin.TenantIDs = "audit", store.RoleAuditor, []tenant.ID{"ten_a"}
+		p.State = store.SessionAuthenticated
+		if raw == adminAuditorPendingToken {
+			p.State = store.SessionTOTPRequired
+		}
 	case adminBoomToken:
 		return adminauth.Principal{}, errors.New("database down")
 	default:
@@ -51,7 +61,11 @@ func (fakeAdminSessions) Resolve(_ context.Context, raw string) (adminauth.Princ
 }
 
 func (fakeAdminSessions) CheckCSRF(raw, header string) bool {
-	return (raw == adminGoodToken || raw == adminPendingToken) && header == adminCSRF
+	switch raw {
+	case adminGoodToken, adminPendingToken, adminAuditorToken, adminAuditorPendingToken:
+		return header == adminCSRF
+	}
+	return false
 }
 
 // adminAuth returns the headers of a same-origin request of the
@@ -89,11 +103,18 @@ func (f *fakeAdminService) Logout(_ context.Context, p adminauth.Principal, _ ne
 	return nil
 }
 
-// fakeTenantList lists one tenant.
+// fakeTenantList lists and gets one tenant.
 type fakeTenantList struct{ admin.Tenants }
 
 func (fakeTenantList) List(context.Context, store.TenantListOptions) (store.Page[*tenant.Tenant], error) {
 	return store.Page[*tenant.Tenant]{Items: []*tenant.Tenant{{ID: "ten_a", Name: "Entity A", FQDN: hostA}}}, nil
+}
+
+func (fakeTenantList) Get(_ context.Context, tid tenant.ID) (*tenant.Tenant, error) {
+	if tid != "ten_a" {
+		return nil, store.ErrNotFound
+	}
+	return &tenant.Tenant{ID: "ten_a", Name: "Entity A", FQDN: hostA}, nil
 }
 
 func newAdminEnv(t *testing.T, opts ...Option) (*env, *fakeAdminService) {
@@ -262,6 +283,68 @@ func TestAdminSessionAndCSRF(t *testing.T) {
 	}
 	if !strings.Contains(e.appLog.String(), "admin session lookup failed") {
 		t.Errorf("app log %q", e.appLog.String())
+	}
+}
+
+// TestAuditorGuard checks the HTTP lock of the auditor role (T-281): an
+// authenticated auditor session gets 403 read-only-role on every operation
+// outside adminauth.AuditorOperations, before its handler runs (the fake
+// service would panic, answered 500), and reaches the handler of the
+// operations of the list. A session still in a login step and the other
+// roles are left to the handler.
+func TestAuditorGuard(t *testing.T) {
+	t.Parallel()
+	e, svc := newAdminEnv(t)
+	session := func(tok string) []string {
+		return []string{
+			"Cookie", middleware.AdminCookie + "=" + tok, middleware.HeaderCSRFToken, adminCSRF,
+			"Origin", "https://" + hostAdmin, "Sec-Fetch-Site", "same-origin", "Content-Type", "application/json",
+		}
+	}
+	tests := []struct {
+		name, method, target, token string
+		status                      int
+		code                        problem.Code
+	}{
+		{"auditor write", http.MethodPost, "/api/v1/admin/admins", adminAuditorToken, http.StatusForbidden, problem.CodeReadOnlyRole},
+		{"auditor account list", http.MethodGet, "/api/v1/admin/admins", adminAuditorToken, http.StatusForbidden, problem.CodeReadOnlyRole},
+		{"auditor configuration read", http.MethodGet, "/api/v1/admin/tenants/ten_a/smtp", adminAuditorToken, http.StatusForbidden, problem.CodeReadOnlyRole},
+		{"auditor tenant change", http.MethodPatch, "/api/v1/admin/tenants/ten_a", adminAuditorToken, http.StatusForbidden, problem.CodeReadOnlyRole},
+		// Outside its tenants, a read is missing, a write still refused.
+		{"auditor configuration read elsewhere", http.MethodGet, "/api/v1/admin/tenants/ten_b/smtp", adminAuditorToken, http.StatusNotFound, problem.CodeNotFound},
+		{"auditor write elsewhere", http.MethodPut, "/api/v1/admin/tenants/ten_b/smtp", adminAuditorToken, http.StatusForbidden, problem.CodeReadOnlyRole},
+		{"auditor own profile", http.MethodGet, "/api/v1/admin/me", adminAuditorToken, http.StatusOK, ""},
+		// Without tenant service, the handler of the list answers 500: the
+		// request went through.
+		{"auditor tenant list", http.MethodGet, "/api/v1/admin/tenants", adminAuditorToken, http.StatusInternalServerError, problem.CodeInternalError},
+		{"auditor logout", http.MethodPost, "/api/v1/admin/auth/logout", adminAuditorToken, http.StatusNoContent, ""},
+		// Not authenticated yet: the handler answers 401, the role is not
+		// told.
+		{"pending auditor", http.MethodGet, "/api/v1/admin/admins", adminAuditorPendingToken, http.StatusUnauthorized, problem.CodeUnauthenticated},
+		// Another role reaches the handler.
+		{"super admin", http.MethodGet, "/api/v1/admin/tenants/ten_a/smtp", adminGoodToken, http.StatusInternalServerError, problem.CodeInternalError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body io.Reader
+			if tt.method != http.MethodGet {
+				body = strings.NewReader("{}")
+			}
+			rec := e.do(t, tt.method, tt.target, hostAdmin, body, session(tt.token)...)
+			if tt.code != "" {
+				decodeProblem(t, rec, tt.status, tt.code)
+			} else if rec.Code != tt.status {
+				t.Fatalf("status %d, want %d; body %s", rec.Code, tt.status, rec.Body.String())
+			}
+		})
+	}
+	if len(svc.loggedOut) != 1 {
+		t.Errorf("logged out %v", svc.loggedOut)
+	}
+	for method, want := range map[string]string{"GetAdminMe": "getAdminMe", "X": "x", "": ""} {
+		if got := operationID(method); got != want {
+			t.Errorf("operationID(%q) = %q, want %q", method, got, want)
+		}
 	}
 }
 

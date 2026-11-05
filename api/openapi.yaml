@@ -5165,7 +5165,7 @@ paths:
       tags: [Admin operations]
       operationId: listTenantTransfers
       summary: List transfers of the tenant
-      description: "Lists the transfers of the tenant, most recent first, with filters on status, address and creation date. Metadata only."
+      description: "Lists the transfers of the tenant, most recent first, with filters on status, address and creation date. Metadata only. Since 2.0, an auditor may not filter by address: 403 read-only-role."
       security:
         - adminSession: []
       parameters:
@@ -5176,7 +5176,7 @@ paths:
           example: available
         - name: email
           in: query
-          description: Filter on sender or recipient address (exact match).
+          description: Filter on sender or recipient address (exact match). Refused to an auditor (`403 read-only-role`).
           schema: { $ref: '#/components/schemas/Email' }
           example: alice@entity-a.example.com
         - name: createdAfter
@@ -5210,6 +5210,7 @@ paths:
                 nextCursor: eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -5660,7 +5661,7 @@ paths:
       tags: [Admin operations]
       operationId: listTenantAuditEvents
       summary: Audit log of the tenant (12-month retention)
-      description: "Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period. Only the events of this tenant are returned, never events without tenant nor those of another tenant. Readable by any admin attached to the tenant."
+      description: "Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period. Only the events of this tenant are returned, never events without tenant nor those of another tenant. Readable by any admin attached to the tenant. Since 2.0, an auditor may not filter by address: 403 read-only-role."
       security:
         - adminSession: []
       parameters:
@@ -5671,7 +5672,7 @@ paths:
           example: transfer.deleted
         - name: actor
           in: query
-          description: "Filter by actor (email address or admin username)."
+          description: "Filter by actor (email address or admin username). An address (any value holding `@`) is refused to an auditor (`403 read-only-role`)."
           schema: { type: string, maxLength: 320 }
           example: alice@entity-a.example.com
         - name: from
@@ -5704,6 +5705,7 @@ paths:
                     details: { fileCount: 2, totalBytes: 12900630528 }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -8624,8 +8626,9 @@ components:
       description: |
         The authenticated admin's role or tenants do not allow the operation (`forbidden`), or the
         CSRF check of this unsafe method failed (`csrf-invalid`: missing or wrong `X-CSRF-Token`,
-        cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor attempting any write gets
-        `403 read-only-role`.
+        cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor calling any operation outside
+        its read-only list (any write, a configuration read of its tenants, an instance or account
+        operation) gets `403 read-only-role`.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }

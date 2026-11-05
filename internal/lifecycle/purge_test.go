@@ -432,3 +432,27 @@ func TestPurgeAbuseRows(t *testing.T) {
 		}
 	})
 }
+
+func TestPurgeRowsSecurityEvents(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		cutoff := ev.clock.Now().AddDate(0, -AuditRetentionMonths, 0)
+		_, err := ev.db.SecurityEvents().Save(ctx, []store.SecurityEvent{
+			{At: cutoff.Add(-time.Minute), Type: "unknown_fqdn"},
+			{At: cutoff.Add(-time.Minute), TenantID: ev.a.ID, Type: "rate_limited"},
+			{At: cutoff.Add(time.Hour), TenantID: ev.a.ID, Type: "rate_limited"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ev.runTask(TaskPurgeRows)
+		if ev.logs.count("security_events=2") != 1 {
+			t.Fatalf("logs:\n%s", ev.logs.all())
+		}
+		page, err := ev.db.SecurityEvents().List(ctx, store.SecurityEventFilter{})
+		if err != nil || len(page.Items) != 1 || !page.Items[0].At.Equal(cutoff.Add(time.Hour)) {
+			t.Fatalf("left = %+v, %v", page.Items, err)
+		}
+	})
+}

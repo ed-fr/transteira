@@ -245,6 +245,12 @@ var isolationCases = map[string]isolationCase{
 	// tenant.
 	"listGlobalAuditEvents": superAdminOperation,
 	"getGlobalStats":        superAdminOperation,
+	// Security events kept in the database (securityevents_test.go, since
+	// 2.0, T-283): a tenant's listing holds its own events only, never
+	// those of another tenant nor those without tenant; the instance-wide
+	// listing is reserved to the super admin.
+	"listTenantSecurityEvents": tenantSecurityEvents,
+	"listGlobalSecurityEvents": globalSecurityEvents,
 	// API tokens (apitokens_test.go): served on the admin host only; the
 	// delegated admin of tenant A gets for tenant B's ID exactly the answer
 	// of an unknown tenant ID, and, under A's own path, for a token of B

@@ -147,9 +147,10 @@
 // expired; the administrator login failure counters whose latest failure
 // is AdminLoginFailureWindow (15 minutes, the longest window of the rules)
 // old and whose lock is over; the audit events older than
-// AuditRetentionMonths (12 calendar months); the daily usage counters of
-// the statistics older than UsageRetentionMonths (13 calendar months,
-// counted from 00:00 UTC of the current day). A failed listing of the
+// AuditRetentionMonths (12 calendar months); the security events kept in
+// the database whose first occurrence is as old (same retention); the
+// daily usage counters of the statistics older than UsageRetentionMonths
+// (13 calendar months, counted from 00:00 UTC of the current day). A failed listing of the
 // tenants skips the tenant phase only. Every purge runs in batches of
 // store.PurgeBatchSize, and the run logs one count per kind of row.
 //

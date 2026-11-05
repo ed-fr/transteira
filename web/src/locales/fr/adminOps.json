@@ -10,12 +10,15 @@
     "audit": "Journal d’audit",
     "stats": "Statistiques",
     "privacy": "Données personnelles",
-    "abuseReports": "Signalements"
+    "abuseReports": "Signalements",
+    "groupConsultation": "Consultation",
+    "security": "Journal de sécurité"
   },
   "transfers": {
     "title": "Transferts",
     "detailTitle": "Détail du transfert",
-    "intro": "Transferts de cette entité, du plus récent au plus ancien. Ouvrez un transfert pour voir ses fichiers, renvoyer sa notification ou le supprimer avant son expiration."
+    "intro": "Transferts de cette entité, du plus récent au plus ancien. Ouvrez un transfert pour voir ses fichiers, renvoyer sa notification ou le supprimer avant son expiration.",
+    "introReadOnly": "Transferts de cette entité, du plus récent au plus ancien. Ouvrez un transfert pour voir ses fichiers et ses destinataires."
   },
   "invitations": {
     "title": "Invitations",
@@ -49,5 +52,9 @@
   "abuseReports": {
     "title": "Signalements d’abus",
     "intro": "Signalements faits par les destinataires depuis la page de téléchargement. Le message est un simple texte, à lire avec prudence."
+  },
+  "security": {
+    "title": "Journal de sécurité",
+    "intro": "Événements de sécurité de cette entité sur les 12 derniers mois : codes de vérification ou mots de passe de transfert erronés, dépôts refusés, limitations de débit, jetons invalides. Les événements identiques survenus à peu d’intervalle sont regroupés. Le journal ne contient jamais d’adresse mail."
   }
 }

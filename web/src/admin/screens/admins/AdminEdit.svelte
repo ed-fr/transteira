@@ -36,6 +36,7 @@
     buildAdminPatch,
     canInvite,
     canMailInvitation,
+    needsTenants,
     canPromote,
     defaultInvitationLanguage,
     editFormFrom,
@@ -106,6 +107,14 @@
       value: 'delegated_admin',
       label: t('admin.role.delegated_admin'),
       ...(admin?.role === 'super_admin' ? { hint: t('adminAccounts.promotion.demoteHint') } : {}),
+    },
+    {
+      value: 'auditor',
+      label: t('admin.role.auditor'),
+      hint:
+        admin?.role === 'super_admin'
+          ? t('adminAccounts.promotion.demoteHint')
+          : t('adminAccounts.form.role.auditorHint'),
     },
     {
       value: 'super_admin',
@@ -399,7 +408,7 @@
           />
         </div>
       {/if}
-      {#if form.role === 'delegated_admin'}
+      {#if needsTenants(form.role)}
         <TenantChecklist
           {tenants}
           idPrefix={ids.tenants}

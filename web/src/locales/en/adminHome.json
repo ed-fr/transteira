@@ -16,7 +16,8 @@
   "links": {
     "transfers": "Transfers of {name}",
     "audit": "Audit log of {name}",
-    "stats": "Statistics of {name}"
+    "stats": "Statistics of {name}",
+    "security": "Security log of {name}"
   },
   "table": {
     "caption": "Entities and storage usage",

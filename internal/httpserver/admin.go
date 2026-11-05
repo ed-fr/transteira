@@ -12,7 +12,9 @@ import (
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/gen"
+	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
+	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
@@ -187,6 +189,52 @@ func noStore(next http.Handler) http.Handler {
 	})
 }
 
+// auditorGuard is the HTTP lock of the read-only auditor role (T-281):
+// an authenticated auditor session calling an operation outside
+// adminauth.AuditorOperations is answered without running the handler:
+// 403 read-only-role, except a read (GET) of a tenant the auditor is not
+// attached to, answered 404 not-found like a missing tenant (a read
+// outside its tenants stays 404, as for every role). Requests without an
+// admin session, or with a session still in a login step (which the
+// services refuse by themselves, 401), and the sessions of the other roles
+// pass through. The services check the role again on their side.
+//
+// The tenant of the request is read with r.PathValue("tenantId"), which
+// relies on the standard library mux (net/http ServeMux patterns) routing
+// the admin operations: another router would leave it empty, and every
+// out-of-scope GET would then answer 403 instead of 404. A request with
+// another method (a write) is answered the uniform 403 read-only-role
+// whatever its tenant, before any lookup: the answer never tells whether
+// a tenant exists (no tenant oracle).
+//
+// The generated strict handler names an operation by its Go method name,
+// the operationId with its first letter upper-cased (GetAdminMe for
+// getAdminMe): the guard turns it back into the operationId.
+func auditorGuard(next gen.StrictHandlerFunc, method string) gen.StrictHandlerFunc {
+	if adminauth.AuditorOperations[operationID(method)] {
+		return next
+	}
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		p, ok := middleware.AdminSessionFrom[adminauth.Principal](ctx)
+		if !ok || p.Admin.Role != store.RoleAuditor || adminauth.RequireAuthenticated(p) != nil {
+			return next(ctx, w, r, request)
+		}
+		if tid := r.PathValue("tenantId"); r.Method == http.MethodGet && tid != "" && !adminauth.CanAccessTenant(p.Admin, tenant.ID(tid)) {
+			return nil, problem.New(problem.CodeNotFound)
+		}
+		return nil, problem.New(problem.CodeReadOnlyRole)
+	}
+}
+
+// operationID returns the OpenAPI operationId of the generated method name
+// method: its first letter lower-cased.
+func operationID(method string) string {
+	if method == "" {
+		return ""
+	}
+	return strings.ToLower(method[:1]) + method[1:]
+}
+
 // newAdminHandler builds the router of the admin hosts: the admin
 // operations under AdminPrefix, the version and the interactive API
 // documentation (adminDocsHandler); any other path goes to the admin web
@@ -198,7 +246,9 @@ func noStore(next http.Handler) http.Handler {
 // operations (403), the body limit (413) and the JSON media type (415),
 // all before the body is read. The provisioning operations get instead,
 // right after the deadlines, their provisioning token check (401,
-// provisioningAuth).
+// provisioningAuth). Inside the strict handler, auditorGuard refuses the
+// operations outside adminauth.AuditorOperations to an auditor session
+// (403 read-only-role), after the body is decoded and before the handler.
 func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.SecurityEvents, limiter middleware.Limiter,
 	provisioningTokens *provisioningAuth, logger *slog.Logger,
 ) http.Handler {
@@ -210,7 +260,7 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 	if deps.AdminSessions != nil {
 		sessions = adminSessionResolver{svc: deps.AdminSessions}
 	}
-	strict := gen.NewStrictHandlerWithOptions(api, nil,
+	strict := gen.NewStrictHandlerWithOptions(api, []gen.StrictMiddlewareFunc{auditorGuard},
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  eh.requestError,
 			ResponseErrorHandlerFunc: eh.responseError,

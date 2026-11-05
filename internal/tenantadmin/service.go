@@ -264,13 +264,28 @@ func New(db *store.DB, opts Options) (*Service, error) {
 
 // --- Authorization -----------------------------------------------------------
 
-// readable checks that p may read tenant tid and returns the tenant, which
-// must be active.
+// readable checks that p may read the configuration of tenant tid and
+// returns the tenant, which must be active. An auditor attached to the
+// tenant gets adminauth.ErrReadOnlyRole (T-281).
 func (s *Service) readable(ctx context.Context, p adminauth.Principal, tid tenant.ID) (*tenant.Tenant, error) {
 	if err := adminauth.RequireAuthenticated(p); err != nil {
 		return nil, err
 	}
 	if err := adminauth.RequireTenantAccess(p.Admin, tid); err != nil {
+		return nil, err
+	}
+	return s.activeTenant(ctx, tid)
+}
+
+// summaryReadable checks that p may read the summary of tenant tid
+// (getTenant), the one tenantadmin read open to the auditor role
+// ([adminauth.RequireTenantAuditRead]), and returns the tenant, which must
+// be active. Every other read uses readable, closed to the auditor.
+func (s *Service) summaryReadable(ctx context.Context, p adminauth.Principal, tid tenant.ID) (*tenant.Tenant, error) {
+	if err := adminauth.RequireAuthenticated(p); err != nil {
+		return nil, err
+	}
+	if err := adminauth.RequireTenantAuditRead(p.Admin, tid); err != nil {
 		return nil, err
 	}
 	return s.activeTenant(ctx, tid)

@@ -46,7 +46,10 @@
     },
     "role": {
       "label": "Rôle",
-      "hint": "Un super administrateur gère toutes les entités et tous les comptes."
+      "hint": "Un super administrateur gère toutes les entités et tous les comptes.",
+      "createHint": "Un administrateur délégué gère les entités rattachées. Un auditeur peut seulement les consulter : transferts, journal d’audit, journal de sécurité et statistiques.",
+      "delegated_adminHint": "Configure et exploite les entités rattachées.",
+      "auditorHint": "Accès en lecture seule aux entités rattachées, pour un RSSI ou un audit. Ne peut rien modifier."
     },
     "tenants": {
       "legend": "Entités rattachées",

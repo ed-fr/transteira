@@ -164,6 +164,45 @@ func TestRightsMatrix(t *testing.T) {
 	})
 }
 
+// TestAuditorRights runs every operation as an auditor of A (T-281): it
+// reads the tenant summary (GetTenant) and the tenant list, nothing else:
+// every other operation is adminauth.ErrReadOnlyRole on A (ErrForbidden for
+// the super admin ones), and everything is ErrNotFound for an auditor of B.
+func TestAuditorRights(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		_, err := ev.svc.UpdateSMTP(ctx, ev.super, ev.a.ID, relay(), clientIP)
+		mustNoErr(t, "smtp", err)
+		auditorA := principal(store.RoleAuditor, "audrey.audit", ev.a.ID)
+		auditorB := principal(store.RoleAuditor, "boris.audit", ev.b.ID)
+		superOnly := map[string]bool{"DeleteTenant": true}
+		for name, op := range operations(ev, pngImage(t, 8, 8)) {
+			if err := op(auditorB, ev.a.ID); !errors.Is(err, ErrNotFound) && (!superOnly[name] || !errors.Is(err, ErrForbidden)) {
+				t.Errorf("%s by B's auditor on A: %v", name, err)
+			}
+			err := op(auditorA, ev.a.ID)
+			switch {
+			case name == "GetTenant":
+				mustNoErr(t, name+" by A's auditor", err)
+			case superOnly[name]:
+				wantErr(t, name+" by A's auditor", err, ErrForbidden)
+			default:
+				wantErr(t, name+" by A's auditor", err, adminauth.ErrReadOnlyRole)
+			}
+		}
+		page, err := ev.svc.ListTenants(ctx, auditorA, "", 0)
+		if err != nil || len(page.Items) != 1 || page.Items[0].ID != ev.a.ID {
+			t.Errorf("ListTenants by A's auditor = %+v, %v", page, err)
+		}
+		// A tenant being deleted is missing for the auditor, as for a
+		// delegated admin.
+		mustNoErr(t, "status", ev.db.Tenants().SetStatus(ctx, ev.a.ID, tenant.StatusDeleting))
+		_, err = ev.svc.GetTenant(ctx, auditorA, ev.a.ID)
+		wantErr(t, "GetTenant by A's auditor on a tenant being deleted", err, ErrNotFound)
+	})
+}
+
 // TestAccessBeforeValidation checks that every operation taking a request
 // body checks access first: on a tenant the caller cannot reach (or that
 // does not exist) an invalid body still answers ErrNotFound, so that the

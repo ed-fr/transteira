@@ -107,6 +107,8 @@ func tenantError(err error) error {
 		return problem.New(problem.CodeRateLimited)
 	case errors.Is(err, tenantadmin.ErrUnauthenticated):
 		return problem.New(problem.CodeUnauthenticated)
+	case errors.Is(err, adminauth.ErrReadOnlyRole):
+		return problem.New(problem.CodeReadOnlyRole)
 	case errors.Is(err, tenantadmin.ErrForbidden):
 		return problem.New(problem.CodeForbidden)
 	case errors.Is(err, tenantadmin.ErrNotFound):

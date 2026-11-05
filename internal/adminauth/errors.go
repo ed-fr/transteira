@@ -27,6 +27,10 @@ var (
 	// is not attached to yields ErrNotFound instead (see
 	// [RequireTenantAccess]).
 	ErrForbidden = errors.New("adminauth: forbidden")
+	// ErrReadOnlyRole reports an auditor, attached to the tenant, calling
+	// an operation outside the reads open to its read-only role (403
+	// read-only-role): every change, and every configuration read.
+	ErrReadOnlyRole = errors.New("adminauth: read-only role")
 	// ErrSetupTokenInvalid reports a missing or wrong setup token (403
 	// setup-token-invalid).
 	ErrSetupTokenInvalid = errors.New("adminauth: invalid setup token")

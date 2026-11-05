@@ -385,6 +385,8 @@ func TestTenantStatsRights(t *testing.T) {
 			{"being deleted", principal(store.RoleSuperAdmin), gone.ID, Period7Days, ErrNotFound},
 			{"unknown", principal(store.RoleSuperAdmin), "ten_01JAB00000000000000UNKNWN", Period7Days, ErrNotFound},
 			{"attached", principal(store.RoleDelegatedAdmin, tn.ID), tn.ID, Period7Days, nil},
+			{"auditor attached", principal(store.RoleAuditor, tn.ID), tn.ID, Period7Days, nil},
+			{"auditor not attached", principal(store.RoleAuditor, other.ID), tn.ID, Period7Days, ErrNotFound},
 		}
 		for _, c := range cases {
 			s, err := ev.svc.TenantStats(ctx, c.p, c.tid, c.per)

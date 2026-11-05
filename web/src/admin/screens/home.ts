@@ -59,15 +59,21 @@ export async function mapLimit<T, R>(
 
 // ---- Kind ------------------------------------------------------------------------------------
 
-/** Content of the dashboard: tenant table (super admin), tenant cards (delegated), nothing. */
-export type DashboardKind = 'super' | 'delegated' | 'none';
+/**
+ * Content of the dashboard: tenant table (super admin), tenant cards with the configuration
+ * links (delegated), tenant cards with the consultation links only (auditor), nothing.
+ */
+export type DashboardKind = 'super' | 'delegated' | 'auditor' | 'none';
 
 /** Kind of dashboard of an admin. */
 export function dashboardKind(me: AdminMe | undefined): DashboardKind {
   if (me === undefined) {
     return 'none';
   }
-  return me.role === 'super_admin' ? 'super' : 'delegated';
+  if (me.role === 'super_admin') {
+    return 'super';
+  }
+  return me.role === 'auditor' ? 'auditor' : 'delegated';
 }
 
 // ---- Delegated admin cards -------------------------------------------------------------------
@@ -136,9 +142,25 @@ export interface QuickLink {
 /** Sections reachable from a card. */
 export const QUICK_SECTIONS = ['transfers', 'audit', 'stats'] as const satisfies readonly TenantSection[];
 
-/** Quick links of a card (the tenant name is in the label, for unambiguous link texts). */
-export function quickLinks(card: Pick<TenantCard, 'id' | 'name'>, t: Translate): QuickLink[] {
-  return QUICK_SECTIONS.map((section) => ({
+/** Sections reachable from a card of an auditor (the read-only sections of a tenant). */
+export const AUDITOR_QUICK_SECTIONS = [
+  'transfers',
+  'audit',
+  'security',
+  'stats',
+] as const satisfies readonly TenantSection[];
+
+/**
+ * Quick links of a card (the tenant name is in the label, for unambiguous link texts). An
+ * auditor also gets the security log; it has no link to a section it cannot open.
+ */
+export function quickLinks(
+  card: Pick<TenantCard, 'id' | 'name'>,
+  t: Translate,
+  kind: DashboardKind = 'delegated',
+): QuickLink[] {
+  const sections: readonly TenantSection[] = kind === 'auditor' ? AUDITOR_QUICK_SECTIONS : QUICK_SECTIONS;
+  return sections.map((section) => ({
     section,
     path: tenantPath(card.id, section),
     label: t(`adminHome.links.${section}`, { name: card.name }),

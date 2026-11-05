@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -497,6 +499,90 @@ func TestRLSAuditAppendOnly(t *testing.T) {
 	for name, args := range map[string][]any{
 		"insert an event of B":  {"aud_01JAPPENDONLYB000000000000", b},
 		"insert a global event": {"aud_01JAPPENDONLYG000000000000", nil},
+	} {
+		err := inTenantTx(ctx, t, raw, &a, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, insert, args...)
+			return err
+		})
+		assertRLSViolation(t, name, err)
+	}
+}
+
+// TestRLSSecurityEventsTenantOrSystem checks the policies of the security
+// events kept in the database (threat model T-283, T-285): a
+// tenant-scoped raw transaction reads its own tenant's events only, never
+// another tenant's nor the events without tenant, and can neither insert,
+// update nor delete any event; the system scope sees and writes them all
+// (the writer of the copy and the 12-month purge).
+func TestRLSSecurityEventsTenantOrSystem(t *testing.T) {
+	t.Parallel()
+	f, raw := pgFixture(t)
+	ctx := t.Context()
+	a, b := string(f.a.ID), string(f.b.ID)
+	insert := `INSERT INTO security_events (id, at, tenant_id, event_type, ip, occurrences, last_seen_at)
+		VALUES ($1, 1, $2, 'rate_limited', '192.0.2.1', 1, 1)`
+
+	// The system scope writes one event of A, one of B and one without
+	// tenant.
+	system := ""
+	err := inTenantTx(ctx, t, raw, &system, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.system_scope', 'on', true)`); err != nil {
+			t.Fatal(err)
+		}
+		for i, tid := range []any{a, b, nil} {
+			if n := affected(ctx, t, tx, insert, fmt.Sprintf("sev_01JSECEVENTS00000000000%03d", i), tid); n != 1 {
+				t.Errorf("system insert %d affected %d rows", i, n)
+			}
+		}
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM security_events`); n != 3 {
+			t.Errorf("system scope sees %d events, want 3", n)
+		}
+		return tx.Commit()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = inTenantTx(ctx, t, raw, &a, func(tx *sql.Tx) error {
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM security_events`); n != 1 {
+			t.Errorf("tenant A sees %d events, want its own only", n)
+		}
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM security_events WHERE tenant_id IS NULL OR tenant_id = $1`, b); n != 0 {
+			t.Errorf("tenant A sees %d events of B or without tenant", n)
+		}
+		for _, stmt := range []string{
+			`UPDATE security_events SET occurrences = 9`,
+			`UPDATE security_events SET tenant_id = NULL WHERE tenant_id = $1`,
+			`DELETE FROM security_events WHERE tenant_id = $1`,
+		} {
+			args := []any{}
+			if strings.Contains(stmt, "$1") {
+				args = append(args, a)
+			}
+			if n := affected(ctx, t, tx, stmt, args...); n != 0 {
+				t.Errorf("tenant-scoped %q affected %d rows, want 0", stmt, n)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Without any setting, nothing is visible.
+	err = inTenantTx(ctx, t, raw, nil, func(tx *sql.Tx) error {
+		if n := countRows(ctx, t, tx, `SELECT count(*) FROM security_events`); n != 0 {
+			t.Errorf("unscoped transaction sees %d events", n)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A tenant scope cannot write an event, not even its own.
+	for name, args := range map[string][]any{
+		"insert an own event":   {"sev_01JSECEVENTSOWN00000000000", a},
+		"insert an event of B":  {"sev_01JSECEVENTSB0000000000000", b},
+		"insert a global event": {"sev_01JSECEVENTSG0000000000000", nil},
 	} {
 		err := inTenantTx(ctx, t, raw, &a, func(tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, insert, args...)

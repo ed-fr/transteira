@@ -191,7 +191,7 @@ func TestStreamEvents(t *testing.T) {
 			t.Fatalf("%d events, want 1", len(got))
 		}
 		want := securitylog.Event{
-			Type: securitylog.RateLimited, IP: ipOne, Tenant: hostA,
+			Type: securitylog.RateLimited, IP: ipOne, Tenant: hostA, TenantID: string(ev.a.ID),
 			Fields: []securitylog.Field{{Key: "transfer", Value: p.id[:transferIDLogLen]}, {Key: securitylog.KeyScope, Value: "download_streams"}},
 		}
 		if !reflect.DeepEqual(got[0], want) {

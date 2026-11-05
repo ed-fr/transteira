@@ -9,6 +9,9 @@ import {
   pickAdminLanguage,
   redirectTarget,
   roleKey,
+  canSearchByAddress,
+  isAuditor,
+  mainLinks,
   sectionGroup,
   systemLinks,
   systemPath,
@@ -90,6 +93,7 @@ describe('system navigation', () => {
       '/system/settings',
       '/system/webhooks',
       '/system/audit',
+      '/system/security-events',
       '/system/master-key',
       '/system/provisioning-tokens',
     ]);
@@ -201,10 +205,80 @@ describe('redirectTarget', () => {
   });
 });
 
+describe('role-aware navigation', () => {
+  it('limits an auditor to the consultation sections, in one group', () => {
+    const links = tenantLinks('ten_1', 'auditor');
+    expect(links.map((l) => l.section)).toEqual(['general', 'transfers', 'audit', 'security', 'stats']);
+    expect(links.map((l) => l.path)).toEqual([
+      '/tenants/ten_1/general',
+      '/tenants/ten_1/transfers',
+      '/tenants/ten_1/audit',
+      '/tenants/ten_1/security-events',
+      '/tenants/ten_1/stats',
+    ]);
+    expect(links[0]?.labelKey).toBe('adminTenants.nav.summary');
+    expect(links.map((l) => l.group)).toEqual(Array(5).fill('consultation'));
+    const groups = tenantLinkGroups('ten_1', 'auditor');
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.labelKey).toBe('adminOps.nav.groupConsultation');
+    expect(groups[0]?.links).toEqual(links);
+  });
+
+  it('gives no configuration section to an auditor', () => {
+    const sections = tenantLinks('ten_1', 'auditor').map((l) => l.section) as string[];
+    for (const config of TENANT_CONFIG_SECTIONS.filter((s) => s !== 'general')) {
+      expect(sections).not.toContain(config);
+    }
+    for (const op of ['invitations', 'blocklist', 'abuseReports', 'tokens', 'webhooks', 'privacy']) {
+      expect(sections).not.toContain(op);
+    }
+  });
+
+  it('keeps every section for the other roles, the security log among the operations', () => {
+    for (const role of ['super_admin', 'delegated_admin', undefined] as const) {
+      expect(tenantLinks('ten_1', role).map((l) => l.section)).toEqual([...TENANT_SECTIONS]);
+    }
+    expect(TENANT_OPS_SECTIONS).toContain('security');
+    expect(tenantLinks('ten_1').find((l) => l.section === 'security')?.labelKey).toBe(
+      'adminOps.nav.security',
+    );
+  });
+
+  it('builds the main navigation per role', () => {
+    const paths = (role: Parameters<typeof mainLinks>[0]) => mainLinks(role).map((l) => l.path);
+    expect(paths('super_admin')).toEqual(['/', '/tenants', '/admins', '/system', '/account']);
+    expect(paths('delegated_admin')).toEqual(['/', '/tenants', '/account']);
+    expect(paths('auditor')).toEqual(['/', '/tenants', '/account']);
+    expect(paths(undefined)).toEqual(['/', '/tenants', '/account']);
+  });
+
+  it('puts the global security log in the system navigation', () => {
+    expect(systemPath('security')).toBe('/system/security-events');
+    expect(systemLinks().find((l) => l.section === 'security')?.labelKey).toBe('adminSystem.nav.security');
+  });
+
+  it('recognises the auditor', () => {
+    expect(isAuditor('auditor')).toBe(true);
+    expect(isAuditor('delegated_admin')).toBe(false);
+    expect(isAuditor(undefined)).toBe(false);
+  });
+});
+
 describe('roleKey', () => {
   it('maps the known roles and a future one', () => {
     expect(roleKey('super_admin')).toBe('admin.role.super_admin');
     expect(roleKey('delegated_admin')).toBe('admin.role.delegated_admin');
-    expect(roleKey('auditor')).toBe('admin.role.unknown');
+    expect(roleKey('auditor')).toBe('admin.role.auditor');
+    expect(roleKey('observer')).toBe('admin.role.unknown');
+  });
+});
+
+describe('canSearchByAddress', () => {
+  it('denies the search by address to the auditor and to an unknown role (T-282)', () => {
+    expect(canSearchByAddress('super_admin')).toBe(true);
+    expect(canSearchByAddress('delegated_admin')).toBe(true);
+    expect(canSearchByAddress('auditor')).toBe(false);
+    expect(canSearchByAddress('observer')).toBe(false);
+    expect(canSearchByAddress(undefined)).toBe(false);
   });
 });

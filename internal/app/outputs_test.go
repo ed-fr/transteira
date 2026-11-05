@@ -10,7 +10,12 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/config"
+	"github.com/ed-fr/transteira/internal/events"
+	"github.com/ed-fr/transteira/internal/metrics"
+	"github.com/ed-fr/transteira/internal/securityevents"
+	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
+	"github.com/ed-fr/transteira/internal/webhook"
 )
 
 // TestRunSyslogExport checks the wiring of the syslog export: a security
@@ -99,4 +104,61 @@ func TestOutputsClose(t *testing.T) {
 	if err := (outputs{}).Close(context.Background()); err != nil {
 		t.Errorf("empty Close = %v", err)
 	}
+}
+
+// fakeBusDrops reports a fixed number of drops per subscriber.
+type fakeBusDrops map[string]uint64
+
+func (f fakeBusDrops) Dropped(subscriber string) uint64 { return f[subscriber] }
+
+// fakeDropped reports a fixed number of drops.
+type fakeDropped uint64
+
+func (f fakeDropped) Dropped() uint64 { return uint64(f) }
+
+// TestBusDrops checks that the supervision counts the drops of the
+// security events recorder itself (refused batch, pending overflow)
+// through Recorder.Dropped, without adding its bus queue drops twice,
+// and the bus drops of every other subscriber.
+func TestBusDrops(t *testing.T) {
+	t.Parallel()
+	bus := fakeBusDrops{securityevents.SubscriberName: 3, webhook.SubscriberName: 2}
+	d := busDrops{bus: bus, securityEvents: fakeDropped(7)} // 7 = 3 bus + 4 own
+	if got := d.Dropped(securityevents.SubscriberName); got != 7 {
+		t.Errorf("security events drops %d, want 7", got)
+	}
+	if got := d.Dropped(webhook.SubscriberName); got != 2 {
+		t.Errorf("webhook drops %d, want 2", got)
+	}
+
+	src := supervisionSources(busOutputs{}, metrics.Sources{Bus: bus})
+	if _, wrapped := src.Bus.(busDrops); wrapped {
+		t.Error("bus wrapped without a security events recorder")
+	}
+	rec, err := securityevents.New(securityevents.Options{Store: failingSecurityStore{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src = supervisionSources(busOutputs{securityEvents: rec}, metrics.Sources{Bus: bus})
+	// The recorder is not registered on a bus: its drops are its own.
+	rec.Add(context.Background(), events.LogRecord{
+		Stream: events.StreamSecurity, Action: "unknown_fqdn", Time: time.Now(),
+	})
+	_ = rec.Flush(context.Background()) // refused as malformed: dropped
+	if got := src.Bus.Dropped(securityevents.SubscriberName); got != 1 {
+		t.Errorf("security events drops %d, want the recorder drop 1", got)
+	}
+	if got := src.Bus.Dropped(webhook.SubscriberName); got != 2 {
+		t.Errorf("webhook drops %d, want 2", got)
+	}
+	if src = supervisionSources(busOutputs{securityEvents: rec}, metrics.Sources{}); src.Bus != nil {
+		t.Errorf("bus %v without a bus", src.Bus)
+	}
+}
+
+// failingSecurityStore refuses every batch as malformed.
+type failingSecurityStore struct{}
+
+func (failingSecurityStore) Save(context.Context, []store.SecurityEvent) ([]store.SecurityEvent, error) {
+	return nil, store.ErrInvalid
 }

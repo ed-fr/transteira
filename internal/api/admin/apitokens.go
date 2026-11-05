@@ -56,6 +56,8 @@ func tokenError(err error) error {
 		return problem.New(problem.CodeStateConflict)
 	case errors.Is(err, apitoken.ErrUnauthenticated):
 		return problem.New(problem.CodeUnauthenticated)
+	case errors.Is(err, adminauth.ErrReadOnlyRole):
+		return problem.New(problem.CodeReadOnlyRole)
 	case errors.Is(err, apitoken.ErrForbidden):
 		return problem.New(problem.CodeForbidden)
 	case errors.Is(err, apitoken.ErrNotFound):

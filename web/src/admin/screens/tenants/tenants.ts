@@ -33,9 +33,9 @@ export type Translate = (key: string, params?: Record<string, string | number>) 
 
 // ---- List ------------------------------------------------------------------------------------
 
-/** Path to go to instead of the list: a delegated admin with a single tenant. */
+/** Path to go to instead of the list: a delegated admin or auditor with a single tenant. */
 export function listRedirect(me: AdminMe | undefined): string | undefined {
-  if (me?.role !== 'delegated_admin' || me.tenants.length !== 1) {
+  if ((me?.role !== 'delegated_admin' && me?.role !== 'auditor') || me.tenants.length !== 1) {
     return undefined;
   }
   const only = me.tenants[0] as AdminMe['tenants'][number];

@@ -646,6 +646,10 @@ var tenantAllowlist = map[string]int{
 	`SELECT id, at, actor_kind, actor, ip, action, object_kind, object_id, details FROM audit_events WHERE tenant_id = ? ` +
 		`AND at >= ? AND at <= ? AND (? = '' OR action = ?) AND (? = '' OR actor = ?) AND (at, id) < (?, ?) ` +
 		`ORDER BY at DESC, id DESC LIMIT ?`: 0,
+	// Security events kept in the database (0026): read only in the tenant
+	// scope, written in the system scope.
+	`SELECT ` + securityEventColumns + ` FROM security_events WHERE tenant_id = ? AND at >= ? AND at <= ? ` +
+		`AND (? = '' OR event_type = ?) AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?`: 0,
 	// Operations of a tenant (0010): administrator view, GDPR erasure,
 	// usage counters and quota alerts.
 	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND transfer_id = ?`:                        0,
@@ -1004,6 +1008,13 @@ var systemAllowlist = map[string]string{
 	`SELECT ` + provisionedTenantColumns + ` FROM tenants t WHERE t.provisioned_by = ? AND t.status = 'active' ` +
 		`ORDER BY t.created_at DESC, t.id DESC`: reasonProvisioning,
 	`SELECT ` + provisionedTenantColumns + ` FROM tenants t WHERE t.provisioned_by = ? AND t.id = ? AND t.status = 'active'`: reasonProvisioning,
+	// Security events kept in the database (0026).
+	`INSERT INTO security_events (id, at, tenant_id, event_type, reason, ip, details, occurrences, last_seen_at) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: reasonSecurityEvents,
+	`UPDATE security_events SET occurrences = ?, last_seen_at = ? WHERE id = ?`: reasonSecurityEvents,
+	`SELECT tenant_id, ` + securityEventColumns + ` FROM security_events WHERE at >= ? AND at <= ? ` +
+		`AND (? = '' OR event_type = ?) AND (at, id) < (?, ?) ORDER BY at DESC, id DESC LIMIT ?`: reasonSecurityEvents,
+	`DELETE FROM security_events WHERE id IN (SELECT id FROM security_events WHERE at < ? ORDER BY at, id LIMIT ?)`: reasonSecurityEvents,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

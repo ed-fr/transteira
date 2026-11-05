@@ -15,7 +15,8 @@
     "empty": "Aucune entité pour le moment.",
     "emptyDelegated": "Aucune entité ne vous est rattachée. Contactez un super administrateur.",
     "create": "Créer une entité",
-    "configure": "Configurer {name}"
+    "configure": "Configurer {name}",
+    "view": "Ouvrir le résumé de {name}"
   },
   "status": {
     "setup": "En cours de mise en service",
@@ -32,7 +33,8 @@
     "legal": "Mentions légales",
     "recipientRules": "Domaines destinataires",
     "confidentiality": "Niveaux de confidentialité",
-    "abuse": "Détection des abus"
+    "abuse": "Détection des abus",
+    "summary": "Résumé"
   },
   "fields": {
     "name": {
@@ -134,7 +136,8 @@
       "busy": "Enregistrement…",
       "disabledDone": "Analyse antivirus désactivée.",
       "enabledDone": "Analyse antivirus activée."
-    }
+    },
+    "auditorNote": "Vous avez un accès en lecture seule à cette entité : les paramètres ci-dessous ne peuvent pas être modifiés."
   },
   "branding": {
     "title": "Habillage",

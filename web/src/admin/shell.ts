@@ -85,6 +85,7 @@ export const TENANT_OPS_SECTIONS = [
   'tokens',
   'webhooks',
   'audit',
+  'security',
   'stats',
   'privacy',
 ] as const;
@@ -95,8 +96,29 @@ export const TENANT_SECTIONS = [...TENANT_CONFIG_SECTIONS, ...TENANT_OPS_SECTION
 /** A section of a tenant. */
 export type TenantSection = (typeof TENANT_SECTIONS)[number];
 
-/** A group of the tenant sub-navigation. */
-export type TenantSectionGroup = 'configuration' | 'operations';
+/**
+ * Sections of a tenant an auditor (read-only role) may open, in navigation order: the summary
+ * (the general view, read-only), the transfers, the audit log, the security log and the
+ * statistics. No configuration section.
+ */
+export const AUDITOR_TENANT_SECTIONS = [
+  'general',
+  'transfers',
+  'audit',
+  'security',
+  'stats',
+] as const satisfies readonly TenantSection[];
+
+/** A group of the tenant sub-navigation ("consultation": the single group of an auditor). */
+export type TenantSectionGroup = 'configuration' | 'operations' | 'consultation';
+
+/** Role of an admin (AdminMe.role), undefined while the profile is not known. */
+export type NavRole = AdminMe['role'] | undefined;
+
+/** Reports whether a role is the read-only auditor. */
+export function isAuditor(role: NavRole): boolean {
+  return role === 'auditor';
+}
 
 /** Groups of the tenant sub-navigation, in order, with their sections and heading key. */
 export const TENANT_SECTION_GROUPS: readonly {
@@ -131,11 +153,17 @@ export interface TenantLinkGroup {
 const TENANT_SEGMENTS: Partial<Record<TenantSection, string>> = {
   recipientRules: 'recipient-rules',
   abuseReports: 'abuse-reports',
+  security: 'security-events',
 };
+
+/** Path segment of a section of a tenant. */
+export function tenantSegment(section: TenantSection): string {
+  return TENANT_SEGMENTS[section] ?? section;
+}
 
 /** Application path of a section of a tenant (the id is percent-encoded). */
 export function tenantPath(tenantId: string, section: TenantSection): string {
-  return `/tenants/${encodeURIComponent(tenantId)}/${TENANT_SEGMENTS[section] ?? section}`;
+  return `/tenants/${encodeURIComponent(tenantId)}/${tenantSegment(section)}`;
 }
 
 /** Group of a section. */
@@ -143,27 +171,67 @@ export function sectionGroup(section: TenantSection): TenantSectionGroup {
   return (TENANT_OPS_SECTIONS as readonly string[]).includes(section) ? 'operations' : 'configuration';
 }
 
-/** Links of the tenant sub-navigation, in order (every group). */
-export function tenantLinks(tenantId: string): TenantLink[] {
-  return TENANT_SECTIONS.map((section) => {
-    const group = sectionGroup(section);
-    return {
+/**
+ * Links of the tenant sub-navigation, in order. An auditor only gets the sections it may open
+ * (AUDITOR_TENANT_SECTIONS), all in the "consultation" group, and its general view is labelled
+ * "Summary" (it is read-only).
+ */
+export function tenantLinks(tenantId: string, role?: NavRole): TenantLink[] {
+  if (isAuditor(role)) {
+    return AUDITOR_TENANT_SECTIONS.map((section) => ({
       section,
-      group,
+      group: 'consultation' as const,
       path: tenantPath(tenantId, section),
-      labelKey: `${group === 'operations' ? 'adminOps' : 'adminTenants'}.nav.${section}`,
-    };
-  });
+      labelKey: section === 'general' ? 'adminTenants.nav.summary' : navLabelKey(section),
+    }));
+  }
+  return TENANT_SECTIONS.map((section) => ({
+    section,
+    group: sectionGroup(section),
+    path: tenantPath(tenantId, section),
+    labelKey: navLabelKey(section),
+  }));
+}
+
+function navLabelKey(section: TenantSection): string {
+  return `${sectionGroup(section) === 'operations' ? 'adminOps' : 'adminTenants'}.nav.${section}`;
 }
 
 /** Links of the tenant sub-navigation, by group (TenantNav renders one titled list each). */
-export function tenantLinkGroups(tenantId: string): TenantLinkGroup[] {
-  const links = tenantLinks(tenantId);
+export function tenantLinkGroups(tenantId: string, role?: NavRole): TenantLinkGroup[] {
+  const links = tenantLinks(tenantId, role);
+  if (isAuditor(role)) {
+    return [{ group: 'consultation', labelKey: 'adminOps.nav.groupConsultation', links }];
+  }
   return TENANT_SECTION_GROUPS.map(({ group, labelKey }) => ({
     group,
     labelKey,
     links: links.filter((link) => link.group === group),
   }));
+}
+
+/** A link of the main navigation. */
+export interface MainLink {
+  path: string;
+  /** Translation key of the link text (admin.nav.*). */
+  key: string;
+}
+
+/**
+ * Links of the main navigation: home, entities and My account for every role, plus the
+ * administrators and the system administration for a super admin.
+ */
+export function mainLinks(role: NavRole): MainLink[] {
+  const items: MainLink[] = [
+    { path: '/', key: 'admin.nav.home' },
+    { path: '/tenants', key: 'admin.nav.tenants' },
+  ];
+  if (role === 'super_admin') {
+    items.push({ path: '/admins', key: 'admin.nav.admins' });
+    items.push({ path: systemPath('overview'), key: 'admin.nav.system' });
+  }
+  items.push({ path: '/account', key: 'admin.nav.account' });
+  return items;
 }
 
 /** Sections of the system administration (super admin), in navigation order. */
@@ -173,6 +241,7 @@ export const SYSTEM_SECTIONS = [
   'settings',
   'webhooks',
   'audit',
+  'security',
   'masterKey',
   'provisioning',
 ] as const;
@@ -197,6 +266,7 @@ const SYSTEM_SEGMENTS: Record<SystemSection, string> = {
   settings: '/settings',
   webhooks: '/webhooks',
   audit: '/audit',
+  security: '/security-events',
   masterKey: '/master-key',
   provisioning: '/provisioning-tokens',
 };
@@ -240,5 +310,16 @@ export function redirectTarget(decision: AccessDecision, current: string): strin
  * The single definition, used by the layout, the account page and the admin accounts screens.
  */
 export function roleKey(role: string | undefined): string {
-  return role === 'super_admin' || role === 'delegated_admin' ? `admin.role.${role}` : 'admin.role.unknown';
+  return role === 'super_admin' || role === 'delegated_admin' || role === 'auditor'
+    ? `admin.role.${role}`
+    : 'admin.role.unknown';
+}
+
+/**
+ * Whether the role may search the tenant lists by e-mail address (the email filter of the transfer
+ * list, the actor filter of the audit log). Since 2.0 the auditor may not (T-282, 403
+ * read-only-role): its screens hide these inputs. A missing or unknown role may not either.
+ */
+export function canSearchByAddress(role: string | undefined): boolean {
+  return role === 'super_admin' || role === 'delegated_admin';
 }

@@ -186,6 +186,7 @@ func TestWebhookErrors(t *testing.T) {
 		{webhookadmin.ErrConflict, problem.CodeStateConflict, problem.FieldError{}},
 		{webhookadmin.ErrUnauthenticated, problem.CodeUnauthenticated, problem.FieldError{}},
 		{webhookadmin.ErrForbidden, problem.CodeForbidden, problem.FieldError{}},
+		{adminauth.ErrReadOnlyRole, problem.CodeReadOnlyRole, problem.FieldError{}},
 		{webhookadmin.ErrNotFound, problem.CodeNotFound, problem.FieldError{}},
 	}
 	for _, tt := range tests {

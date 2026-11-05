@@ -238,17 +238,19 @@ func newService(r repo, opts Options) *Service {
 	return s
 }
 
-// TenantStats returns the statistics of tenant tid over period, for p.
-// It returns adminauth.ErrUnauthenticated for a session that is not
-// authenticated, ErrNotFound for a tenant p may not read, missing or being
-// deleted, and ErrInvalidPeriod for an unknown period, checked after the
-// access so that a tenant p may not read answers ErrNotFound whatever the
-// period. An empty period is DefaultPeriod.
+// TenantStats returns the statistics of tenant tid over period, for p: a
+// super admin, or a delegated admin or an auditor attached to the tenant
+// (adminauth.RequireTenantAuditRead). It returns
+// adminauth.ErrUnauthenticated for a session that is not authenticated,
+// ErrNotFound for a tenant p may not read, missing or being deleted, and
+// ErrInvalidPeriod for an unknown period, checked after the access so that
+// a tenant p may not read answers ErrNotFound whatever the period. An
+// empty period is DefaultPeriod.
 func (s *Service) TenantStats(ctx context.Context, p adminauth.Principal, tid tenant.ID, period Period) (TenantStats, error) {
 	if err := adminauth.RequireAuthenticated(p); err != nil {
 		return TenantStats{}, err
 	}
-	if err := adminauth.RequireTenantAccess(p.Admin, tid); err != nil {
+	if err := adminauth.RequireTenantAuditRead(p.Admin, tid); err != nil {
 		return TenantStats{}, err
 	}
 	period, err := ParsePeriod(string(period))

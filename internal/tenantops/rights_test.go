@@ -3,6 +3,7 @@ package tenantops
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -106,6 +107,80 @@ func TestRightsMatrix(t *testing.T) {
 			wantErr(t, name+" on a missing tenant", op(ev.super, missingTen), ErrNotFound)
 			wantErr(t, name+" on a malformed tenant", op(ev.super, "bad"), ErrNotFound)
 		}
+	})
+}
+
+// auditorReads are the operations of the service open to the auditor
+// role (P55); every other one is refused with adminauth.ErrReadOnlyRole.
+var auditorReads = map[string]bool{"ListTransfers": true, "GetTransfer": true, "ListAuditEvents": true}
+
+// TestAuditorRights runs every tenant operation as an auditor of A (T-281):
+// the audit reads succeed on A, every other operation is
+// adminauth.ErrReadOnlyRole there, and everything is ErrNotFound on B. An
+// auditor of B never reaches A.
+func TestAuditorRights(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		auditorA := principal(store.RoleAuditor, "audrey.audit", ev.a.ID)
+		auditorB := principal(store.RoleAuditor, "boris.audit", ev.b.ID)
+		ops := operations(ev)
+		for name := range auditorReads {
+			if ops[name] == nil {
+				t.Errorf("auditorReads has a stale entry %s", name)
+			}
+		}
+		for name, op := range ops {
+			wantErr(t, name+" by B's auditor on A", op(auditorB, ev.a.ID), ErrNotFound)
+			if auditorReads[name] {
+				mustNoErr(t, name+" by A's auditor", op(auditorA, ev.a.ID))
+				continue
+			}
+			wantErr(t, name+" by A's auditor", op(auditorA, ev.a.ID), adminauth.ErrReadOnlyRole)
+		}
+		// The transfer detail holds metadata only (no message, no link):
+		// the auditor reads exactly what a delegated admin reads.
+		ctx := context.Background()
+		trf := ev.seed(ev.a, store.TransferAvailable, carol)
+		got, err := ev.svc.GetTransfer(ctx, auditorA, ev.a.ID, trf.id)
+		mustNoErr(t, "GetTransfer by A's auditor", err)
+		want, err := ev.svc.GetTransfer(ctx, ev.adminA, ev.a.ID, trf.id)
+		mustNoErr(t, "GetTransfer by A's admin", err)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("auditor view %+v, want the admin view %+v", got, want)
+		}
+		_, err = ev.svc.ListGlobalAuditEvents(ctx, auditorA, GlobalAuditFilter{})
+		wantErr(t, "ListGlobalAuditEvents by an auditor", err, ErrForbidden)
+	})
+}
+
+// TestAuditorAddressFilters refuses the search by address to an auditor
+// (T-282), on the transfer list and on the audit log, while a delegated
+// admin keeps it and an auditor keeps the other filters. An auditor of B
+// still gets ErrNotFound on A, before the filter is looked at.
+func TestAuditorAddressFilters(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		auditorA := principal(store.RoleAuditor, "audrey.audit", ev.a.ID)
+		auditorB := principal(store.RoleAuditor, "boris.audit", ev.b.ID)
+		_, err := ev.svc.ListTransfers(ctx, auditorA, ev.a.ID, TransferFilter{Email: carol})
+		wantErr(t, "ListTransfers by address by A's auditor", err, adminauth.ErrReadOnlyRole)
+		_, err = ev.svc.ListTransfers(ctx, auditorB, ev.a.ID, TransferFilter{Email: carol})
+		wantErr(t, "ListTransfers by address by B's auditor on A", err, ErrNotFound)
+		_, err = ev.svc.ListTransfers(ctx, ev.adminA, ev.a.ID, TransferFilter{Email: carol})
+		mustNoErr(t, "ListTransfers by address by A's admin", err)
+		_, err = ev.svc.ListTransfers(ctx, auditorA, ev.a.ID, TransferFilter{Status: string(store.TransferAvailable)})
+		mustNoErr(t, "ListTransfers by status by A's auditor", err)
+		for _, actor := range []string{carol, "Carol@Example.NET", "@"} {
+			_, err = ev.svc.ListAuditEvents(ctx, auditorA, ev.a.ID, AuditFilter{Actor: actor})
+			wantErr(t, "ListAuditEvents by address "+actor+" by A's auditor", err, adminauth.ErrReadOnlyRole)
+		}
+		_, err = ev.svc.ListAuditEvents(ctx, auditorB, ev.a.ID, AuditFilter{Actor: carol})
+		wantErr(t, "ListAuditEvents by address by B's auditor on A", err, ErrNotFound)
+		_, err = ev.svc.ListAuditEvents(ctx, ev.adminA, ev.a.ID, AuditFilter{Actor: carol})
+		mustNoErr(t, "ListAuditEvents by address by A's admin", err)
+		_, err = ev.svc.ListAuditEvents(ctx, auditorA, ev.a.ID, AuditFilter{Actor: "alice.admin"})
+		mustNoErr(t, "ListAuditEvents by username by A's auditor", err)
 	})
 }
 

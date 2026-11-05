@@ -15,7 +15,8 @@
     "empty": "No entity yet.",
     "emptyDelegated": "No entity is attached to your account. Contact a super administrator.",
     "create": "Create an entity",
-    "configure": "Configure {name}"
+    "configure": "Configure {name}",
+    "view": "Open the summary of {name}"
   },
   "status": {
     "setup": "Being set up",
@@ -32,7 +33,8 @@
     "legal": "Legal information",
     "recipientRules": "Recipient domains",
     "confidentiality": "Confidentiality levels",
-    "abuse": "Abuse detection"
+    "abuse": "Abuse detection",
+    "summary": "Summary"
   },
   "fields": {
     "name": {
@@ -134,7 +136,8 @@
       "busy": "Saving...",
       "disabledDone": "Antivirus analysis disabled.",
       "enabledDone": "Antivirus analysis enabled."
-    }
+    },
+    "auditorNote": "You have read-only access to this entity: the settings below cannot be changed."
   },
   "branding": {
     "title": "Branding",

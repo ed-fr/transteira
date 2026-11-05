@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  auditorRedirect,
   loginPath,
   nextFromSearch,
   resolveAccess,
@@ -249,6 +250,94 @@ describe('resolveAccess', () => {
     });
     expect(resolveAccess(delegated, req('auth', '/tenants/t2/privacy', { id: 't2' }))).toEqual({
       kind: 'notFound',
+    });
+  });
+});
+
+describe('auditor', () => {
+  const auditor: AuthState = { kind: 'authenticated', me: admin('auditor', ['t1']) };
+
+  it.each([
+    '/',
+    '/account',
+    '/tenants',
+    '/tenants/',
+    '/tenants/t1/general',
+    '/tenants/t1/transfers',
+    '/tenants/t1/transfers/trf_1',
+    '/tenants/t1/audit',
+    '/tenants/t1/security-events',
+    '/tenants/t1/stats',
+  ])('may open %s', (path) => {
+    expect(auditorRedirect(path)).toBeUndefined();
+  });
+
+  it.each([
+    ['/tenants/t1/setup', '/tenants/t1/general'],
+    ['/tenants/t1/branding', '/tenants/t1/general'],
+    ['/tenants/t1/smtp', '/tenants/t1/general'],
+    ['/tenants/t1/templates/welcome/en', '/tenants/t1/general'],
+    ['/tenants/t1/tokens/new', '/tenants/t1/general'],
+    ['/tenants/t1/webhooks', '/tenants/t1/general'],
+    ['/tenants/t1/privacy', '/tenants/t1/general'],
+    ['/tenants/t1/stats/extra', '/tenants/t1/general'],
+    ['/tenants/t1/audit/x', '/tenants/t1/general'],
+    ['/tenants/t1', '/tenants/t1/general'],
+    ['/tenants/new', '/tenants'],
+    ['/admins', '/'],
+    ['/admins/adm_1', '/'],
+    ['/system', '/'],
+    ['/system/security-events', '/'],
+    ['/system/settings', '/'],
+  ])('sends %s to %s', (path, to) => {
+    expect(auditorRedirect(path)).toBe(to);
+  });
+
+  it('renders the allowed routes and redirects the others whatever their access level', () => {
+    expect(resolveAccess(auditor, req('auth', '/tenants/t1/security-events', { id: 't1' }))).toEqual({
+      kind: 'render',
+    });
+    expect(resolveAccess(auditor, req('auth', '/tenants/t1/smtp', { id: 't1' }))).toEqual({
+      kind: 'redirect',
+      to: '/tenants/t1/general',
+    });
+    expect(resolveAccess(auditor, req('super', '/admins'))).toEqual({ kind: 'redirect', to: '/' });
+    expect(resolveAccess(auditor, req('super', '/system/security-events'))).toEqual({
+      kind: 'redirect',
+      to: '/',
+    });
+    expect(resolveAccess(auditor, req('super', '/tenants/new'))).toEqual({
+      kind: 'redirect',
+      to: '/tenants',
+    });
+  });
+
+  it('keeps a tenant outside its scope not found, even on a forbidden section', () => {
+    expect(resolveAccess(auditor, req('auth', '/tenants/t2/transfers', { id: 't2' }))).toEqual({
+      kind: 'notFound',
+    });
+    expect(resolveAccess(auditor, req('auth', '/tenants/t2/smtp', { id: 't2' }))).toEqual({
+      kind: 'notFound',
+    });
+  });
+
+  it('never loops: the target of a redirect is a page it may open', () => {
+    for (const path of ['/tenants/t1/smtp', '/tenants/new', '/system', '/admins/x']) {
+      const to = auditorRedirect(path) as string;
+      expect(auditorRedirect(to)).toBeUndefined();
+    }
+  });
+
+  it('does not change the other roles or the anonymous and public routes', () => {
+    expect(resolveAccess(delegated, req('auth', '/tenants/t1/smtp', { id: 't1' }))).toEqual({
+      kind: 'render',
+    });
+    expect(resolveAccess(superAdmin, req('super', '/system/security-events'))).toEqual({ kind: 'render' });
+    expect(resolveAccess(auditor, req('any', '/help'))).toEqual({ kind: 'render' });
+    expect(resolveAccess(auditor, req('anonymous', '/login'))).toEqual({ kind: 'redirect', to: '/' });
+    expect(resolveAccess(anonymous, req('auth', '/tenants/t1/security-events', { id: 't1' }))).toEqual({
+      kind: 'redirect',
+      to: '/login?next=%2Ftenants%2Ft1%2Fsecurity-events',
     });
   });
 });

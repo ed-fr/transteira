@@ -1,7 +1,8 @@
 <script lang="ts">
   // Page frame of the administration: the shared PageLayout (wide card, default theme, no
   // tenant colours) with, once the admin is authenticated, the main navigation (Home, Entities,
-  // Administrators and System for a super admin, My account; aria-current on the current
+  // Administrators and System for a super admin, My account; Home, Entities and My account only
+  // for an auditor; aria-current on the current
   // section), the name and role of the admin and the sign-out button. The navigation is hidden
   // on the setup, sign-in and activation screens and during the intermediate sign-in steps.
   // While the admin is authenticated, the maintenance state is kept by adminMaintenance (read at
@@ -20,7 +21,7 @@
   import { adminMaintenance } from '../maintenance.svelte';
   import { maintenanceBanner, maintenanceBannerText } from '../maintenanceBanner';
   import type { Navigation } from '../screens/types';
-  import { navCurrent, roleKey, systemPath } from '../shell';
+  import { isAuditor, mainLinks, navCurrent, roleKey, systemPath } from '../shell';
   import { updateNotice } from '../version';
   import { adminVersion } from '../version.svelte';
 
@@ -44,24 +45,15 @@
   let signingOut = $state(false);
   let logoutError = $state<string | undefined>(undefined);
 
-  const links = $derived.by(() => {
-    const items = [
-      { path: '/', key: 'admin.nav.home' },
-      { path: '/tenants', key: 'admin.nav.tenants' },
-    ];
-    if (me?.role === 'super_admin') {
-      items.push({ path: '/admins', key: 'admin.nav.admins' });
-      items.push({ path: systemPath('overview'), key: 'admin.nav.system' });
-    }
-    items.push({ path: '/account', key: 'admin.nav.account' });
-    return items;
-  });
+  const links = $derived(mainLinks(me?.role));
 
   // Maintenance state: kept while an admin is authenticated (not during the sign-in steps),
   // forgotten on sign-out and when the layout is destroyed.
+  // An auditor cannot read it (read-only role: 403), so it is not asked for it.
   const authenticated = $derived(adminSession.state.kind === 'authenticated');
+  const readsMaintenance = $derived(authenticated && !isAuditor(me?.role));
   $effect(() => {
-    if (!authenticated) {
+    if (!readsMaintenance) {
       return;
     }
     adminMaintenance.start();
@@ -80,7 +72,7 @@
 
   // A navigation of the admin is admin activity: the state is read again on a new path.
   $effect(() => {
-    if (authenticated) {
+    if (readsMaintenance) {
       adminMaintenance.routeChanged(path);
     }
   });

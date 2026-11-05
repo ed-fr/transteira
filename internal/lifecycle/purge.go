@@ -55,7 +55,7 @@ var rowPurges = []rowPurge{
 // systemPurge is one global purge of TaskPurgeRows, run in the system
 // scope after the purges of the tenants: the rows it deletes belong to no
 // tenant (administrator sessions, activation links, login failures) or to
-// any tenant (the audit log, the usage counters).
+// any tenant (the audit log, the security events, the usage counters).
 type systemPurge struct {
 	// name names the purge in the logs.
 	name string
@@ -77,6 +77,11 @@ func (s *Sweeper) systemPurges() []systemPurge {
 		}},
 		{"audit_events", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
 			return db.AuditEvents().Purge(ctx, now.AddDate(0, -s.auditRetentionMonths, 0))
+		}},
+		// The copy of the security log has the retention of the audit log
+		// (V2, threat model T-284), counted from the first occurrence.
+		{"security_events", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
+			return db.SecurityEvents().Purge(ctx, now.AddDate(0, -s.auditRetentionMonths, 0))
 		}},
 		{"usage_counters", func(ctx context.Context, db *store.DB, now time.Time) (int64, error) {
 			return db.TenantUsage().Purge(ctx, store.DayOf(now).AddDate(0, -UsageRetentionMonths, 0))

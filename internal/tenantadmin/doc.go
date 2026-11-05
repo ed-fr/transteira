@@ -12,7 +12,10 @@
 // ([adminauth.RequireAuthenticated]), then [adminauth.RequireSuperAdmin]
 // for the instance-wide operations (create and delete a tenant) or
 // [adminauth.RequireTenantAccess] / [adminauth.RequireTenantWrite] for the
-// operations of one tenant. A tenant the caller is not attached to, and a
+// operations of one tenant. The auditor role reads the tenant summary only
+// ([Service.GetTenant], through [adminauth.RequireTenantAuditRead]); every
+// other read or change answers it adminauth.ErrReadOnlyRole (403
+// read-only-role, T-281). A tenant the caller is not attached to, and a
 // tenant being deleted, are answered exactly like a missing tenant
 // ([ErrNotFound]). A delegated admin may change the default language and
 // lower the transfer limit under the ceiling set by the super admin; any

@@ -10,6 +10,7 @@ import {
   INVITATION_FILTERS,
   TRANSFER_FILTERS,
   dayToInstant,
+  dropFilter,
   filtersToApiParams,
   filtersToForm,
   filtersToQuery,
@@ -319,5 +320,26 @@ describe('form helpers', () => {
     expect(isEmpty({})).toBe(true);
     expect(isEmpty({ status: undefined, email: '' })).toBe(true);
     expect(isEmpty({ status: 'used' })).toBe(false);
+  });
+});
+
+describe('dropFilter', () => {
+  it('drops the address filter of a URL for a role that may not search by address', () => {
+    const transfers = parseFilters(TRANSFER_FILTERS, '?status=available&email=carol%40example.net');
+    const kept = dropFilter(transfers, 'email', false);
+    expect(kept).toBe(transfers);
+    const dropped = dropFilter(transfers, 'email', true);
+    expect(dropped).toEqual({ status: 'available' });
+    expect(transfers.email).toBe('carol@example.net');
+    expect(filtersToApiParams(TRANSFER_FILTERS, dropped)).not.toHaveProperty('email');
+
+    const audit = parseFilters(AUDIT_FILTERS, '?actor=carol%40example.net&from=2026-10-01');
+    expect(dropFilter(audit, 'actor', true)).not.toHaveProperty('actor');
+    expect(dropFilter(audit, 'actor', true)).toHaveProperty('from');
+  });
+
+  it('returns the filters themselves when the filter is absent', () => {
+    const none = parseFilters(TRANSFER_FILTERS, '?status=expired');
+    expect(dropFilter(none, 'email', true)).toBe(none);
   });
 });

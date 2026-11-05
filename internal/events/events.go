@@ -205,6 +205,11 @@ type LogRecord struct {
 	// Tenant is the tenant of the line: its ID for an audit event, its
 	// normalized FQDN as written in the security log; "" when none.
 	Tenant string
+	// TenantID is the tenant identifier of a security event ("ten_" +
+	// ULID), "" when the event is bound to no tenant (security only; it is
+	// not part of the written line). The copy of the security log in the
+	// database files the event under it (internal/securityevents).
+	TenantID string
 	// Action is the audit action ("admin.login"...) or the security event
 	// type ("unknown_fqdn"...).
 	Action string

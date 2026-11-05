@@ -15,6 +15,8 @@
   // - A link opens the printable user documentation of the entity (/help/print on its FQDN, in a
   //   new tab), as the users see it with the rules in force.
   // The admin profile is reloaded after a rename and after a deletion (it lists the tenants).
+  // - Auditor (read-only role): the same facts as text (summary), with no form, no webhook
+  //   setting and no deletion; the antivirus state is shown but cannot be changed.
   // The tenant sub-navigation (components/TenantNav.svelte) is rendered by App.svelte above
   // every /tenants/:id/... screen: it is not rendered again here.
   import { onMount, tick } from 'svelte';
@@ -82,6 +84,7 @@
   const tenantId = $derived(params['id'] ?? '');
   const role = $derived(adminSession.me?.role);
   const isSuper = $derived(role === 'super_admin');
+  const readOnly = $derived(role === 'auditor');
   const fields = $derived(editableFields(role));
 
   let tenant = $state.raw<Tenant | undefined>(undefined);
@@ -335,7 +338,9 @@
     {/if}
 
     {#if !isSuper}
-      <Alert severity="info" live={false}>{t('adminTenants.general.delegatedNote')}</Alert>
+      <Alert severity="info" live={false}>
+        {readOnly ? t('adminTenants.general.auditorNote') : t('adminTenants.general.delegatedNote')}
+      </Alert>
       <dl class="tt-dl">
         <dt>{t('adminTenants.fields.name.label')}</dt>
         <dd>{tenant.name}</dd>
@@ -345,110 +350,118 @@
         <dd>{formatBytes(tenant.storageQuotaBytes)}</dd>
         <dt>{t('adminTenants.fields.maxTransferCeiling.label')}</dt>
         <dd>{formatBytes(tenant.maxTransferCeiling)}</dd>
+        {#if readOnly}
+          <dt>{t('adminTenants.fields.defaultLanguage.label')}</dt>
+          <dd>{languageLabel(tenant.defaultLanguage, locale.current)}</dd>
+          <dt>{t('adminTenants.fields.maxTransfer.label')}</dt>
+          <dd>{formatBytes(tenant.maxTransferBytes)}</dd>
+        {/if}
       </dl>
     {/if}
 
-    <FormSection
-      title={t('adminTenants.general.legend')}
-      as="fieldset"
-      {dirty}
-      addGuard={(guard) => nav.addGuard(guard)}
-      {validate}
-      onsubmit={save}
-      bind:errors
-      disabled={deleting}
-      successMessage={t('adminTenants.general.saved')}
-    >
-      {#if isSuper}
-        <TextField
-          id={ids.name}
-          label={t('adminTenants.fields.name.label')}
-          hint={t('adminTenants.fields.name.hint')}
-          required
-          maxlength={200}
-          autocomplete="off"
-          disabled={deleting}
-          error={errorFor(errors, ids.name)}
-          bind:value={form.name}
-        />
-        <TextField
-          id={ids.fqdn}
-          label={t('adminTenants.fields.fqdn.label')}
-          hint={t('adminTenants.fields.fqdn.hint')}
-          required
-          maxlength={253}
-          autocomplete="off"
-          spellcheck={false}
-          autocapitalize="none"
-          disabled={deleting}
-          error={errorFor(errors, ids.fqdn)}
-          bind:value={form.fqdn}
-        />
-      {/if}
-      <RadioGroup
-        name={ids.defaultLanguage}
-        legend={t('adminTenants.fields.defaultLanguage.label')}
-        hint={t('adminTenants.fields.defaultLanguage.hint')}
-        options={languageOptions}
-        inline
-        required
+    {#if !readOnly}
+      <FormSection
+        title={t('adminTenants.general.legend')}
+        as="fieldset"
+        {dirty}
+        addGuard={(guard) => nav.addGuard(guard)}
+        {validate}
+        onsubmit={save}
+        bind:errors
         disabled={deleting}
-        error={errorFor(errors, ids.defaultLanguage)}
-        bind:value={form.defaultLanguage}
-      />
-      {#if isSuper}
-        <ByteSizeField
-          id={ids.storageQuotaBytes}
-          label={t('adminTenants.fields.storageQuota.label')}
-          hint={t('adminTenants.fields.storageQuota.hint')}
-          defaultUnit="TiB"
+        successMessage={t('adminTenants.general.saved')}
+      >
+        {#if isSuper}
+          <TextField
+            id={ids.name}
+            label={t('adminTenants.fields.name.label')}
+            hint={t('adminTenants.fields.name.hint')}
+            required
+            maxlength={200}
+            autocomplete="off"
+            disabled={deleting}
+            error={errorFor(errors, ids.name)}
+            bind:value={form.name}
+          />
+          <TextField
+            id={ids.fqdn}
+            label={t('adminTenants.fields.fqdn.label')}
+            hint={t('adminTenants.fields.fqdn.hint')}
+            required
+            maxlength={253}
+            autocomplete="off"
+            spellcheck={false}
+            autocapitalize="none"
+            disabled={deleting}
+            error={errorFor(errors, ids.fqdn)}
+            bind:value={form.fqdn}
+          />
+        {/if}
+        <RadioGroup
+          name={ids.defaultLanguage}
+          legend={t('adminTenants.fields.defaultLanguage.label')}
+          hint={t('adminTenants.fields.defaultLanguage.hint')}
+          options={languageOptions}
+          inline
           required
-          error={sizeError('storageQuotaBytes', form.storageQuotaBytes)}
-          bind:element={inputs.storageQuotaBytes}
-          bind:bytes={form.storageQuotaBytes}
+          disabled={deleting}
+          error={errorFor(errors, ids.defaultLanguage)}
+          bind:value={form.defaultLanguage}
         />
+        {#if isSuper}
+          <ByteSizeField
+            id={ids.storageQuotaBytes}
+            label={t('adminTenants.fields.storageQuota.label')}
+            hint={t('adminTenants.fields.storageQuota.hint')}
+            defaultUnit="TiB"
+            required
+            error={sizeError('storageQuotaBytes', form.storageQuotaBytes)}
+            bind:element={inputs.storageQuotaBytes}
+            bind:bytes={form.storageQuotaBytes}
+          />
+          <ByteSizeField
+            id={ids.maxTransferCeiling}
+            label={t('adminTenants.fields.maxTransferCeiling.label')}
+            hint={t('adminTenants.fields.maxTransferCeiling.hint')}
+            max={MAX_TRANSFER_BYTES}
+            required
+            error={sizeError('maxTransferCeiling', form.maxTransferCeiling)}
+            bind:element={inputs.maxTransferCeiling}
+            bind:bytes={form.maxTransferCeiling}
+          />
+        {/if}
         <ByteSizeField
-          id={ids.maxTransferCeiling}
-          label={t('adminTenants.fields.maxTransferCeiling.label')}
-          hint={t('adminTenants.fields.maxTransferCeiling.hint')}
-          max={MAX_TRANSFER_BYTES}
+          id={ids.maxTransferBytes}
+          label={t('adminTenants.fields.maxTransfer.label')}
+          hint={followsCeiling
+            ? t('adminTenants.fields.maxTransfer.followsCeiling', { ceiling: formatBytes(ceiling) })
+            : t('adminTenants.fields.maxTransfer.hintCeiling', { ceiling: formatBytes(ceiling) })}
           required
-          error={sizeError('maxTransferCeiling', form.maxTransferCeiling)}
-          bind:element={inputs.maxTransferCeiling}
-          bind:bytes={form.maxTransferCeiling}
+          error={sizeError('maxTransferBytes', form.maxTransferBytes)}
+          bind:element={inputs.maxTransferBytes}
+          bind:bytes={form.maxTransferBytes}
         />
-      {/if}
-      <ByteSizeField
-        id={ids.maxTransferBytes}
-        label={t('adminTenants.fields.maxTransfer.label')}
-        hint={followsCeiling
-          ? t('adminTenants.fields.maxTransfer.followsCeiling', { ceiling: formatBytes(ceiling) })
-          : t('adminTenants.fields.maxTransfer.hintCeiling', { ceiling: formatBytes(ceiling) })}
-        required
-        error={sizeError('maxTransferBytes', form.maxTransferBytes)}
-        bind:element={inputs.maxTransferBytes}
-        bind:bytes={form.maxTransferBytes}
-      />
-    </FormSection>
+      </FormSection>
 
-    <FormSection
-      title={t('adminTenants.general.webhooks.title')}
-      intro={t('adminTenants.general.webhooks.intro')}
-      dirty={webhookDirty}
-      addGuard={(guard) => nav.addGuard(guard)}
-      onsubmit={saveWebhookSetting}
-      disabled={deleting}
-      saveLabel={t('adminTenants.general.webhooks.save')}
-      successMessage={t('adminTenants.general.webhooks.saved')}
-    >
-      <Checkbox
-        id={ids.webhookIncludeAddresses}
-        label={t('adminTenants.general.webhooks.includeAddresses.label')}
-        hint={t('adminTenants.general.webhooks.includeAddresses.hint')}
+      <FormSection
+        title={t('adminTenants.general.webhooks.title')}
+        intro={t('adminTenants.general.webhooks.intro')}
+        dirty={webhookDirty}
+        addGuard={(guard) => nav.addGuard(guard)}
+        onsubmit={saveWebhookSetting}
         disabled={deleting}
-        bind:checked={includeAddresses}
-      />
-    </FormSection>
+        saveLabel={t('adminTenants.general.webhooks.save')}
+        successMessage={t('adminTenants.general.webhooks.saved')}
+      >
+        <Checkbox
+          id={ids.webhookIncludeAddresses}
+          label={t('adminTenants.general.webhooks.includeAddresses.label')}
+          hint={t('adminTenants.general.webhooks.includeAddresses.hint')}
+          disabled={deleting}
+          bind:checked={includeAddresses}
+        />
+      </FormSection>
+    {/if}
 
     <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-section">
       <h2 id="{uid}-antivirus">{t('adminTenants.general.antivirus.title')}</h2>

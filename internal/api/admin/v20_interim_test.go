@@ -31,12 +31,12 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	tids := []string{"ten_a"}
 	none, mail := gen.InvitationDeliveryNone, gen.InvitationDeliveryMail
 
-	// Admin creation: the auditor role and the delivery none.
+	// Admin creation: the delivery none (single sign-on, not implemented
+	// yet).
 	for name, tc := range map[string]struct {
 		body  gen.AdminCreate
 		field string
 	}{
-		"auditor role": {gen.AdminCreate{Username: "audit.a", Email: "audit@entity-a.example.com", Role: gen.Auditor, TenantIds: &tids}, "/role"},
 		"delivery none": {gen.AdminCreate{
 			Username: "sso.a", Email: "sso@entity-a.example.com", Role: gen.DelegatedAdmin, TenantIds: &tids,
 			Invitation: &gen.AdminInvitation{Delivery: &none},
@@ -66,11 +66,24 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	svc = &fakeService{}
 	_, err := newServer(svc, &fakeTenants{}).InviteAdmin(super, gen.InviteAdminRequestObject{AdminId: "adm_x", Body: &gen.AdminInvitation{Delivery: &none}})
 	wantNotSupported(t, "invite none", err, "/delivery")
-	role := gen.Auditor
-	_, err = newServer(svc, &fakeTenants{}).UpdateAdmin(super, gen.UpdateAdminRequestObject{AdminId: "adm_x", Body: &gen.AdminUpdate{Role: &role}})
-	wantNotSupported(t, "update auditor", err, "/role")
 	if len(svc.calls) != 0 {
 		t.Errorf("the service was called: %v", svc.calls)
+	}
+	// The auditor role is implemented (since step 2 of V2): creation and
+	// update reach the service with the role.
+	svc = &fakeService{}
+	if _, err := newServer(svc, &fakeTenants{}).CreateAdmin(super, gen.CreateAdminRequestObject{Body: &gen.AdminCreate{
+		Username: "audit.a", Email: "audit@entity-a.example.com", Role: gen.Auditor, TenantIds: &tids,
+	}}); err != nil {
+		t.Errorf("create auditor: %v", err)
+	} else if req := svc.args["Create"][1].(adminauth.AdminCreate); req.Role != store.RoleAuditor {
+		t.Errorf("create auditor: service got role %q", req.Role)
+	}
+	role := gen.Auditor
+	if _, err := newServer(svc, &fakeTenants{}).UpdateAdmin(super, gen.UpdateAdminRequestObject{AdminId: "adm_x", Body: &gen.AdminUpdate{Role: &role}}); err != nil {
+		t.Errorf("update auditor: %v", err)
+	} else if u := svc.args["Update"][2].(adminauth.AdminUpdate); u.Role == nil || *u.Role != store.RoleAuditor {
+		t.Errorf("update auditor: service got %+v", u)
 	}
 
 	// Tenant creation with a first delegated admin without activation link:

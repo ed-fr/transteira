@@ -16,7 +16,8 @@
   "links": {
     "transfers": "Transferts de {name}",
     "audit": "Journal d’audit de {name}",
-    "stats": "Statistiques de {name}"
+    "stats": "Statistiques de {name}",
+    "security": "Journal de sécurité de {name}"
   },
   "table": {
     "caption": "Entités et occupation du stockage",

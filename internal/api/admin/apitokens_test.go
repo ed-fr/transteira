@@ -131,6 +131,7 @@ func TestTokenErrors(t *testing.T) {
 		{apitoken.ErrStateConflict, problem.CodeStateConflict, ""},
 		{apitoken.ErrUnauthenticated, problem.CodeUnauthenticated, ""},
 		{apitoken.ErrForbidden, problem.CodeForbidden, ""},
+		{adminauth.ErrReadOnlyRole, problem.CodeReadOnlyRole, ""},
 		{apitoken.ErrNotFound, problem.CodeNotFound, ""},
 	}
 	for _, tt := range tests {

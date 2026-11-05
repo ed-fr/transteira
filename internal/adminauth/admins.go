@@ -29,8 +29,8 @@ type AdminCreate struct {
 	// Username and Email of the new administrator.
 	Username string
 	Email    string
-	// Role must be store.RoleDelegatedAdmin: a super admin is created by
-	// promoting an activated delegated admin with TOTP enabled
+	// Role must be store.RoleDelegatedAdmin or store.RoleAuditor: a super
+	// admin is created by promoting an activated account with TOTP enabled
 	// ([AdminUpdate].Role), so that no super admin account ever exists
 	// without both factors.
 	Role store.AdminRole
@@ -49,11 +49,12 @@ type AdminCreate struct {
 type AdminUpdate struct {
 	// Email is the new mail address.
 	Email *string
-	// Role is the new role. Promoting to super admin needs an activated
-	// account with TOTP enabled and clears the tenants; demoting needs
-	// TenantIDs.
+	// Role is the new role: store.RoleSuperAdmin, store.RoleDelegatedAdmin
+	// or store.RoleAuditor. Promoting to super admin needs an activated
+	// account with TOTP enabled and clears the tenants; demoting a super
+	// admin needs TenantIDs.
 	Role *store.AdminRole
-	// TenantIDs replaces the tenants of a delegated admin.
+	// TenantIDs replaces the tenants of a delegated admin or an auditor.
 	TenantIDs *[]tenant.ID
 	// RequireTOTP is the new TOTP requirement (ignored for a super admin).
 	RequireTOTP *bool
@@ -119,18 +120,19 @@ func (s *Service) Get(ctx context.Context, p Principal, adminID string) (Account
 	return accountOf(a), nil
 }
 
-// Create creates a delegated admin for the super admin of p, from
-// clientIP, with a single-use activation link valid ActivationTTL,
-// delivered as req.Invitation says: returned once, for the super admin to
-// hand over out of band (the default), or mailed through the system SMTP
-// once the account is committed, and then never returned (TOTP is then
-// mandatory). The account has no password until the link is used.
+// Create creates a delegated admin or an auditor for the super admin of
+// p, from clientIP, with a single-use activation link valid
+// ActivationTTL, delivered as req.Invitation says: returned once, for the
+// super admin to hand over out of band (the default), or mailed through
+// the system SMTP once the account is committed, and then never returned
+// (TOTP is then mandatory). The account has no password until the link is
+// used.
 //
 // It returns ErrUnauthenticated or ErrForbidden for a caller who is not an
 // authenticated super admin, an *InvalidError for a malformed field, a
-// role other than delegated_admin, no tenant or an unknown tenant,
-// ErrSystemSMTPUnavailable for the mail delivery without a system SMTP and
-// ErrAlreadyExists for a username taken.
+// role other than delegated_admin and auditor, no tenant or an unknown
+// tenant, ErrSystemSMTPUnavailable for the mail delivery without a system
+// SMTP and ErrAlreadyExists for a username taken.
 func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clientIP netip.Addr) (Account, Activation, error) {
 	if err := manager(p); err != nil {
 		return Account{}, Activation{}, err
@@ -143,7 +145,7 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	if err != nil {
 		return Account{}, Activation{}, err
 	}
-	if req.Role != store.RoleDelegatedAdmin {
+	if req.Role != store.RoleDelegatedAdmin && req.Role != store.RoleAuditor {
 		return Account{}, Activation{}, invalid(FieldRole)
 	}
 	if len(req.TenantIDs) == 0 {
@@ -171,7 +173,7 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 	)
 	err = s.repo.tx(ctx, func(tx txRepo) error {
 		a, err := tx.createAdmin(ctx, store.Admin{
-			Username: username, Email: email, Role: store.RoleDelegatedAdmin, TenantIDs: req.TenantIDs, RequireTOTP: requireTOTP,
+			Username: username, Email: email, Role: req.Role, TenantIDs: req.TenantIDs, RequireTOTP: requireTOTP,
 		})
 		if err != nil {
 			return err
@@ -212,9 +214,9 @@ func (s *Service) Create(ctx context.Context, p Principal, req AdminCreate, clie
 //
 // It returns ErrUnauthenticated or ErrForbidden for a caller who is not an
 // authenticated super admin, an *InvalidError for a malformed field or an
-// inconsistent result (a delegated admin without tenant, a super admin
-// with tenants, an unknown tenant), ErrNotFound for an unknown account,
-// ErrSelfAction when the caller disables or demotes themselves,
+// inconsistent result (a delegated admin or an auditor without tenant, a
+// super admin with tenants, an unknown tenant), ErrNotFound for an unknown
+// account, ErrSelfAction when the caller disables or demotes themselves,
 // ErrNotPromotable when an account not activated or without TOTP would be
 // promoted to super admin and ErrLastSuperAdmin when the last usable super
 // admin would be disabled or demoted.
@@ -229,7 +231,7 @@ func (s *Service) Update(ctx context.Context, p Principal, adminID string, u Adm
 		}
 		u.Email = &email
 	}
-	if u.Role != nil && *u.Role != store.RoleSuperAdmin && *u.Role != store.RoleDelegatedAdmin {
+	if u.Role != nil && *u.Role != store.RoleSuperAdmin && *u.Role != store.RoleDelegatedAdmin && *u.Role != store.RoleAuditor {
 		return Account{}, invalid(FieldRole)
 	}
 	if u.TenantIDs != nil {

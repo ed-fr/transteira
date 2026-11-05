@@ -10,12 +10,15 @@
     "audit": "Audit log",
     "stats": "Statistics",
     "privacy": "Personal data",
-    "abuseReports": "Abuse reports"
+    "abuseReports": "Abuse reports",
+    "groupConsultation": "Consultation",
+    "security": "Security log"
   },
   "transfers": {
     "title": "Transfers",
     "detailTitle": "Transfer details",
-    "intro": "Transfers of this entity, most recent first. Open a transfer to see its files, resend its notification or delete it before it expires."
+    "intro": "Transfers of this entity, most recent first. Open a transfer to see its files, resend its notification or delete it before it expires.",
+    "introReadOnly": "Transfers of this entity, most recent first. Open a transfer to see its files and recipients."
   },
   "invitations": {
     "title": "Invitations",
@@ -49,5 +52,9 @@
   "abuseReports": {
     "title": "Abuse reports",
     "intro": "Reports made by recipients from the download page. The message is plain text, to be read with caution."
+  },
+  "security": {
+    "title": "Security log",
+    "intro": "Security events of this entity over the last 12 months: wrong verification codes or transfer passwords, refused deposits, rate limits, invalid tokens. Identical events seen within a short time are grouped. The log never contains an email address."
   }
 }

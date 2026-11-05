@@ -135,6 +135,7 @@ describe('admin routes', () => {
       '/system/settings',
       '/system/webhooks',
       '/system/audit',
+      '/system/security-events',
       '/system/master-key',
       '/system/provisioning-tokens',
     ]);

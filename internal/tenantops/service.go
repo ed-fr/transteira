@@ -158,18 +158,28 @@ func New(db *store.DB, opts Options) (*Service, error) {
 
 // --- Authorization -----------------------------------------------------------
 
-// readable checks that p may read tenant tid, which must be active.
+// readable checks that p may read the data of tenant tid, which must be
+// active: closed to the auditor role (adminauth.ErrReadOnlyRole).
 func (s *Service) readable(ctx context.Context, p adminauth.Principal, tid tenant.ID) error {
-	_, err := s.readableTenant(ctx, p, tid)
+	if err := adminauth.RequireAuthenticated(p); err != nil {
+		return err
+	}
+	if err := adminauth.RequireTenantAccess(p.Admin, tid); err != nil {
+		return err
+	}
+	_, err := s.activeTenant(ctx, tid)
 	return err
 }
 
-// readableTenant is readable returning the tenant, which must be active.
-func (s *Service) readableTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID) (*tenant.Tenant, error) {
+// auditReadable checks that p may call one of the reads open to the
+// auditor role on tenant tid (audit log, transfer list and detail,
+// [adminauth.RequireTenantAuditRead]) and returns the tenant, which must
+// be active.
+func (s *Service) auditReadable(ctx context.Context, p adminauth.Principal, tid tenant.ID) (*tenant.Tenant, error) {
 	if err := adminauth.RequireAuthenticated(p); err != nil {
 		return nil, err
 	}
-	if err := adminauth.RequireTenantAccess(p.Admin, tid); err != nil {
+	if err := adminauth.RequireTenantAuditRead(p.Admin, tid); err != nil {
 		return nil, err
 	}
 	return s.activeTenant(ctx, tid)

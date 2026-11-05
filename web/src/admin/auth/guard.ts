@@ -10,6 +10,11 @@
 // - /login while authenticated: the return path (safeNext) or /.
 // - Super admin route for another role, or a tenant outside the admin's scope: not found, like
 //   the 404 of the server (threat model T-164 for the return path).
+// - Auditor (read-only role): only the home, the account, the entity list, the help and, per
+//   entity of its scope, the summary, transfers (list and detail), audit log, security log and
+//   statistics. Any other route redirects (auditorRedirect): the server refuses the matching API
+//   calls with 403 read-only-role, the guard only spares the auditor a screen made of errors.
+import { AUDITOR_TENANT_SECTIONS, tenantSegment } from '../shell';
 import type { AdminMe, AuthOrigin, AuthState } from './machine';
 
 /** Access level of a route. */
@@ -110,6 +115,34 @@ function inScope(me: AdminMe, request: AccessRequest): boolean {
   return me.tenants.some((tenant) => tenant.id === tenantId);
 }
 
+/** Application paths (besides the tenant sections) an auditor may open. */
+const AUDITOR_PATHS: readonly string[] = ['/', '/account', '/tenants'];
+
+/** Path segments of the tenant sections an auditor may open. */
+const AUDITOR_SEGMENTS: readonly string[] = AUDITOR_TENANT_SECTIONS.map(tenantSegment);
+
+/**
+ * Path an auditor is sent to instead of path, or undefined when it may open it. A tenant page
+ * outside its sections goes to the summary of that tenant, anything else to the home (the list
+ * of entities for the creation of an entity).
+ */
+export function auditorRedirect(path: string): string | undefined {
+  const clean = path.replace(/\/+$/, '') || '/';
+  if (AUDITOR_PATHS.includes(clean)) {
+    return undefined;
+  }
+  const parts = clean.split('/');
+  if (parts[1] === 'tenants' && parts.length >= 3 && parts[2] !== '' && parts[2] !== 'new') {
+    const section = parts[3];
+    const allowed =
+      section !== undefined &&
+      AUDITOR_SEGMENTS.includes(section) &&
+      (parts.length === 4 || (section === tenantSegment('transfers') && parts.length === 5));
+    return allowed ? undefined : `/tenants/${parts[2]}/${tenantSegment('general')}`;
+  }
+  return clean === '/tenants/new' ? '/tenants' : '/';
+}
+
 /** Decides what to do with a navigation. */
 export function resolveAccess(state: AuthState, request: AccessRequest): AccessDecision {
   const here = request.path + (request.search ?? '');
@@ -140,6 +173,13 @@ export function resolveAccess(state: AuthState, request: AccessRequest): AccessD
       }
       if (inFlow) {
         return { kind: 'redirect', to: flowPath(state.origin, here) };
+      }
+      if (state.me.role === 'auditor') {
+        if (!inScope(state.me, request)) {
+          return { kind: 'notFound' };
+        }
+        const to = auditorRedirect(request.path);
+        return to === undefined ? render : { kind: 'redirect', to };
       }
       if (request.access === 'super' && state.me.role !== 'super_admin') {
         return { kind: 'notFound' };

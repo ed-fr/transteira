@@ -13,6 +13,36 @@ breaking change of TransTeira.
 
 Implementation: `internal/securitylog`.
 
+## Copy in the database (since 2.0)
+
+Each line is also copied to the database (table `security_events`), so that
+the delegated admins, the auditors and the super admin can read the events in
+the administration (`GET /api/v1/admin/tenants/{tenantId}/security-events`,
+and `GET /api/v1/admin/system/security-events` for the super admin, including
+the events without tenant). The file stays the reference: it is written first,
+its format does not change, and fail2ban and CrowdSec keep reading it.
+
+- The copy is asynchronous and never slows a request: a bounded queue, written
+  by batches every 2 seconds in one transaction. When the queue is full, the
+  database copy is dropped and counted (`transteira_events_dropped_total{subscriber="security_events"}`,
+  which also counts the rows the recorder itself could not keep: a batch refused
+  by the database, or too many rows pending while the database does not answer);
+  the file line is never lost.
+- Identical events (same type, reason, IP and tenant) within 60 seconds are
+  coalesced into one row with a count of occurrences and the time of the last one.
+- Only the type, the reason, the client IP, the tenant and the `scope`,
+  `purpose` and `host` fields are kept. No e-mail address is ever stored, and
+  `host` (the `Host` header of an unknown FQDN, chosen by the client) is kept
+  only when it is a well-formed host name (`[a-z0-9.-]`, at most 253 bytes, the
+  grammar of `tenant=` below); any other value is left out of the row (the file
+  line keeps it, quoted).
+- Rows keep no foreign key to the tenant: the events of a deleted tenant stay in
+  the database, readable by the super admin only (global listing), until the
+  12-month purge.
+- Rows are purged after 12 months by the periodic cleanup task, with the audit log.
+
+Implementation: `internal/securityevents`.
+
 ## Line format
 
 ```text

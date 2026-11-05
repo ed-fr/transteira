@@ -327,7 +327,7 @@ func (s *Service) openCap(sender Sender) int {
 // logEvent writes a security event; a write failure is only reported on the
 // application log.
 func (s *Service) logEvent(ctx context.Context, t *tenant.Tenant, ip netip.Addr, typ securitylog.EventType, fields ...securitylog.Field) {
-	ev := securitylog.Event{Type: typ, IP: ip, Tenant: t.FQDN, Fields: fields}
+	ev := securitylog.Event{Type: typ, IP: ip, Tenant: t.FQDN, TenantID: string(t.ID), Fields: fields}
 	if err := s.seclog.Log(ev); err != nil {
 		s.logger.ErrorContext(ctx, "security log write failed",
 			slog.String("event", string(typ)), slog.String("error", err.Error()))

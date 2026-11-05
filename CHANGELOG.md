@@ -18,6 +18,25 @@ and the project follows [Semantic Versioning](https://semver.org/).
   model 2.0 draft (T-281 to T-336, decisions P55 to P68). The design was validated on
   2026-11-04 and every open point decided (explicit `admins.sso_only`, revoked drop links purged
   after 12 months, proofs kept 12 months after the fact).
+- Read-only `auditor` admin role (threat T-281, decision P55): created, changed, invited and
+  reset by the super admin like a delegated admin (attached to at least one tenant, TOTP
+  required by default); on its tenants it reads the summary, the audit and security events, the
+  statistics and the transfers (metadata only), and manages its own password and TOTP. Every
+  other operation answers `403 read-only-role`, refused twice: by an operation whitelist in
+  front of the handlers, and in the services, where the tenant configuration reads and every
+  write deny the role by default (`RequireTenantAuditRead` opens the few allowed reads). A
+  spec-walk test checks every administration operation for this role on both engines.
+- Security events in the database (threats T-283 to T-285, decision P56): every line of the
+  security log, whose file and format do not change (fail2ban, CrowdSec), is also copied to the
+  `security_events` table, asynchronously from a bounded queue (overflow dropped from the copy
+  only and counted in `transteira_events_dropped_total{subscriber="security_events"}`), identical
+  events (type, reason, IP, tenant) within one minute coalesced into one row
+  (`occurrences`, `lastSeenAt`), written by batch in one transaction, purged after 12 months by
+  the cleanup task. Only closed tokens are kept (type, reason, IP, tenant, and the `scope`,
+  `purpose` and `host` fields), never an e-mail address. `listTenantSecurityEvents` returns a
+  tenant's own events to its delegated admins, its auditors and the super admin (never an event
+  without tenant, row-level security on PostgreSQL); `listGlobalSecurityEvents` the whole
+  instance to the super admin, with an optional tenant filter.
 
 ## [1.2.1] - 2026-11-04
 

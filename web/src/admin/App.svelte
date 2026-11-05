@@ -158,7 +158,13 @@
     {:else if decision.kind === 'render'}
       {@const Screen = route.component}
       {#if tenantId !== undefined}
-        <TenantNav {tenantId} tenantName={tenantNameOf(me, tenantId)} path={match.path} nav={router} />
+        <TenantNav
+          {tenantId}
+          tenantName={tenantNameOf(me, tenantId)}
+          role={me?.role}
+          path={match.path}
+          nav={router}
+        />
       {:else if systemNav}
         <SystemNav path={match.path} nav={router} />
       {/if}

@@ -46,7 +46,7 @@
 // # Accounts
 //
 // Only a super admin manages accounts ([RequireSuperAdmin]). A delegated
-// admin is created attached to at least one tenant with an activation link
+// admin or an auditor (read-only role, since 2.0) is created attached to at least one tenant with an activation link
 // valid 72 hours, which is never mailed: [Service.Create] and
 // [Service.ResetCredentials] return it once, and the super admin hands it
 // over out of band. [Service.Activate] sets the password and opens a
@@ -62,7 +62,12 @@
 // [RequireTenantAccess] and [RequireTenantWrite] guard the tenant
 // operations: a super admin reaches every tenant, a delegated admin its own
 // tenants only, any other tenant being answered as missing (404); unknown
-// roles are denied, so that the read-only auditor of V2 fits in.
+// roles are denied. The auditor is denied by default (T-281): those two
+// helpers answer it [ErrReadOnlyRole] on its tenants, and only the reads
+// that call [RequireTenantAuditRead] (tenant summary, audit and security
+// events, statistics, transfers) open to it. The HTTP layer adds a
+// whitelist of operations, [AuditorOperations]. An auditor changes its own
+// password and TOTP like any administrator, never its role or tenants.
 //
 // # Secrets and logs
 //

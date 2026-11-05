@@ -130,7 +130,7 @@ func (s *Service) Unlock(ctx context.Context, t *tenant.Tenant, rawToken string,
 // truncated; a write failure is only reported on the application log.
 func (s *Service) logEvent(ctx context.Context, t *tenant.Tenant, ip netip.Addr, trfID string, typ securitylog.EventType, fields ...securitylog.Field) {
 	fields = append([]securitylog.Field{{Key: keyTransfer, Value: trfID[:min(len(trfID), transferIDLogLen)]}}, fields...)
-	ev := securitylog.Event{Type: typ, IP: ip, Tenant: t.FQDN, Fields: fields}
+	ev := securitylog.Event{Type: typ, IP: ip, Tenant: t.FQDN, TenantID: string(t.ID), Fields: fields}
 	if err := s.seclog.Log(ev); err != nil {
 		s.log(ctx, slog.LevelError, "security log write failed", t.ID, trfID,
 			slog.String("event", string(typ)), slog.String("error", err.Error()))

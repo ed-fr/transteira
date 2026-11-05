@@ -2607,7 +2607,7 @@ export interface paths {
         };
         /**
          * List transfers of the tenant
-         * @description Lists the transfers of the tenant, most recent first, with filters on status, address and creation date. Metadata only.
+         * @description Lists the transfers of the tenant, most recent first, with filters on status, address and creation date. Metadata only. Since 2.0, an auditor may not filter by address: 403 read-only-role.
          */
         get: operations["listTenantTransfers"];
         put?: never;
@@ -2921,7 +2921,7 @@ export interface paths {
         };
         /**
          * Audit log of the tenant (12-month retention)
-         * @description Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period. Only the events of this tenant are returned, never events without tenant nor those of another tenant. Readable by any admin attached to the tenant.
+         * @description Returns the audit log of the tenant (12-month retention), most recent first, with filters on action, actor and period. Only the events of this tenant are returned, never events without tenant nor those of another tenant. Readable by any admin attached to the tenant. Since 2.0, an auditor may not filter by address: 403 read-only-role.
          */
         get: operations["listTenantAuditEvents"];
         put?: never;
@@ -6882,8 +6882,9 @@ export interface components {
         /**
          * @description The authenticated admin's role or tenants do not allow the operation (`forbidden`), or the
          *     CSRF check of this unsafe method failed (`csrf-invalid`: missing or wrong `X-CSRF-Token`,
-         *     cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor attempting any write gets
-         *     `403 read-only-role`.
+         *     cross-site `Origin` or `Sec-Fetch-Site`). Since 2.0, an auditor calling any operation outside
+         *     its read-only list (any write, a configuration read of its tenants, an instance or account
+         *     operation) gets `403 read-only-role`.
          */
         AdminForbidden: {
             headers: {
@@ -12947,7 +12948,7 @@ export interface operations {
                  */
                 status?: components["schemas"]["TransferStatus"];
                 /**
-                 * @description Filter on sender or recipient address (exact match).
+                 * @description Filter on sender or recipient address (exact match). Refused to an auditor (`403 read-only-role`).
                  * @example alice@entity-a.example.com
                  */
                 email?: components["schemas"]["Email"];
@@ -13014,6 +13015,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -13666,7 +13668,7 @@ export interface operations {
                  */
                 action?: components["schemas"]["AuditAction"];
                 /**
-                 * @description Filter by actor (email address or admin username).
+                 * @description Filter by actor (email address or admin username). An address (any value holding `@`) is refused to an auditor (`403 read-only-role`).
                  * @example alice@entity-a.example.com
                  */
                 actor?: string;
@@ -13739,6 +13741,7 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };

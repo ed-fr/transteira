@@ -18,7 +18,8 @@
   "role": {
     "super_admin": "Super administrator",
     "delegated_admin": "Delegated administrator",
-    "unknown": "Unknown role"
+    "unknown": "Unknown role",
+    "auditor": "Auditor (read-only)"
   },
   "home": {
     "title": "Home"

@@ -1,16 +1,17 @@
 <script lang="ts">
   // Audit log of a tenant (GET /admin/tenants/{tenantId}/audit-events, most recent first, page by
-  // page): filters reflected in the URL (action from a grouped list or typed, actor, period), one
-  // row per event with its date, actor, action, object (a transfer links to its detail), IP and
-  // free details. Details are always rendered as text pairs, never as HTML.
+  // page): filters reflected in the URL (action from a grouped list or typed, actor except for an
+  // auditor, period), one row per event with its date, actor, action, object (a transfer links to
+  // its detail), IP and free details. Details are always rendered as text pairs, never as HTML.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, TextField } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminApi } from '../../api';
+  import { adminApi, adminSession } from '../../api';
   import AuditEventsTable from '../../components/AuditEventsTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
+  import { canSearchByAddress } from '../../shell';
   import type { AdminScreenProps } from '../types';
   import {
     actionEntries,
@@ -26,6 +27,7 @@
     ACTION_MAX_LENGTH,
     ACTOR_MAX_LENGTH,
     AUDIT_FILTERS,
+    dropFilter,
     filtersToApiParams,
     parseFilters,
     pathWithFilters,
@@ -45,7 +47,10 @@
   };
 
   const tenantId = $derived(params['id'] ?? '');
-  const filters = $derived(parseFilters(AUDIT_FILTERS, nav.current.search));
+  // An auditor may not search by address (T-282): no actor input (an address or a username), and
+  // an actor filter of the URL is ignored.
+  const byAddress = $derived(canSearchByAddress(adminSession.me?.role));
+  const filters = $derived(dropFilter(parseFilters(AUDIT_FILTERS, nav.current.search), 'actor', !byAddress));
   let form = $state<AuditForm>({ actionSelect: '', actionCustom: '', actor: '', from: '', to: '' });
   let errors = $state<Partial<Record<AuditFormField, string>>>({});
   let list = $state.raw<PagedList<AuditEvent>>(emptyList());
@@ -160,16 +165,18 @@
       spellcheck="false"
     />
   {/if}
-  <TextField
-    id={ids.actor}
-    label={t('opsAudit.filters.actor')}
-    hint={t('opsAudit.filters.actorHint')}
-    bind:value={form.actor}
-    error={errors.actor}
-    maxlength={ACTOR_MAX_LENGTH}
-    autocomplete="off"
-    spellcheck="false"
-  />
+  {#if byAddress}
+    <TextField
+      id={ids.actor}
+      label={t('opsAudit.filters.actor')}
+      hint={t('opsAudit.filters.actorHint')}
+      bind:value={form.actor}
+      error={errors.actor}
+      maxlength={ACTOR_MAX_LENGTH}
+      autocomplete="off"
+      spellcheck="false"
+    />
+  {/if}
   <TextField
     id={ids.from}
     label={t('opsAudit.filters.from')}

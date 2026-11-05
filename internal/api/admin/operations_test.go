@@ -333,6 +333,7 @@ func TestOperationErrors(t *testing.T) {
 		{tenantops.ErrUnauthenticated, problem.CodeUnauthenticated, "", -1, ""},
 		{tenantops.ErrForbidden, problem.CodeForbidden, "", -1, ""},
 		{stats.ErrForbidden, problem.CodeForbidden, "", -1, ""},
+		{adminauth.ErrReadOnlyRole, problem.CodeReadOnlyRole, "", -1, ""},
 		{tenantops.ErrNotFound, problem.CodeNotFound, "", -1, ""},
 		{tenantops.ErrAlreadyExists, problem.CodeAlreadyExists, "", -1, ""},
 	}

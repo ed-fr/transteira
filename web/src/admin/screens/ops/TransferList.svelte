@@ -1,23 +1,26 @@
 <script lang="ts">
   // Transfers of a tenant (GET /admin/tenants/{id}/transfers, most recent first, page by page
-  // with the cursor), filtered by status, address (sender or recipient) and creation day. The
-  // filters live in the URL query string (bookmarkable, restored by the back button): the screen
-  // is kept when only the query changes, so the list reloads when the filter query changes. The
-  // date column links to the detail screen. The tenant sub-navigation is rendered by App.svelte.
+  // with the cursor), filtered by status, address (sender or recipient; not for an auditor) and
+  // creation day. The filters live in the URL query string (bookmarkable, restored by the back
+  // button): the screen is kept when only the query changes, so the list reloads when the filter
+  // query changes. The date column links to the detail screen. The tenant sub-navigation is
+  // rendered by App.svelte.
   import { untrack } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, TextField } from '../../../shared/components';
   import { formatDate, formatNumber, i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
-  import { adminApi } from '../../api';
+  import { adminApi, adminSession } from '../../api';
   import DataTable from '../../components/DataTable.svelte';
   import FilterBar from '../../components/FilterBar.svelte';
   import SelectField from '../../components/SelectField.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { formatBytes as formatBinaryBytes } from '../../forms/bytes';
+  import { canSearchByAddress } from '../../shell';
   import type { AdminScreenProps } from '../types';
   import {
     EMAIL_MAX_LENGTH,
     TRANSFER_FILTERS,
+    dropFilter,
     filtersToApiParams,
     filtersToForm,
     isEmpty,
@@ -45,7 +48,12 @@
   const formatBytes = (n: number): string => formatBinaryBytes(n, locale.current);
   const dateTime = (d: string): string => formatDate(d, { dateStyle: 'medium', timeStyle: 'short' });
 
-  const filters = $derived(parseFilters(TRANSFER_FILTERS, nav.current.search));
+  // An auditor may not search by address (T-282): no email input, and an email filter of the URL
+  // is ignored.
+  const byAddress = $derived(canSearchByAddress(adminSession.me?.role));
+  const filters = $derived(
+    dropFilter(parseFilters(TRANSFER_FILTERS, nav.current.search), 'email', !byAddress),
+  );
 
   let form = $state<TransferFilterForm>(filtersToForm(TRANSFER_FILTERS, {}));
   let errors = $state<Partial<Record<TransferFilterField, string>>>({});
@@ -162,7 +170,11 @@
 {/snippet}
 
 <h1 tabindex="-1">{t('adminOps.transfers.title')}</h1>
-<p>{t('adminOps.transfers.intro')}</p>
+<p>
+  {adminSession.me?.role === 'auditor'
+    ? t('adminOps.transfers.introReadOnly')
+    : t('adminOps.transfers.intro')}
+</p>
 
 <FilterBar
   label={t('opsTransfers.list.filtersLabel')}
@@ -178,17 +190,19 @@
     error={errors.status}
     bind:element={statusInput}
   />
-  <TextField
-    label={t('opsTransfers.list.email')}
-    hint={t('opsTransfers.list.emailHint')}
-    type="email"
-    autocomplete="off"
-    spellcheck={false}
-    maxlength={EMAIL_MAX_LENGTH}
-    bind:value={form.email}
-    error={errors.email}
-    bind:element={emailInput}
-  />
+  {#if byAddress}
+    <TextField
+      label={t('opsTransfers.list.email')}
+      hint={t('opsTransfers.list.emailHint')}
+      type="email"
+      autocomplete="off"
+      spellcheck={false}
+      maxlength={EMAIL_MAX_LENGTH}
+      bind:value={form.email}
+      error={errors.email}
+      bind:element={emailInput}
+    />
+  {/if}
   <TextField
     label={t('opsTransfers.list.createdAfter')}
     hint={t('opsTransfers.list.createdAfterHint')}

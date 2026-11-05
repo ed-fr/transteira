@@ -7,6 +7,7 @@ import {
   STATS_CONCURRENCY,
   cardFigures,
   cardHeadingLevel,
+  AUDITOR_QUICK_SECTIONS,
   dashboardKind,
   diskCard,
   initialCards,
@@ -133,6 +134,7 @@ describe('dashboard kind', () => {
     expect(dashboardKind(undefined)).toBe('none');
     expect(dashboardKind(me)).toBe('delegated');
     expect(dashboardKind({ ...me, role: 'super_admin', tenants: [] })).toBe('super');
+    expect(dashboardKind({ ...me, role: 'auditor' })).toBe('auditor');
   });
 });
 
@@ -185,6 +187,20 @@ describe('delegated cards', () => {
         label: 'adminHome.links.stats {"name":"Entity A"}',
       },
     ]);
+  });
+});
+
+describe('auditor quick links', () => {
+  it('only leads to the consultation sections, the security log included', () => {
+    expect(AUDITOR_QUICK_SECTIONS).toEqual(['transfers', 'audit', 'security', 'stats']);
+    const links = quickLinks({ id: 'ten_A', name: 'Entity A' }, t, 'auditor');
+    expect(links.map((l) => l.path)).toEqual([
+      '/tenants/ten_A/transfers',
+      '/tenants/ten_A/audit',
+      '/tenants/ten_A/security-events',
+      '/tenants/ten_A/stats',
+    ]);
+    expect(links[2]?.label).toBe('adminHome.links.security {"name":"Entity A"}');
   });
 });
 

@@ -653,8 +653,8 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 2.0.
-- **Meaning:** an admin with the read-only `auditor` role attempted a write (any `POST`, `PUT`, `PATCH` or `DELETE` on an entity). Reads outside the tenants of the auditor stay `404 not-found`.
-- **Typical endpoints:** every write operation of `/admin/tenants/{tenantId}/...`.
+- **Meaning:** an admin with the read-only `auditor` role called an operation outside its read-only list: any write (`POST`, `PUT`, `PATCH`, `DELETE`), a configuration read of one of its tenants (SMTP, API tokens, webhooks, blocklist, network rules, templates, legal texts, data subjects, abuse reports, invitations, export…), or an instance or account operation. Reads of a tenant the auditor is not attached to stay `404 not-found`. An auditor may not search by e-mail address either: the `email` filter of the transfer list and an `actor` filter holding `@` on the audit log are refused.
+- **Typical endpoints:** every write operation of `/admin/tenants/{tenantId}/...`, the configuration reads of a tenant, `/admin/admins` and `/admin/system/...`.
 - **What to do:** use an account with a delegated admin or super admin role.
 
 ### sso-required

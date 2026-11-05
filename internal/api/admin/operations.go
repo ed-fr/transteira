@@ -126,6 +126,8 @@ func operationError(err error) error {
 		return problem.New(problem.CodeMailUnavailable)
 	case errors.Is(err, adminauth.ErrUnauthenticated):
 		return problem.New(problem.CodeUnauthenticated)
+	case errors.Is(err, adminauth.ErrReadOnlyRole):
+		return problem.New(problem.CodeReadOnlyRole)
 	case errors.Is(err, adminauth.ErrForbidden):
 		return problem.New(problem.CodeForbidden)
 	case errors.Is(err, adminauth.ErrNotFound):

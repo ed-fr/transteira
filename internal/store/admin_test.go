@@ -150,17 +150,18 @@ func TestAdminsCRUD(t *testing.T) {
 			many[i] = ta.ID
 		}
 		bad := map[string]store.Admin{
-			"username":        {Username: "a", Email: "a@example.com", Role: store.RoleSuperAdmin},
-			"unicode":         {Username: "admKin", Email: "a@example.com", Role: store.RoleSuperAdmin},
-			"email":           {Username: "valid", Email: "nope", Role: store.RoleSuperAdmin},
-			"role":            {Username: "valid", Email: "a@example.com", Role: "auditor"},
-			"super tenants":   {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, TenantIDs: []tenant.ID{ta.ID}},
-			"no tenants":      {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin},
-			"bad tenant":      {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin, TenantIDs: []tenant.ID{"bogus"}},
-			"too many":        {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin, TenantIDs: many},
-			"hash":            {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, PasswordHash: "plain"},
-			"hash whitespace": {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, PasswordHash: "$a b"},
-			"language":        {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, Language: "de"},
+			"username":           {Username: "a", Email: "a@example.com", Role: store.RoleSuperAdmin},
+			"unicode":            {Username: "admKin", Email: "a@example.com", Role: store.RoleSuperAdmin},
+			"email":              {Username: "valid", Email: "nope", Role: store.RoleSuperAdmin},
+			"role":               {Username: "valid", Email: "a@example.com", Role: "reader"},
+			"auditor no tenants": {Username: "valid", Email: "a@example.com", Role: store.RoleAuditor},
+			"super tenants":      {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, TenantIDs: []tenant.ID{ta.ID}},
+			"no tenants":         {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin},
+			"bad tenant":         {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin, TenantIDs: []tenant.ID{"bogus"}},
+			"too many":           {Username: "valid", Email: "a@example.com", Role: store.RoleDelegatedAdmin, TenantIDs: many},
+			"hash":               {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, PasswordHash: "plain"},
+			"hash whitespace":    {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, PasswordHash: "$a b"},
+			"language":           {Username: "valid", Email: "a@example.com", Role: store.RoleSuperAdmin, Language: "de"},
 		}
 		for name, a := range bad {
 			if _, err := repo.Create(ctx, a); !errors.Is(err, store.ErrInvalid) {
@@ -1136,5 +1137,38 @@ func TestAdminActivations(t *testing.T) {
 		}
 		_, err = repo.Consume(ctx, tokenHash("p-last"), msNow)
 		wantErr(t, "link of a deleted admin", err, store.ErrNotFound)
+	})
+}
+
+// TestAdminsAuditor covers the auditor role (since 2.0): attached to
+// tenants like a delegated admin, never without one, and reachable from and
+// to the delegated admin role.
+func TestAdminsAuditor(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		repo := db.Admins()
+		ta := newTenant(t, db, "transfer.entity-a.example.com")
+		au, err := repo.Create(ctx, store.Admin{
+			Username: "audit.entity-a", Email: "audit@entity-a.example.com", Role: store.RoleAuditor, TenantIDs: []tenant.ID{ta.ID},
+		})
+		if err != nil || au.Role != store.RoleAuditor || !slices.Equal(au.TenantIDs, []tenant.ID{ta.ID}) || au.RequireTOTP {
+			t.Fatalf("Create(auditor) = %+v, %v", au, err)
+		}
+		if got, err := repo.Get(ctx, au.ID); err != nil || got.Role != store.RoleAuditor || !slices.Equal(got.TenantIDs, []tenant.ID{ta.ID}) {
+			t.Errorf("Get(auditor) = %+v, %v", got, err)
+		}
+		_, err = repo.Update(ctx, au.ID, store.AdminUpdate{TenantIDs: &[]tenant.ID{}})
+		wantErr(t, "Update(auditor without tenant)", err, store.ErrInvalid)
+		if up, err := repo.Update(ctx, au.ID, store.AdminUpdate{Role: ptr(store.RoleDelegatedAdmin)}); err != nil || up.Role != store.RoleDelegatedAdmin || !slices.Equal(up.TenantIDs, []tenant.ID{ta.ID}) {
+			t.Errorf("Update(auditor to delegated) = %+v, %v", up, err)
+		}
+		if up, err := repo.Update(ctx, au.ID, store.AdminUpdate{Role: ptr(store.RoleAuditor)}); err != nil || up.Role != store.RoleAuditor {
+			t.Errorf("Update(delegated to auditor) = %+v, %v", up, err)
+		}
+		_, err = repo.Update(ctx, au.ID, store.AdminUpdate{Role: ptr(store.RoleSuperAdmin)})
+		wantErr(t, "Update(auditor to super, not activated)", err, store.ErrPromotionRefused)
 	})
 }

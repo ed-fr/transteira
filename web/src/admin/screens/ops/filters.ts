@@ -487,6 +487,18 @@ export function filtersToForm<S extends FilterSpec>(spec: S, filters: Filters<S>
   return out as Required<FilterForm<S>>;
 }
 
+/**
+ * The filters without the filter key when drop is true (a copy), else the filters themselves. The
+ * address filters are dropped for a role that may not search by address (canSearchByAddress), so
+ * that a URL shared by a delegated admin never makes the API refuse the list (403 read-only-role).
+ */
+export function dropFilter<F extends object>(filters: F, key: keyof F & string, drop: boolean): F {
+  if (!drop || !(key in filters)) {
+    return filters;
+  }
+  return Object.fromEntries(Object.entries(filters).filter(([k]) => k !== key)) as F;
+}
+
 /** Reports whether no filter is set (undefined and empty values count as not set). */
 export function isEmpty(filters: object): boolean {
   return Object.values(filters).every((v) => v === undefined || v === '');

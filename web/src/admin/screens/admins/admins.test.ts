@@ -25,6 +25,8 @@ import {
   asInvitationLanguage,
   canInvite,
   canMailInvitation,
+  CREATABLE_ROLES,
+  needsTenants,
   defaultInvitationLanguage,
   invitationBody,
   invitationErrorMessage,
@@ -137,6 +139,7 @@ describe('invitation helpers', () => {
 
   it('offers the mail to a delegated admin only', () => {
     expect(canMailInvitation({ role: 'delegated_admin' })).toBe(true);
+    expect(canMailInvitation({ role: 'auditor' })).toBe(true);
     expect(canMailInvitation({ role: 'super_admin' })).toBe(false);
   });
 
@@ -184,7 +187,8 @@ describe('adminPath and roleKey', () => {
   it('maps known roles and falls back for others', () => {
     expect(roleKey('super_admin')).toBe('admin.role.super_admin');
     expect(roleKey('delegated_admin')).toBe('admin.role.delegated_admin');
-    expect(roleKey('auditor')).toBe('admin.role.unknown');
+    expect(roleKey('auditor')).toBe('admin.role.auditor');
+    expect(roleKey('observer')).toBe('admin.role.unknown');
     expect(roleKey(undefined)).toBe('admin.role.unknown');
   });
 });
@@ -299,6 +303,7 @@ describe('loadAllPages', () => {
 describe('creation form', () => {
   it('requires two-factor authentication and mails the link by default', () => {
     expect(emptyCreateForm()).toEqual({
+      role: 'delegated_admin',
       username: '',
       email: '',
       tenantIds: [],
@@ -486,6 +491,64 @@ describe('buildAdminPatch', () => {
     ).toEqual({
       disabled: true,
     });
+  });
+});
+
+describe('auditor accounts', () => {
+  it('needs entities like a delegated admin, not a super admin', () => {
+    expect(needsTenants('delegated_admin')).toBe(true);
+    expect(needsTenants('auditor')).toBe(true);
+    expect(needsTenants('super_admin')).toBe(false);
+    expect(CREATABLE_ROLES).toEqual(['delegated_admin', 'auditor']);
+  });
+
+  it('creates an auditor with the chosen role', () => {
+    const body = createBody({
+      ...emptyCreateForm(),
+      role: 'auditor',
+      username: 'audit.a',
+      email: 'a@example.com',
+      tenantIds: ['ten_b', 'ten_a'],
+    });
+    expect(body.role).toBe('auditor');
+    expect(body.tenantIds).toEqual(['ten_a', 'ten_b']);
+    expect(
+      validateCreate({ ...emptyCreateForm(), role: 'auditor', username: 'audit.a', email: 'a@example.com' }),
+    ).toEqual([{ field: 'tenantIds', key: 'adminAccounts.form.tenants.required' }]);
+  });
+
+  it('requires entities when editing an auditor', () => {
+    const admin = delegated({ role: 'auditor' });
+    expect(validateEdit({ ...editFormFrom(admin), tenantIds: [] })).toEqual([
+      { field: 'tenantIds', key: 'adminAccounts.form.tenants.required' },
+    ]);
+  });
+
+  it('sends the role (and no tenants) when switching between delegated admin and auditor', () => {
+    const admin = delegated();
+    expect(buildAdminPatch(admin, { ...editFormFrom(admin), role: 'auditor' })).toEqual({ role: 'auditor' });
+    expect(buildAdminPatch(admin, { ...editFormFrom(admin), role: 'auditor', tenantIds: ['ten_z'] })).toEqual(
+      {
+        role: 'auditor',
+        tenantIds: ['ten_z'],
+      },
+    );
+  });
+
+  it('sends the role and the tenants when demoting a super admin to auditor', () => {
+    const admin = superAdmin();
+    expect(buildAdminPatch(admin, { ...editFormFrom(admin), role: 'auditor', tenantIds: ['ten_a'] })).toEqual(
+      {
+        role: 'auditor',
+        tenantIds: ['ten_a'],
+      },
+    );
+  });
+
+  it('words the conflict of a demotion to auditor as the last super admin', () => {
+    expect(
+      conflictKey(superAdmin(), { kind: 'update', patch: { role: 'auditor', tenantIds: ['t'] } }, 'me'),
+    ).toBe('adminAccounts.errors.lastSuperAdmin');
   });
 });
 

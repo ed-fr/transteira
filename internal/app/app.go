@@ -54,6 +54,7 @@ import (
 	"github.com/ed-fr/transteira/internal/provisioning"
 	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
+	"github.com/ed-fr/transteira/internal/securityevents"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/stats"
 	"github.com/ed-fr/transteira/internal/storage"
@@ -501,7 +502,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	// The outputs of the bus: the webhook dispatcher and the syslog export.
+	// The outputs of the bus: the webhook dispatcher, the copy of the
+	// security log in the database and the syslog export.
 	// They subscribe before the bus starts and are closed right after it, in
 	// the last close stage (see outputs).
 	busOut, err := newBusOutputs(cfg, db, vault, auditLog, bus, logger)
@@ -560,11 +562,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
-	// The subscribers (webhook dispatcher, syslog) are registered above:
-	// Subscribe is refused once the bus has started.
+	// The subscribers (webhook dispatcher, security events, syslog) are
+	// registered above: Subscribe is refused once the bus has started.
 	if err := bus.Start(ctx); err != nil {
 		return fmt.Errorf("app: start the event bus: %w", err)
 	}
+	busOut.securityEvents.Start() //nolint:contextcheck // the recorder outlives ctx: Close stops it after the bus drained, then flushes
 	if o.busReady != nil {
 		o.busReady(bus, busOut.hooks)
 	}
@@ -663,6 +666,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		Events: httpserver.NewSecurityEvents(secLog, logger), Logger: logger,
 	})
 
+	// The security events kept in the database, read by the delegated
+	// admins, the auditors and the super admin (V2, T-283).
+	securityEventsService, err := securityevents.NewService(db.SecurityEvents(), db.Tenants())
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,
@@ -682,7 +691,8 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
-			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner)),
+			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner),
+			admin.WithSecurityEventsService(securityEventsService)),
 		AdminSessions:       admins,
 		Provisioning:        httpserver.NewProvisioningAuthenticator(provisioner),
 		UploadIdleTimeout:   cfg.UploadIdleTimeout,
@@ -1441,8 +1451,17 @@ func newBusOutputs(cfg *config.Config, db *store.DB, vault *masterkey.Vault, aud
 	if err := dispatcher.Register(bus); err != nil {
 		return busOutputs{}, err
 	}
-	out := outputs{bus, dispatcher}
-	res := busOutputs{hooks: hooks, webhook: dispatcher}
+	// The copy of the security log in the database (V2, P56): written
+	// asynchronously from its bus queue, flushed once the bus is closed.
+	recorder, err := securityevents.New(securityevents.Options{Store: db.SecurityEvents(), Logger: logger})
+	if err != nil {
+		return busOutputs{}, err
+	}
+	if err := recorder.Register(bus); err != nil {
+		return busOutputs{}, err
+	}
+	out := outputs{bus, dispatcher, recorder}
+	res := busOutputs{hooks: hooks, webhook: dispatcher, securityEvents: recorder}
 	if cfg.Syslog.Enabled() {
 		exporter, err := syslog.New(syslog.Options{
 			Addr: cfg.Syslog.Addr, Protocol: cfg.Syslog.Protocol, Streams: cfg.Syslog.Streams,
@@ -1477,6 +1496,8 @@ type busOutputs struct {
 	closer  outputs
 	webhook *webhook.Dispatcher
 	syslog  *syslog.Exporter // nil when the syslog export is disabled
+	// securityEvents writes the security log to the database.
+	securityEvents *securityevents.Recorder
 }
 
 // supervisedTasks lists the cleanup tasks whose last success /status and
@@ -1489,15 +1510,43 @@ var supervisedTasks = []string{
 }
 
 // supervisionSources completes src with the bus outputs of b, leaving the
-// syslog members nil (not a typed nil) when the export is disabled.
+// syslog members nil (not a typed nil) when the export is disabled. The
+// drops of the security events subscriber include those of the recorder
+// itself ([busDrops]).
 func supervisionSources(b busOutputs, src metrics.Sources) metrics.Sources {
 	src.Webhook = b.webhook
-	src.Subscribers = []string{webhook.SubscriberName}
+	src.Subscribers = []string{webhook.SubscriberName, securityevents.SubscriberName}
+	if src.Bus != nil && b.securityEvents != nil {
+		src.Bus = busDrops{bus: src.Bus, securityEvents: b.securityEvents}
+	}
 	if b.syslog != nil {
 		src.Syslog = b.syslog
 		src.Subscribers = append(src.Subscribers, syslog.SubscriberName)
 	}
 	return src
+}
+
+// droppedCounter reports the events an output left out.
+// *securityevents.Recorder implements it.
+type droppedCounter interface{ Dropped() uint64 }
+
+// busDrops reports the events dropped per bus subscriber to the
+// supervision (transteira_events_dropped_total). For the security events
+// recorder it reports Recorder.Dropped, which already sums the drops of
+// its bus queue and its own (a batch refused by the store, a full set of
+// pending rows), so that the bus count is not added twice; every other
+// subscriber reports its bus queue drops.
+type busDrops struct {
+	bus            metrics.BusState
+	securityEvents droppedCounter
+}
+
+// Dropped implements metrics.BusState.
+func (d busDrops) Dropped(subscriber string) uint64 {
+	if subscriber == securityevents.SubscriberName {
+		return d.securityEvents.Dropped()
+	}
+	return d.bus.Dropped(subscriber)
 }
 
 // outputs closes the event bus then its outputs, one after the other within

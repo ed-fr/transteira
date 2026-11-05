@@ -1,0 +1,50 @@
+{
+  "filters": {
+    "label": "Filtrer le journal de sécurité",
+    "globalLabel": "Filtrer le journal de sécurité global",
+    "type": "Type d’événement",
+    "anyType": "Tous les types",
+    "customType": "Autre type (saisir son code)",
+    "customToken": "Code du type",
+    "customHint": "Lettres minuscules, chiffres et tirets bas, en commençant par une lettre. Par exemple rate_limited.",
+    "tenantHint": "Avec une entité sélectionnée, les événements sans entité ne sont pas affichés."
+  },
+  "list": {
+    "caption": "Événements de sécurité",
+    "globalCaption": "Événements de sécurité de l’instance",
+    "empty": "Aucun événement de sécurité n’a été enregistré.",
+    "emptyFiltered": "Aucun événement ne correspond à ces filtres.",
+    "loaded": {
+      "one": "{count} événement chargé.",
+      "other": "{count} événements chargés."
+    },
+    "loadedMore": {
+      "one": "{count} événement chargé, d’autres sont disponibles.",
+      "other": "{count} événements chargés, d’autres sont disponibles."
+    },
+    "columns": {
+      "date": "Date",
+      "type": "Type",
+      "reason": "Motif",
+      "ip": "Adresse IP",
+      "occurrences": "Occurrences"
+    },
+    "noReason": "Aucun",
+    "noIp": "Inconnue",
+    "lastSeen": "Dernière :"
+  },
+  "types": {
+    "verification_code_invalid": "Code de vérification erroné",
+    "transfer_password_invalid": "Mot de passe de transfert erroné",
+    "admin_login_failed": "Échec de connexion d’administrateur",
+    "api_token_invalid": "Jeton d’API invalide",
+    "unknown_fqdn": "Adresse (FQDN) inconnue",
+    "deposit_refused": "Dépôt refusé",
+    "rate_limited": "Limitation de débit dépassée",
+    "metrics_token_invalid": "Jeton de métriques invalide",
+    "access_link_invalid": "Lien d’accès invalide",
+    "provisioning_token_invalid": "Jeton de provisionnement invalide",
+    "sso_failed": "Échec de l’authentification unique",
+    "drop_link_invalid": "Lien de dépôt invalide"
+  }
+}

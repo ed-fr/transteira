@@ -1,14 +1,15 @@
 <script lang="ts">
   // Sub-navigation of a tenant: the tenant name, then two titled groups of links, configuration
   // (general, branding, network, SMTP, templates, legal) and operations (transfers, invitations,
-  // blocklist, API tokens, webhooks, audit, statistics, privacy). Each group is a list labelled by its
+  // blocklist, API tokens, webhooks, audit, security log, statistics, privacy). An auditor gets a
+  // single "consultation" group (summary, transfers, audit log, security log, statistics). Each group is a list labelled by its
   // heading. aria-current="page" marks the section shown, "true" its sub-pages (template or legal
   // editor, transfer detail, token creation). Rendered by App.svelte above every
   // /tenants/:id/... screen.
   import { t } from '../../shared/i18n/i18n.svelte';
   import type { Navigation } from '../screens/types';
   import { setupStates } from '../setupStates.svelte';
-  import { navCurrent, tenantLinkGroups } from '../shell';
+  import { isAuditor, navCurrent, tenantLinkGroups, type NavRole } from '../shell';
   import StatusBadge from './StatusBadge.svelte';
 
   interface Props {
@@ -20,20 +21,25 @@
     path: string;
     /** Router helpers. */
     nav: Navigation;
+    /** Role of the admin: an auditor gets the read-only sections only. */
+    role?: NavRole;
   }
 
-  let { tenantId, tenantName, path, nav }: Props = $props();
+  let { tenantId, tenantName, path, nav, role }: Props = $props();
 
   const name = $derived(tenantName ?? tenantId);
-  const groups = $derived(tenantLinkGroups(tenantId));
+  const groups = $derived(tenantLinkGroups(tenantId, role));
   // Unique prefix of the group heading ids (several navigations could share a page).
   const uid = $props.id();
 
   // The "being set up" badge needs the setup state, read once per tenant shown.
+  // An auditor cannot read the setup (403): no badge for it.
   $effect(() => {
-    void setupStates.ensure(tenantId);
+    if (!isAuditor(role)) {
+      void setupStates.ensure(tenantId);
+    }
   });
-  const inSetup = $derived(setupStates.stateOf(tenantId) === 'setup');
+  const inSetup = $derived(!isAuditor(role) && setupStates.stateOf(tenantId) === 'setup');
 </script>
 
 <nav class="tt-tenant-nav" aria-label={t('admin.nav.tenantNav', { name })}>

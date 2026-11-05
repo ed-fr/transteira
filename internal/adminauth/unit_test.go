@@ -3,6 +3,7 @@ package adminauth
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,44 +82,88 @@ func TestErrorsAndHelpers(t *testing.T) {
 	}
 }
 
+// TestAuthorization is the role x helper table of authz.go (T-63,
+// T-281): a tenant out of reach is answered as missing, never forbidden;
+// an auditor attached to the tenant is refused every configuration read and
+// every change with ErrReadOnlyRole, and allowed the audit reads only.
 func TestAuthorization(t *testing.T) {
 	a, b := tenant.ID("ten_01JAB00000000000000ENT1TYA"), tenant.ID("ten_01JAB00000000000000ENT1TYB")
 	super := Account{Role: store.RoleSuperAdmin}
 	deleg := Account{Role: store.RoleDelegatedAdmin, TenantIDs: []tenant.ID{a}}
-	auditor := Account{Role: "auditor", TenantIDs: []tenant.ID{a}}
+	auditor := Account{Role: store.RoleAuditor, TenantIDs: []tenant.ID{a}}
+	disabled := func(acc Account) Account {
+		acc.Disabled = true
+		return acc
+	}
+	unknown := Account{Role: "reader", TenantIDs: []tenant.ID{a}}
+	// want: the answers of CanAccessTenant, RequireTenantAccess,
+	// RequireTenantWrite and RequireTenantAuditRead (nil for allowed).
 	cases := []struct {
-		name string
-		acc  Account
-		tid  tenant.ID
-		want bool
+		name            string
+		acc             Account
+		tid             tenant.ID
+		see             bool
+		access, write   error
+		auditRead, supa error
 	}{
-		{"super any", super, b, true},
-		{"super empty tenant", super, "", false},
-		{"delegated own", deleg, a, true},
-		{"delegated other", deleg, b, false},
-		{"unknown role", auditor, a, false},
-		{"disabled super", Account{Role: store.RoleSuperAdmin, Disabled: true}, a, false},
+		{"super any", super, b, true, nil, nil, nil, nil},
+		{"super own", super, a, true, nil, nil, nil, nil},
+		{"super empty tenant", super, "", false, ErrNotFound, ErrNotFound, ErrNotFound, nil},
+		{"disabled super", disabled(super), a, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"delegated own", deleg, a, true, nil, nil, nil, ErrForbidden},
+		{"delegated other", deleg, b, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"delegated empty tenant", deleg, "", false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"disabled delegated", disabled(deleg), a, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"auditor own", auditor, a, true, ErrReadOnlyRole, ErrReadOnlyRole, nil, ErrForbidden},
+		{"auditor other", auditor, b, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"auditor empty tenant", auditor, "", false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"disabled auditor", disabled(auditor), a, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+		{"unknown role", unknown, a, false, ErrNotFound, ErrNotFound, ErrNotFound, ErrForbidden},
+	}
+	check := func(name, helper string, got, want error) {
+		t.Helper()
+		if want == nil && got != nil || want != nil && !errors.Is(got, want) {
+			t.Errorf("%s: %s = %v, want %v", name, helper, got, want)
+		}
+		// The three outcomes never overlap.
+		if errors.Is(got, ErrNotFound) && (errors.Is(got, ErrForbidden) || errors.Is(got, ErrReadOnlyRole)) ||
+			errors.Is(got, ErrReadOnlyRole) && errors.Is(got, ErrForbidden) {
+			t.Errorf("%s: %s = %v matches two outcomes", name, helper, got)
+		}
 	}
 	for _, tc := range cases {
-		if got := CanAccessTenant(tc.acc, tc.tid); got != tc.want {
+		if got := CanAccessTenant(tc.acc, tc.tid); got != tc.see {
 			t.Errorf("%s: CanAccessTenant = %v", tc.name, got)
 		}
-		// A tenant out of reach is answered as missing, never forbidden.
-		for name, require := range map[string]func(Account, tenant.ID) error{
-			"RequireTenantAccess": RequireTenantAccess, "RequireTenantWrite": RequireTenantWrite,
-		} {
-			err := require(tc.acc, tc.tid)
-			if (err == nil) != tc.want || (err != nil && (!errors.Is(err, ErrNotFound) || errors.Is(err, ErrForbidden))) {
-				t.Errorf("%s: %s = %v", tc.name, name, err)
-			}
-		}
-	}
-	if RequireSuperAdmin(super) != nil || !errors.Is(RequireSuperAdmin(deleg), ErrForbidden) ||
-		!errors.Is(RequireSuperAdmin(Account{Role: store.RoleSuperAdmin, Disabled: true}), ErrForbidden) {
-		t.Error("RequireSuperAdmin")
+		check(tc.name, "RequireTenantAccess", RequireTenantAccess(tc.acc, tc.tid), tc.access)
+		check(tc.name, "RequireTenantWrite", RequireTenantWrite(tc.acc, tc.tid), tc.write)
+		check(tc.name, "RequireTenantAuditRead", RequireTenantAuditRead(tc.acc, tc.tid), tc.auditRead)
+		check(tc.name, "RequireSuperAdmin", RequireSuperAdmin(tc.acc), tc.supa)
 	}
 	if !errors.Is(RequireAuthenticated(Principal{State: store.SessionAuthenticated}), ErrUnauthenticated) {
 		t.Error("RequireAuthenticated(zero session)")
+	}
+}
+
+// TestAuditorOperations checks the whitelist of the auditor role: its own
+// account and the reads of P55, never an account management, system or
+// configuration operation.
+func TestAuditorOperations(t *testing.T) {
+	want := []string{
+		"adminLogout", "changeAdminPassword", "confirmTotpEnrollment", "disableTotp", "getAdminMe",
+		"getTenant", "getTenantStats", "getTenantTransfer", "getTenantTransferProof", "listTenantAuditEvents",
+		"listTenantSecurityEvents", "listTenantTransfers", "listTenants", "startTotpEnrollment",
+	}
+	got := make([]string, 0, len(AuditorOperations))
+	for op, ok := range AuditorOperations {
+		if !ok {
+			t.Errorf("AuditorOperations[%s] = false: remove the entry instead", op)
+		}
+		got = append(got, op)
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Errorf("AuditorOperations = %v, want %v", got, want)
 	}
 }
 

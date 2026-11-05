@@ -7,7 +7,8 @@
     "webhooks": "Webhooks",
     "audit": "Journal d’audit",
     "masterKey": "Clé maître",
-    "provisioning": "Jetons de provisionnement"
+    "provisioning": "Jetons de provisionnement",
+    "security": "Journal de sécurité"
   },
   "overview": {
     "title": "Vue d’ensemble du système",
@@ -42,5 +43,9 @@
   "provisioning": {
     "title": "Jetons de provisionnement",
     "intro": "Jetons permettant à un infogéreur de créer des entités par l’API, dans un périmètre borné : plages d’adresses, suffixes de domaine, nombre d’entités et stockage."
+  },
+  "security": {
+    "title": "Journal de sécurité global",
+    "intro": "Événements de sécurité de toutes les entités et de l’instance elle-même (adresse inconnue, connexion d’administrateur, jeton de provisionnement) sur les 12 derniers mois. Le journal ne contient jamais d’adresse mail."
   }
 }

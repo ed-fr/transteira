@@ -137,10 +137,21 @@ export function canInvite(admin: Pick<Admin, 'activated' | 'disabled'>): boolean
   return !admin.activated && !admin.disabled;
 }
 
-/** Reports whether the activation link of an account can be mailed (delegated admins only). */
+/** Reports whether the activation link of an account can be mailed (not for a super admin). */
 export function canMailInvitation(admin: Pick<Admin, 'role'>): boolean {
-  return admin.role === 'delegated_admin';
+  return admin.role === 'delegated_admin' || admin.role === 'auditor';
 }
+
+/** Roles attached to entities (and so needing at least one), unlike the super admin. */
+export function needsTenants(role: AdminRole): boolean {
+  return role === 'delegated_admin' || role === 'auditor';
+}
+
+/** Roles a new account can be created with (a super admin is promoted from an existing account). */
+export const CREATABLE_ROLES = ['delegated_admin', 'auditor'] as const satisfies readonly AdminRole[];
+
+/** Role of a new account. */
+export type CreatableRole = (typeof CREATABLE_ROLES)[number];
 
 /** Application path of the edit screen of an account (the id is percent-encoded). */
 export function adminPath(id: string): string {
@@ -298,8 +309,10 @@ function tenantIssues(tenantIds: readonly string[]): FieldIssue[] {
   return tenantIds.length === 0 ? [{ field: 'tenantIds', key: 'adminAccounts.form.tenants.required' }] : [];
 }
 
-/** Form of the creation of a delegated admin. */
+/** Form of the creation of a delegated admin or an auditor. */
 export interface CreateForm {
+  /** Role of the account: delegated admin (default) or auditor (read-only). */
+  role: CreatableRole;
   username: string;
   email: string;
   tenantIds: string[];
@@ -315,7 +328,15 @@ export interface CreateForm {
  * the given language (English by default).
  */
 export function emptyCreateForm(language: InvitationLanguage = 'en'): CreateForm {
-  return { username: '', email: '', tenantIds: [], requireTotp: true, delivery: 'mail', language };
+  return {
+    role: 'delegated_admin',
+    username: '',
+    email: '',
+    tenantIds: [],
+    requireTotp: true,
+    delivery: 'mail',
+    language,
+  };
 }
 
 /** Client-side validation of a username and an email address, in the order of the form. */
@@ -335,12 +356,12 @@ export function validateCreate(form: CreateForm): FieldIssue[] {
   return [...validateInvitee(form), ...tenantIssues(form.tenantIds)];
 }
 
-/** Body of POST /admin/admins: always a delegated admin (a super admin is promoted later). */
+/** Body of POST /admin/admins: a delegated admin or an auditor (a super admin is promoted later). */
 export function createBody(form: CreateForm): AdminCreate {
   return {
     username: form.username.trim(),
     email: form.email.trim(),
-    role: 'delegated_admin',
+    role: form.role,
     tenantIds: [...new Set(form.tenantIds)].sort(),
     // The server forces two-factor authentication for an invitation by mail.
     requireTotp: form.requireTotp || form.delivery === 'mail',
@@ -368,19 +389,17 @@ export function editFormFrom(admin: Admin): EditForm {
   };
 }
 
-/** Client-side validation of the edit form: a delegated admin needs at least one entity. */
+/** Client-side validation of the edit form: a delegated admin or an auditor needs at least one entity. */
 export function validateEdit(form: EditForm): FieldIssue[] {
-  return [
-    ...emailIssues(form.email),
-    ...(form.role === 'delegated_admin' ? tenantIssues(form.tenantIds) : []),
-  ];
+  return [...emailIssues(form.email), ...(needsTenants(form.role) ? tenantIssues(form.tenantIds) : [])];
 }
 
 /**
  * Merge patch of an edit (only the changed fields, never null):
  * - promotion to super admin: the role only (the server clears the assignments, and two-factor
  *   authentication is always required for a super admin);
- * - demotion to delegated admin: the role and the assignments (required by the server);
+ * - demotion to delegated admin or auditor: the role and the assignments (required by the
+ *   server); a switch between those two roles sends the role, and the assignments when changed;
  * - otherwise the changed fields; for a super admin, tenantIds and requireTotp are never sent.
  */
 export function buildAdminPatch(admin: Admin, form: EditForm): AdminUpdate {
@@ -391,9 +410,9 @@ export function buildAdminPatch(admin: Admin, form: EditForm): AdminUpdate {
     tenantIds: [...new Set(form.tenantIds)].sort(),
   };
   const patch: AdminUpdate = buildPatch(original, edited, ['email', 'role', 'disabled']);
-  if (edited.role === 'delegated_admin') {
+  if (needsTenants(edited.role)) {
     Object.assign(patch, buildPatch(original, edited, ['requireTotp']));
-    if (original.role !== 'delegated_admin' || !deepEqual(original.tenantIds, edited.tenantIds)) {
+    if (original.role === 'super_admin' || !deepEqual(original.tenantIds, edited.tenantIds)) {
       patch.tenantIds = edited.tenantIds;
     }
   }
@@ -450,7 +469,10 @@ export function conflictKey(
   }
   if (admin.role === 'super_admin') {
     const affectsAccess =
-      action.kind !== 'update' || action.patch.disabled === true || action.patch.role === 'delegated_admin';
+      action.kind !== 'update' ||
+      action.patch.disabled === true ||
+      action.patch.role === 'delegated_admin' ||
+      action.patch.role === 'auditor';
     if (affectsAccess) {
       return 'adminAccounts.errors.lastSuperAdmin';
     }

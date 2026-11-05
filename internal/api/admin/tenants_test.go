@@ -437,6 +437,7 @@ func TestTenantErrors(t *testing.T) {
 		{tenantadmin.ErrRateLimited, problem.CodeRateLimited},
 		{tenantadmin.ErrUnauthenticated, problem.CodeUnauthenticated},
 		{tenantadmin.ErrForbidden, problem.CodeForbidden},
+		{adminauth.ErrReadOnlyRole, problem.CodeReadOnlyRole},
 		{tenantadmin.ErrNotFound, problem.CodeNotFound},
 		{tenantadmin.ErrAlreadyExists, problem.CodeAlreadyExists},
 		{fmt.Errorf("x: %w", tenantadmin.ErrPayloadTooLarge), problem.CodePayloadTooLarge},

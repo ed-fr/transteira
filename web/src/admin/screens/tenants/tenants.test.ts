@@ -89,6 +89,7 @@ describe('list', () => {
       undefined,
     );
     expect(listRedirect(me('delegated_admin', []))).toBe(undefined);
+    expect(listRedirect(me('auditor', one))).toBe('/tenants/ten%2F1/general');
     expect(listRedirect(me('super_admin', one))).toBe(undefined);
     expect(listRedirect(undefined)).toBe(undefined);
   });

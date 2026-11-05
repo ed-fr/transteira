@@ -4,6 +4,9 @@
   //   volume uploaded), the storage quota and quick links; the statistics are loaded with at
   //   most 4 requests at once, and a failed card shows its own message without affecting the
   //   others;
+  // - auditor (read-only role): the same cards without the setup call to action, whose quick
+  //   links only lead to the consultation sections (transfers, audit log, security log,
+  //   statistics);
   // - super admin: maintenance state (adminMaintenance, link to the maintenance screen), disk card
   //   (GET /admin/system/stats?period=30d, loaded independently of the table, with its own error
   //   and retry) and table of the tenants (GET /admin/tenants, page by page) with their status and
@@ -97,7 +100,9 @@
   }
 
   async function loadCards(refs: readonly Ref[]): Promise<void> {
-    void loadSetupTenants();
+    if (kind !== 'auditor') {
+      void loadSetupTenants();
+    }
     cards = initialCards(refs);
     await mapLimit(refs, STATS_CONCURRENCY, loadCard);
   }
@@ -245,8 +250,8 @@
   {/if}
 {/if}
 
-{#if kind === 'delegated'}
-  {#if setupTenants.length > 0}
+{#if kind === 'delegated' || kind === 'auditor'}
+  {#if kind === 'delegated' && setupTenants.length > 0}
     <Alert severity="warning" live={false} title={t('setup.home.title')}>
       {#if setupTenants.length === 1}
         {@const only = setupTenants[0] as Tenant}
@@ -297,7 +302,7 @@
             <QuotaMeter used={card.stats.storageUsedBytes} quota={card.stats.storageQuotaBytes} />
           {/if}
           <ul class="tt-home__links">
-            {#each quickLinks(card, t) as link (link.section)}
+            {#each quickLinks(card, t, kind) as link (link.section)}
               <li><a href={nav.href(link.path)} use:nav.link>{link.label}</a></li>
             {/each}
           </ul>

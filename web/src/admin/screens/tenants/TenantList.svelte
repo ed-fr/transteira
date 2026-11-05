@@ -30,6 +30,8 @@
 
   const me = $derived(adminSession.me);
   const canCreate = $derived(canManageTenants(me));
+  // An auditor only consults: the link of a row opens the read-only summary.
+  const readOnly = $derived(me?.role === 'auditor');
 
   let rows = $state.raw<Tenant[]>([]);
   let nextCursor = $state<string | undefined>(undefined);
@@ -108,7 +110,7 @@
 
 {#snippet actionsCell(row: Tenant)}
   <a href={nav.href(tenantPath(row.id, 'general'))} use:nav.link>
-    {t('adminTenants.list.configure', { name: row.name })}
+    {t(readOnly ? 'adminTenants.list.view' : 'adminTenants.list.configure', { name: row.name })}
   </a>
 {/snippet}
 

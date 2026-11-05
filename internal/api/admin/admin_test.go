@@ -272,6 +272,7 @@ func TestServiceErrors(t *testing.T) {
 		{adminauth.ErrInvalidCredentials, problem.CodeInvalidCredentials},
 		{adminauth.ErrUnauthenticated, problem.CodeUnauthenticated},
 		{adminauth.ErrForbidden, problem.CodeForbidden},
+		{adminauth.ErrReadOnlyRole, problem.CodeReadOnlyRole},
 		{adminauth.ErrSetupTokenInvalid, problem.CodeSetupTokenInvalid},
 		{adminauth.ErrSetupDone, problem.CodeSetupAlreadyDone},
 		{adminauth.ErrNotFound, problem.CodeNotFound},

@@ -66,3 +66,32 @@ func TestLogPublishesNothingOnFailure(t *testing.T) {
 		t.Fatalf("Log with a nil publisher = %v", err)
 	}
 }
+
+// TestTenantIDPublishedNeverWritten checks that the tenant identifier of an
+// event travels with the published record only: the written line is the
+// same as without it (the file format, read by fail2ban and CrowdSec, does
+// not change).
+func TestTenantIDPublishedNeverWritten(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	ev := Event{
+		Type: DepositRefused, IP: netip.MustParseAddr("192.0.2.10"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{Key: KeyReason, Value: ReasonIP}},
+	}
+	var plain, withID bytes.Buffer
+	if err := New(&plain, WithClock(func() time.Time { return at })).Log(ev); err != nil {
+		t.Fatal(err)
+	}
+	rec := &events.Recorder{}
+	ev.TenantID = "ten_01JAB00000000000000ENT1TYA"
+	if err := New(&withID, WithClock(func() time.Time { return at }), WithPublisher(rec)).Log(ev); err != nil {
+		t.Fatal(err)
+	}
+	if plain.String() != withID.String() || strings.Contains(withID.String(), ev.TenantID) {
+		t.Fatalf("line with a tenant id %q, without %q", withID.String(), plain.String())
+	}
+	got := rec.Events()
+	if len(got) != 1 || got[0].Log.TenantID != ev.TenantID || got[0].TenantID != "" {
+		t.Fatalf("published %+v", got)
+	}
+}

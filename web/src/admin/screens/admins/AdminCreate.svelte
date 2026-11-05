@@ -1,14 +1,14 @@
 <script lang="ts">
-  // Creation of a delegated admin (super admin only; CLAUDE.md section 6.5): username, email,
-  // attached entities (at least one), two-factor authentication required by default. A super
-  // admin is never created directly: an activated delegated admin with TOTP is promoted from
+  // Creation of a delegated admin or an auditor, the read-only role (super admin only; CLAUDE.md
+  // section 6.5): role, username, email, attached entities (at least one for both roles),
+  // two-factor authentication required by default. A super admin is never created directly: an activated delegated admin with TOTP is promoted from
   // the edit screen. The activation link is mailed through the system SMTP (default) or shown
   // once to copy (ActivationLinkPanel); a shown link stays in this component's memory only and
   // is cleared when the screen goes away (threat model T-162). Without system SMTP (503) the
   // form keeps its values so that the copy delivery can be chosen and submitted again.
   import { onDestroy, onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Button, Checkbox, TextField } from '../../../shared/components';
+  import { Alert, Button, Checkbox, RadioGroup, TextField } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import ActivationLinkPanel from '../../components/ActivationLinkPanel.svelte';
@@ -19,6 +19,7 @@
   import { deepEqual } from '../../forms/patch';
   import type { AdminScreenProps } from '../types';
   import {
+    CREATABLE_ROLES,
     createBody,
     defaultInvitationLanguage,
     emptyCreateForm,
@@ -41,6 +42,7 @@
     tenants: `${uid}-tenants`,
     requireTotp: `${uid}-require-totp`,
     invitation: `${uid}-invitation`,
+    role: `${uid}-role`,
   };
 
   const initialLanguage = defaultInvitationLanguage(locale.current);
@@ -54,6 +56,14 @@
 
   const dirty = $derived(
     created === undefined && !deepEqual($state.snapshot(form), emptyCreateForm(initialLanguage)),
+  );
+
+  const roleOptions = $derived(
+    CREATABLE_ROLES.map((role) => ({
+      value: role,
+      label: t(`admin.role.${role}`),
+      hint: t(`adminAccounts.form.role.${role}Hint`),
+    })),
   );
 
   const fieldRefs = $derived({
@@ -169,6 +179,13 @@
       savingLabel={t('admin.common.creating')}
       disabled={loading}
     >
+      <RadioGroup
+        name={ids.role}
+        legend={t('adminAccounts.form.role.label')}
+        hint={t('adminAccounts.form.role.createHint')}
+        options={roleOptions}
+        bind:value={form.role}
+      />
       <TextField
         id={ids.username}
         label={t('adminAccounts.form.username.label')}

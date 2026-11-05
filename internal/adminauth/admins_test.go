@@ -232,7 +232,7 @@ func TestUpdateAndRevocation(t *testing.T) {
 		// Input checks and self-protection.
 		_, err = ev.svc.Update(ctx, r.p, d.account.ID, AdminUpdate{Email: ptr("bad")}, ipA)
 		wantInvalid(t, "Update(email)", err, FieldEmail)
-		_, err = ev.svc.Update(ctx, r.p, d.account.ID, AdminUpdate{Role: ptr(store.AdminRole("auditor"))}, ipA)
+		_, err = ev.svc.Update(ctx, r.p, d.account.ID, AdminUpdate{Role: ptr(store.AdminRole("reader"))}, ipA)
 		wantInvalid(t, "Update(role)", err, FieldRole)
 		_, err = ev.svc.Update(ctx, r.p, d.account.ID, AdminUpdate{TenantIDs: &[]tenant.ID{"x"}}, ipA)
 		wantInvalid(t, "Update(tenants)", err, FieldTenantIDs)

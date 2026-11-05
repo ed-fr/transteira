@@ -27,6 +27,7 @@ import AbuseReports from './screens/ops/AbuseReports.svelte';
 import Blocklist from './screens/ops/Blocklist.svelte';
 import InvitationList from './screens/ops/InvitationList.svelte';
 import Privacy from './screens/ops/Privacy.svelte';
+import SecurityLog from './screens/ops/SecurityLog.svelte';
 import TenantStats from './screens/ops/TenantStats.svelte';
 import TokenCreate from './screens/ops/TokenCreate.svelte';
 import TokenList from './screens/ops/TokenList.svelte';
@@ -34,6 +35,7 @@ import TenantWebhooks from './screens/ops/TenantWebhooks.svelte';
 import TransferDetail from './screens/ops/TransferDetail.svelte';
 import TransferList from './screens/ops/TransferList.svelte';
 import GlobalAudit from './screens/system/GlobalAudit.svelte';
+import GlobalSecurityLog from './screens/system/GlobalSecurityLog.svelte';
 import Maintenance from './screens/system/Maintenance.svelte';
 import MasterKey from './screens/system/MasterKey.svelte';
 import ProvisioningTokens from './screens/system/ProvisioningTokens.svelte';
@@ -283,6 +285,14 @@ export const routes: readonly AdminRoute[] = [
     tenantNav: true,
   },
   {
+    pattern: '/tenants/:id/security-events',
+    component: SecurityLog,
+    titleKey: 'adminOps.security.title',
+    access: 'auth',
+    helpTopic: 'tenant-audit',
+    tenantNav: true,
+  },
+  {
     pattern: '/tenants/:id/stats',
     component: TenantStats,
     titleKey: 'adminOps.stats.title',
@@ -355,6 +365,14 @@ export const routes: readonly AdminRoute[] = [
     pattern: '/system/audit',
     component: GlobalAudit,
     titleKey: 'adminSystem.audit.title',
+    access: 'super',
+    helpTopic: 'system-audit',
+    systemNav: true,
+  },
+  {
+    pattern: '/system/security-events',
+    component: GlobalSecurityLog,
+    titleKey: 'adminSystem.security.title',
     access: 'super',
     helpTopic: 'system-audit',
     systemNav: true,

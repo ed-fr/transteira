@@ -57,8 +57,8 @@ const (
 	// RoleDelegatedAdmin administers the tenants it is attached to.
 	RoleDelegatedAdmin AdminRole = "delegated_admin"
 	// RoleAuditor reads, without any write, the tenants it is attached to
-	// (V2). The database accepts it since migration 0026; the store
-	// validation accepts it once the auditor feature is implemented.
+	// (since 2.0, migration 0026): like a delegated admin, it needs at
+	// least one tenant.
 	RoleAuditor AdminRole = "auditor"
 )
 
@@ -294,12 +294,12 @@ func normalizeAdmin(a *Admin) error {
 		return err
 	}
 	switch {
-	case a.Role != RoleSuperAdmin && a.Role != RoleDelegatedAdmin:
+	case a.Role != RoleSuperAdmin && a.Role != RoleDelegatedAdmin && a.Role != RoleAuditor:
 		return invalid("unknown administrator role")
 	case a.Role == RoleSuperAdmin && len(a.TenantIDs) > 0:
 		return invalid("a super admin is attached to no tenant")
-	case a.Role == RoleDelegatedAdmin && len(a.TenantIDs) == 0:
-		return invalid("a delegated admin needs at least one tenant")
+	case a.Role != RoleSuperAdmin && len(a.TenantIDs) == 0:
+		return invalid("a delegated admin or an auditor needs at least one tenant")
 	case !validPasswordHash(a.PasswordHash):
 		return invalid("password hash must be a PHC string of at most %d printable characters", MaxPasswordHashLen)
 	case a.Language != "" && !tenant.IsLanguage(a.Language):
@@ -573,7 +573,7 @@ func (r *Admins) Update(ctx context.Context, adminID string, u AdminUpdate) (Adm
 // is not activated or has no TOTP enabled returns ErrPromotionRefused. It
 // also returns ErrNotFound for an unknown admin or tenant and ErrInvalid
 // for a malformed field or an inconsistent result (a super admin with
-// tenants, a delegated admin without any).
+// tenants, a delegated admin or an auditor without any).
 func (r *Admins) UpdateTx(ctx context.Context, tx *SystemTx, adminID string, u AdminUpdate) (before, after Admin, err error) {
 	before, after, err = r.update(ctx, tx, adminID, u)
 	if err != nil {

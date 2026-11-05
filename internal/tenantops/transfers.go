@@ -125,7 +125,7 @@ type TransferFilter struct {
 	// Status keeps the transfers of this status ("" for all).
 	Status string
 	// Email keeps the transfers whose sender or one of whose recipients is
-	// this address ("" for all).
+	// this address ("" for all). It is refused to an auditor (T-282).
 	Email string
 	// CreatedAfter keeps the transfers created after this time (zero: no
 	// bound).
@@ -179,11 +179,16 @@ func transferOf(t store.Transfer, recipients []string, fileCount int, lang strin
 }
 
 // ListTransfers returns a page of the transfers of tenant tid, most recent
-// first, in every status, with their recipients and number of files.
+// first, in every status, with their recipients and number of files. An
+// auditor may not filter by address (T-282): f.Email is then
+// adminauth.ErrReadOnlyRole.
 func (s *Service) ListTransfers(ctx context.Context, p adminauth.Principal, tid tenant.ID, f TransferFilter) (store.Page[Transfer], error) {
-	tn, err := s.readableTenant(ctx, p, tid)
+	tn, err := s.auditReadable(ctx, p, tid)
 	if err != nil {
 		return store.Page[Transfer]{}, err
+	}
+	if f.Email != "" && p.Admin.Role == store.RoleAuditor {
+		return store.Page[Transfer]{}, adminauth.ErrReadOnlyRole
 	}
 	sf := store.AdminTransferFilter{
 		Status: store.TransferStatus(f.Status), CreatedAfter: f.CreatedAfter, Cursor: f.Cursor, Limit: f.Limit,
@@ -230,9 +235,11 @@ func (s *Service) transfer(ctx context.Context, tid tenant.ID, trfID string) (st
 // GetTransfer returns the transfer trfID of tenant tid with its files,
 // their fingerprints and antivirus results, and the tracking of each
 // recipient for a transfer with one link per recipient: never a file
-// content nor a download link.
+// content nor a download link. It holds no free text either (the message
+// of the sender is not part of it), so the auditor role reads it as is,
+// metadata only (P55).
 func (s *Service) GetTransfer(ctx context.Context, p adminauth.Principal, tid tenant.ID, trfID string) (TransferDetail, error) {
-	tn, err := s.readableTenant(ctx, p, tid)
+	tn, err := s.auditReadable(ctx, p, tid)
 	if err != nil {
 		return TransferDetail{}, err
 	}

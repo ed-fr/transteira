@@ -1,6 +1,6 @@
 <script lang="ts">
   // Sub-navigation of the system administration (super admin): overview, maintenance, settings,
-  // webhooks, global audit log, master key and provisioning tokens. aria-current="page" marks the section shown,
+  // webhooks, global audit log, global security log, master key and provisioning tokens. aria-current="page" marks the section shown,
   // "true" its sub-pages; the overview ("/system", parent of the other paths) is only marked on
   // its exact page. Rendered by App.svelte above every /system screen (routes with systemNav).
   import { t } from '../../shared/i18n/i18n.svelte';

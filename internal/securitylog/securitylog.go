@@ -171,6 +171,13 @@ type Event struct {
 	// request is not bound to a tenant. Anything outside [a-z0-9.-] is
 	// written as tenant=-.
 	Tenant string
+	// TenantID is the identifier of the current tenant ("ten_" + ULID), or
+	// "" when the event is bound to no tenant (unknown FQDN, admin host,
+	// provisioning, monitoring). It is never written to the file, whose
+	// format does not change: it only travels with the published event
+	// (events.LogRecord.TenantID), so that the copy of the security log in
+	// the database can be filtered by tenant (threat model T-283).
+	TenantID string
 	// Fields are extra key="value" pairs, written in order after event=.
 	Fields []Field
 }
@@ -326,8 +333,8 @@ func record(now time.Time, ev Event, line []byte) events.Event {
 	return events.Event{
 		Type: events.LogSecurity, Severity: events.SeverityInfo, OccurredAt: now,
 		Log: &events.LogRecord{
-			Stream: events.StreamSecurity, Time: now, Tenant: tenant, Action: string(ev.Type),
-			IP: ev.IP, Fields: fields, Line: string(line[:len(line)-1]),
+			Stream: events.StreamSecurity, Time: now, Tenant: tenant, TenantID: ev.TenantID,
+			Action: string(ev.Type), IP: ev.IP, Fields: fields, Line: string(line[:len(line)-1]),
 		},
 	}
 }

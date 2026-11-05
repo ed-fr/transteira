@@ -5747,7 +5747,7 @@ type ListTenantAuditEventsParams struct {
 	// Action Filter by audit action. The list of actions is extensible: any value of the `AuditAction` form is accepted, and an unknown action simply matches no event.
 	Action *AuditAction `form:"action,omitempty" json:"action,omitempty"`
 
-	// Actor Filter by actor (email address or admin username).
+	// Actor Filter by actor (email address or admin username). An address (any value holding `@`) is refused to an auditor (`403 read-only-role`).
 	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
 
 	// From Start of the period (inclusive).
@@ -5831,7 +5831,7 @@ type ListTenantTransfersParams struct {
 	// Status Filter by status.
 	Status *TransferStatus `form:"status,omitempty" json:"status,omitempty"`
 
-	// Email Filter on sender or recipient address (exact match).
+	// Email Filter on sender or recipient address (exact match). Refused to an auditor (`403 read-only-role`).
 	Email *Email `form:"email,omitempty" json:"email,omitempty"`
 
 	// CreatedAfter Only items created after this instant.
@@ -18153,6 +18153,22 @@ func (response ListTenantAuditEvents401ApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ListTenantAuditEvents403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantAuditEvents403ApplicationProblemPlusJSONResponse) VisitListTenantAuditEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantAuditEvents404ApplicationProblemPlusJSONResponse struct {
 	NotFoundApplicationProblemPlusJSONResponse
 }
@@ -22545,6 +22561,22 @@ func (response ListTenantTransfers401ApplicationProblemPlusJSONResponse) VisitLi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantTransfers403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantTransfers403ApplicationProblemPlusJSONResponse) VisitListTenantTransfersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
