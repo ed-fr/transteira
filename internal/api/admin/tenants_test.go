@@ -218,6 +218,10 @@ func (f *fakeTenantService) PreviewTemplate(_ context.Context, p adminauth.Princ
 	return tenantadmin.Preview{Subject: "s", HTML: "<p>h</p>", Text: "t"}, f.record("PreviewTemplate", p.SessionID, tid, key, lang, in)
 }
 
+// setupReviewedAt is the review of the network rules answered by the fake
+// completion, in a time zone other than UTC.
+var setupReviewedAt = time.Date(2026, time.November, 5, 10, 30, 0, 0, time.FixedZone("CET", 3600))
+
 // setupA is the checklist answered by the fake setup operations.
 var setupA = tenantadmin.Setup{State: tenant.SetupStateSetup, Items: []tenantadmin.SetupItem{
 	{Key: tenantadmin.SetupBrandingLogo, Done: true},
@@ -231,6 +235,7 @@ func (f *fakeTenantService) GetSetup(_ context.Context, p adminauth.Principal, t
 func (f *fakeTenantService) CompleteSetup(_ context.Context, p adminauth.Principal, tid tenant.ID, force, reviewed bool, ip netip.Addr) (tenantadmin.Setup, error) {
 	done := setupA
 	done.State, done.CanComplete = tenant.SetupStateActive, true
+	done.NetworkReviewedAt = setupReviewedAt
 	return done, f.record("CompleteSetup", p.SessionID, tid, force, reviewed, ip)
 }
 

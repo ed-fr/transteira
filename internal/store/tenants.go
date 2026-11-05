@@ -20,12 +20,13 @@ const (
 	reasonTenantErase   = "tenant deletion: refuse while a wrapped key of the tenant remains (T-110)"
 	reasonTenantSeed    = "tenant creation: seed the default configuration rows of the new tenant"
 	reasonTenantSetup   = "tenant setup completion: check in the same statement the tested SMTP settings, network rules and legal documents"
+	reasonTenantNetwork = "network rules saved by an administrator: replace them and record their review on the tenant row (T-307)"
 )
 
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
 	`status, primary_color, accent_color, has_logo, has_background, background_preset, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
-	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, created_at, updated_at, provisioned_by`
+	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, network_reviewed_at, created_at, updated_at, provisioned_by`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
@@ -33,7 +34,7 @@ var (
 	qTenantInsert = systemQuery(
 		// The setup state is always written explicitly, from the Go value
 		// (migration 0022 drops its default on PostgreSQL, T-261).
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -63,6 +64,11 @@ var (
 	qTenantSetSMTPTested = systemQuery(
 		`UPDATE tenants SET smtp_tested_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
+	// qTenantSetNetworkReviewed records that an administrator saved the
+	// network rules of an active tenant (NetworkRules.ReplaceReviewed).
+	qTenantSetNetworkReviewed = systemQuery(
+		`UPDATE tenants SET network_reviewed_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantNetwork)
 	// qTenantCompleteSetup moves an active tenant from setup to active,
 	// recording the review of the mail templates when given (NULL keeps
 	// the current mark): the forced completion of the super admin.
@@ -75,7 +81,9 @@ var (
 	// a change committed before it makes it fail (Tenants.CompleteSetup):
 	// the SMTP configuration that passed a test is still the current one
 	// (its modification time equals the stamp), at least one internal IP
-	// range and one internal domain exist, and the legal notice and the
+	// range and one internal domain exist and were saved by an
+	// administrator since (network_reviewed_at, T-307: an import leaves it
+	// NULL), and the legal notice and the
 	// privacy policy exist with a non-blank content in the default language
 	// of the tenant. Every subquery names the tenant explicitly (system
 	// scope, which the row-level security policies let read every tenant).
@@ -83,6 +91,7 @@ var (
 		`UPDATE tenants SET setup_state = 'active', mail_templates_reviewed_at = COALESCE(?, mail_templates_reviewed_at),
 			updated_at = ? WHERE id = ? AND status = 'active' AND setup_state = 'setup'
 			AND smtp_tested_at = (SELECT updated_at FROM tenant_smtp_settings WHERE tenant_id = ?)
+			AND network_reviewed_at IS NOT NULL
 			AND EXISTS (SELECT 1 FROM tenant_network_rules WHERE tenant_id = ? AND kind = 'cidr')
 			AND EXISTS (SELECT 1 FROM tenant_network_rules WHERE tenant_id = ? AND kind = 'domain')
 			AND EXISTS (SELECT 1 FROM tenant_legal_documents WHERE tenant_id = ? AND document = 'legal-notice'
@@ -183,11 +192,12 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 		created, updated   int64
 		preset, provBy     sql.NullString
 		tested, reviewed   sql.NullInt64
+		networkReviewed    sql.NullInt64
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
-		&setup, &tested, &reviewed, &created, &updated, &provBy); err != nil {
+		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy); err != nil {
 		return nil, err
 	}
 	t.BackgroundPreset = preset.String // NULL is the default preset, ""
@@ -200,6 +210,9 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	}
 	if reviewed.Valid {
 		t.MailTemplatesReviewedAt = fromMillis(reviewed.Int64)
+	}
+	if networkReviewed.Valid {
+		t.NetworkReviewedAt = fromMillis(networkReviewed.Int64)
 	}
 	t.CreatedAt = fromMillis(created)
 	t.UpdatedAt = fromMillis(updated)
@@ -215,7 +228,7 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // (T-261, P51), else ErrInvalid. A new tenant always starts with its
 // antivirus enabled, whatever t.AntivirusEnabled
 // ([Tenants.SetAntivirusEnabled] changes it), with no SMTP test and no
-// review of its mail templates recorded. It returns the stored tenant,
+// review of its mail templates or of its network rules recorded. It returns the stored tenant,
 // ErrInvalid for invalid fields (including a preset ID, a status other
 // than active, a missing or unknown setup state, a transfer limit above
 // the ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
@@ -264,7 +277,7 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 	}
 	c.ID = tenant.ID(newID)
 	c.AntivirusEnabled = true
-	c.SMTPTestedAt, c.MailTemplatesReviewedAt = time.Time{}, time.Time{}
+	c.SMTPTestedAt, c.MailTemplatesReviewedAt, c.NetworkReviewedAt = time.Time{}, time.Time{}, time.Time{}
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
 	err = r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
@@ -276,7 +289,7 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 		_, err := tx.Exec(ctx, qTenantInsert, string(c.ID), c.Name, c.FQDN, c.DefaultLanguage,
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, presetArg(c.BackgroundPreset), c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
-			c.AllowTransferReply, c.AntivirusEnabled, string(c.SetupState), nil, nil,
+			c.AllowTransferReply, c.AntivirusEnabled, string(c.SetupState), nil, nil, nil,
 			toMillis(now), toMillis(now), nullText(c.ProvisionedBy))
 		if err != nil {
 			return err
@@ -369,7 +382,7 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 // [tenant.Tenant.Validate]; "" is stored as NULL), webhook address option, remote internal deposit
 // and reply options) and refreshes UpdatedAt. It never writes the setup
 // state, which only [Tenants.CompleteSetup] changes, nor the SMTP test
-// stamp and the review mark of the mail templates: t.SetupState must
+// stamp and the review marks of the mail templates and network rules: t.SetupState must
 // merely be valid. The status only changes with
 // [Tenants.SetStatus] and the antivirus switch with
 // [Tenants.UpdateWithAntivirus] or [Tenants.SetAntivirusEnabled]
@@ -519,7 +532,9 @@ func (r *Tenants) SetSMTPTested(ctx context.Context, tid tenant.ID, version time
 // mail templates. Unless force is set, the statement itself requires the
 // SMTP configuration that passed a test to be the current one (see
 // [Tenants.SetSMTPTested]), at least one internal IP range and one internal
-// domain, and a non-blank legal notice and privacy policy in the default
+// domain saved by an administrator ([NetworkRules.ReplaceReviewed]: the
+// rules written by a configuration import must be confirmed first,
+// T-307), and a non-blank legal notice and privacy policy in the default
 // language of the tenant: a change committed between the checks of the
 // caller and this call makes it fail with ErrConflict, and the caller
 // computes the checklist again. Only the absence of a "to complete" marker

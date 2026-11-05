@@ -27,6 +27,8 @@ type repo interface {
 	updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error)
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
+	// replaceNetworkRules also records the review of the rules
+	// (store.NetworkRules.ReplaceReviewed, T-307).
 	replaceNetworkRules(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (store.NetworkRuleSet, error)
 	confidentialityLevels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error)
 	replaceConfidentialityLevels(ctx context.Context, tid tenant.ID, levels []store.ConfidentialityLevel, by string, now time.Time) ([]store.ConfidentialityLevel, error)
@@ -46,6 +48,21 @@ type repo interface {
 	deleteLegal(ctx context.Context, tid tenant.ID, doc, lang string) error
 	listLegal(ctx context.Context, tid tenant.ID) ([]store.LegalDocumentKey, error)
 	audit(ctx context.Context, ev audit.Event) error
+
+	// Reads of the configuration export (since V2).
+	listWebhooks(ctx context.Context, tid tenant.ID) ([]store.Webhook, error)
+	listBlocklist(ctx context.Context, tid tenant.ID, cursor string) (store.Page[store.BlocklistEntry], error)
+
+	// Writes of the configuration import, inside the transaction creating
+	// the tenant, under its scope (since V2).
+	replaceNetworkRulesTx(ctx context.Context, tx *store.ScopedTx, cidrs []netip.Prefix, domains []string) error
+	replaceRecipientRulesTx(ctx context.Context, tx *store.ScopedTx, set store.RecipientRuleSet, now time.Time) error
+	replaceConfidentialityLevelsTx(ctx context.Context, tx *store.ScopedTx, levels []store.ConfidentialityLevel, by string, now time.Time) error
+	putAbuseSettingsTx(ctx context.Context, tx *store.ScopedTx, s store.AbuseSettings) error
+	putSMTPConfigTx(ctx context.Context, tx *store.ScopedTx, c store.SMTPConfig) error
+	putTemplateTx(ctx context.Context, tx *store.ScopedTx, t store.EmailTemplate) error
+	putLegalTx(ctx context.Context, tx *store.ScopedTx, d store.LegalDocument) error
+	createBlocklistEntryTx(ctx context.Context, tx *store.ScopedTx, e store.BlocklistEntry) error
 }
 
 // errPasswordRequired reports, from [repo.putSMTP], a stored password kept
@@ -157,7 +174,7 @@ func (r *storeRepo) networkRules(ctx context.Context, tid tenant.ID) (store.Netw
 }
 
 func (r *storeRepo) replaceNetworkRules(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (store.NetworkRuleSet, error) {
-	return r.db.NetworkRules().Replace(ctx, tid, cidrs, domains)
+	return r.db.NetworkRules().ReplaceReviewed(ctx, tid, cidrs, domains)
 }
 
 func (r *storeRepo) smtp(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error) {
@@ -263,4 +280,51 @@ func (r *storeRepo) abuseSettings(ctx context.Context, tid tenant.ID) (store.Abu
 
 func (r *storeRepo) putAbuseSettings(ctx context.Context, tid tenant.ID, s store.AbuseSettings) (store.AbuseSettings, error) {
 	return r.db.AbuseSettings().Put(ctx, tid, s)
+}
+
+func (r *storeRepo) listWebhooks(ctx context.Context, tid tenant.ID) ([]store.Webhook, error) {
+	return r.db.Webhooks().List(ctx, tid)
+}
+
+func (r *storeRepo) listBlocklist(ctx context.Context, tid tenant.ID, cursor string) (store.Page[store.BlocklistEntry], error) {
+	return r.db.Blocklist().List(ctx, tid, store.BlocklistFilter{Cursor: cursor, Limit: store.MaxPageSize})
+}
+
+func (r *storeRepo) replaceNetworkRulesTx(ctx context.Context, tx *store.ScopedTx, cidrs []netip.Prefix, domains []string) error {
+	_, err := r.db.NetworkRules().ReplaceTx(ctx, tx, cidrs, domains)
+	return err
+}
+
+func (r *storeRepo) replaceRecipientRulesTx(ctx context.Context, tx *store.ScopedTx, set store.RecipientRuleSet, now time.Time) error {
+	_, err := r.db.RecipientRules().ReplaceTx(ctx, tx, set, now)
+	return err
+}
+
+func (r *storeRepo) replaceConfidentialityLevelsTx(ctx context.Context, tx *store.ScopedTx, levels []store.ConfidentialityLevel, by string, now time.Time) error {
+	_, err := r.db.ConfidentialityLevels().ReplaceTx(ctx, tx, levels, by, now)
+	return err
+}
+
+func (r *storeRepo) putAbuseSettingsTx(ctx context.Context, tx *store.ScopedTx, s store.AbuseSettings) error {
+	_, err := r.db.AbuseSettings().PutTx(ctx, tx, s)
+	return err
+}
+
+func (r *storeRepo) putSMTPConfigTx(ctx context.Context, tx *store.ScopedTx, c store.SMTPConfig) error {
+	return r.db.SMTPSettings().PutTx(ctx, tx, c)
+}
+
+func (r *storeRepo) putTemplateTx(ctx context.Context, tx *store.ScopedTx, t store.EmailTemplate) error {
+	_, err := r.db.TenantEmailTemplates().PutTx(ctx, tx, t)
+	return err
+}
+
+func (r *storeRepo) putLegalTx(ctx context.Context, tx *store.ScopedTx, d store.LegalDocument) error {
+	_, err := r.db.TenantLegalDocuments().PutTx(ctx, tx, d)
+	return err
+}
+
+func (r *storeRepo) createBlocklistEntryTx(ctx context.Context, tx *store.ScopedTx, e store.BlocklistEntry) error {
+	_, err := r.db.Blocklist().CreateTx(ctx, tx, e)
+	return err
 }

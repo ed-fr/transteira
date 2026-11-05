@@ -82,6 +82,30 @@ and the project follows [Semantic Versioning](https://semver.org/).
   key); a delivery proof that cannot be written rolls back the whole first-download transaction.
   Guide:
   `docs/operations/proofs.md` (French: `docs/operations/fr/proofs.md`); user guides updated.
+- Export and import of the configuration of an entity (threats in the
+  threat model 2.0): `exportTenantConfig` (`GET /api/v1/admin/tenants/{tenantId}/export`, super
+  admin and delegated admin, not the auditor) returns the general settings without the quota,
+  colours and background preset, network rules, SMTP server, port, security and sender only,
+  recipient rules, confidentiality levels, abuse thresholds, customised mail templates only,
+  legal texts, webhooks by name, kind and events only (disabled), the blocklist, and with
+  `includeBranding=true` the logo and background image. Never exported: SMTP user name and
+  password, webhook URLs and secrets, API tokens, admins, provisioning data, transfers,
+  addresses, invitations, audit, single sign-on. `importTenant` (`POST
+  /api/v1/admin/tenants/import`, super admin only, refused to any other admin before the body
+  is read, 32 MiB) always creates a new entity in the setup state, in one transaction, with
+  strict validation before any decoding (unknown or missing required members, arrays beyond
+  their `maxItems`, at most 10000 blocklist entries: `422 import-invalid` with the JSON pointer
+  of the first error, `422 import-schema-unsupported`, `409` for a used FQDN, `413`). The SMTP
+  credentials, the webhooks and the single sign-on are completed in the setup wizard; the
+  network ranges and domains are imported as written and must be confirmed before completing the
+  setup (threat T-307, migration 0030 `tenants.network_reviewed_at`): the `internal_networks` and
+  `internal_domains` items stay to do, and the completion that is not forced is refused by the
+  statement itself, until an admin saves the rules (`updateNetworkRules`, even unchanged; a
+  "Confirm" button in the wizard and on the Network screen); `TenantSetup` gains
+  `networkReviewedAt`. Existing tenants with rules are backfilled as reviewed. Audit
+  `tenant.exported`, `tenant.imported`. Admin screens: export section on the General screen,
+  "Duplicate" in the entity list, import screen. User guides and API guide (section 10)
+  updated.
 
 ## [1.2.1] - 2026-11-04
 

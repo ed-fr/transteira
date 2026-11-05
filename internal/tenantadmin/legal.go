@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/markup"
@@ -43,6 +42,15 @@ var legalDocuments = []string{store.LegalNotice, store.PrivacyPolicy}
 func checkLegal(doc, lang string) error {
 	if !store.IsLegalDocument(doc) || !tenant.IsLanguage(lang) {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// checkLegalMarkdown validates the Markdown source of a legal document:
+// the bounds of the store ([store.ValidLegalContent]).
+func checkLegalMarkdown(markdown string) error {
+	if !store.ValidLegalContent(markdown) {
+		return invalid(FieldMarkdown, "must be text of at most %d characters", store.MaxLegalContentLen)
 	}
 	return nil
 }
@@ -88,9 +96,8 @@ func (s *Service) UpdateLegal(ctx context.Context, p adminauth.Principal, tid te
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return LegalDocument{}, err
 	}
-	if !utf8.ValidString(markdown) || strings.ContainsRune(markdown, 0) ||
-		utf8.RuneCountInString(markdown) > store.MaxLegalContentLen {
-		return LegalDocument{}, invalid(FieldMarkdown, "must be text of at most %d characters", store.MaxLegalContentLen)
+	if err := checkLegalMarkdown(markdown); err != nil {
+		return LegalDocument{}, err
 	}
 	out := LegalDocument{Document: doc, Language: lang}
 	if strings.TrimSpace(markdown) == "" {

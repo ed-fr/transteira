@@ -149,7 +149,7 @@ The **Setup steps** list is computed from the real configuration of the entity; 
 
 - **Logo** and **Colours** (optional): see [Branding](topic:tenant-branding).
 - **Mail (SMTP)** (required): the settings must have been tested successfully with **Send a test email** since their last change. See [Mail (SMTP)](topic:tenant-smtp).
-- **Internal IP ranges** and **Internal mail domains** (required): at least one of each. See [Network](topic:tenant-network).
+- **Internal IP ranges** and **Internal mail domains** (required): at least one of each, saved from the administration. For an entity created by importing a configuration, the ranges and domains come from the source entity: the wizard shows them with the message "These ranges and domains were imported: check them, then confirm." and both steps stay **To do** until you click **Confirm** (or save them in the Network screen, even unchanged). See [Network](topic:tenant-network).
 - **Legal notice** and **Privacy policy** (required): written in the default language of the entity, with no `[To complete: …]` (or `[À compléter : …]`) marker left. See [Legal information](topic:tenant-legal).
 - **Mail templates** (optional): tick **I reviewed the mail templates** once you have reviewed or adapted them (see [Email templates](topic:tenant-templates)); this is recorded when the setup is finished.
 
@@ -187,6 +187,21 @@ Click **Save** to apply.
 
 The **Webhooks** section below sets the content of the alerts sent to the [webhooks](topic:tenant-webhooks) of the entity. **Include addresses in webhooks** adds the addresses of the sender and of the recipients concerned. Addresses are personal data that leave TransTeira with each alert: tick it only if the receivers need them and are trusted. It is off by default; click **Save the webhook setting** under the box to apply.
 
+<!-- topic: tenant-export -->
+### Exporting the configuration
+
+The **Exporting the configuration** section at the bottom of the General screen downloads the settings of the entity as a JSON file. The super administrator uses it to create another entity by duplicating this one.
+
+The file contains the general settings (without the storage quota), the colours and the background preset, the network ranges and domains, the recipient domain rules, the confidentiality levels, the abuse thresholds, the customised email templates only, the legal texts, the blocklist, the SMTP server, port, security and sender address, and the webhooks by name, type and events only. Tick **Include the logo and the background image** to add the two image files.
+
+The file never contains the SMTP user name and password, the webhook addresses and secrets, the API tokens, the administrators, the single sign-on configuration, the transfers, the addresses, the invitations or the audit log.
+
+Click **Download the configuration** to download the file. Each export is recorded in the [audit log](topic:tenant-audit) (`tenant.exported`).
+
+![Exporting the configuration section of the General screen, with the personal data notice, the Include the logo and the background image checkbox and the Download the configuration link](../screenshots/en/admin-tenant-export.png)
+
+> **Warning** The file holds personal data: the addresses of the blocklist and the contacts written in the legal texts. Keep it like any confidential document, do not send it by plain email and delete it once the new entity is created.
+
 <!-- topic: tenant-branding -->
 ### Branding
 
@@ -223,6 +238,8 @@ A user is internal when **both** conditions are met: their IP address belongs to
 ![Network screen with the internal IP ranges and the internal email domains](../screenshots/en/admin-tenant-network.png)
 
 Errors are reported line by line, sometimes with a suggested correction you can apply. Repeated lines are ignored, and the server normalizes the values it saves (the lists shown after saving are the saved ones). Click **Save**.
+
+If the entity being set up was created by importing a configuration, an **Imported ranges and domains to confirm** warning appears above the lists: check them, then click **Confirm**. Saving the lists also confirms them.
 
 **Allow deposits from outside for verified internal users**: off by default. When on, an address of an internal domain **already verified from the internal network** can deposit outside the ranges, without an invitation, with a code at every deposit (see the depositor guide, section "Depositing from outside"). Invitations remain reserved to the internal network, and these deposits are flagged in the [audit log](topic:tenant-audit) and counted by the [abuse detection](topic:tenant-abuse). A compromised mailbox would then allow deposits from the Internet: turn the option on only after assessment. The option itself is public in the entity configuration. When it is on, a code request from outside for an address that is not eligible (another domain, never verified from the internal network, inactive, unknown) gets the same answer as an eligible address, with no email sent: the attempt counts in the code limits and every code is refused at confirmation. If a user reports that no code arrives from outside, check their eligibility. With the option off, outsiders get the generic refusal. Blocklisted addresses are still refused.
 

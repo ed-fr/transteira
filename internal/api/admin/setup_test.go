@@ -3,6 +3,7 @@ package admin
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
@@ -46,6 +47,12 @@ func TestCompleteTenantSetup(t *testing.T) {
 	got := resp.(gen.CompleteTenantSetup200JSONResponse)
 	if got.SetupState != gen.TenantSetupStateActive || !got.CanComplete || len(got.Items) != 2 {
 		t.Errorf("answer %+v", got)
+	}
+	// The review of the network rules is rendered in UTC (null when none:
+	// see TestGetTenantSetup).
+	if got.NetworkReviewedAt == nil || got.NetworkReviewedAt.Location() != time.UTC ||
+		!got.NetworkReviewedAt.Equal(setupReviewedAt) {
+		t.Errorf("networkReviewedAt = %v", got.NetworkReviewedAt)
 	}
 	if !reflect.DeepEqual(svc.args["CompleteSetup"], []any{"as_01", tenant.ID("ten_a"), true, true, clientIP}) {
 		t.Errorf("args %v", svc.args["CompleteSetup"])

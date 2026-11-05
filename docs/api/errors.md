@@ -719,7 +719,7 @@ use to ban the client IP.
 
 - **HTTP status:** 422 Unprocessable Content
 - **Since:** 2.0.
-- **Meaning:** the imported entity configuration is refused: unknown member, value out of its limits, duplicate. The first entry of `errors` holds the JSON pointer of the first error in the request body (for example `/config/settings/maxTransferBytes`). Nothing is created.
+- **Meaning:** the imported entity configuration is refused: unknown member, missing required member, array longer than its `maxItems` (at most 10000 blocklist entries), value of the wrong type or out of its limits, duplicate. The first entry of `errors` holds the JSON pointer of the first error in the request body (for example `/config/settings/maxTransferBytes`) and a code (`unknown-member`, `required`, `too-many` with the pointer of the array, `type`, `duplicate`, `too-deep`, `syntax`, `invalid-value`...). Nothing is created.
 - **Typical endpoints:** `POST /admin/tenants/import`.
 - **What to do:** fix the document at the pointed place; export again from the source entity if needed.
 

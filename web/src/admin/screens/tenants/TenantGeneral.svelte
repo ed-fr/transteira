@@ -14,6 +14,8 @@
   //   saved by its own form so that it never sends the general settings being edited.
   // - A link opens the printable user documentation of the entity (/help/print on its FQDN, in a
   //   new tab), as the users see it with the rules in force.
+  // - Export (since 2.0, any admin of the tenant, not the auditor): a download link to the JSON
+  //   configuration (GET /admin/tenants/{id}/export), with the branding files on request.
   // The admin profile is reloaded after a rename and after a deletion (it lists the tenants).
   // - Auditor (read-only role): the same facts as text (summary), with no form, no webhook
   //   setting and no deletion; the antivirus state is shown but cannot be changed.
@@ -42,6 +44,7 @@
   import NotFound from '../NotFound.svelte';
   import { includeAddressesPatch, includesAddresses } from '../ops/webhooks';
   import type { AdminScreenProps } from '../types';
+  import { exportUrl } from './tenantTransfer';
   import {
     TENANT_LANGUAGES,
     antivirusPatch,
@@ -79,6 +82,7 @@
     maxTransferCeiling: `${uid}-ceiling`,
     maxTransferBytes: `${uid}-max`,
     webhookIncludeAddresses: `${uid}-webhook-addresses`,
+    exportBranding: `${uid}-export-branding`,
   };
 
   const tenantId = $derived(params['id'] ?? '');
@@ -96,6 +100,8 @@
   let inputs: Partial<Record<SizeField, HTMLInputElement>> = $state({});
   // Webhook payloads: include the addresses concerned.
   let includeAddresses = $state(false);
+  // Export of the configuration: include the branding files.
+  let exportBranding = $state(false);
 
   // Antivirus analysis (since 1.1, super admin): disabling asks for a confirmation.
   let avConfirmOpen = $state(false);
@@ -461,6 +467,26 @@
           bind:checked={includeAddresses}
         />
       </FormSection>
+    {/if}
+
+    {#if !readOnly}
+      <section aria-labelledby="{uid}-export" data-testid="export-section">
+        <h2 id="{uid}-export">{t('adminTenants.general.export.title')}</h2>
+        <p>{t('adminTenants.general.export.intro')}</p>
+        <Alert severity="info" live={false}>{t('adminTenants.general.export.notice')}</Alert>
+        <Checkbox
+          id={ids.exportBranding}
+          label={t('adminTenants.general.export.includeBranding.label')}
+          hint={t('adminTenants.general.export.includeBranding.hint')}
+          bind:checked={exportBranding}
+        />
+        <p>
+          <a href={exportUrl(tenant.id, exportBranding)} download>
+            {t('adminTenants.general.export.download')}
+            <span class="visually-hidden">{t('adminTenants.general.export.downloadHint')}</span>
+          </a>
+        </p>
+      </section>
     {/if}
 
     <section aria-labelledby="{uid}-antivirus" data-testid="antivirus-section">

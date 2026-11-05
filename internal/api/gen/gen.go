@@ -2738,8 +2738,8 @@ type ApiTokenUpdate = json.RawMessage
 // `admin.identity_linked` and `admin.identity_unlinked` name the account, the issuer and the client ID, never the
 // subject (`admin.identity_unlinked` carries `details.identity_id`, `issuer`, `client_id` and `reason`:
 // `unpinned`, `promoted`, `sso_changed` or `email_changed`); `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
-// only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
-// source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
+// only, never the secret; `tenant.exported` (details: `includeBranding`) and `tenant.imported` (details:
+// `sourceVersion`, `exportedAt` and the count of each section) never carry the configuration; `drop_link.*` name the link, never its
 // token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
 // `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
 // `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
@@ -2804,8 +2804,8 @@ type AuditEvent struct {
 	// `admin.identity_linked` and `admin.identity_unlinked` name the account, the issuer and the client ID, never the
 	// subject (`admin.identity_unlinked` carries `details.identity_id`, `issuer`, `client_id` and `reason`:
 	// `unpinned`, `promoted`, `sso_changed` or `email_changed`); `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
-	// only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
-	// source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
+	// only, never the secret; `tenant.exported` (details: `includeBranding`) and `tenant.imported` (details:
+	// `sourceVersion`, `exportedAt` and the count of each section) never carry the configuration; `drop_link.*` name the link, never its
 	// token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
 	// `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
 	// `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
@@ -4726,7 +4726,9 @@ type TenantConfigExport struct {
 	// the transfers of the tenant (no write per uploaded chunk); deposits from outside
 	// (`internal_remote`) count like internal ones.
 	AbuseThresholds *AbuseThresholds `json:"abuseThresholds,omitempty"`
-	Blocklist       *[]struct {
+
+	// Blocklist At most 10000 entries can be imported.
+	Blocklist *[]struct {
 		Comment *string       `json:"comment,omitempty"`
 		Kind    BlocklistKind `json:"kind"`
 		Value   string        `json:"value"`
@@ -4746,7 +4748,7 @@ type TenantConfigExport struct {
 	} `json:"branding,omitempty"`
 	ConfidentialityLevels *ConfidentialityLevelList `json:"confidentialityLevels,omitempty"`
 
-	// EmailTemplates The customised templates only.
+	// EmailTemplates The customised templates only (at most one per template and language).
 	EmailTemplates *[]struct {
 		BodyHtml string `json:"bodyHtml"`
 		BodyText string `json:"bodyText"`
@@ -4772,7 +4774,9 @@ type TenantConfigExport struct {
 		Language Language `json:"language"`
 		Subject  string   `json:"subject"`
 	} `json:"emailTemplates,omitempty"`
-	ExportedAt     time.Time `json:"exportedAt"`
+	ExportedAt time.Time `json:"exportedAt"`
+
+	// LegalDocuments At most one per document and language.
 	LegalDocuments *[]struct {
 		Document TenantConfigExportLegalDocumentsDocument `json:"document"`
 
@@ -4826,7 +4830,9 @@ type TenantConfigExport struct {
 	// Webhooks For information: name, kind and events. Never the URL nor the secret; not recreated by an import.
 	Webhooks *[]struct {
 		Enabled TenantConfigExportWebhooksEnabled `json:"enabled"`
-		Events  []WebhookEventType                `json:"events"`
+
+		// Events Tenant events only.
+		Events []WebhookEventType `json:"events"`
 
 		// Kind `teams` and `slack` receive a formatted message (incoming webhook); `generic` receives a signed `WebhookEvent` JSON document.
 		Kind WebhookKind `json:"kind"`
@@ -4985,6 +4991,9 @@ type TenantSetup struct {
 	// CanComplete Every required item is done.
 	CanComplete bool              `json:"canComplete"`
 	Items       []TenantSetupItem `json:"items"`
+
+	// NetworkReviewedAt Since 2.0. Last time an admin saved the internal IP ranges and mail domains (`updateNetworkRules`, even unchanged); null when never, for example after `importTenant`. The `internal_networks` and `internal_domains` items are done only once it is set.
+	NetworkReviewedAt *time.Time `json:"networkReviewedAt"`
 
 	// SetupState Since 1.2. `setup`: the tenant is being configured and refuses deposits (`503 tenant-in-setup`); `active`: open.
 	SetupState TenantSetupState `json:"setupState"`
@@ -17012,6 +17021,22 @@ func (response ImportTenant500ApplicationProblemPlusJSONResponse) VisitImportTen
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ImportTenant503ApplicationProblemPlusJSONResponse struct {
+	SystemSmtpUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response ImportTenant503ApplicationProblemPlusJSONResponse) VisitImportTenantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }

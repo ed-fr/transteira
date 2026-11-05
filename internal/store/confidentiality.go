@@ -400,32 +400,50 @@ func (r *ConfidentialityLevels) Replace(ctx context.Context, tid tenant.ID, leve
 	if err != nil {
 		return nil, err
 	}
-	err = s.Tx(ctx, func(tx *ScopedTx) error {
-		// Concurrent replaces would otherwise both delete, then collide on
-		// insert (PostgreSQL, READ COMMITTED).
-		if err := tx.lock(ctx); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, qLevelsDelete); err != nil {
-			return err
-		}
-		for _, l := range out {
-			labels, _ := json.Marshal(l.Labels)             // a map[string]string always marshals
-			descriptions, _ := json.Marshal(l.Descriptions) // same
-			_, err := tx.Exec(ctx, qLevelInsert, l.Key, l.Position, string(labels), string(descriptions), l.IsDefault,
-				l.Rules.RequireRecipientVerification, l.Rules.RequirePassword, l.Rules.ExpiryDaysMask,
-				l.Rules.InternalRecipientsOnly, l.Rules.ForceDeleteAfterFirstDownload, nullInt(l.Rules.MaxDownloadsCap),
-				toMillis(l.UpdatedAt), l.UpdatedBy)
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := s.Tx(ctx, func(tx *ScopedTx) error { return replaceLevels(ctx, tx, out) }); err != nil {
 		return nil, wrap("replace confidentiality levels", err)
 	}
 	return out, nil
+}
+
+// ReplaceTx is Replace inside tx, for the tenant tx is bound to (for
+// example a configuration import writing a new tenant in the transaction
+// that creates it). It validates the levels as Replace does. After an
+// error, the caller must abort the transaction.
+func (r *ConfidentialityLevels) ReplaceTx(ctx context.Context, tx *ScopedTx, levels []ConfidentialityLevel, by string, now time.Time) ([]ConfidentialityLevel, error) {
+	out, err := normalizeLevels(levels, by, r.db.orNow(now))
+	if err != nil {
+		return nil, err
+	}
+	if err := replaceLevels(ctx, tx, out); err != nil {
+		return nil, wrap("replace confidentiality levels", err)
+	}
+	return out, nil
+}
+
+// replaceLevels replaces the levels of the tenant of tx with the
+// normalized levels, under the tenant lock, returning raw errors.
+func replaceLevels(ctx context.Context, tx *ScopedTx, levels []ConfidentialityLevel) error {
+	// Concurrent replaces would otherwise both delete, then collide on
+	// insert (PostgreSQL, READ COMMITTED).
+	if err := tx.lock(ctx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, qLevelsDelete); err != nil {
+		return err
+	}
+	for _, l := range levels {
+		labels, _ := json.Marshal(l.Labels)             // a map[string]string always marshals
+		descriptions, _ := json.Marshal(l.Descriptions) // same
+		_, err := tx.Exec(ctx, qLevelInsert, l.Key, l.Position, string(labels), string(descriptions), l.IsDefault,
+			l.Rules.RequireRecipientVerification, l.Rules.RequirePassword, l.Rules.ExpiryDaysMask,
+			l.Rules.InternalRecipientsOnly, l.Rules.ForceDeleteAfterFirstDownload, nullInt(l.Rules.MaxDownloadsCap),
+			toMillis(l.UpdatedAt), l.UpdatedBy)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // normalizeTransferLevel validates the confidentiality snapshot of a new

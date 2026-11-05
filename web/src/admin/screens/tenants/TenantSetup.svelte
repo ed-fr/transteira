@@ -6,7 +6,10 @@
   // checkbox sent as mailTemplatesReviewed at completion. "Finish setup" is enabled when the
   // API says the setup can be completed; a 409 setup-incomplete lists the missing items. The
   // super admin alone can force the opening, after a confirmation. When the tenant is active
-  // the checklist is shown for information. The tenant sub-navigation is rendered by App.svelte.
+  // the checklist is shown for information. Version 2.0: internal ranges and domains that no admin
+  // ever saved (written by a configuration import) are listed with a "Confirm" button that saves
+  // them unchanged (PUT /admin/tenants/{id}/network): until then the network items stay to do.
+  // The tenant sub-navigation is rendered by App.svelte.
   import { tick } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
   import { Alert, Button, Checkbox, Spinner } from '../../../shared/components';
@@ -27,6 +30,7 @@
     orderItems,
     type TenantSetup,
   } from './setup';
+  import { awaitsReview, reviewPending, type NetworkRules } from './network';
 
   type View =
     { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; setup: TenantSetup };
@@ -42,6 +46,9 @@
   let missing = $state<string[] | undefined>(undefined);
   let result = $state<{ severity: 'success' | 'error' | 'info'; text: string } | undefined>(undefined);
   let resultElement = $state<HTMLDivElement | undefined>();
+  // Imported rules waiting for a confirmation, undefined when there is nothing to confirm.
+  let pendingRules = $state.raw<NetworkRules | undefined>(undefined);
+  let confirming = $state(false);
   let ticket = 0;
 
   const me = $derived(adminSession.me);
@@ -68,8 +75,12 @@
     }
     try {
       const { data } = await adminApi.get('/admin/tenants/{tenantId}/setup', { path: { tenantId } });
+      const rules = reviewPending(data)
+        ? (await adminApi.get('/admin/tenants/{tenantId}/network', { path: { tenantId } })).data
+        : undefined;
       if (mine === ticket) {
         view = { kind: 'ready', setup: data };
+        pendingRules = awaitsReview(data, rules) ? rules : undefined;
         setupStates.set(tenantId, data.setupState);
       }
     } catch (err) {
@@ -122,6 +133,22 @@
     }
   }
 
+  /** Confirms the imported network rules by saving them unchanged. */
+  async function confirmNetwork(rules: NetworkRules): Promise<void> {
+    confirming = true;
+    result = undefined;
+    missing = undefined;
+    try {
+      await adminApi.put('/admin/tenants/{tenantId}/network', { path: { tenantId }, body: rules });
+      await load(true);
+      await show('success', t('setup.wizard.networkReview.confirmed'));
+    } catch (err) {
+      await show('error', describeError(i18n, err).message);
+    } finally {
+      confirming = false;
+    }
+  }
+
   async function confirmForce(): Promise<void> {
     await complete(true);
   }
@@ -156,6 +183,43 @@
           {/each}
         </ul>
       {/if}
+    </Alert>
+  {/if}
+
+  {#if pendingRules !== undefined && !active}
+    {@const rules = pendingRules}
+    <Alert severity="warning" live={false} title={t('setup.wizard.networkReview.title')}>
+      <p>{t('setup.wizard.networkReview.text')}</p>
+      <h3 class="tt-setup__review-title">{labelOf('internal_networks')}</h3>
+      {#if rules.internalCidrs.length > 0}
+        <ul>
+          {#each rules.internalCidrs as cidr (cidr)}
+            <li class="tt-break">{cidr}</li>
+          {/each}
+        </ul>
+      {:else}
+        <p>{t('setup.wizard.networkReview.none')}</p>
+      {/if}
+      <h3 class="tt-setup__review-title">{labelOf('internal_domains')}</h3>
+      {#if rules.internalDomains.length > 0}
+        <ul>
+          {#each rules.internalDomains as domain (domain)}
+            <li class="tt-break">{domain}</li>
+          {/each}
+        </ul>
+      {:else}
+        <p>{t('setup.wizard.networkReview.none')}</p>
+      {/if}
+      <p>{t('setup.wizard.networkReview.edit')}</p>
+      <div class="tt-setup__actions">
+        <Button
+          loading={confirming}
+          loadingLabel={t('setup.wizard.networkReview.confirming')}
+          onclick={() => void confirmNetwork(rules)}
+        >
+          {t('setup.wizard.networkReview.confirm')}
+        </Button>
+      </div>
     </Alert>
   {/if}
 
@@ -267,6 +331,11 @@
 
   .tt-setup__hint {
     margin: var(--tt-space-1) 0;
+  }
+
+  .tt-setup__review-title {
+    margin: var(--tt-space-3) 0 var(--tt-space-1);
+    font-size: inherit;
   }
 
   .tt-setup__actions {

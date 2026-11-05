@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/netip"
 	"slices"
 	"strings"
@@ -142,7 +143,8 @@ func (r *NetworkRules) Get(ctx context.Context, tid tenant.ID) (NetworkRuleSet, 
 // stored, normalized set. Concurrent replaces of the same tenant are
 // serialized: the final rules are exactly those of one of them. Invalid values yield ErrInvalid (nothing is
 // changed); a missing tenant yields ErrNotFound when at least one rule is
-// given.
+// given. It does not record the review of the rules: an administrator
+// saving them goes through [NetworkRules.ReplaceReviewed].
 func (r *NetworkRules) Replace(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (NetworkRuleSet, error) {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -152,29 +154,87 @@ func (r *NetworkRules) Replace(ctx context.Context, tid tenant.ID, cidrs []netip
 	if err != nil {
 		return NetworkRuleSet{}, err
 	}
-	err = s.Tx(ctx, func(tx *ScopedTx) error {
-		// Concurrent replaces of the same tenant would otherwise both
-		// delete, then collide on insert (PostgreSQL, READ COMMITTED).
-		if err := tx.lock(ctx); err != nil {
+	err = s.Tx(ctx, func(tx *ScopedTx) error { return replaceNetworkRules(ctx, tx, set) })
+	if err != nil {
+		return NetworkRuleSet{}, wrap("replace network rules", err)
+	}
+	return set, nil
+}
+
+// ReplaceReviewed is Replace for rules saved by an administrator: in the
+// same transaction, under the tenant lock, it also records their review on
+// the tenant row ([tenant.Tenant.NetworkReviewedAt], now), even when the
+// rules are unchanged, since saving them is the confirmation that the
+// setup checklist and [Tenants.CompleteSetup] wait for (T-307). Replace and
+// [NetworkRules.ReplaceTx] (a configuration import) never record it. It
+// returns ErrInvalid for a malformed tenant ID or invalid values, and
+// ErrNotFound when the tenant does not exist or is being deleted (nothing
+// is changed).
+func (r *NetworkRules) ReplaceReviewed(ctx context.Context, tid tenant.ID, cidrs []netip.Prefix, domains []string) (NetworkRuleSet, error) {
+	if err := tid.Validate(); err != nil {
+		return NetworkRuleSet{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	set, err := normalizeRules(cidrs, domains)
+	if err != nil {
+		return NetworkRuleSet{}, err
+	}
+	now := toMillis(r.db.now())
+	err = r.db.systemScope(reasonTenantNetwork).Tx(ctx, func(tx *SystemTx) error {
+		// Ordered with the setup completion (Tenants.CompleteSetup).
+		if err := tx.lockTenant(ctx, tid); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, qRulesDelete); err != nil {
+		res, err := tx.Exec(ctx, qTenantSetNetworkReviewed, now, string(tid))
+		if err == nil {
+			err = expectOne(res)
+		}
+		if err != nil {
 			return err
 		}
-		for _, p := range set.CIDRs {
-			if _, err := tx.Exec(ctx, qRuleInsert, ruleKindCIDR, p.String()); err != nil {
-				return err
-			}
-		}
-		for _, d := range set.Domains {
-			if _, err := tx.Exec(ctx, qRuleInsert, ruleKindDomain, d); err != nil {
-				return err
-			}
-		}
-		return nil
+		return tx.WithTenant(ctx, tid, func(stx *ScopedTx) error { return replaceNetworkRules(ctx, stx, set) })
 	})
 	if err != nil {
 		return NetworkRuleSet{}, wrap("replace network rules", err)
 	}
 	return set, nil
+}
+
+// ReplaceTx is Replace inside tx, for the tenant tx is bound to (for
+// example a configuration import writing a new tenant in the transaction
+// that creates it). It validates and normalizes the rules as Replace does
+// and, like it, does not record their review (T-307).
+// After an error, the caller must abort the transaction.
+func (r *NetworkRules) ReplaceTx(ctx context.Context, tx *ScopedTx, cidrs []netip.Prefix, domains []string) (NetworkRuleSet, error) {
+	set, err := normalizeRules(cidrs, domains)
+	if err != nil {
+		return NetworkRuleSet{}, err
+	}
+	if err := replaceNetworkRules(ctx, tx, set); err != nil {
+		return NetworkRuleSet{}, wrap("replace network rules", err)
+	}
+	return set, nil
+}
+
+// replaceNetworkRules replaces the rules of the tenant of tx with the
+// normalized set, under the tenant lock, returning raw errors.
+func replaceNetworkRules(ctx context.Context, tx *ScopedTx, set NetworkRuleSet) error {
+	// Concurrent replaces of the same tenant would otherwise both
+	// delete, then collide on insert (PostgreSQL, READ COMMITTED).
+	if err := tx.lock(ctx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, qRulesDelete); err != nil {
+		return err
+	}
+	for _, p := range set.CIDRs {
+		if _, err := tx.Exec(ctx, qRuleInsert, ruleKindCIDR, p.String()); err != nil {
+			return err
+		}
+	}
+	for _, d := range set.Domains {
+		if _, err := tx.Exec(ctx, qRuleInsert, ruleKindDomain, d); err != nil {
+			return err
+		}
+	}
+	return nil
 }

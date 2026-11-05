@@ -33,6 +33,7 @@ describe('admin routes', () => {
     ['/admin/account', '/account', 'auth', 'account'],
     ['/admin/tenants', '/tenants', 'auth', 'tenants'],
     ['/admin/tenants/new', '/tenants/new', 'super', 'tenant-create'],
+    ['/admin/tenants/import', '/tenants/import', 'super', 'tenant-create'],
     ['/admin/tenants/ten_1/general', '/tenants/:id/general', 'auth', 'tenant-general'],
     ['/admin/tenants/ten_1/branding', '/tenants/:id/branding', 'auth', 'tenant-branding'],
     ['/admin/tenants/ten_1/network', '/tenants/:id/network', 'auth', 'tenant-network'],
@@ -128,6 +129,7 @@ describe('admin routes', () => {
     const superRoutes = routes.filter((r) => r.access === 'super').map((r) => r.pattern);
     expect(superRoutes).toEqual([
       '/tenants/new',
+      '/tenants/import',
       '/admins',
       '/admins/new',
       '/admins/:id',

@@ -5,6 +5,7 @@ import type { TenantSetup } from './screens/tenants/setup';
 const setup = (setupState: TenantSetup['setupState']): TenantSetup => ({
   setupState,
   canComplete: false,
+  networkReviewedAt: null,
   items: [],
 });
 

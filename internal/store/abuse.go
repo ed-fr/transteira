@@ -351,8 +351,40 @@ func (r *AbuseSettingsRepo) Put(ctx context.Context, tid tenant.ID, s AbuseSetti
 	if _, err := r.db.Scoped(tid); err != nil {
 		return AbuseSettings{}, err
 	}
-	if err := s.Validate(); err != nil {
+	s, args, err := r.abuseSettingsArgs(s)
+	if err != nil {
 		return AbuseSettings{}, err
+	}
+	err = writeScoped(ctx, r.db, tid, "put abuse settings", func(tx *ScopedTx) error {
+		return upsert(ctx, tx, qAbuseSettingsUpdate, args, qAbuseSettingsInsert, args)
+	})
+	if err != nil {
+		return AbuseSettings{}, err
+	}
+	return s, nil
+}
+
+// PutTx is Put inside tx, for the tenant tx is bound to (for example a
+// configuration import writing a new tenant in the transaction that
+// creates it). It validates s as Put does. After an error, the caller must
+// abort the transaction.
+func (r *AbuseSettingsRepo) PutTx(ctx context.Context, tx *ScopedTx, s AbuseSettings) (AbuseSettings, error) {
+	s, args, err := r.abuseSettingsArgs(s)
+	if err != nil {
+		return AbuseSettings{}, err
+	}
+	if err := upsert(ctx, tx, qAbuseSettingsUpdate, args, qAbuseSettingsInsert, args); err != nil {
+		return AbuseSettings{}, wrap("put abuse settings", err)
+	}
+	return s, nil
+}
+
+// abuseSettingsArgs validates s, sets its UpdatedAt (the store's clock
+// when zero, millisecond precision) and returns it with the arguments of
+// the update and insert statements.
+func (r *AbuseSettingsRepo) abuseSettingsArgs(s AbuseSettings) (AbuseSettings, []any, error) {
+	if err := s.Validate(); err != nil {
+		return AbuseSettings{}, nil, err
 	}
 	s.UpdatedAt = r.db.orNow(s.UpdatedAt).UTC().Truncate(time.Millisecond)
 	args := []any{
@@ -362,13 +394,7 @@ func (r *AbuseSettingsRepo) Put(ctx context.Context, tid tenant.ID, s AbuseSetti
 		s.MaxInvitationsPerInviter, nullInt64(s.ExternalMaxDailyBytes), nullInt(s.ExternalMaxDailyDeposits),
 		toMillis(s.UpdatedAt), s.UpdatedBy,
 	}
-	err := writeScoped(ctx, r.db, tid, "put abuse settings", func(tx *ScopedTx) error {
-		return upsert(ctx, tx, qAbuseSettingsUpdate, args, qAbuseSettingsInsert, args)
-	})
-	if err != nil {
-		return AbuseSettings{}, err
-	}
-	return s, nil
+	return s, args, nil
 }
 
 // AbuseAlerts is the tenant-scoped repository of the abuse alert

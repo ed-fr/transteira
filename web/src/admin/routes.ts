@@ -51,6 +51,7 @@ import TenantAbuse from './screens/tenants/TenantAbuse.svelte';
 import TenantBranding from './screens/tenants/TenantBranding.svelte';
 import TenantCreate from './screens/tenants/TenantCreate.svelte';
 import TenantGeneral from './screens/tenants/TenantGeneral.svelte';
+import TenantImport from './screens/tenants/TenantImport.svelte';
 import TenantList from './screens/tenants/TenantList.svelte';
 import TenantNetwork from './screens/tenants/TenantNetwork.svelte';
 import TenantRecipientRules from './screens/tenants/TenantRecipientRules.svelte';
@@ -114,6 +115,13 @@ export const routes: readonly AdminRoute[] = [
     pattern: '/tenants/new',
     component: TenantCreate,
     titleKey: 'adminTenants.create.title',
+    access: 'super',
+    helpTopic: 'tenant-create',
+  },
+  {
+    pattern: '/tenants/import',
+    component: TenantImport,
+    titleKey: 'adminTenants.import.title',
     access: 'super',
     helpTopic: 'tenant-create',
   },

@@ -56,32 +56,20 @@ func (s *Service) GetNetworkRules(ctx context.Context, p adminauth.Principal, ti
 // a single host, host bits must be zero, IPv6 zones are refused and
 // IPv4-mapped prefixes become IPv4. Domains are lowercased host names (punycode for international
 // ones). A malformed value is an *InvalidError naming its index, checked
-// only once access to the tenant is granted.
+// only once access to the tenant is granted. Saving the rules, even
+// unchanged, also records their review on the tenant
+// ([tenant.Tenant.NetworkReviewedAt]) in the same transaction: it is the
+// confirmation of the rules written by a configuration import, which the
+// network items of the setup checklist wait for (T-307). Every save is
+// audited as tenant.network_updated, as before; the review needs no
+// detail of its own since every save records it.
 func (s *Service) UpdateNetworkRules(ctx context.Context, p adminauth.Principal, tid tenant.ID, cidrs, domains []string, ip netip.Addr) (NetworkRules, error) {
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return NetworkRules{}, err
 	}
-	if len(cidrs) > MaxInternalCIDRs {
-		return NetworkRules{}, invalid(FieldInternalCIDRs, "at most %d ranges", MaxInternalCIDRs)
-	}
-	if len(domains) > MaxInternalDomains {
-		return NetworkRules{}, invalid(FieldInternalDomains, "at most %d domains", MaxInternalDomains)
-	}
-	prefixes := make([]netip.Prefix, len(cidrs))
-	for i, raw := range cidrs {
-		pfx, err := netpolicy.ParsePrefix(strings.TrimSpace(raw))
-		if err != nil {
-			return NetworkRules{}, invalid(FieldInternalCIDRs+"/"+strconv.Itoa(i), "%v", err)
-		}
-		prefixes[i] = pfx
-	}
-	norm := make([]string, len(domains))
-	for i, raw := range domains {
-		d, err := normalizeDomain(raw)
-		if err != nil {
-			return NetworkRules{}, invalid(FieldInternalDomains+"/"+strconv.Itoa(i), "must be a mail domain")
-		}
-		norm[i] = d
+	prefixes, norm, err := networkToStore(cidrs, domains)
+	if err != nil {
+		return NetworkRules{}, err
 	}
 	set, err := s.repo.replaceNetworkRules(ctx, tid, prefixes, norm)
 	switch {
@@ -95,6 +83,35 @@ func (s *Service) UpdateNetworkRules(ctx context.Context, p adminauth.Principal,
 		"cidrs": len(out.CIDRs), "domains": len(out.Domains),
 	})
 	return out, nil
+}
+
+// networkToStore validates the internal ranges and domains of a tenant
+// and returns them parsed and normalized; a malformed value is an
+// *InvalidError naming its index.
+func networkToStore(cidrs, domains []string) ([]netip.Prefix, []string, error) {
+	if len(cidrs) > MaxInternalCIDRs {
+		return nil, nil, invalid(FieldInternalCIDRs, "at most %d ranges", MaxInternalCIDRs)
+	}
+	if len(domains) > MaxInternalDomains {
+		return nil, nil, invalid(FieldInternalDomains, "at most %d domains", MaxInternalDomains)
+	}
+	prefixes := make([]netip.Prefix, len(cidrs))
+	for i, raw := range cidrs {
+		pfx, err := netpolicy.ParsePrefix(strings.TrimSpace(raw))
+		if err != nil {
+			return nil, nil, invalid(FieldInternalCIDRs+"/"+strconv.Itoa(i), "%v", err)
+		}
+		prefixes[i] = pfx
+	}
+	norm := make([]string, len(domains))
+	for i, raw := range domains {
+		d, err := normalizeDomain(raw)
+		if err != nil {
+			return nil, nil, invalid(FieldInternalDomains+"/"+strconv.Itoa(i), "must be a mail domain")
+		}
+		norm[i] = d
+	}
+	return prefixes, norm, nil
 }
 
 // errDomainSyntax reports a malformed mail domain; it never quotes the

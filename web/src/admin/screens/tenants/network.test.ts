@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseCidrList } from '../../forms/cidr';
 import { parseDomainList } from '../../forms/domain';
 import {
+  awaitsReview,
+  reviewPending,
   cidrLineMessage,
   domainLineMessage,
   networkBody,
@@ -138,5 +140,36 @@ describe('body, dirty and normalisation', () => {
     expect(wasNormalized(' 10.0.0.1/32 \r\n\n', 'example.com', saved)).toBe(false);
     expect(wasNormalized('10.0.0.1', 'example.com', saved)).toBe(true);
     expect(wasNormalized('10.0.0.1/32', 'EXAMPLE.com', saved)).toBe(true);
+  });
+});
+
+describe('awaitsReview', () => {
+  const rules = { internalCidrs: ['10.0.0.0/8'], internalDomains: ['entity-a.example.com'] };
+  const pending = { setupState: 'setup' as const, networkReviewedAt: null };
+
+  it('asks to confirm the imported rules of a tenant in setup', () => {
+    expect(awaitsReview(pending, rules)).toBe(true);
+    expect(awaitsReview(pending, { internalCidrs: [], internalDomains: ['a.example.com'] })).toBe(true);
+    expect(awaitsReview(pending, { internalCidrs: ['10.0.0.0/8'], internalDomains: [] })).toBe(true);
+  });
+
+  it('asks nothing once the rules are confirmed, without rules, or for an active tenant', () => {
+    expect(awaitsReview({ setupState: 'setup', networkReviewedAt: '2026-11-05T09:30:00Z' }, rules)).toBe(
+      false,
+    );
+    expect(awaitsReview(pending, { internalCidrs: [], internalDomains: [] })).toBe(false);
+    expect(awaitsReview({ setupState: 'active', networkReviewedAt: null }, rules)).toBe(false);
+  });
+
+  it('tells whether the rules of a tenant in setup were never saved', () => {
+    expect(reviewPending(pending)).toBe(true);
+    expect(reviewPending({ setupState: 'setup', networkReviewedAt: '2026-11-05T09:30:00Z' })).toBe(false);
+    expect(reviewPending({ setupState: 'active', networkReviewedAt: null })).toBe(false);
+    expect(reviewPending(undefined)).toBe(false);
+  });
+
+  it('asks nothing while the setup or the rules are unknown', () => {
+    expect(awaitsReview(undefined, rules)).toBe(false);
+    expect(awaitsReview(pending, undefined)).toBe(false);
   });
 });

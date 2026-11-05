@@ -78,6 +78,10 @@ type Setup struct {
 	Items []SetupItem
 	// CanComplete tells that every required item is done.
 	CanComplete bool
+	// NetworkReviewedAt is the last time an administrator saved the
+	// network rules ([tenant.Tenant.NetworkReviewedAt]), zero when never
+	// (for example after a configuration import).
+	NetworkReviewedAt time.Time
 }
 
 // missing returns the keys of the required items not done.
@@ -204,6 +208,7 @@ func (s *Service) checklist(ctx context.Context, t *tenant.Tenant) (Setup, error
 	if err != nil {
 		return Setup{}, fmt.Errorf("tenantadmin: get network rules: %w", err)
 	}
+	reviewed := !t.NetworkReviewedAt.IsZero()
 	notice, err := s.legalWritten(ctx, t, store.LegalNotice)
 	if err != nil {
 		return Setup{}, err
@@ -212,13 +217,15 @@ func (s *Service) checklist(ctx context.Context, t *tenant.Tenant) (Setup, error
 	if err != nil {
 		return Setup{}, err
 	}
-	out := Setup{State: t.SetupState, Items: []SetupItem{
+	out := Setup{State: t.SetupState, NetworkReviewedAt: t.NetworkReviewedAt, Items: []SetupItem{
 		{Key: SetupBrandingLogo, Done: t.HasLogo},
 		{Key: SetupBrandingColors, Done: !strings.EqualFold(t.PrimaryColor, tenant.DefaultPrimaryColor) ||
 			!strings.EqualFold(t.AccentColor, tenant.DefaultAccentColor)},
 		{Key: SetupSMTP, Required: true, Done: smtp},
-		{Key: SetupInternalNetworks, Required: true, Done: len(rules.CIDRs) > 0},
-		{Key: SetupInternalDomains, Required: true, Done: len(rules.Domains) > 0},
+		// The rules written by a configuration import count only once an
+		// administrator saved them (T-307).
+		{Key: SetupInternalNetworks, Required: true, Done: len(rules.CIDRs) > 0 && reviewed},
+		{Key: SetupInternalDomains, Required: true, Done: len(rules.Domains) > 0 && reviewed},
 		{Key: SetupLegalNotice, Required: true, Done: notice},
 		{Key: SetupPrivacyPolicy, Required: true, Done: policy},
 		{Key: SetupMailTemplates, Done: !t.MailTemplatesReviewedAt.IsZero()},

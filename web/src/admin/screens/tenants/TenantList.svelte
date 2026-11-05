@@ -1,7 +1,8 @@
 <script lang="ts">
   // List of the tenants visible to the admin (GET /admin/tenants, page by page with the cursor):
   // name (link to the configuration), FQDN, status (badge "deletion in progress"), storage
-  // used, default language and a configure link. The super admin sees the creation link; a
+  // used, default language and a configure link. The super admin sees the creation link, the
+  // import link and a "Duplicate" action per row (screen TenantImport); a
   // delegated admin with a single tenant goes straight to its general settings.
   import { onMount } from 'svelte';
   import { describeError } from '../../../shared/api/problem';
@@ -22,6 +23,7 @@
     type Tenant,
   } from './tenants';
   import { formatBytes as formatBinaryBytes } from '../../forms/bytes';
+  import { importPath } from './tenantTransfer';
 
   // Sizes are shown with the binary units of the size fields (MiB, GiB, TiB).
   const formatBytes = (n: number): string => formatBinaryBytes(n, locale.current);
@@ -112,13 +114,22 @@
   <a href={nav.href(tenantPath(row.id, 'general'))} use:nav.link>
     {t(readOnly ? 'adminTenants.list.view' : 'adminTenants.list.configure', { name: row.name })}
   </a>
+  {#if canCreate && row.status !== 'deleting'}
+    <a href={nav.href(importPath(row.id))} use:nav.link>
+      {t('adminTenants.list.duplicate', { name: row.name })}
+    </a>
+  {/if}
 {/snippet}
 
 <h1 tabindex="-1">{t('adminTenants.list.title')}</h1>
 <p>{t('adminTenants.list.intro')}</p>
 
 {#if canCreate}
-  <p><a href={nav.href('/tenants/new')} use:nav.link>{t('adminTenants.list.create')}</a></p>
+  <p>
+    <a href={nav.href('/tenants/new')} use:nav.link>{t('adminTenants.list.create')}</a>
+    ·
+    <a href={nav.href(importPath())} use:nav.link>{t('adminTenants.list.import')}</a>
+  </p>
 {/if}
 
 {#if error !== ''}

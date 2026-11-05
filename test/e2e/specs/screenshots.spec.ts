@@ -993,6 +993,24 @@ test.describe('super admin', () => {
     }
   });
 
+  test('export and import of an entity configuration', async ({ newContext, state }) => {
+    test.setTimeout(120_000);
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang, STORAGE_SUPER);
+      // The export section of the general settings of entity A, at the top of the viewport.
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/general`);
+      await heading(page, lang, 'adminTenants.general.title');
+      const section = page.getByTestId('export-section');
+      await section.scrollIntoViewIfNeeded();
+      await section.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      await shoot(page, lang, 'admin-tenant-export');
+      // The import screen with the file picker (no file chosen: nothing volatile on screen).
+      await page.goto(`${ORIGINS.admin}/admin/tenants/import`);
+      await heading(page, lang, 'adminTenants.import.title');
+      await shoot(page, lang, 'admin-tenant-import');
+    }
+  });
+
   test('instance webhooks', async ({ newContext }) => {
     const hooks: ShotWebhook[] = [
       [

@@ -239,6 +239,33 @@ func auditorGuard(next gen.StrictHandlerFunc, method string) gen.StrictHandlerFu
 	}
 }
 
+// superAdminGuard refuses the operations whose route policy is
+// superAdminOnly to any session but an authenticated super admin, before
+// the body limit and before anything reads the body, with the answers the
+// handler would give: 401 unauthenticated for a session that is missing
+// or not authenticated yet, 403 read-only-role for an auditor (as
+// auditorGuard), 403 forbidden for any other admin. The handler checks the
+// role again.
+func superAdminGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !policyOf(r).superAdminOnly {
+			next.ServeHTTP(w, r)
+			return
+		}
+		p, ok := middleware.AdminSessionFrom[adminauth.Principal](r.Context())
+		switch {
+		case !ok || adminauth.RequireAuthenticated(p) != nil:
+			writeProblem(w, r, problem.New(problem.CodeUnauthenticated))
+		case p.Admin.Role == store.RoleAuditor:
+			writeProblem(w, r, problem.New(problem.CodeReadOnlyRole))
+		case adminauth.RequireSuperAdmin(p.Admin) != nil:
+			writeProblem(w, r, problem.New(problem.CodeForbidden))
+		default:
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
 // operationID returns the OpenAPI operationId of the generated method name
 // method: its first letter lower-cased.
 func operationID(method string) string {
@@ -256,8 +283,9 @@ func operationID(method string) string {
 // innermost, are: deadlines, the per-IP limit of the login
 // steps, the admin session cookie (401), the Origin and Sec-Fetch-Site
 // checks of the open login steps and the CSRF checks of the session
-// operations (403), the body limit (413) and the JSON media type (415),
-// all before the body is read. The provisioning operations get instead,
+// operations (403), the role of the operations reserved to the super
+// admin (403, superAdminGuard), the body limit (413) and the JSON media
+// type (415), all before the body is read. The provisioning operations get instead,
 // right after the deadlines, their provisioning token check (401,
 // provisioningAuth). Inside the strict handler, auditorGuard refuses the
 // operations outside adminauth.AuditorOperations to an auditor session
@@ -287,13 +315,19 @@ func newAdminHandler(deps Deps, ui *webUI, eh errorHandlers, events middleware.S
 			// Innermost: after the body limit and the media type checks, it keeps
 			// the raw body of the abuse thresholds update (every member of it is
 			// required) and of the provisioning creations (unknown members are
-			// refused), which the generated types cannot tell.
+			// refused), which the generated types cannot tell; the import of a
+			// tenant configuration is strictly checked there, before the
+			// generated decoder allocates anything for it.
 			admin.CaptureRawBody,
 			// The single sign-on callback (since API 2.0): the flow cookie
 			// read for the handler, and expired whatever the outcome.
 			middleware.FlowCookie(oidc.FlowCookieName, oidcClearCookie, isOIDCCallback),
 			middleware.RequireJSON(func(r *http.Request) bool { return policyOf(r).rawBody }),
 			middleware.BodyLimitFunc(bodyLimitOf),
+			// The import of a tenant configuration (since API 2.0) is
+			// refused to any other admin than the super admin here, before
+			// its 32 MiB body is read or decoded.
+			superAdminGuard,
 			middleware.AdminCSRF(sessions, adminSessionRequired),
 			middleware.SameOrigin(adminOpenRoute),
 			middleware.AdminSession(sessions, adminSessionRequired, logger),

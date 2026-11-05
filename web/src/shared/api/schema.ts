@@ -1947,11 +1947,15 @@ export interface paths {
          *     | `branding_logo` | no | a logo is uploaded |
          *     | `branding_colors` | no | the colours differ from the defaults |
          *     | `smtp` | yes | the SMTP settings are configured **and** a test mail succeeded since their last change |
-         *     | `internal_networks` | yes | at least one internal IP range |
-         *     | `internal_domains` | yes | at least one internal mail domain |
+         *     | `internal_networks` | yes | at least one internal IP range, saved by an admin (`updateNetworkRules`) |
+         *     | `internal_domains` | yes | at least one internal mail domain, saved by an admin (`updateNetworkRules`) |
          *     | `legal_notice` | yes | the legal notice is written in the default language of the tenant |
          *     | `privacy_policy` | yes | the privacy policy is written in the default language of the tenant |
          *     | `mail_templates` | no | an admin reviewed the mail templates (`completeTenantSetup` may record it) |
+         *
+         *     Since 2.0, the internal ranges and domains written by `importTenant` do not count until an
+         *     admin saves them with `updateNetworkRules` (even unchanged), which records
+         *     `networkReviewedAt`: they come from another tenant and must be confirmed.
          *
          *     `canComplete` is true when every required item is done. The keys are an extensible
          *     enumeration: clients must show an unknown key with its raw name. Readable by the super
@@ -2065,7 +2069,7 @@ export interface paths {
         get: operations["getNetworkRules"];
         /**
          * Replace internal IP ranges and email domains
-         * @description Replaces the internal IP ranges (IPv4 or IPv6 CIDR) and internal email domains of the tenant. Values are validated and normalised; the change is audited.
+         * @description Replaces the internal IP ranges (IPv4 or IPv6 CIDR) and internal email domains of the tenant. Values are validated and normalised; the change is audited. Since 2.0, saving the rules, even unchanged, also confirms them (`networkReviewedAt` of `getTenantSetup`): the rules written by `importTenant` must be confirmed this way before the setup can be completed without `force`.
          */
         put: operations["updateNetworkRules"];
         post?: never;
@@ -3248,15 +3252,23 @@ export interface paths {
         /**
          * Create a tenant from an exported configuration (super admin)
          * @description Since 2.0. Creates a tenant in the `setup` state from `name`, `fqdn`, a storage quota and
-         *     a `TenantConfigExport` document, in one transaction. Validation is strict: an unknown
-         *     member, a value out of its limits or a duplicate is refused with `422 import-invalid`
-         *     whose first entry of `errors` carries the JSON pointer of the first error
-         *     (`field`); a `schemaVersion` this server does not read is `422 import-schema-unsupported`.
-         *     A document with a duplicate JSON key is refused too (`import-invalid`). The body is limited
-         *     to 32 MiB (`413 payload-too-large`). The webhooks are not recreated (their URLs are not
-         *     exported); there is no single sign-on in an export. An optional first
-         *     delegated admin is created as for `createTenant`. Reserved to the super admin. Audited as
-         *     `tenant.imported` (the name of the source tenant in the details).
+         *     a `TenantConfigExport` document, in one transaction. Reserved to the super admin: any other
+         *     admin gets `403` (`read-only-role` for an auditor, `forbidden` otherwise) before the body
+         *     is read. Validation is strict: an unknown member, a missing required member (every member
+         *     of `abuseThresholds` is required, as for `updateAbuseThresholds`), an array longer than
+         *     its `maxItems` (the blocklist is limited to 10000 entries), a value out of its limits or a
+         *     duplicate is refused with `422 import-invalid` whose first entry of `errors` carries the
+         *     JSON pointer of the first error (`field`) and a code (`unknown-member`, `required`,
+         *     `too-many` with the pointer of the array, `type`, `duplicate`, `too-deep`, `syntax`,
+         *     `invalid-value`...). `schemaVersion` is read first: an integer this server does not read
+         *     is `422 import-schema-unsupported`, a value that is not an integer `422 import-invalid`
+         *     (code `type`). A document with a duplicate JSON key is refused too (`import-invalid`).
+         *     The body is limited to 32 MiB (`413 payload-too-large`). The webhooks are not recreated (their URLs are not
+         *     exported); there is no single sign-on in an export. The imported internal ranges and domains
+         *     must be confirmed with `updateNetworkRules` before the setup can be completed without
+         *     `force` (`networkReviewedAt` of `getTenantSetup`). An optional first
+         *     delegated admin is created as for `createTenant`. Audited as
+         *     `tenant.imported` (`sourceVersion` and `exportedAt` of the file in the details).
          */
         post: operations["importTenant"];
         delete?: never;
@@ -5142,6 +5154,11 @@ export interface components {
             items: components["schemas"]["TenantSetupItem"][];
             /** @description Every required item is done. */
             canComplete: boolean;
+            /**
+             * Format: date-time
+             * @description Since 2.0. Last time an admin saved the internal IP ranges and mail domains (`updateNetworkRules`, even unchanged); null when never, for example after `importTenant`. The `internal_networks` and `internal_domains` items are done only once it is set.
+             */
+            networkReviewedAt: string | null;
         };
         /** @description Since 1.2. Completion of the setup. `force` (super admin only) opens the tenant even when required items are not done; `mailTemplatesReviewed` records the review of the mail templates. */
         TenantSetupCompletion: {
@@ -5484,8 +5501,8 @@ export interface components {
          *     `admin.identity_linked` and `admin.identity_unlinked` name the account, the issuer and the client ID, never the
          *     subject (`admin.identity_unlinked` carries `details.identity_id`, `issuer`, `client_id` and `reason`:
          *     `unpinned`, `promoted`, `sso_changed` or `email_changed`); `tenant.sso_updated` and `tenant.sso_deleted` carry the names of the changed members
-         *     only, never the secret; `tenant.exported` and `tenant.imported` (details: the name of the
-         *     source tenant on import) never carry the configuration; `drop_link.*` name the link, never its
+         *     only, never the secret; `tenant.exported` (details: `includeBranding`) and `tenant.imported` (details:
+         *     `sourceVersion`, `exportedAt` and the count of each section) never carry the configuration; `drop_link.*` name the link, never its
          *     token, and the audit events of a transfer deposited through a link carry `details.dropLinkId`;
          *     `transfer.link_reissued` names the transfer, never the link; `transfer.proof_downloaded` carries the proof kind and has the downloader as actor;
          *     `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
@@ -6317,7 +6334,7 @@ export interface components {
             recipientRules?: components["schemas"]["RecipientRules"];
             confidentialityLevels?: components["schemas"]["ConfidentialityLevelList"];
             abuseThresholds?: components["schemas"]["AbuseThresholds"];
-            /** @description The customised templates only. */
+            /** @description The customised templates only (at most one per template and language). */
             emailTemplates?: {
                 key: components["schemas"]["EmailTemplateKey"];
                 language: components["schemas"]["Language"];
@@ -6325,6 +6342,7 @@ export interface components {
                 bodyHtml: string;
                 bodyText: string;
             }[];
+            /** @description At most one per document and language. */
             legalDocuments?: {
                 /** @enum {string} */
                 document: "legal-notice" | "privacy-policy";
@@ -6335,10 +6353,12 @@ export interface components {
             webhooks?: {
                 name: string;
                 kind: components["schemas"]["WebhookKind"];
+                /** @description Tenant events only. */
                 events: components["schemas"]["WebhookEventType"][];
                 /** @enum {boolean} */
                 enabled: false;
             }[];
+            /** @description At most 10000 entries can be imported. */
             blocklist?: {
                 kind: components["schemas"]["BlocklistKind"];
                 value: string;
@@ -11338,6 +11358,7 @@ export interface operations {
                      * @example {
                      *       "setupState": "setup",
                      *       "canComplete": false,
+                     *       "networkReviewedAt": null,
                      *       "items": [
                      *         {
                      *           "key": "branding_logo",
@@ -11419,6 +11440,7 @@ export interface operations {
                      * @example {
                      *       "setupState": "active",
                      *       "canComplete": true,
+                     *       "networkReviewedAt": "2026-11-05T09:30:00Z",
                      *       "items": [
                      *         {
                      *           "key": "branding_logo",
@@ -14452,6 +14474,7 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             422: components["responses"]["ImportInvalid"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["SystemSmtpUnavailable"];
         };
     };
     listDropLinks: {

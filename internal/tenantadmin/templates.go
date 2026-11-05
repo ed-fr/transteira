@@ -148,13 +148,11 @@ func (s *Service) UpdateTemplate(ctx context.Context, p adminauth.Principal, tid
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return Template{}, err
 	}
-	src, err := normalizeTemplate(key, mail.TemplateSource{Subject: in.Subject, HTML: in.HTML, Text: in.Text})
+	norm, err := templateToStore(key, lang, in, p.Admin.ID)
 	if err != nil {
-		return Template{}, templateError(err)
+		return Template{}, err
 	}
-	t, err := s.repo.putTemplate(ctx, tid, store.EmailTemplate{
-		Key: key, Language: lang, Subject: src.Subject, BodyHTML: src.HTML, BodyText: src.Text, UpdatedBy: p.Admin.ID,
-	})
+	t, err := s.repo.putTemplate(ctx, tid, norm)
 	switch {
 	case errors.Is(err, store.ErrInvalid):
 		return Template{}, invalid(FieldTemplate, "template out of bounds")
@@ -168,6 +166,32 @@ func (s *Service) UpdateTemplate(ctx context.Context, p adminauth.Principal, tid
 		Key: key, Language: lang, Customized: true, Subject: t.Subject, HTML: t.BodyHTML, Text: t.BodyText,
 		Variables: vars, UpdatedAt: t.UpdatedAt,
 	}, nil
+}
+
+// templateToStore validates the customization in of template key in lang
+// (variables, required variables, syntax), sanitizes its HTML with
+// [mail.NormalizeTemplate] and checks the bounds of the store, returning
+// the template to store, saved by the administrator ID by. An invalid
+// template is an *InvalidError on [FieldTemplate], listing the issues when
+// the template does not validate.
+func templateToStore(key, lang string, in TemplateInput, by string) (store.EmailTemplate, error) {
+	src, err := normalizeTemplate(key, mail.TemplateSource{Subject: in.Subject, HTML: in.HTML, Text: in.Text})
+	if err != nil {
+		return store.EmailTemplate{}, templateError(err)
+	}
+	if !templateInBounds(src) {
+		return store.EmailTemplate{}, invalid(FieldTemplate, "template out of bounds")
+	}
+	return store.EmailTemplate{
+		Key: key, Language: lang, Subject: src.Subject, BodyHTML: src.HTML, BodyText: src.Text, UpdatedBy: by,
+	}, nil
+}
+
+// templateInBounds reports whether src fits the bounds of the store
+// ([store.ValidEmailSubject] and [store.ValidEmailBody], the predicates
+// [store.TenantEmailTemplates.Put] applies).
+func templateInBounds(src mail.TemplateSource) bool {
+	return store.ValidEmailSubject(src.Subject) && store.ValidEmailBody(src.HTML) && store.ValidEmailBody(src.Text)
 }
 
 // templateError maps a template validation error.

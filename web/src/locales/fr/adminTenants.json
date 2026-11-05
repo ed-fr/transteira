@@ -16,7 +16,10 @@
     "emptyDelegated": "Aucune entité ne vous est rattachée. Contactez un super administrateur.",
     "create": "Créer une entité",
     "configure": "Configurer {name}",
-    "view": "Ouvrir le résumé de {name}"
+    "view": "Ouvrir le résumé de {name}",
+    "import": "Importer une configuration",
+    "duplicate": "Dupliquer {name}",
+    "duplicateShort": "Dupliquer"
   },
   "status": {
     "setup": "En cours de mise en service",
@@ -138,7 +141,18 @@
       "disabledDone": "Analyse antivirus désactivée.",
       "enabledDone": "Analyse antivirus activée."
     },
-    "auditorNote": "Vous avez un accès en lecture seule à cette entité : les paramètres ci-dessous ne peuvent pas être modifiés."
+    "auditorNote": "Vous avez un accès en lecture seule à cette entité : les paramètres ci-dessous ne peuvent pas être modifiés.",
+    "export": {
+      "title": "Exporter la configuration",
+      "intro": "Télécharge la configuration de l’entité dans un fichier JSON, pour créer une autre entité à l’identique (action « Dupliquer » ou « Importer une configuration » du super administrateur).",
+      "includeBranding": {
+        "label": "Inclure le logo et l’image de fond",
+        "hint": "Ajoute les fichiers d’image dans le fichier exporté, qui est alors plus volumineux. Sans cette option, seuls les couleurs et le choix d’image de la bibliothèque sont exportés."
+      },
+      "notice": "Le fichier contient des données personnelles (adresses de la liste de blocage, contacts figurant dans les textes légaux) : conservez-le avec soin. Il ne contient jamais de secret : ni mot de passe SMTP, ni URL de webhook, ni réglage d’authentification unique, ni jeton d’API. Les webhooks doivent être saisis à nouveau après l’import.",
+      "download": "Télécharger la configuration",
+      "downloadHint": "(fichier JSON)"
+    }
   },
   "branding": {
     "title": "Habillage",
@@ -282,6 +296,14 @@
       "label": "Autoriser les destinataires à répondre à un transfert",
       "hint": "Option désactivée par défaut. Une réponse n’est possible que pour un transfert envoyé par un utilisateur interne à un destinataire disposant d’un lien personnel, et le destinataire prouve toujours son adresse par un code de vérification au préalable. Les réponses sont soumises aux quotas et à la détection des abus des utilisateurs externes, ainsi qu’à l’antivirus. Désactiver l’option arrête immédiatement les nouvelles réponses.",
       "saved": "Option de réponse enregistrée."
+    },
+    "review": {
+      "title": "Plages et domaines importés à confirmer",
+      "text": "Ces plages et domaines ont été importés : vérifiez-les puis confirmez. Tant qu’ils ne sont pas confirmés, la mise en service ne peut pas être terminée.",
+      "dirty": "Enregistrez vos modifications : l’enregistrement vaut confirmation.",
+      "confirm": "Confirmer",
+      "confirming": "Confirmation…",
+      "confirmed": "Les plages et domaines internes sont confirmés."
     }
   },
   "smtp": {
@@ -741,6 +763,31 @@
       "issuerHttps": "L’émetteur doit être une adresse https.",
       "secretRequired": "Saisissez le secret client : il est obligatoire au premier enregistrement et chaque fois que l’émetteur ou l’identifiant client change.",
       "domainsRequired": "Saisissez au moins un domaine de messagerie."
+    }
+  },
+  "import": {
+    "title": "Importer une configuration",
+    "titleDuplicate": "Dupliquer l’entité {name}",
+    "intro": "Crée une entité à partir d’une configuration exportée. Le nom, l’adresse (FQDN) et le quota de stockage sont à renseigner ; tout le reste vient de la configuration. L’entité est créée en cours de mise en service.",
+    "introDuplicate": "La configuration de l’entité {name} (logo et image de fond compris) est reprise pour créer une nouvelle entité. Renseignez son nom, son adresse (FQDN) et son quota de stockage.",
+    "submit": "Créer l’entité",
+    "legend": "Nouvelle entité",
+    "loadError": "La configuration à dupliquer n’a pas pu être chargée.",
+    "webhooks": "Le fichier mentionne {count} webhook(s) : ils ne sont pas recréés, saisissez-les à nouveau dans l’entité après l’import.",
+    "file": {
+      "label": "Fichier de configuration (JSON)",
+      "hint": "Fichier exporté depuis une entité, 32 Mo au plus.",
+      "loaded": "Fichier chargé : {name}",
+      "errors": {
+        "too-large": "Ce fichier dépasse 32 Mo : ce n’est pas une configuration exportée.",
+        "not-json": "Ce fichier n’est pas du JSON valide.",
+        "not-an-object": "Ce fichier ne contient pas une configuration d’entité (objet JSON attendu).",
+        "required": "Choisissez le fichier de configuration à importer.",
+        "unreadable": "Ce fichier n’a pas pu être lu."
+      }
+    },
+    "errors": {
+      "location": "Erreur dans le fichier à l’emplacement {location}"
     }
   }
 }

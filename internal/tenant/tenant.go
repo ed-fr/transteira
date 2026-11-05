@@ -174,6 +174,13 @@ type Tenant struct {
 	// MailTemplatesReviewedAt is the time an administrator marked the mail
 	// templates as reviewed while completing the setup, zero when never.
 	MailTemplatesReviewedAt time.Time
+	// NetworkReviewedAt is the time an administrator last saved the
+	// internal IP ranges and mail domains of the tenant (even unchanged),
+	// zero when never: a configuration import writes them without it, and
+	// the "internal_networks" and "internal_domains" items of the setup
+	// checklist wait for this confirmation (V2, T-307). Set by the store
+	// only.
+	NetworkReviewedAt time.Time
 	// AntivirusEnabled tells whether the files of the tenant are analyzed
 	// by the antivirus (on for every new tenant; only the super admin
 	// turns it off). The analysis really happens only when the instance

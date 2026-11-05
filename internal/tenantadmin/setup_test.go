@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -269,6 +270,86 @@ func TestCompleteSetup(t *testing.T) {
 		wantErr(t, "again", err, ErrSetupComplete)
 		_, err = ev.svc.CompleteSetup(ctx, ev.super, ev.s.ID, true, false, clientIP)
 		wantErr(t, "again forced", err, ErrSetupComplete)
+	})
+}
+
+// Network rules written without review (the configuration import path,
+// store.NetworkRules.ReplaceTx and Replace) leave the network items undone
+// and the completion refused until an admin saves them, even unchanged;
+// the super admin may still force the completion (T-307).
+func TestSetupNetworkReview(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ctx := context.Background()
+		ev := newSetupEnv(t, e)
+		ev.configure(t)
+		// Another tenant in setup, configured like S but with imported
+		// rules.
+		r, err := ev.db.Tenants().Create(ctx, &tenant.Tenant{
+			SetupState: tenant.SetupStateSetup, Name: "Entity R", FQDN: "transfer.entity-r.example.com", DefaultLanguage: "en",
+			MaxTransferBytes: 10 << 30, StorageQuotaBytes: 100 << 30,
+		})
+		mustNoErr(t, "create R", err)
+		rs := &setupEnv{env: ev.env, s: r, adminS: principal(store.RoleDelegatedAdmin, "rob", r.ID)}
+		_, err = ev.db.NetworkRules().Replace(ctx, r.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"entity-r.example.com"})
+		mustNoErr(t, "imported rules", err)
+		rs.setSMTP(t, "smtp-relay")
+		rs.testSMTP(t)
+		for _, doc := range []string{store.LegalNotice, store.PrivacyPolicy} {
+			_, err := ev.svc.UpdateLegal(ctx, rs.adminS, r.ID, doc, "en", writtenNotice, clientIP)
+			mustNoErr(t, "legal "+doc, err)
+		}
+
+		got := rs.setup(t)
+		if d := done(got); d[SetupInternalNetworks] || d[SetupInternalDomains] || !d[SetupSMTP] || got.CanComplete ||
+			!got.NetworkReviewedAt.IsZero() {
+			t.Fatalf("imported rules: %+v", got)
+		}
+		_, err = ev.svc.CompleteSetup(ctx, rs.adminS, r.ID, false, false, clientIP)
+		var inc *IncompleteError
+		if !errors.As(err, &inc) || !reflect.DeepEqual(inc.Missing, []string{SetupInternalNetworks, SetupInternalDomains}) {
+			t.Fatalf("completion before the review: %v", err)
+		}
+		// The statement refuses too, whatever the caller checked.
+		_, err = ev.db.Tenants().CompleteSetup(ctx, r.ID, false, time.Time{})
+		wantErr(t, "store completion before the review", err, store.ErrConflict)
+		// The review of S never counts for R.
+		if s := ev.setup(t); !s.CanComplete || !s.NetworkReviewedAt.Equal(testStart) {
+			t.Fatalf("S: %+v", s)
+		}
+
+		// Saved unchanged: confirmed, audited as an update.
+		before := len(ev.auditEvents(t, r.ID, ActionTenantNetworkUpdated))
+		ev.clock.Advance(time.Minute)
+		out, err := ev.svc.UpdateNetworkRules(ctx, rs.adminS, r.ID, []string{"10.0.0.0/8"}, []string{"entity-r.example.com"}, clientIP)
+		mustNoErr(t, "confirm", err)
+		if !reflect.DeepEqual(out, NetworkRules{CIDRs: []string{"10.0.0.0/8"}, Domains: []string{"entity-r.example.com"}}) {
+			t.Errorf("rules = %+v", out)
+		}
+		if n := len(ev.auditEvents(t, r.ID, ActionTenantNetworkUpdated)); n != before+1 {
+			t.Errorf("network updates audited = %d, want %d", n, before+1)
+		}
+		got = rs.setup(t)
+		if d := done(got); !d[SetupInternalNetworks] || !d[SetupInternalDomains] || !got.CanComplete ||
+			!got.NetworkReviewedAt.Equal(testStart.Add(time.Minute)) {
+			t.Fatalf("after the review: %+v", got)
+		}
+		got, err = ev.svc.CompleteSetup(ctx, rs.adminS, r.ID, false, false, clientIP)
+		if err != nil || got.State != tenant.SetupStateActive {
+			t.Fatalf("completion after the review: %+v, %v", got, err)
+		}
+
+		// Forced by the super admin: possible without the review.
+		f, err := ev.db.Tenants().Create(ctx, &tenant.Tenant{
+			SetupState: tenant.SetupStateSetup, Name: "Entity F", FQDN: "transfer.entity-f.example.com", DefaultLanguage: "en",
+			MaxTransferBytes: 10 << 30, StorageQuotaBytes: 100 << 30,
+		})
+		mustNoErr(t, "create F", err)
+		_, err = ev.db.NetworkRules().Replace(ctx, f.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"entity-f.example.com"})
+		mustNoErr(t, "imported rules", err)
+		got, err = ev.svc.CompleteSetup(ctx, ev.super, f.ID, true, false, clientIP)
+		if err != nil || got.State != tenant.SetupStateActive || done(got)[SetupInternalNetworks] {
+			t.Fatalf("forced completion: %+v, %v", got, err)
+		}
 	})
 }
 

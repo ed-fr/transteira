@@ -40,7 +40,16 @@
     "back": "Back to setup",
     "backLabel": "Return to the setup list of the entity",
     "error": "The setup could not be loaded.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "networkReview": {
+      "title": "Imported internal ranges and domains",
+      "text": "These ranges and domains were imported: check them, then confirm. They come from the source entity and would make the users of its networks “internal”; the “Internal IP ranges” and “Internal mail domains” steps stay to do until they are confirmed.",
+      "none": "None.",
+      "edit": "To change them, open the Network screen (“Configure” link below): saving them also confirms them.",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "confirmed": "The internal ranges and domains are confirmed."
+    }
   },
   "items": {
     "branding_logo": {

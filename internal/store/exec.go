@@ -236,6 +236,43 @@ func (t *SystemTx) AfterCommit(fn func()) {
 	t.hooks.add(fn)
 }
 
+// WithTenant runs fn with a [ScopedTx] bound to tenant tid on the same
+// underlying transaction as t, so that tenant rows can be written in the
+// transaction that creates the tenant (a configuration import writes the
+// whole configuration of a new tenant with its tenant row, all or nothing).
+// The hooks fn registers with [ScopedTx.AfterCommit] run when t commits,
+// like those of t.
+//
+// On PostgreSQL the transaction is switched to the tenant scope of tid
+// (the row-level security policies then restrict every statement of fn to
+// the rows of tid) and always switched back to the system scope once fn
+// returns, also when it fails, so that t can keep running system queries.
+// The error of fn is returned unchanged; otherwise an error restoring the
+// system scope is returned wrapped, and the caller must abort t. With
+// SQLite there is no scope to switch.
+//
+// It returns ErrInvalid for an empty or malformed tid, without calling fn.
+// fn must not keep the ScopedTx after it returns, nor use t while it runs.
+func (t *SystemTx) WithTenant(ctx context.Context, tid tenant.ID, fn func(*ScopedTx) error) (err error) {
+	if err := tid.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	if t.dialect.scopeTenant != "" {
+		if _, err := t.tx.ExecContext(ctx, t.dialect.scopeTenant, string(tid)); err != nil {
+			return wrap("set tenant scope", err)
+		}
+		defer func() {
+			// Restore even after a failed fn: the caller may handle the
+			// error and go on in the system scope. The context may be
+			// canceled already; the error of fn then wins anyway.
+			if _, rerr := t.tx.ExecContext(ctx, t.dialect.scopeSystem); rerr != nil && err == nil {
+				err = wrap("restore system scope", rerr)
+			}
+		}()
+	}
+	return fn(&ScopedTx{tx: t.tx, tid: tid, dialect: t.dialect, hooks: t.hooks})
+}
+
 // prepare checks that q is a registered system query taking exactly
 // len(args) arguments and returns its SQL text.
 func (t *SystemTx) prepare(q SystemQuery, args []any) (string, error) {

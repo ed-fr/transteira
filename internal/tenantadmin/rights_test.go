@@ -120,6 +120,10 @@ func operations(ev *env, logo []byte) map[string]func(p adminauth.Principal, tid
 		"DeleteTenant": func(p adminauth.Principal, tid tenant.ID) error {
 			return ev.svc.DeleteTenant(ctx, p, tid, "wrong name", clientIP)
 		},
+		"ExportConfig": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.ExportConfig(ctx, p, tid, true, clientIP)
+			return err
+		},
 	}
 }
 

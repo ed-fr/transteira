@@ -86,14 +86,12 @@ func (s *Service) UpdateBranding(ctx context.Context, p adminauth.Principal, tid
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return Branding{}, err
 	}
-	if !tenant.ValidColor(primary) {
-		return Branding{}, invalid(FieldPrimaryColor, "must be #RRGGBB")
-	}
-	if !tenant.ValidColor(accent) {
-		return Branding{}, invalid(FieldAccentColor, "must be #RRGGBB")
+	primary, accent, err := checkColors(primary, accent)
+	if err != nil {
+		return Branding{}, err
 	}
 	t, err := s.changeTenant(ctx, p, tid, func(t *tenant.Tenant) {
-		t.PrimaryColor, t.AccentColor = strings.ToUpper(primary), strings.ToUpper(accent)
+		t.PrimaryColor, t.AccentColor = primary, accent
 	})
 	if err != nil {
 		return Branding{}, err
@@ -102,6 +100,18 @@ func (s *Service) UpdateBranding(ctx context.Context, p adminauth.Principal, tid
 		"primaryColor": t.PrimaryColor, "accentColor": t.AccentColor,
 	})
 	return brandingOf(t), nil
+}
+
+// checkColors validates the colors of a tenant ("#RRGGBB") and returns
+// them in upper case, as stored.
+func checkColors(primary, accent string) (string, string, error) {
+	if !tenant.ValidColor(primary) {
+		return "", "", invalid(FieldPrimaryColor, "must be #RRGGBB")
+	}
+	if !tenant.ValidColor(accent) {
+		return "", "", invalid(FieldAccentColor, "must be #RRGGBB")
+	}
+	return strings.ToUpper(primary), strings.ToUpper(accent), nil
 }
 
 // SetBackgroundPreset chooses the background preset of tenant tid, served
@@ -172,27 +182,9 @@ func (s *Service) UploadAsset(ctx context.Context, p adminauth.Principal, tid te
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return err
 	}
-	img, err := branding.ProcessContext(ctx, kind, r, 0)
-	switch {
-	case errors.Is(err, branding.ErrUnsupportedFormat):
-		return fmt.Errorf("%w: %w", ErrUnsupportedMediaType, err)
-	case errors.Is(err, branding.ErrTooLarge):
-		return fmt.Errorf("%w: %w", ErrPayloadTooLarge, err)
-	case errors.Is(err, branding.ErrInvalid):
-		return invalid(FieldImage, "corrupt or unreadable image")
-	case err != nil:
-		return fmt.Errorf("tenantadmin: read image: %w", err)
-	}
-	files := []assetFile{{kind, img.Data}}
-	if kind == branding.KindLogo {
-		icons, err := s.favicons(ctx, img.Data)
-		if err != nil {
-			return fmt.Errorf("tenantadmin: generate favicons: %w", err)
-		}
-		for _, k := range branding.FaviconKinds() {
-			icon, _ := icons.Get(k)
-			files = append(files, assetFile{k, icon.Data})
-		}
+	files, img, err := s.processAsset(ctx, kind, r)
+	if err != nil {
+		return err
 	}
 	s.assetMu.Lock()
 	defer s.assetMu.Unlock()
@@ -209,6 +201,39 @@ func (s *Service) UploadAsset(ctx context.Context, p adminauth.Principal, tid te
 		"asset": kind.String(), "width": img.Width, "height": img.Height, "bytes": len(img.Data),
 	})
 	return nil
+}
+
+// processAsset decodes and re-encodes the uploaded image of kind with
+// [branding.ProcessContext] and returns the files to write: the image and,
+// for a logo, the favicons generated from the re-encoded logo (never from
+// the uploaded bytes). It returns ErrUnsupportedMediaType for a format
+// other than PNG, JPEG or WebP, ErrPayloadTooLarge above the limits, an
+// *InvalidError on [FieldImage] for a corrupt image, and an internal error
+// when the favicons cannot be generated; nothing is written.
+func (s *Service) processAsset(ctx context.Context, kind branding.Kind, r io.Reader) ([]assetFile, branding.Image, error) {
+	img, err := branding.ProcessContext(ctx, kind, r, 0)
+	switch {
+	case errors.Is(err, branding.ErrUnsupportedFormat):
+		return nil, branding.Image{}, fmt.Errorf("%w: %w", ErrUnsupportedMediaType, err)
+	case errors.Is(err, branding.ErrTooLarge):
+		return nil, branding.Image{}, fmt.Errorf("%w: %w", ErrPayloadTooLarge, err)
+	case errors.Is(err, branding.ErrInvalid):
+		return nil, branding.Image{}, invalid(FieldImage, "corrupt or unreadable image")
+	case err != nil:
+		return nil, branding.Image{}, fmt.Errorf("tenantadmin: read image: %w", err)
+	}
+	files := []assetFile{{kind, img.Data}}
+	if kind == branding.KindLogo {
+		icons, err := s.favicons(ctx, img.Data)
+		if err != nil {
+			return nil, branding.Image{}, fmt.Errorf("tenantadmin: generate favicons: %w", err)
+		}
+		for _, k := range branding.FaviconKinds() {
+			icon, _ := icons.Get(k)
+			files = append(files, assetFile{k, icon.Data})
+		}
+	}
+	return files, img, nil
 }
 
 // assetFile is a branding image to write.

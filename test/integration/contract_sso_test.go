@@ -37,11 +37,24 @@ func openAPIDoc(t *testing.T) *openapi3.T {
 	specOnce.Do(func() {
 		_, file, _, _ := runtime.Caller(0)
 		specDoc, errSpecLoad = openapi3.NewLoader().LoadFromFile(filepath.Join(filepath.Dir(file), "..", "..", "api", "openapi.yaml"))
+		if errSpecLoad == nil {
+			relaxFqdnPattern(specDoc)
+		}
 	})
 	if errSpecLoad != nil {
 		t.Fatalf("api/openapi.yaml: %v", errSpecLoad)
 	}
 	return specDoc
+}
+
+// relaxFqdnPattern drops the length lookahead of the Fqdn pattern, which Go
+// regular expressions cannot compile (the response validator would fail on
+// every FQDN); the schema states the length by maxLength as well, which is
+// still enforced.
+func relaxFqdnPattern(doc *openapi3.T) {
+	if ref := doc.Components.Schemas["Fqdn"]; ref != nil && ref.Value != nil {
+		ref.Value.Pattern = regexp.MustCompile(`\(\?=\.\{\d+,\d+\}\$\)`).ReplaceAllString(ref.Value.Pattern, "")
+	}
 }
 
 // findRoute matches the URL path (below /api/v1) and the method with an

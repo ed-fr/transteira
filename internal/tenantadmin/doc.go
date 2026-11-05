@@ -28,10 +28,23 @@
 // records tenant.deleted once the data is gone), tenant.branding_updated,
 // tenant.asset_uploaded, tenant.asset_deleted, tenant.network_updated,
 // tenant.smtp_updated, tenant.smtp_tested, tenant.template_updated,
-// tenant.template_reset, tenant.legal_updated). The actor is the username
+// tenant.template_reset, tenant.legal_updated), and so do the export and
+// the import of a configuration (tenant.exported with includeBranding,
+// tenant.imported with the sourceVersion and exportedAt of the document and
+// the count of each section, since V2). The actor is the username
 // of the administrator, as in package adminauth. No event holds a secret:
 // the SMTP password never leaves the vault, and an event only tells that
 // the credentials changed.
+//
+// # Configuration export and import (since V2)
+//
+// [Service.ExportConfig] serializes the configuration of a tenant through a
+// dedicated whitelist type ([ConfigExport]), never holding a secret, a
+// webhook URL or the single sign-on configuration (T-304).
+// [Service.ImportTenant] creates a new tenant in the setup state from such
+// a document: every part goes through the validator of its manual entry,
+// all before the single transaction that writes the tenant, its optional
+// first delegated admin and its configuration (T-305 to T-307).
 //
 // # SMTP and SSRF (P21)
 //

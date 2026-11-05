@@ -69,7 +69,7 @@ L’assistant de mise en service d’une entité est l’entrée **Mise en servi
 
 ![Assistant de mise en service d’une entité en cours de mise en service, avec son badge et la liste des étapes faites ou à faire, obligatoires ou facultatives](../screenshots/fr/admin-tenant-setup.png)
 
-- obligatoires : **Messagerie (SMTP)** (réglages testés avec succès depuis leur dernière modification), **Plages d’adresses IP internes**, **Domaines de messagerie internes**, **Mentions légales** et **Politique de confidentialité** (rédigées dans la langue par défaut de l’entité, sans marqueur « À compléter » restant) ;
+- obligatoires : **Messagerie (SMTP)** (réglages testés avec succès depuis leur dernière modification), **Plages d’adresses IP internes**, **Domaines de messagerie internes** (pour une entité importée, faites seulement après confirmation, voir [Dupliquer ou importer une configuration](topic:tenant-import)), **Mentions légales** et **Politique de confidentialité** (rédigées dans la langue par défaut de l’entité, sans marqueur « À compléter » restant) ;
 - facultatives : **Logo**, **Couleurs** et **Modèles de mails**, qui compte comme fait dès que vous cochez **J’ai relu les modèles de mails**.
 
 Chaque étape est détaillée dans le guide de l’administrateur délégué, voir [Mise en service d’une entité](topic:tenant-setup).
@@ -90,6 +90,26 @@ Sur l’écran [Général](topic:tenant-general) d’une entité, vous pouvez mo
 - **Analyse antivirus** : activée par défaut. La désactiver (après confirmation) fait remettre tous les fichiers finalisés à partir de ce moment **sans analyse**, avec la mention « non analysé : antivirus désactivé » : l’expéditeur est prévenu par mail et la page de téléchargement avertit les destinataires. Les fichiers déjà en attente d’analyse au moment de la désactivation continuent d’attendre l’antivirus ; la réactivation n’analyse jamais les fichiers remis entre-temps. La liste de blocage par empreinte, la détection des abus et le téléchargement forcé restent appliqués. Chaque changement est enregistré dans le [journal d’audit](topic:tenant-audit) (`tenant.antivirus_disabled`, `tenant.antivirus_enabled`). Un administrateur délégué voit l’interrupteur en lecture seule. **Attention** : sans analyse, l’entité peut servir à distribuer des logiciels malveillants ; ne la désactivez qu’en connaissance de cause. Si l’exploitant a désactivé l’antivirus pour toute l’instance (`TT_ANTIVIRUS_ENGINE=none`), l’interrupteur n’a aucun effet : aucun fichier n’est analysé, et le moteur est affiché en lecture seule dans les [paramètres du système](topic:system-settings).
 
 > **À savoir** La somme des quotas peut dépasser la taille du disque. Surveillez l’occupation du disque dans la [vue d’ensemble du système](topic:system-overview).
+
+<!-- topic: tenant-import -->
+### Dupliquer ou importer une configuration
+
+Vous pouvez créer une entité à partir de la configuration exportée d’une autre, voir [Exporter la configuration](topic:tenant-export). L’import crée toujours une **nouvelle** entité, à l’état de configuration : il ne modifie jamais une entité existante.
+
+Dans la liste des entités, cliquez sur **Dupliquer** sur la ligne de l’entité à copier, ou sur **Importer une configuration** et choisissez un fichier JSON. Saisissez ensuite le **Nom de l’entité**, l’**Adresse (FQDN)** et le **Quota de stockage** de la nouvelle entité, et éventuellement son premier administrateur délégué, comme dans [Créer une entité](topic:tenant-create). Le logo et l’image de fond ne sont importés que si le fichier les contient.
+
+![Écran Importer une configuration, avec le choix du fichier de configuration, les champs nom, adresse et quota de stockage de l’entité et le premier administrateur délégué facultatif](../screenshots/fr/admin-tenant-import.png)
+
+Le fichier est vérifié strictement et la création est tout ou rien. Si le fichier est refusé, le message indique l’endroit de la première erreur (par exemple `/config/settings/maxTransferBytes`) : corrigez-le ou exportez de nouveau l’entité source. Un fichier écrit par une version plus récente de TransTeira est aussi refusé, de même qu’une adresse déjà utilisée par une autre entité. Chaque import est consigné dans le [journal d’audit](topic:system-audit) (`tenant.imported`).
+
+Certains éléments ne sont jamais copiés : complétez-les dans l’[assistant de configuration](topic:tenant-setup-super) avant d’ouvrir l’entité :
+
+- **Messagerie (SMTP)** : saisissez l’identifiant et le mot de passe si le serveur en demande, puis envoyez un e-mail de test.
+- **Webhooks** : recréez-les avec leurs adresses.
+- **Authentification unique** : configurez-la de nouveau, voir [Authentification unique d’une entité](topic:sso-setup).
+- **Plages réseau et domaines** : ils sont copiés, mais ils ont été écrits pour l’entité source et rendraient « internes » les utilisateurs de ses réseaux. Les étapes **Plages d’adresses IP internes** et **Domaines de messagerie internes** restent **À faire** tant qu’ils ne sont pas confirmés : l’assistant les affiche avec le message « Ces plages et domaines ont été importés : vérifiez-les puis confirmez. » Vérifiez-les, puis cliquez sur **Confirmer** (ou modifiez-les et enregistrez-les dans l’écran **Réseau**, ce qui vaut confirmation). Sans cette confirmation, **Terminer la mise en service** reste refusé ; seul **Forcer l’ouverture** passe outre.
+
+> **Attention** Un fichier importé contient des données personnelles (liste de blocage, contacts des textes légaux) : gardez-le confidentiel et supprimez-le ensuite.
 
 <!-- topic: sso-setup -->
 ### Authentification unique d’une entité

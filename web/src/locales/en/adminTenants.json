@@ -16,7 +16,10 @@
     "emptyDelegated": "No entity is attached to your account. Contact a super administrator.",
     "create": "Create an entity",
     "configure": "Configure {name}",
-    "view": "Open the summary of {name}"
+    "view": "Open the summary of {name}",
+    "import": "Import a configuration",
+    "duplicate": "Duplicate {name}",
+    "duplicateShort": "Duplicate"
   },
   "status": {
     "setup": "Being set up",
@@ -138,7 +141,18 @@
       "disabledDone": "Antivirus analysis disabled.",
       "enabledDone": "Antivirus analysis enabled."
     },
-    "auditorNote": "You have read-only access to this entity: the settings below cannot be changed."
+    "auditorNote": "You have read-only access to this entity: the settings below cannot be changed.",
+    "export": {
+      "title": "Exporting the configuration",
+      "intro": "Downloads the configuration of the entity as a JSON file, to create another entity the same way (the super admin’s \"Duplicate\" or \"Import a configuration\" actions).",
+      "includeBranding": {
+        "label": "Include the logo and the background image",
+        "hint": "Adds the image files to the exported file, which then gets larger. Without it, only the colors and the choice of a library image are exported."
+      },
+      "notice": "The file contains personal data (addresses of the blocklist, contacts in the legal texts): keep it carefully. It never contains a secret: no SMTP password, no webhook URL, no single sign-on setting, no API token. Webhooks must be entered again after the import.",
+      "download": "Download the configuration",
+      "downloadHint": "(JSON file)"
+    }
   },
   "branding": {
     "title": "Branding",
@@ -282,6 +296,14 @@
       "label": "Allow recipients to reply to a transfer",
       "hint": "Off by default. A reply is only possible for a transfer sent by an internal user to a recipient with a personal link, and the recipient always proves their address by a verification code first. Replies are subject to the quotas and the abuse detection of external users, and to the antivirus. Turning the option off stops new replies at once.",
       "saved": "Reply option saved."
+    },
+    "review": {
+      "title": "Imported ranges and domains to confirm",
+      "text": "These ranges and domains were imported: check them, then confirm. Until they are confirmed, the setup cannot be completed.",
+      "dirty": "Save your changes: saving also confirms them.",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "confirmed": "The internal ranges and domains are confirmed."
     }
   },
   "smtp": {
@@ -741,6 +763,31 @@
       "issuerHttps": "The issuer must be an https address.",
       "secretRequired": "Type the client secret: it is required for the first save and whenever the issuer or the client ID changes.",
       "domainsRequired": "Enter at least one email domain."
+    }
+  },
+  "import": {
+    "title": "Import a configuration",
+    "titleDuplicate": "Duplicate the entity {name}",
+    "intro": "Creates an entity from an exported configuration. Enter the name, the address (FQDN) and the storage quota; everything else comes from the configuration. The entity is created in the setup state.",
+    "introDuplicate": "The configuration of the entity {name} (logo and background image included) is used to create a new entity. Enter its name, its address (FQDN) and its storage quota.",
+    "submit": "Create the entity",
+    "legend": "New entity",
+    "loadError": "The configuration to duplicate could not be loaded.",
+    "webhooks": "The file mentions {count} webhook(s): they are not recreated, enter them again in the entity after the import.",
+    "file": {
+      "label": "Configuration file (JSON)",
+      "hint": "File exported from an entity, 32 MB at most.",
+      "loaded": "File loaded: {name}",
+      "errors": {
+        "too-large": "This file is larger than 32 MB: it is not an exported configuration.",
+        "not-json": "This file is not valid JSON.",
+        "not-an-object": "This file does not hold an entity configuration (a JSON object is expected).",
+        "required": "Choose the configuration file to import.",
+        "unreadable": "This file could not be read."
+      }
+    },
+    "errors": {
+      "location": "Error in the file at {location}"
     }
   }
 }

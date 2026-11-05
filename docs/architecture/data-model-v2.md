@@ -4,7 +4,8 @@
 > Sources: CLAUDE.md (sections 2, 6.5, 8.2 and 22), the V2 design brief (features F1 to F10 and
 > its amendments A1 to A9), `docs/architecture/data-model-v1.1.md`, `data-model-v1.2.md`,
 > migrations `internal/store/migrations/{sqlite,postgres}/0001..0025`, package `internal/store`.
-> The migrations 0026 to 0029 are written alongside this document (they apply on both engines
+> The migrations 0026 to 0029 are written alongside this document (0030 was added during the
+> implementation of F4, section 2.5) (they apply on both engines
 > and pass the store tests); the Go store code that uses them comes with the implementation steps.
 
 ## 1. Principles
@@ -32,8 +33,9 @@ unreferenced one (`deposit_sessions`).
 | 0027 | `sso` | F2, A1 | New tables `tenant_sso_settings`, `sso_email_domains`, `admin_identities` (keyed by issuer, client ID and subject). `admin_sessions`: `auth_method`, `sso_issuer`, `sso_client_id`, `sso_mfa`. |
 | 0028 | `proofs` | F3, A8 | `system_secrets.purpose` accepts `proof-signing` (SQLite rebuild). New tables `proof_signing_keys`, `transfer_proofs` (immutable). |
 | 0029 | `transfer_options_v2` | F5, F6, F7, A7, A9 | `tenants`: `link_only_allowed`, `e2e_policy`. `confidentiality_levels`: `link_only_allowed`, `e2e_policy`. New table `drop_links`. `transfers`: `link_only`, `e2e`, `e2e_message`, `drop_link_id`, `sender_kind` `drop_link`. `transfer_files`: `e2e_metadata`, scan status `not_scanned_e2e`. `deposit_sessions`: `drop_link_id`, kind `drop_link`. |
+| 0030 | `network_review` | F4, T-307 | `tenants`: `network_reviewed_at`, backfilled for the tenants that have network rules. Added during the implementation of F4 (decision of 2026-11-05, section 2.5). |
 
-F4 (export / import), F8 (CLI), F9 (signed image) and F10 (compliance kit) need no schema change.
+F8 (CLI), F9 (signed image) and F10 (compliance kit) need no schema change; F4 (export / import) only needs 0030.
 Every transfer-level change is in 0029, so that `transfers` is rebuilt once on SQLite, after
 `drop_links` exists (its composite foreign key target).
 
@@ -272,6 +274,39 @@ second deposit (store rule, like `internal_remote`). SQLite rebuilds `deposit_se
 referenced); PostgreSQL replaces `deposit_sessions_kind_check`. `store.DepositorKind` gains
 `drop_link` at the drop link step.
 
+### 2.5 Migration 0030 `network_review` (F4, T-307)
+
+Added during the implementation of F4, after the human review of 2026-11-05: the internal IP
+ranges and mail domains written by a configuration import come from another tenant and would
+make the users of its networks "internal"; they must be confirmed before the new tenant leaves
+`setup`.
+
+```sql
+network_reviewed_at INTEGER   -- PG: BIGINT, NULL = never saved by an admin
+```
+
+- **Meaning.** The last time an administrator saved the network rules of the tenant
+  (`PUT /admin/tenants/{id}/network`, even unchanged), written by
+  `store.NetworkRules.ReplaceReviewed` in the transaction that replaces the rules, under the
+  tenant lock. `NetworkRules.Replace` and `ReplaceTx` (the import path) never write it; the
+  tenant creation writes NULL; the general update never touches it; the export never carries it.
+- **Use.** The `internal_networks` and `internal_domains` items of the setup checklist are done
+  only when rules exist **and** the column is set, and the guarded statement of
+  `Tenants.CompleteSetup` (completion that is not forced) requires `network_reviewed_at IS NOT
+  NULL` next to its existing rule checks. The forced completion of the super admin ignores it.
+  Exposed as `networkReviewedAt` (date-time, null when never) in `TenantSetup`.
+- **Backfill.** Every existing tenant having at least one network rule (range or domain) gets
+  its `updated_at`: those rules were entered by hand, and no existing checklist changes. A
+  tenant without any rule stays NULL (its items are not done anyway).
+- **PostgreSQL.** `ALTER TABLE tenants ADD COLUMN`: the row-level security and the policies of
+  `tenants` (0001) are kept. The column is written in the system scope only
+  (`tenants_system` policy); `ReplaceReviewed` then switches the same transaction to the tenant
+  scope (`SystemTx.WithTenant`) to replace the rules under `tenant_network_rules_isolation`.
+- **Tests.** `TestMigration0030Upgrade` (backfill, both engines), `TestNetworkRulesReplaceReviewed`
+  and `TestTenantsCompleteSetup` (store), `TestSetupNetworkReview` and `TestImportRoundTrip`
+  (tenantadmin), `TestTenantConfigRoundTrip` (integration).
+- **Retention.** Configuration, kept for the tenant's lifetime.
+
 ## 3. PostgreSQL RLS summary
 
 Templates: tenant isolation (`tenant_id = app.tenant_id OR system scope`, as `tenant_network_rules`),
@@ -311,9 +346,9 @@ their `tenant_id` column, new instance tables through the explicit list).
 ## 5. Impact on existing behaviour
 
 - **Store inserts.** `INSERT INTO transfers`, `transfer_files`, `deposit_sessions`, `admin_sessions` keep working unchanged (every new column has a default or is nullable). Raw test inserts on `security_events` must give `last_seen_at`.
-- **Upgrade tests.** The tests that count applied migrations now expect 16 from a V1 database (0014 to 0029) and 9 from 0020; `migrate` from scratch applies 29. The index check of the rebuilt SQLite tables now includes `admins` and the two new indexes. `TestV2SchemaConstraints` (`internal/store/migrate_v2_internal_test.go`) checks the V2 invariants on both engines.
+- **Upgrade tests.** The tests that count applied migrations now expect 17 from a V1 database (0014 to 0030) and 10 from 0020; `migrate` from scratch applies 30. The index check of the rebuilt SQLite tables now includes `admins` and the two new indexes. `TestV2SchemaConstraints` (`internal/store/migrate_v2_internal_test.go`) checks the V2 invariants on both engines.
 - **Schema parity.** The new named indexes exist on both engines.
-- **Rebuilt tables on SQLite.** `admins`, `system_secrets`, `transfers`, `transfer_files`, `deposit_sessions` keep their rows; the V1.1 upgrade test (populated V1 database, row counts, foreign key and integrity checks) now runs through 0029.
+- **Rebuilt tables on SQLite.** `admins`, `system_secrets`, `transfers`, `transfer_files`, `deposit_sessions` keep their rows; the V1.1 upgrade test (populated V1 database, row counts, foreign key and integrity checks) now runs through 0030.
 
 ## 6. ER summary
 

@@ -10,6 +10,12 @@ import type { LineError, LineList } from '../../forms/lines';
 /** Internal IP ranges and mail domains of a tenant. */
 export type NetworkRules = components['schemas']['NetworkRules'];
 
+/** Part of the setup state telling whether the rules were confirmed (version 2.0). */
+export type NetworkReviewState = Pick<
+  components['schemas']['TenantSetup'],
+  'setupState' | 'networkReviewedAt'
+>;
+
 /** A message to translate: a key and its parameters. */
 export interface Msg {
   key: string;
@@ -154,5 +160,29 @@ export function wasNormalized(cidrText: string, domainText: string, saved: Netwo
   return (
     !sameList(typedLines(cidrText), saved.internalCidrs) ||
     !sameList(typedLines(domainText), saved.internalDomains)
+  );
+}
+
+/**
+ * Reports whether the rules of a tenant being set up were never saved by an admin (version 2.0):
+ * whatever rules it has then come from a configuration import (another tenant).
+ */
+export function reviewPending(setup: NetworkReviewState | undefined): boolean {
+  return setup !== undefined && setup.setupState === 'setup' && setup.networkReviewedAt === null;
+}
+
+/**
+ * Reports whether the rules of a tenant being set up wait for a confirmation (version 2.0): they
+ * exist but no admin ever saved them, as after a configuration import. Saving them again, even
+ * unchanged, confirms them; until then the network items of the setup checklist stay to do.
+ */
+export function awaitsReview(
+  setup: NetworkReviewState | undefined,
+  rules: NetworkRules | undefined,
+): boolean {
+  return (
+    reviewPending(setup) &&
+    rules !== undefined &&
+    (rules.internalCidrs.length > 0 || rules.internalDomains.length > 0)
   );
 }

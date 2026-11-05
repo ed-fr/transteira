@@ -53,7 +53,8 @@ func TestTenantsSetupStateCreation(t *testing.T) {
 		}
 
 		s := newSetupTenant(t, db, "transfer.entity-a.example.com")
-		if s.SetupState != tenant.SetupStateSetup || !s.SMTPTestedAt.IsZero() || !s.MailTemplatesReviewedAt.IsZero() {
+		if s.SetupState != tenant.SetupStateSetup || !s.SMTPTestedAt.IsZero() || !s.MailTemplatesReviewedAt.IsZero() ||
+			!s.NetworkReviewedAt.IsZero() {
 			t.Fatalf("created %+v", s)
 		}
 		a := newTenant(t, db, "transfer.entity-b.example.com")
@@ -236,6 +237,12 @@ func TestTenantsCompleteSetup(t *testing.T) {
 				_, err := db.NetworkRules().Replace(ctx, a.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"entity-a.example.com"})
 				mustNil(t, err)
 			}},
+			// Rules written without review (a configuration import) do not
+			// count until an administrator saves them (T-307).
+			{"network rules not reviewed", func() {
+				_, err := db.NetworkRules().ReplaceReviewed(ctx, a.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"entity-a.example.com"})
+				mustNil(t, err)
+			}},
 			// Legal documents in another language, or blank, do not count.
 			{"no legal document", func() {
 				legal(a.ID, store.LegalNotice, "fr", "Mentions")
@@ -277,11 +284,15 @@ func TestTenantsCompleteSetup(t *testing.T) {
 		_, err = repo.CompleteSetup(ctx, a.ID, true, time.Time{})
 		wantErr(t, "CompleteSetup(active, forced)", err, store.ErrSetupComplete)
 
-		// Forced: no SMTP needed; a zero review time keeps the mark (none).
+		// Forced: no SMTP needed, no network review either; a zero review
+		// time keeps the mark (none).
 		b := newSetupTenant(t, db, "transfer.entity-b.example.com")
+		_, err = db.NetworkRules().Replace(ctx, b.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"entity-b.example.com"})
+		mustNil(t, err)
 		c := newSetupTenant(t, db, "transfer.entity-c.example.com")
 		got, err = repo.CompleteSetup(ctx, b.ID, true, time.Time{})
-		if err != nil || got.SetupState != tenant.SetupStateActive || !got.MailTemplatesReviewedAt.IsZero() {
+		if err != nil || got.SetupState != tenant.SetupStateActive || !got.MailTemplatesReviewedAt.IsZero() ||
+			!got.NetworkReviewedAt.IsZero() {
 			t.Fatalf("CompleteSetup(forced) = %+v, %v", got, err)
 		}
 		// Isolation: the tested settings of A never open C.
@@ -308,6 +319,102 @@ func TestTenantsCompleteSetup(t *testing.T) {
 		wantErr(t, "CompleteSetup(deleting)", err, store.ErrNotFound)
 		if errors.Is(err, store.ErrSetupComplete) {
 			t.Error("a deleting tenant reported as complete")
+		}
+	})
+}
+
+// ReplaceReviewed records the review of the network rules with them, even
+// unchanged; Replace and ReplaceTx (configuration import) never do (T-307).
+func TestNetworkRulesReplaceReviewed(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openDB(t, e)
+		repo := db.NetworkRules()
+		tenants := db.Tenants()
+		a := newSetupTenant(t, db, "transfer.entity-a.example.com")
+		b := newSetupTenant(t, db, "transfer.entity-b.example.com")
+		cidrs := []netip.Prefix{netip.MustParsePrefix("10.1.2.3/8")}
+		domains := []string{"Entity-A.example.com"}
+		reviewedAt := func(tid tenant.ID) time.Time {
+			t.Helper()
+			got, err := tenants.Get(ctx, tid)
+			mustNil(t, err)
+			return got.NetworkReviewedAt
+		}
+
+		// Replace: rules stored, no review.
+		_, err := repo.Replace(ctx, a.ID, cidrs, domains)
+		mustNil(t, err)
+		if at := reviewedAt(a.ID); !at.IsZero() {
+			t.Fatalf("Replace recorded a review: %v", at)
+		}
+		// ReplaceReviewed with the same rules: the review is recorded, the
+		// rules are normalized as by Replace, B is untouched.
+		set, err := repo.ReplaceReviewed(ctx, a.ID, cidrs, domains)
+		if err != nil || len(set.CIDRs) != 1 || set.CIDRs[0].String() != "10.0.0.0/8" ||
+			len(set.Domains) != 1 || set.Domains[0] != "entity-a.example.com" {
+			t.Fatalf("ReplaceReviewed = %+v, %v", set, err)
+		}
+		if at := reviewedAt(a.ID); !at.Equal(msNow) {
+			t.Errorf("review of A = %v, want %v", at, msNow)
+		}
+		if at := reviewedAt(b.ID); !at.IsZero() {
+			t.Errorf("review of B = %v, want none", at)
+		}
+		if got, err := repo.Get(ctx, a.ID); err != nil || len(got.CIDRs) != 1 || len(got.Domains) != 1 {
+			t.Errorf("Get(A) = %+v, %v", got, err)
+		}
+		// Empty rules are saved and reviewed too (the checklist then waits
+		// for rules); the general update keeps the mark.
+		_, err = repo.ReplaceReviewed(ctx, b.ID, nil, nil)
+		mustNil(t, err)
+		if at := reviewedAt(b.ID); !at.Equal(msNow) {
+			t.Errorf("review of B = %v, want %v", at, msNow)
+		}
+		cur, err := tenants.Get(ctx, a.ID)
+		mustNil(t, err)
+		cur.Name = "Renamed"
+		if got, err := tenants.Update(ctx, cur); err != nil || !got.NetworkReviewedAt.Equal(msNow) {
+			t.Errorf("Update = %+v, %v", got, err)
+		}
+
+		// ReplaceTx (the import path) writes the rules without review.
+		c, err := tenants.CreateWith(ctx, &tenant.Tenant{
+			SetupState: tenant.SetupStateSetup, Name: "C", FQDN: "transfer.entity-c.example.com", DefaultLanguage: "en",
+			MaxTransferBytes: 1 << 30, StorageQuotaBytes: 1 << 40,
+		}, func(tx *store.SystemTx, created *tenant.Tenant) error {
+			return tx.WithTenant(ctx, created.ID, func(stx *store.ScopedTx) error {
+				_, err := repo.ReplaceTx(ctx, stx, cidrs, domains)
+				return err
+			})
+		})
+		mustNil(t, err)
+		if got, err := repo.Get(ctx, c.ID); err != nil || len(got.CIDRs) != 1 || len(got.Domains) != 1 {
+			t.Errorf("Get(C) = %+v, %v", got, err)
+		}
+		if at := reviewedAt(c.ID); !at.IsZero() {
+			t.Errorf("ReplaceTx recorded a review: %v", at)
+		}
+
+		// Invalid values change nothing.
+		_, err = repo.ReplaceReviewed(ctx, c.ID, nil, []string{"bad@domain"})
+		wantErr(t, "ReplaceReviewed(bad domain)", err, store.ErrInvalid)
+		if at := reviewedAt(c.ID); !at.IsZero() {
+			t.Errorf("a refused ReplaceReviewed recorded a review: %v", at)
+		}
+		for _, tid := range badTenants {
+			_, err = repo.ReplaceReviewed(ctx, tid, cidrs, domains)
+			wantErr(t, "ReplaceReviewed(bad tenant)", err, store.ErrInvalid)
+		}
+		_, err = repo.ReplaceReviewed(ctx, tenant.ID(id.New(id.Tenant)), nil, nil)
+		wantErr(t, "ReplaceReviewed(unknown)", err, store.ErrNotFound)
+		mustNil(t, tenants.SetStatus(ctx, c.ID, tenant.StatusDeleting))
+		_, err = repo.ReplaceReviewed(ctx, c.ID, nil, nil)
+		wantErr(t, "ReplaceReviewed(deleting)", err, store.ErrNotFound)
+		if got, err := repo.Get(ctx, c.ID); err != nil || len(got.CIDRs) != 1 {
+			t.Errorf("a refused ReplaceReviewed changed the rules: %+v, %v", got, err)
 		}
 	})
 }

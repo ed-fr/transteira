@@ -173,6 +173,25 @@ type TenantLegalDocuments struct {
 // TenantLegalDocuments returns the legal document repository.
 func (db *DB) TenantLegalDocuments() *TenantLegalDocuments { return &TenantLegalDocuments{db: db} }
 
+// ValidEmailSubject reports whether s is a mail template subject the store
+// accepts: 1 to [MaxEmailSubjectLen] characters of valid UTF-8 on one line
+// (no control character nor Unicode line or paragraph separator). The
+// callers that check a template before writing it use it, so that their
+// bounds cannot drift from those of the store.
+func ValidEmailSubject(s string) bool {
+	return s != "" && validText(s, MaxEmailSubjectLen, true)
+}
+
+// ValidEmailBody reports whether s is a mail template body (HTML or text)
+// the store accepts: at most [MaxEmailBodyLen] characters of valid UTF-8
+// without NUL.
+func ValidEmailBody(s string) bool { return validBody(s, MaxEmailBodyLen) }
+
+// ValidLegalContent reports whether s is a legal document source the store
+// accepts: at most [MaxLegalContentLen] characters of valid UTF-8 without
+// NUL.
+func ValidLegalContent(s string) bool { return validBody(s, MaxLegalContentLen) }
+
 // validBody reports whether s is valid UTF-8 of at most maxRunes
 // characters without NUL (which PostgreSQL text cannot hold).
 func validBody(s string, maxRunes int) bool {
@@ -321,9 +340,9 @@ func (r *TenantEmailTemplates) put(ctx context.Context, tx *ScopedTx, t EmailTem
 		return EmailTemplate{}, err
 	}
 	switch {
-	case t.Subject == "" || !validText(t.Subject, MaxEmailSubjectLen, true):
+	case !ValidEmailSubject(t.Subject):
 		return EmailTemplate{}, invalid("subject must be 1 to %d characters on one line", MaxEmailSubjectLen)
-	case !validBody(t.BodyHTML, MaxEmailBodyLen), !validBody(t.BodyText, MaxEmailBodyLen):
+	case !ValidEmailBody(t.BodyHTML), !ValidEmailBody(t.BodyText):
 		return EmailTemplate{}, invalid("mail bodies must be text of at most %d characters", MaxEmailBodyLen)
 	case !validUpdatedBy(t.UpdatedBy):
 		return EmailTemplate{}, invalid("malformed administrator id")
@@ -439,7 +458,7 @@ func (r *TenantLegalDocuments) put(ctx context.Context, tx *ScopedTx, d LegalDoc
 		return LegalDocument{}, err
 	}
 	switch {
-	case !validBody(d.Content, MaxLegalContentLen):
+	case !ValidLegalContent(d.Content):
 		return LegalDocument{}, invalid("legal document must be text of at most %d characters", MaxLegalContentLen)
 	case !validUpdatedBy(d.UpdatedBy):
 		return LegalDocument{}, invalid("malformed administrator id")

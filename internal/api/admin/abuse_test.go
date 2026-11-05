@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
+	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
@@ -160,28 +162,43 @@ func TestAbuseThresholdsUpdateErrors(t *testing.T) {
 func TestThresholdsConversions(t *testing.T) {
 	t.Parallel()
 	// The factor goes through a float32: 1.1 must give 110, not 109.
-	for f, want := range map[float32]int{1.5: 150, 1.1: 110, 2.3: 230, 100: 10000, 3.4e38: maxVolumePercent} {
+	for f, want := range map[float32]int{1.5: 150, 1.1: 110, 2.3: 230, 100: 10000, 3.4e38: math.MaxInt32} {
 		got, err := thresholdsSettings(gen.AbuseThresholds{UnusualVolumeFactor: &f})
 		if err != nil || *got.UnusualVolumePct != want {
 			t.Errorf("factor %v = %v, %v; want %d", f, got.UnusualVolumePct, err, want)
 		}
 	}
 	for s, want := range map[string]int{"00:00": 0, "08:30": 510, "23:59": 1439} {
-		if got, ok := parseClock(s, false); !ok || got != want {
-			t.Errorf("parseClock(%q) = %d, %v", s, got, ok)
+		if got, ok := tenantadmin.ParseClock(s, false); !ok || got != want {
+			t.Errorf("tenantadmin.ParseClock(%q) = %d, %v", s, got, ok)
 		}
 	}
 	for _, s := range []string{"", "8:00", "08:0", "24:00", "24:01", "12:60", "ab:cd", "0800"} {
-		if _, ok := parseClock(s, false); ok {
-			t.Errorf("parseClock(%q) accepted", s)
+		if _, ok := tenantadmin.ParseClock(s, false); ok {
+			t.Errorf("tenantadmin.ParseClock(%q) accepted", s)
 		}
 	}
-	if m, ok := parseClock("24:00", true); !ok || m != 1440 {
+	if m, ok := tenantadmin.ParseClock("24:00", true); !ok || m != 1440 {
 		t.Errorf("end of day: %d %v", m, ok)
 	}
-	if formatClock(1440) != "24:00" || formatClock(65) != "01:05" {
+	if tenantadmin.FormatClock(1440) != "24:00" || tenantadmin.FormatClock(65) != "01:05" {
 		t.Error("formatClock")
 	}
+	// Every stored percentage renders as the float32 factor pct/100 and
+	// converts back to itself.
+	for pct := 0; pct <= store.MaxUnusualVolumePct; pct++ {
+		back := thresholdsBody(store.AbuseSettings{UnusualVolumePct: &pct})
+		if *back.UnusualVolumeFactor != float32(pct)/100 {
+			t.Fatalf("percentage %d renders %v", pct, *back.UnusualVolumeFactor)
+		}
+		got, err := thresholdsSettings(back)
+		if err != nil || *got.UnusualVolumePct != pct {
+			t.Fatalf("percentage %d round trip = %v, %v", pct, got.UnusualVolumePct, err)
+		}
+	}
+	// A clock that cannot be converted names its field.
+	_, err := thresholdsSettings(gen.AbuseThresholds{OfficeHours: &gen.OfficeHours{Start: "8:00", End: "18:00", Weekdays: []int{1}}})
+	expectProblem(t, err, problem.CodeValidationFailed)
 	// Weekdays: the mask round-trips in ISO order, Sunday being bit 6.
 	start, end := 60, 120
 	back := thresholdsBody(store.AbuseSettings{OfficeStartMinute: &start, OfficeEndMinute: &end, OfficeWeekdays: 0b1000001})
@@ -238,6 +255,45 @@ func TestCaptureRawBody(t *testing.T) {
 	CaptureRawBody(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })).ServeHTTP(httptest.NewRecorder(), r)
 	if !called {
 		t.Error("request without body not passed on")
+	}
+}
+
+// TestCaptureRawBodyImportCheck checks that the raw body of an import is
+// strictly checked before anything decodes it: refused, it is answered
+// with the Problem of the check and the request id, and never passed on.
+func TestCaptureRawBodyImportCheck(t *testing.T) {
+	t.Parallel()
+	called := false
+	h := middleware.AssignRequestID(CaptureRawBody(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })))
+	run := func(body string) *httptest.ResponseRecorder {
+		called = false
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/import", strings.NewReader(body))
+		r.Pattern = importRoute
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+	rec := run(`{"config":{"schemaVersion":2}}`)
+	var p problem.Problem
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || rec.Code != http.StatusUnprocessableEntity ||
+		p.Code != problem.CodeImportSchemaUnsupported || p.Instance == "" || p.Instance != rec.Header().Get(middleware.HeaderRequestID) {
+		t.Errorf("schema 2: %d %s", rec.Code, rec.Body)
+	}
+	if called {
+		t.Error("refused body passed on")
+	}
+	rec = run(`{"name":"x","config":{"schemaVersion":1,"nope":1}}`)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `"/config/nope"`) || called {
+		t.Errorf("unknown member: %d %s (passed on: %v)", rec.Code, rec.Body, called)
+	}
+	if run(validImport); !called {
+		t.Error("valid import not passed on")
+	}
+	// writeProblem answers a 500 for an error that is not a Problem.
+	rec = httptest.NewRecorder()
+	writeProblem(rec, httptest.NewRequest(http.MethodGet, "/", nil), errors.New("boom"))
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "boom") {
+		t.Errorf("non-problem error: %d %s", rec.Code, rec.Body)
 	}
 }
 

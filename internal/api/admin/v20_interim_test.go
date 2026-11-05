@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/adminauth"
@@ -74,6 +75,30 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	wantNotSupported(t, "create tenant delivery none", err, "/delegatedAdmin/delivery")
 	if len(tsvc.args["CreateTenant"]) != 0 {
 		t.Errorf("create tenant delivery none: the service was called")
+	}
+
+	// Tenant import (since step 5 of V2): the same refusal of a first
+	// delegated admin without activation link, before the service.
+	tsvc = &fakeTenantService{}
+	_, err = tenantServer(tsvc).ImportTenant(importCtx(super, strings.Replace(validImport, `"config"`,
+		`"delegatedAdmin":{"username":"admin.c","email":"admin@entity-c.example.com","language":"fr","delivery":"none"},"config"`, 1)), importReq())
+	wantNotSupported(t, "import tenant delivery none", err, "/delegatedAdmin/delivery")
+	if len(tsvc.args["ImportTenant"]) != 0 {
+		t.Errorf("import tenant delivery none: the service was called")
+	}
+	// The link-only and end-to-end policies of an import are not stored
+	// before steps 6 and 7: the service refuses any value but the default,
+	// answered 422 import-invalid at its pointer (not a silent loss).
+	for _, ptr := range []string{
+		"/config/settings/linkOnlyAllowed", "/config/settings/e2ePolicy",
+		"/config/confidentialityLevels/items/0/rules/e2ePolicy",
+	} {
+		tsvc = &fakeTenantService{err: &tenantadmin.ImportError{Pointer: ptr, Reason: "not supported yet"}}
+		_, err = tenantServer(tsvc).ImportTenant(importCtx(super, validImport), importReq())
+		p := expectProblem(t, err, problem.CodeImportInvalid)
+		if len(p.Errors) != 1 || p.Errors[0].Field != ptr {
+			t.Errorf("import %s: errors %+v", ptr, p.Errors)
+		}
 	}
 
 	// Tenant merge patch: the policies are super admin only, like

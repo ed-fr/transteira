@@ -153,6 +153,16 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   // Super admin.
   { name: 'admin-home-super', screen: 'admin /admin/', profile: 'super-admin' },
   { name: 'admin-tenant-create', screen: 'admin /admin/tenants/new', profile: 'super-admin' },
+  {
+    name: 'admin-tenant-export',
+    screen: 'admin /admin/tenants/:id/general (export of the configuration)',
+    profile: 'super-admin',
+  },
+  {
+    name: 'admin-tenant-import',
+    screen: 'admin /admin/tenants/import (create an entity from a configuration)',
+    profile: 'super-admin',
+  },
   { name: 'admin-admins', screen: 'admin /admin/admins', profile: 'super-admin' },
   { name: 'admin-admin-create', screen: 'admin /admin/admins/new', profile: 'super-admin' },
   {

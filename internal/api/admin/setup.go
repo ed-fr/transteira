@@ -44,6 +44,10 @@ func setupBody(s tenantadmin.Setup) gen.TenantSetup {
 	for i, it := range s.Items {
 		out.Items[i] = gen.TenantSetupItem{Key: gen.TenantSetupItemKey(it.Key), Required: it.Required, Done: it.Done}
 	}
+	if !s.NetworkReviewedAt.IsZero() {
+		at := s.NetworkReviewedAt.UTC()
+		out.NetworkReviewedAt = &at
+	}
 	return out
 }
 

@@ -193,6 +193,35 @@ func (r *Blocklist) Create(ctx context.Context, tid tenant.ID, e BlocklistEntry)
 	if err != nil {
 		return BlocklistEntry{}, err
 	}
+	out, err := r.newBlockEntry(e)
+	if err != nil {
+		return BlocklistEntry{}, err
+	}
+	if err := s.Tx(ctx, func(tx *ScopedTx) error { return insertBlock(ctx, tx, out) }); err != nil {
+		return BlocklistEntry{}, wrap("create blocklist entry", err)
+	}
+	return out, nil
+}
+
+// CreateTx is Create inside tx, for the tenant tx is bound to (for example
+// a configuration import writing a new tenant in the transaction that
+// creates it). It validates and normalizes e as Create does. On
+// PostgreSQL a conflict aborts the transaction: the caller must remove
+// duplicates first. After an error, the caller must abort the transaction.
+func (r *Blocklist) CreateTx(ctx context.Context, tx *ScopedTx, e BlocklistEntry) (BlocklistEntry, error) {
+	out, err := r.newBlockEntry(e)
+	if err != nil {
+		return BlocklistEntry{}, err
+	}
+	if err := insertBlock(ctx, tx, out); err != nil {
+		return BlocklistEntry{}, wrap("create blocklist entry", err)
+	}
+	return out, nil
+}
+
+// newBlockEntry validates and normalizes e and returns the entry to store,
+// with a new ID and the store's clock as creation time.
+func (r *Blocklist) newBlockEntry(e BlocklistEntry) (BlocklistEntry, error) {
 	value, err := e.Kind.Normalize(e.Value)
 	if err != nil {
 		return BlocklistEntry{}, err
@@ -207,19 +236,17 @@ func (r *Blocklist) Create(ctx context.Context, tid tenant.ID, e BlocklistEntry)
 	if err != nil {
 		return BlocklistEntry{}, wrap("create blocklist entry", err)
 	}
-	out := BlocklistEntry{
+	return BlocklistEntry{
 		ID: newID, Kind: e.Kind, Value: value, Comment: e.Comment, CreatedBy: e.CreatedBy,
 		CreatedAt: r.db.now().UTC().Truncate(time.Millisecond),
-	}
-	err = s.Tx(ctx, func(tx *ScopedTx) error {
-		_, err := tx.Exec(ctx, qBlockInsert, out.ID, string(out.Kind), out.Value, out.Comment,
-			out.CreatedBy, toMillis(out.CreatedAt))
-		return err
-	})
-	if err != nil {
-		return BlocklistEntry{}, wrap("create blocklist entry", err)
-	}
-	return out, nil
+	}, nil
+}
+
+// insertBlock stores the prepared entry e in tx, returning raw errors.
+func insertBlock(ctx context.Context, tx *ScopedTx, e BlocklistEntry) error {
+	_, err := tx.Exec(ctx, qBlockInsert, e.ID, string(e.Kind), e.Value, e.Comment,
+		e.CreatedBy, toMillis(e.CreatedAt))
+	return err
 }
 
 // Get returns the entry entryID of tenant tid. It returns ErrNotFound when

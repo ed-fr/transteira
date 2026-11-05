@@ -40,7 +40,16 @@
     "back": "Retour à la mise en service",
     "backLabel": "Revenir à la liste de mise en service de l’entité",
     "error": "Impossible de charger la mise en service.",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "networkReview": {
+      "title": "Plages et domaines internes importés",
+      "text": "Ces plages et domaines ont été importés : vérifiez-les puis confirmez. Ils viennent de l’entité d’origine et rendraient « internes » les utilisateurs de ses réseaux ; les étapes « Plages d’adresses IP internes » et « Domaines de messagerie internes » restent à faire tant qu’ils ne sont pas confirmés.",
+      "none": "Aucun.",
+      "edit": "Pour les modifier, ouvrez l’écran Réseau (lien « Configurer » ci-dessous) : leur enregistrement vaut aussi confirmation.",
+      "confirm": "Confirmer",
+      "confirming": "Confirmation…",
+      "confirmed": "Les plages et domaines internes sont confirmés."
+    }
   },
   "items": {
     "branding_logo": {

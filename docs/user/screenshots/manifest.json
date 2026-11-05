@@ -156,10 +156,22 @@
     "path": "{lang}/admin-tenant-create.png"
   },
   {
+    "name": "admin-tenant-export",
+    "screen": "admin /admin/tenants/:id/general (export of the configuration)",
+    "profile": "super-admin",
+    "path": "{lang}/admin-tenant-export.png"
+  },
+  {
     "name": "admin-tenant-general",
     "screen": "admin /admin/tenants/:id/general",
     "profile": "delegated-admin",
     "path": "{lang}/admin-tenant-general.png"
+  },
+  {
+    "name": "admin-tenant-import",
+    "screen": "admin /admin/tenants/import (create an entity from a configuration)",
+    "profile": "super-admin",
+    "path": "{lang}/admin-tenant-import.png"
   },
   {
     "name": "admin-tenant-legal",

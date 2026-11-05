@@ -149,7 +149,7 @@ La liste **Étapes de la mise en service** est calculée d’après la configura
 
 - **Logo** et **Couleurs** (facultatifs) : voir [Habillage](topic:tenant-branding).
 - **Messagerie (SMTP)** (obligatoire) : la configuration doit avoir été testée avec succès avec **Envoyer un mail de test** depuis sa dernière modification. Voir [Messagerie (SMTP)](topic:tenant-smtp).
-- **Plages d’adresses IP internes** et **Domaines de messagerie internes** (obligatoires) : au moins un de chaque. Voir [Réseau](topic:tenant-network).
+- **Plages d’adresses IP internes** et **Domaines de messagerie internes** (obligatoires) : au moins un de chaque, enregistrés depuis l’administration. Pour une entité créée par l’import d’une configuration, les plages et domaines viennent de l’entité d’origine : l’assistant les affiche avec le message « Ces plages et domaines ont été importés : vérifiez-les puis confirmez. » et les deux étapes restent **À faire** jusqu’à ce que vous cliquiez sur **Confirmer** (ou que vous les enregistriez dans l’écran Réseau, même sans changement). Voir [Réseau](topic:tenant-network).
 - **Mentions légales** et **Politique de confidentialité** (obligatoires) : rédigées dans la langue par défaut de l’entité, sans aucune mention `[À compléter : …]` (ou `[To complete: …]`). Voir [Mentions légales](topic:tenant-legal).
 - **Modèles de mails** (facultatif) : cochez **J’ai relu les modèles de mails** une fois les modèles relus ou adaptés (voir [Modèles de mails](topic:tenant-templates)) ; cela est enregistré à la fin de la mise en service.
 
@@ -187,6 +187,21 @@ Cliquez sur **Enregistrer** pour appliquer.
 
 La section **Webhooks** ci-dessous règle le contenu des alertes envoyées aux [webhooks](topic:tenant-webhooks) de l’entité. **Inclure les adresses dans les webhooks** ajoute les adresses de l’expéditeur et des destinataires concernés. Les adresses sont des données personnelles qui quittent TransTeira avec chaque alerte : cochez la case seulement si les destinataires en ont besoin et sont de confiance. Elle est décochée par défaut ; cliquez sur **Enregistrer le réglage des webhooks** sous la case pour appliquer.
 
+<!-- topic: tenant-export -->
+### Exporter la configuration
+
+La section **Exporter la configuration** en bas de l’écran Général télécharge les réglages de l’entité dans un fichier JSON. Le super administrateur s’en sert pour créer une autre entité en dupliquant celle-ci.
+
+Le fichier contient les réglages généraux (sans le quota de stockage), les couleurs et le fond prédéfini, les plages réseau et les domaines, les règles de domaines destinataires, les niveaux de confidentialité, les seuils de détection des abus, les modèles d’e-mail personnalisés uniquement, les textes légaux, la liste de blocage, le serveur, le port, le chiffrement et l’adresse d’expéditeur du SMTP, et les webhooks par nom, type et événements seulement. Cochez **Inclure le logo et l’image de fond** pour ajouter les deux fichiers image.
+
+Le fichier ne contient jamais l’identifiant et le mot de passe SMTP, les adresses et secrets des webhooks, les jetons d’API, les administrateurs, la configuration de l’authentification unique, les transferts, les adresses, les invitations ni le journal d’audit.
+
+Cliquez sur **Télécharger la configuration** pour télécharger le fichier. Chaque export est consigné dans le [journal d’audit](topic:tenant-audit) (`tenant.exported`).
+
+![Section Exporter la configuration de l’écran Général, avec l’avertissement sur les données personnelles, la case Inclure le logo et l’image de fond et le lien Télécharger la configuration](../screenshots/fr/admin-tenant-export.png)
+
+> **Attention** Le fichier contient des données personnelles : les adresses de la liste de blocage et les contacts écrits dans les textes légaux. Traitez-le comme un document confidentiel, ne l’envoyez pas par e-mail en clair et supprimez-le une fois la nouvelle entité créée.
+
 <!-- topic: tenant-branding -->
 ### Habillage
 
@@ -223,6 +238,8 @@ Un utilisateur est interne lorsque les **deux** conditions sont réunies : son a
 ![Écran Réseau avec les plages IP internes et les domaines de messagerie internes](../screenshots/fr/admin-tenant-network.png)
 
 Les erreurs sont signalées ligne par ligne, parfois avec une correction proposée que vous pouvez appliquer. Les lignes répétées sont ignorées, et le serveur normalise les valeurs qu’il enregistre (les listes affichées après l’enregistrement sont celles enregistrées). Cliquez sur **Enregistrer**.
+
+Si l’entité en cours de mise en service a été créée par l’import d’une configuration, un avertissement **Plages et domaines importés à confirmer** apparaît au-dessus des listes : vérifiez-les, puis cliquez sur **Confirmer**. Enregistrer les listes vaut aussi confirmation.
 
 **Autoriser le dépôt depuis l’extérieur pour les internes vérifiés** : option désactivée par défaut. Activée, une adresse d’un domaine interne **déjà vérifiée depuis le réseau interne** peut déposer hors des plages, sans invitation, avec un code à chaque dépôt (voir le guide du déposant, section « Dépôt depuis l’extérieur »). Les invitations restent réservées au réseau interne, et ces dépôts sont signalés dans le [journal d’audit](topic:tenant-audit) et comptés par la [détection des abus](topic:tenant-abuse). Une boîte mail compromise permettrait alors de déposer depuis Internet : n’activez l’option qu’après évaluation. L’option est publique dans la configuration de l’entité. Lorsqu’elle est activée, une demande de code venant de l’extérieur pour une adresse non éligible (autre domaine, jamais vérifiée depuis le réseau interne, inactive, inconnue) reçoit la même réponse qu’une adresse éligible, sans mail envoyé : la tentative compte dans les limites de codes et tout code est refusé à la confirmation. Si un utilisateur dit ne recevoir aucun code depuis l’extérieur, vérifiez son éligibilité. Option désactivée, les personnes extérieures reçoivent le refus générique. Les adresses de la liste de blocage restent refusées.
 

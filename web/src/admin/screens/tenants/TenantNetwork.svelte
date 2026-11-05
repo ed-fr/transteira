@@ -6,10 +6,12 @@
   // - the save is refused while a list has invalid lines or too many entries;
   // - warnings (not blocking): an empty list makes nobody internal, a catch-all range makes every
   //   client of an internal domain internal;
-  // - the lists then show the values saved by the server, which normalises them again.
+  // - the lists then show the values saved by the server, which normalises them again;
+  // - version 2.0: for a tenant being set up whose rules no admin ever saved (a configuration
+  //   import), a notice asks to check them and a "Confirm" button saves them unchanged.
   // The tenant sub-navigation is rendered by App.svelte.
   import { describeError } from '../../../shared/api/problem';
-  import { Alert, Checkbox, HelpIcon, Spinner } from '../../../shared/components';
+  import { Alert, Button, Checkbox, HelpIcon, Spinner } from '../../../shared/components';
   import { i18n, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
   import FormSection from '../../components/FormSection.svelte';
@@ -20,6 +22,7 @@
   import { joinLines } from '../../forms/lines';
   import type { AdminScreenProps } from '../types';
   import {
+    awaitsReview,
     cidrLineMessage,
     domainLineMessage,
     networkBody,
@@ -28,6 +31,7 @@
     validateNetwork,
     wasNormalized,
     type NetworkRules,
+    type NetworkReviewState,
   } from './network';
 
   const { params, nav }: AdminScreenProps = $props();
@@ -42,6 +46,11 @@
   let domainText = $state('');
   let errors = $state<SummaryError[]>([]);
   let normalizedNotice = $state(false);
+  // Setup state of the tenant (version 2.0), to ask for the confirmation of imported rules.
+  let review = $state.raw<NetworkReviewState | undefined>(undefined);
+  let confirming = $state(false);
+  let confirmResult = $state<{ ok: boolean; text: string } | undefined>(undefined);
+  const pending = $derived(awaitsReview(review, saved));
   // Deposit from outside (version 1.1): a flag of the tenant itself (PATCH /admin/tenants/{id}).
   let remoteSaved = $state<boolean | undefined>(undefined);
   let remote = $state(false);
@@ -107,6 +116,44 @@
     }
   }
 
+  async function loadReview(id: string): Promise<void> {
+    try {
+      const res = await adminApi.get('/admin/tenants/{tenantId}/setup', { path: { tenantId: id } });
+      if (id === tenantId) {
+        review = res.data;
+      }
+    } catch {
+      // Without the setup state, no confirmation is asked (the wizard asks it too).
+      if (id === tenantId) {
+        review = undefined;
+      }
+    }
+  }
+
+  /** Confirms the saved (imported) rules by saving them unchanged. */
+  async function confirmRules(rules: NetworkRules): Promise<void> {
+    const id = tenantId;
+    confirming = true;
+    confirmResult = undefined;
+    try {
+      const res = await adminApi.put('/admin/tenants/{tenantId}/network', {
+        path: { tenantId: id },
+        body: rules,
+      });
+      if (id === tenantId) {
+        show(res.data);
+        await loadReview(id);
+        confirmResult = { ok: true, text: t('adminTenants.network.review.confirmed') };
+      }
+    } catch (err) {
+      if (id === tenantId) {
+        confirmResult = { ok: false, text: describeError(i18n, err).message };
+      }
+    } finally {
+      confirming = false;
+    }
+  }
+
   async function loadRemote(id: string): Promise<void> {
     try {
       const res = await adminApi.get('/admin/tenants/{tenantId}', { path: { tenantId: id } });
@@ -131,7 +178,10 @@
     remote = false;
     replySaved = undefined;
     reply = false;
+    review = undefined;
+    confirmResult = undefined;
     void load(tenantId);
+    void loadReview(tenantId);
     void loadRemote(tenantId);
   });
 
@@ -182,6 +232,8 @@
       const normalized = wasNormalized(typedCidrs, typedDomains, res.data);
       show(res.data);
       normalizedNotice = normalized;
+      // Saving also confirms the rules (version 2.0).
+      void loadReview(tenantId);
       return { ok: true, message: t('adminTenants.network.saved') };
     } catch (err) {
       const view = describeError(i18n, err);
@@ -204,6 +256,26 @@
 {:else if loadError !== ''}
   <Alert severity="error">{loadError}</Alert>
 {:else}
+  {#if confirmResult !== undefined}
+    <Alert severity={confirmResult.ok ? 'success' : 'error'}>{confirmResult.text}</Alert>
+  {/if}
+  {#if pending && saved !== undefined}
+    {@const rules = saved}
+    <Alert severity="warning" live={false} title={t('adminTenants.network.review.title')}>
+      <p>{t('adminTenants.network.review.text')}</p>
+      {#if dirty}
+        <p>{t('adminTenants.network.review.dirty')}</p>
+      {:else}
+        <Button
+          loading={confirming}
+          loadingLabel={t('adminTenants.network.review.confirming')}
+          onclick={() => void confirmRules(rules)}
+        >
+          {t('adminTenants.network.review.confirm')}
+        </Button>
+      {/if}
+    </Alert>
+  {/if}
   <FormSection
     title={t('adminTenants.network.form.title')}
     intro={t('adminTenants.network.intro')}

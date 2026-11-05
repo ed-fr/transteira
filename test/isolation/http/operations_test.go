@@ -174,6 +174,8 @@ var isolationCases = map[string]isolationCase{
 	"listTenants":                 adminTenantOp,
 	"createTenant":                adminTenantOp,
 	"getTenant":                   adminTenantOp,
+	"exportTenantConfig":          exportTenantConfigCase,
+	"importTenant":                importTenantCase,
 	"updateTenant":                adminTenantOp,
 	"deleteTenant":                adminTenantOp,
 	"getBranding":                 adminTenantOp,
@@ -626,6 +628,9 @@ type harness struct {
 	// provisioning is the secret of the provisioning token of the
 	// provisioning cases (created on first use, guarded by sessMu).
 	provisioning string
+	// auditor is the session of the auditor of tenant A, created on first
+	// use by auditorSession (guarded by sessMu).
+	auditor *adminSession
 }
 
 // masterKeyLabel names the master key of the server

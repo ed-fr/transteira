@@ -30,7 +30,9 @@ const (
 	// sessions, authenticated and awaiting its TOTP code.
 	adminAuditorToken        = "as_auditor"
 	adminAuditorPendingToken = "as_auditor_pending"
-	adminCSRF                = "csrf_admin"
+	// adminDelegatedToken is an authenticated delegated admin's session.
+	adminDelegatedToken = "as_delegated"
+	adminCSRF           = "csrf_admin"
 )
 
 // fakeAdminSessions knows the sessions adminGoodToken (authenticated
@@ -53,6 +55,9 @@ func (fakeAdminSessions) Resolve(_ context.Context, raw string) (adminauth.Princ
 		if raw == adminAuditorPendingToken {
 			p.State = store.SessionTOTPRequired
 		}
+	case adminDelegatedToken:
+		p.Admin.Username, p.Admin.Role, p.Admin.TenantIDs = "deleg", store.RoleDelegatedAdmin, []tenant.ID{"ten_a"}
+		p.State = store.SessionAuthenticated
 	case adminBoomToken:
 		return adminauth.Principal{}, errors.New("database down")
 	default:
@@ -63,7 +68,7 @@ func (fakeAdminSessions) Resolve(_ context.Context, raw string) (adminauth.Princ
 
 func (fakeAdminSessions) CheckCSRF(raw, header string) bool {
 	switch raw {
-	case adminGoodToken, adminPendingToken, adminAuditorToken, adminAuditorPendingToken:
+	case adminGoodToken, adminPendingToken, adminAuditorToken, adminAuditorPendingToken, adminDelegatedToken:
 		return header == adminCSRF
 	}
 	return false

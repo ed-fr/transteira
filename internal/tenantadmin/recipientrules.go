@@ -48,15 +48,11 @@ func (s *Service) UpdateRecipientRules(ctx context.Context, p adminauth.Principa
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return RecipientRules{}, err
 	}
-	a, err := normalizeRecipientDomains(FieldAllowedDomains, allowed)
+	norm, err := recipientRulesToStore(allowed, denied)
 	if err != nil {
 		return RecipientRules{}, err
 	}
-	d, err := normalizeRecipientDomains(FieldDeniedDomains, denied)
-	if err != nil {
-		return RecipientRules{}, err
-	}
-	set, err := s.repo.replaceRecipientRules(ctx, tid, store.RecipientRuleSet{Allowed: a, Denied: d}, s.now())
+	set, err := s.repo.replaceRecipientRules(ctx, tid, norm, s.now())
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return RecipientRules{}, ErrNotFound
@@ -72,6 +68,21 @@ func (s *Service) UpdateRecipientRules(ctx context.Context, p adminauth.Principa
 		"allowed": out.Allowed, "denied": out.Denied,
 	})
 	return out, nil
+}
+
+// recipientRulesToStore validates and normalizes the allowed and denied
+// recipient domains; a malformed or repeated entry is an *InvalidError
+// naming its index.
+func recipientRulesToStore(allowed, denied []string) (store.RecipientRuleSet, error) {
+	a, err := normalizeRecipientDomains(FieldAllowedDomains, allowed)
+	if err != nil {
+		return store.RecipientRuleSet{}, err
+	}
+	d, err := normalizeRecipientDomains(FieldDeniedDomains, denied)
+	if err != nil {
+		return store.RecipientRuleSet{}, err
+	}
+	return store.RecipientRuleSet{Allowed: a, Denied: d}, nil
 }
 
 // normalizeRecipientDomains normalizes the domains of the list at pointer

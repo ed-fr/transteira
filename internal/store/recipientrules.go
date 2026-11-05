@@ -149,6 +149,35 @@ func (r *RecipientRules) Replace(ctx context.Context, tid tenant.ID, rules Recip
 	if err != nil {
 		return RecipientRuleSet{}, err
 	}
+	set, err := normalizeRecipientRules(rules)
+	if err != nil {
+		return RecipientRuleSet{}, err
+	}
+	created := toMillis(r.db.orNow(now))
+	err = s.Tx(ctx, func(tx *ScopedTx) error { return replaceRecipientRules(ctx, tx, set, created) })
+	if err != nil {
+		return RecipientRuleSet{}, wrap("replace recipient rules", err)
+	}
+	return set, nil
+}
+
+// ReplaceTx is Replace inside tx, for the tenant tx is bound to (for
+// example a configuration import writing a new tenant in the transaction
+// that creates it). It validates the rules as Replace does. After an
+// error, the caller must abort the transaction.
+func (r *RecipientRules) ReplaceTx(ctx context.Context, tx *ScopedTx, rules RecipientRuleSet, now time.Time) (RecipientRuleSet, error) {
+	set, err := normalizeRecipientRules(rules)
+	if err != nil {
+		return RecipientRuleSet{}, err
+	}
+	if err := replaceRecipientRules(ctx, tx, set, toMillis(r.db.orNow(now))); err != nil {
+		return RecipientRuleSet{}, wrap("replace recipient rules", err)
+	}
+	return set, nil
+}
+
+// normalizeRecipientRules validates and sorts both lists of rules.
+func normalizeRecipientRules(rules RecipientRuleSet) (RecipientRuleSet, error) {
 	allowed, err := normalizeRecipientDomains(rules.Allowed)
 	if err != nil {
 		return RecipientRuleSet{}, err
@@ -157,30 +186,30 @@ func (r *RecipientRules) Replace(ctx context.Context, tid tenant.ID, rules Recip
 	if err != nil {
 		return RecipientRuleSet{}, err
 	}
-	created := toMillis(r.db.orNow(now))
-	err = s.Tx(ctx, func(tx *ScopedTx) error {
-		// Concurrent replaces would otherwise both delete, then collide on
-		// insert (PostgreSQL, READ COMMITTED).
-		if err := tx.lock(ctx); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, qRecipientRulesDelete); err != nil {
-			return err
-		}
-		for _, k := range []struct {
-			kind    string
-			domains []string
-		}{{recipientRuleAllow, allowed}, {recipientRuleDeny, denied}} {
-			for _, d := range k.domains {
-				if _, err := tx.Exec(ctx, qRecipientRuleInsert, k.kind, d, created); err != nil {
-					return err
-				}
+	return RecipientRuleSet{Allowed: allowed, Denied: denied}, nil
+}
+
+// replaceRecipientRules replaces the rules of the tenant of tx with set,
+// recorded at created (milliseconds), under the tenant lock, returning raw
+// errors.
+func replaceRecipientRules(ctx context.Context, tx *ScopedTx, set RecipientRuleSet, created int64) error {
+	// Concurrent replaces would otherwise both delete, then collide on
+	// insert (PostgreSQL, READ COMMITTED).
+	if err := tx.lock(ctx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, qRecipientRulesDelete); err != nil {
+		return err
+	}
+	for _, k := range []struct {
+		kind    string
+		domains []string
+	}{{recipientRuleAllow, set.Allowed}, {recipientRuleDeny, set.Denied}} {
+		for _, d := range k.domains {
+			if _, err := tx.Exec(ctx, qRecipientRuleInsert, k.kind, d, created); err != nil {
+				return err
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return RecipientRuleSet{}, wrap("replace recipient rules", err)
 	}
-	return RecipientRuleSet{Allowed: allowed, Denied: denied}, nil
+	return nil
 }

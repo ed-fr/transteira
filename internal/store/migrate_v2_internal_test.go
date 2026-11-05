@@ -156,3 +156,58 @@ func TestV2SchemaConstraints(t *testing.T) {
 		rejected("drop link session without link", dsession, "dps_2", a, bytes.Repeat([]byte{2}, 32), nil)
 	})
 }
+
+// TestMigration0030Upgrade applies 0030_network_review on a database at
+// 0029: the existing tenants that have network rules count as reviewed (at
+// their last modification), those without any rule stay unreviewed, so
+// that no existing tenant sees its setup checklist change (T-307).
+func TestMigration0030Upgrade(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		db := openEngine(t, e)
+		db.migrationsFS = migrationsUpTo(t, 29)
+		if n, err := db.Migrate(ctx); err != nil || n != 29 {
+			t.Fatalf("Migrate to 0029 = %d, %v", n, err)
+		}
+		// Tenants of the 0029 schema: with a range only, a domain only,
+		// both, and no rule.
+		tenants := map[string]int64{"ten_cidr": 11, "ten_domain": 12, "ten_both": 13, "ten_none": 14}
+		for tid, updated := range tenants {
+			if err := rawExecArgs(ctx, t, db, `INSERT INTO tenants (id, name, fqdn, default_language, max_transfer_bytes,
+				storage_quota_bytes, setup_state, created_at, updated_at) VALUES (?, 'Legacy', ?, 'fr', 1, 1000, 'setup', 1, ?)`,
+				tid, tid[len("ten_"):]+".example.com", updated); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rules := [][3]string{
+			{"ten_cidr", "cidr", "10.0.0.0/8"},
+			{"ten_domain", "domain", "a.example.com"},
+			{"ten_both", "cidr", "10.0.0.0/8"},
+			{"ten_both", "domain", "a.example.com"},
+		}
+		for _, r := range rules {
+			if err := rawExecArgs(ctx, t, db, `INSERT INTO tenant_network_rules (tenant_id, kind, value) VALUES (?, ?, ?)`,
+				r[0], r[1], r[2]); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		db.migrationsFS = migrationFiles
+		if n, err := db.Migrate(ctx); err != nil || n != 1 {
+			t.Fatalf("Migrate to the latest = %d, %v", n, err)
+		}
+		for tid, want := range map[string]int64{"ten_cidr": 11, "ten_domain": 12, "ten_both": 13} {
+			if got := rawInt(ctx, t, db, `SELECT network_reviewed_at FROM tenants WHERE id = '`+tid+`'`); got != want {
+				t.Errorf("%s: network_reviewed_at = %d, want %d", tid, got, want)
+			}
+		}
+		if n := rawInt(ctx, t, db, `SELECT count(*) FROM tenants WHERE network_reviewed_at IS NULL`); n != 1 {
+			t.Errorf("tenants without review = %d, want 1 (ten_none)", n)
+		}
+		if e.Driver == "sqlite" {
+			checkSQLiteIntegrity(ctx, t, db)
+		}
+	})
+}

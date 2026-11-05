@@ -74,6 +74,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/ed-fr/transteira/internal/api/admin"
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/api/public"
@@ -221,6 +222,11 @@ type routePolicy struct {
 	// unsafe methods (OpenAPI security schemes myTransfersSession and
 	// csrfToken together); it implies meSession.
 	meCSRF bool
+	// superAdminOnly reserves an admin operation to the super admin before
+	// its body is read (superAdminGuard, right after the admin session and
+	// CSRF checks): another admin gets 403 whatever the body, which is
+	// never read. For the large bodies whose decoding alone costs memory.
+	superAdminOnly bool
 	// assetBody limits the body to the size limit of the branding image
 	// named by the {asset} path value (5 MiB for a logo, 10 MiB for a
 	// background), bodyLimit for an unknown name.
@@ -331,6 +337,12 @@ var routePolicies = map[string]routePolicy{
 	},
 	http.MethodDelete + " " + APIBaseURL + "/admin/tenants/{tenantId}": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: AdminLongDeadline,
+	},
+	// The import of a tenant configuration (since API 2.0) carries the
+	// branding images in base64, re-encoded by the handler: reserved to the
+	// super admin before its body is read.
+	http.MethodPost + " " + APIBaseURL + "/admin/tenants/import": {
+		bodyLimit: admin.ImportBodyLimit, deadline: AdminLongDeadline, superAdminOnly: true,
 	},
 	http.MethodGet + " " + APIBaseURL + "/tenant/assets/{asset}": {
 		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: ImageDeadline,

@@ -31,6 +31,7 @@ administration.
 - [7. Receiving webhooks](#7-receiving-webhooks)
 - [8. Monitoring endpoints](#8-monitoring-endpoints)
 - [9. Proofs of deposit and delivery](#9-proofs-of-deposit-and-delivery)
+- [10. Exporting and duplicating a tenant configuration](#10-exporting-and-duplicating-a-tenant-configuration)
 
 ## Basics
 
@@ -1094,3 +1095,72 @@ exist or is past its 12-month retention answers `404` with the code `proof-not-a
 address (a single IPv4 address or an IPv6 /64, shared by the sender and administration
 proof endpoints and across entities) and answer `429` beyond. To verify a proof offline, see
 [docs/operations/proofs.md](../operations/proofs.md).
+
+## 10. Exporting and duplicating a tenant configuration
+
+From version 2.0, an entity can be duplicated: its configuration is exported as a JSON document
+(`exportTenantConfig`), and the super admin creates a new entity from it (`importTenant`). Both
+are **admin-session operations** (the sign-in steps and header file of
+[section 1](#1-create-an-api-token) and [section 6](#6-managing-tokens-list-change-revoke)),
+not API-token operations: an API token cannot call them. Export is open to the super admin and to
+a delegated admin of the entity, not to an auditor; import is reserved to the super admin.
+
+```bash
+# Export (GET: the session cookie is enough). includeBranding=true adds the logo and the
+# background image (base64).
+curl -sS "$TT_ADMIN_URL/api/v1/admin/tenants/$TT_TENANT_ID/export?includeBranding=false" \
+  -H @"$work/admin-headers" -o entity-a-config.json
+
+# Import: creates a NEW tenant in the setup state (super admin; the CSRF token is in the header file).
+jq '{name: "Entity C", fqdn: "transfer.entity-c.example.com",
+     storageQuotaBytes: 1099511627776, config: .}' entity-a-config.json \
+  | curl -sS -X POST "$TT_ADMIN_URL/api/v1/admin/tenants/import" \
+      -H @"$work/admin-headers" -H 'Content-Type: application/json' --data-binary @- \
+  | jq '{id, name, fqdn, status}'
+```
+
+```powershell
+# $AdminUrl and Invoke-Admin come from the PowerShell script of section 1 (session cookie + CSRF).
+$cfg = Invoke-Admin GET "/admin/tenants/$TenantId/export?includeBranding=false"
+$cfg | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath entity-a-config.json -Encoding utf8
+Invoke-Admin POST /admin/tenants/import @{
+    name = 'Entity C'; fqdn = 'transfer.entity-c.example.com'
+    storageQuotaBytes = 1099511627776; config = $cfg
+}
+```
+
+- **What the export holds:** the general settings (without the quota), colours and background
+  preset, network rules, recipient rules, confidentiality levels, abuse thresholds, customised
+  mail templates only, legal texts, the blocklist, the SMTP server, port, security and sender
+  only, and the webhooks by name, kind and events only (disabled). With `includeBranding=true`,
+  the logo and the background image. **Never exported:** the SMTP user name and password, the
+  webhook URLs and secrets, API tokens, admins, provisioning data, transfers, addresses,
+  invitations, audit and the single sign-on configuration.
+- **Personal data:** the file holds the blocklist addresses and the contacts of the legal texts.
+  Store it as a confidential document, and delete it when the new entity exists.
+- **Import is strict and all or nothing**, in one transaction, body limited to 32 MiB
+  (`413 payload-too-large`), reserved to the super admin (any other admin gets `403` before the
+  body is read). An unknown or missing required member (every member of `abuseThresholds` is
+  required), an array longer than its `maxItems` (at most 10000 blocklist entries), a duplicate
+  JSON key or a value out of its limits answers `422` [`import-invalid`](errors.md#import-invalid),
+  with the JSON pointer of the first error in `errors[0].field`; an unknown `schemaVersion`
+  answers `422`
+  [`import-schema-unsupported`](errors.md#import-schema-unsupported); an FQDN already used
+  answers `409`. An optional `delegatedAdmin` is created as for `createTenant`.
+- **After the import** the new entity is in the setup state: complete and test the SMTP
+  (user name and password), recreate the webhooks with their URLs, configure single sign-on
+  again. The network ranges and domains are imported as written but must be confirmed: the
+  `internal_networks` and `internal_domains` items of `getTenantSetup` stay not done
+  (`networkReviewedAt` null) and `completeTenantSetup` answers `409 setup-incomplete` until an
+  admin saves them with `updateNetworkRules` (sending the same lists confirms them):
+
+  ```bash
+  # NEW_TENANT_ID is the id answered by the import.
+  curl -sS "$TT_ADMIN_URL/api/v1/admin/tenants/$NEW_TENANT_ID/network" \
+    -H @"$work/admin-headers" > "$work/network.json"
+  # Review network.json, then confirm (or change) the rules:
+  curl -sS -X PUT "$TT_ADMIN_URL/api/v1/admin/tenants/$NEW_TENANT_ID/network" \
+    -H 'Content-Type: application/json' -H @"$work/admin-headers" \
+    --data @"$work/network.json"
+  ```
+- The audit log records `tenant.exported` and `tenant.imported`.

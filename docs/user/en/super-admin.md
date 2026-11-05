@@ -69,7 +69,7 @@ The setup wizard of an entity is the **Setup** entry of its navigation (the **Co
 
 ![Setup wizard of an entity being set up, with its badge and the list of setup steps marked done or to do, required or optional](../screenshots/en/admin-tenant-setup.png)
 
-- required: **Mail (SMTP)** (settings tested successfully since their last change), **Internal IP ranges**, **Internal mail domains**, **Legal notice** and **Privacy policy** (written in the default language of the entity, with no "To complete" marker left);
+- required: **Mail (SMTP)** (settings tested successfully since their last change), **Internal IP ranges**, **Internal mail domains** (for an imported entity, done only once confirmed, see [Duplicate or import a configuration](topic:tenant-import)), **Legal notice** and **Privacy policy** (written in the default language of the entity, with no "To complete" marker left);
 - optional: **Logo**, **Colours** and **Mail templates**, which counts as done once you tick **I reviewed the mail templates**.
 
 Each step is detailed in the guide of the delegated administrator, see [Setup of an entity](topic:tenant-setup).
@@ -90,6 +90,26 @@ On the [General](topic:tenant-general) screen of an entity, you can change the s
 - **Antivirus analysis**: on by default. Turning it off (after a confirmation) delivers every file finalized from then on **without analysis**, flagged "not analysed: antivirus disabled": the sender is told by email and the download page warns the recipients. Files already waiting for analysis when you turn it off keep waiting for the antivirus; turning it back on never analyses files delivered in the meantime. The blocklist by fingerprint, the abuse detection and the forced download stay in force. Each change is recorded in the [audit log](topic:tenant-audit) (`tenant.antivirus_disabled`, `tenant.antivirus_enabled`). A delegated administrator sees the switch read-only. **Warning**: without analysis, the entity can be used to distribute malware; turn it off only knowingly. If the operator has disabled the antivirus for the whole instance (`TT_ANTIVIRUS_ENGINE=none`), the switch has no effect: no file is analysed, and the engine is shown read-only in the [system settings](topic:system-settings).
 
 > **Note** The sum of the quotas may exceed the size of the disk. Watch the disk use in the [System overview](topic:system-overview).
+
+<!-- topic: tenant-import -->
+### Duplicating or importing a configuration
+
+You can create an entity from the configuration exported from another one, see [Exporting the configuration](topic:tenant-export). Import always creates a **new** entity, in the setup state: it never changes an existing entity.
+
+In the list of entities, click **Duplicate** on the row of the entity to copy, or click **Import a configuration** and choose a JSON file. Then enter the **Entity name**, the **Address (FQDN)** and the **Storage quota** of the new entity, and optionally its first delegated administrator, as in [Creating an entity](topic:tenant-create). The logo and the background image are imported only if the file contains them.
+
+![Import a configuration screen, with the configuration file picker, the entity name, address and storage quota fields and the optional first delegated administrator](../screenshots/en/admin-tenant-import.png)
+
+The file is checked strictly, and the creation is all or nothing. If the file is refused, the message names the place of the first error (for example `/config/settings/maxTransferBytes`): fix it or export the source entity again. A file written by a newer version of TransTeira is refused as well, and an address already used by another entity is refused. Each import is recorded in the [audit log](topic:system-audit) (`tenant.imported`).
+
+Some things are never copied, so complete them in the [setup wizard](topic:tenant-setup-super) before opening the entity:
+
+- **Mail (SMTP)**: enter the user name and password if the server needs them, then send a test email.
+- **Webhooks**: recreate them with their addresses.
+- **Single sign-on**: configure it again, see [Single sign-on of an entity](topic:sso-setup).
+- **Network ranges and domains**: they are copied, but they were written for the source entity and would make the users of its networks "internal". The **Internal IP ranges** and **Internal mail domains** steps stay **To do** until they are confirmed: the wizard shows them with the message "These ranges and domains were imported: check them, then confirm." Check them, then click **Confirm** (or change them and save them in the **Network** screen, which also confirms them). Without this confirmation, **Finish setup** stays refused; only **Force opening** overrides it.
+
+> **Warning** An imported file holds personal data (blocklist, contacts of the legal texts): keep it confidential and delete it afterwards.
 
 <!-- topic: sso-setup -->
 ### Single sign-on of an entity

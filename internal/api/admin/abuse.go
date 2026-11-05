@@ -5,12 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"math"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
@@ -31,11 +27,25 @@ const apiBase = "/api/v1"
 // Request.Pattern by the generated router) of the operations whose handler
 // reads the raw body (see CaptureRawBody): the abuse thresholds update and,
 // since API 1.2, the creation of a provisioning token and of a tenant by a
-// provisioning token.
+// provisioning token, and since API 2.0 the import of a tenant
+// configuration (strict JSON: duplicate and unknown members refused).
 var rawBodyRoutes = map[string]bool{
 	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/abuse-thresholds": true,
 	http.MethodPost + " " + apiBase + "/admin/provisioning-tokens":                true,
 	http.MethodPost + " " + apiBase + "/provisioning/tenants":                     true,
+	importRoute: true,
+}
+
+// importRoute is the route pattern of importTenant.
+const importRoute = http.MethodPost + " " + apiBase + "/admin/tenants/import"
+
+// rawBodyChecks are the checks CaptureRawBody runs on the raw body of a
+// route before the generated handler decodes it: a non-nil error is the
+// *problem.Problem answered instead. The import is strictly checked there
+// (CheckImportBody), so that the typed decode only ever sees a document
+// whose arrays are bounded (T-306).
+var rawBodyChecks = map[string]func([]byte) error{
+	importRoute: CheckImportBody,
 }
 
 // rawBodyKey is the context key of the raw body of an operation that reads
@@ -51,7 +61,10 @@ func rawBodyWanted(r *http.Request) bool { return rawBodyRoutes[r.Pattern] }
 // rawBodyWanted): every member of the abuse thresholds body is required,
 // and the provisioning bodies refuse unknown members, which the generated
 // types cannot tell. The body is read after the body limit middleware, so
-// it is bounded; it is handed back unchanged to the generated decoder.
+// it is bounded. When the route has a check in rawBodyChecks (the import
+// of a tenant configuration), a body it refuses is answered with its
+// Problem and never reaches the generated decoder; any other body is
+// handed back unchanged to the generated decoder.
 func CaptureRawBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Body == nil || !rawBodyWanted(r) {
@@ -65,9 +78,27 @@ func CaptureRawBody(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if check := rawBodyChecks[r.Pattern]; check != nil {
+			if err := check(raw); err != nil {
+				writeProblem(w, r, err)
+				return
+			}
+		}
 		r.Body = io.NopCloser(bytes.NewReader(raw))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), rawBodyKey{}, raw)))
 	})
+}
+
+// writeProblem answers err, a *problem.Problem (anything else is a 500
+// internal-error), with the request identifier as instance.
+func writeProblem(w http.ResponseWriter, r *http.Request, err error) {
+	var p *problem.Problem
+	if !errors.As(err, &p) {
+		p = problem.New(problem.CodeInternalError)
+	}
+	cp := *p
+	cp.Instance = middleware.RequestID(r.Context())
+	problem.Write(w, &cp)
 }
 
 // failingReader returns err on every read.
@@ -177,20 +208,12 @@ func thresholdsInput(raw []byte, b gen.AbuseThresholds) (store.AbuseSettings, er
 	return thresholdsSettings(b)
 }
 
-// Office hours and unusual volume conversions.
-const (
-	officeEndOfDay   = "24:00"
-	minutesPerHour   = 60
-	minutesPerDay    = 24 * minutesPerHour
-	maxVolumePercent = math.MaxInt32
-)
-
 // thresholdsSettings converts the OpenAPI body to the settings of the
-// store: the unusual volume factor becomes a percentage, the office hours
-// minutes of the day and a weekday mask. A value that cannot be converted
-// names its field; the service checks the bounds.
+// store with tenantadmin.AbuseFromAPI, the conversion shared with the
+// import. A value that cannot be converted names its field; the service
+// checks the bounds.
 func thresholdsSettings(b gen.AbuseThresholds) (store.AbuseSettings, error) {
-	out := store.AbuseSettings{
+	in := tenantadmin.ExportedAbuseThresholds{
 		MaxDailyBytesPerSender: b.MaxDailyBytesPerSender, MaxDailyTransfersPerSender: b.MaxDailyTransfersPerSender,
 		MaxRecipientsPerTransfer: b.MaxRecipientsPerTransfer, BlockOnExceed: b.BlockOnExceed,
 		UnusualMinHistoryDays: b.UnusualMinHistoryDays, LargeExternalTransferBytes: b.LargeExternalTransferBytes,
@@ -198,91 +221,37 @@ func thresholdsSettings(b gen.AbuseThresholds) (store.AbuseSettings, error) {
 		ExternalMaxDailyBytes: b.ExternalMaxDailyBytes, ExternalMaxDailyDeposits: b.ExternalMaxDailyDeposits,
 	}
 	if f := b.UnusualVolumeFactor; f != nil {
-		pct := maxVolumePercent
-		if v := math.Round(float64(*f) * 100); v < maxVolumePercent {
-			pct = int(v)
-		}
-		out.UnusualVolumePct = &pct
+		v := float64(*f)
+		in.UnusualVolumeFactor = &v
 	}
 	if oh := b.OfficeHours; oh != nil {
-		start, ok := parseClock(oh.Start, false)
-		if !ok {
-			return store.AbuseSettings{}, validationFailed(tenantadmin.FieldOfficeHours+"/start", fieldInvalidFormat)
-		}
-		end, ok := parseClock(oh.End, true)
-		if !ok {
-			return store.AbuseSettings{}, validationFailed(tenantadmin.FieldOfficeHours+"/end", fieldInvalidFormat)
-		}
-		mask, ok := weekdayMask(oh.Weekdays)
-		if !ok {
-			return store.AbuseSettings{}, validationFailed(tenantadmin.FieldOfficeHoursWeekdays, fieldInvalidFormat)
-		}
-		out.OfficeStartMinute, out.OfficeEndMinute, out.OfficeWeekdays = &start, &end, mask
+		in.OfficeHours = &tenantadmin.ExportedOfficeHours{Start: oh.Start, End: oh.End, Weekdays: oh.Weekdays}
 	}
-	return out, nil
+	out, err := tenantadmin.AbuseFromAPI(in)
+	var ie *tenantadmin.InvalidError
+	if errors.As(err, &ie) {
+		return store.AbuseSettings{}, validationFailed(ie.Field, fieldInvalidFormat)
+	}
+	return out, err
 }
 
-// weekdayMask converts ISO 8601 weekdays (1 = Monday ... 7 = Sunday) to
-// the mask of the store (bit 0 = Monday). It reports false for an empty
-// list, a day out of range or a duplicate day (OpenAPI minItems 1 and
-// uniqueItems).
-func weekdayMask(days []int) (int, bool) {
-	mask := 0
-	for _, d := range days {
-		if d < 1 || d > 7 || mask&(1<<(d-1)) != 0 {
-			return 0, false
-		}
-		mask |= 1 << (d - 1)
-	}
-	return mask, mask != 0
-}
-
-// parseClock parses "HH:MM" (00:00 to 23:59), and "24:00" when allowEnd,
-// to minutes of the day.
-func parseClock(s string, allowEnd bool) (int, bool) {
-	if allowEnd && s == officeEndOfDay {
-		return minutesPerDay, true
-	}
-	h, m, ok := strings.Cut(s, ":")
-	if !ok || len(h) != 2 || len(m) != 2 {
-		return 0, false
-	}
-	hh, err1 := strconv.Atoi(h)
-	mm, err2 := strconv.Atoi(m)
-	if err1 != nil || err2 != nil || hh < 0 || hh > 23 || mm < 0 || mm > 59 {
-		return 0, false
-	}
-	return hh*minutesPerHour + mm, true
-}
-
-// formatClock renders minutes of the day as HH:MM ("24:00" for the end).
-func formatClock(minutes int) string {
-	return fmt.Sprintf("%02d:%02d", minutes/minutesPerHour, minutes%minutesPerHour)
-}
-
-// thresholdsBody renders the settings as the OpenAPI AbuseThresholds.
+// thresholdsBody renders the settings as the OpenAPI AbuseThresholds with
+// tenantadmin.AbuseToAPI, the conversion shared with the export.
 func thresholdsBody(s store.AbuseSettings) gen.AbuseThresholds {
+	a := tenantadmin.AbuseToAPI(s)
 	out := gen.AbuseThresholds{
-		MaxDailyBytesPerSender: s.MaxDailyBytesPerSender, MaxDailyTransfersPerSender: s.MaxDailyTransfersPerSender,
-		MaxRecipientsPerTransfer: s.MaxRecipientsPerTransfer, BlockOnExceed: s.BlockOnExceed,
-		UnusualMinHistoryDays: s.UnusualMinHistoryDays, LargeExternalTransferBytes: s.LargeExternalTransferBytes,
-		TimeZone: s.TimeZone, MaxInvitationsPerInviter: s.MaxInvitationsPerInviter,
-		ExternalMaxDailyBytes: s.ExternalMaxDailyBytes, ExternalMaxDailyDeposits: s.ExternalMaxDailyDeposits,
+		MaxDailyBytesPerSender: a.MaxDailyBytesPerSender, MaxDailyTransfersPerSender: a.MaxDailyTransfersPerSender,
+		MaxRecipientsPerTransfer: a.MaxRecipientsPerTransfer, BlockOnExceed: a.BlockOnExceed,
+		UnusualMinHistoryDays: a.UnusualMinHistoryDays, LargeExternalTransferBytes: a.LargeExternalTransferBytes,
+		TimeZone: a.TimeZone, MaxInvitationsPerInviter: a.MaxInvitationsPerInviter,
+		ExternalMaxDailyBytes: a.ExternalMaxDailyBytes, ExternalMaxDailyDeposits: a.ExternalMaxDailyDeposits,
 	}
-	if s.UnusualVolumePct != nil {
-		f := float32(*s.UnusualVolumePct) / 100
-		out.UnusualVolumeFactor = &f
+	if f := a.UnusualVolumeFactor; f != nil {
+		f32 := float32(*f)
+		out.UnusualVolumeFactor = &f32
 	}
-	if s.OfficeStartMinute != nil && s.OfficeEndMinute != nil {
-		days := []int{}
-		for d := 1; d <= 7; d++ {
-			if s.OfficeWeekdays&(1<<(d-1)) != 0 {
-				days = append(days, d)
-			}
-		}
-		out.OfficeHours = &gen.OfficeHours{
-			Start: formatClock(*s.OfficeStartMinute), End: formatClock(*s.OfficeEndMinute), Weekdays: days,
-		}
+	if oh := a.OfficeHours; oh != nil {
+		out.OfficeHours = &gen.OfficeHours{Start: oh.Start, End: oh.End, Weekdays: oh.Weekdays}
 	}
 	return out
 }

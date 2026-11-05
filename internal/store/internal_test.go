@@ -336,6 +336,9 @@ func TestScopeStatements(t *testing.T) {
 	if _, err := db.NetworkRules().Replace(ctx, a.ID, nil, []string{"a.example.com"}); err != nil {
 		t.Fatalf("Replace: %v", err)
 	}
+	if _, err := db.NetworkRules().ReplaceReviewed(ctx, a.ID, nil, []string{"a.example.com"}); err != nil {
+		t.Fatalf("ReplaceReviewed: %v", err)
+	}
 	if !strings.Contains(logs.String(), "system scope") || !strings.Contains(logs.String(), reasonTenantAdmin) {
 		t.Errorf("system scope not logged: %q", logs.String())
 	}
@@ -344,7 +347,14 @@ func TestScopeStatements(t *testing.T) {
 	if _, err := db.NetworkRules().Replace(ctx, a.ID, nil, nil); err == nil || !strings.Contains(err.Error(), "lock tenant") {
 		t.Errorf("failing tenant lock: %v", err)
 	}
+	if _, err := db.NetworkRules().ReplaceReviewed(ctx, a.ID, nil, nil); err == nil || !strings.Contains(err.Error(), "lock tenant") {
+		t.Errorf("failing tenant lock (reviewed): %v", err)
+	}
+	d.lockTenant = "SELECT ?"
 	d.scopeTenant = "SELECT bogus("
+	if _, err := db.NetworkRules().ReplaceReviewed(ctx, a.ID, nil, nil); err == nil || !strings.Contains(err.Error(), "set tenant scope") {
+		t.Errorf("failing tenant scope (reviewed): %v", err)
+	}
 	if _, err := db.NetworkRules().Get(ctx, a.ID); err == nil || !strings.Contains(err.Error(), "set transaction scope") {
 		t.Errorf("failing tenant scope: %v", err)
 	}
@@ -386,6 +396,10 @@ func TestDriverFaults(t *testing.T) {
 		"rules.get":      func() error { _, err := db.NetworkRules().Get(ctx, a.ID); return err },
 		"rules.replace": func() error {
 			_, err := db.NetworkRules().Replace(ctx, a.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"a.example.com"})
+			return err
+		},
+		"rules.replacereviewed": func() error {
+			_, err := db.NetworkRules().ReplaceReviewed(ctx, a.ID, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}, []string{"a.example.com"})
 			return err
 		},
 		"block.list":     func() error { _, err := db.Blocklist().List(ctx, a.ID, BlocklistFilter{}); return err },
