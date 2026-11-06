@@ -86,11 +86,11 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	if len(tsvc.args["ImportTenant"]) != 0 {
 		t.Errorf("import tenant delivery none: the service was called")
 	}
-	// The link-only and end-to-end policies of an import are not stored
-	// before steps 6 and 7: the service refuses any value but the default,
-	// answered 422 import-invalid at its pointer (not a silent loss).
+	// The end-to-end policies of an import are not stored before step 7:
+	// the service refuses any value but the default, answered 422
+	// import-invalid at its pointer (not a silent loss).
 	for _, ptr := range []string{
-		"/config/settings/linkOnlyAllowed", "/config/settings/e2ePolicy",
+		"/config/settings/e2ePolicy",
 		"/config/confidentialityLevels/items/0/rules/e2ePolicy",
 	} {
 		tsvc = &fakeTenantService{err: &tenantadmin.ImportError{Pointer: ptr, Reason: "not supported yet"}}
@@ -101,10 +101,10 @@ func TestInterimNotSupportedV20(t *testing.T) {
 		}
 	}
 
-	// Tenant merge patch: the policies are super admin only, like
+	// Tenant merge patch: the end-to-end policy is super admin only, like
 	// antivirusEnabled. The super admin gets not-supported, a delegated
 	// admin of the tenant 403 forbidden; the service is never reached.
-	for _, body := range []string{`{"linkOnlyAllowed":true}`, `{"e2ePolicy":"allowed"}`, `{"name":"x","linkOnlyAllowed":false}`} {
+	for _, body := range []string{`{"e2ePolicy":"allowed"}`, `{"name":"x","e2ePolicy":"forbidden"}`} {
 		tsvc = &fakeTenantService{}
 		_, err = tenantServer(tsvc).UpdateTenant(super, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(body)})
 		p := expectProblem(t, err, problem.CodeValidationFailed)
@@ -119,18 +119,17 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	}
 	// A tenant outside the scope of the admin stays a 404 from the service.
 	tsvc = &fakeTenantService{err: tenantadmin.ErrNotFound}
-	_, err = tenantServer(tsvc).UpdateTenant(deleg, gen.UpdateTenantRequestObject{TenantId: "ten_b", Body: patchBody(`{"linkOnlyAllowed":true}`)})
+	_, err = tenantServer(tsvc).UpdateTenant(deleg, gen.UpdateTenantRequestObject{TenantId: "ten_b", Body: patchBody(`{"e2ePolicy":"allowed"}`)})
 	expectProblem(t, err, problem.CodeNotFound)
 
 	// Confidentiality levels: the policies of a rule.
-	yes, allowed := true, gen.E2ePolicy("allowed")
+	allowed := gen.E2ePolicy("allowed")
 	rules := gen.ConfidentialityRules{AllowedExpiryDays: []gen.ExpiryDays{gen.N1}}
 	for name, tc := range map[string]struct {
 		set   func(*gen.ConfidentialityRules)
 		field string
 	}{
-		"link only": {func(r *gen.ConfidentialityRules) { r.LinkOnlyAllowed = &yes }, "/items/1/rules/linkOnlyAllowed"},
-		"e2e":       {func(r *gen.ConfidentialityRules) { r.E2ePolicy = &allowed }, "/items/1/rules/e2ePolicy"},
+		"e2e": {func(r *gen.ConfidentialityRules) { r.E2ePolicy = &allowed }, "/items/1/rules/e2ePolicy"},
 	} {
 		r := rules
 		tc.set(&r)
@@ -147,5 +146,32 @@ func TestInterimNotSupportedV20(t *testing.T) {
 		tsvc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 		_, err = tenantServer(tsvc).UpdateConfidentialityLevels(deleg, gen.UpdateConfidentialityLevelsRequestObject{TenantId: "ten_b", Body: levels})
 		expectProblem(t, err, problem.CodeNotFound)
+	}
+}
+
+// The link-only switch of a level (since step 6 of V2): absent means
+// allowed, false forbids, and the answer always carries it.
+func TestLevelLinkOnlyAllowed(t *testing.T) {
+	t.Parallel()
+	ctx := ctxWith(store.SessionAuthenticated, delegated)
+	no := false
+	rules := gen.ConfidentialityRules{AllowedExpiryDays: []gen.ExpiryDays{gen.N1}}
+	off := rules
+	off.LinkOnlyAllowed = &no
+	tsvc := &fakeTenantService{}
+	resp, err := tenantServer(tsvc).UpdateConfidentialityLevels(ctx, gen.UpdateConfidentialityLevelsRequestObject{
+		TenantId: "ten_a",
+		Body:     &gen.ConfidentialityLevelList{Items: []gen.ConfidentialityLevel{{Key: "a", IsDefault: true, Rules: rules}, {Key: "b", Rules: off}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := tsvc.args["UpdateConfidentialityLevels"][2].([]tenantadmin.ConfidentialityLevel)
+	if in[0].Rules.LinkOnlyForbidden || !in[1].Rules.LinkOnlyForbidden {
+		t.Errorf("service got %+v", in)
+	}
+	out := resp.(gen.UpdateConfidentialityLevels200JSONResponse).Items
+	if a, b := out[0].Rules.LinkOnlyAllowed, out[1].Rules.LinkOnlyAllowed; a == nil || !*a || b == nil || *b {
+		t.Errorf("answer %v %v", a, b)
 	}
 }

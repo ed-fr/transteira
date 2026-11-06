@@ -29,6 +29,8 @@ import InvitationList from './screens/ops/InvitationList.svelte';
 import Privacy from './screens/ops/Privacy.svelte';
 import SecurityLog from './screens/ops/SecurityLog.svelte';
 import TenantStats from './screens/ops/TenantStats.svelte';
+import DropLinkCreate from './screens/ops/DropLinkCreate.svelte';
+import DropLinkList from './screens/ops/DropLinkList.svelte';
 import TokenCreate from './screens/ops/TokenCreate.svelte';
 import TokenList from './screens/ops/TokenList.svelte';
 import TenantWebhooks from './screens/ops/TenantWebhooks.svelte';
@@ -283,6 +285,22 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminOps.tokens.createTitle',
     access: 'auth',
     helpTopic: 'tenant-tokens',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/drop-links',
+    component: DropLinkList,
+    titleKey: 'adminOps.dropLinks.title',
+    access: 'auth',
+    helpTopic: 'tenant-drop-links',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/drop-links/new',
+    component: DropLinkCreate,
+    titleKey: 'adminOps.dropLinks.createTitle',
+    access: 'auth',
+    helpTopic: 'tenant-drop-links',
     tenantNav: true,
   },
   {

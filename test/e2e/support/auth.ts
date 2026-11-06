@@ -10,9 +10,26 @@ import { ORIGINS, STORAGE_DELEGATE, STORAGE_SUPER } from './env';
 import type { E2EState } from './state';
 import { freshTotp } from './totp';
 
+/**
+ * Opens url, retrying when Chromium aborts the navigation with ERR_NETWORK_CHANGED: Docker adds
+ * a network interface on the host (e2e Caddy container) just before the global setup signs in,
+ * and Chromium then fails the first navigation.
+ */
+async function gotoStable(page: Page, url: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (err) {
+      if (attempt >= 5 || !String(err).includes('ERR_NETWORK_CHANGED')) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+}
+
 /** Fills the password step of the login screen. */
 async function passwordStep(page: Page, username: string, password: string): Promise<void> {
-  await page.goto(`${ORIGINS.admin}/admin/login`);
+  await gotoStable(page, `${ORIGINS.admin}/admin/login`);
   await page.getByLabel(/^Username/).fill(username);
   await page.getByLabel(/^Password/).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();

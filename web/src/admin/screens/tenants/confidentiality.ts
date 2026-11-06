@@ -41,6 +41,8 @@ export interface LevelDraft {
   requireRecipientVerification: boolean;
   internalRecipientsOnly: boolean;
   forceDeleteAfterFirstDownload: boolean;
+  /** Link-only transfers are allowed at this level (since 2.0; absent from the API means true). */
+  linkOnlyAllowed: boolean;
   /** Cap of the number of downloads as typed; empty for none. */
   maxDownloadsText: string;
 }
@@ -71,6 +73,7 @@ export function toDraft(level: ConfidentialityLevel, uid: number): LevelDraft {
     requireRecipientVerification: level.rules.requireRecipientVerification,
     internalRecipientsOnly: level.rules.internalRecipientsOnly,
     forceDeleteAfterFirstDownload: level.rules.forceDeleteAfterFirstDownload,
+    linkOnlyAllowed: level.rules.linkOnlyAllowed !== false,
     maxDownloadsText: level.rules.maxDownloads === null ? '' : String(level.rules.maxDownloads),
   };
 }
@@ -88,6 +91,7 @@ export function newDraft(uid: number, isDefault: boolean): LevelDraft {
     requireRecipientVerification: false,
     internalRecipientsOnly: false,
     forceDeleteAfterFirstDownload: false,
+    linkOnlyAllowed: true,
     maxDownloadsText: '',
   };
 }
@@ -132,6 +136,10 @@ export function fromDraft(draft: LevelDraft): ConfidentialityLevel {
   };
   if (Object.keys(descriptions).length > 0) {
     level.descriptions = descriptions;
+  }
+  // Absent means allowed: only a prohibition is written.
+  if (!draft.linkOnlyAllowed) {
+    level.rules.linkOnlyAllowed = false;
   }
   return level;
 }

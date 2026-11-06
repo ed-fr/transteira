@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiProblem } from '../../shared/api/client';
 import {
   AccessTokenHolder,
+  canReissueLink,
+  dropLinkRecipients,
   extendFailure,
   extensionOptions,
   isSessionExpired,
@@ -176,5 +178,23 @@ describe('openAccessLink', () => {
     expect(retry).toBe(LINK_A);
     await expect(openAccessLink(api, retry ?? '', false)).resolves.toEqual({ kind: 'signed-in', ...alice });
     expect(start).toHaveBeenNthCalledWith(2, LINK_A);
+  });
+});
+
+describe('dropLinkRecipients', () => {
+  const tr = (key: string, params?: Record<string, string>) => `${key}:${params?.label ?? ''}`;
+  it('names the link instead of the recipients of a drop link deposit', () => {
+    expect(dropLinkRecipients({ dropLinkLabel: 'Invoices' }, tr)).toBe('myTransfers.list.dropLink:Invoices');
+    expect(dropLinkRecipients({ dropLinkLabel: '' }, tr)).toBe('myTransfers.list.dropLinkNoLabel:');
+    expect(dropLinkRecipients({}, tr)).toBeUndefined();
+  });
+});
+
+describe('canReissueLink', () => {
+  it('allows a link-only transfer scanning or available', () => {
+    expect(canReissueLink({ status: 'available', linkOnly: true })).toBe(true);
+    expect(canReissueLink({ status: 'scanning', linkOnly: true })).toBe(true);
+    expect(canReissueLink({ status: 'uploading', linkOnly: true })).toBe(false);
+    expect(canReissueLink({ status: 'available' })).toBe(false);
   });
 });

@@ -110,6 +110,9 @@ const (
 	// (since 2.0). It is internal: proofs are addressed by transfer, kind
 	// and recipient.
 	TransferProof Prefix = "prf"
+	// DropLink identifies a permanent drop link record (since 2.0, OpenAPI
+	// DropLink.id), not its bearer token ("ttd_" + base62).
+	DropLink Prefix = "drl"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

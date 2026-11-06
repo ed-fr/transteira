@@ -34,6 +34,12 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'depositor',
   },
   { name: 'deposit-sent', screen: 'public / (recap: transfer sent)', profile: 'depositor' },
+  {
+    name: 'deposit-link-only',
+    screen: 'public / (recap: link-only transfer, download link shown once)',
+    profile: 'depositor',
+  },
+  { name: 'drop-link', screen: 'public /drop/:token (drop link landing)', profile: 'depositor' },
   { name: 'invite', screen: 'public /invite', profile: 'depositor' },
   { name: 'invitation-landing', screen: 'public /i/:token', profile: 'depositor' },
   { name: 'legal-notice', screen: 'public /legal/legal-notice', profile: 'depositor' },
@@ -120,6 +126,7 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'delegated-admin',
   },
   { name: 'admin-invitations', screen: 'admin /admin/tenants/:id/invitations', profile: 'delegated-admin' },
+  { name: 'admin-drop-links', screen: 'admin /admin/tenants/:id/drop-links', profile: 'delegated-admin' },
   { name: 'admin-blocklist', screen: 'admin /admin/tenants/:id/blocklist', profile: 'delegated-admin' },
   { name: 'admin-tokens', screen: 'admin /admin/tenants/:id/tokens', profile: 'delegated-admin' },
   {

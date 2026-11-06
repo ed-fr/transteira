@@ -9,6 +9,7 @@
   //                  onnavigate={(path) => router.navigate(path)}
   //                  addGuard={(guard) => router.addGuard(guard)} />
   // The guard asks for a confirmation before an in-app navigation interrupts an upload.
+  // For a drop link: <DepositScreen tenant={publicTenant} dropLink={{ token, label, validityDays, levelKey }} />.
   // Key the component on the invitation token: the flow is built from the initial props.
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { Alert, Button, Spinner } from '../../shared/components';
@@ -21,6 +22,7 @@
   import {
     DepositFlow,
     type DepositFlowDeps,
+    type DropLinkContext,
     type InvitationContext,
     type PublicTenant,
     type ReplyContext,
@@ -35,6 +37,8 @@
     tenant: PublicTenant;
     /** Invitation the depositor arrived with (external deposit). */
     invitation?: InvitationContext | undefined;
+    /** Drop link the depositor arrived with (/drop/:token); the files go to its recipients. */
+    dropLink?: DropLinkContext | undefined;
     /** Reply mode (/d/:token/reply): the recipient is the sender of the original transfer. */
     reply?: ReplyContext | undefined;
     /** Reply mode: called when the reply session is gone (expired, ended or invalid). */
@@ -47,9 +51,9 @@
     deps?: DepositFlowDeps | undefined;
   }
 
-  let { tenant, invitation, reply, onreplyended, onnavigate, addGuard, deps }: Props = $props();
+  let { tenant, invitation, dropLink, reply, onreplyended, onnavigate, addGuard, deps }: Props = $props();
 
-  const flow = untrack(() => new DepositFlow(tenant, invitation, deps ?? browserDeps(), reply));
+  const flow = untrack(() => new DepositFlow(tenant, invitation, deps ?? browserDeps(), reply, dropLink));
   let container: HTMLElement | undefined = $state();
 
   onMount(() => {

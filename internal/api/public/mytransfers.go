@@ -26,6 +26,7 @@ type MyTransfersService interface {
 	Get(ctx context.Context, t *tenant.Tenant, sess mytransfers.SessionInfo, trfID string) (mytransfers.TransferDetail, error)
 	Delete(ctx context.Context, t *tenant.Tenant, sess mytransfers.SessionInfo, ip netip.Addr, trfID string) error
 	Extend(ctx context.Context, t *tenant.Tenant, sess mytransfers.SessionInfo, ip netip.Addr, trfID string, days int) (mytransfers.TransferDetail, error)
+	ReissueLink(ctx context.Context, t *tenant.Tenant, sess mytransfers.SessionInfo, ip netip.Addr, trfID string) (string, error)
 }
 
 // WithMyTransfers serves the "my transfers" operations with svc. Without
@@ -155,7 +156,7 @@ func (s *Server) ListMyTransfers(ctx context.Context, req gen.ListMyTransfersReq
 	}
 	resp := gen.ListMyTransfers200JSONResponse{Items: make([]gen.MyTransfer, len(page.Items))}
 	for i, it := range page.Items {
-		resp.Items[i] = myTransferBody(it.Transfer, it.Recipients, it.FileCount, it.DownloadedBy, it.LevelLabel)
+		resp.Items[i] = myTransferBody(it.Transfer, it.Recipients, it.FileCount, it.DownloadedBy, it.LevelLabel, it.DropLinkLabel)
 	}
 	if page.NextCursor != "" {
 		next := page.NextCursor
@@ -208,6 +209,22 @@ func (s *Server) ExtendMyTransfer(ctx context.Context, req gen.ExtendMyTransferR
 	return gen.ExtendMyTransfer200JSONResponse(myTransferDetailBody(d)), nil
 }
 
+// ReissueMyTransferLink issues a new download link for a link-only
+// transfer of the session address (since 2.0): the link is returned once,
+// and the previous one stops working. The CSRF token is checked by the
+// session middleware, as for every write of "My transfers".
+func (s *Server) ReissueMyTransferLink(ctx context.Context, req gen.ReissueMyTransferLinkRequestObject) (gen.ReissueMyTransferLinkResponseObject, error) {
+	t, info, _, err := s.mySession(ctx)
+	if err != nil {
+		return nil, err
+	}
+	url, err := s.myTransfers.ReissueLink(ctx, t, info, middleware.ClientIP(ctx), req.TransferId)
+	if err != nil {
+		return nil, myTransfersError(err)
+	}
+	return gen.ReissueMyTransferLink200JSONResponse{DownloadUrl: url}, nil
+}
+
 // mySessionBody renders a session as the OpenAPI MyTransfersSession. The
 // session record identifier stays on the server.
 func mySessionBody(info mytransfers.SessionInfo) gen.MyTransfersSession {
@@ -215,8 +232,9 @@ func mySessionBody(info mytransfers.SessionInfo) gen.MyTransfersSession {
 }
 
 // myTransferBody renders a transfer as the OpenAPI MyTransfer: never a
-// link nor a token.
-func myTransferBody(t store.Transfer, recipients []string, fileCount, downloadedBy int, label string) gen.MyTransfer {
+// link nor a token. dropLinkLabel is the label of the drop link of a drop
+// link transfer, whose recipients the service already hid (T-311).
+func myTransferBody(t store.Transfer, recipients []string, fileCount, downloadedBy int, label, dropLinkLabel string) gen.MyTransfer {
 	body := gen.MyTransfer{
 		Id: t.ID, Status: gen.TransferStatus(t.Status), Recipients: make([]gen.Email, len(recipients)),
 		FileCount: fileCount, TotalBytes: t.TotalBytes, ExpiryDays: gen.ExpiryDays(t.ExpiryDays),
@@ -228,6 +246,12 @@ func myTransferBody(t store.Transfer, recipients []string, fileCount, downloaded
 	if t.Status != store.TransferScanning {
 		body.ExpiresAt = optionalTime(t.ExpiresAt)
 	}
+	if t.LinkOnly {
+		body.LinkOnly = &t.LinkOnly
+	}
+	if t.DropLinkID != "" {
+		body.DropLinkLabel = &dropLinkLabel
+	}
 	for i, r := range recipients {
 		body.Recipients[i] = gen.Email(r)
 	}
@@ -238,14 +262,14 @@ func myTransferBody(t store.Transfer, recipients []string, fileCount, downloaded
 // files and per-recipient tracking, never a link nor a token.
 func myTransferDetailBody(d mytransfers.TransferDetail) gen.MyTransferDetail {
 	t := d.Transfer
-	head := myTransferBody(t, d.Recipients, len(d.Files), d.DownloadedBy, d.LevelLabel)
+	head := myTransferBody(t, d.Recipients, len(d.Files), d.DownloadedBy, d.LevelLabel, d.DropLinkLabel)
 	count := t.ExtensionCount
 	body := gen.MyTransferDetail{
 		Id: head.Id, Status: head.Status, Recipients: head.Recipients, FileCount: head.FileCount,
 		TotalBytes: head.TotalBytes, ExpiryDays: head.ExpiryDays, CreatedAt: head.CreatedAt, ExpiresAt: head.ExpiresAt,
 		PasswordProtected: head.PasswordProtected, RecipientVerification: head.RecipientVerification,
-		ConfidentialityLevel: head.ConfidentialityLevel, DownloadedBy: head.DownloadedBy,
-		Message: optional(t.Message), DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, MaxDownloads: t.MaxDownloads,
+		ConfidentialityLevel: head.ConfidentialityLevel, DownloadedBy: head.DownloadedBy, LinkOnly: head.LinkOnly,
+		DropLinkLabel: head.DropLinkLabel, Message: optional(t.Message), DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, MaxDownloads: t.MaxDownloads,
 		DownloadCount: int(t.DownloadCount), ExtensionCount: &count, ExtendableTo: optionalTime(d.ExtendableTo),
 		RecipientTracking: apiutil.RecipientTracking(d.Tracking),
 	}
@@ -300,7 +324,7 @@ func myTransfersError(err error) error {
 		return problem.New(problem.CodeUnauthenticated)
 	case errors.Is(err, mytransfers.ErrNotFound):
 		return problem.New(problem.CodeNotFound)
-	case errors.Is(err, mytransfers.ErrNotExtendable):
+	case errors.Is(err, mytransfers.ErrNotExtendable), errors.Is(err, mytransfers.ErrNotReissuable):
 		return problem.New(problem.CodeStateConflict)
 	case errors.Is(err, mytransfers.ErrExtensionLimit):
 		return problem.New(problem.CodeExtensionLimitReached,

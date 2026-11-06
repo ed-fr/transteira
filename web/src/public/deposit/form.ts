@@ -143,12 +143,13 @@ export function validateForm<F extends { name: string; size: number }>(
   values: FormValues<F>,
   limits: FormLimits,
   needRecipients: boolean,
+  recipientsOptional = false,
 ): FormErrors {
   const errors: FormErrors = {};
   if (needRecipients) {
     const recipients = parseRecipients(values.recipientsText);
     if (recipients.length === 0) {
-      errors['recipients'] = fieldError('required');
+      if (!recipientsOptional) errors['recipients'] = fieldError('required');
     } else if (recipients.length > MAX_RECIPIENTS) {
       errors['recipients'] = { key: 'deposit.form.recipients.tooMany', params: { max: MAX_RECIPIENTS } };
     }
@@ -243,6 +244,7 @@ export const FIELD_ORDER = [
   'password',
   'maxDownloads',
   'recipientVerification',
+  'linkOnly',
   'files',
 ] as const;
 

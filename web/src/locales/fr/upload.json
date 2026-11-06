@@ -51,6 +51,7 @@
     "incomplete": "Certains fichiers n’ont pas été entièrement reçus. L’envoi reprend.",
     "blocked": "Votre organisation n’autorise pas ces fichiers, le transfert a été refusé :",
     "available": "Le transfert est prêt : les destinataires ont été prévenus.",
+    "availableLinkOnly": "Le transfert est prêt. Aucun e-mail n'a été envoyé aux destinataires : copiez le lien ci-dessous et transmettez-le vous-même.",
     "rejected": "Aucun fichier n’a pu être remis : le transfert a été refusé après l’analyse antivirus.",
     "error": {
       "checksum-mismatch": "Un fichier a été altéré pendant l’envoi. Commencez un nouveau transfert.",

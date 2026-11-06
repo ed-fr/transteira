@@ -163,11 +163,11 @@ var keyDefs = map[string]keyDef{
 		vars: []varSpec{
 			tenantVar,
 			{"download_link", VarURL, false, "Download link; empty when each recipient has a personal link."},
-			{"link_notice", VarBlock, false, "Download link of a shared transfer, or a sentence saying that each recipient received a personal link."},
+			{"link_notice", VarBlock, false, "Download link of a shared transfer, a sentence saying that each recipient received a personal link, or, for a link-only transfer, that no recipient was mailed."},
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Reminder to give the password through another channel; empty without password."},
 			confidentialityVar,
-			{"recipients", VarBlock, false, "List of the recipients."},
+			{"recipients", VarBlock, false, "List of the recipients; for a deposit through a drop link, a sentence naming the link instead (its recipients are never disclosed to the depositor)."},
 			filesVar(false),
 			{"file_count", VarText, false, "Number of delivered files."},
 			{"withheld_files", VarBlock, false, "Files withheld because they could not be analyzed; empty when there is none."},
@@ -558,11 +558,11 @@ func confirmationValues(l *labels, lang string, data any) (map[string]value, boo
 	return map[string]value{
 		"tenant_name":            textValue(d.TenantName),
 		"download_link":          urlValue(d.Link),
-		"link_notice":            linkNoticeBlock(l, d.Link),
+		"link_notice":            linkNoticeBlock(l, d.Link, d.LinkOnly),
 		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
 		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelSender, true),
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
-		"recipients":             recipientsBlock(d.Recipients),
+		"recipients":             confirmationRecipientsBlock(l, d),
 		"files":                  filesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
 		"withheld_files":         withheldConfirmationBlock(l, lang, d.Withheld),
@@ -955,9 +955,14 @@ func noticeBlock(on bool, text string, strong bool) value {
 }
 
 // linkNoticeBlock is the download link paragraph of the sender confirmation,
-// or, when link is empty (every recipient has a personal link that the sender
-// never sees), the sentence saying so.
-func linkNoticeBlock(l *labels, link string) value {
+// or, when link is empty, the sentence saying why: a link-only transfer
+// (linkOnly, whose link was shown once to the sender and never mailed), or
+// a transfer whose every recipient has a personal link that the sender
+// never sees.
+func linkNoticeBlock(l *labels, link string, linkOnly bool) value {
+	if linkOnly {
+		return noticeBlock(true, l.linkOnlyNotice, false)
+	}
 	if link == "" {
 		return noticeBlock(true, l.personalLinks, false)
 	}
@@ -1010,6 +1015,24 @@ func recipientsBlock(rs []string) value {
 		ts[i] = "- " + r
 	}
 	return listBlock(hs, ts)
+}
+
+// confirmationRecipientsBlock is the recipient list of the sender
+// confirmation, or the sentence saying that none was named (a link-only
+// transfer may have no recipient), or, for a drop link deposit, the
+// sentence naming the link instead of its recipients (T-311).
+func confirmationRecipientsBlock(l *labels, d TransferConfirmationData) value {
+	switch {
+	case d.DropLink && d.DropLinkLabel != "":
+		return noticeBlock(true, fmt.Sprintf(l.dropLinkRecipients, d.DropLinkLabel), false)
+	case d.DropLink:
+		return noticeBlock(true, l.dropLinkNoLabel, false)
+	}
+	rs := d.Recipients
+	if len(rs) == 0 {
+		return noticeBlock(true, l.noRecipient, false)
+	}
+	return recipientsBlock(rs)
 }
 
 // listBlock wraps list items, or renders nothing without item.

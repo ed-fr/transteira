@@ -12,6 +12,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/adminauth"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/pdf"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -69,6 +70,24 @@ func TestMyProof(t *testing.T) {
 		}
 		if _, err := my(alice, trf.id, store.ProofDelivery, bob); !errors.Is(err, ErrNotAvailable) {
 			t.Errorf("MyProof(not a recipient) = %v", err)
+		}
+
+		// A drop link deposit: its statement names the recipients of
+		// the link, never shown to the depositor (T-311).
+		tok, err := id.NewDropToken()
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := ev.db.DropLinks().Create(ctx, ev.a.ID, store.DropLink{
+			ID: id.New(id.DropLink), TokenHash: id.HashToken(tok), Label: "Invoices",
+			Recipients: []string{carol, dave}, ValidityDays: 7, Enabled: true, CreatedBy: "adm_1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dropped := ev.seed(ev.a, seedOptions{sender: bob, dropLink: l.ID})
+		if _, err := my(bob, dropped.id, store.ProofDeposit, ""); !errors.Is(err, ErrNotAvailable) {
+			t.Errorf("MyProof(drop link) = %v", err)
 		}
 
 		// Parameters.

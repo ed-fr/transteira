@@ -67,6 +67,8 @@ interface ScreenshotData {
   downloadPassword: string;
   /** Invitation landing path per language. */
   invitation: Record<Lang, string>;
+  /** Landing page path of a permanent drop link, per language (label in that language). */
+  dropLink: Record<Lang, string>;
   /** Activation page path of a pending delegated admin. */
   activation: string;
   /** Password of the activated delegated admin of entities A and B (list of entities). */
@@ -219,6 +221,19 @@ async function createData(): Promise<ScreenshotData> {
     { host: HOSTS.a },
   );
 
+  // Permanent drop links (V2): the list of the admin screen and the public landing page.
+  const dropLink = {} as Record<Lang, string>;
+  const dropLabels: Record<Lang, string> = { en: 'Supplier invoices', fr: 'Factures fournisseurs' };
+  for (const lang of LANGS) {
+    const link = await api.ok<{ token: string }>(
+      'POST',
+      `/admin/tenants/${a}/drop-links`,
+      { label: dropLabels[lang], recipients: ['accounting@example.com'], validityDays: 7 },
+      [201],
+    );
+    dropLink[lang] = `/drop/${link.token}`;
+  }
+
   // Invitations of external people by the internal sender (links read in Mailpit).
   const session = await openDepositSession(API_SENDER, { host: HOSTS.a, clientIp: CLIENT_IP.api });
   const invitation = {} as Record<Lang, string>;
@@ -277,6 +292,7 @@ async function createData(): Promise<ScreenshotData> {
     transferId,
     downloadPassword: await recipientPath(protectedTransfer, 'erin@example.net'),
     invitation,
+    dropLink,
     activation: pathOf(created.activationUrl),
     multiDelegatePassword,
   };
@@ -591,6 +607,56 @@ test.describe('depositor', () => {
     }
   });
 
+  test('link-only transfer', async ({ newContext, state }) => {
+    test.setTimeout(120_000);
+    const senders: Record<Lang, string> = { en: 'lena@example.com', fr: 'louise@example.com' };
+    // Link-only transfers are off by default: allowed for this test only (other captures unchanged).
+    const api = superAdminApi();
+    await api.ok('PATCH', `/admin/tenants/${state.tenants.a.id}`, { linkOnlyAllowed: true });
+    try {
+      for (const lang of LANGS) {
+        const page = await openPage(newContext, lang);
+        const email = senders[lang];
+        await page.goto(`${ORIGINS.a}/`);
+        await heading(page, lang, 'deposit.email.title');
+        await page.getByLabel(startsWith(msg(lang, 'deposit.email.label'))).fill(email);
+        const after = Date.now() - 2000;
+        await page.getByRole('button', { name: msg(lang, 'deposit.email.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.code.title');
+        await page
+          .getByLabel(startsWith(msg(lang, 'deposit.code.label')))
+          .fill(await waitForCode(email, after));
+        await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.form.title');
+        await page
+          .getByRole('checkbox', { name: startsWith(msg(lang, 'deposit.form.linkOnly.label')) })
+          .check();
+        const file = lang === 'en' ? 'meeting-notes.pdf' : 'compte-rendu.pdf';
+        await page
+          .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
+          .setInputFiles([
+            { name: file, mimeType: 'application/pdf', buffer: makeFile(file, 96 * 1024).buffer },
+          ]);
+        await expect(page.getByText(file).first()).toBeVisible();
+        await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.done.title');
+        await expect(page.locator('.tt-done-link')).toBeVisible();
+        await shoot(page, lang, 'deposit-link-only', [page.locator('.tt-done-link')]);
+      }
+    } finally {
+      await api.ok('PATCH', `/admin/tenants/${state.tenants.a.id}`, { linkOnlyAllowed: false });
+    }
+  });
+
+  test('drop link landing', async ({ newContext }) => {
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.a}${data.dropLink[lang]}`);
+      await heading(page, lang, 'dropLink.landing.title');
+      await shoot(page, lang, 'drop-link');
+    }
+  });
+
   test('invitation landing', async ({ newContext }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);
@@ -799,6 +865,7 @@ test.describe('delegated admin', () => {
     ['admin-transfers', () => 'transfers', 'adminOps.transfers.title'],
     ['admin-transfer-detail', () => `transfers/${data.transferId}`, 'adminOps.transfers.detailTitle'],
     ['admin-invitations', () => 'invitations', 'adminOps.invitations.title'],
+    ['admin-drop-links', () => 'drop-links', 'adminOps.dropLinks.title'],
     ['admin-blocklist', () => 'blocklist', 'adminOps.blocklist.title'],
     ['admin-tokens', () => 'tokens', 'adminOps.tokens.title'],
     ['admin-audit', () => 'audit', 'adminOps.audit.title'],

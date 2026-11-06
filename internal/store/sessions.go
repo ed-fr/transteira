@@ -13,8 +13,8 @@ import (
 // DepositorKind).
 type DepositorKind string
 
-// Depositor kinds. Later versions add others (drop_link), with a migration
-// of the kind constraint.
+// Depositor kinds. A new kind comes with a migration of the kind
+// constraints of deposit_sessions and transfers.
 const (
 	// DepositorInternal is an internal user: internal IP and domain.
 	DepositorInternal DepositorKind = "internal"
@@ -32,6 +32,14 @@ const (
 	// external depositor (quotas, antivirus, abuse detection), has no
 	// invitation and no API token, and is bound to its source transfer.
 	DepositorReply DepositorKind = "reply"
+	// DepositorDropLink is a third party depositing through a permanent
+	// drop link of the tenant (since 2.0): any address, proven by code at
+	// every deposit (a session of this kind is never reused for a second
+	// deposit, a rule of the deposit service). It follows the rules of an
+	// external depositor (quotas, antivirus, abuse detection), has no
+	// invitation, no API token and no source transfer, and is bound to its
+	// drop link, whose recipients receive the transfer.
+	DepositorDropLink DepositorKind = "drop_link"
 )
 
 // IsInternal reports whether k is an internal kind: [DepositorInternal]
@@ -41,9 +49,10 @@ func (k DepositorKind) IsInternal() bool {
 }
 
 // IsExternal reports whether k is a kind subject to the external rules
-// and quotas (spec 15.2): [DepositorExternal] or [DepositorReply].
+// and quotas (spec 15.2): [DepositorExternal], [DepositorReply] or, since
+// 2.0, [DepositorDropLink].
 func (k DepositorKind) IsExternal() bool {
-	return k == DepositorExternal || k == DepositorReply
+	return k == DepositorExternal || k == DepositorReply || k == DepositorDropLink
 }
 
 // validDepositorKind reports whether k is a kind the store accepts for a
@@ -54,14 +63,14 @@ func validDepositorKind(k DepositorKind) bool {
 
 // sessionColumns is the column list read by the deposit session queries.
 const sessionColumns = `id, token_hash, email, kind, invitation_id, created_at, expires_at, reply_to_transfer_id, ` +
-	`recipient_link_id`
+	`recipient_link_id, drop_link_id`
 
 // Statements of the DepositSessions repository.
 var (
 	qSessionInsert = tenantQuery(
 		`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at,
-		reply_to_transfer_id, recipient_link_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		reply_to_transfer_id, recipient_link_id, drop_link_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qSessionReplyLink counts the recipient link of a reply session when
 	// it belongs to the source transfer, in the same tenant: the composite
 	// foreign keys prove the tenant of each, not that they match.
@@ -108,6 +117,12 @@ type DepositSession struct {
 	// unless the session is a reply. Deleting the link deletes the
 	// session.
 	RecipientLinkID string
+	// DropLinkID is the permanent drop link of a drop link session ("drl_"
+	// + ULID, same tenant, since 2.0), "" for any other kind. The store
+	// only checks that the link exists in the tenant: the caller checks
+	// that it is enabled and not revoked. Deleting the link deletes the
+	// session.
+	DropLinkID string
 	// CreatedAt is the creation time; the store's clock is used when it is
 	// zero.
 	CreatedAt time.Time
@@ -144,9 +159,10 @@ func (r *DepositSessions) Create(ctx context.Context, tid tenant.ID, s DepositSe
 // challenge consumption and the address verification). It returns
 // ErrInvalid for a malformed field (an external session needs an
 // invitation, every other kind none; a reply session needs its source
-// transfer and recipient link, every other kind none), ErrNotFound when the
-// tenant, the invitation, the source transfer or the recipient link does
-// not exist (or belongs to another tenant), or when the link is not one of
+// transfer and recipient link, every other kind none; a drop link session
+// needs its drop link, every other kind none), ErrNotFound when the tenant,
+// the invitation, the source transfer, the recipient link or the drop link
+// does not exist (or belongs to another tenant), or when the link is not one of
 // the source transfer, and ErrConflict when the ID or the token hash is
 // already used. After an error, the caller must abort the transaction.
 func (r *DepositSessions) CreateTx(ctx context.Context, tx *ScopedTx, s DepositSession) error {
@@ -181,6 +197,10 @@ func (r *DepositSessions) create(ctx context.Context, tx *ScopedTx, s DepositSes
 		return invalid("malformed source transfer id")
 	case s.RecipientLinkID != "" && !id.Valid(id.RecipientLink, s.RecipientLinkID):
 		return invalid("malformed recipient link id")
+	case (s.Kind == DepositorDropLink) != (s.DropLinkID != ""):
+		return invalid("a drop link session needs its drop link, another kind none")
+	case s.DropLinkID != "" && !id.Valid(id.DropLink, s.DropLinkID):
+		return invalid("malformed drop link id")
 	case !s.ExpiresAt.After(created):
 		return invalid("session must expire after its creation")
 	case !s.EndedAt.IsZero():
@@ -196,7 +216,8 @@ func (r *DepositSessions) create(ctx context.Context, tx *ScopedTx, s DepositSes
 		}
 	}
 	_, err = tx.Exec(ctx, qSessionInsert, s.ID, s.TokenHash, email, string(s.Kind), nullText(s.InvitationID),
-		toMillis(created), toMillis(s.ExpiresAt), nullText(s.ReplyToTransferID), nullText(s.RecipientLinkID))
+		toMillis(created), toMillis(s.ExpiresAt), nullText(s.ReplyToTransferID), nullText(s.RecipientLinkID),
+		nullText(s.DropLinkID))
 	return err
 }
 
@@ -230,12 +251,14 @@ func (r *DepositSessions) GetByTokenHash(ctx context.Context, tid tenant.ID, has
 		var (
 			kind             string
 			inv, reply, link sql.NullString
+			dropLink         sql.NullString
 			created, expires int64
 		)
 		err := tx.QueryRow(ctx, qSessionGet, hash, toMillis(now)).Scan(&s.ID, &s.TokenHash, &s.Email, &kind,
-			&inv, &created, &expires, &reply, &link)
+			&inv, &created, &expires, &reply, &link, &dropLink)
 		s.Kind, s.InvitationID = DepositorKind(kind), inv.String
 		s.ReplyToTransferID, s.RecipientLinkID = reply.String, link.String
+		s.DropLinkID = dropLink.String
 		s.CreatedAt, s.ExpiresAt = fromMillis(created), fromMillis(expires)
 		return err
 	})

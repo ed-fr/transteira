@@ -232,6 +232,17 @@ type TransferConfirmationData struct {
 	// MyTransfersLink is the absolute URL of the "My transfers" page of the
 	// entity; empty shows no such line.
 	MyTransfersLink string
+	// LinkOnly marks a link-only transfer (since 2.0): no recipient was
+	// mailed and Link is empty (the link was shown once to the sender at
+	// the finalization); the mail says so, and Recipients may be empty.
+	LinkOnly bool
+	// DropLink marks a transfer deposited through a permanent drop link
+	// (since 2.0): its recipients are never disclosed to the depositor
+	// (threat model T-311), so Recipients is ignored and the recipient
+	// list names the link, by DropLinkLabel ("" when unknown).
+	DropLink bool
+	// DropLinkLabel is the label of that drop link.
+	DropLinkLabel string
 }
 
 // InfectedFile is a file deleted because the antivirus found it infected.

@@ -44,6 +44,10 @@ var (
 	// ErrNotAvailable reports a notification resend for a transfer that is
 	// not available (409 state-conflict). It matches [ErrStateConflict].
 	ErrNotAvailable = fmt.Errorf("%w: the transfer is not available", ErrStateConflict)
+	// ErrLinkOnly reports a notification resend for a link-only transfer
+	// (since 2.0), whose recipients are never mailed (409 state-conflict).
+	// It matches [ErrStateConflict].
+	ErrLinkOnly = fmt.Errorf("%w: a link-only transfer is never mailed", ErrStateConflict)
 	// ErrRateLimited reports too many notification resends of a transfer
 	// (429 rate-limited). The error is a *[RateLimitError] carrying the
 	// Retry-After delay.

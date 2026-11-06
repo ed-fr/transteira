@@ -152,6 +152,16 @@
       "notice": "Le fichier contient des données personnelles (adresses de la liste de blocage, contacts figurant dans les textes légaux) : conservez-le avec soin. Il ne contient jamais de secret : ni mot de passe SMTP, ni URL de webhook, ni réglage d’authentification unique, ni jeton d’API. Les webhooks doivent être saisis à nouveau après l’import.",
       "download": "Télécharger la configuration",
       "downloadHint": "(fichier JSON)"
+    },
+    "linkOnly": {
+      "title": "Transferts par lien seul",
+      "intro": "Un transfert par lien seul n’envoie aucun mail aux destinataires : l’expéditeur reçoit le lien une seule fois et le transmet lui-même (messagerie instantanée, par exemple).",
+      "label": "Autoriser les transferts par lien seul",
+      "hint": "Chaque niveau de confidentialité peut ensuite l’interdire. Désactivé par défaut.",
+      "save": "Enregistrer",
+      "saved": "Réglage enregistré.",
+      "statusOn": "Les transferts par lien seul sont autorisés pour cette entité (réglage du super administrateur).",
+      "statusOff": "Les transferts par lien seul ne sont pas autorisés pour cette entité (réglage du super administrateur)."
     }
   },
   "branding": {
@@ -629,14 +639,16 @@
       "requireRecipientVerification": "Vérification du destinataire obligatoire",
       "internalRecipientsOnly": "Destinataires internes uniquement",
       "forceDeleteAfterFirstDownload": "Suppression après le premier téléchargement (imposée)",
-      "maxDownloads": "Nombre maximal de téléchargements (plafond)"
+      "maxDownloads": "Nombre maximal de téléchargements (plafond)",
+      "linkOnlyAllowed": "Lien seul autorisé"
     },
     "hints": {
       "key": "Lettres minuscules, chiffres, tiret ou tiret bas, en commençant par une lettre (32 caractères au plus). Identifie le niveau dans l’API : gardez-la stable.",
       "description": "Facultatif. Affichée à l’expéditeur sous le niveau.",
       "recipientVerification": "Prend effet lorsque les liens propres à chaque destinataire seront disponibles. D’ici là, l’option est enregistrée mais pas appliquée.",
       "internalRecipientsOnly": "Les destinataires doivent appartenir aux domaines internes de l’entité.",
-      "maxDownloads": "Facultatif, de 1 à {max}. Plafonne le nombre de téléchargements que l’expéditeur peut fixer ; vide pour aucun plafond."
+      "maxDownloads": "Facultatif, de 1 à {max}. Plafonne le nombre de téléchargements que l’expéditeur peut fixer ; vide pour aucun plafond.",
+      "linkOnlyAllowed": "Permet aux expéditeurs d’envoyer à ce niveau sans que les destinataires reçoivent de mail : l’expéditeur transmet lui-même le lien. Ne peut pas se combiner avec la vérification du destinataire. Sans effet si l’entité n’autorise pas le lien seul."
     },
     "dayChoice": {
       "one": "{count} jour",
@@ -663,7 +675,8 @@
       "descriptionTooLong": "La description est trop longue ({max} caractères au plus).",
       "daysRequired": "Autorisez au moins une durée.",
       "capInvalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide."
-    }
+    },
+    "levelInUse": "Ce niveau est utilisé par un lien de dépôt actif. Modifiez ou révoquez d’abord ce lien (écran « Liens de dépôt »), puis réessayez."
   },
   "abuse": {
     "title": "Détection des abus"

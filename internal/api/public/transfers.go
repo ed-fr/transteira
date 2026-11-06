@@ -86,6 +86,10 @@ func senderOf(ctx context.Context, info deposit.SessionInfo) transfer.Sender {
 		sender.InvitationID = info.Invitation.ID
 	}
 	sender.ReplyToTransferID = info.ReplyToTransferID
+	if info.DropLink != nil {
+		sender.DropLinkID = info.DropLink.ID
+		sender.SessionID = info.ID
+	}
 	return sender
 }
 
@@ -152,14 +156,11 @@ func (s *Server) FinalizeTransfer(ctx context.Context, req gen.FinalizeTransferR
 }
 
 // unsupportedTransferCreate refuses the members of TransferCreate added by
-// API 2.0 that are not implemented yet (linkOnly, endToEndEncrypted,
+// API 2.0 that are not implemented yet (endToEndEncrypted,
 // encryptedMessage and the encryptedMetadata of a file) with a 400
 // validation-failed naming the first one present, or returns nil. A false
 // boolean is the default and harmless.
 func unsupportedTransferCreate(b *gen.TransferCreate) *problem.Problem {
-	if deref(b.LinkOnly) {
-		return validationFailed("/linkOnly", fieldNotSupported)
-	}
 	if deref(b.EndToEndEncrypted) {
 		return validationFailed("/endToEndEncrypted", fieldNotSupported)
 	}
@@ -187,6 +188,7 @@ func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 		MaxDownloads:             b.MaxDownloads,
 		ConfidentialityLevel:     string(deref(b.ConfidentialityLevel)),
 		RecipientVerification:    deref(b.RecipientVerification),
+		LinkOnly:                 deref(b.LinkOnly),
 	}
 	if b.Recipients != nil {
 		req.Recipients = make([]string, len(*b.Recipients))
@@ -216,6 +218,15 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		Files: make([]gen.SenderFile, len(d.Files)), MaxDownloads: d.MaxDownloads,
 		ConfidentialityLevel: senderLevelRef(d), RecipientVerification: &d.RecipientVerification,
 		ReplyToTransferId: optional(d.ReplyToTransferID),
+	}
+	if d.LinkOnly {
+		// Its downloadUrl is only set in the answer of the finalization
+		// that drew it (transfer.Service.Finalize).
+		body.LinkOnly = &d.LinkOnly
+	}
+	if d.DropLinkLabel != "" {
+		// A drop link transfer: the service hid its recipients (T-311).
+		body.DropLinkLabel = &d.DropLinkLabel
 	}
 	// A transfer with one link per recipient never shows a link (P27): the
 	// sender follows the recipients through their tracking only.
@@ -326,6 +337,10 @@ func transferError(err error) error {
 		return problem.New(problem.CodeReplyNotAllowed)
 	case errors.Is(err, transfer.ErrOriginalGone):
 		return problem.New(problem.CodeTransferGone)
+	case errors.Is(err, transfer.ErrLinkOnlyForbidden): // a policy refusal, never in the security log
+		return problem.New(problem.CodeLinkOnlyForbidden)
+	case errors.Is(err, transfer.ErrLinkOnlyConflict):
+		return problem.New(problem.CodeLinkOnlyConflict)
 	case errors.Is(err, transfer.ErrForbidden):
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, transfer.ErrNotFound):

@@ -26,7 +26,8 @@ const (
 // tenantColumns is the column list read by the tenant queries.
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
 	`status, primary_color, accent_color, has_logo, has_background, background_preset, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
-	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, network_reviewed_at, created_at, updated_at, provisioned_by`
+	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, network_reviewed_at, created_at, updated_at, provisioned_by, ` +
+	`link_only_allowed`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
@@ -34,7 +35,7 @@ var (
 	qTenantInsert = systemQuery(
 		// The setup state is always written explicitly, from the Go value
 		// (migration 0022 drops its default on PostgreSQL, T-261).
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -58,6 +59,11 @@ var (
 	// admin only, decision D8).
 	qTenantSetAntivirus = systemQuery(
 		`UPDATE tenants SET antivirus_enabled = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantSetLinkOnly switches the link-only transfers of an active
+	// tenant (super admin only, since 2.0).
+	qTenantSetLinkOnly = systemQuery(
+		`UPDATE tenants SET link_only_allowed = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	// qTenantSetSMTPTested records the SMTP configuration of an active
 	// tenant that passed a test send (Tenants.SetSMTPTested).
@@ -197,7 +203,7 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
-		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy); err != nil {
+		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed); err != nil {
 		return nil, err
 	}
 	t.BackgroundPreset = preset.String // NULL is the default preset, ""
@@ -228,7 +234,9 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // (T-261, P51), else ErrInvalid. A new tenant always starts with its
 // antivirus enabled, whatever t.AntivirusEnabled
 // ([Tenants.SetAntivirusEnabled] changes it), with no SMTP test and no
-// review of its mail templates or of its network rules recorded. It returns the stored tenant,
+// review of its mail templates or of its network rules recorded. It stores
+// t.LinkOnlyAllowed as given (false for the zero value): the caller checks
+// that only a super admin sets it. It returns the stored tenant,
 // ErrInvalid for invalid fields (including a preset ID, a status other
 // than active, a missing or unknown setup state, a transfer limit above
 // the ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
@@ -290,7 +298,7 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, presetArg(c.BackgroundPreset), c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
 			c.AllowTransferReply, c.AntivirusEnabled, string(c.SetupState), nil, nil, nil,
-			toMillis(now), toMillis(now), nullText(c.ProvisionedBy))
+			toMillis(now), toMillis(now), nullText(c.ProvisionedBy), c.LinkOnlyAllowed)
 		if err != nil {
 			return err
 		}
@@ -386,7 +394,9 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 // merely be valid. The status only changes with
 // [Tenants.SetStatus] and the antivirus switch with
 // [Tenants.UpdateWithAntivirus] or [Tenants.SetAntivirusEnabled]
-// (t.AntivirusEnabled is ignored here), so t.Status must merely be valid.
+// (t.AntivirusEnabled is ignored here), and the link-only switch with
+// [Tenants.UpdateWithPolicies] or [Tenants.SetLinkOnlyAllowed]
+// (t.LinkOnlyAllowed is ignored here), so t.Status must merely be valid.
 // The transfer limit must not exceed the ceiling, itself at most
 // [tenant.MaxTransferLimit]; who may change which field is the caller's
 // rule. It returns the stored tenant, ErrInvalid for invalid fields,
@@ -394,7 +404,29 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 // ErrConflict when the new FQDN is already used. Callers must invalidate
 // the tenant.Resolver cache for the old and new FQDN.
 func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant, error) {
-	return r.update(ctx, t, true, false, "update tenant")
+	return r.update(ctx, t, TenantParts{General: true}, "update tenant")
+}
+
+// TenantParts selects the parts of a tenant written by
+// [Tenants.UpdateWithPolicies].
+type TenantParts struct {
+	// General writes the fields of [Tenants.Update].
+	General bool
+	// Antivirus writes t.AntivirusEnabled (super admin only).
+	Antivirus bool
+	// LinkOnly writes t.LinkOnlyAllowed (super admin only, since 2.0).
+	LinkOnly bool
+}
+
+// UpdateWithPolicies writes the parts of t selected by parts in one
+// transaction (a failure stores nothing) and refreshes UpdatedAt: the
+// general fields as [Tenants.Update] does, and the super admin switches
+// (antivirus, link-only transfers) as [Tenants.SetAntivirusEnabled] and
+// [Tenants.SetLinkOnlyAllowed] do. Callers check the caller's scope for
+// each switch. It returns the stored tenant and the errors of
+// [Tenants.Update]; selecting no part only reads the tenant back.
+func (r *Tenants) UpdateWithPolicies(ctx context.Context, t *tenant.Tenant, parts TenantParts) (*tenant.Tenant, error) {
+	return r.update(ctx, t, parts, "update tenant")
 }
 
 // UpdateWithAntivirus is [Tenants.Update] when general is set, and also
@@ -403,7 +435,7 @@ func (r *Tenants) Update(ctx context.Context, t *tenant.Tenant) (*tenant.Tenant,
 // (callers check the caller's scope); it applies to the transfers
 // finalized afterwards (decision D8).
 func (r *Tenants) UpdateWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error) {
-	return r.update(ctx, t, general, antivirus, "update tenant")
+	return r.update(ctx, t, TenantParts{General: general, Antivirus: antivirus}, "update tenant")
 }
 
 // SetAntivirusEnabled turns the antivirus analysis of the active tenant
@@ -417,17 +449,30 @@ func (r *Tenants) SetAntivirusEnabled(ctx context.Context, tid tenant.ID, enable
 	if err := tid.Validate(); err != nil {
 		return nil, fmt.Errorf("store: set tenant antivirus: %w", ErrNotFound)
 	}
-	return r.update(ctx, &tenant.Tenant{ID: tid, AntivirusEnabled: enabled}, false, true, "set tenant antivirus")
+	return r.update(ctx, &tenant.Tenant{ID: tid, AntivirusEnabled: enabled}, TenantParts{Antivirus: true}, "set tenant antivirus")
 }
 
-// update implements Update, UpdateWithAntivirus and SetAntivirusEnabled:
-// the general fields of t when general is set, its antivirus switch when
-// antivirus is set, in one transaction.
-func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, general, antivirus bool, op string) (*tenant.Tenant, error) {
+// SetLinkOnlyAllowed allows or forbids the link-only transfers of the
+// active tenant tid (since 2.0) and refreshes UpdatedAt (super admin only:
+// callers check the caller's scope). It applies to the transfers created
+// afterwards. It returns the stored tenant, and ErrNotFound when the
+// tenant does not exist or is being deleted. Callers must invalidate the
+// tenant.Resolver cache of its FQDN.
+func (r *Tenants) SetLinkOnlyAllowed(ctx context.Context, tid tenant.ID, allowed bool) (*tenant.Tenant, error) {
+	if err := tid.Validate(); err != nil {
+		return nil, fmt.Errorf("store: set tenant link-only: %w", ErrNotFound)
+	}
+	return r.update(ctx, &tenant.Tenant{ID: tid, LinkOnlyAllowed: allowed}, TenantParts{LinkOnly: true}, "set tenant link-only")
+}
+
+// update implements Update, UpdateWithAntivirus, UpdateWithPolicies,
+// SetAntivirusEnabled and SetLinkOnlyAllowed: the parts of t selected by
+// parts, in one transaction.
+func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantParts, op string) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
 		return nil, invalid("tenant id is required")
 	}
-	if general {
+	if parts.General {
 		if err := t.Validate(); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
@@ -435,7 +480,7 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, general, antivir
 	now := toMillis(r.db.now())
 	var out *tenant.Tenant
 	err := r.db.systemScope(reasonTenantAdmin).Tx(ctx, func(tx *SystemTx) error {
-		if general {
+		if parts.General {
 			res, err := tx.Exec(ctx, qTenantUpdate, t.Name, t.FQDN, t.DefaultLanguage,
 				t.MaxTransferBytes, t.MaxTransferCeiling, t.StorageQuotaBytes, t.PrimaryColor, t.AccentColor,
 				t.HasLogo, t.HasBackground, presetArg(t.BackgroundPreset), t.WebhookIncludeAddresses, t.AllowRemoteInternalDeposit, t.AllowTransferReply, now,
@@ -447,8 +492,17 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, general, antivir
 				return err
 			}
 		}
-		if antivirus {
+		if parts.Antivirus {
 			res, err := tx.Exec(ctx, qTenantSetAntivirus, t.AntivirusEnabled, now, string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if parts.LinkOnly {
+			res, err := tx.Exec(ctx, qTenantSetLinkOnly, t.LinkOnlyAllowed, now, string(t.ID))
 			if err == nil {
 				err = expectOne(res)
 			}

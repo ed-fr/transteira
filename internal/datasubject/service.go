@@ -98,6 +98,10 @@ type Summary struct {
 	// Proofs counts the proofs of deposit and delivery whose signed
 	// statement names the address (since 2.0).
 	Proofs int
+	// DropLinks counts the permanent drop links, revoked ones included,
+	// whose recipients include the address (since 2.0). It is not part of
+	// the API summary: it only feeds the audit details.
+	DropLinks int
 }
 
 // EraseReport counts what an erasure did (schema DataSubjectEraseReport).
@@ -129,6 +133,12 @@ type EraseReport struct {
 	// statement names the address (sender, recipient), deleted (since
 	// 2.0).
 	ProofsDeleted int
+	// DropLinksUpdated counts the permanent drop links the address was
+	// removed from as a recipient (since 2.0).
+	DropLinksUpdated int
+	// DropLinksDisabled counts those of them left without recipient, hence
+	// disabled (since 2.0).
+	DropLinksDisabled int
 }
 
 // details returns the audit details of the report: counts only.
@@ -138,6 +148,7 @@ func (r EraseReport) details() map[string]any {
 		"verifiedAddressDeleted": r.VerifiedAddressDeleted, "invitationsDeleted": r.InvitationsDeleted,
 		"logEntriesPseudonymised": r.LogEntriesPseudonymised, "accessLinks": r.AccessLinks,
 		"abuseReports": r.AbuseReports, "proofsDeleted": r.ProofsDeleted,
+		"dropLinksUpdated": r.DropLinksUpdated, "dropLinksDisabled": r.DropLinksDisabled,
 	}
 }
 
@@ -308,14 +319,18 @@ func (s *Service) Search(ctx context.Context, p adminauth.Principal, ip netip.Ad
 	if err != nil {
 		return Summary{}, fmt.Errorf("datasubject: count proofs: %w", err)
 	}
+	dropLinks, err := s.repo.countDropLinks(ctx, tid, addr)
+	if err != nil {
+		return Summary{}, fmt.Errorf("datasubject: count drop links: %w", err)
+	}
 	sum := Summary{
-		Email: addr, VerifiedAddress: verified, TransfersAsSender: len(sent), TransfersAsRecipient: len(received),
+		DropLinks: dropLinks, Email: addr, VerifiedAddress: verified, TransfersAsSender: len(sent), TransfersAsRecipient: len(received),
 		Invitations: invitee + inviter, AuditEvents: events, Proofs: proofs,
 	}
 	s.record(ctx, p, ip, tid, audit.ActionDataSubjectSearched, newPseudonym(addr), map[string]any{
 		"verifiedAddress": sum.VerifiedAddress, "transfersAsSender": sum.TransfersAsSender,
 		"transfersAsRecipient": sum.TransfersAsRecipient, "invitations": sum.Invitations, "auditEvents": sum.AuditEvents,
-		"proofs": sum.Proofs,
+		"proofs": sum.Proofs, "dropLinks": sum.DropLinks,
 	})
 	return sum, nil
 }
@@ -408,6 +423,12 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 		return fmt.Errorf("datasubject: erase invitations: %w", err)
 	}
 	rep.InvitationsDeleted = int(n)
+	// 4b. Permanent drop links the address is a recipient of (since 2.0).
+	dl, err := s.repo.eraseDropLinks(ctx, tid, addr, s.now())
+	if err != nil {
+		return fmt.Errorf("datasubject: erase drop link recipients: %w", err)
+	}
+	rep.DropLinksUpdated, rep.DropLinksDisabled = dl.Updated, dl.Disabled
 	// 5. Proofs of deposit and delivery naming the address (since 2.0).
 	// They outlive the transfers, so they go once the transfers are gone.
 	pf, err := s.repo.eraseProofs(ctx, tid, addr)

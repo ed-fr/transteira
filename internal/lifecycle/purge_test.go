@@ -102,7 +102,7 @@ func TestPurgeRows(t *testing.T) {
 		if !ev.gone(oldA) || !ev.gone(oldB) || ev.gone(recentA) || ev.gone(rej) {
 			t.Fatalf("purge at the retention: %v %v %v %v", ev.gone(oldA), ev.gone(oldB), ev.gone(recentA), ev.gone(rej))
 		}
-		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0") != 1 {
+		if ev.logs.count("rows purged transfers=2 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0 drop_links=0") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		// The token hash no longer resolves: the link answers 404.
@@ -170,7 +170,7 @@ func TestPurgeRowsFailures(t *testing.T) {
 		}
 	})
 	for _, fault := range []string{
-		"listEnded", "deleteEnded", "purge:challenges", "purge:proofs", "purge:invitations",
+		"listEnded", "deleteEnded", "purge:challenges", "purge:proofs", "purge:invitations", "purge:drop_links",
 		"purgeSystem:admin_sessions", "purgeSystem:audit_events", "purgeSystem:usage_counters",
 	} {
 		runEach(t, fault, func(t *testing.T, e storetest.Engine) {
@@ -311,7 +311,7 @@ func TestPurgeRowsSystem(t *testing.T) {
 		now := ev.clock.Now()
 		ev.adminRows(now)
 		ev.runTask(TaskPurgeRows)
-		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0 "+systemCounts) != 1 {
+		if ev.logs.count("rows purged transfers=0 challenges=0 sessions=0 password_failures=0 sender_access=0 verified_addresses=0 abuse_alerts=0 abuse_reports=0 proofs=0 invitations=0 drop_links=0 "+systemCounts) != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		if ev.f.called("scrub") != 1 {
@@ -515,6 +515,49 @@ func TestPurgeRowsSecurityEvents(t *testing.T) {
 		page, err := ev.db.SecurityEvents().List(ctx, store.SecurityEventFilter{})
 		if err != nil || len(page.Items) != 1 || !page.Items[0].At.Equal(cutoff.Add(time.Hour)) {
 			t.Fatalf("left = %+v, %v", page.Items, err)
+		}
+	})
+}
+
+// TestPurgeRevokedDropLinks purges the drop links revoked, or expired, 12
+// months before.
+func TestPurgeRevokedDropLinks(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		start := ev.clock.Now()
+		mk := func(tn *tenant.Tenant, expires time.Time) string {
+			tok, err := id.NewDropToken()
+			if err != nil {
+				t.Fatal(err)
+			}
+			l, err := ev.db.DropLinks().Create(ctx, tn.ID, store.DropLink{
+				ID: id.New(id.DropLink), TokenHash: id.HashToken(tok), Label: "Intake",
+				Recipients: []string{"desk@entity-a.example.com"}, ValidityDays: 7, Enabled: true, CreatedBy: "adm_x",
+				CreatedAt: start.Add(-time.Hour), ExpiresAt: expires,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return l.ID
+		}
+		revoked, live, expired := mk(ev.a, time.Time{}), mk(ev.a, time.Time{}), mk(ev.a, start)
+		if _, _, err := ev.db.DropLinks().Revoke(ctx, ev.a.ID, revoked, start); err != nil {
+			t.Fatal(err)
+		}
+		exists := func(linkID string) bool {
+			_, err := ev.db.DropLinks().Get(ctx, ev.a.ID, linkID)
+			return err == nil
+		}
+		ev.clock.set(start.AddDate(0, DropLinkRetentionMonths, 0).Add(-time.Hour))
+		ev.runTask(TaskPurgeRows)
+		if !exists(revoked) || !exists(expired) {
+			t.Fatal("revoked or expired link purged before its retention")
+		}
+		ev.clock.set(start.AddDate(0, DropLinkRetentionMonths, 0).Add(time.Hour))
+		ev.runTask(TaskPurgeRows)
+		if exists(revoked) || exists(expired) || !exists(live) {
+			t.Fatalf("after the retention: revoked kept=%v expired kept=%v live kept=%v", exists(revoked), exists(expired), exists(live))
 		}
 	})
 }

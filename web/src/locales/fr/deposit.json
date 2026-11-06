@@ -20,7 +20,9 @@
     "sending": "Envoi du code…",
     "notAllowed": "Le dépôt n’est possible que depuis le réseau interne avec une adresse de l’organisation. Pour envoyer des fichiers depuis l’extérieur, demandez une invitation à un utilisateur interne.",
     "invitationGone": "Cette invitation a expiré ou n’est plus valide. Demandez une nouvelle invitation à la personne qui vous a invité.",
-    "remoteHint": "Vous travaillez hors du réseau de l’organisation ? Si votre adresse est déjà vérifiée, un code de vérification vous sera demandé à chaque dépôt."
+    "remoteHint": "Vous travaillez hors du réseau de l’organisation ? Si votre adresse est déjà vérifiée, un code de vérification vous sera demandé à chaque dépôt.",
+    "dropLinkIntro": "Pour envoyer des fichiers à « {label} », saisissez votre adresse électronique. Un code de vérification y sera envoyé à chaque dépôt.",
+    "dropLinkGone": "Ce lien de dépôt n’est plus valide. Demandez-en un nouveau à la personne qui vous l’a transmis."
   },
   "code": {
     "title": "Saisissez le code de vérification",
@@ -59,7 +61,9 @@
       "reply": "Votre réponse sera envoyée à {recipient}.",
       "addressError": "{address} : {message}",
       "tooMany": "Saisissez au plus {max} destinataires.",
-      "domainRefused": "Ce service n’autorise pas l’envoi vers le domaine de cette adresse."
+      "domainRefused": "Ce service n’autorise pas l’envoi vers le domaine de cette adresse.",
+      "dropLink": "Les fichiers seront envoyés à : {label}.",
+      "optionalHint": "Facultatif pour un transfert par lien seul : aucun mail n’est envoyé à ces adresses."
     },
     "message": {
       "label": "Message",
@@ -70,6 +74,10 @@
       "days": {
         "one": "{count} jour",
         "other": "{count} jours"
+      },
+      "forcedByLink": {
+        "one": "Les fichiers restent disponibles {count} jour, durée fixée par ce lien de dépôt.",
+        "other": "Les fichiers restent disponibles {count} jours, durée fixée par ce lien de dépôt."
       }
     },
     "password": {
@@ -118,9 +126,15 @@
       "label": "Les destinataires doivent vérifier leur adresse par un code",
       "hint": "Chaque destinataire reçoit un lien personnel et doit saisir un code envoyé à son adresse avant de télécharger. Un lien transféré à quelqu’un d’autre est inutilisable.",
       "forced": "Imposé par le niveau de confidentialité choisi.",
-      "requiredByLevel": "Le niveau de confidentialité choisi impose que les destinataires vérifient leur adresse."
+      "requiredByLevel": "Le niveau de confidentialité choisi impose que les destinataires vérifient leur adresse.",
+      "incompatibleLinkOnly": "Non disponible pour un transfert par lien seul."
     },
-    "abuseBlocked": "Ce transfert dépasse une limite fixée par l’organisation (volume, nombre de transferts ou de destinataires) : il est refusé. Réessayez plus tard ou contactez l’administrateur."
+    "abuseBlocked": "Ce transfert dépasse une limite fixée par l’organisation (volume, nombre de transferts ou de destinataires) : il est refusé. Réessayez plus tard ou contactez l’administrateur.",
+    "linkOnly": {
+      "label": "Lien seul (aucun mail aux destinataires)",
+      "hint": "Aucun mail n’est envoyé : le lien vous est affiché une seule fois à la fin de l’envoi et vous le transmettez vous-même.",
+      "blockedByVerification": "Non disponible : le niveau de confidentialité choisi impose la vérification des destinataires."
+    }
   },
   "upload": {
     "overall": "Progression globale",
@@ -167,6 +181,17 @@
       "infected": "Ce fichier contenait une menace : il a été supprimé et ne sera pas remis.",
       "notScanned": "Ce fichier n’a pas pu être analysé par l’antivirus : il est remis et les destinataires en sont informés.",
       "scanError": "Ce fichier n’a pas pu être analysé : il est retenu et ne sera pas remis."
+    },
+    "recipientsLinkOnly": "Destinataires (non prévenus)",
+    "dropLink": "Envoyé par le lien de dépôt",
+    "linkOnly": {
+      "title": "Lien de téléchargement",
+      "intro": "Aucun mail n’a été envoyé aux destinataires. Transmettez-leur ce lien vous-même.",
+      "shownOnce": "Ce lien n’est affiché qu’une seule fois : copiez-le maintenant.",
+      "label": "Lien de téléchargement",
+      "copy": "Copier le lien",
+      "missing": "Le lien n’a pas pu être affiché. Vous pouvez en obtenir un nouveau depuis « Mes envois », l’ancien cessera alors de fonctionner.",
+      "myTransfers": "Ouvrir « Mes envois »"
     }
   },
   "resume": {

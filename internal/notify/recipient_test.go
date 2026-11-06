@@ -240,6 +240,13 @@ func TestFirstDownloadBy(t *testing.T) {
 	if _, err := e.n.FirstDownloadBy(ctx, e.t, tr, at, time.Time{}, "not an address"); !errors.Is(err, ErrInvalidTransfer) {
 		t.Errorf("bad recipient: %v", err)
 	}
+	// A drop link depositor never learns who downloaded (T-311).
+	dl := tr
+	dl.DropLink, dl.DropLinkLabel = true, "HR documents"
+	hidden, err := e.n.FirstDownloadBy(ctx, e.t, dl, at, time.Time{}, "carol@example.org")
+	if err != nil || strings.Contains(hidden.Message.Text, "carol@") || strings.Contains(hidden.Message.HTML, "carol@") {
+		t.Errorf("drop link recipient disclosed: %v\n%s", err, hidden.Message.Text)
+	}
 }
 
 func TestMyTransfersLinkJob(t *testing.T) {

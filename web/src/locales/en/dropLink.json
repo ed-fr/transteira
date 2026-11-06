@@ -1,0 +1,19 @@
+{
+  "landing": {
+    "title": "Send files",
+    "text": "You can send files to: {label}.",
+    "label": "Destination",
+    "validity": "Files are kept for",
+    "validityValue": {
+      "one": "{count} day",
+      "other": "{count} days"
+    },
+    "level": "Confidentiality level",
+    "next": "To continue, you will receive a verification code at your e-mail address. It is asked again at every deposit.",
+    "continue": "Continue"
+  },
+  "invalid": {
+    "title": "This drop link is not valid",
+    "text": "The link is unknown, disabled or has been replaced by a new one. Ask the person who gave it to you for a new one."
+  }
+}

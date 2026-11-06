@@ -3003,7 +3003,13 @@ type DataSubjectEraseReport struct {
 	AbuseReports *int `json:"abuseReports,omitempty"`
 
 	// AccessLinks Since 1.1. "My transfers" access links and sessions deleted.
-	AccessLinks             *int `json:"accessLinks,omitempty"`
+	AccessLinks *int `json:"accessLinks,omitempty"`
+
+	// DropLinksDisabled Since 2.0. Among dropLinksUpdated, links left without recipient, hence disabled.
+	DropLinksDisabled *int `json:"dropLinksDisabled,omitempty"`
+
+	// DropLinksUpdated Since 2.0. Permanent drop links whose recipients listed the address, which was removed from them.
+	DropLinksUpdated        *int `json:"dropLinksUpdated,omitempty"`
 	InvitationsDeleted      int  `json:"invitationsDeleted"`
 	LogEntriesPseudonymised int  `json:"logEntriesPseudonymised"`
 
@@ -3024,6 +3030,9 @@ type DataSubjectRequest struct {
 type DataSubjectSummary struct {
 	// AuditEvents Audit events of the tenant whose actor is the address.
 	AuditEvents int `json:"auditEvents"`
+
+	// DropLinks Since 2.0. Permanent drop links, revoked ones included, whose recipients list the address.
+	DropLinks *int `json:"dropLinks,omitempty"`
 
 	// Email A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
 	Email       Email `json:"email"`
@@ -3128,15 +3137,24 @@ type DropLink struct {
 	CreatedAt            time.Time `json:"createdAt"`
 
 	// CreatedBy Identifier of the admin who created the link.
-	CreatedBy  string     `json:"createdBy"`
-	Enabled    bool       `json:"enabled"`
+	CreatedBy string `json:"createdBy"`
+	Enabled   bool   `json:"enabled"`
+
+	// ExpiresAt Optional end of the link; null for none. From then on the link answers depositors exactly like a revoked or disabled one (`404 drop-link-invalid`), until an admin sets a later expiry or none. An expired link is purged 12 months after its expiry, once no transfer references it.
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 	Id         string     `json:"id"`
 	Label      string     `json:"label"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
 
+	// MaxDepositsPerHour Transfers that may be created through the link in the sliding last hour, all depositors together, on top of the external quotas: beyond it, `startDepositSession` and `createTransfer` answer `429 rate-limited`.
+	MaxDepositsPerHour int `json:"maxDepositsPerHour"`
+
 	// Recipients Internal addresses the deposits are addressed to.
-	Recipients   []Email    `json:"recipients"`
-	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
+	Recipients []Email    `json:"recipients"`
+	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+
+	// Unused Computed: the link is not revoked and neither used nor created in the last 12 months (`lastUsedAt`, else `createdAt`). A forgotten link to review: disable, revoke or give it an expiry.
+	Unused       *bool      `json:"unused,omitempty"`
 	UpdatedAt    time.Time  `json:"updatedAt"`
 	ValidityDays ExpiryDays `json:"validityDays"`
 }
@@ -3146,9 +3164,15 @@ type DropLinkCreate struct {
 	// ConfidentialityLevel Key of a level of the tenant; the tenant default when absent.
 	ConfidentialityLevel *ConfidentialityLevelKey `json:"confidentialityLevel,omitempty"`
 	Enabled              *bool                    `json:"enabled,omitempty"`
-	Label                string                   `json:"label"`
-	Recipients           []Email                  `json:"recipients"`
-	ValidityDays         ExpiryDays               `json:"validityDays"`
+
+	// ExpiresAt Since 2.0. Optional end of the link, in the future (`400 validation-failed` on `/expiresAt` otherwise); none when absent.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	Label     string     `json:"label"`
+
+	// MaxDepositsPerHour Since 2.0. Hourly deposit cap of the link.
+	MaxDepositsPerHour *int       `json:"maxDepositsPerHour,omitempty"`
+	Recipients         []Email    `json:"recipients"`
+	ValidityDays       ExpiryDays `json:"validityDays"`
 }
 
 // DropLinkCreated Since 2.0. A drop link with its token, present only in the answers of `createDropLink` and `rotateDropLink`.
@@ -3158,19 +3182,31 @@ type DropLinkCreated struct {
 	CreatedAt            time.Time `json:"createdAt"`
 
 	// CreatedBy Identifier of the admin who created the link.
-	CreatedBy  string     `json:"createdBy"`
-	Enabled    bool       `json:"enabled"`
+	CreatedBy string `json:"createdBy"`
+	Enabled   bool   `json:"enabled"`
+
+	// ExpiresAt Optional end of the link; null for none. From then on the link answers depositors exactly like a revoked or disabled one (`404 drop-link-invalid`), until an admin sets a later expiry or none. An expired link is purged 12 months after its expiry, once no transfer references it.
+	ExpiresAt  *time.Time `json:"expiresAt,omitempty"`
 	Id         string     `json:"id"`
 	Label      string     `json:"label"`
 	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+
+	// MaxDepositsPerHour Transfers that may be created through the link in the sliding last hour, all depositors together, on top of the external quotas: beyond it, `startDepositSession` and `createTransfer` answer `429 rate-limited`.
+	MaxDepositsPerHour int `json:"maxDepositsPerHour"`
 
 	// Recipients Internal addresses the deposits are addressed to.
 	Recipients []Email    `json:"recipients"`
 	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
 
 	// Token Shown once; only its SHA-256 is stored.
-	Token        string     `json:"token"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	Token string `json:"token"`
+
+	// Unused Computed: the link is not revoked and neither used nor created in the last 12 months (`lastUsedAt`, else `createdAt`). A forgotten link to review: disable, revoke or give it an expiry.
+	Unused    *bool     `json:"unused,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Url Landing page of the link on the tenant host (`/drop/{token}`), to give to third parties; shown once, like the token.
+	Url          string     `json:"url"`
 	ValidityDays ExpiryDays `json:"validityDays"`
 }
 
@@ -3179,7 +3215,7 @@ type DropLinkList struct {
 	Items []DropLink `json:"items"`
 }
 
-// DropLinkUpdate Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` only.
+// DropLinkUpdate Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` and `expiresAt` only.
 type DropLinkUpdate = json.RawMessage
 
 // E2ePolicy Since 2.0. End-to-end encryption policy: `forbidden` (the default), `allowed` (the sender chooses) or `required`.
@@ -3634,6 +3670,11 @@ type MyTransfer struct {
 	// DownloadedBy Recipients who downloaded at least one file (per-recipient links only; 0 otherwise).
 	DownloadedBy int `json:"downloadedBy"`
 
+	// DropLinkLabel Since 2.0. Set for a transfer deposited through a permanent drop link: the label of the
+	// link, shown instead of the recipients, which are never disclosed to its depositor
+	// (`recipients` empty, `downloadedBy` 0, `recipientTracking` empty; threat model T-311).
+	DropLinkLabel *string `json:"dropLinkLabel,omitempty"`
+
 	// EndToEndEncrypted Since 2.0. The files are encrypted in the browser.
 	EndToEndEncrypted *bool `json:"endToEndEncrypted,omitempty"`
 
@@ -3667,6 +3708,11 @@ type MyTransferDetail struct {
 
 	// DownloadedBy Recipients who downloaded at least one file (per-recipient links only; 0 otherwise).
 	DownloadedBy int `json:"downloadedBy"`
+
+	// DropLinkLabel Since 2.0. Set for a transfer deposited through a permanent drop link: the label of the
+	// link, shown instead of the recipients, which are never disclosed to its depositor
+	// (`recipients` empty, `downloadedBy` 0, `recipientTracking` empty; threat model T-311).
+	DropLinkLabel *string `json:"dropLinkLabel,omitempty"`
 
 	// EndToEndEncrypted Since 2.0. The files are encrypted in the browser.
 	EndToEndEncrypted *bool `json:"endToEndEncrypted,omitempty"`
@@ -3946,6 +3992,12 @@ type ProofStatement struct {
 
 	// Kind Since 2.0. `deposit`: written when the transfer becomes available. `delivery`: written at the first download (and at the first download of each recipient with per-recipient links).
 	Kind ProofKind `json:"kind"`
+
+	// LinkOnly Present (and true) only for a link-only transfer: no recipient was mailed nor
+	// identified, so a delivery proves a download by whoever held the link ("link only:
+	// recipient not identified" in the PDF and in `transteira proof verify`). Absent
+	// otherwise, so that the statements signed before it keep their exact encoding.
+	LinkOnly *bool `json:"linkOnly,omitempty"`
 
 	// RecipientDownloads First download of each recipient (per-recipient links), in a `delivery` statement.
 	RecipientDownloads *[]struct {
@@ -4484,6 +4536,12 @@ type SenderTransfer struct {
 	// `finalizeTransfer`, and never by any other operation.
 	DownloadUrl *string `json:"downloadUrl,omitempty"`
 
+	// DropLinkLabel Since 2.0. Set for a transfer deposited through a permanent drop link: the label of the
+	// link, shown instead of the recipients. The recipients of a drop link are never
+	// disclosed to its depositor: for such a transfer `recipients` is an empty array and
+	// `recipientTracking` is absent (threat model T-311).
+	DropLinkLabel *string `json:"dropLinkLabel,omitempty"`
+
 	// EncryptedMessage Since 2.0. The message of an end-to-end encrypted transfer, as sent.
 	EncryptedMessage *string `json:"encryptedMessage,omitempty"`
 
@@ -4933,6 +4991,9 @@ type TenantFeatures struct {
 	// Folders Folders may be dropped and keep their tree.
 	Folders bool `json:"folders"`
 
+	// LinkOnly Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them.
+	LinkOnly *bool `json:"linkOnly,omitempty"`
+
 	// MaxDownloads The maximum number of downloads option is offered to senders.
 	MaxDownloads bool `json:"maxDownloads"`
 
@@ -5190,7 +5251,7 @@ type TransferCreate struct {
 	// RecipientVerification Since 1.1. Every recipient must prove their address with a code before downloading; may be imposed by the confidentiality level.
 	RecipientVerification *bool `json:"recipientVerification,omitempty"`
 
-	// Recipients Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient) and for drop link depositors (the recipients of the link).
+	// Recipients Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient); for drop link depositors, omitted or equal to the recipients of the link.
 	Recipients *[]Email `json:"recipients,omitempty"`
 
 	// SenderEmail Mandatory with an API token, forbidden with a deposit session (`400
@@ -19306,6 +19367,22 @@ func (response UpdateConfidentialityLevels404ApplicationProblemPlusJSONResponse)
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateConfidentialityLevels409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateConfidentialityLevels409ApplicationProblemPlusJSONResponse) VisitUpdateConfidentialityLevelsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }

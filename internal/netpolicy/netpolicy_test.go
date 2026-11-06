@@ -59,3 +59,21 @@ func FuzzEvaluate(f *testing.F) {
 		}
 	})
 }
+
+func TestAllDomainsInternal(t *testing.T) {
+	t.Parallel()
+	r := Rules{Domains: []string{"entity-a.example.com"}}
+	for name, tc := range map[string]struct {
+		emails []string
+		want   bool
+	}{
+		"none":     {nil, false},
+		"all":      {[]string{"a@entity-a.example.com", "B@Entity-A.example.com"}, true},
+		"one out":  {[]string{"a@entity-a.example.com", "x@partner.example.org"}, false},
+		"only out": {[]string{"x@partner.example.org"}, false},
+	} {
+		if got := AllDomainsInternal(r, tc.emails); got != tc.want {
+			t.Errorf("%s: AllDomainsInternal = %v, want %v", name, got, tc.want)
+		}
+	}
+}

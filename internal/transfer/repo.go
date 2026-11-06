@@ -20,6 +20,7 @@ type repo interface {
 	invitation(ctx context.Context, tid tenant.ID, invID string) (store.Invitation, error)
 	verifiedAddress(ctx context.Context, tid tenant.ID, email string) (store.VerifiedAddress, error)
 	apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error)
+	dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error)
 	tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error)
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.TransferDetails, error)
 	transferByKey(ctx context.Context, tid tenant.ID, o owner, key string, since time.Time) (store.TransferDetails, error)
@@ -43,6 +44,16 @@ type txRepo interface {
 	// returned.
 	finalize(ctx context.Context, trfID string, now time.Time, unscanned bool) (int, error)
 	deleteTransfer(ctx context.Context, trfID string) error
+	// useDropLinkSession marks the drop link session sessionID of the link
+	// linkID used (see [store.DropLinks.UseSessionTx]).
+	useDropLinkSession(ctx context.Context, sessionID, linkID string, now time.Time) error
+	// dropLinkUsage counts the transfers created through the drop link
+	// linkID since since, all depositors together (see
+	// [store.DropLinks.UsageSinceTx]).
+	dropLinkUsage(ctx context.Context, linkID string, since time.Time) (store.DropLinkUsage, error)
+	// setLinkOnlyToken records the hash of the token of a link-only
+	// transfer (see [store.Transfers.SetLinkOnlyTokenTx]).
+	setLinkOnlyToken(ctx context.Context, trfID string, hash []byte) error
 	// checkAbuse runs the abuse checker a inside the transaction (see
 	// [AbuseChecker.CheckCreateTx]).
 	checkAbuse(ctx context.Context, a AbuseChecker, t *tenant.Tenant, f AbuseFacts) (*AbuseBlock, error)
@@ -90,6 +101,10 @@ func (r storeRepo) verifiedAddress(ctx context.Context, tid tenant.ID, email str
 
 func (r storeRepo) apiToken(ctx context.Context, tid tenant.ID, tokID string) (store.APIToken, error) {
 	return r.db.APITokens().Get(ctx, tid, tokID)
+}
+
+func (r storeRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	return r.db.DropLinks().Get(ctx, tid, linkID)
 }
 
 func (r storeRepo) tenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
@@ -173,6 +188,18 @@ func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time, unsc
 
 func (t storeTx) deleteTransfer(ctx context.Context, trfID string) error {
 	return t.db.Transfers().DeleteTx(ctx, t.tx, trfID)
+}
+
+func (t storeTx) useDropLinkSession(ctx context.Context, sessionID, linkID string, now time.Time) error {
+	return t.db.DropLinks().UseSessionTx(ctx, t.tx, sessionID, linkID, now)
+}
+
+func (t storeTx) dropLinkUsage(ctx context.Context, linkID string, since time.Time) (store.DropLinkUsage, error) {
+	return t.db.DropLinks().UsageSinceTx(ctx, t.tx, linkID, since)
+}
+
+func (t storeTx) setLinkOnlyToken(ctx context.Context, trfID string, hash []byte) error {
+	return t.db.Transfers().SetLinkOnlyTokenTx(ctx, t.tx, trfID, hash)
 }
 
 func (t storeTx) checkAbuse(ctx context.Context, a AbuseChecker, tn *tenant.Tenant, f AbuseFacts) (*AbuseBlock, error) {

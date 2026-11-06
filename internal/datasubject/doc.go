@@ -36,6 +36,9 @@
 //     rejected) is handled the same way, and no row keeps the address;
 //  4. the invitations of which it is the invitee are deleted; those it
 //     issued are revoked and their issuer replaced by the pseudonym;
+//     In the same step (since 2.0) the address is removed from the
+//     recipients of the permanent drop links, revoked ones included; a
+//     link left without recipient is disabled;
 //  5. the proofs of deposit and delivery whose signed statement names the
 //     address are deleted (since 2.0): they outlive their transfers;
 //  6. the abuse alert rows of the address are deleted and the abuse reports

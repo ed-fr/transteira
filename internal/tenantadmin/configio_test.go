@@ -292,7 +292,7 @@ func TestExportConfig(t *testing.T) {
 		st := out.Settings
 		if *st.DefaultLanguage != "fr" || *st.MaxTransferBytes != 12<<30 || *st.MaxTransferCeiling != 15<<30 ||
 			!*st.AllowRemoteInternalDeposit || !*st.AllowTransferReply || !*st.WebhookIncludeAddresses ||
-			st.LinkOnlyAllowed != nil || st.E2EPolicy != nil {
+			st.LinkOnlyAllowed == nil || *st.LinkOnlyAllowed || st.E2EPolicy != nil {
 			t.Errorf("settings = %+v", st)
 		}
 		b := out.Branding
@@ -313,7 +313,8 @@ func TestExportConfig(t *testing.T) {
 		}
 		lv := out.ConfidentialityLevels.Items
 		if len(lv) != 2 || lv[1].Key != "secret" || *lv[1].Rules.MaxDownloads != 3 || !slices.Equal(lv[1].Rules.AllowedExpiryDays, []int{1, 7}) ||
-			lv[1].Descriptions["fr"] != "Restreint" || lv[0].Descriptions != nil || lv[1].Rules.E2EPolicy != nil {
+			lv[1].Descriptions["fr"] != "Restreint" || lv[0].Descriptions != nil || lv[1].Rules.E2EPolicy != nil ||
+			lv[1].Rules.LinkOnlyAllowed == nil || !*lv[1].Rules.LinkOnlyAllowed {
 			t.Errorf("levels = %+v", lv)
 		}
 		ab := out.AbuseThresholds
@@ -560,12 +561,14 @@ func TestImportMinimal(t *testing.T) {
 		ctx := context.Background()
 		ev := newEnv(t, e)
 		in := minimalImport("c1.example.com")
-		// The defaults of the pending V2 members are accepted.
-		in.Config.Settings = &ExportedSettings{LinkOnlyAllowed: ptr(false), E2EPolicy: ptr("forbidden")}
+		// The default of the pending e2ePolicy member is accepted; the
+		// link-only switches are stored (since step 6 of V2).
+		in.Config.Settings = &ExportedSettings{LinkOnlyAllowed: ptr(true), E2EPolicy: ptr("forbidden")}
 		in.Config.Branding = &ExportedBranding{AccentColor: ptr("#00aa00")}
 		lvl := levelToExport(goodLevel("public", true))
-		lvl.Rules.LinkOnlyAllowed = ptr(true)
-		in.Config.ConfidentialityLevels = &ExportedLevelList{Items: []ExportedLevel{lvl}}
+		closed := levelToExport(goodLevel("closed", false))
+		closed.Rules.LinkOnlyAllowed = ptr(false)
+		in.Config.ConfidentialityLevels = &ExportedLevelList{Items: []ExportedLevel{lvl, closed}}
 		in.Config.LegalDocuments = []ExportedLegalDocument{{Document: store.LegalNotice, Language: "en", Markdown: "  \n"}}
 		got, err := ev.svc.ImportTenant(ctx, ev.super, in, clientIP)
 		mustNoErr(t, "import", err)
@@ -578,6 +581,13 @@ func TestImportMinimal(t *testing.T) {
 		if br.PrimaryColor != tenant.DefaultPrimaryColor || br.AccentColor != "#00AA00" || br.HasLogo ||
 			br.BackgroundPreset != branding.DefaultPresetID {
 			t.Errorf("branding = %+v", br)
+		}
+		if v, err := ev.svc.GetTenant(ctx, ev.super, got.ID); err != nil || !v.LinkOnlyAllowed {
+			t.Errorf("tenant link-only = %+v, %v", v, err)
+		}
+		if lv, err := ev.svc.GetConfidentialityLevels(ctx, ev.super, got.ID); err != nil || len(lv) != 2 ||
+			lv[0].Rules.LinkOnlyForbidden || !lv[1].Rules.LinkOnlyForbidden {
+			t.Errorf("levels = %+v, %v", lv, err)
 		}
 		if _, err := ev.svc.GetSMTP(ctx, ev.super, got.ID); !errors.Is(err, ErrNotFound) {
 			t.Errorf("smtp of a minimal import: %v", err)
@@ -715,7 +725,6 @@ func TestImportValidation(t *testing.T) {
 			{"limit above ceiling", "/config/settings/maxTransferBytes", settings(func(s *ExportedSettings) {
 				s.MaxTransferBytes, s.MaxTransferCeiling = ptr(int64(10)), ptr(int64(5))
 			})},
-			{"link only", "/config/settings/linkOnlyAllowed", settings(func(s *ExportedSettings) { s.LinkOnlyAllowed = ptr(true) })},
 			{"e2e", "/config/settings/e2ePolicy", settings(func(s *ExportedSettings) { s.E2EPolicy = ptr("allowed") })},
 			{"preset", "/config/branding/backgroundPreset", func(in *ImportInput) {
 				in.Config.Branding = &ExportedBranding{BackgroundPreset: ptr("../../etc/passwd")}
@@ -760,9 +769,6 @@ func TestImportValidation(t *testing.T) {
 				l.Rules.AllowedExpiryDays = []int{2}
 			})},
 			{"level e2e", "/config/confidentialityLevels/items/0/rules/e2ePolicy", level(func(l *ExportedLevel) { l.Rules.E2EPolicy = ptr("forbidden") })},
-			{"level link only", "/config/confidentialityLevels/items/0/rules/linkOnlyAllowed", level(func(l *ExportedLevel) {
-				l.Rules.LinkOnlyAllowed = ptr(false)
-			})},
 			{"office start", "/config/abuseThresholds/officeHours/start", abuse(func(a *ExportedAbuseThresholds) {
 				a.OfficeHours = &ExportedOfficeHours{Start: "25:00", End: "18:00", Weekdays: []int{1}}
 			})},

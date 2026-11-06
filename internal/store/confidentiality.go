@@ -172,6 +172,15 @@ type ConfidentialityLevel struct {
 	IsDefault bool
 	// Rules are the rules the level imposes.
 	Rules ConfidentialityRules
+	// LinkOnlyAllowed lets the senders create link-only transfers at this
+	// level (since 2.0), provided the tenant allows them
+	// ([TenantSettings.LinkOnlyAllowed]): a level can only forbid them. The
+	// database default, and the value of the seeded levels, is true; the
+	// Go zero value is false, so a caller building a level must set it
+	// explicitly (an absent API member means true). It is configuration,
+	// not part of the snapshot of a transfer: the outcome is recorded by
+	// [Transfer.LinkOnly].
+	LinkOnlyAllowed bool
 	// UpdatedAt is when the list was last replaced (zero for the levels
 	// seeded with the tenant).
 	UpdatedAt time.Time
@@ -184,7 +193,7 @@ type ConfidentialityLevel struct {
 // queries.
 const levelColumns = `key, position, labels, descriptions, is_default, require_recipient_verification, ` +
 	`require_password, allowed_validity_days, internal_recipients_only, force_delete_after_download, ` +
-	`max_downloads_cap, updated_at, updated_by`
+	`max_downloads_cap, updated_at, updated_by, link_only_allowed`
 
 // Statements of the ConfidentialityLevels repository.
 var (
@@ -199,8 +208,13 @@ var (
 	qLevelInsert = tenantQuery(
 		`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, descriptions, is_default,
 		require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only,
-		force_delete_after_download, max_downloads_cap, updated_at, updated_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	// qLevelDropLinkKeys lists the level keys used by the enabled,
+	// non-revoked drop links of the tenant, which a replace must keep.
+	qLevelDropLinkKeys = tenantQuery(
+		`SELECT DISTINCT confidentiality_level FROM drop_links
+		WHERE tenant_id = ? AND enabled AND revoked_at IS NULL AND confidentiality_level IS NOT NULL`)
 )
 
 // ConfidentialityLevels is the tenant-scoped repository of the
@@ -298,7 +312,8 @@ func normalizeLevels(levels []ConfidentialityLevel, by string, now time.Time) ([
 		}
 		out[i] = ConfidentialityLevel{
 			Key: l.Key, Position: i, Labels: labels, Descriptions: descriptions, IsDefault: l.IsDefault,
-			Rules: l.Rules.clone(), UpdatedAt: now.Truncate(time.Millisecond), UpdatedBy: by,
+			Rules: l.Rules.clone(), LinkOnlyAllowed: l.LinkOnlyAllowed, UpdatedAt: now.Truncate(time.Millisecond),
+			UpdatedBy: by,
 		}
 	}
 	if defaults != 1 {
@@ -317,7 +332,7 @@ func scanLevel(row interface{ Scan(...any) error }) (ConfidentialityLevel, error
 	)
 	err := row.Scan(&l.Key, &l.Position, &labels, &descriptions, &l.IsDefault, &l.Rules.RequireRecipientVerification,
 		&l.Rules.RequirePassword, &l.Rules.ExpiryDaysMask, &l.Rules.InternalRecipientsOnly,
-		&l.Rules.ForceDeleteAfterFirstDownload, &maxCap, &updated, &l.UpdatedBy)
+		&l.Rules.ForceDeleteAfterFirstDownload, &maxCap, &updated, &l.UpdatedBy, &l.LinkOnlyAllowed)
 	if err != nil {
 		return ConfidentialityLevel{}, err
 	}
@@ -389,8 +404,12 @@ func (r *ConfidentialityLevels) Default(ctx context.Context, tid tenant.ID) (Con
 // one default, labels in every supported language (1 to
 // MaxLevelLabelRunes characters), descriptions of at most
 // MaxLevelDescriptionRunes characters in supported languages, and valid
-// rules; ErrNotFound when the tenant does not exist. Concurrent replaces of
-// a tenant are serialized. Past transfers keep their snapshot.
+// rules; ErrNotFound when the tenant does not exist; ErrConflict, changing
+// nothing, when the list leaves out the key of a level used by an enabled,
+// non-revoked drop link of the tenant (since 2.0: the link must be changed
+// or disabled first; a disabled or revoked link falls back to the default
+// level). Concurrent replaces of a tenant are serialized. Past transfers
+// keep their snapshot.
 func (r *ConfidentialityLevels) Replace(ctx context.Context, tid tenant.ID, levels []ConfidentialityLevel, by string, now time.Time) ([]ConfidentialityLevel, error) {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -422,12 +441,24 @@ func (r *ConfidentialityLevels) ReplaceTx(ctx context.Context, tx *ScopedTx, lev
 }
 
 // replaceLevels replaces the levels of the tenant of tx with the
-// normalized levels, under the tenant lock, returning raw errors.
+// normalized levels, under the tenant lock, returning raw errors. It
+// returns ErrConflict when a level used by an enabled, non-revoked drop
+// link would disappear: the drop link writes take the tenant lock too, so
+// that a link cannot start using a level being removed.
 func replaceLevels(ctx context.Context, tx *ScopedTx, levels []ConfidentialityLevel) error {
 	// Concurrent replaces would otherwise both delete, then collide on
 	// insert (PostgreSQL, READ COMMITTED).
 	if err := tx.lock(ctx); err != nil {
 		return err
+	}
+	used, err := listIDs(ctx, tx, qLevelDropLinkKeys)
+	if err != nil {
+		return err
+	}
+	for _, key := range used {
+		if !slices.ContainsFunc(levels, func(l ConfidentialityLevel) bool { return l.Key == key }) {
+			return ErrConflict
+		}
 	}
 	if _, err := tx.Exec(ctx, qLevelsDelete); err != nil {
 		return err
@@ -438,7 +469,7 @@ func replaceLevels(ctx context.Context, tx *ScopedTx, levels []ConfidentialityLe
 		_, err := tx.Exec(ctx, qLevelInsert, l.Key, l.Position, string(labels), string(descriptions), l.IsDefault,
 			l.Rules.RequireRecipientVerification, l.Rules.RequirePassword, l.Rules.ExpiryDaysMask,
 			l.Rules.InternalRecipientsOnly, l.Rules.ForceDeleteAfterFirstDownload, nullInt(l.Rules.MaxDownloadsCap),
-			toMillis(l.UpdatedAt), l.UpdatedBy)
+			toMillis(l.UpdatedAt), l.UpdatedBy, l.LinkOnlyAllowed)
 		if err != nil {
 			return err
 		}

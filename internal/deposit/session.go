@@ -31,6 +31,11 @@ const (
 	// sender (V1.1, spec 10, [Service.OpenReply]): subject to the external
 	// rules, no recognition cookie, no invitation.
 	KindReply = store.DepositorReply
+	// KindDropLink is a third party depositing through a permanent drop
+	// link of the tenant (since 2.0, [Service.StartDropLink]): a code at
+	// every use, no recognition cookie, no invitation, subject to the
+	// external rules; its transfers go to the recipients of the link.
+	KindDropLink = store.DepositorDropLink
 )
 
 // Limits are the deposit limits shown to a depositor (OpenAPI
@@ -64,6 +69,18 @@ type ReplyInfo struct {
 	TransferExpiresAt time.Time
 }
 
+// DropLinkInfo describes the permanent drop link of a drop link session
+// (OpenAPI DepositSession.dropLink, since 2.0).
+type DropLinkInfo struct {
+	// ID is the drop link record ("drl_" + ULID), for the server only.
+	ID string
+	// Label is the label of the link, shown to the depositor.
+	Label string
+	// ValidityDays is the lifetime of the transfers deposited through the
+	// link, imposed on the depositor.
+	ValidityDays int
+}
+
 // SessionInfo describes an active deposit session (OpenAPI DepositSession).
 type SessionInfo struct {
 	// ID is the session record ("ds_" + ULID), for the server only.
@@ -83,6 +100,13 @@ type SessionInfo struct {
 	Invitation *InvitationInfo
 	// Reply is set for reply depositors (KindReply) only.
 	Reply *ReplyInfo
+	// DropLink is set for drop link depositors (KindDropLink) only.
+	DropLink *DropLinkInfo
+	// OpenedAt is when the session was opened. A drop link session
+	// deposits one transfer only: the transfer service marks the session
+	// used, by ID, in the creation transaction
+	// (store.DropLinks.UseSessionTx).
+	OpenedAt time.Time
 	// ReplyToTransferID is the source transfer of a reply session ("trf_"
 	// + ULID), "" for any other kind. For the server only.
 	ReplyToTransferID string
@@ -135,6 +159,9 @@ type sessionSpec struct {
 	// replyTo and linkID are the source transfer and the recipient link of
 	// a reply depositor (kind KindReply), "" otherwise.
 	replyTo, linkID string
+	// dropLink is the drop link of a drop link depositor (kind
+	// KindDropLink), nil otherwise.
+	dropLink *store.DropLink
 	// notAfter, when not zero, caps the expiry of the session (the expiry
 	// of the source transfer of a reply): a value not after the opening
 	// time fails with ErrReplyGone.
@@ -167,6 +194,9 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, spec sessio
 		CreatedAt: now, ExpiresAt: now.Add(s.sessionTTL),
 		ReplyToTransferID: spec.replyTo, RecipientLinkID: spec.linkID,
 	}
+	if spec.dropLink != nil {
+		rec.DropLinkID = spec.dropLink.ID
+	}
 	if !spec.notAfter.IsZero() {
 		// At the precision of the stored timestamps, as now.
 		notAfter := spec.notAfter.UTC().Truncate(time.Millisecond)
@@ -196,10 +226,24 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, spec sessio
 				return errLimited
 			}
 		}
+		if spec.dropLink != nil {
+			// Read again under the transaction: a link disabled, revoked
+			// or expired since the code was checked opens nothing.
+			l, err := tx.dropLink(ctx, spec.dropLink.ID)
+			switch {
+			case errors.Is(err, store.ErrNotFound) || (err == nil && !l.Usable(now)):
+				return ErrDropLinkInvalid
+			case err != nil:
+				return fmt.Errorf("deposit: read drop link: %w", err)
+			}
+			spec.dropLink = &l
+		}
 		err := tx.createSession(ctx, rec)
 		switch {
 		case spec.kind == KindReply && errors.Is(err, store.ErrNotFound):
 			return ErrReplyGone
+		case spec.kind == KindDropLink && errors.Is(err, store.ErrNotFound):
+			return ErrDropLinkInvalid
 		case err != nil:
 			return fmt.Errorf("deposit: create session: %w", err)
 		case inv == nil:
@@ -218,7 +262,10 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, spec sessio
 	info := SessionInfo{
 		ID: rec.ID, Email: rec.Email, Kind: rec.Kind, ExpiresAt: rec.ExpiresAt, Limits: limits(t),
 		CanInvite: rec.Kind == KindInternal, CSRFToken: csrf,
-		ReplyToTransferID: rec.ReplyToTransferID, RecipientLinkID: rec.RecipientLinkID,
+		ReplyToTransferID: rec.ReplyToTransferID, RecipientLinkID: rec.RecipientLinkID, OpenedAt: rec.CreatedAt,
+	}
+	if l := spec.dropLink; l != nil {
+		info.setDropLink(*l)
 	}
 	if inv != nil {
 		// TouchTx moved the expiry to 12 months after this use when later.
@@ -231,13 +278,23 @@ func (s *Service) openSession(ctx context.Context, t *tenant.Tenant, spec sessio
 	return Session{Token: token, SessionInfo: info}, nil
 }
 
+// setDropLink fills the drop link of a drop link session: its public part
+// and, since the depositor cannot choose it, the validity of the link as
+// the only expiry offered.
+func (info *SessionInfo) setDropLink(l store.DropLink) {
+	info.DropLink = &DropLinkInfo{ID: l.ID, Label: l.Label, ValidityDays: l.ValidityDays}
+	info.Limits.ExpiryDays = []int{l.ValidityDays}
+}
+
 // Session returns the active session whose cookie token is rawToken, with
 // its CSRF token. It returns ErrUnauthenticated when the token is malformed,
 // unknown in the tenant, ended or expired, and for an external depositor
 // whose invitation is no longer active (a revoked invitation ends its
 // sessions). For a reply depositor it reads the source transfer to fill
 // Reply, and returns ErrUnauthenticated when it no longer exists (its
-// deletion also deletes the reply sessions).
+// deletion also deletes the reply sessions). For a drop link depositor it
+// reads the link to fill DropLink, and returns ErrUnauthenticated when the
+// link is disabled or revoked (which ends its sessions) or gone.
 func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string) (SessionInfo, error) {
 	if !validToken(id.SessionTokenPrefix, rawToken) {
 		return SessionInfo{}, ErrUnauthenticated
@@ -252,7 +309,7 @@ func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string
 	info := SessionInfo{
 		ID: rec.ID, Email: rec.Email, Kind: rec.Kind, ExpiresAt: rec.ExpiresAt, Limits: limits(t),
 		CanInvite: rec.Kind == KindInternal, ReplyToTransferID: rec.ReplyToTransferID,
-		RecipientLinkID: rec.RecipientLinkID,
+		RecipientLinkID: rec.RecipientLinkID, OpenedAt: rec.CreatedAt,
 	}
 	switch rec.Kind {
 	case KindExternal:
@@ -273,6 +330,16 @@ func (s *Service) Session(ctx context.Context, t *tenant.Tenant, rawToken string
 			return SessionInfo{}, fmt.Errorf("deposit: read source transfer: %w", err)
 		}
 		info.Reply = &ReplyInfo{Recipient: src.SenderEmail, TransferExpiresAt: src.ExpiresAt}
+	case KindDropLink:
+		l, err := s.repo.dropLink(ctx, t.ID, rec.DropLinkID)
+		switch {
+		case errors.Is(err, store.ErrNotFound) || (err == nil && !l.Usable(s.now())):
+			// A disabled, revoked or expired link ends its sessions.
+			return SessionInfo{}, ErrUnauthenticated
+		case err != nil:
+			return SessionInfo{}, fmt.Errorf("deposit: read drop link: %w", err)
+		}
+		info.setDropLink(l)
 	}
 	if info.CSRFToken, err = s.csrfToken(rawToken); err != nil {
 		return SessionInfo{}, err

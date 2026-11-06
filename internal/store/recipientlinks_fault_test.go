@@ -161,7 +161,7 @@ func TestRecipientLinkDriverFaults(t *testing.T) {
 		}
 	}
 	const (
-		getTransfer = "extended_at, reply_to_transfer_id FROM transfers WHERE tenant_id = ? AND id = ?"
+		getTransfer = "reply_to_transfer_id, link_only, drop_link_id FROM transfers WHERE tenant_id = ? AND id = ?"
 		joinLinks   = "FROM recipient_links l JOIN"
 	)
 	steps := []struct {
@@ -291,7 +291,7 @@ func TestFirstDownloadReReadFault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := newTransferFixture(t)
-	f.plan.add(faultQuery, "extended_at, reply_to_transfer_id FROM transfers WHERE tenant_id = ? AND id = ?", 1)
+	f.plan.add(faultQuery, "reply_to_transfer_id, link_only, drop_link_id FROM transfers WHERE tenant_id = ? AND id = ?", 1)
 	err := f.tx(ctx, func(tx *ScopedTx) error {
 		_, err := f.db.Transfers().MarkFirstDownloadTx(ctx, tx, f.trf.ID, time.Now(), time.Time{})
 		return err

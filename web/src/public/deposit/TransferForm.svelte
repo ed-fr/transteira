@@ -43,6 +43,7 @@
     password: 'tt-deposit-password',
     maxDownloads: 'tt-deposit-max-downloads',
     recipientVerification: 'tt-deposit-recipient-verification',
+    linkOnly: 'tt-deposit-link-only',
     files: 'tt-deposit-files',
   };
 
@@ -93,6 +94,7 @@
   const passwordRequired = $derived(flow.rules?.requirePassword === true);
   const verificationForced = $derived(flow.rules?.requireRecipientVerification === true);
   const deleteForced = $derived(flow.rules?.forceDeleteAfterFirstDownload === true);
+  const linkOnlyOn = $derived(flow.linkOnlyEffective);
   const downloadsCap = $derived(maxDownloadsCap(flow.rules));
   const expiryOptions = $derived(
     flow.expiryOptions.map((d) => ({ value: d, label: t('deposit.form.expiry.days', { count: d }) })),
@@ -112,6 +114,8 @@
         return t('deposit.form.maxDownloads.label');
       case 'recipientVerification':
         return t('deposit.form.recipientVerification.label');
+      case 'linkOnly':
+        return t('deposit.form.linkOnly.label');
       case 'files':
         return t('deposit.form.files.label');
     }
@@ -165,7 +169,11 @@
 {/if}
 
 <form class="tt-stack" novalidate onsubmit={submit}>
-  {#if flow.isReply}
+  {#if flow.isDropLink}
+    <Alert severity="info" live={false}>
+      {t('deposit.form.recipients.dropLink', { label: flow.dropLinkLabel ?? '' })}
+    </Alert>
+  {:else if flow.isReply}
     <Alert severity="info" live={false}>
       {t('deposit.form.recipients.reply', { recipient: flow.replyRecipient ?? '' })}
     </Alert>
@@ -177,8 +185,8 @@
     <TextArea
       id={ids.recipients}
       label={t('deposit.form.recipients.label')}
-      hint={t('deposit.form.recipients.hint')}
-      required
+      hint={linkOnlyOn ? t('deposit.form.recipients.optionalHint') : t('deposit.form.recipients.hint')}
+      required={!linkOnlyOn}
       rows={3}
       autocomplete="email"
       spellcheck={false}
@@ -197,7 +205,7 @@
     bind:value={flow.form.message}
   />
 
-  {#if flow.levels.length > 1}
+  {#if flow.levels.length > 1 && !flow.isDropLink}
     <RadioGroup
       legend={t('deposit.form.level.legend')}
       hint={t('deposit.form.level.hint')}
@@ -209,15 +217,21 @@
     />
   {/if}
 
-  <RadioGroup
-    legend={t('deposit.form.expiry.legend')}
-    name={ids.expiryDays}
-    options={expiryOptions}
-    required
-    inline
-    error={say(errors['expiryDays'])}
-    bind:value={flow.form.expiryDays}
-  />
+  {#if flow.isDropLink}
+    <p class="tt-mb-0">
+      {t('deposit.form.expiry.forcedByLink', { count: flow.expiryOptions[0] ?? 0 })}
+    </p>
+  {:else}
+    <RadioGroup
+      legend={t('deposit.form.expiry.legend')}
+      name={ids.expiryDays}
+      options={expiryOptions}
+      required
+      inline
+      error={say(errors['expiryDays'])}
+      bind:value={flow.form.expiryDays}
+    />
+  {/if}
 
   <TextField
     id={ids.password}
@@ -268,11 +282,28 @@
       <Checkbox
         id={ids.recipientVerification}
         label={t('deposit.form.recipientVerification.label')}
-        hint={t('deposit.form.recipientVerification.hint')}
+        hint={linkOnlyOn
+          ? t('deposit.form.recipientVerification.incompatibleLinkOnly')
+          : t('deposit.form.recipientVerification.hint')}
+        disabled={linkOnlyOn}
         error={say(errors['recipientVerification'])}
         bind:checked={flow.form.recipientVerification}
       />
     {/if}
+  {/if}
+
+  {#if flow.linkOnlyOffered}
+    <Checkbox
+      id={ids.linkOnly}
+      label={t('deposit.form.linkOnly.label')}
+      hint={flow.linkOnlyBlockedByVerification
+        ? t('deposit.form.linkOnly.blockedByVerification')
+        : t('deposit.form.linkOnly.hint')}
+      disabled={flow.linkOnlyBlockedByVerification}
+      error={say(errors['linkOnly'])}
+      checked={flow.form.linkOnly}
+      onchange={(e) => flow.setLinkOnly(e.currentTarget.checked)}
+    />
   {/if}
 
   {#if deleteForced}

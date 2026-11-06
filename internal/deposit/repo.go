@@ -26,6 +26,11 @@ type repo interface {
 	session(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) (store.DepositSession, error)
 	endSession(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) error
 	transfer(ctx context.Context, tid tenant.ID, trfID string) (store.Transfer, error)
+	dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error)
+	dropLinkByHash(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) (store.DropLink, error)
+	dropLinkUsage(ctx context.Context, tid tenant.ID, linkID string, since time.Time) (store.DropLinkUsage, error)
+	touchDropLink(ctx context.Context, tid tenant.ID, linkID string, at time.Time) error
+	levels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error)
 	tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error
 }
 
@@ -33,6 +38,7 @@ type repo interface {
 type txRepo interface {
 	countByEmail(ctx context.Context, email string, since time.Time) (int, error)
 	countByIP(ctx context.Context, ip netip.Addr, since time.Time) (int, error)
+	countByDropLink(ctx context.Context, linkID string, since time.Time) (int, error)
 	countInvitations(ctx context.Context, inviter string, since time.Time) (int, error)
 	createChallenge(ctx context.Context, c store.Challenge) error
 	consumeChallenge(ctx context.Context, chID string, now time.Time) error
@@ -42,6 +48,7 @@ type txRepo interface {
 	countLiveReplies(ctx context.Context, linkID string, now time.Time) (int, error)
 	touchInvitation(ctx context.Context, invID string, now time.Time) error
 	createInvitation(ctx context.Context, inv store.Invitation) error
+	dropLink(ctx context.Context, linkID string) (store.DropLink, error)
 }
 
 // storeRepo implements repo over a *store.DB.
@@ -103,6 +110,26 @@ func (r storeRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 	return d.Transfer, err
 }
 
+func (r storeRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	return r.db.DropLinks().Get(ctx, tid, linkID)
+}
+
+func (r storeRepo) dropLinkByHash(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) (store.DropLink, error) {
+	return r.db.DropLinks().GetByTokenHash(ctx, tid, hash, now)
+}
+
+func (r storeRepo) dropLinkUsage(ctx context.Context, tid tenant.ID, linkID string, since time.Time) (store.DropLinkUsage, error) {
+	return r.db.DropLinks().UsageSince(ctx, tid, linkID, since)
+}
+
+func (r storeRepo) touchDropLink(ctx context.Context, tid tenant.ID, linkID string, at time.Time) error {
+	return r.db.DropLinks().TouchLastUsed(ctx, tid, linkID, at)
+}
+
+func (r storeRepo) levels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	return r.db.ConfidentialityLevels().List(ctx, tid)
+}
+
 func (r storeRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	s, err := r.db.Scoped(tid)
 	if err != nil {
@@ -123,6 +150,10 @@ func (t storeTx) countByEmail(ctx context.Context, email string, since time.Time
 
 func (t storeTx) countByIP(ctx context.Context, ip netip.Addr, since time.Time) (int, error) {
 	return t.db.Challenges().CountByIPSinceTx(ctx, t.tx, ip, since)
+}
+
+func (t storeTx) countByDropLink(ctx context.Context, linkID string, since time.Time) (int, error) {
+	return t.db.Challenges().CountByDropLinkSinceTx(ctx, t.tx, linkID, since)
 }
 
 func (t storeTx) countInvitations(ctx context.Context, inviter string, since time.Time) (int, error) {
@@ -159,4 +190,8 @@ func (t storeTx) touchInvitation(ctx context.Context, invID string, now time.Tim
 
 func (t storeTx) createInvitation(ctx context.Context, inv store.Invitation) error {
 	return t.db.Invitations().CreateTx(ctx, t.tx, inv)
+}
+
+func (t storeTx) dropLink(ctx context.Context, linkID string) (store.DropLink, error) {
+	return t.db.DropLinks().GetTx(ctx, t.tx, linkID)
 }

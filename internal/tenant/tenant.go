@@ -187,6 +187,13 @@ type Tenant struct {
 	// engine is not "none" as well (antivirusEffective). It is read at
 	// finalization (decision D8).
 	AntivirusEnabled bool
+	// LinkOnlyAllowed lets the senders of the tenant create link-only
+	// transfers (since 2.0, spec 8.2): a confidentiality level may still
+	// forbid them. Off by default; only the super admin changes it (the
+	// store writes it at creation and with
+	// store.Tenants.SetLinkOnlyAllowed or UpdateWithPolicies, never with
+	// the general update).
+	LinkOnlyAllowed bool
 	// ProvisionedBy is the identifier ("prv_" + ULID) of the provisioning
 	// token that created the tenant, "" for a tenant created by a super
 	// admin (V1.2). It is set at creation only, by the store.

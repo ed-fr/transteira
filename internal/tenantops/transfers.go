@@ -44,6 +44,9 @@ const (
 	// OriginReply is the recipient of a transfer replying to its sender
 	// (spec 10, since 1.1).
 	OriginReply Origin = "reply"
+	// OriginDropLink is a third party depositing through a permanent drop
+	// link (since 2.0).
+	OriginDropLink Origin = "drop_link"
 )
 
 // Transfer is a transfer as the administration lists it (OpenAPI
@@ -62,7 +65,13 @@ type Transfer struct {
 	// ReplyToTransferID is the original transfer of a reply ("trf_" +
 	// ULID), "" for any other origin. The original may have been purged
 	// since.
-	ReplyToTransferID        string
+	ReplyToTransferID string
+	// DropLinkID is the permanent drop link of a drop link deposit ("drl_"
+	// + ULID, since 2.0), "" for any other origin.
+	DropLinkID string
+	// LinkOnly marks a link-only transfer (since 2.0): never mailed, its
+	// link is never shown to the administration.
+	LinkOnly                 bool
 	FileCount                int
 	TotalBytes               int64
 	PasswordProtected        bool
@@ -153,6 +162,8 @@ func originOf(t store.Transfer) Origin {
 		return OriginReply
 	case t.SenderKind == store.DepositorInternalRemote:
 		return OriginInternalRemote
+	case t.SenderKind == store.DepositorDropLink:
+		return OriginDropLink
 	}
 	return OriginInternal
 }
@@ -167,7 +178,7 @@ func transferOf(t store.Transfer, recipients []string, fileCount int, lang strin
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
 		MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel, Rules: t.Rules,
-		RecipientVerification: t.RecipientVerification,
+		RecipientVerification: t.RecipientVerification, DropLinkID: t.DropLinkID, LinkOnly: t.LinkOnly,
 	}
 	if t.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(t.ConfidentialityLabel, t.Language, lang, "en")
@@ -329,8 +340,9 @@ func redactReason(reason string) string {
 // ResendNotification queues the notification mail of the transfer trfID
 // of tenant tid again, through the SMTP settings of the tenant, to the
 // given recipients, or to all of them when the list is empty. The transfer
-// must be available (ErrNotAvailable) and every listed address must be an
-// original recipient (*InvalidError on "/recipients/<index>").
+// must be available (ErrNotAvailable), not link-only (ErrLinkOnly: its
+// recipients are never mailed, since 2.0) and every listed address must be
+// an original recipient (*InvalidError on "/recipients/<index>").
 //
 // The mail carries the existing link: the download token is unsealed for
 // the build, wiped after it, never rotated, returned or logged. For a
@@ -353,6 +365,9 @@ func (s *Service) ResendNotification(ctx context.Context, p adminauth.Principal,
 	d, err := s.transfer(ctx, tid, trfID)
 	if err != nil {
 		return err
+	}
+	if d.LinkOnly {
+		return ErrLinkOnly
 	}
 	perRecipient := d.LinkMode == store.LinkModePerRecipient
 	if d.Status != store.TransferAvailable || (!perRecipient && d.DownloadTokenKeyID == "") {

@@ -20,6 +20,7 @@
     "invitations": "Invitations received or issued",
     "auditEvents": "Audit log entries",
     "proofs": "Proofs of deposit and delivery",
+    "dropLinks": "Drop links listing the address",
     "securityNote": "The security log never records email addresses, so it holds nothing to erase."
   },
   "erase": {
@@ -33,6 +34,7 @@
       "received": "transfers received: the address is removed from the recipients, and a transfer left without recipients is deleted;",
       "invitations": "invitations it received are deleted; invitations it issued are revoked;",
       "proofs": "proofs of deposit and delivery whose signed statement names the address;",
+      "dropLinks": "the address is removed from the recipients of permanent drop links, and a link left without recipient is disabled;",
       "audit": "audit log: the address is replaced by a pseudonym (erased-…)."
     },
     "keptIntro": "What is kept on purpose:",
@@ -58,6 +60,8 @@
     "invitationsDeleted": "Invitations deleted",
     "logEntriesPseudonymised": "Audit log entries pseudonymised",
     "proofsDeleted": "Proofs deleted",
+    "dropLinksUpdated": "Drop links updated",
+    "dropLinksDisabled": "Drop links disabled (no recipient left)",
     "auditHint": "The erasure is recorded in the audit log without the address; its pseudonym appears as the object of the entry.",
     "auditLink": "View in the audit log",
     "newSearch": "New search"

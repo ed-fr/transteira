@@ -169,6 +169,10 @@
       return { ok: true, message: t('adminTenants.confidentiality.saved') };
     } catch (err) {
       const view = describeError(i18n, err);
+      if (view.code === 'state-conflict') {
+        // A level used by an enabled drop link cannot be removed (409).
+        return { ok: false, message: t('adminTenants.confidentiality.levelInUse') };
+      }
       const mapped = serverLevelErrors(view.fields, drafts, ref);
       const message = mapped.errors.length === 0 || mapped.unmatched.length > 0 ? view.message : undefined;
       return message === undefined
@@ -289,6 +293,11 @@
         <Checkbox
           label={t('adminTenants.confidentiality.fields.forceDeleteAfterFirstDownload')}
           bind:checked={draft.forceDeleteAfterFirstDownload}
+        />
+        <Checkbox
+          label={t('adminTenants.confidentiality.fields.linkOnlyAllowed')}
+          hint={t('adminTenants.confidentiality.hints.linkOnlyAllowed')}
+          bind:checked={draft.linkOnlyAllowed}
         />
         <TextField
           id={fieldId(draft, 'maxDownloads')}

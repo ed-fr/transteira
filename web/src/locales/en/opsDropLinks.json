@@ -1,0 +1,117 @@
+{
+  "status": {
+    "active": "Active",
+    "disabled": "Disabled",
+    "revoked": "Revoked",
+    "expired": "Expired"
+  },
+  "list": {
+    "caption": "Drop links of the entity",
+    "create": "Create a drop link",
+    "empty": "No drop link for this entity yet.",
+    "columns": {
+      "label": "Label",
+      "recipients": "Recipients",
+      "validity": "Validity",
+      "level": "Level",
+      "status": "Status",
+      "lastUsed": "Last used",
+      "actions": "Actions",
+      "expiry": "Ends",
+      "cap": "Deposits per hour"
+    },
+    "defaultLevel": "Entity default level",
+    "neverUsed": "Never used",
+    "lastUsedNote": "The last use is recorded at most once a minute: it can lag by up to a minute.",
+    "edit": "Edit",
+    "enable": "Enable",
+    "disable": "Disable",
+    "rotate": "Rotate",
+    "revoke": "Revoke",
+    "noExpiry": "No expiry",
+    "capValue": "{count} per hour",
+    "unused": "Unused for 12 months",
+    "unusedHint": "Consider disabling or revoking this link, or setting an expiry date."
+  },
+  "form": {
+    "title": "Drop link settings",
+    "submit": "Create the link",
+    "created": "Drop link created.",
+    "back": "Back to the drop links",
+    "label": {
+      "label": "Label",
+      "hint": "Name of the service or collection, shown to depositors (at most 100 characters)."
+    },
+    "recipients": {
+      "label": "Recipients",
+      "hint": "Internal addresses that receive the deposited files, one per line (at most 20). They are never shown to depositors."
+    },
+    "validity": {
+      "legend": "How long deposits are kept",
+      "hint": "Applied to every deposit made through this link. The confidentiality level must allow it.",
+      "days": {
+        "one": "{count} day",
+        "other": "{count} days"
+      }
+    },
+    "level": {
+      "label": "Confidentiality level",
+      "hint": "Applied to every deposit made through this link.",
+      "default": "Entity default level"
+    },
+    "enabled": {
+      "label": "Link enabled",
+      "hint": "A disabled link refuses deposits; you can enable it again later."
+    },
+    "expiry": {
+      "label": "Expiry date (optional)",
+      "hint": "The link refuses deposits after the end of this day (your local time). Leave empty for no end."
+    },
+    "cap": {
+      "label": "Deposits per hour",
+      "hint": "Transfers accepted through this link per hour, all depositors together (1 to {max}). Beyond it, deposits are refused for a while."
+    }
+  },
+  "edit": {
+    "title": "Edit the link {label}",
+    "legend": "Drop link settings",
+    "intro": "The address of the link does not change. To replace it, use \"Rotate\".",
+    "saved": "Drop link updated.",
+    "discardConfirm": "You have unsaved changes. Close without saving them?"
+  },
+  "levelsError": "The confidentiality levels could not be loaded: the level names are shown as keys and the level choice may be incomplete. Reload the page to try again.",
+  "toggle": {
+    "enabledDone": "The link {label} is enabled.",
+    "disabledDone": "The link {label} is disabled."
+  },
+  "rotate": {
+    "title": "Rotate the link {label}?",
+    "text": "A new address is created and the old one stops working at once: people who saved it will no longer be able to deposit. The new address is shown only once.",
+    "confirm": "Rotate the link"
+  },
+  "revoke": {
+    "title": "Revoke the link {label}?",
+    "text": "The link stops working for good. This cannot be undone: to receive deposits again, create a new link.",
+    "confirm": "Revoke the link",
+    "done": "The link {label} is revoked."
+  },
+  "secret": {
+    "title": "Drop link {label}",
+    "rotatedTitle": "New drop link {label}",
+    "text": "This is the address of the drop link. Copy it now and give it to the people who must send files: it will never be shown again.",
+    "rotatedText": "This is the new address of the link. The old one no longer works. Copy it now: it will never be shown again.",
+    "label": "Drop link address"
+  },
+  "errors": {
+    "recipientTooLong": "Address too long.",
+    "labelTooLong": "The label must not exceed {max} characters.",
+    "recipientsRequired": "Enter at least one recipient.",
+    "recipientsTooMany": "At most {max} recipients.",
+    "limit": "The maximum number of drop links is reached. Revoke an unused link and try again.",
+    "conflict": "This link is revoked: it can no longer be changed. Reload the page.",
+    "notFound": "This link no longer exists. Reload the page.",
+    "expiryInvalid": "Enter a valid date.",
+    "expiryPast": "Choose a date in the future.",
+    "capInvalid": "Enter a whole number between {min} and {max}."
+  }
+}

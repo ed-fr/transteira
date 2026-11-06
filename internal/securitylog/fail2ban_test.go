@@ -204,7 +204,7 @@ func TestFail2banForgedLines(t *testing.T) {
 }
 
 // downloadStreamsLines are rate_limited lines checked against the
-// exclusion of the download_streams scope by both integrations: banned
+// exclusion of the download_streams and drop_link scopes by both integrations: banned
 // tells whether the line must still count as a failure.
 var downloadStreamsLines = []struct {
 	name   string
@@ -215,6 +215,22 @@ var downloadStreamsLines = []struct {
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.30"), Tenant: "transfer.entity-a.example.com",
 		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "download_streams"}},
 	}, false},
+	{"drop_link", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.38"), Tenant: "transfer.entity-a.example.com",
+		Fields: []Field{{KeyScope, "drop_link"}},
+	}, false},
+	{"drop_link with an extra field", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.39"),
+		Fields: []Field{{KeyScope, "drop_link"}, {"x", "y"}},
+	}, true},
+	{"drop_link smuggled in the scope", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.40"),
+		Fields: []Field{{KeyScope, `x" scope="drop_link`}},
+	}, true},
+	{"drop_link with a transfer", Event{
+		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.41"),
+		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "drop_link"}},
+	}, true},
 	{"transfer_password", Event{
 		Type: RateLimited, IP: netip.MustParseAddr("198.51.100.31"), Tenant: "transfer.entity-a.example.com",
 		Fields: []Field{{"transfer", "trf_01JABCD8E3"}, {KeyScope, "transfer_password"}},

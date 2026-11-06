@@ -12,7 +12,8 @@
     "privacy": "Personal data",
     "abuseReports": "Abuse reports",
     "groupConsultation": "Consultation",
-    "security": "Security log"
+    "security": "Security log",
+    "dropLinks": "Drop links"
   },
   "transfers": {
     "title": "Transfers",
@@ -56,5 +57,11 @@
   "security": {
     "title": "Security log",
     "intro": "Security events of this entity over the last 12 months: wrong verification codes or transfer passwords, refused deposits, rate limits, invalid tokens. Identical events seen within a short time are grouped. The log never contains an email address."
+  },
+  "dropLinks": {
+    "title": "Drop links",
+    "createTitle": "Create a drop link",
+    "intro": "A drop link is a permanent address you give to third parties (customers, suppliers...) so that they can send files to a service, without an invitation. Every deposit requires the depositor to confirm their address with a code. The files are addressed to the recipients of the link.",
+    "introReadOnly": "Permanent drop links of this entity, read-only."
   }
 }

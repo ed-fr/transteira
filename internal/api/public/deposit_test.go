@@ -62,6 +62,22 @@ type fakeDeposit struct {
 	// replySession is the answer of OpenReply, gotTarget what it received.
 	replySession deposit.Session
 	gotTarget    deposit.ReplyTarget
+
+	// dropChallenge and dropLink are the answers of StartDropLink and
+	// PublicDropLink, gotDropToken the token they received.
+	dropChallenge deposit.Challenge
+	dropLink      deposit.PublicDropLink
+	gotDropToken  string
+}
+
+func (f *fakeDeposit) StartDropLink(_ context.Context, _ *tenant.Tenant, ip netip.Addr, lang, email, raw string) (deposit.Challenge, error) {
+	f.gotIP, f.gotLang, f.gotEmail, f.gotDropToken = ip, lang, email, raw
+	return f.dropChallenge, f.err
+}
+
+func (f *fakeDeposit) PublicDropLink(_ context.Context, _ *tenant.Tenant, ip netip.Addr, lang, raw string) (deposit.PublicDropLink, error) {
+	f.gotIP, f.gotLang, f.gotDropToken = ip, lang, raw
+	return f.dropLink, f.err
 }
 
 func (f *fakeDeposit) Start(_ context.Context, _ *tenant.Tenant, ip netip.Addr, lang, email, inv, recog string) (deposit.Result, error) {
@@ -218,6 +234,10 @@ func TestDepositOperationsRequireTenantAndService(t *testing.T) {
 		},
 		"getInvitation": func(s *Server, ctx context.Context) error {
 			_, err := s.GetInvitation(ctx, gen.GetInvitationRequestObject{})
+			return err
+		},
+		"getPublicDropLink": func(s *Server, ctx context.Context) error {
+			_, err := s.GetPublicDropLink(ctx, gen.GetPublicDropLinkRequestObject{})
 			return err
 		},
 	}
@@ -552,6 +572,7 @@ func TestDepositError(t *testing.T) {
 		{name: "reply gone", err: deposit.ErrReplyGone, code: problem.CodeTransferGone},
 		{name: "not found", err: deposit.ErrNotFound, code: problem.CodeNotFound},
 		{name: "invitation gone", err: deposit.ErrInvitationGone, code: problem.CodeInvitationGone},
+		{name: "drop link invalid", err: deposit.ErrDropLinkInvalid, code: problem.CodeDropLinkInvalid},
 		{name: "challenge gone", err: deposit.ErrChallengeGone, code: problem.CodeVerificationExhausted},
 		{name: "mail unavailable", err: deposit.ErrMailUnavailable, code: problem.CodeMailUnavailable},
 		{name: "internal", err: internal, code: problem.CodeInternalError},

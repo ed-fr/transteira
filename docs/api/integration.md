@@ -32,6 +32,7 @@ administration.
 - [8. Monitoring endpoints](#8-monitoring-endpoints)
 - [9. Proofs of deposit and delivery](#9-proofs-of-deposit-and-delivery)
 - [10. Exporting and duplicating a tenant configuration](#10-exporting-and-duplicating-a-tenant-configuration)
+- [11. Link-only transfers and drop links](#11-link-only-transfers-and-drop-links)
 
 ## Basics
 
@@ -1164,3 +1165,82 @@ Invoke-Admin POST /admin/tenants/import @{
     --data @"$work/network.json"
   ```
 - The audit log records `tenant.exported` and `tenant.imported`.
+
+## 11. Link-only transfers and drop links
+
+### Link-only deposit by script
+
+Since 2.0, a script can deposit a **link-only** transfer: no mail is sent to the recipients, and
+the script hands the download link on itself (for example through a chat tool). It is allowed
+only when the tenant has turned `linkOnlyAllowed` on (super admin setting, off by default) and
+the confidentiality level of the transfer allows it (`linkOnlyAllowed` of the level, on by
+default), and only to internal depositors and API tokens. Otherwise `createTransfer` answers
+`403` [`link-only-forbidden`](errors.md#link-only-forbidden). It cannot be combined with
+`recipientVerification` (`400` [`link-only-conflict`](errors.md#link-only-conflict)). The
+tenant's `GET /api/v1/tenant` answer tells whether the tenant allows it (`features.linkOnly`).
+
+The flow is the one of section 2, with two differences:
+
+- in step 1, add `"linkOnly": true`; `recipients` becomes optional (the addresses are recorded
+  but never mailed);
+- in step 4, the answer of `finalize` (`202`) is the **only** place where `downloadUrl` appears.
+  Neither `GET /api/v1/transfers/{id}` nor the tenant administration returns it, nothing is
+  mailed and it is not logged. Keep it at once: `finalize` stays idempotent but never returns
+  the link a second time. The link works once the transfer is `available` (end of the
+  antivirus analysis).
+
+```bash
+# Step 1: create the transfer (no recipients needed).
+curl -sS -X POST https://transfer.entity-a.example.com/api/v1/transfers \
+  -H @auth-header.txt -H 'Content-Type: application/json' \
+  --data-binary @- <<'EOF'
+{
+  "senderEmail": "reporting@entity-a.example.com",
+  "expiryDays": 7,
+  "linkOnly": true,
+  "files": [ { "name": "report.pdf", "size": 2097152 } ]
+}
+EOF
+
+# ... upload with PATCH (steps 2 and 3), then finalize and keep the link:
+download_url=$(curl -sS -X POST \
+  https://transfer.entity-a.example.com/api/v1/transfers/trf_01JABCD8E3W5Q2Z7K9M4N6P0RS/finalize \
+  -H @auth-header.txt | jq -r '.downloadUrl')
+printf '%s\n' "$download_url" > report-link.txt   # the only chance to read it
+```
+
+```powershell
+# Step 1: create the transfer (no recipients needed).
+$headers = @{ Authorization = "Bearer $((Get-Content -Raw $env:TT_TOKEN_FILE).Trim())" }
+$body = @{
+  senderEmail = 'reporting@entity-a.example.com'
+  expiryDays  = 7
+  linkOnly    = $true
+  files       = @(@{ name = 'report.pdf'; size = 2097152 })
+} | ConvertTo-Json -Depth 4
+$transfer = Invoke-RestMethod -Method Post -Uri 'https://transfer.entity-a.example.com/api/v1/transfers' `
+  -Headers $headers -ContentType 'application/json' -Body $body
+
+# ... upload with PATCH (steps 2 and 3), then finalize and keep the link:
+$final = Invoke-RestMethod -Method Post -Headers $headers `
+  -Uri "https://transfer.entity-a.example.com/api/v1/transfers/$($transfer.id)/finalize"
+Set-Content -Path report-link.txt -Value $final.downloadUrl   # the only chance to read it
+```
+
+If the answer of `finalize` is lost, the link cannot be read again: the sender asks for a new one
+from **My transfers** (`POST /api/v1/me/transfers/{transferId}/link`, a browser session after
+the verification of the sender address), which revokes the old link. API tokens cannot call it.
+Consider protecting the transfer with a `password` sent through another channel.
+
+### Drop links
+
+Permanent drop links (a fixed address given to third parties, landing page `/drop/{token}`) are
+created and managed in the administration only (`/admin/tenants/{tenantId}/drop-links`, admin
+session with CSRF token): **API tokens cannot create, read or rotate them.** The URL of a link
+is shown once, at creation and at rotation. A third party deposits through the public flow
+(`getPublicDropLink`, then `startDepositSession` with `dropLinkToken`), which always requires an
+e-mail code, so it is not a way to script a deposit; scripts use an API token as in section 2. A
+link may carry an expiry (`expiresAt`, after which it answers `404 drop-link-invalid` like a
+disabled link) and caps the transfers created through it per hour (`maxDepositsPerHour`, 20 by
+default): beyond it, `startDepositSession` and `createTransfer` answer `429 rate-limited` with
+`Retry-After`.

@@ -170,7 +170,7 @@ func (f *fakeSubjects) Search(_ context.Context, p adminauth.Principal, ip netip
 func (f *fakeSubjects) Erase(_ context.Context, p adminauth.Principal, ip netip.Addr, tid tenant.ID, email string) (datasubject.EraseReport, error) {
 	return datasubject.EraseReport{
 		TransfersDeleted: 1, RecipientEntriesRemoved: 2, VerifiedAddressDeleted: true, InvitationsDeleted: 3, LogEntriesPseudonymised: 4,
-		AccessLinks: 5, ProofsDeleted: 6,
+		AccessLinks: 5, ProofsDeleted: 6, DropLinksUpdated: 7, DropLinksDisabled: 2,
 	}, f.record("Erase", p.SessionID, ip, tid, email)
 }
 
@@ -408,7 +408,7 @@ func TestTransferOperations(t *testing.T) {
 	if _, ok := body["nextCursor"]; ok {
 		t.Error("nextCursor present on the last page")
 	}
-	for _, absent := range []string{"invitationId", "firstDownloadedAt", "apiTokenId"} {
+	for _, absent := range []string{"invitationId", "firstDownloadedAt", "apiTokenId", "linkOnly", "dropLinkId"} {
 		if _, ok := item[absent]; ok {
 			t.Errorf("%s present: %v", absent, item)
 		}
@@ -437,6 +437,20 @@ func TestTransferOperations(t *testing.T) {
 	}
 	if _, ok := f1["sha256"]; ok {
 		t.Errorf("empty fingerprint rendered: %v", f1)
+	}
+	// A drop link deposit, link-only: both members are rendered (list and
+	// detail).
+	o.transfer.Origin, o.transfer.DropLinkID, o.transfer.LinkOnly = tenantops.OriginDropLink, "drl_01", true
+	resp, _ = s.ListTenantTransfers(ctx, gen.ListTenantTransfersRequestObject{TenantId: "ten_a"})
+	if _, body := decode(t, resp); body["items"].([]any)[0].(map[string]any)["dropLinkId"] != "drl_01" {
+		t.Errorf("drop link item = %v", body["items"])
+	}
+	saved := o.detail
+	o.detail.Transfer = o.transfer
+	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
+	o.detail = saved
+	if _, body := decode(t, got); body["linkOnly"] != true || body["dropLinkId"] != "drl_01" || body["origin"] != "drop_link" {
+		t.Errorf("drop link detail = %v", body)
 	}
 	if _, ok := f1["mediaType"]; ok {
 		t.Errorf("empty media type rendered: %v", f1)
@@ -779,7 +793,7 @@ func TestDataSubjectOperations(t *testing.T) {
 	t.Parallel()
 	ctx := ctxWith(store.SessionAuthenticated, delegated)
 	d := &fakeSubjects{summary: datasubject.Summary{
-		Email: "carol@customer.example.net", TransfersAsRecipient: 3, AuditEvents: 7, Invitations: 1, VerifiedAddress: true, Proofs: 4,
+		Email: "carol@customer.example.net", TransfersAsRecipient: 3, AuditEvents: 7, Invitations: 1, VerifiedAddress: true, Proofs: 4, DropLinks: 8,
 	}}
 	s := opsServer(nil, d, nil)
 	body := &gen.DataSubjectRequest{Email: "Carol@Customer.example.net"}
@@ -792,7 +806,7 @@ func TestDataSubjectOperations(t *testing.T) {
 	}
 	code, out := decode(t, resp)
 	if code != http.StatusOK || out["email"] != "carol@customer.example.net" || out["transfersAsRecipient"] != float64(3) ||
-		out["securityEvents"] != float64(0) || out["verifiedAddress"] != true || out["auditEvents"] != float64(7) || out["proofs"] != float64(4) {
+		out["securityEvents"] != float64(0) || out["verifiedAddress"] != true || out["auditEvents"] != float64(7) || out["proofs"] != float64(4) || out["dropLinks"] != float64(8) {
 		t.Errorf("summary = %d %v", code, out)
 	}
 	erase, err := s.EraseDataSubject(ctx, gen.EraseDataSubjectRequestObject{TenantId: "ten_a", Body: body})
@@ -802,7 +816,8 @@ func TestDataSubjectOperations(t *testing.T) {
 	code, out = decode(t, erase)
 	if code != http.StatusOK || out["transfersDeleted"] != float64(1) || out["recipientEntriesRemoved"] != float64(2) ||
 		out["verifiedAddressDeleted"] != true || out["invitationsDeleted"] != float64(3) || out["logEntriesPseudonymised"] != float64(4) ||
-		out["accessLinks"] != float64(5) || out["proofsDeleted"] != float64(6) {
+		out["accessLinks"] != float64(5) || out["proofsDeleted"] != float64(6) ||
+		out["dropLinksUpdated"] != float64(7) || out["dropLinksDisabled"] != float64(2) {
 		t.Errorf("report = %d %v", code, out)
 	}
 	if args := d.args["Erase"]; args[1] != clientIP || args[2] != tenant.ID("ten_a") {

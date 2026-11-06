@@ -39,6 +39,8 @@
     "empty": "You have no transfer in progress.",
     "caption": "Transfers in progress",
     "recipients": "Recipients",
+    "dropLink": "Recipients of the drop link “{label}”",
+    "dropLinkNoLabel": "Recipients of a drop link",
     "files": "Files",
     "status": "Status",
     "expires": "Available until",
@@ -66,7 +68,6 @@
     "not_scanned_encrypted": "Not analysed: encrypted file",
     "not_scanned_disabled": "Not analysed: antivirus disabled",
     "scan_error": "Analysis failed",
-    "not_scanned_disabled": "Not analysed: antivirus disabled",
     "unknown": "Unknown"
   },
   "detail": {
@@ -136,6 +137,21 @@
       "confirmButton": "Delete permanently",
       "cancel": "Keep the transfer",
       "done": "Transfer deleted."
+    },
+    "noRecipients": "No recipient recorded",
+    "link": {
+      "title": "Download link",
+      "text": "This is a link-only transfer: no mail was sent to the recipients. If you lost the link, you can get a new one.",
+      "button": "New link",
+      "confirmTitle": "Create a new link?",
+      "confirm": "A new link is created and the old one stops working at once: people who received it will no longer be able to download. The new link is shown only once.",
+      "confirmButton": "Create a new link",
+      "cancel": "Cancel",
+      "done": "New link created. Copy it now.",
+      "conflict": "A new link can no longer be created for this transfer (expired, deleted or not yet available).",
+      "shownOnce": "This link is shown only once: copy it now. The old link no longer works.",
+      "label": "New download link",
+      "copy": "Copy the link"
     }
   }
 }

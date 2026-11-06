@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -479,6 +480,59 @@ func TestReplyTransfers(t *testing.T) {
 		// The original stays out of the replier's transfers.
 		if _, err := ev.svc.Get(ctx, ev.a, sess, orig); !errors.Is(err, ErrNotFound) {
 			t.Errorf("Get original: %v", err)
+		}
+	})
+}
+
+// TestDropLinkTransfers checks that the recipients of a drop link are never
+// shown to its depositor (threat model T-311): the label of the link
+// replaces them, in the list and the detail.
+func TestDropLinkTransfers(t *testing.T) {
+	t.Parallel()
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		t.Parallel()
+		ctx := context.Background()
+		ev := newEnv(t, e)
+		tok, err := id.NewDropToken()
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := ev.db.DropLinks().Create(ctx, ev.a.ID, store.DropLink{
+			ID: id.New(id.DropLink), TokenHash: id.HashToken(tok), Label: "Supplier invoices",
+			Recipients: []string{carol}, ValidityDays: 7, Enabled: true, CreatedBy: "adm_1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dropped := ev.seed(ev.a, seedOptions{sender: dave, dropLink: l.ID, perRecipient: true})
+		ev.seed(ev.a, seedOptions{sender: dave})
+		sess := ev.mustSession(ev.a, dave).SessionInfo
+
+		page, err := ev.svc.List(ctx, ev.a, sess, "", 0)
+		if err != nil || len(page.Items) != 2 {
+			t.Fatalf("List = %+v, %v", page.Items, err)
+		}
+		for _, it := range page.Items {
+			if it.ID == dropped && (it.Recipients != nil || it.DropLinkLabel != l.Label || it.DownloadedBy != 0) {
+				t.Errorf("drop link item = %+v", it)
+			}
+			if it.ID != dropped && (len(it.Recipients) != 2 || it.DropLinkLabel != "") {
+				t.Errorf("other item = %+v", it)
+			}
+		}
+		got, err := ev.svc.Get(ctx, ev.a, sess, dropped)
+		if err != nil || got.Recipients != nil || got.Tracking != nil || got.DropLinkLabel != l.Label {
+			t.Errorf("Get = %+v, %v", got, err)
+		}
+		if _, err := (storeRepo{db: ev.db}).dropLinkLabels(ctx, ""); err == nil {
+			t.Error("dropLinkLabels accepted an empty tenant")
+		}
+		ev.fail("dropLinkLabels")
+		if _, err := ev.svc.List(ctx, ev.a, sess, "", 0); !errors.Is(err, errBoom) {
+			t.Errorf("List with dropLinkLabels failing: %v", err)
+		}
+		if _, err := ev.svc.Get(ctx, ev.a, sess, dropped); !errors.Is(err, errBoom) {
+			t.Errorf("Get with dropLinkLabels failing: %v", err)
 		}
 	})
 }

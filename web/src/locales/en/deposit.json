@@ -20,7 +20,9 @@
     "sending": "Sending the code…",
     "notAllowed": "Deposits are only possible from the internal network with an address of the organisation. To send files from outside, ask an internal user to invite you.",
     "invitationGone": "This invitation has expired or is no longer valid. Ask the person who invited you for a new invitation.",
-    "remoteHint": "Working outside the organisation’s network? If your address is already verified, a verification code is asked at each deposit."
+    "remoteHint": "Working outside the organisation’s network? If your address is already verified, a verification code is asked at each deposit.",
+    "dropLinkIntro": "To send files to \"{label}\", enter your e-mail address. A verification code will be sent to it at every deposit.",
+    "dropLinkGone": "This drop link is no longer valid. Ask the person who gave it to you for a new one."
   },
   "code": {
     "title": "Enter the verification code",
@@ -59,7 +61,9 @@
       "reply": "Your reply goes to {recipient}.",
       "addressError": "{address}: {message}",
       "tooMany": "Enter at most {max} recipients.",
-      "domainRefused": "This service does not allow sending to the domain of this address."
+      "domainRefused": "This service does not allow sending to the domain of this address.",
+      "dropLink": "Files will be sent to: {label}.",
+      "optionalHint": "Optional for a link-only transfer: no mail is sent to these addresses."
     },
     "message": {
       "label": "Message",
@@ -70,6 +74,10 @@
       "days": {
         "one": "{count} day",
         "other": "{count} days"
+      },
+      "forcedByLink": {
+        "one": "The files stay available {count} day, a duration set by this drop link.",
+        "other": "The files stay available {count} days, a duration set by this drop link."
       }
     },
     "password": {
@@ -118,9 +126,15 @@
       "label": "Recipients must verify their address by code",
       "hint": "Each recipient receives a personal link and must enter a code sent to their address before downloading. A forwarded link cannot be used.",
       "forced": "Required by the chosen confidentiality level.",
-      "requiredByLevel": "The chosen confidentiality level requires the recipients to verify their address."
+      "requiredByLevel": "The chosen confidentiality level requires the recipients to verify their address.",
+      "incompatibleLinkOnly": "Not available for a link-only transfer."
     },
-    "abuseBlocked": "This transfer exceeds a limit set by the organisation (volume, number of transfers or recipients): it is refused. Try again later or contact the administrator."
+    "abuseBlocked": "This transfer exceeds a limit set by the organisation (volume, number of transfers or recipients): it is refused. Try again later or contact the administrator.",
+    "linkOnly": {
+      "label": "Link only (no e-mail to the recipients)",
+      "hint": "No mail is sent: the link is shown to you once at the end of the upload and you pass it on yourself.",
+      "blockedByVerification": "Not available: the chosen confidentiality level requires recipient verification."
+    }
   },
   "upload": {
     "overall": "Overall progress",
@@ -167,6 +181,17 @@
       "infected": "This file contained a threat: it was deleted and will not be delivered.",
       "notScanned": "This file could not be analysed by the antivirus: it is delivered and the recipients are told so.",
       "scanError": "This file could not be analysed: it is withheld and will not be delivered."
+    },
+    "recipientsLinkOnly": "Recipients (not notified)",
+    "dropLink": "Sent through the drop link",
+    "linkOnly": {
+      "title": "Download link",
+      "intro": "No mail was sent to the recipients. Pass this link on to them yourself.",
+      "shownOnce": "This link is shown only once: copy it now.",
+      "label": "Download link",
+      "copy": "Copy the link",
+      "missing": "The link could not be shown. You can get a new one from \"My transfers\"; the old one will then stop working.",
+      "myTransfers": "Open \"My transfers\""
     }
   },
   "resume": {

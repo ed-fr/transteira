@@ -1,0 +1,117 @@
+{
+  "status": {
+    "active": "Actif",
+    "disabled": "Désactivé",
+    "revoked": "Révoqué",
+    "expired": "Expiré"
+  },
+  "list": {
+    "caption": "Liens de dépôt de l’entité",
+    "create": "Créer un lien de dépôt",
+    "empty": "Aucun lien de dépôt pour cette entité pour le moment.",
+    "columns": {
+      "label": "Libellé",
+      "recipients": "Destinataires",
+      "validity": "Durée de validité",
+      "level": "Niveau",
+      "status": "Statut",
+      "lastUsed": "Dernière utilisation",
+      "actions": "Actions",
+      "expiry": "Fin",
+      "cap": "Dépôts par heure"
+    },
+    "defaultLevel": "Niveau par défaut de l’entité",
+    "neverUsed": "Jamais utilisé",
+    "lastUsedNote": "La dernière utilisation est enregistrée au plus une fois par minute : elle peut avoir jusqu’à une minute de retard.",
+    "edit": "Modifier",
+    "enable": "Activer",
+    "disable": "Désactiver",
+    "rotate": "Renouveler",
+    "revoke": "Révoquer",
+    "noExpiry": "Sans échéance",
+    "capValue": "{count} par heure",
+    "unused": "Inutilisé depuis 12 mois",
+    "unusedHint": "Pensez à désactiver ou révoquer ce lien, ou à lui fixer une date d'expiration."
+  },
+  "form": {
+    "title": "Paramètres du lien de dépôt",
+    "submit": "Créer le lien",
+    "created": "Lien de dépôt créé.",
+    "back": "Retour aux liens de dépôt",
+    "label": {
+      "label": "Libellé",
+      "hint": "Nom du service ou de la collecte, affiché aux déposants (100 caractères au plus)."
+    },
+    "recipients": {
+      "label": "Destinataires",
+      "hint": "Adresses internes qui reçoivent les fichiers déposés, une par ligne (20 au plus). Elles ne sont jamais montrées aux déposants."
+    },
+    "validity": {
+      "legend": "Durée de conservation des dépôts",
+      "hint": "Imposée à chaque dépôt fait par ce lien. Elle doit être permise par le niveau de confidentialité.",
+      "days": {
+        "one": "{count} jour",
+        "other": "{count} jours"
+      }
+    },
+    "level": {
+      "label": "Niveau de confidentialité",
+      "hint": "Appliqué à chaque dépôt fait par ce lien.",
+      "default": "Niveau par défaut de l’entité"
+    },
+    "enabled": {
+      "label": "Lien activé",
+      "hint": "Un lien désactivé refuse les dépôts ; vous pouvez le réactiver plus tard."
+    },
+    "expiry": {
+      "label": "Date d'expiration (facultative)",
+      "hint": "Le lien refuse les dépôts après la fin de ce jour (heure locale). Laissez vide pour ne pas fixer de fin."
+    },
+    "cap": {
+      "label": "Dépôts par heure",
+      "hint": "Nombre de transferts acceptés par ce lien chaque heure, tous déposants confondus (de 1 à {max}). Au-delà, les dépôts sont refusés pendant un moment."
+    }
+  },
+  "edit": {
+    "title": "Modifier le lien {label}",
+    "legend": "Paramètres du lien de dépôt",
+    "intro": "L’adresse du lien ne change pas. Pour la remplacer, utilisez « Renouveler ».",
+    "saved": "Lien de dépôt mis à jour.",
+    "discardConfirm": "Vous avez des modifications non enregistrées. Fermer sans les enregistrer ?"
+  },
+  "levelsError": "Les niveaux de confidentialité n’ont pas pu être chargés : leurs noms s’affichent sous forme de clés et le choix du niveau peut être incomplet. Rechargez la page pour réessayer.",
+  "toggle": {
+    "enabledDone": "Le lien {label} est activé.",
+    "disabledDone": "Le lien {label} est désactivé."
+  },
+  "rotate": {
+    "title": "Renouveler le lien {label} ?",
+    "text": "Une nouvelle adresse est créée et l’ancienne cesse immédiatement de fonctionner : les personnes qui l’ont enregistrée ne pourront plus déposer. La nouvelle adresse ne sera affichée qu’une seule fois.",
+    "confirm": "Renouveler le lien"
+  },
+  "revoke": {
+    "title": "Révoquer le lien {label} ?",
+    "text": "Le lien cesse définitivement de fonctionner. Cette action est irréversible : pour reprendre les dépôts, créez un nouveau lien.",
+    "confirm": "Révoquer le lien",
+    "done": "Le lien {label} est révoqué."
+  },
+  "secret": {
+    "title": "Lien de dépôt {label}",
+    "rotatedTitle": "Nouveau lien de dépôt {label}",
+    "text": "Voici l’adresse du lien de dépôt. Copiez-la maintenant et transmettez-la aux personnes qui doivent déposer des fichiers : elle ne sera plus jamais affichée.",
+    "rotatedText": "Voici la nouvelle adresse du lien. L’ancienne ne fonctionne plus. Copiez-la maintenant : elle ne sera plus jamais affichée.",
+    "label": "Adresse du lien de dépôt"
+  },
+  "errors": {
+    "recipientTooLong": "Adresse trop longue.",
+    "labelTooLong": "Le libellé ne doit pas dépasser {max} caractères.",
+    "recipientsRequired": "Indiquez au moins un destinataire.",
+    "recipientsTooMany": "{max} destinataires au plus.",
+    "limit": "Le nombre maximal de liens de dépôt est atteint. Révoquez un lien inutilisé puis réessayez.",
+    "conflict": "Ce lien est révoqué : il ne peut plus être modifié. Rechargez la page.",
+    "notFound": "Ce lien n’existe plus. Rechargez la page.",
+    "expiryInvalid": "Saisissez une date valide.",
+    "expiryPast": "Choisissez une date à venir.",
+    "capInvalid": "Saisissez un nombre entier entre {min} et {max}."
+  }
+}

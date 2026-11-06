@@ -151,6 +151,41 @@ func TestRenderContent(t *testing.T) {
 	}
 }
 
+// TestRenderLinkOnly checks a statement of a link-only transfer: the
+// linkOnly member is signed and verified, the PDF says that no recipient
+// was identified, and a statement without it keeps its 2.0 encoding.
+func TestRenderLinkOnly(t *testing.T) {
+	t.Parallel()
+	st := sampleStatement()
+	before, _ := st.Marshal()
+	if bytes.Contains(before, []byte("linkOnly")) {
+		t.Fatal("linkOnly emitted while false")
+	}
+	st.LinkOnly, st.Recipients, st.RecipientDownloads = true, []string{}, nil
+	data, sig := signed(t, st)
+	if !bytes.Contains(data, []byte(`"linkOnly":true`)) {
+		t.Fatalf("statement = %s", data)
+	}
+	for lang, want := range map[string]string{"en": "Link only: recipient not identified", "fr": `Lien seul : destinataire non identifi\351`} {
+		doc, err := Render(st, data, sig, lang, KeysURL(hostA))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(doc, []byte(want)) {
+			t.Errorf("%s PDF lacks %q", lang, want)
+		}
+		got, err := Verify(bytes.NewReader(doc), []PublicKey{testPub(time.Time{})}, DefaultVerifyLimit)
+		if err != nil || !got.LinkOnly {
+			t.Errorf("Verify(%s) = %+v, %v", lang, got.LinkOnly, err)
+		}
+	}
+	// An explicit false is not the canonical encoding of the schema.
+	bad := bytes.Replace(data, []byte(`"linkOnly":true`), []byte(`"linkOnly":false`), 1)
+	if _, err := ParseStatement(bad); err == nil {
+		t.Error("ParseStatement accepted linkOnly false")
+	}
+}
+
 func TestRenderRejects(t *testing.T) {
 	t.Parallel()
 	st := sampleStatement()

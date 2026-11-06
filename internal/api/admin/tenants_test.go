@@ -449,6 +449,7 @@ func TestTenantErrors(t *testing.T) {
 		{fmt.Errorf("read: %w", &http.MaxBytesError{Limit: 5}), problem.CodePayloadTooLarge},
 		{fmt.Errorf("x: %w", tenantadmin.ErrUnsupportedMediaType), problem.CodeUnsupportedMediaType},
 		{tenantadmin.ErrUnknownBackgroundPreset, problem.CodeUnknownBackgroundPreset},
+		{tenantadmin.ErrLevelInUse, problem.CodeStateConflict},
 	}
 	for _, tt := range tests {
 		expectProblem(t, tenantError(tt.err), tt.code)
@@ -540,7 +541,7 @@ func TestTenantsHandlers(t *testing.T) {
 		Id: "ten_a", Name: "Entity A", Fqdn: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, MaxTransferCeiling: 10 << 30, Status: gen.TenantStatusActive, StorageQuotaBytes: 1 << 40,
 		StorageUsedBytes: 1 << 30, WebhookIncludeAddresses: new(true), AllowRemoteInternalDeposit: new(false), AllowTransferReply: new(false),
-		AntivirusEnabled: new(true), AntivirusEffective: new(false), CreatedAt: created, UpdatedAt: now,
+		AntivirusEnabled: new(true), AntivirusEffective: new(false), LinkOnlyAllowed: new(false), CreatedAt: created, UpdatedAt: now,
 	}
 
 	cursor, limit := "c1", 10
@@ -562,7 +563,7 @@ func TestTenantsHandlers(t *testing.T) {
 	}
 
 	upd, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(
-		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "allowTransferReply": true, "antivirusEnabled": false}`,
+		`{"name": "Entity A2", "defaultLanguage": "en", "maxTransferBytes": 1073741824, "webhookIncludeAddresses": false, "allowRemoteInternalDeposit": true, "allowTransferReply": true, "antivirusEnabled": false, "linkOnlyAllowed": true}`,
 	)})
 	if err != nil || upd.(gen.UpdateTenant200JSONResponse).Id != "ten_a" {
 		t.Fatalf("update %+v %v", upd, err)
@@ -571,14 +572,15 @@ func TestTenantsHandlers(t *testing.T) {
 	if *in.Name != "Entity A2" || *in.DefaultLanguage != "en" || *in.MaxTransferBytes != 1<<30 || in.FQDN != nil ||
 		in.MaxTransferCeiling != nil || in.StorageQuotaBytes != nil || in.WebhookIncludeAddresses == nil ||
 		*in.WebhookIncludeAddresses || in.AllowRemoteInternalDeposit == nil || !*in.AllowRemoteInternalDeposit || in.AllowTransferReply == nil || !*in.AllowTransferReply ||
-		in.AntivirusEnabled == nil || *in.AntivirusEnabled || svc.args["UpdateTenant"][3] != clientIP {
+		in.AntivirusEnabled == nil || *in.AntivirusEnabled || in.LinkOnlyAllowed == nil || !*in.LinkOnlyAllowed ||
+		svc.args["UpdateTenant"][3] != clientIP {
 		t.Errorf("update input %+v", svc.args["UpdateTenant"])
 	}
 	// No language: left unchanged.
 	if _, err := s.UpdateTenant(ctx, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(` { } `)}); err != nil {
 		t.Fatal(err)
 	}
-	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil || in.AllowRemoteInternalDeposit != nil || in.AllowTransferReply != nil || in.AntivirusEnabled != nil {
+	if in := svc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); in.DefaultLanguage != nil || in.WebhookIncludeAddresses != nil || in.AllowRemoteInternalDeposit != nil || in.AllowTransferReply != nil || in.AntivirusEnabled != nil || in.LinkOnlyAllowed != nil {
 		t.Errorf("language set: %+v", in)
 	}
 

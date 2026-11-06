@@ -359,11 +359,8 @@ func (s *Service) importTenantRow(in ImportInput) (*tenant.Tenant, error) {
 	if st == nil {
 		st = &ExportedSettings{}
 	}
-	// Not stored before the link-only and end-to-end steps of version 2:
-	// only the defaults can be imported without losing a setting.
-	if st.LinkOnlyAllowed != nil && *st.LinkOnlyAllowed {
-		return nil, importErr(ptrSettings+"/linkOnlyAllowed", "not supported yet")
-	}
+	// Not stored before the end-to-end step of version 2: only the default
+	// can be imported without losing a setting.
 	if st.E2EPolicy != nil && *st.E2EPolicy != e2eForbidden {
 		return nil, importErr(ptrSettings+"/e2ePolicy", "not supported yet")
 	}
@@ -396,6 +393,7 @@ func (s *Service) importTenantRow(in ImportInput) (*tenant.Tenant, error) {
 	t.AllowRemoteInternalDeposit = deref(st.AllowRemoteInternalDeposit)
 	t.AllowTransferReply = deref(st.AllowTransferReply)
 	t.WebhookIncludeAddresses = deref(st.WebhookIncludeAddresses)
+	t.LinkOnlyAllowed = deref(st.LinkOnlyAllowed)
 	return t, nil
 }
 
@@ -504,13 +502,10 @@ func planLevels(items []ExportedLevel) ([]store.ConfidentialityLevel, error) {
 	levels := make([]ConfidentialityLevel, len(items))
 	for i, l := range items {
 		rules := ptrLevels + strictjson.Pointer("items", i, "rules")
-		// Not stored before the link-only and end-to-end steps of
-		// version 2: only the defaults can be imported.
+		// Not stored before the end-to-end step of version 2: only the
+		// default can be imported.
 		if l.Rules.E2EPolicy != nil {
 			return nil, importErr(rules+"/e2ePolicy", "not supported yet")
-		}
-		if l.Rules.LinkOnlyAllowed != nil && !*l.Rules.LinkOnlyAllowed {
-			return nil, importErr(rules+"/linkOnlyAllowed", "not supported yet")
 		}
 		levels[i] = ConfidentialityLevel{
 			Key: l.Key, Labels: l.Labels, Descriptions: l.Descriptions, IsDefault: l.IsDefault,
@@ -519,6 +514,8 @@ func planLevels(items []ExportedLevel) ([]store.ConfidentialityLevel, error) {
 				RequirePassword: l.Rules.RequirePassword, RequireRecipientVerification: l.Rules.RequireRecipientVerification,
 				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+				// Absent means allowed.
+				LinkOnlyForbidden: l.Rules.LinkOnlyAllowed != nil && !*l.Rules.LinkOnlyAllowed,
 			},
 		}
 	}

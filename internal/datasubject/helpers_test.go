@@ -272,6 +272,20 @@ func (f *faultRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, 
 	return f.repo.eraseInvitations(ctx, tid, email, pseudonym, now)
 }
 
+func (f *faultRepo) countDropLinks(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	if err := f.fail("countDropLinks"); err != nil {
+		return 0, err
+	}
+	return f.repo.countDropLinks(ctx, tid, email)
+}
+
+func (f *faultRepo) eraseDropLinks(ctx context.Context, tid tenant.ID, email string, now time.Time) (store.DropLinkErasure, error) {
+	if err := f.fail("eraseDropLinks"); err != nil {
+		return store.DropLinkErasure{}, err
+	}
+	return f.repo.eraseDropLinks(ctx, tid, email, now)
+}
+
 func (f *faultRepo) countProofs(ctx context.Context, tid tenant.ID, email string) (int, error) {
 	if err := f.fail("countProofs"); err != nil {
 		return 0, err

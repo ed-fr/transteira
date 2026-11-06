@@ -45,6 +45,9 @@ var (
 	// is in progress (409 state-conflict with a Retry-After header). The
 	// error is a *[BusyError].
 	ErrBusy = errors.New("mytransfers: an upload of the transfer is in progress")
+	// ErrNotReissuable reports a link reissue for a transfer that is not
+	// link-only, or not available (409 state-conflict, since 2.0).
+	ErrNotReissuable = errors.New("mytransfers: no link to reissue for this transfer")
 )
 
 // Fields named by an [InvalidError]: JSON pointers of the request bodies,

@@ -24,7 +24,9 @@ type repo interface {
 	setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error
 	setSMTPTested(ctx context.Context, tid tenant.ID, version time.Time) error
 	completeSetup(ctx context.Context, tid tenant.ID, force bool, reviewedAt time.Time) (*tenant.Tenant, error)
-	updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error)
+	// updateTenantParts writes the parts of t selected by parts in one
+	// transaction (store.Tenants.UpdateWithPolicies).
+	updateTenantParts(ctx context.Context, t *tenant.Tenant, parts store.TenantParts) (*tenant.Tenant, error)
 	usedBytes(ctx context.Context, tid tenant.ID) (int64, error)
 	networkRules(ctx context.Context, tid tenant.ID) (store.NetworkRuleSet, error)
 	// replaceNetworkRules also records the review of the rules
@@ -138,8 +140,8 @@ func (r *storeRepo) updateTenant(ctx context.Context, t *tenant.Tenant) (*tenant
 	return r.db.Tenants().Update(ctx, t)
 }
 
-func (r *storeRepo) updateTenantWithAntivirus(ctx context.Context, t *tenant.Tenant, general, antivirus bool) (*tenant.Tenant, error) {
-	return r.db.Tenants().UpdateWithAntivirus(ctx, t, general, antivirus)
+func (r *storeRepo) updateTenantParts(ctx context.Context, t *tenant.Tenant, parts store.TenantParts) (*tenant.Tenant, error) {
+	return r.db.Tenants().UpdateWithPolicies(ctx, t, parts)
 }
 
 func (r *storeRepo) setTenantStatus(ctx context.Context, tid tenant.ID, status tenant.Status) error {

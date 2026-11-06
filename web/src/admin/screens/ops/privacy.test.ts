@@ -152,8 +152,29 @@ describe('summary', () => {
     });
   });
 
+  it('adds the drop link rows when the server reports them', () => {
+    expect(hasData({ ...empty, dropLinks: 1 })).toBe(true);
+    expect(summaryRows({ ...empty, dropLinks: 2 }, t, format).at(-1)).toEqual({
+      id: 'dropLinks',
+      term: 'opsPrivacy.summary.dropLinks',
+      value: '#2',
+    });
+    const base: DataSubjectEraseReport = {
+      transfersDeleted: 0,
+      recipientEntriesRemoved: 0,
+      verifiedAddressDeleted: false,
+      invitationsDeleted: 0,
+      logEntriesPseudonymised: 0,
+    };
+    const rows = reportRows({ ...base, dropLinksUpdated: 3, dropLinksDisabled: 1 }, t, format);
+    expect(rows.slice(-2).map((r) => [r.id, r.value])).toEqual([
+      ['dropLinksUpdated', '#3'],
+      ['dropLinksDisabled', '#1'],
+    ]);
+  });
+
   it('lists what is erased and what is kept', () => {
-    expect(ERASED_KEYS.length).toBe(6);
+    expect(ERASED_KEYS.length).toBe(7);
     expect(ERASED_KEYS).toContain('opsPrivacy.erase.erased.proofs');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.blocklist');
     expect(KEPT_KEYS).toContain('opsPrivacy.erase.kept.backups');

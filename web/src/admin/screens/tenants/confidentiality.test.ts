@@ -50,6 +50,16 @@ describe('drafts', () => {
     expect(fromDraft(toDraft(level, 1))).toEqual(level);
   });
 
+  it('reads an absent linkOnlyAllowed as true and writes only a prohibition', () => {
+    expect(toDraft(level, 1).linkOnlyAllowed).toBe(true);
+    const forbidden = { ...level, rules: { ...level.rules, linkOnlyAllowed: false } };
+    const draft = toDraft(forbidden, 1);
+    expect(draft.linkOnlyAllowed).toBe(false);
+    expect(fromDraft(draft).rules.linkOnlyAllowed).toBe(false);
+    expect(fromDraft(toDraft(level, 1)).rules).not.toHaveProperty('linkOnlyAllowed');
+    expect(newDraft(2, false).linkOnlyAllowed).toBe(true);
+  });
+
   it('omits empty descriptions and trims texts', () => {
     const d = valid(1, ' a ', true);
     d.labels = { fr: ' A ', en: 'A' };

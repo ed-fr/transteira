@@ -1,6 +1,7 @@
 package id
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math/big"
@@ -41,6 +42,10 @@ const (
 	// (since 1.1), which appears in the fragment of the mailed link and is
 	// looked up by its SHA-256 hash.
 	AccessLinkTokenPrefix = "mta"
+	// DropTokenPrefix starts a permanent drop link token (since 2.0), which
+	// appears in the landing page URL of the link and is looked up by its
+	// SHA-256 hash (see HashToken).
+	DropTokenPrefix = "ttd"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -58,6 +63,9 @@ const (
 	// AccessLinkTokenBytes is the entropy of an access link token (256
 	// bits): single use, valid 15 minutes.
 	AccessLinkTokenBytes = 32
+	// DropTokenBytes is the entropy of a drop link token (256 bits): it
+	// lives until the link is rotated or revoked, without expiry.
+	DropTokenBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
@@ -101,6 +109,44 @@ const DownloadPath = "/d/"
 // and token are used as they are, without validation.
 func DownloadURL(fqdn, token string) string {
 	return "https://" + fqdn + DownloadPath + token
+}
+
+// NewDropToken returns a new permanent drop link token: DropTokenPrefix
+// followed by DropTokenBytes of crypto/rand entropy in base62 (matching the
+// OpenAPI DropToken pattern "^ttd_[A-Za-z0-9]{22,43}$"). Only its HashToken
+// is stored.
+func NewDropToken() (string, error) {
+	return NewToken(DropTokenPrefix, DropTokenBytes)
+}
+
+// DropTokenValid reports whether s has the shape of a drop link token
+// ("ttd_" + 22 to 43 base62 characters). Callers check the shape before
+// hashing and looking a token up, so that a malformed value is refused
+// without a database query.
+func DropTokenValid(s string) bool {
+	return TokenValid(DropTokenPrefix, s, MinTokenBodyLen, MaxTokenBodyLen)
+}
+
+// DropPath is the path of the web landing page of a permanent drop link,
+// followed by the drop token: the address given to third parties is
+// "https://" + FQDN + DropPath + token (see DropURL).
+const DropPath = "/drop/"
+
+// DropURL returns the landing page of the drop link token for the tenant
+// served on fqdn: "https://" + fqdn + DropPath + token. As for DownloadURL,
+// fqdn must be the host name stored for the tenant, never one taken from a
+// request; it and token are used as they are, without validation.
+func DropURL(fqdn, token string) string {
+	return "https://" + fqdn + DropPath + token
+}
+
+// HashToken returns the SHA-256 of a public bearer token, the only form in
+// which the store keeps a token looked up by hash (download, access link,
+// session and drop link tokens, API tokens). The hash is of the whole
+// token, prefix included.
+func HashToken(token string) []byte {
+	h := sha256.Sum256([]byte(token))
+	return h[:]
 }
 
 // MyTransfersPath is the path of the web "my transfers" page (spec 8.7):

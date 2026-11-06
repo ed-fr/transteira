@@ -184,6 +184,13 @@ func (r faultRepo) makeAvailable(ctx context.Context, t *tenant.Tenant, trfID st
 	return r.inner.makeAvailable(ctx, t, trfID, perRecipient, tokens, now)
 }
 
+func (r faultRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	if err := r.f.hit("dropLink"); err != nil {
+		return store.DropLink{}, err
+	}
+	return r.inner.dropLink(ctx, tid, linkID)
+}
+
 func (r faultRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
 	if err := r.f.hit("recipientLinks"); err != nil {
 		return nil, err

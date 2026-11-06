@@ -1,6 +1,7 @@
 // Route table of the public application (tenant hosts). The server serves the application
 // shell on the same paths (internal/httpserver/webui.go) and answers other paths with 404.
 import type { Route } from '../shared/router/router.svelte';
+import DropLinkLanding from './screens/DropLinkLanding.svelte';
 import Download from './screens/Download.svelte';
 import Help from './screens/Help.svelte';
 import HelpPrint from './screens/HelpPrint.svelte';
@@ -28,6 +29,12 @@ export const routes: readonly Route<ScreenComponent>[] = [
     component: InvitationLanding,
     titleKey: 'invitation.landing.title',
     helpTopic: 'invitation',
+  },
+  {
+    pattern: '/drop/:token',
+    component: DropLinkLanding,
+    titleKey: 'dropLink.landing.title',
+    helpTopic: 'drop-link',
   },
   { pattern: '/invite', component: Invite, titleKey: 'invitation.invite.title', helpTopic: 'invite' },
   { pattern: '/me', component: MyTransfers, titleKey: 'myTransfers.title', helpTopic: 'my-transfers' },

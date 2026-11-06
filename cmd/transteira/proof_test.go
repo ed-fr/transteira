@@ -439,3 +439,18 @@ func TestProofVerifyEscapesSignedFields(t *testing.T) {
 		t.Fatalf("--json = %d, %q", code, out)
 	}
 }
+
+func TestProofVerifyLinkOnly(t *testing.T) {
+	e := newProofEnv(t)
+	keys := writeFile(t, "keys.json", keyListJSONOf(t, e.pub))
+	st := statement(e.pub.KeyID)
+	code, out, _ := runCmd("proof", "verify", "--keys", keys, writePDF(t, st, e.priv))
+	if code != exitOK || strings.Contains(out, "Link only") {
+		t.Fatalf("verify = %d, %q", code, out)
+	}
+	st.LinkOnly = true
+	code, out, _ = runCmd("proof", "verify", "--keys", keys, writePDF(t, st, e.priv))
+	if code != exitOK || !strings.Contains(out, "Link only:          recipient not identified") {
+		t.Fatalf("verify(link only) = %d, %q", code, out)
+	}
+}

@@ -146,7 +146,10 @@ test.describe('tenant configuration', () => {
       await page.getByRole('radio', { name: 'French' }).check();
       await page.getByRole('textbox', { name: /^Maximum size per transfer/ }).fill('5');
       await page.getByRole('combobox', { name: 'Unit of Maximum size per transfer' }).selectOption('GiB');
-      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await page
+        .getByRole('group', { name: 'Entity settings' })
+        .getByRole('button', { name: 'Save', exact: true })
+        .click();
       await expect(page.getByText('The general settings have been saved.')).toBeVisible();
       created.name = renamed;
 

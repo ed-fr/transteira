@@ -171,6 +171,25 @@ Une réponse arrive comme un transfert ordinaire : vous recevez le mail de notif
 
 Vous seul recevez la réponse : l’expéditeur d’origine est son unique destinataire. Elle est refusée à son auteur si votre adresse est bloquée ou n’appartient plus à l’organisation, ou si votre transfert d’origine a expiré ou a été supprimé.
 
+<!-- topic: link-only -->
+## Envoyer en lien seul
+
+L’option **Lien seul** (sans envoi de mail aux destinataires) vous permet de transmettre vous-même le lien de téléchargement, par exemple par une messagerie instantanée. Elle n’est proposée que si votre organisation l’autorise, et seulement aux utilisateurs internes (y compris depuis l’extérieur lorsque l’organisation le permet) et aux jetons d’API. Une personne invitée, une réponse à un transfert ou un lien de dépôt ne peuvent pas l’utiliser. Le niveau de confidentialité choisi doit lui aussi l’autoriser.
+
+Dans le formulaire [Nouveau transfert](topic:deposit-options), cochez **Lien seul** :
+
+- les **Destinataires** deviennent facultatifs. S’ils sont renseignés, ils sont enregistrés mais **ne reçoivent aucun mail** ;
+- l’option est incompatible avec la vérification du destinataire : cocher l’une décoche l’autre ;
+- l’analyse antivirus et les autres règles s’appliquent comme d’habitude.
+
+Quand vous cliquez sur **Envoyer**, le lien s’affiche **une seule fois**, à la fin du dépôt. Cliquez sur **Copier le lien** et conservez-le avant de quitter la page : il ne figure ni dans le mail de confirmation, ni dans [Mes envois](topic:my-transfers). Le lien ne fonctionne que lorsque l’analyse antivirus est terminée ; le mail de confirmation vous prévient alors. Comme toute personne qui détient le lien peut télécharger, transmettez-le par un canal de confiance et protégez le transfert par un mot de passe communiqué séparément.
+
+![Récapitulatif Transfert envoyé pour un transfert en lien seul, avec le lien de téléchargement affiché une seule fois et le bouton Copier le lien](../screenshots/fr/deposit-link-only.png)
+
+> **À savoir** Sans destinataire identifié, le suivi des téléchargements ne désigne personne.
+
+Si vous perdez le lien, ouvrez [Mes envois](topic:my-transfers) et cliquez sur **Nouveau lien** : l’ancien lien cesse de fonctionner.
+
 <!-- topic: my-transfers -->
 ## Mes envois
 
@@ -203,6 +222,7 @@ Ouvrez un transfert pour en voir le détail : les fichiers avec leur taille et l
 
 - **Supprimer** : après confirmation, les fichiers sont effacés définitivement et les liens de téléchargement cessent de fonctionner.
 - **Prolonger** : choisissez une nouvelle durée parmi celles que votre organisation autorise pour le niveau de confidentialité du transfert. La nouvelle expiration est comptée à partir d’aujourd’hui et ne peut jamais être antérieure à l’actuelle. Un transfert ne peut pas rester disponible plus de **90 jours** après sa création : au-delà, la page indique la date la plus lointaine possible, et il faut renvoyer les fichiers. Les destinataires qui n’ont pas encore téléchargé reçoivent un nouveau rappel la veille de la nouvelle expiration. Un transfert dont le nombre de téléchargements est atteint ne peut pas être prolongé.
+- **Nouveau lien** : pour un transfert en lien seul (voir [Envoyer en lien seul](topic:link-only)) dont vous avez perdu le lien, génère un nouveau lien, affiché une seule fois, même pendant l’analyse antivirus (le nouveau lien fonctionne dès que le transfert est disponible). L’ancien lien cesse de fonctionner immédiatement.
 
 Cliquez sur **Se déconnecter** quand vous avez terminé, surtout sur un ordinateur partagé.
 
@@ -259,6 +279,19 @@ Si le lien ne fonctionne pas :
 
 - **Invitation introuvable** : le lien est incomplet. Copiez-le en entier depuis le mail, ou cliquez directement dessus.
 - **Invitation expirée** : l’invitation n’est plus valable. Demandez-en une nouvelle à la personne qui vous a invité.
+
+<!-- topic: drop-link -->
+## Envoyer des fichiers par un lien de dépôt
+
+Un service de l’organisation peut vous avoir donné un *lien de dépôt* : une adresse fixe qui permet de lui envoyer des fichiers sans invitation personnelle. L’adresse ressemble à `transfer.entity-a.example.com/drop/ttd_…`.
+
+Ouvrez le lien. La page d’accueil indique le nom du service (le **libellé** du lien), la durée de conservation des fichiers et le niveau de confidentialité. Elle ne montre jamais les adresses des destinataires. Cliquez sur **Continuer**, puis [identifiez-vous par un code](topic:deposit-identify) reçu à votre adresse mail : le code est redemandé à **chaque** utilisation du lien, même si vous l’avez déjà saisi.
+
+![Page d’accueil d’un lien de dépôt avec le nom du service, la durée de conservation, le niveau de confidentialité et le bouton Continuer](../screenshots/fr/drop-link.png)
+
+Le formulaire affiche ensuite le service auquel les fichiers seront envoyés, sans que vous ayez rien à saisir : les destinataires, la durée et le niveau sont fixés par le lien. Les adresses des destinataires ne vous sont jamais montrées, ni ici, ni dans Mes envois, ni dans le mail de confirmation, qui indiquent le nom du lien à la place ; les preuves de dépôt et de remise de ces envois sont réservées aux administrateurs. Vous pouvez ajouter un message et, si le niveau l’exige, un mot de passe ; le reste du formulaire fonctionne comme décrit dans [Remplir le transfert](topic:deposit-options). Un seul transfert est possible par vérification : pour envoyer d’autres fichiers, ouvrez de nouveau le lien et saisissez un nouveau code. Les limites propres aux utilisateurs externes (volume et nombre de dépôts) s’appliquent.
+
+Si la page indique que le lien est introuvable, il est incomplet, désactivé, révoqué ou remplacé par un nouveau : demandez-en l’adresse actuelle à la personne qui vous l’a donné.
 
 <!-- topic: deposit-problems -->
 ## Problèmes courants

@@ -4,7 +4,7 @@
   import { api } from '../../shared/api/api';
   import { Alert, Button, Spinner, announce } from '../../shared/components';
   import { formatBytes, formatDate, t } from '../../shared/i18n/i18n.svelte';
-  import { isSessionExpired, statusKey, type MyTransfer } from './logic';
+  import { dropLinkRecipients, isSessionExpired, statusKey, type MyTransfer } from './logic';
 
   interface Props {
     /** Address of the session. */
@@ -97,7 +97,7 @@
         {#each items as item (item.id)}
           <tr>
             <th scope="row" class="tt-break recipients">
-              {item.recipients.join(', ')}
+              {dropLinkRecipients(item, t) ?? item.recipients.join(', ')}
               {#if item.confidentialityLevel}
                 <span class="level tt-text-sm">{item.confidentialityLevel.label}</span>
               {/if}
@@ -120,7 +120,9 @@
             <td>
               <Button variant="secondary" small onclick={() => onopen(item.id)}>
                 {t('myTransfers.list.open')}<span class="visually-hidden">
-                  {t('myTransfers.list.openFor', { recipients: item.recipients.join(', ') })}</span
+                  {t('myTransfers.list.openFor', {
+                    recipients: dropLinkRecipients(item, t) ?? item.recipients.join(', '),
+                  })}</span
                 >
               </Button>
             </td>

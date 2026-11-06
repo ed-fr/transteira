@@ -21,6 +21,11 @@ var (
 	// ErrInvitationGone reports an invitation that exists but is expired or
 	// revoked (410 invitation-gone).
 	ErrInvitationGone = errors.New("deposit: invitation expired or revoked")
+	// ErrDropLinkInvalid reports a permanent drop link (since 2.0) that is
+	// malformed, unknown in the tenant, disabled or revoked: the same answer
+	// for each (404 drop-link-invalid), written to the security log as
+	// drop_link_invalid.
+	ErrDropLinkInvalid = errors.New("deposit: drop link not valid")
 	// ErrReplyGone reports that the source transfer of a reply
 	// ([Service.OpenReply]) expired, or that it or the recipient link no
 	// longer exists in the tenant (410 transfer-gone).

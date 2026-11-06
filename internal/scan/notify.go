@@ -36,15 +36,28 @@ func one(j mail.Job, err error) ([]mail.Job, error) {
 // none, since the sender never sees a recipient link (P27, T-199).
 func (w *Worker) notifyAvailable(ctx context.Context, k key, t *tenant.Tenant, d store.TransferDetails, link string, links []notify.RecipientLink) {
 	v := notify.ViewOf(d)
+	if v.DropLink {
+		// The confirmation names the link instead of its recipients
+		// (T-311); without its label (gone, or a failing read, logged),
+		// it names none.
+		if l, err := w.repo.dropLink(ctx, t.ID, d.DropLinkID); err == nil {
+			v.DropLinkLabel = l.Label
+		} else if !errors.Is(err, store.ErrNotFound) {
+			w.log(ctx, slog.LevelError, "drop link not read: the confirmation names no link", k, slog.Any("error", err))
+		}
+	}
 	recipients := func() ([]mail.Job, error) { return w.notifier.RecipientJobs(ctx, t, v, link) }
 	if d.LinkMode == store.LinkModePerRecipient {
 		recipients = func() ([]mail.Job, error) { return w.notifier.PerRecipientJobs(ctx, t, v, links) }
 	}
 	builders := []builder{
-		{mail.TemplateTransferNotification, recipients},
 		{mail.TemplateTransferConfirmation, func() ([]mail.Job, error) {
 			return one(w.notifier.SenderConfirmation(ctx, t, v, link))
 		}},
+	}
+	if !d.LinkOnly {
+		// A link-only transfer is never mailed to its recipients.
+		builders = append([]builder{{mail.TemplateTransferNotification, recipients}}, builders...)
 	}
 	if count(v, notify.ScanInfected)+count(v, notify.ScanWithheld) > 0 {
 		builders = append(builders, w.problemsBuilder(ctx, t, v))
@@ -145,6 +158,12 @@ func (w *Worker) sendDeferred(ctx context.Context, k key, d store.TransferDetail
 				return
 			}
 			w.notifyAvailable(ctx, k, t, d, "", links)
+			return
+		}
+		if d.LinkOnly {
+			// No sealed token: the sender alone holds the link, and only
+			// the confirmation (without link) is sent.
+			w.notifyAvailable(ctx, k, t, d, "", nil)
 			return
 		}
 		token, err := w.vault.Open(ctx, k.tid, crypto.PurposeSecret, d.DownloadTokenKeyID)

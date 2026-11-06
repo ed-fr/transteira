@@ -84,6 +84,7 @@ export const TENANT_OPS_SECTIONS = [
   'blocklist',
   'abuseReports',
   'tokens',
+  'dropLinks',
   'webhooks',
   'audit',
   'security',
@@ -106,6 +107,7 @@ export const AUDITOR_TENANT_SECTIONS = [
   'general',
   'sso',
   'transfers',
+  'dropLinks',
   'audit',
   'security',
   'stats',
@@ -155,6 +157,7 @@ export interface TenantLinkGroup {
 const TENANT_SEGMENTS: Partial<Record<TenantSection, string>> = {
   recipientRules: 'recipient-rules',
   abuseReports: 'abuse-reports',
+  dropLinks: 'drop-links',
   security: 'security-events',
 };
 

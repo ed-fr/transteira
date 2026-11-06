@@ -1,13 +1,16 @@
 <script lang="ts">
   // One transfer of the sender: message, options, files with SHA-256 and antivirus status,
-  // per-recipient tracking, extension of the validity and deletion (with confirmation).
-  import { onMount, tick } from 'svelte';
+  // per-recipient tracking, extension of the validity and deletion (with confirmation). For an
+  // available link-only transfer (since 2.0), a "New link" button issues a fresh download link
+  // (the old one stops working, after a confirmation) and shows it once, with a Copy button.
+  import { onDestroy, onMount, tick } from 'svelte';
   import { api } from '../../shared/api/api';
   import { ApiProblem } from '../../shared/api/client';
   import { problemMessage } from '../../shared/api/problem';
   import {
     Alert,
     Button,
+    CopyButton,
     Dialog,
     ProofsSection,
     RadioGroup,
@@ -18,6 +21,8 @@
   import { formatBytes, formatDate, i18n, t } from '../../shared/i18n/i18n.svelte';
   import { recipientsWithDelivery } from '../../shared/api/proof';
   import {
+    canReissueLink,
+    dropLinkRecipients,
     extendFailure,
     extensionOptions,
     isSessionExpired,
@@ -41,6 +46,7 @@
   let transfer = $state<MyTransferDetail | undefined>();
   let loadFailed = $state(false);
   let heading: HTMLElement | undefined = $state();
+  let linkHeading: HTMLElement | undefined = $state();
   let extendDays = $state<number | undefined>();
   let extendError = $state<string | undefined>();
   let extending = $state(false);
@@ -48,10 +54,17 @@
   let deleteOpen = $state(false);
   let deleting = $state(false);
   let deleteError = $state<string | undefined>();
+  let linkOpen = $state(false);
+  let linkBusy = $state(false);
+  let linkError = $state<string | undefined>();
+  // The new link of a link-only transfer, shown once and dropped when the page goes away.
+  let newLink = $state<string | undefined>();
 
   const options = $derived(
     transfer === undefined ? [] : extensionOptions(Date.now(), transfer.expiresAt, transfer.extendableTo),
   );
+  const canReissue = $derived(transfer !== undefined && canReissueLink(transfer));
+  const viaDropLink = $derived(transfer === undefined ? undefined : dropLinkRecipients(transfer, t));
   const canExtend = $derived(transfer?.status === 'available' && options.length > 0);
   const fileNames = $derived(new Map((transfer?.files ?? []).map((f) => [f.id, fullName(f.path, f.name)])));
 
@@ -79,6 +92,41 @@
   onMount(() => {
     void load();
   });
+
+  onDestroy(() => {
+    newLink = undefined;
+  });
+
+  async function reissue(): Promise<void> {
+    if (linkBusy) {
+      return;
+    }
+    linkBusy = true;
+    linkError = undefined;
+    try {
+      const { data } = await api.post('/me/transfers/{transferId}/link', { path: { transferId: id } });
+      newLink = data.downloadUrl;
+      linkOpen = false;
+      announce(t('myTransfers.detail.link.done'));
+      await tick();
+      linkHeading?.focus();
+    } catch (err) {
+      if (isSessionExpired(err)) {
+        onexpired();
+        return;
+      }
+      if (err instanceof ApiProblem && err.status === 404) {
+        ondeleted();
+        return;
+      }
+      linkError =
+        err instanceof ApiProblem && err.status === 409
+          ? t('myTransfers.detail.link.conflict')
+          : problemMessage(i18n, err);
+    } finally {
+      linkBusy = false;
+    }
+  }
 
   $effect(() => {
     if (transfer !== undefined) {
@@ -187,7 +235,12 @@
 
   <dl class="tt-dl">
     <dt>{t('myTransfers.list.recipients')}</dt>
-    <dd class="tt-break">{transfer.recipients.join(', ')}</dd>
+    <dd class="tt-break">
+      {viaDropLink ??
+        (transfer.recipients.length === 0
+          ? t('myTransfers.detail.noRecipients')
+          : transfer.recipients.join(', '))}
+    </dd>
     <dt>{t('myTransfers.list.status')}</dt>
     <dd>{t(statusKey(transfer.status))}</dd>
     <dt>{t('myTransfers.detail.created')}</dt>
@@ -314,14 +367,55 @@
     </div>
   {/if}
 
-  <ProofsSection
-    headingId="proofs"
-    base={`/me/transfers/${encodeURIComponent(id)}`}
-    status={transfer.status}
-    delivered={transfer.downloadCount > 0}
-    recipients={recipientsWithDelivery(transfer.recipientTracking)}
-    {onexpired}
-  />
+  {#if viaDropLink === undefined}
+    <!-- The proofs of a drop link deposit name its recipients: administrators only (T-311). -->
+    <ProofsSection
+      headingId="proofs"
+      base={`/me/transfers/${encodeURIComponent(id)}`}
+      status={transfer.status}
+      delivered={transfer.downloadCount > 0}
+      recipients={recipientsWithDelivery(transfer.recipientTracking)}
+      {onexpired}
+    />
+  {/if}
+
+  {#if canReissue}
+    <h2 class="tt-text-lg" tabindex="-1" bind:this={linkHeading}>{t('myTransfers.detail.link.title')}</h2>
+    {#if newLink}
+      <Alert severity="warning" live={false}>
+        <p class="tt-text-bold tt-mb-0">{t('myTransfers.detail.link.shownOnce')}</p>
+      </Alert>
+      <p class="tt-mb-0" id="tt-mytransfer-link-label">{t('myTransfers.detail.link.label')}</p>
+      <code class="tt-new-link" aria-labelledby="tt-mytransfer-link-label">{newLink}</code>
+      <div class="tt-mb-4">
+        <CopyButton text={newLink} label={t('myTransfers.detail.link.copy')} />
+      </div>
+    {/if}
+    <p>{t('myTransfers.detail.link.text')}</p>
+    <div class="tt-cluster">
+      <Button
+        variant="secondary"
+        onclick={() => {
+          linkError = undefined;
+          linkOpen = true;
+        }}>{t('myTransfers.detail.link.button')}</Button
+      >
+    </div>
+    <Dialog bind:open={linkOpen} title={t('myTransfers.detail.link.confirmTitle')} hideCloseButton={linkBusy}>
+      <p>{t('myTransfers.detail.link.confirm')}</p>
+      {#if linkError}
+        <Alert severity="error">{linkError}</Alert>
+      {/if}
+      {#snippet actions()}
+        <Button loading={linkBusy} onclick={() => void reissue()}>
+          {t('myTransfers.detail.link.confirmButton')}
+        </Button>
+        <Button variant="secondary" disabled={linkBusy} onclick={() => (linkOpen = false)}>
+          {t('myTransfers.detail.link.cancel')}
+        </Button>
+      {/snippet}
+    </Dialog>
+  {/if}
 
   <h2 class="tt-text-lg">{t('myTransfers.detail.extend.title')}</h2>
   {#if extendedNotice}
@@ -365,7 +459,9 @@
   </div>
 
   <Dialog bind:open={deleteOpen} title={t('myTransfers.detail.delete.title')} hideCloseButton={deleting}>
-    <p>{t('myTransfers.detail.delete.confirm', { recipients: transfer.recipients.join(', ') })}</p>
+    <p>
+      {t('myTransfers.detail.delete.confirm', { recipients: viaDropLink ?? transfer.recipients.join(', ') })}
+    </p>
     {#if deleteError}
       <Alert severity="error">{deleteError}</Alert>
     {/if}
@@ -405,6 +501,19 @@
 
   .plain {
     font-weight: var(--tt-font-weight-normal);
+  }
+
+  .tt-new-link {
+    display: block;
+    margin: var(--tt-space-2) 0;
+    padding: var(--tt-space-3);
+    border: var(--tt-border-width) solid var(--tt-border);
+    border-radius: var(--tt-radius-sm);
+    background: var(--tt-surface-muted);
+    color: var(--tt-text);
+    font-family: var(--tt-font-mono);
+    word-break: break-all;
+    user-select: all;
   }
 
   .nowrap {

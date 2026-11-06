@@ -35,6 +35,11 @@ type ConfidentialityRules struct {
 	RequireRecipientVerification  bool
 	InternalRecipientsOnly        bool
 	ForceDeleteAfterFirstDownload bool
+	// LinkOnlyForbidden forbids the link-only transfers at this level
+	// (since 2.0, OpenAPI linkOnlyAllowed false). The zero value allows
+	// them, as an absent linkOnlyAllowed does; the tenant switch still
+	// applies.
+	LinkOnlyForbidden bool
 }
 
 // ConfidentialityLevel is a confidentiality level of a tenant (OpenAPI
@@ -71,6 +76,7 @@ func levelOf(l store.ConfidentialityLevel) ConfidentialityLevel {
 			AllowedExpiryDays: r.AllowedExpiryDays(), MaxDownloads: r.MaxDownloadsCap,
 			RequirePassword: r.RequirePassword, RequireRecipientVerification: r.RequireRecipientVerification,
 			InternalRecipientsOnly: r.InternalRecipientsOnly, ForceDeleteAfterFirstDownload: r.ForceDeleteAfterFirstDownload,
+			LinkOnlyForbidden: !l.LinkOnlyAllowed,
 		},
 	}
 }
@@ -100,6 +106,8 @@ func (s *Service) GetConfidentialityLevels(ctx context.Context, p adminauth.Prin
 // language, and allowed validities that are a non-empty subset of {1, 7,
 // 30}. A malformed value is an *InvalidError naming it, checked only once
 // access to the tenant is granted. Past transfers keep their snapshot.
+// Removing a level that an enabled, non-revoked drop link uses is
+// ErrLevelInUse (since 2.0).
 func (s *Service) UpdateConfidentialityLevels(ctx context.Context, p adminauth.Principal, tid tenant.ID, levels []ConfidentialityLevel, ip netip.Addr) ([]ConfidentialityLevel, error) {
 	if _, err := s.writable(ctx, p, tid); err != nil {
 		return nil, err
@@ -112,6 +120,8 @@ func (s *Service) UpdateConfidentialityLevels(ctx context.Context, p adminauth.P
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return nil, ErrNotFound
+	case errors.Is(err, store.ErrConflict):
+		return nil, ErrLevelInUse
 	case errors.Is(err, store.ErrInvalid):
 		// The checks above mirror the store's, so this cannot happen
 		// unless they drift apart.
@@ -168,6 +178,7 @@ func levelsToStore(levels []ConfidentialityLevel) ([]store.ConfidentialityLevel,
 		}
 		out[i] = store.ConfidentialityLevel{
 			Key: l.Key, Position: i, Labels: l.Labels, Descriptions: l.Descriptions, IsDefault: l.IsDefault, Rules: rules,
+			LinkOnlyAllowed: !l.Rules.LinkOnlyForbidden,
 		}
 	}
 	if defaults == 0 {

@@ -50,6 +50,11 @@ type Statement struct {
 	// file names are then generic and the hashes are those of the
 	// ciphertext.
 	EndToEndEncrypted bool `json:"endToEndEncrypted"`
+	// LinkOnly reports a link-only transfer (since 2.0): no recipient was
+	// mailed nor identified, and a download may come from anyone holding
+	// the link. Emitted only when true, so that the statements signed
+	// before it keep their exact encoding.
+	LinkOnly bool `json:"linkOnly,omitempty"`
 	// Files are the files of the transfer, by position.
 	Files []StatementFile `json:"files"`
 	// DepositedAt is when the sender finalized the deposit (TimeLayout).
@@ -223,9 +228,9 @@ func newStatement(kind store.ProofKind, t *tenant.Tenant, d store.TransferDetail
 		SchemaVersion: SchemaVersion, Kind: kind, InstanceVersion: version.Get().Version,
 		Tenant:     StatementTenant{Name: t.Name, FQDN: t.FQDN},
 		TransferID: d.ID, SenderEmail: d.SenderEmail, Recipients: append([]string{}, d.Recipients...),
-		ConfidentialityLevel: d.ConfidentialityLevel,
-		Files:                make([]StatementFile, 0, len(d.Files)),
-		DepositedAt:          FormatTime(deposited), ExpiresAt: FormatTime(d.ExpiresAt),
+		ConfidentialityLevel: d.ConfidentialityLevel, LinkOnly: d.LinkOnly,
+		Files:       make([]StatementFile, 0, len(d.Files)),
+		DepositedAt: FormatTime(deposited), ExpiresAt: FormatTime(d.ExpiresAt),
 	}
 	for _, f := range d.Files {
 		st.Files = append(st.Files, StatementFile{

@@ -4,7 +4,7 @@ package adminauth
 // session may call (P55, T-281): its own account (logout, profile,
 // password, TOTP), the tenant list and summary, and the reads of its
 // tenants: audit events, security events, statistics, transfers and their
-// proof. The HTTP layer refuses every other operation of an auditor
+// proof, and the drop links. The HTTP layer refuses every other operation of an auditor
 // session with 403 read-only-role before its handler runs; the services
 // check again on their side ([RequireTenantAuditRead]). The login steps
 // served without a session (setup status, login, second factor,
@@ -35,4 +35,8 @@ var AuditorOperations = map[string]bool{
 	// The single sign-on configuration of an attached tenant (read only,
 	// without its secret; since 2.0).
 	"getTenantSso": true,
+	// The permanent drop links of an attached tenant (read only, without
+	// their tokens; since 2.0).
+	"listDropLinks": true,
+	"getDropLink":   true,
 }

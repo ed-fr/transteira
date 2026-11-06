@@ -524,8 +524,8 @@ func TestEtagMatches(t *testing.T) {
 func TestIsPublicRoute(t *testing.T) {
 	t.Parallel()
 	for p, want := range map[string]bool{
-		"/": true, "/invite": true, "/me": true, "/help": true, "/help/": true, "/help/a/b": true, "/d/x": true, "/d/x/reply": true, "/d/reply": true, "/i/x": true, "/legal/terms": true,
-		"": false, "/helpx": false, "/invite/": false, "/d/": false, "/d/x/": false, "/d": false, "/d//reply": false, "/d/x/reply/": false, "/d/x/other": false, "/d/x/reply/reply": false, "/i/x/reply": false, "/legal/a/b": false,
+		"/": true, "/invite": true, "/me": true, "/help": true, "/help/": true, "/help/a/b": true, "/d/x": true, "/d/x/reply": true, "/d/reply": true, "/i/x": true, "/drop/ttd_x": true, "/legal/terms": true,
+		"": false, "/helpx": false, "/invite/": false, "/d/": false, "/d/x/": false, "/d": false, "/d//reply": false, "/d/x/reply/": false, "/d/x/other": false, "/d/x/reply/reply": false, "/i/x/reply": false, "/drop/": false, "/drop": false, "/drop/x/": false, "/drop/x/reply": false, "/legal/a/b": false,
 		"/admin/": false, "/x": false, "/dx": false, "/me/": false, "/me/x": false,
 	} {
 		if got := isPublicRoute(p); got != want {
@@ -544,10 +544,11 @@ func TestTokenAPIRobots(t *testing.T) {
 		"/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf":         true,
 		"/api/v1/downloads/dl_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf/archive": true,
 		"/api/v1/invitations/inv_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf":      true,
-		"/api/v1/invitations": false,
-		"/api/v1/downloads":   false,
-		"/api/v1/version":     false,
-		"/api/v1/tenant":      false,
+		"/api/v1/drop-links/ttd_Xk4Lm9Qp2Zr7Vb1Nt6Yc3Hd8Jf":       true,
+		"/api/v1/invitations":                                     false,
+		"/api/v1/downloads":                                       false,
+		"/api/v1/version":                                         false,
+		"/api/v1/tenant":                                          false,
 	} {
 		t.Run(target, func(t *testing.T) {
 			t.Parallel()

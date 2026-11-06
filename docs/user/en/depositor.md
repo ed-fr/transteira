@@ -171,6 +171,25 @@ A reply arrives like an ordinary transfer: you receive the usual notification ma
 
 Only you receive the reply: the original sender is its only recipient. It is refused to its author if your address is blocked or no longer belongs to the organization, or if your original transfer has expired or been deleted.
 
+<!-- topic: link-only -->
+## Sending with a link only
+
+The **Link only** option (no email sent to the recipients) lets you pass the download link on yourself, for example through an instant messenger. It is offered only if your organisation allows it, and only to internal users (including from outside when the organisation allows it) and to API tokens. An invited person, a reply to a transfer or a drop link cannot use it. The confidentiality level you choose must allow it too.
+
+In the [New transfer](topic:deposit-options) form, tick **Link only**:
+
+- the **Recipients** become optional. If you fill them in, they are recorded but **receive no email**;
+- the option is incompatible with recipient verification: ticking one unticks the other;
+- the antivirus analysis and the other rules apply as usual.
+
+When you click **Send**, the link is shown **only once**, at the end of the deposit. Click **Copy the link** and keep it before leaving the page: it appears neither in the confirmation email nor in [My transfers](topic:my-transfers). The link works only once the antivirus analysis is over; the confirmation email then tells you. Since anyone holding the link can download, pass it on through a trusted channel and protect the transfer with a password given separately.
+
+![Transfer sent summary for a link-only transfer, with the download link shown once and the Copy the link button](../screenshots/en/deposit-link-only.png)
+
+> **Good to know** With no identified recipient, the download tracking names nobody.
+
+If you lose the link, open [My transfers](topic:my-transfers) and click **New link**: the old link stops working.
+
 <!-- topic: my-transfers -->
 ## My transfers
 
@@ -203,6 +222,7 @@ Open a transfer to see its details: the files with their size and SHA-256 finger
 
 - **Delete**: after confirmation, the files are erased for good and the download links stop working.
 - **Extend**: choose a new duration among those your organisation allows for the confidentiality level of the transfer. The new expiry is counted from today and can never be earlier than the current one. A transfer cannot stay available more than **90 days** after it was created: beyond that, the page tells you the latest possible date, and you must send the files again. Recipients who have not downloaded yet receive a new reminder the day before the new expiry. A transfer whose number of downloads is reached cannot be extended.
+- **New link**: for a link-only transfer (see [Sending with a link only](topic:link-only)) whose link you lost, issues a new link, shown only once, even while the antivirus is still analysing the files (the new link works as soon as the transfer is available). The old link stops working immediately.
 
 Use **Sign out** when you have finished, especially on a shared computer.
 
@@ -259,6 +279,19 @@ If the link does not work:
 
 - **Invitation not found**: the link is incomplete. Copy it entirely from the email, or click it directly.
 - **Invitation expired**: the invitation is no longer valid. Ask the person who invited you to send a new one.
+
+<!-- topic: drop-link -->
+## Sending files through a drop link
+
+A service of the organisation may have given you a *drop link*: a fixed address that lets you send it files without a personal invitation. The address looks like `transfer.entity-a.example.com/drop/ttd_…`.
+
+Open the link. The landing page shows the name of the service (the **label** of the link), how long the files are kept and the confidentiality level. It never shows the addresses of the recipients. Click **Continue**, then [identify yourself with a code](topic:deposit-identify) received at your email address: the code is asked again at **every** use of the link, even if you already typed one.
+
+![Landing page of a drop link with the name of the service, the retention period, the confidentiality level and the Continue button](../screenshots/en/drop-link.png)
+
+The form then shows the service the files will be sent to, with nothing to type: the recipients, the duration and the level are fixed by the link. The addresses of the recipients are never shown to you, neither here, nor in My transfers, nor in the confirmation email, which show the name of the link instead; the proofs of deposit and delivery of these transfers are for the administrators only. You can add a message and, if the level requires it, a password; the rest of the form works as described in [Filling in the transfer](topic:deposit-options). Only one transfer is possible per verification: to send more files, open the link again and type a new code. The limits specific to external users (volume and number of deposits) apply.
+
+If the page says the link was not found, it is incomplete, disabled, revoked or replaced by a new one: ask the person who gave it to you for the current address.
 
 <!-- topic: deposit-problems -->
 ## Common problems

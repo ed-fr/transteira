@@ -354,6 +354,13 @@ func (r *recRepo) list(ctx context.Context, tid tenant.ID, email, cursor string,
 	return r.repo.list(ctx, tid, email, cursor, limit)
 }
 
+func (r *recRepo) dropLinkLabels(ctx context.Context, tid tenant.ID) (map[string]string, error) {
+	if err := r.note("dropLinkLabels", tid); err != nil {
+		return nil, err
+	}
+	return r.repo.dropLinkLabels(ctx, tid)
+}
+
 func (r *recRepo) get(ctx context.Context, tid tenant.ID, trfID, email string) (store.SenderTransferDetail, error) {
 	if err := r.note("get", tid); err != nil {
 		return store.SenderTransferDetail{}, err
@@ -375,6 +382,15 @@ func (r *recRepo) extend(ctx context.Context, tid tenant.ID, trfID, email string
 		return store.TransferExtension{}, store.SenderTransferDetail{}, err
 	}
 	return r.repo.extend(ctx, tid, trfID, email, now, check)
+}
+
+func (r *recRepo) reissue(ctx context.Context, tid tenant.ID, trfID, email string, hash []byte,
+	check func(store.SenderTransferDetail) error,
+) error {
+	if err := r.note("reissue", tid); err != nil {
+		return err
+	}
+	return r.repo.reissue(ctx, tid, trfID, email, hash, check)
 }
 
 // env is a service over a migrated database with tenants A and B (SMTP
@@ -544,6 +560,12 @@ type seedOptions struct {
 	created      time.Time
 	// replyTo makes the transfer a reply to that transfer of the tenant.
 	replyTo string
+	// linkOnly makes a link-only transfer (since 2.0), its token hash set
+	// at the finalization.
+	linkOnly bool
+	// dropLink makes a transfer deposited through that drop link of the
+	// tenant (since 2.0).
+	dropLink string
 }
 
 // seed stores a transfer of tn with one file to carol and dave, brought to
@@ -602,9 +624,13 @@ func (ev *env) seed(tn *tenant.Tenant, o seedOptions) string {
 		if o.perRecipient {
 			tr.LinkMode = store.LinkModePerRecipient
 		}
+		tr.LinkOnly = o.linkOnly
 		tr.APITokenID = tokenID
 		if o.replyTo != "" {
 			tr.SenderKind, tr.ReplyToTransferID = store.DepositorReply, o.replyTo
+		}
+		if o.dropLink != "" {
+			tr.SenderKind, tr.DropLinkID = store.DepositorDropLink, o.dropLink
 		}
 		trs := ev.db.Transfers()
 		if err := trs.CreateTx(ctx, tx, tr, []string{carol, dave}, []store.TransferFile{file}); err != nil {
@@ -616,13 +642,27 @@ func (ev *env) seed(tn *tenant.Tenant, o seedOptions) string {
 		if err := trs.FinalizeTx(ctx, tx, trfID, now); err != nil {
 			return err
 		}
+		if o.linkOnly {
+			raw, err := id.NewDownloadToken()
+			if err != nil {
+				return err
+			}
+			if err := trs.SetLinkOnlyTokenTx(ctx, tx, trfID, tokenHash(raw)); err != nil {
+				return err
+			}
+		}
 		if o.status == store.TransferScanning {
 			return nil
 		}
 		if err := ev.db.TransferFiles().SetScanResultTx(ctx, tx, file.ID, store.ScanClean, "", now); err != nil {
 			return err
 		}
-		if o.perRecipient {
+		switch {
+		case o.linkOnly:
+			if err := trs.MarkLinkOnlyAvailableTx(ctx, tx, trfID, now); err != nil {
+				return err
+			}
+		case o.perRecipient:
 			tokens := make([]store.LinkToken, 2)
 			for i := range tokens {
 				raw, err := id.NewDownloadToken()
@@ -638,7 +678,7 @@ func (ev *env) seed(tn *tenant.Tenant, o seedOptions) string {
 			if _, err := trs.MarkAvailableLinksTx(ctx, tx, trfID, tokens, now); err != nil {
 				return err
 			}
-		} else {
+		default:
 			raw, err := id.NewDownloadToken()
 			if err != nil {
 				return err

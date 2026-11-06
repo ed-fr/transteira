@@ -128,6 +128,8 @@ func tenantError(err error) error {
 		return problem.New(problem.CodeUnsupportedMediaType)
 	case errors.Is(err, tenantadmin.ErrUnknownBackgroundPreset):
 		return problem.New(problem.CodeUnknownBackgroundPreset)
+	case errors.Is(err, tenantadmin.ErrLevelInUse):
+		return problem.New(problem.CodeStateConflict)
 	default:
 		return err
 	}
@@ -278,7 +280,7 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 
 // unsupportedTenantPatchFields are the members of TenantUpdate added by API
 // 2.0 that are not implemented yet, in the order they are reported.
-var unsupportedTenantPatchFields = []string{"linkOnlyAllowed", "e2ePolicy"}
+var unsupportedTenantPatchFields = []string{"e2ePolicy"}
 
 // unsupportedTenantPatch refuses a member of API 2.0 that is not
 // implemented yet, before the unknown-member check. These members are
@@ -318,11 +320,13 @@ type tenantPatch struct {
 	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit"`
 	AllowTransferReply         *bool   `json:"allowTransferReply"`
 	AntivirusEnabled           *bool   `json:"antivirusEnabled"`
-	// LinkOnlyAllowed and E2EPolicy (API 2.0) are known members so that a
-	// tenant outside the admin's scope answers its 404; they are refused
-	// earlier (unsupportedTenantPatch) for an admin of the tenant.
-	LinkOnlyAllowed *bool   `json:"linkOnlyAllowed"`
-	E2EPolicy       *string `json:"e2ePolicy"`
+	// LinkOnlyAllowed (API 2.0) is super admin only, like
+	// AntivirusEnabled (the service refuses it to a delegated admin).
+	LinkOnlyAllowed *bool `json:"linkOnlyAllowed"`
+	// E2EPolicy (API 2.0) is a known member so that a tenant outside the
+	// admin's scope answers its 404; it is refused earlier
+	// (unsupportedTenantPatch) for an admin of the tenant.
+	E2EPolicy *string `json:"e2ePolicy"`
 }
 
 // tenantPatchFields lists the members of a tenant merge patch, in the order
@@ -374,6 +378,7 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 		AllowRemoteInternalDeposit: b.AllowRemoteInternalDeposit,
 		AllowTransferReply:         b.AllowTransferReply,
 		AntivirusEnabled:           b.AntivirusEnabled,
+		LinkOnlyAllowed:            b.LinkOnlyAllowed,
 	}, nil
 }
 
@@ -399,7 +404,7 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
 		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
 		AntivirusEffective: &v.AntivirusEffective, SetupState: setupStateOf(v.SetupState),
-		CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		LinkOnlyAllowed: &v.LinkOnlyAllowed, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
 }
 
@@ -450,7 +455,8 @@ func tenantCreatedBody(c tenantadmin.TenantCreated) gen.TenantCreated {
 		Status: gen.TenantCreatedStatus(t.Status), StorageQuotaBytes: t.StorageQuotaBytes, StorageUsedBytes: t.StorageUsedBytes,
 		WebhookIncludeAddresses: t.WebhookIncludeAddresses, AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit,
 		AllowTransferReply: t.AllowTransferReply, AntivirusEnabled: t.AntivirusEnabled,
-		AntivirusEffective: t.AntivirusEffective, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		AntivirusEffective: t.AntivirusEffective, SetupState: t.SetupState, LinkOnlyAllowed: t.LinkOnlyAllowed,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 

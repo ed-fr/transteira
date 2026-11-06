@@ -49,8 +49,8 @@ detail them; in short:
 9. **Compression of text only**, never of uploads, downloaded files or ZIP
    archives.
 10. **No capability token in the access log**: the paths `/d/{token}`,
-    `/i/{token}`, `/api/v1/downloads/{token}/…` and
-    `/api/v1/invitations/{token}` are masked or left out.
+    `/i/{token}`, `/drop/{token}`, `/api/v1/downloads/{token}/…`,
+    `/api/v1/invitations/{token}` and `/api/v1/drop-links/{token}` are masked or left out.
 
 ## The `proxy` network
 

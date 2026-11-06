@@ -38,6 +38,7 @@ import (
 	"github.com/ed-fr/transteira/internal/deposit"
 	"github.com/ed-fr/transteira/internal/diskalert"
 	"github.com/ed-fr/transteira/internal/download"
+	"github.com/ed-fr/transteira/internal/droplink"
 	"github.com/ed-fr/transteira/internal/events"
 	"github.com/ed-fr/transteira/internal/health"
 	"github.com/ed-fr/transteira/internal/httpserver"
@@ -655,6 +656,12 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 
+	// dropLinks serves the administration of the permanent drop links.
+	dropLinks, err := droplink.New(db, droplink.Options{Logger: logger, Audit: auditLog})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+
 	healthChecks := &health.Service{
 		Database:  health.Check{Checker: health.CheckerFunc(db.Ping)},
 		Antivirus: health.Check{Checker: antivirusHealth(scanner)},
@@ -705,7 +712,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		AdminAPI: admin.NewServer(admin.WithService(admins), admin.WithTenants(db.Tenants()),
 			admin.WithTenantService(tenants), admin.WithOperationsService(operations),
 			admin.WithDataSubjectService(subjects), admin.WithStatsService(statistics),
-			admin.WithAPITokenService(apiTokens), admin.WithMaintenance(maint),
+			admin.WithAPITokenService(apiTokens), admin.WithDropLinkService(dropLinks), admin.WithMaintenance(maint),
 			admin.WithSystemSettings(systemSettings), admin.WithKeyRotation(rotations),
 			admin.WithWebhookService(busOut.hooks), admin.WithAntivirusTest(selfTests),
 			admin.WithUpdateCheck(updates), admin.WithProvisioningService(provisioner),

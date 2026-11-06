@@ -78,6 +78,15 @@ type Details struct {
 	// ReplyToTransferID is, for a reply, the original transfer it answers
 	// ("trf_" + ULID); "" otherwise.
 	ReplyToTransferID string
+	// LinkOnly marks a link-only transfer (since 2.0): DownloadURL is only
+	// set in the answer of the finalization that drew its token.
+	LinkOnly bool
+	// DropLinkLabel is, for a transfer deposited through a permanent drop
+	// link (since 2.0), the label of the link, shown instead of the
+	// recipients: those are never disclosed to the depositor (threat model
+	// T-311), so Recipients and RecipientTracking are nil for such a
+	// transfer. "" otherwise (and when the link is gone).
+	DropLinkLabel string
 }
 
 // File is a file of a transfer as its sender sees it (OpenAPI SenderFile).
@@ -128,9 +137,21 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
 		MaxDownloads: d.MaxDownloads, ConfidentialityLevel: d.ConfidentialityLevel, Rules: d.Rules,
 		RecipientVerification: d.RecipientVerification, ReplyToTransferID: d.ReplyToTransferID,
+		LinkOnly: d.LinkOnly,
 	}
 	if d.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(d.ConfidentialityLabel, d.Language, t.DefaultLanguage, "en")
+	}
+	if d.DropLinkID != "" {
+		// The recipients of a drop link stay hidden from its depositor.
+		out.Recipients = nil
+		l, err := s.repo.dropLink(ctx, tid, d.DropLinkID)
+		switch {
+		case err == nil:
+			out.DropLinkLabel = l.Label
+		case !errors.Is(err, store.ErrNotFound):
+			return Details{}, fmt.Errorf("transfer: read drop link: %w", err)
+		}
 	}
 	// The expires_at written at finalization is provisional: it becomes
 	// the expiry when the antivirus makes the transfer available.
@@ -163,7 +184,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		out.Files[i] = file
 	}
 	if d.LinkMode == store.LinkModePerRecipient {
-		if !d.AvailableAt.IsZero() {
+		if !d.AvailableAt.IsZero() && d.DropLinkID == "" {
 			tracking, err := s.repo.tracking(ctx, tid, d.ID)
 			if err != nil {
 				return Details{}, fmt.Errorf("transfer: read recipient tracking: %w", err)
@@ -172,7 +193,9 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		}
 		return out, nil
 	}
-	if d.Status == store.TransferAvailable && d.DownloadTokenKeyID != "" {
+	// A link-only transfer never shows its link here: only the hash of its
+	// token is stored, and the link is returned once, by Finalize.
+	if d.Status == store.TransferAvailable && d.DownloadTokenKeyID != "" && !d.LinkOnly {
 		token, err := s.repo.downloadToken(ctx, tid, d.DownloadTokenKeyID)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "transfer: cannot open the download token: download link omitted",
@@ -275,6 +298,13 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 // (decision D8), and a file.not_scanned event with reason disabled is
 // recorded for each of them.
 //
+// A link-only transfer (since 2.0) gets its download token now: only its
+// SHA-256 is stored, in the finalization transaction, never a sealed copy,
+// and its link is returned in DownloadURL by this call only (a repeated
+// finalization is ErrConflict, and no other view shows it; a lost link is
+// replaced through "My transfers"). The link works once the antivirus makes
+// the transfer available.
+//
 // After the commit, Options.OnFinalized and Options.Usage are called and
 // the transfer.finalized audit event is recorded (best effort).
 func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender, trfID string) (Details, error) {
@@ -323,11 +353,22 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	if err := s.checkBlockedFiles(ctx, t, sender, d.Files); err != nil {
 		return Details{}, err
 	}
+	var token string
+	if d.LinkOnly {
+		if token, err = s.newDownloadToken(); err != nil {
+			return Details{}, fmt.Errorf("transfer: new download token: %w", err)
+		}
+	}
 	now := s.now()
 	unscanned := !s.AntivirusEffective(t)
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
-		_, err := tx.finalize(ctx, trfID, now, unscanned)
-		return err
+		if _, err := tx.finalize(ctx, trfID, now, unscanned); err != nil {
+			return err
+		}
+		if token == "" {
+			return nil
+		}
+		return tx.setLinkOnlyToken(ctx, trfID, id.HashToken(token))
 	})
 	if err != nil {
 		return Details{}, storeError("finalize transfer", err)
@@ -344,7 +385,13 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	if d, err = s.load(ctx, t.ID, sender, trfID); err != nil {
 		return Details{}, err
 	}
-	return s.details(ctx, t, d)
+	out, err := s.details(ctx, t, d)
+	if err == nil && token != "" {
+		// Returned once: only its hash is stored, and no later view shows
+		// it (see details).
+		out.DownloadURL = id.DownloadURL(t.FQDN, token)
+	}
+	return out, err
 }
 
 // AntivirusEffective reports whether the files of the tenant t finalized

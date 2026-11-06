@@ -158,6 +158,17 @@ type TransferView struct {
 	// reply (availability, resend by an administrator) carries the
 	// warning. The notification mail then warns about the external origin.
 	ReplyTo *ReplyInfo
+	// LinkOnly marks a link-only transfer (since 2.0): its recipients are
+	// never mailed and may be none; the sender confirmation carries no link
+	// and says so.
+	LinkOnly bool
+	// DropLink marks a transfer deposited through a permanent drop link
+	// (since 2.0): the sender confirmation never lists its recipients
+	// (threat model T-311) and names the link instead, by DropLinkLabel
+	// ("" when unknown; [ViewOf] leaves it empty, the caller fills it).
+	DropLink bool
+	// DropLinkLabel is the label of that drop link.
+	DropLinkLabel string
 }
 
 // ReplyInfo describes the transfer a reply answers.
@@ -372,9 +383,16 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 
 // SenderConfirmation builds the transfer_confirmation mail to the sender:
 // the download link (none when every recipient has a personal link, which the
-// sender never sees: link is then empty), the recipients, the delivered files with their SHA-256
+// sender never sees, or for a link-only transfer, whose link was shown once
+// at the finalization: link is then empty), the recipients (possibly none
+// for a link-only transfer; for a drop link deposit, the label of the link
+// instead, its recipients never being disclosed to the depositor), the
+// delivered files with their SHA-256
 // digest, the expiry, and the withheld files with a short explanation.
 func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr TransferView, link string) (mail.Job, error) {
+	if tr.LinkOnly {
+		link = "" // the link of a link-only transfer is never mailed
+	}
 	var v downloadView
 	var err error
 	if link == "" {
@@ -385,14 +403,17 @@ func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr 
 	if err != nil {
 		return mail.Job{}, err
 	}
-	recipients, err := normalizeRecipients(tr.Recipients)
-	if err != nil {
-		return mail.Job{}, err
+	var recipients []string
+	if !tr.DropLink && (!tr.LinkOnly || len(tr.Recipients) > 0) {
+		if recipients, err = normalizeRecipients(tr.Recipients); err != nil {
+			return mail.Job{}, err
+		}
 	}
 	data := mail.TransferConfirmationData{
 		TenantName: t.Name, Link: link, Recipients: recipients, Files: v.files,
 		ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, Withheld: withheldFiles(tr.Files),
-		ConfidentialityLabel: n.levelLabel(t, tr),
+		ConfidentialityLabel: n.levelLabel(t, tr), LinkOnly: tr.LinkOnly,
+		DropLink: tr.DropLink, DropLinkLabel: tr.DropLinkLabel,
 	}
 	if t.FQDN != "" {
 		data.MyTransfersLink = "https://" + t.FQDN + id.MyTransfersPath
@@ -489,6 +510,11 @@ func (n *Notifier) firstDownload(ctx context.Context, t *tenant.Tenant, tr Trans
 	}
 	if len(files) == 0 {
 		return mail.Job{}, fmt.Errorf("%w: no delivered file", ErrInvalidTransfer)
+	}
+	if tr.DropLink {
+		// The depositor of a drop link never learns the internal
+		// recipients of the link (threat model T-311).
+		recipient = ""
 	}
 	data := mail.FirstDownloadData{TenantName: t.Name, Files: files, DownloadedAt: at, DeleteAt: deleteAt, RecipientEmail: recipient}
 	return n.senderJob(ctx, t, tr, sender, mail.TemplateFirstDownload, data)
@@ -759,7 +785,7 @@ func ViewOf(d store.TransferDetails) TransferView {
 	v := TransferView{
 		ID: d.ID, Language: d.Language, SenderEmail: d.SenderEmail, Recipients: d.Recipients,
 		Message: d.Message, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
-		ReplyTo: replyInfoOf(d.Transfer),
+		ReplyTo: replyInfoOf(d.Transfer), LinkOnly: d.LinkOnly, DropLink: d.DropLinkID != "",
 	}
 	if d.ConfidentialityLevel != "" {
 		v.ConfidentialityLabels = maps.Clone(d.ConfidentialityLabel)

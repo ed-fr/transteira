@@ -46,6 +46,7 @@ export const ERASED_KEYS: readonly string[] = [
   'opsPrivacy.erase.erased.received',
   'opsPrivacy.erase.erased.invitations',
   'opsPrivacy.erase.erased.proofs',
+  'opsPrivacy.erase.erased.dropLinks',
   'opsPrivacy.erase.erased.audit',
 ];
 
@@ -89,7 +90,8 @@ export function hasData(summary: DataSubjectSummary): boolean {
     summary.transfersAsRecipient > 0 ||
     summary.invitations > 0 ||
     summary.auditEvents > 0 ||
-    (summary.proofs ?? 0) > 0
+    (summary.proofs ?? 0) > 0 ||
+    (summary.dropLinks ?? 0) > 0
   );
 }
 
@@ -120,6 +122,9 @@ export function summaryRows(summary: DataSubjectSummary, t: Translate, format: F
   ];
   if (summary.proofs !== undefined) {
     rows.push({ id: 'proofs', term: t('opsPrivacy.summary.proofs'), value: format(summary.proofs) });
+  }
+  if (summary.dropLinks !== undefined) {
+    rows.push({ id: 'dropLinks', term: t('opsPrivacy.summary.dropLinks'), value: format(summary.dropLinks) });
   }
   return rows;
 }
@@ -158,6 +163,20 @@ export function reportRows(report: DataSubjectEraseReport, t: Translate, format:
       id: 'proofsDeleted',
       term: t('opsPrivacy.report.proofsDeleted'),
       value: format(report.proofsDeleted),
+    });
+  }
+  if (report.dropLinksUpdated !== undefined) {
+    rows.push({
+      id: 'dropLinksUpdated',
+      term: t('opsPrivacy.report.dropLinksUpdated'),
+      value: format(report.dropLinksUpdated),
+    });
+  }
+  if (report.dropLinksDisabled !== undefined) {
+    rows.push({
+      id: 'dropLinksDisabled',
+      term: t('opsPrivacy.report.dropLinksDisabled'),
+      value: format(report.dropLinksDisabled),
     });
   }
   return rows;

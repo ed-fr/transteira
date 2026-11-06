@@ -497,7 +497,7 @@ func (c *depositor) finalizedTransfer(t *testing.T, req transferCreate, files ..
 	if req.ExpiryDays == 0 {
 		req.ExpiryDays = 7
 	}
-	if len(req.Recipients) == 0 {
+	if len(req.Recipients) == 0 && !req.noRecipients {
 		req.Recipients = []string{uniqueEmail(t, "rcpt", "example.net")}
 	}
 	tr := c.mustCreate(t, req)

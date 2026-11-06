@@ -91,6 +91,23 @@ var (
 	// finalization, so that a reply whose original disappears during the
 	// upload is never finalized (decision 7).
 	ErrOriginalGone = errors.New("transfer: original transfer no longer available")
+	// ErrLinkOnlyForbidden reports a link-only request (since 2.0) that the
+	// tenant or the confidentiality level does not allow, or that comes
+	// from a depositor whose recipient is imposed and must be mailed (an
+	// invited external, a reply or a drop link depositor; 403
+	// link-only-forbidden). It is a policy refusal, never written to the
+	// security log.
+	ErrLinkOnlyForbidden = errors.New("transfer: link-only transfer not allowed")
+	// ErrLinkOnlyConflict reports a link-only request that also asks for
+	// the recipient verification, which needs per-recipient links (400
+	// link-only-conflict).
+	ErrLinkOnlyConflict = errors.New("transfer: link-only incompatible with recipient verification")
+	// ErrDropLinkUsed reports a second creation through a drop link deposit
+	// session (since 2.0): such a session deposits one transfer only, and
+	// the depositor proves their address again for the next one (403
+	// deposit-not-allowed). It matches ErrForbidden; it is not written to
+	// the security log.
+	ErrDropLinkUsed = fmt.Errorf("%w: the drop link session already deposited a transfer", ErrForbidden)
 )
 
 // AbuseBlockedError reports a creation refused by the abuse detection. It

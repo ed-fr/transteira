@@ -98,7 +98,9 @@ var isolationCases = map[string]isolationCase{
 	// Deposit sessions and invitations (deposit_test.go): a session cookie,
 	// a challenge identifier or an invitation token of tenant A is refused
 	// under tenant B's Host (401, 403 or 404), while tenant A recognizes it.
-	"startDepositSession":          startWithForeignInvitation,
+	// Since 2.0, a drop link token of A is unknown under B (and the
+	// reverse), exactly like an unknown token (droplinks_test.go).
+	"startDepositSession":          startWithForeignInvitationOrDropLink,
 	"confirmVerificationChallenge": confirmForeignChallenge,
 	"getCurrentDepositSession":     currentWithForeignSession,
 	"endDepositSession":            endWithForeignSession,
@@ -108,7 +110,9 @@ var isolationCases = map[string]isolationCase{
 	// tenant A's owner is never reached by another sender of A nor, under
 	// B's Host, by a sender of B (404), while its owner reaches it. The tus
 	// capabilities carry no tenant data.
-	"createTransfer":     createWithForeignSession,
+	// Since 2.0, a drop link session of A is unknown under B and never
+	// addresses a transfer through a link of B (droplinks_test.go).
+	"createTransfer":     createWithForeignSessionOrDropLink,
 	"getTransfer":        getForeignTransfer,
 	"cancelTransfer":     cancelForeignTransfer,
 	"finalizeTransfer":   finalizeForeignTransfer,
@@ -143,6 +147,10 @@ var isolationCases = map[string]isolationCase{
 	"getMyTransferProof":           getMyForeignTransferProof,
 	"deleteMyTransfer":             deleteMyForeignTransfer,
 	"extendMyTransfer":             extendMyForeignTransfer,
+	// The reissue of a link-only transfer's link (droplinks_test.go,
+	// since 2.0): same refusals as the other "my transfers" operations;
+	// the previous link of A dies, the new one is unknown under B.
+	"reissueMyTransferLink": reissueMyForeignTransferLink,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the
@@ -217,6 +225,10 @@ var isolationCases = map[string]isolationCase{
 	"getPublicTenant":        publicTenantConfig,
 	"getTenantAsset":         tenantAssets,
 	"getTenantLegalDocument": tenantLegal,
+	// The landing page of a permanent drop link (droplinks_test.go, since
+	// 2.0): a drop token of A is unknown under B and the reverse, with
+	// exactly the answer of an unknown token (404 drop-link-invalid).
+	"getPublicDropLink": publicForeignDropLink,
 	// Operations of a tenant (tenantops_test.go): served on the admin host
 	// only; the delegated admin of tenant A gets for tenant B's ID exactly
 	// the answer of an unknown tenant ID, and, under A's own path, for a
@@ -267,6 +279,18 @@ var isolationCases = map[string]isolationCase{
 	"createApiToken": adminAPIToken,
 	"updateApiToken": adminAPIToken,
 	"revokeApiToken": adminAPIToken,
+	// Permanent drop links (droplinks_test.go, since 2.0): served on the
+	// admin host only; the delegated admin of tenant A gets for tenant B's
+	// ID exactly the answer of an unknown tenant ID, even with an invalid
+	// body, and, under A's own path, for a link of B exactly the answer of
+	// an unknown link; B's link is never listed, read, changed, revoked nor
+	// rotated, and A's new link is never listed for B nor opened under B.
+	"listDropLinks":  adminDropLink,
+	"createDropLink": adminDropLink,
+	"getDropLink":    adminDropLink,
+	"updateDropLink": adminDropLink,
+	"deleteDropLink": adminDropLink,
+	"rotateDropLink": adminDropLink,
 	// System operations (system_test.go): instance-wide, served on the
 	// admin host only. The maintenance state holds no tenant data and is
 	// readable by every administrator; the other operations are reserved

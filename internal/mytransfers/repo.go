@@ -39,6 +39,9 @@ type repo interface {
 	endSession(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) error
 	// list lists the transfers in progress of a sender.
 	list(ctx context.Context, tid tenant.ID, email, cursor string, limit int) (store.Page[store.SenderTransfer], error)
+	// dropLinkLabels returns the label of every drop link of the tenant,
+	// by identifier.
+	dropLinkLabels(ctx context.Context, tid tenant.ID) (map[string]string, error)
 	// get reads a transfer in progress of a sender.
 	get(ctx context.Context, tid tenant.ID, trfID, email string) (store.SenderTransferDetail, error)
 	// status reads the status of a transfer of a sender, whatever it is.
@@ -48,11 +51,28 @@ type repo interface {
 	// transfer after the extension.
 	extend(ctx context.Context, tid tenant.ID, trfID, email string, now time.Time,
 		check func(store.SenderTransferDetail) (time.Time, error)) (store.TransferExtension, store.SenderTransferDetail, error)
+	// reissue reads the transfer of the sender, asks check whether its
+	// link may be replaced, and replaces the hash of its token with hash,
+	// in one transaction ([store.Transfers.ReplaceDownloadTokenTx]).
+	reissue(ctx context.Context, tid tenant.ID, trfID, email string, hash []byte,
+		check func(store.SenderTransferDetail) error) error
 }
 
 // storeRepo implements repo over a *store.DB.
 type storeRepo struct {
 	db *store.DB
+}
+
+func (r storeRepo) dropLinkLabels(ctx context.Context, tid tenant.ID) (map[string]string, error) {
+	links, err := r.db.DropLinks().List(ctx, tid)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(links))
+	for _, l := range links {
+		out[l.ID] = l.Label
+	}
+	return out, nil
 }
 
 func (r storeRepo) smtp(ctx context.Context, tid tenant.ID) (store.SMTPConfig, error) {
@@ -173,4 +193,24 @@ func (r storeRepo) extend(ctx context.Context, tid tenant.ID, trfID, email strin
 		return err
 	})
 	return x, after, err
+}
+
+func (r storeRepo) reissue(ctx context.Context, tid tenant.ID, trfID, email string, hash []byte,
+	check func(store.SenderTransferDetail) error,
+) error {
+	sc, err := r.db.Scoped(tid)
+	if err != nil {
+		return err
+	}
+	return sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		transfers := r.db.Transfers()
+		d, err := transfers.GetBySenderTx(ctx, tx, trfID, email)
+		if err != nil {
+			return err
+		}
+		if err := check(d); err != nil {
+			return err
+		}
+		return transfers.ReplaceDownloadTokenTx(ctx, tx, trfID, hash)
+	})
 }

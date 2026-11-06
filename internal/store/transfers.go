@@ -112,7 +112,7 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
 	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
 	`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode, recipient_verification, ` +
-	`expiry_reminder_at, extension_count, extended_at, reply_to_transfer_id`
+	`expiry_reminder_at, extension_count, extended_at, reply_to_transfer_id, link_only, drop_link_id`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -149,8 +149,9 @@ var (
 		expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint,
 		created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id,
 		confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password,
-		rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download,
+		link_only, drop_link_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -400,6 +401,20 @@ type Transfer struct {
 	// ExtendedAt is the time of the last extension, zero when never
 	// extended (ignored at creation).
 	ExtendedAt time.Time
+	// LinkOnly marks a link-only transfer (since 2.0, spec 8.2): its single
+	// download link is returned once to the sender and never mailed. It
+	// needs LinkModeShared (hence no recipient verification), and its
+	// recipients are optional (0 to MaxTransferRecipients, recorded but
+	// never mailed). Its token is set at the finalization
+	// ([Transfers.SetLinkOnlyTokenTx]), without a sealed copy, kept when
+	// the transfer becomes available and replaced by a reissue
+	// ([Transfers.ReplaceDownloadTokenTx]).
+	LinkOnly bool
+	// DropLinkID is the permanent drop link the transfer was deposited
+	// through ("drl_" + ULID, same tenant, since 2.0) for the sender kind
+	// DepositorDropLink, "" for any other kind. It must be enabled and not
+	// revoked at the creation.
+	DropLinkID string
 }
 
 // LinkMode is how the recipients of a transfer get their download link.
@@ -601,6 +616,10 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("malformed api token id")
 	case t.APITokenID != "" && !t.SenderKind.IsInternal():
 		return Transfer{}, invalid("an api token sender is internal")
+	case (t.SenderKind == DepositorDropLink) != (t.DropLinkID != ""):
+		return Transfer{}, invalid("a drop link sender needs its drop link, another sender kind none")
+	case t.DropLinkID != "" && !id.Valid(id.DropLink, t.DropLinkID):
+		return Transfer{}, invalid("malformed drop link id")
 	case !validText(t.Message, MaxTransferMessageLen, false):
 		return Transfer{}, invalid("message must be text of at most %d characters", MaxTransferMessageLen)
 	case t.Language != "" && !tenant.IsLanguage(t.Language):
@@ -631,6 +650,8 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("unknown link mode")
 	case t.RecipientVerification && t.LinkMode != LinkModePerRecipient:
 		return Transfer{}, invalid("recipient verification needs per-recipient links")
+	case t.LinkOnly && t.LinkMode == LinkModePerRecipient:
+		return Transfer{}, invalid("a link-only transfer needs the shared link")
 	case !t.ExpiryReminderAt.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be reminded")
 	}
@@ -647,9 +668,11 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 	return t, nil
 }
 
-// normalizeRecipients validates and normalizes the recipient addresses.
-func normalizeRecipients(recipients []string) ([]string, error) {
-	if len(recipients) == 0 || len(recipients) > MaxTransferRecipients {
+// normalizeRecipients validates and normalizes the recipient addresses: 1
+// to MaxTransferRecipients distinct ones, or 0 when optional (a link-only
+// transfer).
+func normalizeRecipients(recipients []string, optional bool) ([]string, error) {
+	if (len(recipients) == 0 && !optional) || len(recipients) > MaxTransferRecipients {
 		return nil, invalid("a transfer needs 1 to %d recipients", MaxTransferRecipients)
 	}
 	out := make([]string, len(recipients))
@@ -733,12 +756,14 @@ func checkKey(ctx context.Context, tx *ScopedTx, keyID, purpose, msg string) err
 // ([WrappedKeys.CreateTx]) beforehand. Addresses are normalized.
 //
 // It returns ErrInvalid for a malformed field (1 to MaxTransferRecipients
-// distinct recipients and 1 to MaxTransferFiles files are required; a file
-// may be created completed, such as an empty file), ErrNotFound when the
+// distinct recipients, 0 allowed for a link-only transfer, and 1 to
+// MaxTransferFiles files are required; a file may be created completed,
+// such as an empty file), ErrNotFound when the
 // tenant is not active (its deletion started: checked under the tenant
 // lock, in the same transaction as the inserts), when the invitation or a
 // data key does not exist (or belongs to another tenant), when the source
-// transfer of a reply does not exist in the tenant, or when the API
+// transfer of a reply does not exist in the tenant, when the drop link
+// does not exist in the tenant or is disabled or revoked, or when the API
 // token does not exist, belongs to another tenant, or is revoked or expired
 // at t.CreatedAt, and ErrConflict when an identifier, an upload identifier,
 // a storage name or a data key is already used, or when the sender (the API
@@ -774,7 +799,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 	if err != nil {
 		return err
 	}
-	rcpts, err := normalizeRecipients(recipients)
+	rcpts, err := normalizeRecipients(recipients, t.LinkOnly)
 	if err != nil {
 		return err
 	}
@@ -787,6 +812,11 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 	created := r.db.orNow(t.CreatedAt)
 	if t.APITokenID != "" {
 		if err := checkAPIToken(ctx, tx, t.APITokenID, created); err != nil {
+			return err
+		}
+	}
+	if t.DropLinkID != "" {
+		if err := checkDropLink(ctx, tx, t.DropLinkID, created); err != nil {
 			return err
 		}
 	}
@@ -822,7 +852,8 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		toMillis(created), senderIP, nullText(t.APITokenID), nullInt(t.MaxDownloads), string(t.LinkMode),
 		t.RecipientVerification, nullText(t.ReplyToTransferID),
 	}
-	_, err = tx.Exec(ctx, qTransferInsert, append(args, levelArgs(t)...)...)
+	args = append(args, levelArgs(t)...)
+	_, err = tx.Exec(ctx, qTransferInsert, append(args, t.LinkOnly, nullText(t.DropLinkID))...)
 	if err != nil {
 		return err
 	}
@@ -862,7 +893,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		t                                Transfer
 		status, kind                     string
 		inv, pwd, key, fp, tokenKey, ip  sql.NullString
-		replyTo                          sql.NullString
+		replyTo, dropLink                sql.NullString
 		apiToken, level, label           sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
@@ -876,7 +907,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
 		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
 		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del, &linkMode,
-		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended, &replyTo)
+		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended, &replyTo, &t.LinkOnly, &dropLink)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -899,6 +930,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
 	t.LinkMode, t.ExpiryReminderAt = LinkMode(linkMode), nullMillis(reminded)
 	t.ExtendedAt, t.ReplyToTransferID = nullMillis(extended), replyTo.String
+	t.DropLinkID = dropLink.String
 	return t, nil
 }
 

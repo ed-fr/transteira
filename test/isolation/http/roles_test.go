@@ -77,6 +77,10 @@ var auditorExpect = map[string]auditorClass{
 	"listTenantAuditEvents":    tenantRead,
 	"listTenantSecurityEvents": tenantRead,
 	"listTenantTransfers":      tenantRead,
+	// The permanent drop links (since 2.0), never their tokens; the
+	// writes on them stay refused.
+	"getDropLink":   tenantRead,
+	"listDropLinks": tenantRead,
 
 	// Accounts (super admin only).
 	"createAdmin":           refused,
@@ -165,12 +169,10 @@ var auditorExpect = map[string]auditorClass{
 	"deleteTenantWebhook":        refused,
 	"eraseDataSubject":           refused,
 	"getAbuseReport":             refused,
-	"getDropLink":                refused,
 	"getTenantWebhook":           refused,
 	"listAbuseReports":           refused,
 	"listApiTokens":              refused,
 	"listBlocklist":              refused,
-	"listDropLinks":              refused,
 	"listTenantInvitations":      refused,
 	"listTenantWebhooks":         refused,
 	"resendTransferNotification": refused,
@@ -336,7 +338,9 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 		h := startHarness(t, e)
 		auditor := h.newAuditor(t)
 		trA := h.newTransfer(t, h.colleague(t), "ivan@customer.example.net")
-		params := map[string]string{"transferId": trA.ID}
+		linkA := h.dropLinkOf(t, operation{id: "seed"}, h.tenantA.ID, dropLabelA, dropRecipientA)
+		linkB := h.dropLinkOfB(t, operation{id: "seed"})
+		params := map[string]string{"transferId": trA.ID, "dropLinkId": linkA.ID}
 		proofParams := map[string]string{"transferId": h.availableTransferWithProof(t)}
 		a, b := string(h.tenantA.ID), string(h.tenantB.ID)
 		var logout *operation
@@ -373,6 +377,18 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 					h.noDataOfB(t, op, "auditor of A on B", foreign)
 					if op.id == "getTenantTransfer" && !strings.Contains(string(own.body), trA.ID) {
 						t.Errorf("%s: %s", op, own.body)
+					}
+					if strings.Contains(op.template, "/drop-links") {
+						// A's links without their tokens; B's link never.
+						if !strings.Contains(string(own.body), linkA.ID) || strings.Contains(string(own.body), linkA.Token) {
+							t.Errorf("%s by the auditor of A: %s, want A's link without its token", op, own.body)
+						}
+						h.noDropLinkOfB(t, op, "auditor of A", own, linkB)
+						if op.id == "getDropLink" {
+							foreign := h.sendRole(t, auditor, op, a, map[string]string{"dropLinkId": linkB.ID})
+							wantCode(t, op, hostAdmin, foreign, http.StatusNotFound, "not-found")
+							h.noDropLinkOfB(t, op, "auditor of A, B's link under A", foreign, linkB)
+						}
 					}
 				case ownAccount:
 					if op.id == "adminLogout" {
@@ -426,6 +442,40 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 			resp = h.adminCall(t, deleg, http.MethodGet, "/admin/admins", "")
 			if resp.status != http.StatusForbidden || problemCode(resp) != "forbidden" {
 				t.Errorf("delegated admin account list: %d %s, want 403 forbidden", resp.status, resp.body)
+			}
+		})
+
+		t.Run("link-only policy is super admin only", func(t *testing.T) {
+			// The tenant's linkOnlyAllowed (since 2.0) is changed by the super
+			// admin only: 403 for the delegated admin of A, 404 for B (like an
+			// unknown tenant), 403 read-only-role for the auditor.
+			// (Sending the current value is not a change and is accepted, as
+			// for antivirusEnabled: the case sends the opposite value.)
+			deleg := h.session(t)
+			for _, v := range []string{"true"} {
+				body := `{"linkOnlyAllowed":` + v + `}`
+				resp := h.adminCall(t, deleg, http.MethodPatch, tenantPath(h.tenantA.ID, ""), body)
+				if resp.status != http.StatusForbidden || problemCode(resp) != "forbidden" {
+					t.Errorf("delegated admin linkOnlyAllowed=%s on A: %d %s, want 403 forbidden", v, resp.status, resp.body)
+				}
+				resp = h.adminCall(t, deleg, http.MethodPatch, tenantPath(h.tenantB.ID, ""), body)
+				if resp.status != http.StatusNotFound || problemCode(resp) != "not-found" {
+					t.Errorf("delegated admin linkOnlyAllowed=%s on B: %d %s, want 404 not-found", v, resp.status, resp.body)
+				}
+				h.noDataOfB(t, operation{id: "updateTenant"}, "delegated admin on B", resp)
+				resp = h.adminCall(t, auditor, http.MethodPatch, tenantPath(h.tenantA.ID, ""), body)
+				if resp.status != http.StatusForbidden || problemCode(resp) != "read-only-role" {
+					t.Errorf("auditor linkOnlyAllowed=%s on A: %d %s, want 403 read-only-role", v, resp.status, resp.body)
+				}
+			}
+			super := h.superSession(t)
+			resp := h.adminCall(t, super, http.MethodPatch, tenantPath(h.tenantB.ID, ""), `{"linkOnlyAllowed":true}`)
+			if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"linkOnlyAllowed":true`) {
+				t.Errorf("super admin linkOnlyAllowed on B: %d %s, want 200", resp.status, resp.body)
+			}
+			resp = h.adminCall(t, super, http.MethodGet, tenantPath(h.tenantA.ID, ""), "")
+			if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"linkOnlyAllowed":false`) {
+				t.Errorf("tenant A after the refused changes and B's change: %d %s, want linkOnlyAllowed false", resp.status, resp.body)
 			}
 		})
 

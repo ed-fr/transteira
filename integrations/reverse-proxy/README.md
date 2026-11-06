@@ -63,8 +63,8 @@ of them being missed.
    restriction. Compressing them would cost CPU for nothing, break byte ranges
    and force buffering.
 10. **No capability token in the access log** (threat model T-161). The paths
-    `/d/{token}`, `/i/{token}`, `/api/v1/downloads/{token}/…` and
-    `/api/v1/invitations/{token}` contain secrets: anyone reading the log could
+    `/d/{token}`, `/i/{token}`, `/drop/{token}`, `/api/v1/downloads/{token}/…`,
+    `/api/v1/invitations/{token}` and `/api/v1/drop-links/{token}` contain secrets: anyone reading the log could
     download the transfer or use the invitation. Each configuration masks the
     token (Caddy, Nginx, Apache) or leaves these routes out of the access log
     (Traefik). The `Referer` header is not logged either. See

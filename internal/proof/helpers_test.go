@@ -165,6 +165,8 @@ type seedOptions struct {
 	scanning bool
 	// noProof makes the transfer available without its deposit proof.
 	noProof bool
+	// dropLink makes a transfer deposited through that drop link.
+	dropLink string
 }
 
 // seeded is a seeded transfer.
@@ -216,6 +218,9 @@ func (ev *env) seed(tn *tenant.Tenant, o seedOptions) seeded {
 		}
 		if o.perRecipient {
 			tr.LinkMode = store.LinkModePerRecipient
+		}
+		if o.dropLink != "" {
+			tr.SenderKind, tr.DropLinkID = store.DepositorDropLink, o.dropLink
 		}
 		if o.level {
 			tr.ConfidentialityLevel, tr.Rules = "secret", &store.ConfidentialityRules{ExpiryDaysMask: 7}

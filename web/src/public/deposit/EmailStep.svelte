@@ -23,6 +23,8 @@
 
 {#if flow.invitation}
   <p>{t('deposit.email.invitationIntro', { invitedBy: flow.invitation.invitedBy })}</p>
+{:else if flow.dropLink}
+  <p>{t('deposit.email.dropLinkIntro', { label: flow.dropLink.label })}</p>
 {:else}
   <p>{t('deposit.email.intro')}</p>
 {/if}
@@ -55,7 +57,7 @@
   <Button
     type="submit"
     loading={flow.busy}
-    disabled={remaining > 0 || flow.invitationGone}
+    disabled={remaining > 0 || flow.invitationGone || flow.dropLinkGone}
     loadingLabel={t('deposit.email.sending')}
   >
     {t('deposit.email.submit')}

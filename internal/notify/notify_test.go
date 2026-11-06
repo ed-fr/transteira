@@ -702,3 +702,54 @@ func TestSenderConfirmationWithoutLink(t *testing.T) {
 		t.Errorf("expired: %v", err)
 	}
 }
+
+// TestSenderConfirmationLinkOnly checks the confirmation of a link-only
+// transfer: no link even when one is passed, the link-only sentence, and no
+// recipient required; recipients, when named, are still validated.
+func TestSenderConfirmationLinkOnly(t *testing.T) {
+	e := newEnv(t)
+	tr := testTransfer()
+	tr.LinkOnly, tr.Recipients = true, nil
+	j, err := e.n.SenderConfirmation(context.Background(), e.t, tr, testLink)
+	if err != nil {
+		t.Fatalf("link-only: %v", err)
+	}
+	if strings.Contains(j.Message.Text, testLink) || strings.Contains(j.Message.HTML, testLink) {
+		t.Errorf("the link is shown:\n%s", j.Message.Text)
+	}
+	for _, s := range []string{"Aucun e-mail n'a été envoyé aux destinataires", "Aucun destinataire indiqué."} {
+		if !strings.Contains(j.Message.Text, s) {
+			t.Errorf("%q missing:\n%s", s, j.Message.Text)
+		}
+	}
+	tr.Recipients = []string{"not an address"}
+	if _, err := e.n.SenderConfirmation(context.Background(), e.t, tr, ""); !errors.Is(err, ErrInvalidTransfer) {
+		t.Errorf("bad recipient: %v", err)
+	}
+	if v := ViewOf(store.TransferDetails{Transfer: store.Transfer{LinkOnly: true}}); !v.LinkOnly {
+		t.Error("ViewOf drops LinkOnly")
+	}
+}
+
+// TestSenderConfirmationDropLink checks the confirmation of a drop link
+// deposit (T-311): the recipients are never listed, the link is named.
+func TestSenderConfirmationDropLink(t *testing.T) {
+	e := newEnv(t)
+	tr := testTransfer()
+	tr.DropLink, tr.DropLinkLabel = true, "Factures"
+	j, err := e.n.SenderConfirmation(context.Background(), e.t, tr, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range tr.Recipients {
+		if strings.Contains(j.Message.Text, r) || strings.Contains(j.Message.HTML, r) {
+			t.Errorf("recipient %s disclosed:\n%s", r, j.Message.Text)
+		}
+	}
+	if !strings.Contains(j.Message.Text, "« Factures »") {
+		t.Errorf("link label missing:\n%s", j.Message.Text)
+	}
+	if v := ViewOf(store.TransferDetails{Transfer: store.Transfer{DropLinkID: "drl_x"}}); !v.DropLink {
+		t.Error("ViewOf drops DropLink")
+	}
+}

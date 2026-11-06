@@ -84,6 +84,9 @@ func Render(st Statement, statementJSON, sig []byte, lang, keysURL string) ([]by
 	r.field("proof.field.transfer", st.TransferID)
 	r.field("proof.field.sender", st.SenderEmail)
 	r.field("proof.field.recipients", strings.Join(st.Recipients, "\n"))
+	if st.LinkOnly {
+		r.field("proof.field.linkOnly", r.t("proof.linkOnly.notice"))
+	}
 	if st.ConfidentialityLevel != "" {
 		r.field("proof.field.level", st.ConfidentialityLevel)
 	}

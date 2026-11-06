@@ -323,8 +323,16 @@ export interface paths {
          *     permanent drop link: the e-mail code is required **every time** (recognition cookie
          *     neither honoured nor set), the session kind is `drop_link`, the recipients of the
          *     transfers are forced to the link's, and the external quotas, the abuse detection and the
-         *     blocklist apply. An unknown, revoked or disabled link is `404 drop-link-invalid` (security
-         *     log `drop_link_invalid`).
+         *     blocklist apply. An unknown, revoked, disabled or expired link, and a link one of whose
+         *     recipients is no longer in an internal mail domain of the tenant, is
+         *     `404 drop-link-invalid` (security log `drop_link_invalid`). When the link already
+         *     received its `maxDepositsPerHour` transfers in the sliding last hour (cancelled ones
+         *     included), the answer is `429 rate-limited` with `Retry-After` (security log
+         *     `rate_limited`, `scope="drop_link"`), checked before any code is sent, so that a busy
+         *     link cannot be used to send codes to third parties. Likewise, at most three times
+         *     `maxDepositsPerHour` codes are sent through one link per sliding hour, all addresses and
+         *     client IPs together: beyond, `429 rate-limited` (`Retry-After` one hour, same security
+         *     log line).
          *
          *     Rate limits: 5 codes per hour per address, 20 codes per hour per client IP.
          *     Refused deposits are written to the security log.
@@ -469,8 +477,10 @@ export interface paths {
          *     Since 2.0:
          *     - `linkOnly` creates a link-only transfer (no mail to the recipients, who become optional;
          *       the link is returned once by `finalizeTransfer`): `403 link-only-forbidden` when the
-         *       tenant or the level does not allow it, `400 link-only-conflict` with
-         *       `recipientVerification`;
+         *       tenant or the level does not allow it, and for every depositor other than an internal
+         *       one (`internal`, `internal_remote`) or an API token (an invited external, a reply or a
+         *       drop link depositor, whose recipient is imposed and must be mailed);
+         *       `400 link-only-conflict` with `recipientVerification`;
          *     - `endToEndEncrypted` declares files encrypted in the browser (`encryptedMetadata` on every
          *       file, generic names, ciphertext sizes): `403 e2e-forbidden` when the policy of the tenant
          *       or level forbids it, `400 e2e-required` when it is required and the member is false;
@@ -478,8 +488,21 @@ export interface paths {
          *       checks the framing of each upload while streaming (magic, header, chunk lengths, final
          *       chunk): a malformed one is refused with `400 e2e-format-invalid` at the tus upload;
          *     - a deposit session of kind `drop_link` addresses the transfer to the recipients of the
-         *       link, with its validity and level (end-to-end encryption is refused there in 2.0: `403 e2e-forbidden`) (`recipients` and `expiryDays` must then match them
-         *       or be omitted).
+         *       link, with its validity and level (end-to-end encryption is refused there in 2.0:
+         *       `403 e2e-forbidden`). `recipients` must be omitted: any non-empty list, whatever its
+         *       values, gets the same `400 validation-failed` (`/recipients`, `not-allowed`), so that
+         *       the request cannot probe the recipients of the link, which are never disclosed to its
+         *       depositor (the answers carry an empty `recipients` and the `dropLinkLabel`).
+         *       `expiryDays` must equal the validity of the link, and `confidentialityLevel` be omitted
+         *       or that of the link (`400 validation-failed` otherwise). Such a session deposits
+         *       **one** transfer: a second creation through it gets `403 deposit-not-allowed`, even
+         *       after the first was cancelled (the depositor proves their address again for the next
+         *       one). The hourly cap of the link (`maxDepositsPerHour`, all depositors together,
+         *       cancelled transfers included) is enforced again here, in the creation transaction:
+         *       beyond it, `429 rate-limited` with `Retry-After` (security log `rate_limited`,
+         *       `scope="drop_link"`). A link expired, disabled or revoked since the session opened, or
+         *       one of whose recipients is no longer in an internal mail domain of the tenant, gets
+         *       `403 deposit-not-allowed`.
          */
         post: operations["createTransfer"];
         delete?: never;
@@ -720,9 +743,12 @@ export interface paths {
          * @description Since 2.0. Used by the landing page of a permanent drop link (a fixed address given to
          *     third parties to send files to a service). Reveals only what the depositor needs: the
          *     label, the validity of the transfers and the confidentiality level; never the recipients.
-         *     An unknown, revoked or disabled link gets the same `404 drop-link-invalid`, written to the
+         *     An unknown, revoked, disabled or expired link gets the same `404 drop-link-invalid`, written to the
          *     security log (`drop_link_invalid`). The deposit itself starts with `startDepositSession`
-         *     and its `dropLinkToken`: the e-mail code is required at every use.
+         *     and its `dropLinkToken`: the e-mail code is required at every use. The address handed to
+         *     third parties is the landing page `/drop/{dropToken}` of the tenant host (the `url` of
+         *     `DropLinkCreated`, e.g. `https://transfer.entity-a.example.com/drop/ttd_...`), which calls
+         *     this operation.
          */
         get: operations["getPublicDropLink"];
         put?: never;
@@ -1301,7 +1327,10 @@ export interface paths {
          *     downloads (the first of the transfer, then the first of each recipient for per-recipient
          *     links: `recipient` selects it) and are immutable, never updated. Before the fact exists, or
          *     after the 12 months the proof is kept (even when the transfer is deleted), the answer is
-         *     `404 proof-not-available`. Audited as `transfer.proof_downloaded`.
+         *     `404 proof-not-available`. A transfer deposited through a permanent drop link also
+         *     answers `404 proof-not-available` here: its signed statement names the recipients of the
+         *     link, never disclosed to the depositor (only the administrators download it). Audited
+         *     as `transfer.proof_downloaded`.
          */
         get: operations["getMyTransferProof"];
         put?: never;
@@ -1331,8 +1360,9 @@ export interface paths {
          * Issue a new download link for a link-only transfer
          * @description Since 2.0. For a link-only transfer (`linkOnly`) of the session address whose link was lost
          *     (for example the answer of `finalizeTransfer` never reached the sender): issues a fresh
-         *     download link, returned once, and revokes the previous link token. `409 state-conflict`
-         *     for any other transfer or a transfer that is not available. Audited as
+         *     download link, returned once, and revokes the previous link token. Allowed while the
+         *     transfer is `scanning` (the new link works once it becomes `available`) or `available`
+         *     before its expiry; `409 state-conflict` for any other transfer. Audited as
          *     `transfer.link_reissued`. `finalizeTransfer` stays idempotent and never returns the link a
          *     second time.
          */
@@ -1802,8 +1832,8 @@ export interface paths {
          *     Since 2.0, `linkOnlyAllowed` and `e2ePolicy` are super admin only, like
          *     `antivirusEnabled`: an end-to-end encrypted file is never scanned, so `e2ePolicy:
          *     required` amounts to turning the antivirus off for the tenant. A change is audited as
-         *     `tenant.updated` with the member names. Until these members are implemented, the super
-         *     admin gets the interim `400 validation-failed` (code `not-supported`); a delegated admin
+         *     `tenant.updated` with the member names. Until `e2ePolicy` is implemented, the super
+         *     admin gets the interim `400 validation-failed` (code `not-supported`) for it; a delegated admin
          *     of the tenant gets `403 forbidden` as for `antivirusEnabled`, and an admin outside the
          *     tenant `404 not-found`.
          */
@@ -2367,7 +2397,9 @@ export interface paths {
          *     Every level needs a label in each supported language (an optional description per
          *     language is shown in the form and the help), and `allowedExpiryDays` must be a non-empty
          *     subset of the tenant durations. The change applies to new transfers only: existing transfers keep the level
-         *     key, label and rules they were created with. Requires the right to change the tenant.
+         *     key, label and rules they were created with. Since 2.0, a level used by an enabled,
+         *     non-revoked permanent drop link cannot be removed from the list (`409 state-conflict`):
+         *     change or disable the link first. Requires the right to change the tenant.
          *     Audited as `tenant.confidentiality_updated` with the list of keys.
          */
         put: operations["updateConfidentialityLevels"];
@@ -2703,6 +2735,9 @@ export interface paths {
          *     server is configured for the tenant, nothing is queued (`503 mail-unavailable`). Audited
          *     as `transfer.notification_resent` with the number of recipients only. Requires the right
          *     to change the tenant.
+         *
+         *     Since 2.0, a link-only transfer (`linkOnly`) is never mailed to its recipients: its
+         *     resend gets `409 state-conflict`.
          */
         post: operations["resendTransferNotification"];
         delete?: never;
@@ -3293,7 +3328,8 @@ export interface paths {
         /**
          * List the permanent drop links of the tenant
          * @description Since 2.0. Lists the drop links (never their token: it is shown at creation and by
-         *     `rotateDropLink` only). Readable by the delegated admins of the tenant, the super admin
+         *     `rotateDropLink` only). `unused` flags a link that is not revoked and was neither used nor
+         *     created in the last 12 months, to review. Readable by the delegated admins of the tenant, the super admin
          *     and, read-only, an auditor.
          */
         get: operations["listDropLinks"];
@@ -3306,8 +3342,15 @@ export interface paths {
          *     link prove their address by code at every use; the transfers are addressed to the link's
          *     recipients, with the link's validity and level, and are subject to the external quotas,
          *     the abuse detection and the blocklist. At most 100 links per tenant
-         *     (`409 drop-link-limit-reached`). Delegated admin of the tenant and super admin. Audited as
-         *     `drop_link.created`.
+         *     (`409 drop-link-limit-reached`). Every recipient must belong to an internal mail domain
+         *     of the tenant, and `validityDays` must be one of the `allowedExpiryDays` of the level
+         *     (the given one, or the default level when absent): `400 validation-failed` with a
+         *     pointer to the member otherwise. `expiresAt` (optional, in the future) ends the link;
+         *     `maxDepositsPerHour` (1 to 1000, 20 by default) caps the transfers created through it in
+         *     the sliding last hour, all depositors together. A later change of the level does not break the link: the
+         *     transfer creation applies the rules of the level, as for any transfer. The answer
+         *     carries `url`, the landing page to give to third parties. Delegated admin of the tenant
+         *     and super admin. Audited as `drop_link.created`.
          */
         post: operations["createDropLink"];
         delete?: never;
@@ -3353,8 +3396,10 @@ export interface paths {
         /**
          * Change a permanent drop link
          * @description Since 2.0. JSON Merge Patch of `label`, `recipients`, `validityDays`,
-         *     `confidentialityLevel` (`null` goes back to the tenant default level) and `enabled`; `null`
-         *     is refused on the other members and an unknown member is refused. A disabled link answers
+         *     `confidentialityLevel` (`null` goes back to the tenant default level), `enabled`,
+         *     `expiresAt` (in the future; `null` removes the expiry, so that a later expiry or none makes
+         *     an expired link usable again) and `maxDepositsPerHour`; `null` is refused on the other
+         *     members and an unknown member is refused. A disabled or expired link answers depositors
          *     like an unknown one. Audited as `drop_link.updated`. Delegated admin of the tenant and
          *     super admin.
          */
@@ -4544,7 +4589,7 @@ export interface components {
              *     not empty, and the blocklist applies to it.
              */
             senderEmail?: components["schemas"]["Email"];
-            /** @description Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient) and for drop link depositors (the recipients of the link). */
+            /** @description Mandatory for internal depositors and API tokens, unless `linkOnly` (then optional: recorded but never mailed); ignored for invited externals (the inviter is the recipient); for drop link depositors, omitted or equal to the recipients of the link. */
             recipients?: components["schemas"]["Email"][];
             /** @description Plain text; never interpreted as HTML. */
             message?: string;
@@ -4649,6 +4694,13 @@ export interface components {
             recipientTracking?: components["schemas"]["RecipientTracking"][];
             /** @description Since 2.0. Link-only transfer. */
             linkOnly?: boolean;
+            /**
+             * @description Since 2.0. Set for a transfer deposited through a permanent drop link: the label of the
+             *     link, shown instead of the recipients. The recipients of a drop link are never
+             *     disclosed to its depositor: for such a transfer `recipients` is an empty array and
+             *     `recipientTracking` is absent (threat model T-311).
+             */
+            dropLinkLabel?: string;
             /** @description Since 2.0. The files are encrypted in the browser. */
             endToEndEncrypted?: boolean;
             /** @description Since 2.0. The message of an end-to-end encrypted transfer, as sent. */
@@ -5587,6 +5639,8 @@ export interface components {
             securityEvents: number;
             /** @description Since 2.0. Proofs of deposit and delivery whose signed statement names the address (erased with it). */
             proofs?: number;
+            /** @description Since 2.0. Permanent drop links, revoked ones included, whose recipients list the address. */
+            dropLinks?: number;
         };
         DataSubjectEraseReport: {
             transfersDeleted: number;
@@ -5600,6 +5654,10 @@ export interface components {
             accessLinks?: number;
             /** @description Since 2.0. Proofs of deposit and delivery whose signed statement names the address, deleted. */
             proofsDeleted?: number;
+            /** @description Since 2.0. Permanent drop links whose recipients listed the address, which was removed from them. */
+            dropLinksUpdated?: number;
+            /** @description Since 2.0. Among dropLinksUpdated, links left without recipient, hence disabled. */
+            dropLinksDisabled?: number;
         };
         GlobalStats: {
             /** @enum {string} */
@@ -5973,6 +6031,8 @@ export interface components {
              * @enum {string}
              */
             antivirus: "enabled" | "disabled";
+            /** @description Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them. */
+            linkOnly?: boolean;
         };
         /**
          * @description Since 1.1. Key of a confidentiality level, unique within the tenant.
@@ -6170,6 +6230,13 @@ export interface components {
             /** @description Key of the level of the transfer. */
             confidentialityLevel?: string;
             endToEndEncrypted: boolean;
+            /**
+             * @description Present (and true) only for a link-only transfer: no recipient was mailed nor
+             *     identified, so a delivery proves a download by whoever held the link ("link only:
+             *     recipient not identified" in the PDF and in `transteira proof verify`). Absent
+             *     otherwise, so that the statements signed before it keep their exact encoding.
+             */
+            linkOnly?: boolean;
             files: {
                 name: string;
                 path?: string;
@@ -6227,6 +6294,18 @@ export interface components {
             lastUsedAt?: string | null;
             /** Format: date-time */
             revokedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Optional end of the link; null for none. From then on the link answers depositors exactly like a revoked or disabled one (`404 drop-link-invalid`), until an admin sets a later expiry or none. An expired link is purged 12 months after its expiry, once no transfer references it.
+             */
+            expiresAt?: string | null;
+            /**
+             * @description Transfers that may be created through the link in the sliding last hour, all depositors together, on top of the external quotas: beyond it, `startDepositSession` and `createTransfer` answer `429 rate-limited`.
+             * @default 20
+             */
+            maxDepositsPerHour: number;
+            /** @description Computed: the link is not revoked and neither used nor created in the last 12 months (`lastUsedAt`, else `createdAt`). A forgotten link to review: disable, revoke or give it an expiry. */
+            readonly unused: boolean;
         };
         /** @description Since 2.0. Creation of a permanent drop link. */
         DropLinkCreate: {
@@ -6237,19 +6316,41 @@ export interface components {
             confidentialityLevel?: components["schemas"]["ConfidentialityLevelKey"];
             /** @default true */
             enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description Since 2.0. Optional end of the link, in the future (`400 validation-failed` on `/expiresAt` otherwise); none when absent.
+             */
+            expiresAt?: string;
+            /**
+             * @description Since 2.0. Hourly deposit cap of the link.
+             * @default 20
+             */
+            maxDepositsPerHour?: number;
         };
-        /** @description Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` only. */
+        /** @description Since 2.0. JSON Merge Patch of a drop link; `null` is accepted on `confidentialityLevel` and `expiresAt` only. */
         DropLinkUpdate: {
             label?: string;
             recipients?: components["schemas"]["Email"][];
             validityDays?: components["schemas"]["ExpiryDays"];
             confidentialityLevel?: string | null;
             enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description New end of the link, in the future; `null` removes the expiry.
+             */
+            expiresAt?: string | null;
+            maxDepositsPerHour?: number;
         };
         /** @description Since 2.0. A drop link with its token, present only in the answers of `createDropLink` and `rotateDropLink`. */
         DropLinkCreated: components["schemas"]["DropLink"] & {
             /** @description Shown once; only its SHA-256 is stored. */
             token: string;
+            /**
+             * Format: uri
+             * @description Landing page of the link on the tenant host (`/drop/{token}`), to give to third parties; shown once, like the token.
+             * @example https://transfer.entity-a.example.com/drop/ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ
+             */
+            url: string;
         };
         DropLinkList: {
             items: components["schemas"]["DropLink"][];
@@ -6459,6 +6560,12 @@ export interface components {
             downloadedBy: number;
             /** @description Since 2.0. Link-only transfer (its link cannot be retrieved). */
             linkOnly?: boolean;
+            /**
+             * @description Since 2.0. Set for a transfer deposited through a permanent drop link: the label of the
+             *     link, shown instead of the recipients, which are never disclosed to its depositor
+             *     (`recipients` empty, `downloadedBy` 0, `recipientTracking` empty; threat model T-311).
+             */
+            dropLinkLabel?: string;
             /** @description Since 2.0. The files are encrypted in the browser. */
             endToEndEncrypted?: boolean;
         };
@@ -7150,7 +7257,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Since 2.0. The drop link is unknown, revoked or disabled (the same answer), written to the security log as `drop_link_invalid`. */
+        /** @description Since 2.0. The drop link is unknown, revoked, disabled or expired (the same answer), written to the security log as `drop_link_invalid`. */
         DropLinkInvalid: {
             headers: {
                 [name: string]: unknown;
@@ -8472,7 +8579,8 @@ export interface operations {
              *     (`recipient-domain-refused`), or an abuse threshold set to block is exceeded
              *     (`abuse-threshold-blocked`). A reply is refused (`reply-not-allowed`) when replies are
              *     disabled or the original sender can no longer be replied to. Since 2.0: `link-only-forbidden`
-             *     and `e2e-forbidden` (policy of the tenant or level).
+             *     (policy of the tenant or level, or a depositor that is neither internal nor an API
+             *     token) and `e2e-forbidden` (policy of the tenant or level).
              */
             403: {
                 headers: {
@@ -12447,6 +12555,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -13903,7 +14012,9 @@ export interface operations {
                      *       "transfersAsRecipient": 3,
                      *       "invitations": 0,
                      *       "auditEvents": 7,
-                     *       "securityEvents": 0
+                     *       "securityEvents": 0,
+                     *       "proofs": 0,
+                     *       "dropLinks": 1
                      *     }
                      */
                     "application/json": components["schemas"]["DataSubjectSummary"];
@@ -13952,7 +14063,10 @@ export interface operations {
                      *       "recipientEntriesRemoved": 3,
                      *       "verifiedAddressDeleted": false,
                      *       "invitationsDeleted": 0,
-                     *       "logEntriesPseudonymised": 7
+                     *       "logEntriesPseudonymised": 7,
+                     *       "proofsDeleted": 0,
+                     *       "dropLinksUpdated": 1,
+                     *       "dropLinksDisabled": 0
                      *     }
                      */
                     "application/json": components["schemas"]["DataSubjectEraseReport"];
@@ -14514,7 +14628,10 @@ export interface operations {
                      *           "createdAt": "2026-11-04T09:00:00Z",
                      *           "updatedAt": "2026-11-04T09:00:00Z",
                      *           "lastUsedAt": null,
-                     *           "revokedAt": null
+                     *           "revokedAt": null,
+                     *           "expiresAt": "2027-06-30T22:00:00Z",
+                     *           "maxDepositsPerHour": 20,
+                     *           "unused": false
                      *         }
                      *       ]
                      *     }
@@ -14549,7 +14666,9 @@ export interface operations {
                  *         "accounting@entity-a.example.com"
                  *       ],
                  *       "validityDays": 7,
-                 *       "confidentialityLevel": "internal"
+                 *       "confidentialityLevel": "internal",
+                 *       "expiresAt": "2027-06-30T22:00:00Z",
+                 *       "maxDepositsPerHour": 20
                  *     }
                  */
                 "application/json": components["schemas"]["DropLinkCreate"];
@@ -14575,7 +14694,11 @@ export interface operations {
                      *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
                      *       "createdAt": "2026-11-04T09:00:00Z",
                      *       "updatedAt": "2026-11-04T09:00:00Z",
-                     *       "token": "ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ"
+                     *       "expiresAt": "2027-06-30T22:00:00Z",
+                     *       "maxDepositsPerHour": 20,
+                     *       "unused": false,
+                     *       "token": "ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ",
+                     *       "url": "https://transfer.entity-a.example.com/drop/ttd_9sK2mQ7xL0aZ4vR8tYb3nC6dE1fG5hJ"
                      *     }
                      */
                     "application/json": components["schemas"]["DropLinkCreated"];
@@ -14628,7 +14751,9 @@ export interface operations {
                      *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
                      *       "createdAt": "2026-11-04T09:00:00Z",
                      *       "updatedAt": "2026-11-04T09:00:00Z",
-                     *       "lastUsedAt": "2026-11-05T14:12:00Z"
+                     *       "lastUsedAt": "2026-11-05T14:12:00Z",
+                     *       "maxDepositsPerHour": 20,
+                     *       "unused": false
                      *     }
                      */
                     "application/json": components["schemas"]["DropLink"];
@@ -14718,7 +14843,9 @@ export interface operations {
                      *       "enabled": false,
                      *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
                      *       "createdAt": "2026-11-04T09:00:00Z",
-                     *       "updatedAt": "2026-11-05T15:00:00Z"
+                     *       "updatedAt": "2026-11-05T15:00:00Z",
+                     *       "maxDepositsPerHour": 20,
+                     *       "unused": false
                      *     }
                      */
                     "application/json": components["schemas"]["DropLink"];
@@ -14769,7 +14896,10 @@ export interface operations {
                      *       "createdBy": "adm_01JABCG1H2J3K415M6N7P8Q9R0",
                      *       "createdAt": "2026-11-04T09:00:00Z",
                      *       "updatedAt": "2026-11-05T15:30:00Z",
-                     *       "token": "ttd_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z"
+                     *       "maxDepositsPerHour": 20,
+                     *       "unused": false,
+                     *       "token": "ttd_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z",
+                     *       "url": "https://transfer.entity-a.example.com/drop/ttd_Ab3dEf6Gh9Jk2Lm5Np8Qr1St4Vw7Xy0Z"
                      *     }
                      */
                     "application/json": components["schemas"]["DropLinkCreated"];

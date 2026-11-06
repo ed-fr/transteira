@@ -2,7 +2,8 @@ package store
 
 // Depositor is the authenticated sender of a deposit request: the verified
 // address of a deposit session, its kind and, for an external depositor,
-// its invitation, for a reply its source transfer; or an API token. It is
+// its invitation, for a reply its source transfer, for a drop link
+// depositor its link; or an API token. It is
 // the single ownership rule of the uploads and the transfers (threat model
 // T-21).
 type Depositor struct {
@@ -21,13 +22,17 @@ type Depositor struct {
 	// APITokenID is the API token of the request ("tok_" + ULID), "" for a
 	// deposit session.
 	APITokenID string
+	// DropLinkID is the permanent drop link of a drop link depositor
+	// ("drl_" + ULID, since 2.0), "" for any other kind.
+	DropLinkID string
 }
 
 // Owns reports whether d is the sender of t. An API token owns exactly the
 // transfers it created, whatever their sender address. A deposit session
 // owns the transfers of the same normalized address, the same kind, the
-// same invitation ("" for both unless external) and the same source
-// transfer ("" for both unless reply) that no API token created, even with
+// same invitation ("" for both unless external), the same source
+// transfer ("" for both unless reply) and the same drop link ("" for both
+// unless drop_link) that no API token created, even with
 // the same address: two reply sessions of one address to different
 // transfers never share their transfers, nor does a session of another
 // kind. An address that does not normalize owns
@@ -41,5 +46,5 @@ func (d Depositor) Owns(t Transfer) bool {
 		return false
 	}
 	return email == t.SenderEmail && d.Kind == t.SenderKind && d.InvitationID == t.InvitationID &&
-		d.ReplyToTransferID == t.ReplyToTransferID
+		d.ReplyToTransferID == t.ReplyToTransferID && d.DropLinkID == t.DropLinkID
 }

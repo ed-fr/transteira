@@ -40,8 +40,8 @@ const (
 	// PublicUICacheControl is the Cache-Control of the public entry page
 	// and of the root files on the tenant hosts: revalidated on every use
 	// (ETag) and never stored by a shared cache, whose entries would be
-	// keyed by URLs carrying link and invitation tokens (/d/{token},
-	// /i/{token}).
+	// keyed by URLs carrying link, invitation and drop link tokens
+	// (/d/{token}, /i/{token}, /drop/{token}).
 	PublicUICacheControl = "private, no-cache"
 )
 
@@ -295,14 +295,15 @@ func etagMatches(header, etag string) bool {
 
 // isPublicRoute reports whether p is a route of the public application: /,
 // /d/{token}, /d/{token}/reply (reply to a transfer, since 1.1), /i/{token},
-// /legal/{document}, /invite, /me ("my transfers",
+// /drop/{token} (permanent drop link, since 2.0), /legal/{document},
+// /invite, /me ("my transfers",
 // since 1.1; its access token travels in the URL fragment, never in the
 // path), /help and anything under /help/.
 func isPublicRoute(p string) bool {
 	if p == "/" || p == "/invite" || p == "/me" || p == "/help" || strings.HasPrefix(p, "/help/") {
 		return true
 	}
-	for _, prefix := range []string{"/d/", "/i/", "/legal/"} {
+	for _, prefix := range []string{"/d/", "/i/", "/drop/", "/legal/"} {
 		if rest, ok := strings.CutPrefix(p, prefix); ok {
 			if prefix == "/d/" {
 				rest = strings.TrimSuffix(rest, "/reply")
@@ -322,10 +323,10 @@ func logWebUILoad(logger *slog.Logger, err error) {
 }
 
 // robotsAPIPrefixes are the public API paths named after a secret link
-// token (download links, invitations): their responses get the
+// token (download links, invitations, drop links): their responses get the
 // X-Robots-Tag of the web interface, so that a crawler that came across
 // such a link never indexes what it answers.
-var robotsAPIPrefixes = []string{APIBaseURL + "/downloads/", APIBaseURL + "/invitations/"}
+var robotsAPIPrefixes = []string{APIBaseURL + "/downloads/", APIBaseURL + "/invitations/", APIBaseURL + "/drop-links/"}
 
 // tokenRobots sets the X-Robots-Tag UIRobots on the responses of the API
 // paths under robotsAPIPrefixes, whatever the method and the status, then

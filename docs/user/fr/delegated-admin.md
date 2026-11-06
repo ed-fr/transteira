@@ -130,7 +130,7 @@ La création et la suppression d’une entité sont réservées au super adminis
 Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
 
 - **Configuration** : **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Niveaux de confidentialité**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
-- **Exploitation** : **Transferts**, **Invitations**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
+- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
 
 Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
 
@@ -283,6 +283,7 @@ Pour chaque niveau, renseignez :
 - **Vérification du destinataire obligatoire**. Cette règle est enregistrée mais pas encore appliquée : elle prendra effet avec les liens propres à chaque destinataire.
 - **Destinataires internes uniquement** : les destinataires doivent appartenir aux domaines internes de l’entité (voir [Réseau](topic:tenant-network)).
 - **Suppression après le premier téléchargement (imposée)**.
+- **Lien seul autorisé** : autorise (par défaut) ou interdit l’option « lien seul » pour ce niveau, voir « Envoyer en lien seul » (guide du déposant). Elle n’est offerte que si le super administrateur l’a autorisée pour l’entité. Un niveau qui impose la vérification du destinataire ne permet pas le lien seul, les deux options étant incompatibles.
 - **Nombre maximal de téléchargements (plafond)** : facultatif, de 1 à 1000. Il plafonne le nombre de téléchargements que l’expéditeur peut fixer ; si l’expéditeur n’en fixe aucun, le plafond s’applique.
 
 Utilisez les flèches pour réordonner les niveaux, **Ajouter un niveau** pour en créer un et **Enregistrer** pour appliquer. L’écran signale les erreurs niveau par niveau.
@@ -409,6 +410,37 @@ Les colonnes indiquent l’**Adresse invitée**, **Invitée par**, le **Statut**
 ![Liste des invitations avec leur statut et leurs dates](../screenshots/fr/admin-invitations.png)
 
 Cliquez sur **Révoquer** pour arrêter immédiatement une invitation : son lien ne permet plus de déposer, et les dépôts déjà commencés avec elle prennent fin. C’est définitif, mais une nouvelle invitation pourra être envoyée plus tard.
+
+<!-- topic: tenant-drop-links -->
+### Liens de dépôt permanents
+
+Un lien de dépôt permanent est une adresse fixe, que vous donnez à des tiers (clients, fournisseurs) pour qu’ils envoient des fichiers à un service de l’entité sans avoir besoin d’une invitation à chaque fois. Les destinataires, la durée et le niveau de confidentialité sont fixés par le lien : le déposant ne les choisit pas.
+
+La liste indique pour chaque lien : **Libellé**, **Destinataires**, **Durée de validité**, **Niveau de confidentialité**, **Statut** (**Actif**, **Expiré**, **Désactivé** ou **Révoqué**), **Fin**, **Dépôts par heure**, **Création** et **Dernière utilisation**. Un lien ni utilisé ni créé depuis 12 mois porte le badge **Inutilisé depuis 12 mois** : vérifiez s’il sert encore, puis désactivez-le, révoquez-le ou donnez-lui une date d’expiration. Un lien révoqué reste listé. Une entité compte au plus 100 liens. Un auditeur peut consulter la liste, jamais le secret.
+
+![Liste des liens de dépôt permanents avec leurs destinataires, leur statut et leurs dépôts par heure](../screenshots/fr/admin-drop-links.png)
+
+Pour en créer un, cliquez sur **Créer un lien** :
+
+1. **Libellé** : le nom du service, par exemple « Pièces comptables fournisseurs ». Il est **affiché publiquement** sur la page d’accueil du lien : n’y mettez rien de confidentiel.
+1. **Destinataires** : de 1 à 20 adresses, toutes d’un domaine de messagerie interne de l’entité (voir [Réseau](topic:tenant-network)). Elles ne sont jamais montrées au déposant.
+1. **Durée de validité** : 1, 7 ou 30 jours, parmi les durées autorisées par le niveau de confidentialité choisi.
+1. **Niveau de confidentialité** : facultatif ; à défaut, le niveau par défaut de l’entité (voir [Niveaux de confidentialité](topic:tenant-confidentiality)). Ses règles s’appliquent au déposant : si le niveau exige un mot de passe, le déposant le saisit.
+1. **Date d’expiration (facultative)** : un jour à venir. Après la fin de ce jour (heure locale), le lien est refusé aux déposants exactement comme un lien désactivé ; vous pouvez reculer la date ou la retirer ensuite. Un lien expiré est supprimé 12 mois après son expiration, une fois ses transferts supprimés.
+1. **Dépôts par heure** : 20 par défaut (de 1 à 1000). Nombre de transferts acceptés par le lien sur la dernière heure, tous déposants confondus, en plus des quotas des externes. Au-delà, aucun code de vérification n’est envoyé et le déposant est invité à réessayer plus tard.
+1. Cliquez sur **Créer le lien**.
+
+L’adresse du lien, de la forme `transfer.entity-a.example.com/drop/ttd_…`, n’est affichée **qu’une seule fois**, à la création et à la rotation. Cliquez sur **Copier le lien** avant de fermer la fenêtre, puis transmettez-le à vos tiers. Seule une empreinte du secret est conservée : il est impossible de le retrouver ensuite.
+
+Ce que vit le déposant est décrit dans « Envoyer des fichiers par un lien de dépôt » (guide du déposant). À chaque utilisation, il doit saisir un code reçu par mail. Les quotas des externes, la détection des abus et la liste de blocage s’appliquent comme pour une invitation ; le chiffrement de bout en bout n’est pas proposé par ce moyen.
+
+Les actions de chaque ligne :
+
+- **Modifier** : change le libellé, les destinataires, la durée, le niveau ou l’état **Actif** / **Désactivé**. Un lien désactivé refuse les dépôts jusqu’à sa réactivation. Les transferts déjà déposés ne changent pas.
+- **Renouveler le secret** (rotation) : crée une nouvelle adresse et invalide **immédiatement** l’ancienne. À utiliser si le lien a fuité ; pensez à prévenir vos tiers.
+- **Révoquer** : arrête définitivement le lien. Il reste dans la liste, et il est supprimé 12 mois plus tard s’il n’est référencé par aucun transfert.
+
+Une adresse ouverte au public peut être détournée : surveillez le journal de sécurité et les [signalements](topic:tenant-abuse-reports). Un lien inconnu, révoqué ou désactivé affiche toujours la même page « lien introuvable », et chaque essai est enregistré dans le journal de sécurité. Vous ne pouvez pas supprimer un niveau de confidentialité utilisé par un lien actif : modifiez d’abord le lien. L’effacement des données d’une personne (voir [Données personnelles](topic:tenant-privacy)) la retire des destinataires des liens, et désactive un lien qui n’a plus aucun destinataire. Les créations, modifications, rotations et révocations sont enregistrées dans le [journal d’audit](topic:tenant-audit). Les liens se gèrent depuis l’administration uniquement, pas par jeton d’API.
 
 <!-- topic: tenant-blocklist -->
 ### Liste de blocage

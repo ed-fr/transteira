@@ -420,7 +420,10 @@ use to ban the client IP.
   (`TT_MAX_OPEN_TRANSFERS`, 10 by default, for an internal user and for each API token; 3 for an
   invited external depositor; finalizing or cancelling one frees a slot), or too many simultaneous download
   streams (2 per client for one transfer, 4 for one transfer, 8 per client across the
-  transfers of the entity; a client is an IP address, an IPv6 address counting as its /64).
+  transfers of the entity; a client is an IP address, an IPv6 address counting as its /64),
+  or, since 2.0, a permanent drop link that already received its `maxDepositsPerHour` transfers
+  in the sliding last hour (all depositors together; checked before a code is sent and again
+  at the transfer creation).
   On the admin host: failed sign-ins (5 per username and client IP, 20 per client IP within
   15 minutes lock for 15 minutes; 5 wrong second factors of one admin, TOTP enrollment
   confirmations and the TOTP re-confirmation of a master key rotation included, lock their
@@ -735,7 +738,7 @@ use to ban the client IP.
 
 - **HTTP status:** 404 Not Found
 - **Since:** 2.0.
-- **Meaning:** the permanent drop link is unknown, revoked or disabled. The three cases give the same answer, and the refusal is written to the security log (`drop_link_invalid`).
+- **Meaning:** the permanent drop link is unknown, revoked, disabled or expired. These cases give the same answer, and the refusal is written to the security log (`drop_link_invalid`).
 - **Typical endpoints:** `GET /drop-links/{dropToken}`, `POST /deposit-sessions`.
 - **What to do:** ask the owner of the service for a valid link.
 

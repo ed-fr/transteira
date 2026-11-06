@@ -60,11 +60,13 @@ type ExportedSettings struct {
 	AllowRemoteInternalDeposit *bool   `json:"allowRemoteInternalDeposit,omitempty"`
 	AllowTransferReply         *bool   `json:"allowTransferReply,omitempty"`
 	WebhookIncludeAddresses    *bool   `json:"webhookIncludeAddresses,omitempty"`
-	// LinkOnlyAllowed and E2EPolicy are members of the 2.0 contract that
-	// this version does not store yet: an export never sets them, and an
-	// import accepts only their defaults (absent, false, "forbidden").
-	LinkOnlyAllowed *bool   `json:"linkOnlyAllowed,omitempty"`
-	E2EPolicy       *string `json:"e2ePolicy,omitempty"`
+	// LinkOnlyAllowed is the link-only switch of the tenant (since 2.0,
+	// super admin only: the import is a super admin operation).
+	LinkOnlyAllowed *bool `json:"linkOnlyAllowed,omitempty"`
+	// E2EPolicy is a member of the 2.0 contract that this version does not
+	// store yet: an export never sets it, and an import accepts only its
+	// default (absent or "forbidden").
+	E2EPolicy *string `json:"e2ePolicy,omitempty"`
 }
 
 // ExportedBranding is the branding of a tenant (OpenAPI
@@ -132,11 +134,12 @@ type ExportedLevelRules struct {
 	RequireRecipientVerification  bool  `json:"requireRecipientVerification"`
 	InternalRecipientsOnly        bool  `json:"internalRecipientsOnly"`
 	ForceDeleteAfterFirstDownload bool  `json:"forceDeleteAfterFirstDownload"`
-	// E2EPolicy and LinkOnlyAllowed are members of the 2.0 contract not
-	// stored yet: never exported; an import accepts only their defaults:
-	// absent for e2ePolicy; absent or true for linkOnlyAllowed.
-	E2EPolicy       *string `json:"e2ePolicy,omitempty"`
-	LinkOnlyAllowed *bool   `json:"linkOnlyAllowed,omitempty"`
+	// E2EPolicy is a member of the 2.0 contract not stored yet: never
+	// exported; an import accepts it only absent.
+	E2EPolicy *string `json:"e2ePolicy,omitempty"`
+	// LinkOnlyAllowed is the link-only switch of the level (since 2.0),
+	// always exported; absent on import means true.
+	LinkOnlyAllowed *bool `json:"linkOnlyAllowed,omitempty"`
 }
 
 // ExportedAbuseThresholds are the abuse detection settings in the form of
@@ -223,6 +226,7 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 			AllowRemoteInternalDeposit: ptrTo(t.AllowRemoteInternalDeposit),
 			AllowTransferReply:         ptrTo(t.AllowTransferReply),
 			WebhookIncludeAddresses:    ptrTo(t.WebhookIncludeAddresses),
+			LinkOnlyAllowed:            ptrTo(t.LinkOnlyAllowed),
 		},
 	}
 	if out.Branding, err = s.exportBranding(t, includeBranding); err != nil {
@@ -307,6 +311,7 @@ func levelToExport(l ConfidentialityLevel) ExportedLevel {
 			RequirePassword: l.Rules.RequirePassword, RequireRecipientVerification: l.Rules.RequireRecipientVerification,
 			InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 			ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+			LinkOnlyAllowed:               ptrTo(!l.Rules.LinkOnlyForbidden),
 		},
 	}
 	if len(l.Descriptions) > 0 {

@@ -44,6 +44,10 @@ type labels struct {
 	downloadedBy          string // prefix of the recipient notice
 	downloadLinkIntro     string // intro of the download link in the sender confirmation
 	personalLinks         string // sentence replacing the link when each recipient has a personal one
+	linkOnlyNotice        string // sentence replacing the link of a link-only transfer
+	noRecipient           string // shown instead of the recipient list of a link-only transfer without recipient
+	dropLinkRecipients    string // %s: label of the drop link; shown instead of the recipient list of a drop link deposit
+	dropLinkNoLabel       string // the same, the label unknown
 	myTransfersIntro      string // intro of the My transfers link in the sender confirmation
 	replyNotice           string // %s: date of the original transfer, entity name, sender address
 	noEntity              string // shown when an administrator account is assigned to no entity yet
@@ -111,6 +115,10 @@ var allLabels = map[string]*labels{
 		downloadedBy:          "Downloaded by: ",
 		downloadLinkIntro:     "Download link",
 		personalLinks:         "Each recipient received their own personal link.",
+		linkOnlyNotice:        "No mail was sent to the recipients: share the download link that was shown to you when you sent the transfer. If you lost it, issue a new one from My transfers.",
+		noRecipient:           "No recipient named.",
+		dropLinkRecipients:    "The recipients of the drop link “%s” (their addresses are not disclosed).",
+		dropLinkNoLabel:       "The recipients of the drop link (their addresses are not disclosed).",
 		myTransfersIntro:      "Manage this transfer (delete it, extend it, see who downloaded it) in My transfers",
 		replyNotice:           "This is a reply to the transfer you sent on %s. It comes from outside %s: %s proved they own this address with a code, but be careful with files you did not expect.",
 	},
@@ -158,6 +166,10 @@ var allLabels = map[string]*labels{
 		downloadedBy:          "Téléchargé par : ",
 		downloadLinkIntro:     "Lien de téléchargement",
 		personalLinks:         "Chaque destinataire a reçu son propre lien personnel.",
+		linkOnlyNotice:        "Aucun e-mail n'a été envoyé aux destinataires : transmettez-leur le lien de téléchargement qui vous a été affiché à l'envoi. Si vous l'avez perdu, générez-en un nouveau depuis Mes envois.",
+		noRecipient:           "Aucun destinataire indiqué.",
+		dropLinkRecipients:    "Les destinataires du lien de dépôt « %s » (leurs adresses ne sont pas communiquées).",
+		dropLinkNoLabel:       "Les destinataires du lien de dépôt (leurs adresses ne sont pas communiquées).",
 		myTransfersIntro:      "Gérez ce transfert (le supprimer, le prolonger, voir qui l'a téléchargé) dans Mes envois",
 		replyNotice:           "Ceci est une réponse au transfert que vous avez envoyé le %s. Il provient de l'extérieur de %s : %s a prouvé posséder cette adresse par un code, mais restez prudent avec les fichiers que vous n'attendiez pas.",
 	},

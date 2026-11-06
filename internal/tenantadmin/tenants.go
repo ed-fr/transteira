@@ -48,6 +48,9 @@ type TenantView struct {
 	// AntivirusEffective tells whether they really are: AntivirusEnabled
 	// and an instance engine other than "none" (read only).
 	AntivirusEffective bool
+	// LinkOnlyAllowed tells whether senders may create link-only transfers
+	// (since 2.0, changed by the super admin only).
+	LinkOnlyAllowed bool
 	// SetupState is setup while the tenant is being configured, active
 	// afterwards (since V1.2, read only: see [Service.CompleteSetup]).
 	SetupState tenant.SetupState
@@ -128,6 +131,9 @@ type TenantUpdate struct {
 	// AntivirusEnabled turns on or off the antivirus analysis of the files
 	// of the tenant, super admin only (decision D8).
 	AntivirusEnabled *bool
+	// LinkOnlyAllowed allows or forbids the link-only transfers of the
+	// tenant, super admin only (since 2.0).
+	LinkOnlyAllowed *bool
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -143,7 +149,7 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
 		AntivirusEnabled: t.AntivirusEnabled, AntivirusEffective: s.AntivirusEffective(t),
-		SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		LinkOnlyAllowed: t.LinkOnlyAllowed, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -363,9 +369,10 @@ func createLimits(in TenantCreate) (limit, ceiling int64, err error) {
 // below the limit lowers the limit. A delegated admin may only change the
 // default language, the webhook address option and the remote deposit option, and set the transfer
 // limit at most to the ceiling:
-// another changed field (including the antivirus switch), or a limit above
-// the ceiling, is ErrForbidden and changes nothing.
-// The tenant.updated audit event names the changed fields; a change of the
+// another changed field (including the antivirus and link-only switches),
+// or a limit above the ceiling, is ErrForbidden and changes nothing.
+// The tenant.updated audit event names the changed fields (linkOnlyAllowed
+// included, since 2.0); a change of the
 // antivirus switch is recorded apart, as tenant.antivirus_disabled or
 // tenant.antivirus_enabled, only when its value really changes.
 func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, in TenantUpdate, ip netip.Addr) (TenantView, error) {
@@ -384,9 +391,13 @@ func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid t
 	if len(changed) == 0 && !avChanged {
 		return s.view(ctx, cur)
 	}
+	loChanged := next.LinkOnlyAllowed != cur.LinkOnlyAllowed
 	// One transaction: a failure stores nothing, and the events are
-	// recorded only once both changes are committed.
-	t, err := s.repo.updateTenantWithAntivirus(ctx, next, len(changed) > 0, avChanged)
+	// recorded only once every change is committed. The link-only switch
+	// is among the changed fields but written apart from the general ones.
+	t, err := s.repo.updateTenantParts(ctx, next, store.TenantParts{
+		General: len(changed) > 0 && (!loChanged || len(changed) > 1), Antivirus: avChanged, LinkOnly: loChanged,
+	})
 	if err != nil {
 		return TenantView{}, updateError("update tenant", err)
 	}
@@ -453,6 +464,9 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	if in.AntivirusEnabled != nil {
 		next.AntivirusEnabled = *in.AntivirusEnabled
 	}
+	if in.LinkOnlyAllowed != nil {
+		next.LinkOnlyAllowed = *in.LinkOnlyAllowed
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -477,7 +491,7 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	}
 	if !super && (next.Name != cur.Name || next.FQDN != cur.FQDN ||
 		next.StorageQuotaBytes != cur.StorageQuotaBytes || next.MaxTransferCeiling != cur.MaxTransferCeiling ||
-		next.AntivirusEnabled != cur.AntivirusEnabled) {
+		next.AntivirusEnabled != cur.AntivirusEnabled || next.LinkOnlyAllowed != cur.LinkOnlyAllowed) {
 		return nil, ErrForbidden
 	}
 	return next, nil
@@ -501,6 +515,7 @@ func changedFields(a, b *tenant.Tenant) []string {
 	add(a.WebhookIncludeAddresses != b.WebhookIncludeAddresses, "webhookIncludeAddresses")
 	add(a.AllowRemoteInternalDeposit != b.AllowRemoteInternalDeposit, "allowRemoteInternalDeposit")
 	add(a.AllowTransferReply != b.AllowTransferReply, "allowTransferReply")
+	add(a.LinkOnlyAllowed != b.LinkOnlyAllowed, "linkOnlyAllowed")
 	return out
 }
 

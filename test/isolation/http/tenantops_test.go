@@ -525,7 +525,8 @@ func checkSearchDataSubject(t *testing.T, h *harness, op operation, sess adminSe
 }
 
 // checkEraseDataSubject: erasing in A an address known in both tenants
-// leaves B's transfer, B's sender session and B's invitation untouched.
+// leaves B's transfer, B's sender session, B's invitation and the
+// recipients of B's drop link untouched.
 func checkEraseDataSubject(t *testing.T, h *harness, op operation, sess adminSession) {
 	for _, bad := range []string{`null`, `{"email":"not an address"}`} {
 		h.invalidInputOfB(t, op, sess, http.MethodPost, "/data-subjects/erase", bad)
@@ -533,7 +534,10 @@ func checkEraseDataSubject(t *testing.T, h *harness, op operation, sess adminSes
 	const shared = "heidi@shared.example.net"
 	h.newTransfer(t, h.colleague(t), shared)
 	trB := h.newTransfer(t, h.other(t), shared)
-	for _, addr := range []string{shared, insiderB} {
+	// Since 2.0, the erasure removes the address from the drop links of
+	// the tenant: never from those of B.
+	linkB := h.dropLinkOfB(t, op)
+	for _, addr := range []string{shared, insiderB, dropRecipientB} {
 		resp := h.adminCall(t, sess, http.MethodPost, tenantPath(h.tenantA.ID, "/data-subjects/erase"), `{"email":"`+addr+`"}`)
 		wantOK(t, op, "erasure in tenant A", resp)
 		h.noDataOfB(t, op, "erasure in tenant A", resp, trB.ID)
@@ -544,6 +548,7 @@ func checkEraseDataSubject(t *testing.T, h *harness, op operation, sess adminSes
 	if got := h.search(t, op, h.superSession(t), h.tenantB.ID, shared); got.TransfersAsRecipient != 1 {
 		t.Errorf("%s: %s in tenant B after the erasure in A = %+v, want its transfer of B", op, shared, got)
 	}
+	h.dropLinkOfBIntact(t, op, linkB)
 	// B's sender still has its session (other reads it) and its transfers.
 	h.transferOfB(t, op, trB.ID, shared)
 	if got := h.search(t, op, h.superSession(t), h.tenantB.ID, insiderB); got.TransfersAsSender == 0 {

@@ -39,6 +39,8 @@
     "empty": "Vous n’avez aucun envoi en cours.",
     "caption": "Envois en cours",
     "recipients": "Destinataires",
+    "dropLink": "Destinataires du lien de dépôt « {label} »",
+    "dropLinkNoLabel": "Destinataires d’un lien de dépôt",
     "files": "Fichiers",
     "status": "État",
     "expires": "Disponible jusqu’au",
@@ -66,7 +68,6 @@
     "not_scanned_encrypted": "Non analysé : fichier chiffré",
     "not_scanned_disabled": "Non analysé : antivirus désactivé",
     "scan_error": "Échec de l’analyse",
-    "not_scanned_disabled": "Non analysé : antivirus désactivé",
     "unknown": "Inconnu"
   },
   "detail": {
@@ -136,6 +137,21 @@
       "confirmButton": "Supprimer définitivement",
       "cancel": "Conserver l’envoi",
       "done": "Envoi supprimé."
+    },
+    "noRecipients": "Aucun destinataire enregistré",
+    "link": {
+      "title": "Lien de téléchargement",
+      "text": "Ce transfert est un transfert par lien seul : aucun mail n’a été envoyé aux destinataires. Si vous avez perdu le lien, vous pouvez en obtenir un nouveau.",
+      "button": "Nouveau lien",
+      "confirmTitle": "Créer un nouveau lien ?",
+      "confirm": "Un nouveau lien est créé et l’ancien cesse immédiatement de fonctionner : les personnes qui l’ont reçu ne pourront plus télécharger. Le nouveau lien ne sera affiché qu’une seule fois.",
+      "confirmButton": "Créer un nouveau lien",
+      "cancel": "Annuler",
+      "done": "Nouveau lien créé. Copiez-le maintenant.",
+      "conflict": "Un nouveau lien ne peut plus être créé pour ce transfert (expiré, supprimé ou pas encore disponible).",
+      "shownOnce": "Ce lien n’est affiché qu’une seule fois : copiez-le maintenant. L’ancien lien ne fonctionne plus.",
+      "label": "Nouveau lien de téléchargement",
+      "copy": "Copier le lien"
     }
   }
 }

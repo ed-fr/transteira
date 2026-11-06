@@ -37,17 +37,10 @@ func (s *Server) UpdateConfidentialityLevels(ctx context.Context, req gen.Update
 	}
 	in := make([]tenantadmin.ConfidentialityLevel, len(req.Body.Items))
 	for i, l := range req.Body.Items {
-		// The link-only and end-to-end policies of API 2.0 are not implemented
-		// yet: refused rather than silently dropped.
-		field := ""
-		switch {
-		case l.Rules.LinkOnlyAllowed != nil:
-			field = "linkOnlyAllowed"
-		case l.Rules.E2ePolicy != nil:
-			field = "e2ePolicy"
-		}
-		if field != "" {
-			if prob := unsupportedInTenant(p, req.TenantId, fmt.Sprintf("/items/%d/rules/%s", i, field)); prob != nil {
+		// The end-to-end policy of API 2.0 is not implemented yet: refused
+		// rather than silently dropped.
+		if l.Rules.E2ePolicy != nil {
+			if prob := unsupportedInTenant(p, req.TenantId, fmt.Sprintf("/items/%d/rules/e2ePolicy", i)); prob != nil {
 				return nil, prob
 			}
 		}
@@ -59,6 +52,8 @@ func (s *Server) UpdateConfidentialityLevels(ctx context.Context, req gen.Update
 				RequireRecipientVerification:  l.Rules.RequireRecipientVerification,
 				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+				// Absent means allowed.
+				LinkOnlyForbidden: l.Rules.LinkOnlyAllowed != nil && !*l.Rules.LinkOnlyAllowed,
 			},
 		}
 	}
@@ -98,6 +93,7 @@ func levelListBody(levels []tenantadmin.ConfidentialityLevel) gen.Confidentialit
 				RequireRecipientVerification:  l.Rules.RequireRecipientVerification,
 				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+				LinkOnlyAllowed:               new(!l.Rules.LinkOnlyForbidden),
 			},
 		}
 	}

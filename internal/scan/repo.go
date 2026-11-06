@@ -25,6 +25,7 @@ type repo interface {
 	reject(ctx context.Context, tid tenant.ID, trfID string) error
 	makeAvailable(ctx context.Context, t *tenant.Tenant, trfID string, perRecipient bool, tokens []string, now time.Time) ([]store.RecipientLink, error)
 	recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error)
+	dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error)
 	sweep(ctx context.Context) ([]store.TenantTransfer, error)
 }
 
@@ -90,8 +91,10 @@ func (r storeRepo) reject(ctx context.Context, tid tenant.ID, trfID string) erro
 // of each token and its sealed copy, and writes its deposit proof, in one
 // transaction: either all exist or none (T-302). The store restarts the
 // expiry from now. A shared transfer takes a single token (no link is
-// returned); a transfer with one link per recipient (perRecipient) takes
-// one token per recipient and returns the links created, in position order.
+// returned), a link-only transfer none (it keeps the token of its
+// finalization, never sealed); a transfer with one link per recipient
+// (perRecipient) takes one token per recipient and returns the links
+// created, in position order.
 //
 // The signing key is prepared before the transaction opens (it may open
 // system transactions, never nested in a tenant one); a failure to prepare
@@ -116,12 +119,17 @@ func (r storeRepo) makeAvailable(ctx context.Context, t *tenant.Tenant, trfID st
 			sealed[i] = store.LinkToken{Hash: hash[:], KeyID: wkID}
 		}
 		var err error
-		if !perRecipient {
+		switch {
+		case !perRecipient && len(tokens) == 0:
+			// A link-only transfer keeps the token drawn at its
+			// finalization, which has no sealed copy.
+			err = r.db.Transfers().MarkLinkOnlyAvailableTx(ctx, tx, trfID, now)
+		case !perRecipient:
 			if len(sealed) != 1 {
 				return fmt.Errorf("scan: a shared transfer takes one token, %d given", len(sealed))
 			}
 			err = r.db.Transfers().MarkAvailableTx(ctx, tx, trfID, sealed[0].Hash, sealed[0].KeyID, now)
-		} else {
+		default:
 			links, err = r.db.Transfers().MarkAvailableLinksTx(ctx, tx, trfID, sealed, now)
 		}
 		if err != nil || sealer == nil {
@@ -140,6 +148,10 @@ func (r storeRepo) makeAvailable(ctx context.Context, t *tenant.Tenant, trfID st
 
 // recipientLinks returns the links of a transfer with one link per
 // recipient, with their sealed token, in position order.
+func (r storeRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	return r.db.DropLinks().Get(ctx, tid, linkID)
+}
+
 func (r storeRepo) recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error) {
 	return r.db.RecipientLinks().ListByTransfer(ctx, tid, trfID)
 }

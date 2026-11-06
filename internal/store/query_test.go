@@ -368,8 +368,10 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM confidentiality_levels WHERE tenant_id = ?`:                                        0,
 	`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, descriptions, is_default, ` +
 		`require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, ` +
-		`force_delete_after_download, max_downloads_cap, updated_at, updated_by) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT DISTINCT confidentiality_level FROM drop_links ` +
+		`WHERE tenant_id = ? AND enabled AND revoked_at IS NULL AND confidentiality_level IS NOT NULL`: 0,
 	`SELECT kind, domain FROM recipient_domain_rules WHERE tenant_id = ?`:                          0,
 	`DELETE FROM recipient_domain_rules WHERE tenant_id = ?`:                                       0,
 	`INSERT INTO recipient_domain_rules (tenant_id, kind, domain, created_at) VALUES (?, ?, ?, ?)`: 0,
@@ -407,8 +409,8 @@ var tenantAllowlist = map[string]int{
 		`from_address, from_name, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	// Verification challenges.
 	`INSERT INTO verification_challenges (tenant_id, id, email, code_mac, attempts_remaining, invitation_id, ` +
-		`client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent, drop_link_id) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND recipient_link_id = ? AND created_at >= ?`: 0,
 	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`:                    0,
 	`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND recipient_link_id = ? ` +
@@ -435,7 +437,7 @@ var tenantAllowlist = map[string]int{
 	`UPDATE verified_addresses SET recognition_salt = ? WHERE tenant_id = ? AND email = ?`: 1,
 	// Deposit sessions.
 	`INSERT INTO deposit_sessions (tenant_id, id, token_hash, email, kind, invitation_id, created_at, expires_at, ` +
-		`reply_to_transfer_id, recipient_link_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`reply_to_transfer_id, recipient_link_id, drop_link_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT count(*) FROM recipient_links WHERE tenant_id = ? AND id = ? AND transfer_id = ?`: 0,
 	`SELECT count(*) FROM deposit_sessions ` +
 		`WHERE tenant_id = ? AND recipient_link_id = ? AND ended_at IS NULL AND expires_at > ?`: 0,
@@ -458,8 +460,9 @@ var tenantAllowlist = map[string]int{
 		`expiry_days, password_hash, delete_after_first_download, total_bytes, idempotency_key, request_fingerprint, ` +
 		`created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id, ` +
 		`confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, ` +
-		`rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download, ` +
+		`link_only, drop_link_id) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
@@ -499,6 +502,34 @@ var tenantAllowlist = map[string]int{
 		`allowed_senders = COALESCE(?, allowed_senders) WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 3,
 	`UPDATE api_tokens SET last_used_at = ? ` +
 		`WHERE tenant_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: 1,
+	// Drop links (since 2.0).
+	`INSERT INTO drop_links (tenant_id, id, token_hash, label, recipients, validity_days, confidentiality_level, ` +
+		`enabled, created_by, created_at, updated_at, expires_at, max_deposits_per_hour) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+	`SELECT ` + dropLinkColumns + ` FROM drop_links WHERE tenant_id = ? AND id = ?`: 0,
+	`SELECT ` + dropLinkColumns + ` FROM drop_links ` +
+		`WHERE tenant_id = ? AND token_hash = ? AND enabled AND revoked_at IS NULL ` +
+		`AND (expires_at IS NULL OR expires_at > ?)`: 0,
+	`SELECT ` + dropLinkColumns + ` FROM drop_links WHERE tenant_id = ? ORDER BY created_at DESC, id DESC`:            0,
+	`SELECT count(*) FROM drop_links WHERE tenant_id = ?`:                                                             0,
+	`SELECT count(*) FROM drop_links WHERE tenant_id = ? AND id = ?`:                                                  0,
+	`UPDATE deposit_sessions SET used_at = ? WHERE tenant_id = ? AND id = ? AND drop_link_id = ? AND used_at IS NULL`: 1,
+	`SELECT count(*), min(used_at) FROM deposit_sessions WHERE tenant_id = ? AND drop_link_id = ? AND used_at > ?`:    0,
+	`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND drop_link_id = ? AND created_at >= ?`:       0,
+	`UPDATE drop_links SET label = ?, recipients = ?, validity_days = ?, confidentiality_level = ?, enabled = ?, ` +
+		`expires_at = ?, max_deposits_per_hour = ?, updated_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 8,
+	`UPDATE drop_links SET token_hash = ?, updated_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 2,
+	`UPDATE drop_links SET revoked_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ? AND revoked_at IS NULL`: 2,
+	`UPDATE drop_links SET last_used_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`: 1,
+	`SELECT count(*) FROM confidentiality_levels WHERE tenant_id = ? AND key = ?`: 0,
+	`SELECT id, recipients FROM drop_links WHERE tenant_id = ? ORDER BY id`:       0,
+	`UPDATE drop_links SET recipients = ?, enabled = (enabled AND NOT ?), updated_at = ? ` +
+		`WHERE tenant_id = ? AND id = ?`: 3,
+	`SELECT id FROM drop_links WHERE tenant_id = ? AND (revoked_at < ? OR expires_at < ?) AND id > ? ` +
+		`ORDER BY id LIMIT ?`: 0,
+	`DELETE FROM drop_links WHERE tenant_id = ? AND id = ? AND (revoked_at < ? OR expires_at < ?)`: 0,
+	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND drop_link_id = ?`:                      0,
 	// Transfer files.
 	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, path, name, size, media_type, expected_sha256, ` +
 		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status) ` +
@@ -515,7 +546,14 @@ var tenantAllowlist = map[string]int{
 	// Antivirus analysis and download links.
 	`UPDATE transfers SET status = 'available', download_token_hash = ?, download_token_key_id = ?, available_at = ?, ` +
 		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) WHERE tenant_id = ? AND id = ? AND status = 'scanning' ` +
-		`AND link_mode = 'shared'`: 4,
+		`AND link_mode = 'shared' AND NOT link_only`: 4,
+	`UPDATE transfers SET status = 'available', available_at = ?, ` +
+		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT) WHERE tenant_id = ? AND id = ? AND status = 'scanning' ` +
+		`AND link_only AND download_token_hash IS NOT NULL`: 2,
+	`UPDATE transfers SET download_token_hash = ?, download_token_key_id = NULL ` +
+		`WHERE tenant_id = ? AND id = ? AND link_only AND status IN ('uploading', 'scanning')`: 1,
+	`UPDATE transfers SET download_token_hash = ?, download_token_key_id = NULL ` +
+		`WHERE tenant_id = ? AND id = ? AND link_only AND status IN ('scanning', 'available')`: 1,
 	`UPDATE transfers SET status = 'available', available_at = ?, ` +
 		`expires_at = ? + expiry_days * CAST(86400000 AS BIGINT), ` +
 		`expiry_reminder_at = (CASE WHEN expiry_days * CAST(86400000 AS BIGINT) < CAST(? AS BIGINT) ` +
@@ -578,7 +616,8 @@ var tenantAllowlist = map[string]int{
 	`SELECT storage_name, id, transfer_id, dek_key_id, uploaded_at FROM transfer_files WHERE tenant_id = ? LIMIT ?`: 0,
 	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND invitation_id = ?`:                                      0,
 	`DELETE FROM verified_addresses WHERE tenant_id = ? AND email = ? AND last_used_at = ?`:                         0,
-	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?)`:     0,
+	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) ` +
+		`AND (used_at IS NULL OR used_at <= ?)`: 0,
 	`SELECT id FROM verification_challenges WHERE tenant_id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) ` +
 		`AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
 	`DELETE FROM verification_challenges WHERE tenant_id = ? AND id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) ` +
@@ -628,8 +667,8 @@ var tenantAllowlist = map[string]int{
 	`UPDATE abuse_reports SET message = ?, note = ? WHERE tenant_id = ? AND id = ?`:                      2,
 	`SELECT id FROM abuse_reports WHERE tenant_id = ? AND created_at < ? AND id > ? ORDER BY id LIMIT ?`: 0,
 	`DELETE FROM abuse_reports WHERE tenant_id = ? AND id = ? AND created_at < ?`:                        0,
-	`SELECT id FROM deposit_sessions WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) AND id > ? ` +
-		`ORDER BY id LIMIT ?`: 0,
+	`SELECT id FROM deposit_sessions WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) ` +
+		`AND (used_at IS NULL OR used_at <= ?) AND id > ? ORDER BY id LIMIT ?`: 0,
 	`SELECT key FROM password_failures WHERE tenant_id = ? AND scope = ? AND COALESCE(fail_1, 0) <= ? ` +
 		`AND COALESCE(fail_2, 0) <= ? AND COALESCE(fail_3, 0) <= ? AND COALESCE(locked_until, 0) <= ? AND key > ? ` +
 		`ORDER BY key LIMIT ?`: 0,
@@ -861,7 +900,7 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                                  reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                               reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
@@ -869,6 +908,7 @@ var systemAllowlist = map[string]string{
 	`DELETE FROM tenants WHERE id = ?`:                                                            reasonTenantAdmin,
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:                                  reasonTenantAdmin,
 	`UPDATE tenants SET antivirus_enabled = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET link_only_allowed = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`UPDATE tenants SET smtp_tested_at = ? WHERE id = ? AND status = 'active'`:                    reasonTenantAdmin,
 	`UPDATE tenants SET network_reviewed_at = ? WHERE id = ? AND status = 'active'`:               reasonTenantNetwork,
 	`UPDATE tenants SET setup_state = 'active', mail_templates_reviewed_at = COALESCE(?, mail_templates_reviewed_at), updated_at = ? WHERE id = ? AND status = 'active' AND setup_state = 'setup'`: reasonTenantAdmin,

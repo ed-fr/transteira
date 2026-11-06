@@ -106,6 +106,46 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `tenant.exported`, `tenant.imported`. Admin screens: export section on the General screen,
   "Duplicate" in the entity list, import screen. User guides and API guide (section 10)
   updated.
+- Permanent drop links (threats T-309 to T-314, decision P63): a fixed address
+  `https://<tenant host>/drop/ttd_...` given to third parties to send files to a service without a
+  personal invitation. Created by the delegated admins and the super admin (at most 100 per
+  entity; read-only for auditors) with a public label, 1 to 20 recipients of the internal mail
+  domains, a validity of 1, 7 or 30 days within the durations of the chosen confidentiality
+  level; edited, disabled, rotated (the old token dies at once) or revoked (kept in the list,
+  purged 12 months later when no transfer refers to it). The URL is shown once, at creation and
+  rotation; only the SHA-256 of the token is stored. The depositor gets an e-mail code at every
+  use (single-use `drop_link` session, no recognition cookie); external quotas, abuse detection
+  and the blocklist apply, and the rules of the level apply to the depositor. An unknown, revoked
+  or disabled link answers the same `404 drop-link-invalid` and is written to the security log
+  (`drop_link_invalid`). A confidentiality level used by an enabled link cannot be deleted
+  (`409 state-conflict`); erasing a person's data removes them from the recipients and disables a
+  link left without any. Audit `drop_link.*`. Migration 0031 (`verification_challenges.drop_link_id`).
+  Limits of a link (P63, migration 0032): an optional expiry date (`expiresAt`; an expired link
+  answers like a disabled one, can be extended or cleared, and is purged 12 months after its
+  expiry), a cap of transfers per hour through the link, all depositors together
+  (`maxDepositsPerHour`, 20 by default, 1 to 1000; checked before a code is sent and again at the
+  transfer creation: `429 rate-limited`, security log scope `drop_link`), and an `unused` flag with
+  an "Unused for 12 months" badge in the administration. The single use of a session and the
+  hourly cap survive the cancellation of a transfer (`deposit_sessions.used_at`, migration 0032);
+  at most three times `maxDepositsPerHour` codes are sent through a link per hour, whatever the
+  address. The recipients of a link are never disclosed to its depositor: any `recipients` in
+  the creation is refused the same way, the transfer and "My transfers" answers carry an empty
+  `recipients` and a `dropLinkLabel`, the confirmation mail names the link, and the proofs of
+  these transfers are for the administrators only. A link whose recipient left the internal mail
+  domains is refused like a disabled one. The reverse proxy configurations mask the `/drop/` and
+  `/api/v1/drop-links/` tokens in their logs.
+- Link-only transfers (threats T-315 to T-317, decision P64): `linkOnly` on `createTransfer`, for
+  internal depositors and API tokens only, when the entity allows it (`linkOnlyAllowed`, super
+  admin, off by default) and the confidentiality level allows it (on by default); incompatible
+  with recipient verification. No mail is sent to the (optional) recipients; the link is drawn
+  at finalization and returned **once**, in the answer of `finalizeTransfer`, with only its hash
+  stored; the sender confirmation mail has no link, and administrators cannot resend the
+  notification. A lost link is replaced from "My transfers" (`reissueMyTransferLink`), which
+  kills the old one, as soon as the transfer is scanning (the new link works once it is
+  available). The proofs of a link-only transfer carry `linkOnly: true` and say "link only:
+  recipient not identified" (PDF and `transteira proof verify`). `TenantFeatures.linkOnly` tells
+  the forms whether to offer the option.
+  Guides (French and English), API integration guide (section 11) and threat model updated.
 
 ## [1.2.1] - 2026-11-04
 

@@ -430,10 +430,14 @@ type sessionJSON struct {
 		InvitedBy string    `json:"invitedBy"`
 		ExpiresAt time.Time `json:"expiresAt"`
 	} `json:"invitation"`
+	DropLink *struct {
+		Label        string `json:"label"`
+		ValidityDays int    `json:"validityDays"`
+	} `json:"dropLink"`
 }
 
 // sessionMembers are the members the DepositSession schema allows.
-var sessionMembers = []string{"email", "kind", "csrfToken", "expiresAt", "limits", "canInvite", "invitation"}
+var sessionMembers = []string{"email", "kind", "csrfToken", "expiresAt", "limits", "canInvite", "invitation", "dropLink"}
 
 // expectChallenge asserts a 202 VerificationChallenge for email.
 func expectChallenge(t *testing.T, resp response, email string) challengeJSON {
@@ -551,8 +555,12 @@ func expectSessionBody(t *testing.T, body []byte, email string) sessionJSON {
 	if s.Email != strings.ToLower(email) || !strings.HasPrefix(s.CSRFToken, "csrf_") {
 		t.Errorf("session = %s, want email %s and a csrf_ token", body, email)
 	}
-	if s.Limits.MaxTransferBytes != 1<<30 || !slices.Equal(s.Limits.ExpiryDays, []int{1, 7, 30}) {
-		t.Errorf("limits = %+v, want the tenant limit and 1, 7, 30 days", s.Limits)
+	wantDays := []int{1, 7, 30}
+	if s.DropLink != nil { // the validity is the link's
+		wantDays = []int{s.DropLink.ValidityDays}
+	}
+	if s.Limits.MaxTransferBytes != 1<<30 || !slices.Equal(s.Limits.ExpiryDays, wantDays) {
+		t.Errorf("limits = %+v, want the tenant limit and %v days", s.Limits, wantDays)
 	}
 	if d := time.Until(s.ExpiresAt); d <= defaultSessionTTL-time.Minute || d > defaultSessionTTL+5*time.Second {
 		t.Errorf("session expires in %s, want %s", d, defaultSessionTTL)

@@ -73,6 +73,8 @@ describe('admin routes', () => {
     ['/admin/tenants/ten_1/blocklist', '/tenants/:id/blocklist', 'auth', 'tenant-blocklist'],
     ['/admin/tenants/ten_1/tokens', '/tenants/:id/tokens', 'auth', 'tenant-tokens'],
     ['/admin/tenants/ten_1/tokens/new', '/tenants/:id/tokens/new', 'auth', 'tenant-tokens'],
+    ['/admin/tenants/ten_1/drop-links', '/tenants/:id/drop-links', 'auth', 'tenant-drop-links'],
+    ['/admin/tenants/ten_1/drop-links/new', '/tenants/:id/drop-links/new', 'auth', 'tenant-drop-links'],
     ['/admin/tenants/ten_1/webhooks', '/tenants/:id/webhooks', 'auth', 'tenant-webhooks'],
     ['/admin/tenants/ten_1/audit', '/tenants/:id/audit', 'auth', 'tenant-audit'],
     ['/admin/tenants/ten_1/stats', '/tenants/:id/stats', 'auth', 'tenant-stats'],

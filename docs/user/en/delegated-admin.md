@@ -130,7 +130,7 @@ Creating and deleting entities is reserved to the super administrator: these act
 Once an entity is open, a navigation bar shows its name and two groups of screens.
 
 - **Configuration**: **General**, **Branding**, **Network**, **Recipient domains**, **Confidentiality levels**, **Mail (SMTP)**, **Email templates**, **Legal information**.
-- **Operations**: **Transfers**, **Invitations**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Statistics**, **Personal data**.
+- **Operations**: **Transfers**, **Invitations**, **Drop links**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Statistics**, **Personal data**.
 
 The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
 
@@ -283,6 +283,7 @@ For each level, fill in:
 - **Recipient verification required**. This rule is stored but not applied yet: it takes effect once per-recipient links are available.
 - **Internal recipients only**: recipients must belong to the internal domains of the entity (see [Network](topic:tenant-network)).
 - **Delete after the first download (forced)**.
+- **Link-only allowed**: allows (the default) or forbids the "link only" option for this level, see “Sending with a link only” (depositor guide). It is offered only if the super admin has allowed it for the entity. A level that requires recipient verification does not allow link-only, as the two options are incompatible.
 - **Maximum number of downloads (cap)**: optional, from 1 to 1000. It caps the number of downloads the sender can set; if the sender sets none, the cap applies.
 
 Use the arrows to reorder the levels, **Add a level** to create one, and **Save** to apply. The screen reports errors level by level.
@@ -409,6 +410,37 @@ The columns show the **Invited address**, **Invited by**, the **Status** (**Pend
 ![List of the invitations with their status and dates](../screenshots/en/admin-invitations.png)
 
 Click **Revoke** to stop an invitation immediately: its link no longer allows a deposit, and deposits already started with it end. This is final, but a new invitation can be sent later.
+
+<!-- topic: tenant-drop-links -->
+### Permanent drop links
+
+A permanent drop link is a fixed address you give to third parties (customers, suppliers) so that they can send files to a service of the entity without needing a new invitation each time. The recipients, the duration and the confidentiality level are fixed by the link: the depositor does not choose them.
+
+The list shows for each link: **Label**, **Recipients**, **Validity**, **Confidentiality level**, **Status** (**Active**, **Expired**, **Disabled** or **Revoked**), **Ends**, **Deposits per hour**, **Created** and **Last used**. A link neither used nor created for 12 months carries an **Unused for 12 months** badge: check whether it is still needed, then disable it, revoke it or give it an expiry date. A revoked link stays listed. An entity holds at most 100 links. An auditor can read the list, never the secret.
+
+![List of the permanent drop links with their recipients, status and deposits per hour](../screenshots/en/admin-drop-links.png)
+
+To create one, click **Create a link**:
+
+1. **Label**: the name of the service, for example "Supplier accounting documents". It is **shown publicly** on the landing page of the link: put nothing confidential in it.
+1. **Recipients**: 1 to 20 addresses, all in an internal mail domain of the entity (see [Network](topic:tenant-network)). They are never shown to the depositor.
+1. **Validity**: 1, 7 or 30 days, among the durations allowed by the chosen confidentiality level.
+1. **Confidentiality level**: optional; otherwise the default level of the entity (see [Confidentiality levels](topic:tenant-confidentiality)). Its rules apply to the depositor: if the level requires a password, the depositor types one.
+1. **Expiry date (optional)**: a day to come. After the end of that day (your local time), the link is refused to depositors exactly like a disabled one; you can push the date back or remove it later. An expired link is deleted 12 months after its expiry, once its transfers are deleted.
+1. **Deposits per hour**: 20 by default (1 to 1000). Transfers accepted through the link over the last hour, all depositors together, on top of the quotas of external users. Beyond it, no verification code is sent and the depositor is asked to try again later.
+1. Click **Create the link**.
+
+The address of the link, of the form `transfer.entity-a.example.com/drop/ttd_…`, is shown **only once**, at creation and at rotation. Click **Copy the link** before closing the window, then pass it to your third parties. Only a fingerprint of the secret is kept: it cannot be retrieved afterwards.
+
+What the depositor goes through is described in “Sending files through a drop link” (depositor guide). At every use, they must type a code received by email. The quotas of external users, abuse detection and the blocklist apply as for an invitation; end-to-end encryption is not offered through this means.
+
+The actions of each row:
+
+- **Edit**: changes the label, the recipients, the duration, the level or the **Active** / **Disabled** state. A disabled link refuses deposits until it is enabled again. Transfers already deposited do not change.
+- **Rotate the secret**: creates a new address and invalidates the old one **immediately**. Use it if the link leaked; remember to warn your third parties.
+- **Revoke**: stops the link for good. It stays in the list, and it is deleted 12 months later if no transfer refers to it.
+
+An address open to the public can be misused: watch the security log and the [reports](topic:tenant-abuse-reports). An unknown, revoked or disabled link always shows the same "link not found" page, and each attempt is written to the security log. You cannot delete a confidentiality level used by an active link: edit the link first. Erasing the data of a person (see [Personal data](topic:tenant-privacy)) removes them from the recipients of the links, and disables a link left without any recipient. Creations, changes, rotations and revocations are recorded in the [audit log](topic:tenant-audit). Links are managed from the administration only, not with an API token.
 
 <!-- topic: tenant-blocklist -->
 ### Blocklist

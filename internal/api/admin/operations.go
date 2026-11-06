@@ -234,7 +234,17 @@ func adminTransferBody(t tenantops.Transfer) gen.AdminTransfer {
 		CreatedAt: t.CreatedAt, ExpiresAt: optionalTime(t.ExpiresAt), FirstDownloadedAt: optionalTime(t.FirstDownloadedAt),
 		DownloadCount: int(t.DownloadCount), MaxDownloads: t.MaxDownloads, ConfidentialityLevel: transferLevelRef(t),
 		RecipientVerification: new(t.RecipientVerification), ReplyToTransferId: optional(t.ReplyToTransferID),
+		DropLinkId: optional(t.DropLinkID), LinkOnly: optionalTrue(t.LinkOnly),
 	}
+}
+
+// optionalTrue returns &true when b is set, nil otherwise: a 2.0 flag
+// stays absent for the transfers it does not concern.
+func optionalTrue(b bool) *bool {
+	if !b {
+		return nil
+	}
+	return &b
 }
 
 // transferLevelRef renders the confidentiality level snapshotted on t as
@@ -279,6 +289,7 @@ func (s *Server) GetTenantTransfer(ctx context.Context, req gen.GetTenantTransfe
 		CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, FirstDownloadedAt: t.FirstDownloadedAt,
 		DownloadCount: t.DownloadCount, MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel,
 		RecipientVerification: t.RecipientVerification, ReplyToTransferId: t.ReplyToTransferId,
+		DropLinkId: t.DropLinkId, LinkOnly: t.LinkOnly,
 	}
 	if d.SenderIP.IsValid() {
 		ip := d.SenderIP.String()
@@ -587,7 +598,7 @@ func (s *Server) SearchDataSubject(ctx context.Context, req gen.SearchDataSubjec
 	return gen.SearchDataSubject200JSONResponse{
 		Email: sum.Email, VerifiedAddress: sum.VerifiedAddress, TransfersAsSender: sum.TransfersAsSender,
 		TransfersAsRecipient: sum.TransfersAsRecipient, Invitations: sum.Invitations, AuditEvents: sum.AuditEvents,
-		SecurityEvents: sum.SecurityEvents, Proofs: &sum.Proofs,
+		SecurityEvents: sum.SecurityEvents, Proofs: &sum.Proofs, DropLinks: &sum.DropLinks,
 	}, nil
 }
 
@@ -606,6 +617,7 @@ func (s *Server) EraseDataSubject(ctx context.Context, req gen.EraseDataSubjectR
 		TransfersDeleted: rep.TransfersDeleted, RecipientEntriesRemoved: rep.RecipientEntriesRemoved,
 		VerifiedAddressDeleted: rep.VerifiedAddressDeleted, InvitationsDeleted: rep.InvitationsDeleted,
 		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks, AbuseReports: &rep.AbuseReports, ProofsDeleted: &rep.ProofsDeleted,
+		DropLinksUpdated: &rep.DropLinksUpdated, DropLinksDisabled: &rep.DropLinksDisabled,
 	}, nil
 }
 

@@ -27,6 +27,8 @@ type repo interface {
 	deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error)
 	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error)
+	countDropLinks(ctx context.Context, tid tenant.ID, email string) (int, error)
+	eraseDropLinks(ctx context.Context, tid tenant.ID, email string, now time.Time) (store.DropLinkErasure, error)
 	countProofs(ctx context.Context, tid tenant.ID, email string) (int, error)
 	eraseProofs(ctx context.Context, tid tenant.ID, email string) (int, error)
 	eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
@@ -217,6 +219,29 @@ func (r *storeRepo) eraseAbuse(ctx context.Context, tid tenant.ID, email, pseudo
 		return err
 	})
 	return n, err
+}
+
+// countDropLinks counts the permanent drop links, revoked ones included,
+// whose recipients include email (since 2.0).
+func (r *storeRepo) countDropLinks(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	return r.db.DropLinks().CountByRecipient(ctx, tid, email)
+}
+
+// eraseDropLinks removes email from the recipients of the drop links of
+// the tenant, in one transaction; a link left without recipient is
+// disabled (since 2.0).
+func (r *storeRepo) eraseDropLinks(ctx context.Context, tid tenant.ID, email string, now time.Time) (store.DropLinkErasure, error) {
+	sc, err := r.db.Scoped(tid)
+	if err != nil {
+		return store.DropLinkErasure{}, err
+	}
+	var out store.DropLinkErasure
+	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
+		var err error
+		out, err = r.db.DropLinks().RemoveRecipientTx(ctx, tx, email, now)
+		return err
+	})
+	return out, err
 }
 
 // countProofs counts the proofs of deposit and delivery whose statement

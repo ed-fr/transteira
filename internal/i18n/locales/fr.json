@@ -9,6 +9,8 @@
   "proof.field.transfer": "Transfert",
   "proof.field.sender": "Expéditeur",
   "proof.field.recipients": "Destinataires",
+  "proof.field.linkOnly": "Lien seul",
+  "proof.linkOnly.notice": "Lien seul : destinataire non identifié. Aucun e-mail n'a été envoyé ; l'expéditeur a transmis lui-même le lien de téléchargement, si bien qu'un téléchargement peut provenir de toute personne qui le détient.",
   "proof.field.level": "Niveau de confidentialité",
   "proof.field.e2e": "Chiffrement de bout en bout",
   "proof.e2e.notice": "Les fichiers ont été chiffrés dans le navigateur de l'expéditeur : les noms sont les noms génériques connus du serveur, et les empreintes SHA-256 sont celles du contenu chiffré.",

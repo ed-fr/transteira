@@ -49,6 +49,8 @@
     TENANT_LANGUAGES,
     antivirusPatch,
     antivirusState,
+    linkOnlyEnabled,
+    linkOnlyPatch,
     changesProfile,
     deletionResumes,
     editableFields,
@@ -100,6 +102,8 @@
   let inputs: Partial<Record<SizeField, HTMLInputElement>> = $state({});
   // Webhook payloads: include the addresses concerned.
   let includeAddresses = $state(false);
+  // Link-only transfers (since 2.0, super admin).
+  let linkOnly = $state(false);
   // Export of the configuration: include the branding files.
   let exportBranding = $state(false);
 
@@ -116,6 +120,9 @@
   const deleting = $derived(tenant?.status === 'deleting');
   const docsHref = $derived(tenant === undefined ? undefined : userDocsHref(tenant.fqdn));
   const webhookPatch = $derived(tenant === undefined ? {} : includeAddressesPatch(tenant, includeAddresses));
+  const linkOnlyDirty = $derived(
+    !deleted && tenant !== undefined && Object.keys(linkOnlyPatch(tenant, linkOnly)).length > 0,
+  );
   const webhookDirty = $derived(!deleted && Object.keys(webhookPatch).length > 0);
   const dirty = $derived(
     !deleted && tenant !== undefined && form !== undefined && isDirty(tenant, form, role),
@@ -152,6 +159,7 @@
     tenant = next;
     form = formFromTenant(next);
     includeAddresses = includesAddresses(next);
+    linkOnly = linkOnlyEnabled(next);
   }
 
   async function load(): Promise<void> {
@@ -244,6 +252,25 @@
       tenant = res.data;
       includeAddresses = includesAddresses(res.data);
       return { ok: true, message: t('adminTenants.general.webhooks.saved') };
+    } catch (err) {
+      return { ok: false, message: describeError(i18n, err).message };
+    }
+  }
+
+  async function saveLinkOnly(): Promise<SubmitOutcome> {
+    if (tenant === undefined) {
+      return { ok: false, message: t('errors.unknown') };
+    }
+    const patch = linkOnlyPatch(tenant, linkOnly);
+    if (Object.keys(patch).length === 0) {
+      return { ok: true, message: t('admin.common.noChanges') };
+    }
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', { path: { tenantId }, body: patch });
+      // Only the tenant and this setting: the general settings being edited are kept.
+      tenant = res.data;
+      linkOnly = linkOnlyEnabled(res.data);
+      return { ok: true, message: t('adminTenants.general.linkOnly.saved') };
     } catch (err) {
       return { ok: false, message: describeError(i18n, err).message };
     }
@@ -541,6 +568,36 @@
         busyLabel={t('adminTenants.general.antivirus.busy')}
         onconfirm={() => setAntivirus(false)}
       />
+    {/if}
+
+    {#if isSuper}
+      <FormSection
+        title={t('adminTenants.general.linkOnly.title')}
+        intro={t('adminTenants.general.linkOnly.intro')}
+        dirty={linkOnlyDirty}
+        addGuard={(guard) => nav.addGuard(guard)}
+        onsubmit={saveLinkOnly}
+        disabled={deleting}
+        saveLabel={t('adminTenants.general.linkOnly.save')}
+        successMessage={t('adminTenants.general.linkOnly.saved')}
+      >
+        <Checkbox
+          id="{uid}-link-only"
+          label={t('adminTenants.general.linkOnly.label')}
+          hint={t('adminTenants.general.linkOnly.hint')}
+          disabled={deleting}
+          bind:checked={linkOnly}
+        />
+      </FormSection>
+    {:else}
+      <section aria-labelledby="{uid}-link-only-ro">
+        <h2 id="{uid}-link-only-ro">{t('adminTenants.general.linkOnly.title')}</h2>
+        <p>
+          {tenant && linkOnlyEnabled(tenant)
+            ? t('adminTenants.general.linkOnly.statusOn')
+            : t('adminTenants.general.linkOnly.statusOff')}
+        </p>
+      </section>
     {/if}
 
     {#if isSuper}

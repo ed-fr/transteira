@@ -12,7 +12,8 @@
     "privacy": "Données personnelles",
     "abuseReports": "Signalements",
     "groupConsultation": "Consultation",
-    "security": "Journal de sécurité"
+    "security": "Journal de sécurité",
+    "dropLinks": "Liens de dépôt"
   },
   "transfers": {
     "title": "Transferts",
@@ -56,5 +57,11 @@
   "security": {
     "title": "Journal de sécurité",
     "intro": "Événements de sécurité de cette entité sur les 12 derniers mois : codes de vérification ou mots de passe de transfert erronés, dépôts refusés, limitations de débit, jetons invalides. Les événements identiques survenus à peu d’intervalle sont regroupés. Le journal ne contient jamais d’adresse mail."
+  },
+  "dropLinks": {
+    "title": "Liens de dépôt",
+    "createTitle": "Créer un lien de dépôt",
+    "intro": "Un lien de dépôt est une adresse permanente que vous donnez à des tiers (clients, fournisseurs…) pour qu’ils envoient des fichiers à un service, sans invitation. Chaque dépôt exige la confirmation de l’adresse du déposant par code. Les fichiers sont adressés aux destinataires du lien.",
+    "introReadOnly": "Liens de dépôt permanents de cette entité, en lecture seule."
   }
 }

@@ -10,6 +10,8 @@
   "proof.field.sender": "Sender",
   "proof.field.recipients": "Recipients",
   "proof.field.level": "Confidentiality level",
+  "proof.field.linkOnly": "Link only",
+  "proof.linkOnly.notice": "Link only: recipient not identified. No mail was sent; the sender shared the download link, so any download may come from anyone holding it.",
   "proof.field.e2e": "End-to-end encryption",
   "proof.e2e.notice": "The files were encrypted in the sender's browser: the names are the generic names known to the server, and the SHA-256 fingerprints are those of the encrypted content.",
   "proof.field.deposited": "Deposited on",

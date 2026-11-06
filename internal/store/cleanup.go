@@ -140,10 +140,11 @@ var (
 		WHERE tenant_id = ? AND id = ? AND (consumed_at IS NOT NULL OR expires_at <= ?) AND created_at < ?`)
 	qSessionPurgeList = tenantQuery(
 		`SELECT id FROM deposit_sessions
-		WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) AND id > ?
-		ORDER BY id LIMIT ?`)
+		WHERE tenant_id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) AND (used_at IS NULL OR used_at <= ?)
+		AND id > ? ORDER BY id LIMIT ?`)
 	qSessionPurge = tenantQuery(
-		`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?)`)
+		`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?)
+		AND (used_at IS NULL OR used_at <= ?)`)
 	qFailurePurgeList = tenantQuery(
 		`SELECT key FROM password_failures
 		WHERE tenant_id = ? AND scope = ? AND COALESCE(fail_1, 0) <= ? AND COALESCE(fail_2, 0) <= ?
@@ -552,12 +553,13 @@ func (r *Challenges) Purge(ctx context.Context, tid tenant.ID, now time.Time) (i
 
 // Purge deletes the deposit sessions of tenant tid that are ended or
 // expired at now, in batches of PurgeBatchSize, and returns how many it
-// deleted.
+// deleted. A drop link session used less than DropLinkWindow ago is kept:
+// the hourly cap of its link still counts it ([DropLinks.UsageSince]).
 func (r *DepositSessions) Purge(ctx context.Context, tid tenant.ID, now time.Time) (int64, error) {
-	ms := toMillis(now)
+	ms, used := toMillis(now), toMillis(now.Add(-DropLinkWindow))
 	return r.db.purge(ctx, tid, "purge deposit sessions", false, func(ctx context.Context, tx *ScopedTx, after string, size int) (int64, string, bool, error) {
-		return deleteEach(ctx, tx, qSessionPurgeList, []any{ms}, after, size, qSessionPurge,
-			func(k string) []any { return []any{k, ms} })
+		return deleteEach(ctx, tx, qSessionPurgeList, []any{ms, used}, after, size, qSessionPurge,
+			func(k string) []any { return []any{k, ms, used} })
 	})
 }
 

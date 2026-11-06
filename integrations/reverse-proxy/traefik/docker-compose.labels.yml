@@ -44,7 +44,7 @@ services:
       - "traefik.http.routers.transteira-downloads.middlewares=transteira-hsts"
       - "traefik.http.routers.transteira-downloads.observability.accesslogs=false"
 
-      - "traefik.http.routers.transteira-tokens.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`))"
+      - "traefik.http.routers.transteira-tokens.rule=(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`) || PathPrefix(`/drop/`) || PathPrefix(`/api/v1/drop-links/`))"
       - "traefik.http.routers.transteira-tokens.priority=100"
       - "traefik.http.routers.transteira-tokens.entrypoints=websecure"
       - "traefik.http.routers.transteira-tokens.tls.certresolver=letsencrypt"

@@ -13,6 +13,9 @@ export type PublicFile = components['schemas']['PublicFile'];
 /** Invitation as seen by the invited person. */
 export type PublicInvitation = components['schemas']['PublicInvitation'];
 
+/** Drop link as seen by the depositor (label, validity, level; never the recipients). */
+export type PublicDropLink = components['schemas']['PublicDropLink'];
+
 /** Antivirus status of a file. */
 export type ScanStatus = components['schemas']['ScanStatus'];
 

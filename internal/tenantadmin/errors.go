@@ -52,6 +52,10 @@ var (
 	// networks (TT_SMTP_DENY_NETWORKS). It is [netpolicy.ErrAddressDenied],
 	// returned by [netpolicy.DialGuard].
 	ErrAddressDenied = netpolicy.ErrAddressDenied
+	// ErrLevelInUse reports a replacement of the confidentiality levels
+	// that removes a level an enabled, non-revoked drop link uses (since
+	// 2.0, 409 state-conflict).
+	ErrLevelInUse = errors.New("tenantadmin: a confidentiality level is used by a drop link")
 )
 
 // Fields named by an [InvalidError], as JSON pointers (RFC 6901) of the

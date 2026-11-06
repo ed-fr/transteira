@@ -66,6 +66,9 @@ type fileDecl struct {
 
 // transferCreate is the TransferCreate schema.
 type transferCreate struct {
+	// noRecipients keeps Recipients absent in the helpers that otherwise
+	// add one (a drop link deposit names none).
+	noRecipients             bool
 	Recipients               []string   `json:"recipients,omitempty"`
 	Message                  string     `json:"message,omitempty"`
 	ExpiryDays               int        `json:"expiryDays"`
@@ -75,6 +78,7 @@ type transferCreate struct {
 	Files                    []fileDecl `json:"files"`
 	ConfidentialityLevel     string     `json:"confidentialityLevel,omitempty"`
 	RecipientVerification    bool       `json:"recipientVerification,omitempty"`
+	LinkOnly                 bool       `json:"linkOnly,omitempty"`
 }
 
 // senderFileJSON is the SenderFile schema.
@@ -108,12 +112,13 @@ type senderTransferJSON struct {
 	DownloadURL              string           `json:"downloadUrl"`
 	Files                    []senderFileJSON `json:"files"`
 	ReplyToTransferID        string           `json:"replyToTransferId"`
+	DropLinkLabel            string           `json:"dropLinkLabel"`
 }
 
 // Members allowed by the SenderTransfer and SenderFile schemas, and the
 // required ones.
 var (
-	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking", "replyToTransferId"}
+	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking", "replyToTransferId", "linkOnly", "dropLinkLabel"}
 	transferRequiredMembers = []string{"id", "status", "senderEmail", "recipients", "expiryDays", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "files"}
 	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset"}
 	fileRequiredMembers     = []string{"id", "name", "size", "scanStatus"}

@@ -2,6 +2,7 @@ package id
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"regexp"
 	"strings"
@@ -185,4 +186,54 @@ func TestDownloadURL(t *testing.T) {
 	if got, want := DownloadURL("transfer.entity-a.example.com", "dl_abc"), "https://transfer.entity-a.example.com/d/dl_abc"; got != want {
 		t.Errorf("DownloadURL = %q, want %q", got, want)
 	}
+}
+
+func TestDropToken(t *testing.T) {
+	tok, err := NewDropToken()
+	if err != nil || !DropTokenValid(tok) || len(tok) != len(DropTokenPrefix)+1+TokenLen(DropTokenBytes) {
+		t.Fatalf("NewDropToken = %q, %v", tok, err)
+	}
+	if DropTokenBytes < MinTokenBytes || TokenLen(DropTokenBytes) > MaxTokenBodyLen {
+		t.Errorf("drop token entropy %d out of the token bounds", DropTokenBytes)
+	}
+	pattern := regexp.MustCompile(`^ttd_[A-Za-z0-9]{22,43}$`) // OpenAPI DropToken
+	if !pattern.MatchString(tok) {
+		t.Errorf("NewDropToken = %q does not match the OpenAPI pattern", tok)
+	}
+	for _, bad := range []string{"", "ttd_short", "dl_" + tok[4:], tok + "-", "ttd_" + strings.Repeat("a", 44)} {
+		if DropTokenValid(bad) {
+			t.Errorf("DropTokenValid(%q) = true", bad)
+		}
+	}
+}
+
+func TestDropURL(t *testing.T) {
+	if got, want := DropURL("transfer.entity-a.example.com", "ttd_abc"), "https://transfer.entity-a.example.com/drop/ttd_abc"; got != want {
+		t.Errorf("DropURL = %q, want %q", got, want)
+	}
+}
+
+func TestHashToken(t *testing.T) {
+	want := sha256.Sum256([]byte("ttd_abc"))
+	if got := HashToken("ttd_abc"); !bytes.Equal(got, want[:]) || len(got) != sha256.Size {
+		t.Errorf("HashToken = %x, want %x", got, want)
+	}
+	if bytes.Equal(HashToken("ttd_abc"), HashToken("ttd_abd")) {
+		t.Error("HashToken collides on different tokens")
+	}
+}
+
+// FuzzDropTokenValid checks that a token DropTokenValid accepts has the
+// documented shape, so that it is safe to hash and look up.
+func FuzzDropTokenValid(f *testing.F) {
+	tok, _ := NewDropToken()
+	for _, s := range []string{tok, "", "ttd_", "ttd_short", "dl_" + tok[4:], tok + "-", "ttd_" + strings.Repeat("a", 44), "ttd_é" + tok[5:]} {
+		f.Add(s)
+	}
+	pattern := regexp.MustCompile(`^ttd_[A-Za-z0-9]{22,43}$`)
+	f.Fuzz(func(t *testing.T, s string) {
+		if got := DropTokenValid(s); got != pattern.MatchString(s) {
+			t.Fatalf("DropTokenValid(%q) = %v, want %v", s, got, !got)
+		}
+	})
 }

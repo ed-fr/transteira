@@ -203,7 +203,7 @@ func TestGetPublicTenantOptions(t *testing.T) {
 			}},
 			{Key: "secret", Label: "Secret", Rules: tenantadmin.ConfidentialityRules{
 				AllowedExpiryDays: []int{1}, MaxDownloads: &cap3, RequirePassword: true, RequireRecipientVerification: true,
-				InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true,
+				InternalRecipientsOnly: true, ForceDeleteAfterFirstDownload: true, LinkOnlyForbidden: true,
 			}},
 		},
 	}
@@ -233,6 +233,12 @@ func TestGetPublicTenantOptions(t *testing.T) {
 	if b.Features == nil || !b.Features.MaxDownloads || !b.Features.RecipientVerification || !b.Features.RecipientRestrictions ||
 		!b.Features.Folders {
 		t.Errorf("features %+v", b.Features)
+	}
+	if l[0].Rules.LinkOnlyAllowed == nil || !*l[0].Rules.LinkOnlyAllowed || r.LinkOnlyAllowed == nil || *r.LinkOnlyAllowed {
+		t.Errorf("level link-only switches %v %v", l[0].Rules.LinkOnlyAllowed, r.LinkOnlyAllowed)
+	}
+	if b.Features.LinkOnly == nil || *b.Features.LinkOnly {
+		t.Errorf("link-only announced for a tenant that does not allow it: %+v", b.Features)
 	}
 	if b.Features.RemoteInternalDeposit {
 		t.Errorf("remote deposit announced for a tenant that does not allow it: %+v", b.Features)
@@ -447,12 +453,14 @@ func TestGetPublicTenantRemoteFeature(t *testing.T) {
 	ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{
 		ID: "ten_x", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
 		MaxTransferBytes: 5 << 30, PrimaryColor: "#0B5FFF", AccentColor: "#00875A", AllowRemoteInternalDeposit: true,
+		LinkOnlyAllowed: true,
 	})
 	resp, err := NewServer(WithTenantService(&fakeTenantConfig{})).GetPublicTenant(ctx, gen.GetPublicTenantRequestObject{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features == nil || !b.Features.RemoteInternalDeposit {
+	if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features == nil || !b.Features.RemoteInternalDeposit ||
+		b.Features.LinkOnly == nil || !*b.Features.LinkOnly {
 		t.Errorf("features %+v", b.Features)
 	}
 }

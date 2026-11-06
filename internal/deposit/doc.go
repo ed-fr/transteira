@@ -203,4 +203,22 @@
 // SHA-256 is stored. The message of the inviter is stripped of control and
 // invisible formatting characters before it is stored (threats T-18, T-81).
 // Only a KindInternal session from an internal IP may invite.
+//
+// # Permanent drop links (since 2.0)
+//
+// A third party holding the address of a permanent drop link of the tenant
+// (/drop/{ttd_...}) may deposit to its recipients. [Service.PublicDropLink]
+// serves the landing page (label, validity, level; never the recipients)
+// and [Service.StartDropLink] sends a code, bound to the link through the
+// challenge. A malformed, unknown, disabled or revoked link gets the same
+// ErrDropLinkInvalid and a drop_link_invalid security event. The code is
+// required at every use: the recognition cookie is neither honored nor
+// set. [Service.Confirm] checks the blocklist and the link again (also
+// under the transaction that opens the session), opens a KindDropLink
+// session bound to the link, records the use of the link and audits the
+// verification with origin drop_link. [Service.Session] ends the sessions
+// of a link disabled or revoked meanwhile. Such a session offers the
+// validity of the link as its only expiry and cannot invite; it deposits
+// one transfer only, a rule of the transfer service built on
+// SessionInfo.OpenedAt.
 package deposit

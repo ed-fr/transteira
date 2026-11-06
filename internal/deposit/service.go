@@ -75,6 +75,9 @@ const (
 	scopeCodesPerIP      = "verification_ip"
 	scopeInvitations     = "invitation"
 	scopeReplySessions   = "reply_session"
+	// scopeDropLink is the hourly deposit cap of a permanent drop link
+	// (since 2.0, threat model P63).
+	scopeDropLink = "drop_link"
 )
 
 // errLimited aborts the transaction of a request over a rate limit.
@@ -122,6 +125,9 @@ const (
 	// transfer, whose address was verified by code on the download page
 	// (V1.1, spec 10).
 	originReply = "reply"
+	// originDropLink is a verification through a permanent drop link
+	// (since 2.0).
+	originDropLink = "drop_link"
 )
 
 // AbuseDetector supplies the configurable invitation limit of spec 15.2 and

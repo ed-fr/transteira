@@ -370,7 +370,11 @@ func (s *Service) downloaded(ctx context.Context, t *tenant.Tenant, d store.Tran
 			slog.Bool("delete_after_download", d.DeleteAfterFirstDownload))
 		recipient := ""
 		if link != nil {
-			recipient = link.Email
+			if d.DropLinkID == "" {
+				// A drop link depositor never learns the recipients of
+				// the link (threat model T-311).
+				recipient = link.Email
+			}
 			if len(d.Recipients) > 1 {
 				// The deletion waits for the other recipients: the mail
 				// announces none.

@@ -212,6 +212,7 @@ describe('role-aware navigation', () => {
       'general',
       'sso',
       'transfers',
+      'dropLinks',
       'audit',
       'security',
       'stats',
@@ -220,12 +221,13 @@ describe('role-aware navigation', () => {
       '/tenants/ten_1/general',
       '/tenants/ten_1/sso',
       '/tenants/ten_1/transfers',
+      '/tenants/ten_1/drop-links',
       '/tenants/ten_1/audit',
       '/tenants/ten_1/security-events',
       '/tenants/ten_1/stats',
     ]);
     expect(links[0]?.labelKey).toBe('adminTenants.nav.summary');
-    expect(links.map((l) => l.group)).toEqual(Array(6).fill('consultation'));
+    expect(links.map((l) => l.group)).toEqual(Array(7).fill('consultation'));
     const groups = tenantLinkGroups('ten_1', 'auditor');
     expect(groups).toHaveLength(1);
     expect(groups[0]?.labelKey).toBe('adminOps.nav.groupConsultation');

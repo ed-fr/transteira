@@ -370,6 +370,8 @@ type env struct {
 	super    adminauth.Principal
 	adminA   adminauth.Principal
 	adminB   adminauth.Principal
+	// seedLinkOnly makes seed create link-only transfers.
+	seedLinkOnly bool
 }
 
 // envOption customizes the options of the service of an env.
@@ -506,6 +508,7 @@ func (ev *env) seedMode(tn *tenant.Tenant, mode store.LinkMode, status store.Tra
 		tr := store.Transfer{
 			ID: out.id, SenderEmail: alice, SenderKind: store.DepositorInternal, ExpiryDays: 7,
 			Message: "Here are the plans", SenderIP: netip.MustParseAddr("10.10.4.21"), LinkMode: mode,
+			LinkOnly: ev.seedLinkOnly,
 		}
 		trs := ev.db.Transfers()
 		if err := trs.CreateTx(ctx, tx, tr, recipients, files); err != nil {
@@ -525,11 +528,24 @@ func (ev *env) seedMode(tn *tenant.Tenant, mode store.LinkMode, status store.Tra
 				return err
 			}
 		}
-		if mode == store.LinkModePerRecipient {
+		switch {
+		case mode == store.LinkModePerRecipient:
 			if err := ev.makeLinks(ctx, tx, out.id, recipients, &out, now); err != nil {
 				return err
 			}
-		} else {
+		case tr.LinkOnly:
+			token, err := id.NewDownloadToken()
+			if err != nil {
+				return err
+			}
+			out.token = token
+			if err := trs.SetLinkOnlyTokenTx(ctx, tx, out.id, id.HashToken(token)); err != nil {
+				return err
+			}
+			if err := trs.MarkLinkOnlyAvailableTx(ctx, tx, out.id, now); err != nil {
+				return err
+			}
+		default:
 			token, err := id.NewDownloadToken()
 			if err != nil {
 				return err

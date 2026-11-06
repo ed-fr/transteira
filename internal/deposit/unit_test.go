@@ -281,6 +281,41 @@ func (f faultRepo) transfer(ctx context.Context, tid tenant.ID, trfID string) (s
 	return f.repo.transfer(ctx, tid, trfID)
 }
 
+func (f faultRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	if err := f.fail("dropLink"); err != nil {
+		return store.DropLink{}, err
+	}
+	return f.repo.dropLink(ctx, tid, linkID)
+}
+
+func (f faultRepo) dropLinkByHash(ctx context.Context, tid tenant.ID, hash []byte, now time.Time) (store.DropLink, error) {
+	if err := f.fail("dropLinkByHash"); err != nil {
+		return store.DropLink{}, err
+	}
+	return f.repo.dropLinkByHash(ctx, tid, hash, now)
+}
+
+func (f faultRepo) dropLinkUsage(ctx context.Context, tid tenant.ID, linkID string, since time.Time) (store.DropLinkUsage, error) {
+	if err := f.fail("dropLinkUsage"); err != nil {
+		return store.DropLinkUsage{}, err
+	}
+	return f.repo.dropLinkUsage(ctx, tid, linkID, since)
+}
+
+func (f faultRepo) touchDropLink(ctx context.Context, tid tenant.ID, linkID string, at time.Time) error {
+	if err := f.fail("touchDropLink"); err != nil {
+		return err
+	}
+	return f.repo.touchDropLink(ctx, tid, linkID, at)
+}
+
+func (f faultRepo) levels(ctx context.Context, tid tenant.ID) ([]store.ConfidentialityLevel, error) {
+	if err := f.fail("levels"); err != nil {
+		return nil, err
+	}
+	return f.repo.levels(ctx, tid)
+}
+
 func (f faultRepo) tx(ctx context.Context, tid tenant.ID, fn func(txRepo) error) error {
 	return f.repo.tx(ctx, tid, func(tx txRepo) error { return fn(faultTx{txRepo: tx, f: f}) })
 }
@@ -296,6 +331,13 @@ func (t faultTx) countByEmail(ctx context.Context, email string, since time.Time
 		return 0, err
 	}
 	return t.txRepo.countByEmail(ctx, email, since)
+}
+
+func (t faultTx) countByDropLink(ctx context.Context, linkID string, since time.Time) (int, error) {
+	if err := t.f.fail("countByDropLink"); err != nil {
+		return 0, err
+	}
+	return t.txRepo.countByDropLink(ctx, linkID, since)
 }
 
 func (t faultTx) countByIP(ctx context.Context, ip netip.Addr, since time.Time) (int, error) {
@@ -359,6 +401,13 @@ func (t faultTx) touchInvitation(ctx context.Context, invID string, now time.Tim
 		return err
 	}
 	return t.txRepo.touchInvitation(ctx, invID, now)
+}
+
+func (t faultTx) dropLink(ctx context.Context, linkID string) (store.DropLink, error) {
+	if err := t.f.fail("tx.dropLink"); err != nil {
+		return store.DropLink{}, err
+	}
+	return t.txRepo.dropLink(ctx, linkID)
 }
 
 func (t faultTx) createInvitation(ctx context.Context, inv store.Invitation) error {
@@ -567,7 +616,7 @@ func TestFaults(t *testing.T) {
 func isSentinel(err error) bool {
 	for _, s := range []error{
 		ErrInvalid, ErrForbidden, ErrInvitationGone, ErrRateLimited, ErrMailUnavailable,
-		ErrNotFound, ErrChallengeGone, ErrWrongCode, ErrUnauthenticated,
+		ErrNotFound, ErrChallengeGone, ErrWrongCode, ErrUnauthenticated, ErrDropLinkInvalid, ErrReplyGone,
 	} {
 		if errors.Is(err, s) {
 			return true

@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -129,7 +130,8 @@ func refusedRecipients(recipients []string, set store.RecipientRuleSet) ([]Field
 // bind the free recipients only). Steps, in order:
 //
 //  1. the level: the default one when req names none, an unknown key is a
-//     *ValidationError (400);
+//     *ValidationError (400); for a link-only request, the link-only rule
+//     (see checkLinkOnly): ErrLinkOnlyForbidden (403);
 //  2. its rules: every broken rule at once, as a *RuleError matching
 //     ErrConfidentialityRule (422);
 //  3. the recipient domain rules: every refused recipient at once, as a
@@ -151,6 +153,11 @@ func (s *Service) applyPolicies(ctx context.Context, t *tenant.Tenant, sender Se
 	level, err := pickLevel(levels, req.ConfidentialityLevel)
 	if err != nil {
 		return policy{}, err
+	}
+	if req.LinkOnly {
+		if err := s.checkLinkOnly(ctx, t, sender, level); err != nil {
+			return policy{}, err
+		}
 	}
 	var rules netpolicy.Rules
 	if level != nil && level.Rules.InternalRecipientsOnly {
@@ -186,6 +193,30 @@ func (s *Service) applyPolicies(ctx context.Context, t *tenant.Tenant, sender Se
 		return policy{}, &RuleError{Kind: ErrRecipientDomainRefused, Fields: fields}
 	}
 	return applyLevel(level, req), nil
+}
+
+// checkLinkOnly applies the link-only rule (since 2.0, decision 4) to a
+// link-only request of sender at level (nil without level): the sender is
+// internal (internal, internal_remote or an API token: an invited
+// external, a reply or a drop link depositor has an imposed recipient who
+// must be mailed), the tenant allows link-only transfers (read again, so
+// that turning the option off applies at once) and so does the level.
+// ErrLinkOnlyForbidden otherwise, a policy refusal never written to the
+// security log; a tenant whose deletion started is ErrForbidden.
+func (s *Service) checkLinkOnly(ctx context.Context, t *tenant.Tenant, sender Sender, level *store.ConfidentialityLevel) error {
+	if !sender.Kind.IsInternal() {
+		return ErrLinkOnlyForbidden
+	}
+	cur, err := s.repo.tenant(ctx, t.ID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return ErrForbidden
+	case err != nil:
+		return fmt.Errorf("transfer: read tenant: %w", err)
+	case !cur.LinkOnlyAllowed, level != nil && !level.LinkOnlyAllowed:
+		return ErrLinkOnlyForbidden
+	}
+	return nil
 }
 
 // snapshot writes the level of p, its labels and its rules into rec,

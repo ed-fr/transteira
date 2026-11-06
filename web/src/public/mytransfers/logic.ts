@@ -12,6 +12,29 @@ export type MyTransferDetail = components['schemas']['MyTransferDetail'];
 /** Downloads of one recipient. */
 export type RecipientTracking = components['schemas']['RecipientTracking'];
 
+/**
+ * Recipients of a transfer as the sender sees them: for a deposit through a drop link, whose
+ * recipients are never disclosed (T-311), the label of the link instead; undefined otherwise
+ * (the caller lists the recipients).
+ */
+export function dropLinkRecipients(
+  transfer: Pick<MyTransfer, 'dropLinkLabel'>,
+  tr: (key: string, params?: Record<string, string>) => string,
+): string | undefined {
+  if (transfer.dropLinkLabel === undefined) return undefined;
+  return transfer.dropLinkLabel === ''
+    ? tr('myTransfers.list.dropLinkNoLabel')
+    : tr('myTransfers.list.dropLink', { label: transfer.dropLinkLabel });
+}
+
+/**
+ * Whether a lost link can be reissued: a link-only transfer, scanning or available (a link
+ * reissued while scanning works once the transfer is available).
+ */
+export function canReissueLink(transfer: Pick<MyTransfer, 'status' | 'linkOnly'>): boolean {
+  return transfer.linkOnly === true && (transfer.status === 'available' || transfer.status === 'scanning');
+}
+
 /** Durations (days) a transfer can be extended to, ascending. */
 export const EXTENSION_DAYS: readonly number[] = [1, 7, 30];
 

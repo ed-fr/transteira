@@ -12,9 +12,10 @@ import (
 const historyDays = 30
 
 // externalKinds are the sender kinds of the external quota: the invited
-// external depositors and the replies of section 10, counted together under
-// the sender address (store.DepositorKind.IsExternal).
-var externalKinds = []store.DepositorKind{store.DepositorExternal, store.DepositorReply}
+// external depositors, the replies of section 10 and, since 2.0, the
+// depositors through a permanent drop link, counted together under the
+// sender address (store.DepositorKind.IsExternal).
+var externalKinds = []store.DepositorKind{store.DepositorExternal, store.DepositorReply, store.DepositorDropLink}
 
 // internalKinds are the sender kinds of the per-sender daily rules: the
 // internal users, from the internal network or from outside (API tokens
@@ -49,7 +50,7 @@ func (f finding) unusual() bool {
 }
 
 // isExternal reports whether kind is subject to the external quota (an
-// invited external depositor or a reply).
+// invited external depositor, a reply or a drop link depositor).
 func isExternal(kind store.DepositorKind) bool {
 	return kind.IsExternal()
 }

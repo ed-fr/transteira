@@ -51,6 +51,7 @@
     "incomplete": "Some files were not completely received. The upload resumes.",
     "blocked": "Your organisation does not allow these files, the transfer was refused:",
     "available": "The transfer is ready: the recipients have been notified.",
+    "availableLinkOnly": "The transfer is ready. No mail was sent to the recipients: copy the link below and share it yourself.",
     "rejected": "No file could be delivered: the transfer was refused after the antivirus analysis.",
     "error": {
       "checksum-mismatch": "A file was altered during the upload. Start a new transfer.",

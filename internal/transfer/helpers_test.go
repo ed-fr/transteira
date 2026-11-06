@@ -616,3 +616,31 @@ func (ev *env) usedBytes(t *testing.T, tn *tenant.Tenant) int64 {
 
 // busy is the error of a fake engine whose files are locked.
 var busy = upload.ErrBusy
+
+func (r *faultRepo) dropLink(ctx context.Context, tid tenant.ID, linkID string) (store.DropLink, error) {
+	if err := r.check("dropLink"); err != nil {
+		return store.DropLink{}, err
+	}
+	return r.inner.dropLink(ctx, tid, linkID)
+}
+
+func (t faultTx) dropLinkUsage(ctx context.Context, linkID string, since time.Time) (store.DropLinkUsage, error) {
+	if err := t.r.check("dropLinkUsage"); err != nil {
+		return store.DropLinkUsage{}, err
+	}
+	return t.inner.dropLinkUsage(ctx, linkID, since)
+}
+
+func (t faultTx) useDropLinkSession(ctx context.Context, sessionID, linkID string, now time.Time) error {
+	if err := t.r.check("useDropLinkSession"); err != nil {
+		return err
+	}
+	return t.inner.useDropLinkSession(ctx, sessionID, linkID, now)
+}
+
+func (t faultTx) setLinkOnlyToken(ctx context.Context, trfID string, hash []byte) error {
+	if err := t.r.check("setLinkOnlyToken"); err != nil {
+		return err
+	}
+	return t.inner.setLinkOnlyToken(ctx, trfID, hash)
+}

@@ -116,7 +116,7 @@ func (s *Service) Start(ctx context.Context, t *tenant.Tenant, clientIP netip.Ad
 			return Result{Session: &sess}, nil
 		}
 	}
-	ch, err := s.sendCode(ctx, t, clientIP, acceptLanguage, addr, inv, decoy)
+	ch, err := s.sendCode(ctx, t, clientIP, acceptLanguage, addr, codeBinding{inv: inv}, decoy)
 	if err != nil {
 		return Result{}, err
 	}
@@ -168,7 +168,22 @@ func (s *Service) verifiedAddress(ctx context.Context, tid tenant.ID, email stri
 	return v, v.Active(s.now()), nil
 }
 
-// sendCode creates a verification challenge for addr and mails its code.
+// codeBinding is what a verification challenge is bound to besides its
+// address: the invitation of an external depositor or the drop link of a
+// drop link depositor (at most one), nothing for an internal one.
+type codeBinding struct {
+	// inv is the invitation, nil for none.
+	inv *store.Invitation
+	// dropLinkID is the drop link ("drl_" + ULID), "" for none.
+	dropLinkID string
+	// maxDropLinkCodes caps the codes sent through the drop link in
+	// RateWindow, all addresses and IPs together (DropLinkCodesFactor
+	// times its hourly deposit cap); unused without a drop link.
+	maxDropLinkCodes int
+}
+
+// sendCode creates a verification challenge for addr, bound to bind, and
+// mails its code.
 //
 // The mail is prepared first: a tenant without SMTP settings gets
 // ErrMailUnavailable before anything is written. The rate limits are then
@@ -182,7 +197,8 @@ func (s *Service) verifiedAddress(ctx context.Context, tid tenant.ID, email stri
 // With decoy true (see [Service.Start]) everything runs the same, the code
 // included, except that the mail is not queued: the code, drawn at random
 // and kept only as its MAC, is then known to nobody.
-func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage string, addr address, inv *store.Invitation, decoy bool) (Challenge, error) {
+func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage string, addr address, bind codeBinding, decoy bool) (Challenge, error) {
+	inv := bind.inv
 	chID, err := s.newToken(id.ChallengeTokenPrefix, id.ChallengeTokenBytes)
 	if err != nil {
 		return Challenge{}, fmt.Errorf("deposit: new challenge id: %w", err)
@@ -212,6 +228,7 @@ func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip
 	if inv != nil {
 		rec.InvitationID = inv.ID
 	}
+	rec.DropLinkID = bind.dropLinkID
 	since := now.Add(-RateWindow)
 	scope := ""
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
@@ -229,6 +246,15 @@ func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip
 		if n >= MaxCodesPerIP {
 			scope = scopeCodesPerIP
 			return errLimited
+		}
+		if bind.dropLinkID != "" {
+			if n, err = tx.countByDropLink(ctx, bind.dropLinkID, since); err != nil {
+				return fmt.Errorf("deposit: count codes per drop link: %w", err)
+			}
+			if n >= bind.maxDropLinkCodes {
+				scope = scopeDropLink
+				return errLimited
+			}
 		}
 		if err := tx.createChallenge(ctx, rec); err != nil {
 			return fmt.Errorf("deposit: create challenge: %w", err)
@@ -295,6 +321,16 @@ func (s *Service) sendCode(ctx context.Context, t *tenant.Tenant, clientIP netip
 // outside only refreshes the last use of the address, never records an
 // internal verification and never sets the recognition cookie.
 //
+// A challenge requested through a permanent drop link ([Service.StartDropLink],
+// since 2.0) opens a session of kind KindDropLink bound to the link once
+// the blocklist and the link are checked again (ErrDropLinkInvalid, logged
+// as drop_link_invalid, when it was disabled or revoked meanwhile, also
+// under the transaction that opens the session). Like an external
+// depositor, its address is recorded as verified (last use refreshed,
+// never an internal verification) but it never sets the recognition
+// cookie; the use of the link is recorded (store.DropLinks.TouchLastUsed)
+// and the verification is audited with origin drop_link and the link.
+//
 // Errors: *InvalidError (ErrInvalid) for a code that is not 6 digits;
 // ErrNotFound for an unknown challenge (or one of another tenant);
 // ErrChallengeGone when it is expired, used or exhausted (including after
@@ -317,7 +353,8 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 	case !ch.Open(s.now()):
 		return Session{}, ErrChallengeGone
 	}
-	kind, inv, err := s.recheck(ctx, t, clientIP, ch)
+	kind, bind, err := s.recheck(ctx, t, clientIP, ch)
+	inv := bind.inv
 	decoy := errors.Is(err, errDecoy)
 	if err != nil && !decoy {
 		return Session{}, err
@@ -330,7 +367,7 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 		return Session{}, s.wrongCode(ctx, t, clientIP, ch.ID)
 	}
 	cookie := ""
-	sess, err := s.openSession(ctx, t, sessionSpec{email: ch.Email, kind: kind, inv: inv}, func(tx txRepo, now time.Time) error {
+	sess, err := s.openSession(ctx, t, sessionSpec{email: ch.Email, kind: kind, inv: inv, dropLink: bind.dropLink}, func(tx txRepo, now time.Time) error {
 		if err := tx.consumeChallenge(ctx, ch.ID, now); errors.Is(err, store.ErrNotFound) {
 			return ErrChallengeGone
 		} else if err != nil {
@@ -353,59 +390,90 @@ func (s *Service) Confirm(ctx context.Context, t *tenant.Tenant, clientIP netip.
 		}
 		return err
 	})
+	if errors.Is(err, ErrDropLinkInvalid) {
+		// Disabled or revoked since recheck.
+		s.logEvent(ctx, t, clientIP, securitylog.DropLinkInvalid)
+	}
 	if err != nil {
 		return Session{}, err
 	}
 	sess.Recognition = cookie
-	s.recordConfirmed(ctx, t, clientIP, ch.Email, sess.ID, kind, inv)
+	s.recordConfirmed(ctx, t, clientIP, ch.Email, sess.ID, kind, inv, sess.DropLink)
+	if sess.DropLink != nil {
+		s.touchDropLink(ctx, t, sess.DropLink.ID)
+	}
 	return sess, nil
 }
 
 // recordConfirmed records the audit events of a confirmed code: the
-// verification of the address (origin internal, remote or invitation after
-// the depositor kind), then the first use of the invitation of an external
-// depositor (its LastUsedAt was zero when the challenge was checked).
-func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, email, sessionID string, kind Kind, inv *store.Invitation) {
-	origin := originInternal
+// verification of the address (origin internal, remote, invitation or
+// drop_link after the depositor kind; a drop link verification also names
+// the link), then the first use of the invitation of an external depositor
+// (its LastUsedAt was zero when the challenge was checked).
+func (s *Service) recordConfirmed(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, email, sessionID string, kind Kind, inv *store.Invitation, link *DropLinkInfo) {
+	details := map[string]any{"origin": originInternal}
 	switch kind {
 	case KindExternal:
-		origin = originInvitation
+		details["origin"] = originInvitation
 	case KindInternalRemote:
-		origin = originRemote
+		details["origin"] = originRemote
+	case KindDropLink:
+		details["origin"] = originDropLink
+		if link != nil {
+			details["dropLinkId"] = link.ID
+		}
 	}
-	s.record(ctx, t, clientIP, email, audit.ActionAddressVerified, audit.ObjectDepositSession, sessionID,
-		map[string]any{"origin": origin})
+	s.record(ctx, t, clientIP, email, audit.ActionAddressVerified, audit.ObjectDepositSession, sessionID, details)
 	if inv != nil && inv.LastUsedAt.IsZero() {
 		s.record(ctx, t, clientIP, email, audit.ActionInvitationUsed, audit.ObjectInvitation, inv.ID,
 			map[string]any{"sessionId": sessionID})
 	}
 }
 
+// confirmedBinding is what [Service.recheck] found a challenge bound to.
+type confirmedBinding struct {
+	// inv is the active invitation of an external depositor, nil otherwise.
+	inv *store.Invitation
+	// dropLink is the usable drop link of a drop link depositor, nil
+	// otherwise.
+	dropLink *store.DropLink
+}
+
 // recheck verifies that the depositor of challenge ch is still eligible
 // and returns its kind (computed again from clientIP for a challenge
-// without invitation) and the invitation of an external depositor (nil
-// otherwise). For a challenge without invitation it returns errDecoy when
+// without invitation nor drop link) and the invitation of an external
+// depositor or the drop link of a drop link depositor. For a challenge
+// without invitation nor drop link it returns errDecoy when
 // [Service.checkDepositor] does (outside, option on, remote rule failed):
-// [Service.Confirm] turns it into the wrong-code outcome.
-func (s *Service) recheck(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, ch store.Challenge) (Kind, *store.Invitation, error) {
+// [Service.Confirm] turns it into the wrong-code outcome. A drop link that
+// is no longer usable (disabled, revoked or deleted) gives
+// ErrDropLinkInvalid and a drop_link_invalid security event.
+func (s *Service) recheck(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, ch store.Challenge) (Kind, confirmedBinding, error) {
 	if !clientIP.IsValid() {
-		return "", nil, s.refuse(ctx, t, clientIP, securitylog.ReasonIP)
+		return "", confirmedBinding{}, s.refuse(ctx, t, clientIP, securitylog.ReasonIP)
 	}
 	if err := s.checkBlocklist(ctx, t, clientIP, ch.Email); err != nil {
-		return "", nil, err
+		return "", confirmedBinding{}, err
 	}
-	if ch.InvitationID == "" {
+	switch {
+	case ch.DropLinkID != "":
+		l, err := s.usableDropLink(ctx, t, clientIP, ch.DropLinkID)
+		if err != nil {
+			return "", confirmedBinding{}, err
+		}
+		return KindDropLink, confirmedBinding{dropLink: &l}, nil
+	case ch.InvitationID == "":
 		kind, err := s.checkDepositor(ctx, t, clientIP, ch.Email)
-		return kind, nil, err
+		return kind, confirmedBinding{}, err
 	}
 	inv, err := s.activeInvitation(ctx, t.ID, ch.InvitationID)
 	if errors.Is(err, ErrInvitationGone) {
 		_ = s.refuse(ctx, t, clientIP, securitylog.ReasonInvitation)
 	}
 	if err != nil {
-		return "", nil, err
+		return "", confirmedBinding{}, err
 	}
-	return KindExternal, &inv, nil
+	return KindExternal, confirmedBinding{inv: &inv}, nil
 }
 
 // wrongCode spends one attempt of the challenge chID, logs the failure

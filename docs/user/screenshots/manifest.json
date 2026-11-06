@@ -48,6 +48,12 @@
     "path": "{lang}/admin-blocklist.png"
   },
   {
+    "name": "admin-drop-links",
+    "screen": "admin /admin/tenants/:id/drop-links",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-drop-links.png"
+  },
+  {
     "name": "admin-home-delegate",
     "screen": "admin /admin/",
     "profile": "delegated-admin",
@@ -288,6 +294,12 @@
     "path": "{lang}/deposit-form-verification.png"
   },
   {
+    "name": "deposit-link-only",
+    "screen": "public / (recap: link-only transfer, download link shown once)",
+    "profile": "depositor",
+    "path": "{lang}/deposit-link-only.png"
+  },
+  {
     "name": "deposit-sent",
     "screen": "public / (recap: transfer sent)",
     "profile": "depositor",
@@ -328,6 +340,12 @@
     "screen": "public /d/:token (recipient verification: code entry)",
     "profile": "recipient",
     "path": "{lang}/download-verify-code.png"
+  },
+  {
+    "name": "drop-link",
+    "screen": "public /drop/:token (drop link landing)",
+    "profile": "depositor",
+    "path": "{lang}/drop-link.png"
   },
   {
     "name": "invitation-landing",

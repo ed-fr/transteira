@@ -192,6 +192,36 @@ func TestSenderOfReply(t *testing.T) {
 	}
 }
 
+func TestSenderOfDropLink(t *testing.T) {
+	t.Parallel()
+	info := internalInfo()
+	info.Email, info.Kind = "bob@partner.example.org", store.DepositorDropLink
+	info.DropLink, info.ID = &deposit.DropLinkInfo{ID: "drl_01JABCD8E3W5Q2Z7K9M4N6P0RS"}, "ds_01JABCD8E3W5Q2Z7K9M4N6P0RS"
+	got := senderOf(depositCtx(t, nil), info)
+	if got.DropLinkID != info.DropLink.ID || got.SessionID != info.ID || got.Kind != store.DepositorDropLink {
+		t.Errorf("sender = %+v", got)
+	}
+	if got := senderOf(depositCtx(t, nil), internalInfo()); got.DropLinkID != "" || got.SessionID != "" {
+		t.Errorf("internal sender = %+v", got)
+	}
+}
+
+func TestLinkOnlyCreateAndBody(t *testing.T) {
+	t.Parallel()
+	yes := true
+	req := createRequest(&gen.TransferCreate{ExpiryDays: 7, Files: []gen.FileDeclaration{{Name: "a", Size: 1}}, LinkOnly: &yes})
+	if !req.LinkOnly || req.Recipients != nil {
+		t.Errorf("request = %+v", req)
+	}
+	body := transferBody(transfer.Details{ID: "trf_x", LinkOnly: true, DownloadURL: "https://x.example.com/d/dl_x"})
+	if body.LinkOnly == nil || !*body.LinkOnly || body.DownloadUrl == nil {
+		t.Errorf("body = %+v", body)
+	}
+	if body := transferBody(transfer.Details{ID: "trf_x"}); body.LinkOnly != nil {
+		t.Errorf("regular body = %+v", body)
+	}
+}
+
 func TestTransferBodyReplyTo(t *testing.T) {
 	t.Parallel()
 	if b := transferBody(transfer.Details{ReplyToTransferID: "trf_orig"}); b.ReplyToTransferId == nil || *b.ReplyToTransferId != "trf_orig" {
@@ -216,5 +246,16 @@ func TestGetPublicTenantReplyFeature(t *testing.T) {
 		if b := resp.(gen.GetPublicTenant200JSONResponse).Body; b.Features == nil || b.Features.TransferReply != allowed {
 			t.Errorf("allowed=%v: features %+v", allowed, b.Features)
 		}
+	}
+}
+
+func TestTransferBodyDropLink(t *testing.T) {
+	t.Parallel()
+	b := transferBody(transfer.Details{ID: "trf_x", DropLinkLabel: "Supplier invoices"})
+	if b.DropLinkLabel == nil || *b.DropLinkLabel != "Supplier invoices" || b.Recipients == nil || len(b.Recipients) != 0 {
+		t.Errorf("drop link body = %+v", b)
+	}
+	if b := transferBody(transfer.Details{ID: "trf_x"}); b.DropLinkLabel != nil {
+		t.Error("dropLinkLabel rendered for a regular transfer")
 	}
 }

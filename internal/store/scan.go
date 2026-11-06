@@ -41,7 +41,25 @@ var (
 	qTransferMarkAvailable = tenantQuery(
 		`UPDATE transfers SET status = 'available', download_token_hash = ?, download_token_key_id = ?, available_at = ?,
 		expires_at = ? + expiry_days * CAST(86400000 AS BIGINT)
-		WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_mode = 'shared'`)
+		WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_mode = 'shared' AND NOT link_only`)
+	// qTransferMarkLinkOnlyAvailable is qTransferMarkAvailable for a
+	// link-only transfer: it keeps the token hash set at the finalization
+	// (and has no sealed copy).
+	qTransferMarkLinkOnlyAvailable = tenantQuery(
+		`UPDATE transfers SET status = 'available', available_at = ?,
+		expires_at = ? + expiry_days * CAST(86400000 AS BIGINT)
+		WHERE tenant_id = ? AND id = ? AND status = 'scanning' AND link_only AND download_token_hash IS NOT NULL`)
+	// qTransferSetLinkOnlyToken records the token of a link-only transfer
+	// being finalized (hash only, no sealed copy).
+	qTransferSetLinkOnlyToken = tenantQuery(
+		`UPDATE transfers SET download_token_hash = ?, download_token_key_id = NULL
+		WHERE tenant_id = ? AND id = ? AND link_only AND status IN ('uploading', 'scanning')`)
+	// qTransferReplaceToken replaces the token of a finalized link-only
+	// transfer, scanning or available (reissue), which kills the previous
+	// link; the availability keeps the token stored.
+	qTransferReplaceToken = tenantQuery(
+		`UPDATE transfers SET download_token_hash = ?, download_token_key_id = NULL
+		WHERE tenant_id = ? AND id = ? AND link_only AND status IN ('scanning', 'available')`)
 	// qTransferMarkAvailableLinks is qTransferMarkAvailable for a
 	// per-recipient transfer, which has no transfer-level token. A transfer
 	// whose lifetime is shorter than ReminderMinLifetime gets its expiry
@@ -156,13 +174,16 @@ func (s ScanStatus) Deliverable() bool {
 // tokenKeyID the wrapped key ("wk_" + ULID, purpose KeyPurposeSecret, same
 // tenant) sealing the raw token, created in the same transaction.
 //
-// It applies to a LinkModeShared transfer only: a LinkModePerRecipient
-// transfer becomes available with [Transfers.MarkAvailableLinksTx].
+// It applies to a LinkModeShared transfer that is not link-only: a
+// LinkModePerRecipient transfer becomes available with
+// [Transfers.MarkAvailableLinksTx], a link-only one with
+// [Transfers.MarkLinkOnlyAvailableTx].
 //
-// It returns ErrInvalid for a malformed value, a key that is not a secret
-// or a per-recipient transfer, ErrNotFound when the transfer or the key
-// does not exist (or belongs to another tenant), and ErrConflict when the
-// transfer is not scanning or the token hash or the key is already used.
+// It returns ErrInvalid for a malformed value, a key that is not a secret,
+// a per-recipient or a link-only transfer, ErrNotFound when the transfer or
+// the key does not exist (or belongs to another tenant), and ErrConflict
+// when the transfer is not scanning or the token hash or the key is already
+// used.
 // After an error, the caller must abort the transaction.
 func (r *Transfers) MarkAvailableTx(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []byte, tokenKeyID string, now time.Time) error {
 	if err := markAvailable(ctx, tx, trfID, tokenHash, tokenKeyID, now); err != nil {
@@ -193,6 +214,103 @@ func markAvailable(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []
 	return err
 }
 
+// MarkLinkOnlyAvailableTx makes the scanning link-only transfer trfID of
+// the tenant tx is bound to available at now, inside tx, like
+// [Transfers.MarkAvailableTx], but keeps the token hash recorded at the
+// finalization ([Transfers.SetLinkOnlyTokenTx]): the link was returned to
+// the sender then, and works from now on. No token is sealed: the link is
+// never shown again (a lost link is replaced with
+// [Transfers.ReplaceDownloadTokenTx]). Its expiry restarts from now.
+//
+// It returns ErrNotFound when the transfer does not exist (or belongs to
+// another tenant), ErrInvalid when it is not link-only, and ErrConflict
+// when it is not scanning or has no token. After an error, the caller must
+// abort the transaction.
+func (r *Transfers) MarkLinkOnlyAvailableTx(ctx context.Context, tx *ScopedTx, trfID string, now time.Time) error {
+	ms := toMillis(now)
+	res, err := tx.Exec(ctx, qTransferMarkLinkOnlyAvailable, ms, ms, trfID)
+	if err == nil {
+		err = expectOne(res)
+	}
+	if errors.Is(err, ErrNotFound) {
+		err = linkOnlyMismatch(ctx, tx, trfID)
+	}
+	if err != nil {
+		return wrap("mark transfer available", err)
+	}
+	return nil
+}
+
+// SetLinkOnlyTokenTx records tokenHash, the SHA-256 (TokenHashSize bytes)
+// of the "dl_" token of the link-only transfer trfID of the tenant tx is
+// bound to, inside tx: the finalization draws the token and returns its
+// link once, in its answer. Only the hash is kept (DownloadTokenKeyID
+// stays empty). The transfer must be uploading or scanning (the
+// finalization moves it to scanning in the same transaction); a token set
+// before is replaced. The link works once the transfer is available
+// ([Transfers.MarkLinkOnlyAvailableTx]).
+//
+// It returns ErrInvalid for a malformed hash or a transfer that is not
+// link-only, ErrNotFound when the transfer does not exist (or belongs to
+// another tenant), and ErrConflict when it is past scanning or the hash is
+// already used. After an error, the caller must abort the transaction.
+func (r *Transfers) SetLinkOnlyTokenTx(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []byte) error {
+	if err := setLinkOnlyToken(ctx, tx, qTransferSetLinkOnlyToken, trfID, tokenHash); err != nil {
+		return wrap("set link-only token", err)
+	}
+	return nil
+}
+
+// ReplaceDownloadTokenTx replaces the token of the finalized link-only
+// transfer trfID (scanning or available) of the tenant tx is bound to with
+// tokenHash (SHA-256, TokenHashSize bytes), inside tx: the reissue of a
+// lost link (A9), possible as soon as the link was shown once, the link
+// working once the transfer is available ([Transfers.MarkLinkOnlyAvailableTx]
+// keeps the stored hash). The previous link stops working at once; nothing
+// is sealed.
+//
+// It returns ErrInvalid for a malformed hash or a transfer that is not
+// link-only, ErrNotFound when the transfer does not exist (or belongs to
+// another tenant), and ErrConflict when it is neither scanning nor
+// available or the hash is already used. After an error, the caller must abort the transaction.
+func (r *Transfers) ReplaceDownloadTokenTx(ctx context.Context, tx *ScopedTx, trfID string, tokenHash []byte) error {
+	if err := setLinkOnlyToken(ctx, tx, qTransferReplaceToken, trfID, tokenHash); err != nil {
+		return wrap("replace download token", err)
+	}
+	return nil
+}
+
+// setLinkOnlyToken runs the token statement q (qTransferSetLinkOnlyToken
+// or qTransferReplaceToken) for trfID, returning raw errors.
+func setLinkOnlyToken(ctx context.Context, tx *ScopedTx, q TenantQuery, trfID string, tokenHash []byte) error {
+	if !validTokenHash(tokenHash) {
+		return invalid("token hash must hold %d bytes", TokenHashSize)
+	}
+	res, err := tx.Exec(ctx, q, tokenHash, trfID)
+	if err == nil {
+		err = expectOne(res)
+	}
+	if errors.Is(err, ErrNotFound) {
+		return linkOnlyMismatch(ctx, tx, trfID)
+	}
+	return err
+}
+
+// linkOnlyMismatch explains why a statement on a link-only transfer
+// changed nothing: ErrNotFound when it does not exist, ErrInvalid when it
+// is not link-only, ErrConflict otherwise (wrong status or no token).
+func linkOnlyMismatch(ctx context.Context, tx *ScopedTx, trfID string) error {
+	t, err := scanTransfer(tx.QueryRow(ctx, qTransferGet, trfID))
+	switch {
+	case err != nil:
+		return err
+	case !t.LinkOnly:
+		return invalid("the transfer is not link-only")
+	default:
+		return ErrConflict
+	}
+}
+
 // availableMismatch explains why a scanning transfer could not be made
 // available with the link mode mode: ErrNotFound when it does not exist,
 // ErrInvalid when it has the other link mode, ErrConflict otherwise (not
@@ -204,6 +322,8 @@ func availableMismatch(ctx context.Context, tx *ScopedTx, trfID string, mode Lin
 		return err
 	case t.LinkMode != mode:
 		return invalid("the transfer has %s links", t.LinkMode)
+	case t.LinkOnly:
+		return invalid("a link-only transfer keeps its token")
 	default:
 		return ErrConflict
 	}

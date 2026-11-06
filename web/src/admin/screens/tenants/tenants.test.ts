@@ -5,6 +5,8 @@ import { MAX_TRANSFER_BYTES } from '../../forms/bytes';
 import {
   antivirusPatch,
   antivirusState,
+  linkOnlyEnabled,
+  linkOnlyPatch,
   TENANT_FIELDS,
   appendPage,
   canManageTenants,
@@ -595,5 +597,19 @@ describe('antivirus', () => {
   it('builds the merge patch of the switch', () => {
     expect(antivirusPatch(false)).toEqual({ antivirusEnabled: false });
     expect(antivirusPatch(true)).toEqual({ antivirusEnabled: true });
+  });
+});
+
+describe('link-only switch', () => {
+  it('reads an absent flag as off', () => {
+    expect(linkOnlyEnabled({})).toBe(false);
+    expect(linkOnlyEnabled({ linkOnlyAllowed: true })).toBe(true);
+  });
+
+  it('builds a merge patch only when the value changes', () => {
+    expect(linkOnlyPatch({}, true)).toEqual({ linkOnlyAllowed: true });
+    expect(linkOnlyPatch({ linkOnlyAllowed: true }, false)).toEqual({ linkOnlyAllowed: false });
+    expect(linkOnlyPatch({ linkOnlyAllowed: true }, true)).toEqual({});
+    expect(linkOnlyPatch({}, false)).toEqual({});
   });
 });

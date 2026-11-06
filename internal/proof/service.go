@@ -118,8 +118,10 @@ func NewService(db *store.DB, signer *Signer, rec TenantAuditor, clock func() ti
 //
 // It returns ErrRateLimited (a *RateLimitError) beyond the limit of the
 // client ip, ErrInvalid for a malformed kind or recipient or a recipient
-// with kind deposit, ErrNotAvailable when the proof does not exist. The
-// download is audited as transfer.proof_downloaded, the sender as actor.
+// with kind deposit, ErrNotAvailable when the proof does not exist or the
+// transfer was deposited through a drop link (its statement names the
+// recipients of the link, never disclosed to the depositor). The download
+// is audited as transfer.proof_downloaded, the sender as actor.
 func (s *Service) MyProof(ctx context.Context, t *tenant.Tenant, senderEmail, trfID string, kind store.ProofKind,
 	recipient, lang string, ip netip.Addr,
 ) (Document, error) {
@@ -130,12 +132,17 @@ func (s *Service) MyProof(ctx context.Context, t *tenant.Tenant, senderEmail, tr
 	if err != nil {
 		return Document{}, err
 	}
-	_, err = s.db.Transfers().GetBySender(ctx, t.ID, trfID, senderEmail)
+	d, err := s.db.Transfers().GetBySender(ctx, t.ID, trfID, senderEmail)
 	switch {
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrInvalid):
 		return Document{}, ErrNotFound
 	case err != nil:
 		return Document{}, fmt.Errorf("proof: read transfer: %w", err)
+	case d.DropLinkID != "":
+		// The signed statement names the recipients of the drop link,
+		// never disclosed to its depositor (T-311): only the
+		// administrators reach these proofs.
+		return Document{}, ErrNotAvailable
 	}
 	doc, err := s.document(ctx, t, trfID, kind, rcpt, lang)
 	if err != nil {

@@ -79,7 +79,7 @@ func TestUpdateTenantAntivirus(t *testing.T) {
 		}
 
 		// A store failure is reported.
-		ev.faults("updateTenantWithAntivirus")
+		ev.faults("updateTenantParts")
 		_, err = ev.svc.UpdateTenant(ctx, ev.super, ev.a.ID, TenantUpdate{AntivirusEnabled: ptr(false)}, clientIP)
 		wantErr(t, "store failure", err, errBoom)
 	})

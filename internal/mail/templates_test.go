@@ -709,6 +709,65 @@ func TestConfirmationWithoutLink(t *testing.T) {
 	}
 }
 
+// TestConfirmationLinkOnly checks the sender confirmation of a link-only
+// transfer without recipient (since 2.0): no link, the link-only sentence
+// and the no-recipient sentence instead, in both languages.
+func TestConfirmationLinkOnly(t *testing.T) {
+	tpl := DefaultTemplates()
+	data := TransferConfirmationData{TenantName: "T", ExpiresAt: goldenExpiry, LinkOnly: true, Files: goldenFiles()}
+	for lang, sentences := range map[string][]string{
+		"fr": {"Aucun e-mail n'a été envoyé aux destinataires", "Aucun destinataire indiqué."},
+		"en": {"No mail was sent to the recipients", "No recipient named."},
+	} {
+		m, err := tpl.Render(TemplateTransferConfirmation, lang, data)
+		if err != nil {
+			t.Fatalf("%s: %v", lang, err)
+		}
+		if strings.Contains(m.HTML, "href=") || strings.Contains(m.Text, "http") {
+			t.Errorf("%s: a link is shown:\n%s\n%s", lang, m.Text, m.HTML)
+		}
+		for _, s := range sentences {
+			if !strings.Contains(m.Text, s) || !strings.Contains(m.HTML, s) {
+				t.Errorf("%s: %q missing:\n%s\n%s", lang, s, m.Text, m.HTML)
+			}
+		}
+		if strings.Contains(m.Text, "personal link") || strings.Contains(m.Text, "lien personnel") {
+			t.Errorf("%s: the personal link sentence is shown:\n%s", lang, m.Text)
+		}
+	}
+}
+
+// TestConfirmationDropLink checks the sender confirmation of a deposit
+// through a drop link (since 2.0, T-311): the recipients are never listed,
+// the link is named instead (escaped), in both languages.
+func TestConfirmationDropLink(t *testing.T) {
+	tpl := DefaultTemplates()
+	data := TransferConfirmationData{
+		TenantName: "T", ExpiresAt: goldenExpiry, Files: goldenFiles(), Link: "https://t.example.com/d/x",
+		Recipients: []string{"ap@entity-a.example.com"}, DropLink: true, DropLinkLabel: "Invoices <A>",
+	}
+	for lang, sentence := range map[string]string{
+		"fr": "Les destinataires du lien de dépôt « Invoices <A> »",
+		"en": "The recipients of the drop link “Invoices <A>”",
+	} {
+		m, err := tpl.Render(TemplateTransferConfirmation, lang, data)
+		if err != nil {
+			t.Fatalf("%s: %v", lang, err)
+		}
+		if strings.Contains(m.Text, "ap@entity-a") || strings.Contains(m.HTML, "ap@entity-a") {
+			t.Errorf("%s: a recipient is disclosed:\n%s", lang, m.Text)
+		}
+		if !strings.Contains(m.Text, sentence) || !strings.Contains(m.HTML, "Invoices &lt;A&gt;") {
+			t.Errorf("%s: link sentence missing:\n%s\n%s", lang, m.Text, m.HTML)
+		}
+	}
+	data.DropLinkLabel = ""
+	m, err := tpl.Render(TemplateTransferConfirmation, "en", data)
+	if err != nil || !strings.Contains(m.Text, "The recipients of the drop link (their addresses") || strings.Contains(m.Text, "ap@entity-a") {
+		t.Errorf("without label: %v\n%s", err, m.Text)
+	}
+}
+
 // TestTemplatesReplyNotice checks the warning of a reply from an external
 // sender (T-223): shown only for a reply, localized, and escaped.
 func TestTemplatesReplyNotice(t *testing.T) {

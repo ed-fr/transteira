@@ -434,10 +434,15 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 	// A shared transfer (created before 1.1) gets one token for every
 	// recipient; a transfer with one link per recipient gets one token per
 	// recipient (P27), each mailed to its recipient only.
+	// A link-only transfer gets none: its token was drawn at the
+	// finalization and returned to the sender only.
 	perRecipient := d.LinkMode == store.LinkModePerRecipient
 	n := 1
-	if perRecipient {
+	switch {
+	case perRecipient:
 		n = len(d.Recipients)
+	case d.LinkOnly:
+		n = 0
 	}
 	tokens := make([]string, n)
 	for i := range tokens {
@@ -455,9 +460,15 @@ func (w *Worker) conclude(ctx context.Context, k key) time.Duration {
 		slog.Int("infected", infected), slog.Int("scan_error", withheld))
 	// The mails show the expiry the store just set, counted from now.
 	d.ExpiresAt = now.Add(time.Duration(d.ExpiryDays) * 24 * time.Hour)
-	if perRecipient {
+	switch {
+	case perRecipient:
 		w.notifyAvailable(ctx, k, t, d, "", recipientLinks(t, links, tokens))
-	} else {
+	case d.LinkOnly:
+		// No link to mail: notifyAvailable sends nothing to the
+		// recipients of a link-only transfer, and confirms to the sender
+		// without the link.
+		w.notifyAvailable(ctx, k, t, d, "", nil)
+	default:
 		w.notifyAvailable(ctx, k, t, d, id.DownloadURL(t.FQDN, tokens[0]), nil)
 	}
 	return 0

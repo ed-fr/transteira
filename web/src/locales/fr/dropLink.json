@@ -1,0 +1,19 @@
+{
+  "landing": {
+    "title": "Dépôt de fichiers",
+    "text": "Vous pouvez envoyer des fichiers à : {label}.",
+    "label": "Destination",
+    "validity": "Durée de conservation",
+    "validityValue": {
+      "one": "{count} jour",
+      "other": "{count} jours"
+    },
+    "level": "Niveau de confidentialité",
+    "next": "Pour continuer, vous allez recevoir un code de vérification à votre adresse mail. Il vous sera redemandé à chaque dépôt.",
+    "continue": "Continuer"
+  },
+  "invalid": {
+    "title": "Ce lien de dépôt n’est pas valide",
+    "text": "Le lien est inconnu, désactivé ou remplacé par un nouveau. Demandez-en un nouveau à la personne qui vous l’a transmis."
+  }
+}

@@ -11,6 +11,11 @@ import (
 	"github.com/ed-fr/transteira/internal/tenant"
 )
 
+// DropLinkRetentionMonths is how long a revoked or expired permanent drop
+// link is kept before its row is purged: store.DropLinkRetentionMonths,
+// also the delay after which an idle link is flagged as unused.
+const DropLinkRetentionMonths = store.DropLinkRetentionMonths
+
 // rowPurge is one purge of TaskPurgeRows after the ended transfers.
 type rowPurge struct {
 	// name names the purge in the logs.
@@ -52,6 +57,12 @@ var rowPurges = []rowPurge{
 	}},
 	{"invitations", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.Invitations().Purge(ctx, tid, now)
+	}},
+	// A revoked or expired drop link goes 12 months after its revocation
+	// or expiry, once the rows of its transfers are deleted (they
+	// reference it without cascade).
+	{"drop_links", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
+		return db.DropLinks().Purge(ctx, tid, now.AddDate(0, -DropLinkRetentionMonths, 0))
 	}},
 }
 

@@ -27,6 +27,8 @@ type DepositService interface {
 	Invite(ctx context.Context, t *tenant.Tenant, session deposit.SessionInfo, clientIP netip.Addr, acceptLanguage, email, message, language string) (deposit.Invitation, error)
 	PublicInvitation(ctx context.Context, t *tenant.Tenant, rawToken string) (deposit.PublicInvitation, error)
 	OpenReply(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, target deposit.ReplyTarget) (deposit.Session, error)
+	StartDropLink(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage, email, rawToken string) (deposit.Challenge, error)
+	PublicDropLink(ctx context.Context, t *tenant.Tenant, clientIP netip.Addr, acceptLanguage, rawToken string) (deposit.PublicDropLink, error)
 }
 
 // errNoDepositService reports a server built without WithDeposit: a wiring
@@ -38,6 +40,9 @@ const (
 	fieldInvalidEmail  = "invalid-email"
 	fieldInvalidFormat = "invalid-format"
 	fieldRequired      = "required"
+	// fieldDropLinkToken is the pointer of the drop link token of
+	// startDepositSession.
+	fieldDropLinkToken = "/dropLinkToken"
 	// fieldNotSupported is a member of API 2.0 that this server does not
 	// implement yet (drop link, link-only, end-to-end encryption): refused
 	// rather than ignored (fail closed), so that a client never believes it
@@ -167,12 +172,21 @@ func (s *Server) StartDepositSession(ctx context.Context, req gen.StartDepositSe
 	if req.Body == nil {
 		return nil, validationFailed(deposit.FieldEmail, fieldRequired)
 	}
-	if req.Body.DropLinkToken != nil {
-		return nil, validationFailed("/dropLinkToken", fieldNotSupported)
-	}
 	invitation := ""
 	if req.Body.InvitationToken != nil {
 		invitation = *req.Body.InvitationToken
+	}
+	if req.Body.DropLinkToken != nil {
+		if req.Body.InvitationToken != nil {
+			return nil, validationFailed(fieldDropLinkToken, fieldNotAllowed)
+		}
+		// A code every time: the recognition cookie is not even passed.
+		ch, err := s.deposit.StartDropLink(ctx, t, middleware.ClientIP(ctx), deref(req.Params.AcceptLanguage),
+			string(req.Body.Email), *req.Body.DropLinkToken)
+		if err != nil {
+			return nil, depositError(err)
+		}
+		return challengeBody(ch), nil
 	}
 	res, err := s.deposit.Start(ctx, t, middleware.ClientIP(ctx), deref(req.Params.AcceptLanguage),
 		string(req.Body.Email), invitation, deref(req.Params.UnderscoreUnderscoreHostTtKnown))
@@ -185,10 +199,15 @@ func (s *Server) StartDepositSession(ctx context.Context, req gen.StartDepositSe
 	if res.Challenge == nil {
 		return nil, errors.New("public: deposit start returned neither a session nor a challenge")
 	}
-	ch := res.Challenge
+	return challengeBody(*res.Challenge), nil
+}
+
+// challengeBody renders a verification challenge as the 202 answer of
+// startDepositSession.
+func challengeBody(ch deposit.Challenge) gen.StartDepositSession202JSONResponse {
 	return gen.StartDepositSession202JSONResponse{
 		ChallengeId: ch.ID, Email: gen.Email(ch.Email), ExpiresAt: ch.ExpiresAt, AttemptsRemaining: ch.AttemptsRemaining,
-	}, nil
+	}
 }
 
 // ConfirmVerificationChallenge checks a verification code and opens a
@@ -289,8 +308,8 @@ func (s *Server) GetInvitation(ctx context.Context, req gen.GetInvitationRequest
 	return resp, nil
 }
 
-// sessionBody renders a session as the OpenAPI DepositSession. The session
-// and invitation record identifiers stay on the server.
+// sessionBody renders a session as the OpenAPI DepositSession. The session,
+// invitation and drop link record identifiers stay on the server.
 func sessionBody(info deposit.SessionInfo) gen.DepositSession {
 	body := gen.DepositSession{
 		Email: gen.Email(info.Email), Kind: gen.DepositorKind(info.Kind), CsrfToken: info.CSRFToken,
@@ -306,6 +325,12 @@ func sessionBody(info deposit.SessionInfo) gen.DepositSession {
 			ExpiresAt time.Time `json:"expiresAt"`
 			InvitedBy gen.Email `json:"invitedBy"`
 		}{ExpiresAt: inv.ExpiresAt, InvitedBy: gen.Email(inv.InvitedBy)}
+	}
+	if l := info.DropLink; l != nil {
+		body.DropLink = &struct {
+			Label        string         `json:"label"`
+			ValidityDays gen.ExpiryDays `json:"validityDays"`
+		}{Label: l.Label, ValidityDays: gen.ExpiryDays(l.ValidityDays)}
 	}
 	if r := info.Reply; r != nil {
 		body.Reply = &struct {
@@ -349,6 +374,8 @@ func depositError(err error) error {
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, deposit.ErrNotFound):
 		return problem.New(problem.CodeNotFound)
+	case errors.Is(err, deposit.ErrDropLinkInvalid):
+		return problem.New(problem.CodeDropLinkInvalid)
 	case errors.Is(err, deposit.ErrInvitationGone):
 		return problem.New(problem.CodeInvitationGone)
 	case errors.Is(err, deposit.ErrChallengeGone):

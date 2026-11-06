@@ -16,14 +16,14 @@ const MaxChallengeAttempts = 2
 
 // challengeColumns is the column list read by the challenge queries.
 const challengeColumns = `id, email, code_mac, attempts_remaining, invitation_id, client_ip, created_at, expires_at, ` +
-	`consumed_at, purpose, recipient_link_id, recipient_intent`
+	`consumed_at, purpose, recipient_link_id, recipient_intent, drop_link_id`
 
 // Statements of the Challenges repository.
 var (
 	qChallengeInsert = tenantQuery(
 		`INSERT INTO verification_challenges (tenant_id, id, email, code_mac, attempts_remaining, invitation_id,
-		client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		client_ip, created_at, expires_at, purpose, recipient_link_id, recipient_intent, drop_link_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	qChallengeGet = tenantQuery(
 		`SELECT ` + challengeColumns + ` FROM verification_challenges WHERE tenant_id = ? AND id = ?`)
 	// qChallengeCountEmail counts the deposit codes of an address: the
@@ -43,6 +43,10 @@ var (
 		`SELECT ` + challengeColumns + ` FROM verification_challenges
 		WHERE tenant_id = ? AND recipient_link_id = ? AND purpose = 'recipient'
 		ORDER BY created_at DESC, id DESC LIMIT 1`)
+	// qChallengeCountDropLink counts the deposit codes sent through a drop
+	// link (verification_challenges_drop_link_idx).
+	qChallengeCountDropLink = tenantQuery(
+		`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND drop_link_id = ? AND created_at >= ?`)
 	qChallengeCountIP = tenantQuery(
 		`SELECT count(*) FROM verification_challenges WHERE tenant_id = ? AND client_ip = ? AND created_at >= ?`)
 	qChallengeDelete = tenantQuery(
@@ -125,6 +129,14 @@ type Challenge struct {
 	// RecipientIntent is what a ChallengeRecipient code is for, "" for a
 	// deposit code.
 	RecipientIntent RecipientIntent
+	// DropLinkID is the permanent drop link ("drl_" + ULID, same tenant)
+	// a deposit code was requested through (since 2.0), "" otherwise. It
+	// excludes InvitationID and a ChallengeRecipient purpose. The store only
+	// checks that the link exists in the tenant (composite foreign key):
+	// the caller checks that it is enabled and not revoked, at the request
+	// and again at the confirmation. Deleting the link deletes the
+	// challenge.
+	DropLinkID string
 }
 
 // Open reports whether the challenge still accepts a code at now: not
@@ -172,10 +184,11 @@ func (r *Challenges) Create(ctx context.Context, tid tenant.ID, c Challenge) err
 // CreateTx stores c for the tenant tx is bound to, inside tx. It returns
 // ErrInvalid for a malformed field (a recipient code needs a link and an
 // intent, is sent to the address of the link and has no invitation; a
-// deposit code has neither link nor intent), ErrNotFound when the tenant,
-// the invitation or the recipient link does not exist (or belongs to
-// another tenant) and ErrConflict when the ID is already used. After an
-// error, the caller must abort the transaction.
+// deposit code has neither link nor intent; a drop link excludes an
+// invitation), ErrNotFound when the tenant, the invitation, the recipient
+// link or the drop link does not exist (or belongs to another tenant) and
+// ErrConflict when the ID is already used. After an error, the caller must
+// abort the transaction.
 func (r *Challenges) CreateTx(ctx context.Context, tx *ScopedTx, c Challenge) error {
 	if err := r.create(ctx, tx, c); err != nil {
 		return wrap("create challenge", err)
@@ -203,6 +216,10 @@ func (r *Challenges) create(ctx context.Context, tx *ScopedTx, c Challenge) erro
 		return invalid("attempts must be between 1 and %d", MaxChallengeAttempts)
 	case c.InvitationID != "" && !id.Valid(id.Invitation, c.InvitationID):
 		return invalid("malformed invitation id")
+	case c.DropLinkID != "" && !id.Valid(id.DropLink, c.DropLinkID):
+		return invalid("malformed drop link id")
+	case c.DropLinkID != "" && c.InvitationID != "":
+		return invalid("a code is for an invitation or a drop link, not both")
 	case !c.ExpiresAt.After(created):
 		return invalid("challenge must expire after its creation")
 	case !c.ConsumedAt.IsZero():
@@ -216,7 +233,7 @@ func (r *Challenges) create(ctx context.Context, tx *ScopedTx, c Challenge) erro
 	}
 	_, err = tx.Exec(ctx, qChallengeInsert, c.ID, email, c.CodeMAC, c.AttemptsRemaining,
 		nullText(c.InvitationID), ip, toMillis(created), toMillis(c.ExpiresAt), string(c.Purpose),
-		nullText(c.RecipientLinkID), nullText(string(c.RecipientIntent)))
+		nullText(c.RecipientLinkID), nullText(string(c.RecipientIntent)), nullText(c.DropLinkID))
 	return err
 }
 
@@ -235,8 +252,8 @@ func checkChallengePurpose(ctx context.Context, tx *ScopedTx, c Challenge, email
 		return invalid("unknown challenge purpose")
 	}
 	switch {
-	case c.InvitationID != "":
-		return invalid("a recipient code has no invitation")
+	case c.InvitationID != "" || c.DropLinkID != "":
+		return invalid("a recipient code has no invitation and no drop link")
 	case c.RecipientIntent != IntentDownload && c.RecipientIntent != IntentReply:
 		return invalid("unknown recipient intent")
 	case !validLinkID(c.RecipientLinkID):
@@ -311,16 +328,18 @@ func scanChallenge(row interface{ Scan(...any) error }) (Challenge, error) {
 	var (
 		c                 Challenge
 		inv, link, intent sql.NullString
+		dropLink          sql.NullString
 		ip, purpose       string
 		created, expires  int64
 		consumed          sql.NullInt64
 	)
 	if err := row.Scan(&c.ID, &c.Email, &c.CodeMAC, &c.AttemptsRemaining,
-		&inv, &ip, &created, &expires, &consumed, &purpose, &link, &intent); err != nil {
+		&inv, &ip, &created, &expires, &consumed, &purpose, &link, &intent, &dropLink); err != nil {
 		return Challenge{}, err
 	}
 	c.InvitationID, c.Purpose = inv.String, ChallengePurpose(purpose)
 	c.RecipientLinkID, c.RecipientIntent = link.String, RecipientIntent(intent.String)
+	c.DropLinkID = dropLink.String
 	c.ClientIP = parseIP(ip)
 	c.CreatedAt, c.ExpiresAt = fromMillis(created), fromMillis(expires)
 	c.ConsumedAt = nullMillis(consumed)
@@ -402,6 +421,19 @@ func (r *Challenges) CountByLinkSinceTx(ctx context.Context, tx *ScopedTx, linkI
 		return 0, wrap("count challenges", invalid("malformed recipient link id"))
 	}
 	return countTx(ctx, tx, qChallengeCountLink, linkID, since, "count challenges")
+}
+
+// CountByDropLinkSinceTx returns, inside tx, the number of deposit
+// challenges created through the drop link linkID at or after since,
+// consumed or not, after the tenant lock (see [Challenges.CountSinceTx]):
+// the cap on the codes sent through one link, all addresses and IPs
+// together (threat model T-310). It returns ErrInvalid for a malformed link
+// ID. After an error, the caller must abort the transaction.
+func (r *Challenges) CountByDropLinkSinceTx(ctx context.Context, tx *ScopedTx, linkID string, since time.Time) (int, error) {
+	if !id.Valid(id.DropLink, linkID) {
+		return 0, wrap("count challenges", invalid("malformed drop link id"))
+	}
+	return countTx(ctx, tx, qChallengeCountDropLink, linkID, since, "count challenges")
 }
 
 // countTx takes the tenant lock, then runs the count q for key and since in

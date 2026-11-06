@@ -56,13 +56,16 @@ type CreateRequest struct {
 	// verified address is used.
 	SenderEmail string
 	// Recipients are the recipient addresses: mandatory for an internal
-	// sender and an API token, ignored for an external one (the inviter is
-	// the recipient) and for a reply (the sender of the original transfer
-	// is the recipient).
+	// sender and an API token (optional for a link-only transfer), ignored
+	// for an external one (the inviter is the recipient) and for a reply
+	// (the sender of the original transfer is the recipient); for a drop
+	// link sender, omitted or equal to the recipients of the link, in any
+	// order.
 	Recipients []string
 	// Message is the optional plain-text message.
 	Message string
-	// ExpiryDays is the validity: 1, 7 or 30 days after the finalization.
+	// ExpiryDays is the validity: 1, 7 or 30 days after the finalization;
+	// for a drop link sender, the validity of the link.
 	ExpiryDays int
 	// Password is the optional transfer password; nil for none (an empty
 	// password is refused).
@@ -79,12 +82,18 @@ type CreateRequest struct {
 	// the confidentiality level, when it has one).
 	MaxDownloads *int
 	// ConfidentialityLevel is the key of the chosen confidentiality level,
-	// "" for the default level of the tenant.
+	// "" for the default level of the tenant; for a drop link sender, ""
+	// or the level of the link, which is imposed.
 	ConfidentialityLevel string
 	// RecipientVerification asks every recipient to prove their address by
 	// code before downloading through their own link (spec 10). A level
 	// that requires it refuses a request without it.
 	RecipientVerification bool
+	// LinkOnly asks for a link-only transfer (since 2.0, spec 8.2): a
+	// single shared link, returned once by the finalization and never
+	// mailed; the recipients become optional. Internal senders and API
+	// tokens only, when the tenant and the level allow it.
+	LinkOnly bool
 }
 
 // FileDeclaration declares one file of a transfer (OpenAPI
@@ -158,7 +167,7 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 		p.sender = email
 	}
 	if sender.Kind.IsInternal() {
-		p.recipients = s.validateRecipients(&v, req.Recipients)
+		p.recipients = s.validateRecipients(&v, req.Recipients, req.LinkOnly)
 	}
 	switch {
 	case !utf8.ValidString(req.Message):
@@ -198,11 +207,14 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 }
 
 // validateRecipients checks the recipients of an internal sender and
-// returns them normalized.
-func (s *Service) validateRecipients(v *validator, raw []string) []string {
+// returns them normalized. They may be omitted when optional (a link-only
+// transfer).
+func (s *Service) validateRecipients(v *validator, raw []string, optional bool) []string {
 	switch {
 	case len(raw) == 0:
-		v.add(FieldRecipients, CodeRequired)
+		if !optional {
+			v.add(FieldRecipients, CodeRequired)
+		}
 		return nil
 	case len(raw) > s.maxRecipients:
 		v.add(FieldRecipients, CodeTooMany)
@@ -312,10 +324,20 @@ func validIdempotencyKey(k string) bool {
 var (
 	errQuota   = errors.New("transfer: quota reached")
 	errOpenCap = errors.New("transfer: open transfer cap reached")
+	// errDropLinkUsed: the drop link session already deposited a transfer.
+	errDropLinkUsed = errors.New("transfer: drop link session used")
+	// errDropLinkBusy: the drop link reached its hourly deposit cap.
+	errDropLinkBusy = errors.New("transfer: drop link hourly cap reached")
 )
 
-// scopeOpenTransfers is the security log scope of the open transfer cap.
-const scopeOpenTransfers = "open_transfers"
+// Security log scopes of the creation limits.
+const (
+	// scopeOpenTransfers is the open transfer cap.
+	scopeOpenTransfers = "open_transfers"
+	// scopeDropLink is the hourly deposit cap of a drop link (since 2.0,
+	// threat model P63), the scope the deposit service uses too.
+	scopeDropLink = "drop_link"
+)
 
 // fingerprint returns the SHA-256, in lowercase hexadecimal, of the
 // canonical form of a validated request, kept with its idempotency key: the
@@ -348,12 +370,14 @@ func fingerprint(p plan, req CreateRequest) string {
 		MaxDownloads *int   `json:"x,omitempty"`
 		Level        string `json:"c,omitempty"`
 		Verification bool   `json:"v,omitempty"`
+		// The link-only option of version 2.0, omitted when unset.
+		LinkOnly bool `json:"o,omitempty"`
 	}{
 		Sender:     p.sender,
 		Recipients: slices.Sorted(slices.Values(p.recipients)), Message: p.message, ExpiryDays: req.ExpiryDays,
 		Password: p.password != nil, Delete: req.DeleteAfterFirstDownload, Language: req.Language,
 		Files: make([]file, len(p.files)), MaxDownloads: req.MaxDownloads, Level: req.ConfidentialityLevel,
-		Verification: req.RecipientVerification,
+		Verification: req.RecipientVerification, LinkOnly: req.LinkOnly,
 	}
 	for i, f := range p.files {
 		canonical.Files[i] = file{Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256, Path: f.Path}
@@ -404,7 +428,11 @@ func fingerprint(p plan, req CreateRequest) string {
 //  6. the password is hashed with argon2id (bounded concurrency, T-125),
 //     before the transaction so that the lock is not held meanwhile; its
 //     plaintext bytes are cleared afterwards;
-//  7. in one transaction, under the tenant lock: the cap on the unfinished
+//  7. in one transaction, under the tenant lock: for a drop link sender,
+//     the single deposit of its session (ErrDropLinkUsed) and the hourly
+//     cap of the link, all depositors together (*RateLimitError with the
+//     time until the window frees a slot, logged as rate_limited with
+//     scope drop_link); the cap on the unfinished
 //     transfers of the sender (Options.MaxOpenTransfers for an internal
 //     sender and per API token, MaxOpenTransfersExternal for an external
 //     or reply one; until the cleanup job exists, nothing else frees the
@@ -444,14 +472,25 @@ func fingerprint(p plan, req CreateRequest) string {
 // completes it on the first empty PATCH, and until then the finalization
 // answers ErrIncomplete.
 func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, idempotencyKey string) (Details, error) {
-	email, recipient, p, err := s.admit(ctx, t, sender, req, idempotencyKey)
+	email, f, p, err := s.admit(ctx, t, sender, req, idempotencyKey)
 	defer clear(p.password) // the paths that return before hashing
 	if err != nil {
 		return Details{}, err
 	}
+	if req.LinkOnly && req.RecipientVerification {
+		return Details{}, ErrLinkOnlyConflict
+	}
+	if f.link != nil {
+		if err := matchDropLink(req, *f.link); err != nil {
+			return Details{}, err
+		}
+		// The level of the link is imposed ("" for the default level).
+		req.ConfidentialityLevel = f.link.ConfidentialityLevel
+	}
 	if sender.Kind.IsExternal() {
-		// The inviter, or the sender of the original transfer of a reply.
-		p.recipients = []string{recipient}
+		// The inviter, the sender of the original transfer of a reply, or
+		// the recipients of a drop link.
+		p.recipients = slices.Clone(f.recipients)
 	}
 	pol, err := s.applyPolicies(ctx, t, sender, email, req, p.recipients)
 	if err != nil {
@@ -487,14 +526,22 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	facts := AbuseFacts{
 		SenderEmail: email, Kind: sender.Kind, Bytes: p.total, Recipients: p.recipients, At: now, ClientIP: sender.ClientIP,
 	}
-	var block *AbuseBlock
+	var (
+		block *AbuseBlock
+		busy  store.DropLinkUsage
+	)
 	rec := store.Transfer{
 		ID: trfID, SenderEmail: email, SenderKind: sender.Kind, InvitationID: sender.InvitationID, APITokenID: sender.APITokenID,
 		ReplyToTransferID: sender.ReplyToTransferID, Message: p.message, Language: req.Language, ExpiryDays: req.ExpiryDays,
 		PasswordHash: hash, IdempotencyKey: idempotencyKey, RequestFingerprint: fp, CreatedAt: now, SenderIP: sender.ClientIP,
 		// Every transfer created since 1.1 gives each recipient their own
-		// link (P27), mailed to them only and never shown to the sender.
+		// link (P27), mailed to them only and never shown to the sender;
+		// a link-only transfer has a single shared link, never mailed.
 		LinkMode: s.linkMode, RecipientVerification: req.RecipientVerification,
+		LinkOnly: req.LinkOnly, DropLinkID: sender.DropLinkID,
+	}
+	if req.LinkOnly {
+		rec.LinkMode = store.LinkModeShared
 	}
 	pol.snapshot(&rec)
 	deks := make([][]byte, len(p.files))
@@ -507,6 +554,27 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		used, err := tx.usedBytes(ctx)
 		if err != nil {
 			return err
+		}
+		if sender.Kind == store.DepositorDropLink {
+			// The hourly cap of the link, all depositors together, under
+			// the tenant lock taken by usedBytes: two concurrent creations
+			// cannot both take the last slot. It counts the used sessions,
+			// so canceling a transfer frees no slot.
+			if busy, err = tx.dropLinkUsage(ctx, sender.DropLinkID, now.Add(-store.DropLinkWindow)); err != nil {
+				return err
+			}
+			if busy.Full(f.link.MaxDepositsPerHour) {
+				return errDropLinkBusy
+			}
+			// The single use of the session, marked after the cap is
+			// counted (the mark is a use) and rolled back with any later
+			// refusal; canceling the transfer keeps it.
+			switch err := tx.useDropLinkSession(ctx, sender.SessionID, sender.DropLinkID, now); {
+			case errors.Is(err, store.ErrNotFound):
+				return errDropLinkUsed
+			case err != nil:
+				return err
+			}
 		}
 		if err := s.checkOpenCap(ctx, t.ID, tx, sender, email, now); err != nil {
 			return err
@@ -540,12 +608,18 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	// With a key, an abuse block may also come from a concurrent request with
 	// the same key that committed first and is now counted: it is replayed
 	// rather than refused.
-	if (errors.Is(err, store.ErrConflict) || errors.Is(err, errAbuse)) && idempotencyKey != "" {
+	if (errors.Is(err, store.ErrConflict) || errors.Is(err, errAbuse) || errors.Is(err, errDropLinkUsed)) && idempotencyKey != "" {
 		if d, ok, rerr := s.replay(ctx, t, sender, email, idempotencyKey, fp); ok || rerr != nil {
 			return d, rerr
 		}
 	}
 	switch {
+	case errors.Is(err, errDropLinkUsed):
+		return Details{}, ErrDropLinkUsed
+	case errors.Is(err, errDropLinkBusy):
+		s.logEvent(ctx, t, sender.ClientIP, securitylog.RateLimited,
+			securitylog.Field{Key: securitylog.KeyScope, Value: scopeDropLink})
+		return Details{}, &RateLimitError{RetryAfter: busy.RetryAfter(now)}
 	case errors.Is(err, errOpenCap):
 		s.logEvent(ctx, t, sender.ClientIP, securitylog.RateLimited,
 			securitylog.Field{Key: securitylog.KeyScope, Value: scopeOpenTransfers})
@@ -578,6 +652,12 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	if sender.Kind == store.DepositorInternalRemote {
 		created["remote"] = true
 	}
+	if req.LinkOnly {
+		created["linkOnly"] = true
+	}
+	if sender.DropLinkID != "" {
+		created["dropLinkId"] = sender.DropLinkID
+	}
 	s.record(ctx, t, sender, email, audit.ActionTransferCreated, trfID, created)
 	if sender.Kind == store.DepositorReply {
 		s.record(ctx, t, sender, email, audit.ActionTransferReplyCreated, trfID,
@@ -603,25 +683,45 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 
 // admit checks the eligibility of sender and validates req (steps 1 and 2
 // of Create, in the order of the sender kind) and returns the normalized
-// sender address, the forced recipient of an external or reply sender
-// (see checkEligible) and the plan. The plan is returned with its password
-// even on error, for the caller to clear it.
-func (s *Service) admit(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, key string) (string, string, plan, error) {
+// sender address, what the eligibility imposes on an external, reply or
+// drop link sender (see checkEligible) and the plan. The plan is returned
+// with its password even on error, for the caller to clear it.
+func (s *Service) admit(ctx context.Context, t *tenant.Tenant, sender Sender, req CreateRequest, key string) (string, forced, plan, error) {
 	if sender.APITokenID == "" {
-		email, recipient, err := s.checkEligible(ctx, t, sender)
+		email, f, err := s.checkEligible(ctx, t, sender)
 		if err != nil {
-			return "", "", plan{}, err
+			return "", forced{}, plan{}, err
 		}
 		p, err := s.validate(req, sender, key)
-		return email, recipient, p, err
+		return email, f, p, err
 	}
 	p, err := s.validate(req, sender, key)
 	if err != nil {
-		return "", "", p, err
+		return "", forced{}, p, err
 	}
 	sender.Email = p.sender
 	email, _, err := s.checkEligible(ctx, t, sender)
-	return email, "", p, err
+	return email, forced{}, p, err
+}
+
+// matchDropLink checks that the request of a drop link sender agrees with
+// its link l: no recipients (any list, whatever its values, is refused the
+// same way, so that the request cannot probe the recipients of the link,
+// threat model T-311), the validity of the link, and the level omitted or
+// that of the link. Every mismatch is collected in a *ValidationError
+// (CodeNotAllowed; the expected validity in Allowed).
+func matchDropLink(req CreateRequest, l store.DropLink) error {
+	var v validator
+	if len(req.Recipients) > 0 {
+		v.add(FieldRecipients, CodeNotAllowed)
+	}
+	if req.ExpiryDays != l.ValidityDays {
+		v.errs = append(v.errs, FieldError{Pointer: FieldExpiryDays, Code: CodeNotAllowed, Allowed: []int{l.ValidityDays}})
+	}
+	if req.ConfidentialityLevel != "" && req.ConfidentialityLevel != l.ConfidentialityLevel {
+		v.add(FieldConfidentialityLevel, CodeNotAllowed)
+	}
+	return v.err()
 }
 
 // checkOpenCap refuses a new transfer of sender (normalized address email;

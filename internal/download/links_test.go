@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -383,4 +384,35 @@ func TestVerificationErrorMessages(t *testing.T) {
 	if !errors.Is(&RateLimitError{}, ErrRateLimited) || !errors.Is(&WrongCodeError{}, ErrWrongCode) {
 		t.Error("error types do not match their sentinels")
 	}
+}
+
+// TestDropLinkReceiptHidesRecipient: the first download mail of a drop link
+// transfer completed through a recipient link names nobody (threat model
+// T-311), while an ordinary per-recipient transfer still names its
+// recipient.
+func TestDropLinkReceiptHidesRecipient(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, nil)
+		l, err := ev.db.DropLinks().Create(context.Background(), ev.a.ID, store.DropLink{
+			ID: id.New(id.DropLink), TokenHash: id.HashToken("drop-token"), Label: "Supplier invoices",
+			Recipients: []string{dave}, ValidityDays: 7, Enabled: true, CreatedBy: "adm_1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		drop := ev.publish(ev.a, spec{contents: [][]byte{random(100)}, perRecipient: true, sender: func(tr *store.Transfer) {
+			tr.SenderEmail, tr.SenderKind, tr.DropLinkID = erin, store.DepositorDropLink, l.ID
+		}})
+		ev.archive(drop)
+		ev.waitUntil("drop link receipt", func() bool { return len(ev.firstDownloads()) == 1 })
+		if who, _ := ev.receiptRecipients(); len(who) != 1 || who[0] != "" {
+			t.Fatalf("drop link receipt names %q", who)
+		}
+		plain := ev.publish(ev.a, spec{contents: [][]byte{random(100)}, perRecipient: true})
+		ev.archive(plain)
+		ev.waitUntil("plain receipt", func() bool { return len(ev.firstDownloads()) == 2 })
+		if who, _ := ev.receiptRecipients(); who[1] != dave {
+			t.Fatalf("plain receipt names %q, want %q", who[1], dave)
+		}
+	})
 }

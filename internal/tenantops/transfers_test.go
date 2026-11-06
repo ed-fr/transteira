@@ -412,6 +412,14 @@ func TestResendStates(t *testing.T) {
 		}
 		wantErr(t, "missing", ev.svc.ResendNotification(ctx, ev.adminA, ev.a.ID, missingTrf, nil, clientIP), ErrNotFound)
 
+		// A link-only transfer is never mailed, even available.
+		ev.seedLinkOnly = true
+		lo := ev.seed(ev.a, store.TransferAvailable, carol)
+		ev.seedLinkOnly = false
+		err := ev.svc.ResendNotification(ctx, ev.adminA, ev.a.ID, lo.id, nil, clientIP)
+		wantErr(t, "link-only", err, ErrLinkOnly)
+		wantErr(t, "link-only", err, ErrStateConflict)
+
 		// Tenant B has no SMTP settings: nothing queued, nothing counted.
 		trfB := ev.seed(ev.b, store.TransferAvailable, carol)
 		for range DefaultResendLimit + 1 {
@@ -485,7 +493,7 @@ func notAnAddress(err error) bool {
 // of a reply.
 func TestTransferOrigin(t *testing.T) {
 	t.Parallel()
-	tokID, origID := id.New(id.APIToken), id.New(id.Transfer)
+	tokID, origID, dropID := id.New(id.APIToken), id.New(id.Transfer), id.New(id.DropLink)
 	for _, c := range []struct {
 		tr      store.Transfer
 		want    Origin
@@ -497,11 +505,15 @@ func TestTransferOrigin(t *testing.T) {
 		{store.Transfer{SenderKind: store.DepositorInternal, APITokenID: tokID}, OriginAPI, tokID, ""},
 		{store.Transfer{SenderKind: store.DepositorReply, ReplyToTransferID: origID}, OriginReply, "", origID},
 		{store.Transfer{SenderKind: store.DepositorInternalRemote}, OriginInternalRemote, "", ""},
+		{store.Transfer{SenderKind: store.DepositorDropLink, DropLinkID: dropID, LinkOnly: true}, OriginDropLink, "", ""},
 	} {
 		got := transferOf(c.tr, nil, 0, "en")
 		if got.Origin != c.want || got.APITokenID != c.token || got.ReplyToTransferID != c.replyTo {
 			t.Errorf("transferOf(%+v) = origin %q token %q reply to %q, want %q %q %q", c.tr, got.Origin, got.APITokenID,
 				got.ReplyToTransferID, c.want, c.token, c.replyTo)
+		}
+		if got.DropLinkID != c.tr.DropLinkID || got.LinkOnly != c.tr.LinkOnly {
+			t.Errorf("transferOf(%+v) = drop link %q link-only %v", c.tr, got.DropLinkID, got.LinkOnly)
 		}
 	}
 }

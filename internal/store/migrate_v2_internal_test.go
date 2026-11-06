@@ -9,7 +9,7 @@ import (
 )
 
 // TestV2SchemaConstraints checks the guarantees the V2 migrations (0026 to
-// 0029) enforce by themselves, on both engines: defaults reproducing 1.2,
+// 0031) enforce by themselves, on both engines: defaults reproducing 1.2,
 // the instance-wide uniqueness of SSO domains, the session auth method,
 // coalesced security events, a single active proof signing key, immutable
 // proofs, and the drop link, link-only and end-to-end transfer invariants.
@@ -154,6 +154,22 @@ func TestV2SchemaConstraints(t *testing.T) {
 			VALUES (?, ?, ?, 'd@example.org', 'drop_link', 0, 1, ?)`
 		mustExec(dsession, "dps_1", a, bytes.Repeat([]byte{1}, 32), "drl_1")
 		rejected("drop link session without link", dsession, "dps_2", a, bytes.Repeat([]byte{2}, 32), nil)
+
+		// Verification codes bound to a drop link (0031): same tenant, never
+		// with an invitation, removed with the link.
+		mustExec(`INSERT INTO invitations (id, tenant_id, token_hash, email, invited_by, created_at, expires_at)
+			VALUES ('inv_1', ?, ?, 'x@example.org', 'i@a.example.com', 0, 1)`, a, tok(11))
+		challenge := `INSERT INTO verification_challenges (id, tenant_id, email, code_mac, attempts_remaining, client_ip,
+			created_at, expires_at, invitation_id, drop_link_id) VALUES (?, ?, 'd@example.org', ?, 2, '192.0.2.1', 0, 1, ?, ?)`
+		mustExec(challenge, "vch_1", a, []byte{1}, nil, "drl_1")
+		rejected("drop link code of another tenant", challenge, "vch_2", b, []byte{1}, nil, "drl_1")
+		rejected("drop link code with an invitation", challenge, "vch_3", a, []byte{1}, "inv_1", "drl_1")
+		mustExec(link, "drl_9", a, tok(10), `["y@a.example.com"]`)
+		mustExec(challenge, "vch_5", a, []byte{1}, nil, "drl_9")
+		mustExec(`DELETE FROM drop_links WHERE id = 'drl_9'`)
+		if n := rawInt(ctx, t, db, `SELECT count(*) FROM verification_challenges WHERE id = 'vch_5'`); n != 0 {
+			t.Error("the code of a deleted drop link survived")
+		}
 	})
 }
 
@@ -195,7 +211,7 @@ func TestMigration0030Upgrade(t *testing.T) {
 		}
 
 		db.migrationsFS = migrationFiles
-		if n, err := db.Migrate(ctx); err != nil || n != 1 {
+		if n, err := db.Migrate(ctx); err != nil || n != len(mustMigrations(t, db))-29 {
 			t.Fatalf("Migrate to the latest = %d, %v", n, err)
 		}
 		for tid, want := range map[string]int64{"ten_cidr": 11, "ten_domain": 12, "ten_both": 13} {

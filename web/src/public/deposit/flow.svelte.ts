@@ -87,6 +87,18 @@ export interface InvitationContext {
   message?: string | undefined;
 }
 
+/** Drop link the depositor arrived with (/drop/:token, after the drop link landing). */
+export interface DropLinkContext {
+  /** Drop link token (ttd_...). */
+  token: string;
+  /** Label of the link, shown to the depositor ("Files will be sent to: label"). */
+  label: string;
+  /** Validity of the deposits, imposed by the link. */
+  validityDays: number;
+  /** Key of the confidentiality level imposed by the link; undefined for the tenant default. */
+  levelKey?: string | undefined;
+}
+
 /** Reply the depositor is making (/d/:token/reply, after the reply session was opened). */
 export interface ReplyContext {
   /** Download link token of the transfer replied to. */
@@ -131,6 +143,8 @@ export interface DepositForm {
   maxDownloadsText: string;
   /** Every recipient proves their address by code (a per-recipient link each). */
   recipientVerification: boolean;
+  /** Link-only transfer: no mail to the recipients, the sender passes the link on (since 2.0). */
+  linkOnly: boolean;
   /** Key of the chosen confidentiality level; undefined when the tenant has none. */
   confidentialityLevel: string | undefined;
   files: DepositFile[];
@@ -238,6 +252,7 @@ function emptyForm(expiryDays: readonly number[] = [], levels: readonly PublicLe
     deleteAfterFirstDownload: false,
     maxDownloadsText: '',
     recipientVerification: false,
+    linkOnly: false,
     confidentialityLevel: level?.key,
     files: [],
   };
@@ -273,8 +288,15 @@ export class DepositFlow {
   maintenanceMessageLanguage = $state<string | undefined>(undefined);
   /** The invitation can no longer be used. */
   invitationGone = $state(false);
+  /** The drop link was revoked, disabled or rotated since the landing page. */
+  dropLinkGone = $state(false);
   /** Reply mode: the reply session is gone (expired, ended or never opened). */
   replyEnded = $state(false);
+  /**
+   * Download link of a link-only transfer, taken from the answer of the finalization (the only
+   * one that carries it, once). Kept apart from transfer: later reads replace that object.
+   */
+  linkOnlyUrl = $state<string | undefined>(undefined);
   /** Deposit form values. */
   form = $state<DepositForm>(emptyForm());
   /** Field errors of the form. */
@@ -301,6 +323,7 @@ export class DepositFlow {
   readonly tenant: PublicTenant;
   readonly invitation: InvitationContext | undefined;
   readonly reply: ReplyContext | undefined;
+  readonly dropLink: DropLinkContext | undefined;
   readonly #deps: DepositFlowDeps;
   readonly #key: IdempotencyKey;
   readonly #now: () => number;
@@ -318,9 +341,11 @@ export class DepositFlow {
     invitation: InvitationContext | undefined,
     deps: DepositFlowDeps,
     reply?: ReplyContext,
+    dropLink?: DropLinkContext,
   ) {
     this.tenant = tenant;
     this.reply = reply;
+    this.dropLink = dropLink;
     this.form.confidentialityLevel = defaultLevel(this.levels)?.key;
     this.#syncLevel();
     this.invitation = invitation;
@@ -331,6 +356,9 @@ export class DepositFlow {
     if (invitation !== undefined) {
       this.email = invitation.email;
     }
+    if (dropLink !== undefined) {
+      this.form.expiryDays = dropLink.validityDays;
+    }
   }
 
   // ---- Derived values ---------------------------------------------------------------------
@@ -338,6 +366,16 @@ export class DepositFlow {
   /** The depositor is an invited external user: no recipients to choose. */
   get isExternal(): boolean {
     return this.session?.kind === 'external' || (this.session === undefined && this.invitation !== undefined);
+  }
+
+  /** The depositor deposits through a permanent drop link: the link fixes recipients and validity. */
+  get isDropLink(): boolean {
+    return this.session?.kind === 'drop_link' || (this.session === undefined && this.dropLink !== undefined);
+  }
+
+  /** Label of the drop link, shown as the destination of the files. */
+  get dropLinkLabel(): string | undefined {
+    return this.session?.dropLink?.label ?? this.dropLink?.label;
   }
 
   /** The depositor is replying to a transfer: the only recipient is its sender. */
@@ -372,6 +410,13 @@ export class DepositFlow {
 
   /** Confidentiality levels the sender can use, in display order (see selectableLevels). */
   get levels(): readonly PublicLevel[] {
+    if (this.dropLink !== undefined) {
+      // The level is imposed by the link: the depositor cannot choose another one.
+      const all = this.tenant.confidentialityLevels ?? [];
+      const imposed =
+        this.dropLink.levelKey === undefined ? defaultLevel(all) : levelByKey(all, this.dropLink.levelKey);
+      return imposed === undefined ? [] : [imposed];
+    }
     return selectableLevels(
       this.tenant.confidentialityLevels ?? [],
       this.limits.expiryDays,
@@ -404,8 +449,34 @@ export class DepositFlow {
     return this.tenant.features?.recipientVerification === true;
   }
 
+  /** The "link only" option is offered: tenant feature, level not forbidding it, internal depositor. */
+  get linkOnlyOffered(): boolean {
+    return (
+      this.tenant.features?.linkOnly === true &&
+      this.rules?.linkOnlyAllowed !== false &&
+      (this.session?.kind === 'internal' || this.session?.kind === 'internal_remote')
+    );
+  }
+
+  /** The level requires recipient verification, which cannot be combined with a link-only transfer. */
+  get linkOnlyBlockedByVerification(): boolean {
+    return this.linkOnlyOffered && this.rules?.requireRecipientVerification === true;
+  }
+
+  /** Link-only as sent. */
+  get linkOnlyEffective(): boolean {
+    return this.linkOnlyOffered && !this.linkOnlyBlockedByVerification && this.form.linkOnly;
+  }
+
+  /** Chooses or clears link-only; choosing it clears the incompatible recipient verification. */
+  setLinkOnly(on: boolean): void {
+    this.form.linkOnly = on;
+    if (on) this.form.recipientVerification = false;
+  }
+
   /** Recipient verification as sent: forced by the level or chosen by the sender. */
   get recipientVerificationEffective(): boolean {
+    if (this.form.linkOnly && this.linkOnlyOffered) return false;
     return effectiveRecipientVerification(
       this.form.recipientVerification,
       this.rules,
@@ -413,8 +484,11 @@ export class DepositFlow {
     );
   }
 
-  /** Durations offered: those of the limits that the chosen level allows. */
+  /** Durations offered: the one of the link for a drop link, else those the chosen level allows. */
   get expiryOptions(): number[] {
+    if (this.dropLink !== undefined) {
+      return [this.session?.dropLink?.validityDays ?? this.dropLink.validityDays];
+    }
     return effectiveExpiryDays(this.limits.expiryDays, this.rules);
   }
 
@@ -430,6 +504,7 @@ export class DepositFlow {
   }
 
   #syncLevel(): void {
+    if (!this.linkOnlyOffered || this.linkOnlyBlockedByVerification) this.form.linkOnly = false;
     this.form.expiryDays = keepExpiry(this.form.expiryDays, this.expiryOptions);
     this.form.maxDownloadsText = keepMaxDownloads(this.form.maxDownloadsText, this.rules);
   }
@@ -533,7 +608,7 @@ export class DepositFlow {
 
   /** Requests a code (or a session for a recognised internal address). */
   async submitEmail(): Promise<void> {
-    if (this.busy || this.invitationGone) return;
+    if (this.busy || this.invitationGone || this.dropLinkGone) return;
     const email = this.email.trim();
     this.notice = undefined;
     if (!isEmail(email)) {
@@ -545,7 +620,11 @@ export class DepositFlow {
     this.busy = true;
     try {
       const body =
-        this.invitation === undefined ? { email } : { email, invitationToken: this.invitation.token };
+        this.invitation !== undefined
+          ? { email, invitationToken: this.invitation.token }
+          : this.dropLink !== undefined
+            ? { email, dropLinkToken: this.dropLink.token }
+            : { email };
       const res = await this.#deps.api.post('/deposit-sessions', { body });
       this.retryAt = undefined;
       if (res.status === 201) {
@@ -654,9 +733,16 @@ export class DepositFlow {
   async submitTransfer(): Promise<void> {
     const session = this.session;
     if (this.busy || session === undefined) return;
-    const needRecipients = session.kind !== 'external' && session.kind !== 'reply';
+    const needRecipients =
+      session.kind !== 'external' && session.kind !== 'reply' && session.kind !== 'drop_link';
+    const linkOnly = this.linkOnlyEffective;
     const errors = {
-      ...validateForm(this.form, { ...session.limits, expiryDays: this.expiryOptions }, needRecipients),
+      ...validateForm(
+        this.form,
+        { ...session.limits, expiryDays: this.expiryOptions },
+        needRecipients,
+        linkOnly,
+      ),
       ...validatePolicy(this.form.password, this.form.maxDownloadsText, this.rules, this.maxDownloadsOffered),
     };
     this.stepError = undefined;
@@ -678,7 +764,12 @@ export class DepositFlow {
         return declared;
       }),
     };
-    if (needRecipients) body.recipients = parseRecipients(this.form.recipientsText);
+    if (needRecipients) {
+      const recipients = parseRecipients(this.form.recipientsText);
+      // A link-only transfer may have none; the field is then left out.
+      if (!linkOnly || recipients.length > 0) body.recipients = recipients;
+    }
+    if (linkOnly) body.linkOnly = true;
     if (this.form.message.trim() !== '') body.message = this.form.message;
     if (this.form.password !== '') body.password = this.form.password;
     if (this.maxDownloadsOffered) {
@@ -686,7 +777,8 @@ export class DepositFlow {
       if (parsed.ok && parsed.value !== undefined) body.maxDownloads = parsed.value;
     }
     if (this.recipientVerificationEffective) body.recipientVerification = true;
-    if (this.level !== undefined) body.confidentialityLevel = this.level.key;
+    // A drop link imposes its own level: the server refuses a choice made by the depositor.
+    if (this.level !== undefined && session.kind !== 'drop_link') body.confidentialityLevel = this.level.key;
     const language = this.#deps.language();
     if ((languageValues as readonly string[]).includes(language)) {
       body.language = language as TransferCreate['language'];
@@ -808,12 +900,16 @@ export class DepositFlow {
     this.transfer = undefined;
     this.upload = undefined;
     this.outcome = undefined;
+    this.linkOnlyUrl = undefined;
     this.blockedFiles = undefined;
     this.finalizeError = undefined;
     this.stepError = undefined;
     this.notice = undefined;
     this.formErrors = {};
-    this.form = emptyForm(this.limits.expiryDays, this.levels);
+    this.form = emptyForm(
+      this.dropLink === undefined ? this.limits.expiryDays : this.expiryOptions,
+      this.levels,
+    );
     this.#renewKey();
     this.step = this.session === undefined ? 'email' : 'form';
   }
@@ -852,6 +948,7 @@ export class DepositFlow {
   /** Stops background work (page left). */
   dispose(): void {
     this.#disposed = true;
+    this.linkOnlyUrl = undefined;
     this.#abortFinalize();
     this.#disposeEngine();
   }
@@ -867,6 +964,10 @@ export class DepositFlow {
 
   /** In invitation mode, an existing session is reused only if it is for this invitation. */
   #sessionFits(session: DepositSession): boolean {
+    if (this.dropLink !== undefined) {
+      // A drop link asks for its own code at every use: only a drop link session fits.
+      return session.kind === 'drop_link' && session.dropLink?.label === this.dropLink.label;
+    }
     if (this.invitation === undefined) return true;
     return (
       session.kind === 'external' &&
@@ -994,6 +1095,11 @@ export class DepositFlow {
       this.challenge = undefined;
       this.step = 'email';
       this.stepError = { message: { key: 'deposit.email.invitationGone' } };
+    } else if (isProblem(err, 'drop-link-invalid')) {
+      this.dropLinkGone = true;
+      this.challenge = undefined;
+      this.step = 'email';
+      this.stepError = { message: { key: 'deposit.email.dropLinkGone' } };
     } else if (isProblem(err, 'validation-failed')) {
       this.fieldError = { key: 'fieldErrors.invalid-email' };
     } else {
@@ -1106,7 +1212,9 @@ export class DepositFlow {
     const outcome = await (pollOnly ? this.#deps.poll : this.#deps.finalize)(transferId, {
       signal: controller.signal,
       onUpdate: (t) => {
-        if (!controller.signal.aborted) this.transfer = t;
+        if (controller.signal.aborted) return;
+        this.transfer = t;
+        this.#captureLink(t);
       },
     });
     if (controller.signal.aborted || this.#disposed) return;
@@ -1115,13 +1223,18 @@ export class DepositFlow {
       case 'available':
       case 'rejected':
         this.transfer = outcome.transfer;
+        this.#captureLink(outcome.transfer);
         this.outcome = outcome.kind;
         this.#deps.resumeStore.clear();
         this.#disposeEngine();
         this.step = 'done';
         this.#deps.announce(
           this.#deps.tr.t(
-            outcome.kind === 'available' ? 'upload.finalize.available' : 'upload.finalize.rejected',
+            outcome.kind === 'rejected'
+              ? 'upload.finalize.rejected'
+              : outcome.transfer.linkOnly === true
+                ? 'upload.finalize.availableLinkOnly'
+                : 'upload.finalize.available',
           ),
         );
         return;
@@ -1152,6 +1265,13 @@ export class DepositFlow {
         return;
       case 'stopped':
         return;
+    }
+  }
+
+  /** Keeps the link of a link-only transfer the first time an answer carries it. */
+  #captureLink(transfer: SenderTransfer): void {
+    if (transfer.linkOnly === true && transfer.downloadUrl && this.linkOnlyUrl === undefined) {
+      this.linkOnlyUrl = transfer.downloadUrl;
     }
   }
 

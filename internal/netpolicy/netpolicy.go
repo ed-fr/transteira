@@ -80,6 +80,14 @@ func DomainInternal(rules Rules, email string) bool {
 	})
 }
 
+// AllDomainsInternal reports whether every address of emails has an
+// internal domain: false for an empty list. The recipients of a permanent
+// drop link are checked again at every use, so that removing an internal
+// domain stops the links that send to it (threat model T-312).
+func AllDomainsInternal(rules Rules, emails []string) bool {
+	return len(emails) > 0 && !slices.ContainsFunc(emails, func(e string) bool { return !DomainInternal(rules, e) })
+}
+
 // normalizeDomain returns the canonical form of a mail domain, refusing any
 // character that has no place in one (a port, a path, brackets).
 func normalizeDomain(d string) (string, bool) {

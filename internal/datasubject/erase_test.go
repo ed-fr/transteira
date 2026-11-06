@@ -13,6 +13,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/crypto"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
@@ -432,7 +433,7 @@ func TestEraseStepFailures(t *testing.T) {
 		ev.seed(ev.a)
 		for _, m := range []string{
 			"deleteDepositRows", "deleteSenderAccess", "deleteVerified", "senderTransfers", "inviteeInvitations", "invitationTransfers",
-			"recipientTransfers", "removeRecipient", "eraseInvitations", "eraseProofs", "eraseAbuse", "pseudonymiseAudit",
+			"recipientTransfers", "removeRecipient", "eraseInvitations", "eraseDropLinks", "eraseProofs", "eraseAbuse", "pseudonymiseAudit",
 		} {
 			ev.faults(m)
 			_, err := ev.svc.Erase(context.Background(), ev.super, clientIP, ev.a.ID, carol)
@@ -528,4 +529,48 @@ func sortedCopy(l []string) []string {
 	c := slices.Clone(l)
 	slices.Sort(c)
 	return c
+}
+
+func TestEraseDropLinkRecipients(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		now := time.Now().UTC()
+		mk := func(tn *tenant.Tenant, recipients []string) string {
+			tok, err := id.NewDropToken()
+			if err != nil {
+				t.Fatal(err)
+			}
+			l, err := ev.db.DropLinks().Create(ctx, tn.ID, store.DropLink{
+				ID: id.New(id.DropLink), TokenHash: id.HashToken(tok), Label: "Intake", Recipients: recipients,
+				ValidityDays: 7, Enabled: true, CreatedBy: "adm_x", CreatedAt: now,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return l.ID
+		}
+		both := mk(ev.a, []string{carol, dave})
+		sole := mk(ev.a, []string{carol})
+		other := mk(ev.b, []string{carol})
+		if got := ev.search(ev.a, carol); got.DropLinks != 2 {
+			t.Errorf("Search DropLinks = %d, want 2", got.DropLinks)
+		}
+		rep := ev.erase(ev.a, carol)
+		if rep.DropLinksUpdated != 2 || rep.DropLinksDisabled != 1 {
+			t.Errorf("report = %+v", rep)
+		}
+		l, _ := ev.db.DropLinks().Get(ctx, ev.a.ID, both)
+		if len(l.Recipients) != 1 || l.Recipients[0] != dave || !l.Enabled {
+			t.Errorf("shared link = %+v", l)
+		}
+		l, _ = ev.db.DropLinks().Get(ctx, ev.a.ID, sole)
+		if len(l.Recipients) != 0 || l.Enabled {
+			t.Errorf("sole link = %+v", l)
+		}
+		l, _ = ev.db.DropLinks().Get(ctx, ev.b.ID, other)
+		if len(l.Recipients) != 1 {
+			t.Errorf("other tenant link = %+v", l)
+		}
+	})
 }

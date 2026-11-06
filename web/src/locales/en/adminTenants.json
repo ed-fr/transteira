@@ -152,6 +152,16 @@
       "notice": "The file contains personal data (addresses of the blocklist, contacts in the legal texts): keep it carefully. It never contains a secret: no SMTP password, no webhook URL, no single sign-on setting, no API token. Webhooks must be entered again after the import.",
       "download": "Download the configuration",
       "downloadHint": "(JSON file)"
+    },
+    "linkOnly": {
+      "title": "Link-only transfers",
+      "intro": "A link-only transfer sends no mail to the recipients: the sender gets the link once and passes it on themselves (instant messaging, for example).",
+      "label": "Allow link-only transfers",
+      "hint": "Each confidentiality level can still forbid them. Off by default.",
+      "save": "Save",
+      "saved": "Setting saved.",
+      "statusOn": "Link-only transfers are allowed for this entity (set by the super admin).",
+      "statusOff": "Link-only transfers are not allowed for this entity (set by the super admin)."
     }
   },
   "branding": {
@@ -629,14 +639,16 @@
       "requireRecipientVerification": "Recipient verification required",
       "internalRecipientsOnly": "Internal recipients only",
       "forceDeleteAfterFirstDownload": "Delete after the first download (forced)",
-      "maxDownloads": "Maximum number of downloads (cap)"
+      "maxDownloads": "Maximum number of downloads (cap)",
+      "linkOnlyAllowed": "Link-only allowed"
     },
     "hints": {
       "key": "Lowercase letters, digits, hyphen or underscore, starting with a letter (32 characters at most). Identifies the level in the API; keep it stable.",
       "description": "Optional. Shown to the sender under the level.",
       "recipientVerification": "Takes effect once per-recipient links are available. Until then, the option is stored but not applied.",
       "internalRecipientsOnly": "Recipients must belong to the internal domains of the entity.",
-      "maxDownloads": "Optional, from 1 to {max}. Caps the number of downloads a sender can set; empty for no cap."
+      "maxDownloads": "Optional, from 1 to {max}. Caps the number of downloads a sender can set; empty for no cap.",
+      "linkOnlyAllowed": "Lets senders send at this level without any mail to the recipients: the sender passes the link on themselves. Cannot be combined with recipient verification. Has no effect while the entity does not allow link-only transfers."
     },
     "dayChoice": {
       "one": "{count} day",
@@ -663,7 +675,8 @@
       "descriptionTooLong": "The description is too long (at most {max} characters).",
       "daysRequired": "Allow at least one duration.",
       "capInvalid": "Enter a whole number between 1 and {max}, or leave the field empty."
-    }
+    },
+    "levelInUse": "This level is used by an active drop link. Change or revoke that link first (\"Drop links\" screen), then try again."
   },
   "abuse": {
     "title": "Abuse detection"

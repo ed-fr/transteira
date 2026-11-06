@@ -40,6 +40,7 @@ type fakeMe struct {
 	gotLimit    int
 	gotTransfer string
 	gotDays     int
+	link        string
 }
 
 func (f *fakeMe) RequestLink(_ context.Context, _ *tenant.Tenant, ip netip.Addr, accept, email, language string) error {
@@ -78,6 +79,11 @@ func (f *fakeMe) Delete(_ context.Context, _ *tenant.Tenant, sess mytransfers.Se
 func (f *fakeMe) Extend(_ context.Context, _ *tenant.Tenant, sess mytransfers.SessionInfo, ip netip.Addr, trfID string, days int) (mytransfers.TransferDetail, error) {
 	f.gotSession, f.gotIP, f.gotTransfer, f.gotDays = sess, ip, trfID, days
 	return f.detail, f.err
+}
+
+func (f *fakeMe) ReissueLink(_ context.Context, _ *tenant.Tenant, sess mytransfers.SessionInfo, ip netip.Addr, trfID string) (string, error) {
+	f.gotSession, f.gotIP, f.gotTransfer = sess, ip, trfID
+	return f.link, f.err
 }
 
 // staticMe resolves every token to meInfo.
@@ -159,6 +165,10 @@ func TestMyTransfersRequireTenantAndService(t *testing.T) {
 		},
 		"delete": func(s *Server, ctx context.Context) error {
 			_, err := s.DeleteMyTransfer(ctx, gen.DeleteMyTransferRequestObject{TransferId: "trf_x"})
+			return err
+		},
+		"reissue": func(s *Server, ctx context.Context) error {
+			_, err := s.ReissueMyTransferLink(ctx, gen.ReissueMyTransferLinkRequestObject{TransferId: "trf_x"})
 			return err
 		},
 		"extend": func(s *Server, ctx context.Context) error {
@@ -406,6 +416,58 @@ func TestDeleteMyTransfer(t *testing.T) {
 	}
 }
 
+func TestReissueMyTransferLink(t *testing.T) {
+	t.Parallel()
+	f := &fakeMe{link: "https://transfer.entity-a.example.com/d/dl_new"}
+	srv := newMeServer(f)
+	resp, err := srv.ReissueMyTransferLink(meCtx(t, true), gen.ReissueMyTransferLinkRequestObject{TransferId: "trf_x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := resp.(gen.ReissueMyTransferLink200JSONResponse); body.DownloadUrl != f.link || f.gotTransfer != "trf_x" ||
+		f.gotSession != meInfo() || !f.gotIP.IsValid() {
+		t.Errorf("reissue = %+v, service got %+v", body, f)
+	}
+	f.err = mytransfers.ErrNotReissuable
+	_, err = srv.ReissueMyTransferLink(meCtx(t, true), gen.ReissueMyTransferLinkRequestObject{TransferId: "trf_x"})
+	_ = problemOf(t, err, problem.CodeStateConflict)
+}
+
+func TestMyTransferDropLinkLabel(t *testing.T) {
+	t.Parallel()
+	tr := sampleTransfer()
+	if b := myTransferBody(tr, nil, 1, 0, "", ""); b.DropLinkLabel != nil {
+		t.Errorf("dropLinkLabel rendered for a regular transfer: %v", *b.DropLinkLabel)
+	}
+	tr.DropLinkID = "drl_01JABCD8E3W5Q2Z7K9M4N6P0RS"
+	var d mytransfers.TransferDetail
+	d.Transfer, d.DropLinkLabel = tr, "Supplier invoices"
+	if b := myTransferDetailBody(d); b.DropLinkLabel == nil || *b.DropLinkLabel != "Supplier invoices" || len(b.Recipients) != 0 {
+		t.Errorf("drop link detail = %+v", b)
+	}
+}
+
+func TestMyTransferLinkOnlyFlag(t *testing.T) {
+	t.Parallel()
+	tr := sampleTransfer()
+	if b := myTransferBody(tr, nil, 1, 0, "", ""); b.LinkOnly != nil {
+		t.Errorf("linkOnly rendered for a regular transfer: %v", *b.LinkOnly)
+	}
+	tr.LinkOnly = true
+	if b := myTransferBody(tr, nil, 1, 0, "", ""); b.LinkOnly == nil || !*b.LinkOnly {
+		t.Error("linkOnly missing")
+	}
+	var d mytransfers.TransferDetail
+	d.Transfer = tr
+	if b := myTransferDetailBody(d); b.LinkOnly == nil || !*b.LinkOnly {
+		t.Error("linkOnly missing from the detail")
+	}
+	d.LinkOnly = false
+	if b := myTransferDetailBody(d); b.LinkOnly != nil {
+		t.Error("linkOnly rendered in the detail of a regular transfer")
+	}
+}
+
 func TestMyTransfersError(t *testing.T) {
 	t.Parallel()
 	other := errors.New("boom")
@@ -425,6 +487,7 @@ func TestMyTransfersError(t *testing.T) {
 		{mytransfers.ErrUnauthenticated, problem.CodeUnauthenticated, "", ""},
 		{mytransfers.ErrNotFound, problem.CodeNotFound, "", ""},
 		{mytransfers.ErrNotExtendable, problem.CodeStateConflict, "", ""},
+		{mytransfers.ErrNotReissuable, problem.CodeStateConflict, "", ""},
 		{mytransfers.ErrExtensionLimit, problem.CodeExtensionLimitReached, "", ""},
 	} {
 		p := problemOf(t, myTransfersError(c.err), c.code)

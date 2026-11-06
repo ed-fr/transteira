@@ -496,6 +496,16 @@ export function antivirusState(
   return tenant.antivirusEffective === false ? 'instance_disabled' : 'enabled';
 }
 
+/** Whether the tenant allows link-only transfers (since 2.0; absent means off). */
+export function linkOnlyEnabled(tenant: Pick<Tenant, 'linkOnlyAllowed'>): boolean {
+  return tenant.linkOnlyAllowed === true;
+}
+
+/** Merge patch for the link-only switch: empty when it already has the wanted value. */
+export function linkOnlyPatch(tenant: Pick<Tenant, 'linkOnlyAllowed'>, allowed: boolean): TenantUpdateBody {
+  return linkOnlyEnabled(tenant) === allowed ? {} : { linkOnlyAllowed: allowed };
+}
+
 /** Merge patch that switches the antivirus analysis of a tenant on or off. */
 export function antivirusPatch(enabled: boolean): TenantUpdateBody {
   return { antivirusEnabled: enabled };

@@ -68,8 +68,11 @@ from `ed-fr/transteira-bf`: recipients behind one NAT, or a download manager
 opening parallel connections, reach these limits without any attack. The
 exclusion matches the whole `fields` part of the exact line TransTeira
 writes for them (truncated transfer ID, then the scope, nothing after), so a
-value forged elsewhere on the line cannot use it to escape a ban. Every
-other `rate_limited` scope still counts.
+value forged elsewhere on the line cannot use it to escape a ban. The same
+goes for `scope="drop_link"` (the hourly deposit cap of a permanent drop
+link): it is a limit of the link, not of the client, and counting it would
+let a third party who fills a link get its legitimate depositors banned.
+Every other `rate_limited` scope still counts.
 
 ## Never ban your own users
 

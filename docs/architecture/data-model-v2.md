@@ -5,7 +5,7 @@
 > its amendments A1 to A9), `docs/architecture/data-model-v1.1.md`, `data-model-v1.2.md`,
 > migrations `internal/store/migrations/{sqlite,postgres}/0001..0025`, package `internal/store`.
 > The migrations 0026 to 0029 are written alongside this document (0030 was added during the
-> implementation of F4, section 2.5) (they apply on both engines
+> implementation of F4, section 2.5, and 0031 and 0032 during that of F5, sections 2.6 and 2.7) (they apply on both engines
 > and pass the store tests); the Go store code that uses them comes with the implementation steps.
 
 ## 1. Principles
@@ -34,6 +34,8 @@ unreferenced one (`deposit_sessions`).
 | 0028 | `proofs` | F3, A8 | `system_secrets.purpose` accepts `proof-signing` (SQLite rebuild). New tables `proof_signing_keys`, `transfer_proofs` (immutable). |
 | 0029 | `transfer_options_v2` | F5, F6, F7, A7, A9 | `tenants`: `link_only_allowed`, `e2e_policy`. `confidentiality_levels`: `link_only_allowed`, `e2e_policy`. New table `drop_links`. `transfers`: `link_only`, `e2e`, `e2e_message`, `drop_link_id`, `sender_kind` `drop_link`. `transfer_files`: `e2e_metadata`, scan status `not_scanned_e2e`. `deposit_sessions`: `drop_link_id`, kind `drop_link`. |
 | 0030 | `network_review` | F4, T-307 | `tenants`: `network_reviewed_at`, backfilled for the tenants that have network rules. Added during the implementation of F4 (decision of 2026-11-05, section 2.5). |
+| 0031 | `drop_link_challenges` | F5 | `verification_challenges`: `drop_link_id` (composite foreign key to `drop_links`, cascade), exclusive with `invitation_id`, deposit codes only (SQLite rebuild). Added during the implementation of F5 (section 2.6). |
+| 0032 | `drop_link_limits` | F5, P63 | `drop_links`: `expires_at` (optional end), `max_deposits_per_hour` (1 to 1000, default 20). `deposit_sessions`: `used_at` (single use and hourly cap that survive a cancellation). Added during the implementation of F5 (threat model P63, section 2.7). |
 
 F8 (CLI), F9 (signed image) and F10 (compliance kit) need no schema change; F4 (export / import) only needs 0030.
 Every transfer-level change is in 0029, so that `transfers` is rebuilt once on SQLite, after
@@ -167,6 +169,8 @@ CREATE INDEX transfer_proofs_key_idx ON transfer_proofs (key_id);
 - **Cross-scope foreign key.** `transfer_proofs` (tenant scope) references `proof_signing_keys` (system scope). PostgreSQL referential integrity checks are not filtered by row-level security, so a tenant-scoped insert works; the tenant scope still cannot read the key table. Signing itself (reading the private key) is a system-scope operation done before the tenant-scoped insert.
 - **Data-subject erasure.** Statements name the sender and recipients. The erasure deletes, in its tenant scope, the proofs whose statement names the address: SQL prefilter on `lower(statement)` (`instr` on SQLite, `strpos` on PostgreSQL) looking for the normalized address, or for its `@domain` part when the address holds a character that a JSON encoding may escape (the prefilter only has to select a superset), then confirmation by parsing the JSON in Go (sender, recipients and recipient downloads; no false positive deletes another person's proof). No address column is added (minimisation, decided 2026-11-04). **Implemented as designed, with two precisions:** the statement must be **valid JSON at insert** (`json.Valid`, within a size range; the signature is checked at 64 bytes), and the prefilter is the lower-cased one above rather than a plain `instr(statement, <address>)`.
 - **E2E transfers (F7).** The statement carries the ciphertext hashes and `endToEndEncrypted: true`; no schema impact.
+- **Link-only transfers (F6).** The statement carries `linkOnly: true`, emitted only when true (the statements signed before keep their encoding and still verify): the PDF and `transteira proof verify` say "link only: recipient not identified". No schema impact.
+- **Drop link transfers (F5).** The statement names the recipients of the link, which are never disclosed to the depositor (T-311): "My transfers" refuses these proofs (`404 proof-not-available`), the administrators download them.
 - **RLS.** `proof_signing_keys_system` (system only, added to the `verifyRLS` instance list) and `transfer_proofs_isolation` (usual tenant template).
 
 ### 2.4 Migration 0029 `transfer_options_v2` (F5, F6, F7, A7, A9)
@@ -269,8 +273,10 @@ FOREIGN KEY (tenant_id, drop_link_id) REFERENCES drop_links (tenant_id, id) ON D
 CREATE INDEX deposit_sessions_drop_link_idx ON deposit_sessions (tenant_id, drop_link_id) WHERE drop_link_id IS NOT NULL;
 ```
 
-The e-mail code is required at every drop link use: a `drop_link` session is never reused for a
-second deposit (store rule, like `internal_remote`). SQLite rebuilds `deposit_sessions` (not
+The e-mail code is required at every drop link use: a `drop_link` session carries one deposit.
+This single use is enforced when the transfer is created, by counting the transfers of the
+session's sender since the session opened (`CountSenderTransfersSinceTx`); the session row
+itself is not marked as consumed. SQLite rebuilds `deposit_sessions` (not
 referenced); PostgreSQL replaces `deposit_sessions_kind_check`. `store.DepositorKind` gains
 `drop_link` at the drop link step.
 
@@ -307,6 +313,84 @@ network_reviewed_at INTEGER   -- PG: BIGINT, NULL = never saved by an admin
   (tenantadmin), `TestTenantConfigRoundTrip` (integration).
 - **Retention.** Configuration, kept for the tenant's lifetime.
 
+### 2.6 Migration 0031 `drop_link_challenges` (F5)
+
+Added during the implementation of F5 (V2 step 6): the confirmation of a verification code
+(`confirmDepositVerification`) receives the challenge ID and the code, never the drop token, so
+the drop link a code was requested through must be recorded on the challenge, as `invitation_id`
+is for an invitation.
+
+```sql
+drop_link_id TEXT,                                        -- PG: TEXT COLLATE "C"
+CHECK (invitation_id IS NULL OR drop_link_id IS NULL),    -- PG: verification_challenges_drop_link_check
+CHECK (purpose = 'deposit' OR drop_link_id IS NULL),      -- PG: verification_challenges_drop_link_purpose_check
+FOREIGN KEY (tenant_id, drop_link_id) REFERENCES drop_links (tenant_id, id) ON DELETE CASCADE
+                                                          -- PG: verification_challenges_drop_link_fkey
+CREATE INDEX verification_challenges_drop_link_idx ON verification_challenges (tenant_id, drop_link_id)
+    WHERE drop_link_id IS NOT NULL;
+```
+
+- **Meaning.** The drop link of a deposit code, NULL otherwise. The store checks the shape and
+  the exclusivity (`store.Challenge.DropLinkID`); the composite foreign key keeps the link in the
+  tenant. The deposit service checks that the link is enabled and not revoked at the request and
+  again at the confirmation (the session of kind `drop_link` then carries the same link).
+- **Lifecycle.** The codes follow the link: purging a revoked link (12 months after revocation,
+  section 4) deletes its codes by cascade, as for its sessions. The usual one-hour challenge
+  purge applies first in practice.
+- **SQLite.** A composite foreign key cannot be added with `ALTER TABLE`: the table is rebuilt
+  (`verification_challenges_0031`), as in 0015; no table references it, and its five indexes are
+  recreated plus the new one. PostgreSQL alters the table in place; its row-level security and
+  `verification_challenges_isolation` policy are kept.
+- **Tests.** `TestV2SchemaConstraints` (tenant, exclusivity, cascade), the index list of the
+  rebuilt tables in the upgrade tests, `TestDropLinkSessionsChallengesTransfers` (store).
+
+### 2.7 Migration 0032 `drop_link_limits` (F5, P63)
+
+Added during the implementation of F5 (V2 step 6), when the limits of a drop link validated in
+the threat model (P63, threats T-310 and T-314) were taken into this step.
+
+```sql
+-- drop_links
+expires_at            INTEGER,                         -- PG: BIGINT; Unix ms, NULL: no end
+max_deposits_per_hour INTEGER NOT NULL DEFAULT 20
+    CHECK (max_deposits_per_hour BETWEEN 1 AND 1000)   -- PG: drop_links_max_deposits_per_hour_check
+-- deposit_sessions
+used_at               INTEGER,                         -- PG: BIGINT; Unix ms, NULL: not used yet
+CREATE INDEX deposit_sessions_drop_link_used_idx ON deposit_sessions (tenant_id, drop_link_id, used_at)
+    WHERE used_at IS NOT NULL;
+```
+
+- **Expiry.** From `expires_at` on, the link answers depositors exactly like a revoked or
+  disabled one (`404 drop-link-invalid`, `drop_link_invalid` in the security log): the token
+  lookup (`GetByTokenHash`) filters it, and `DropLink.Usable(now)` refuses it at the code
+  confirmation, the session reads and the transfer creation (under the tenant lock). An admin
+  may still change the link: a later expiry, or none, makes it usable again. The store checks
+  that an expiry follows the creation; the service requires it in the future.
+- **Single use and hourly cap, robust to cancellation (T-310).** Cancelling a transfer deletes
+  its row, so neither rule counts transfers. The creation transaction, under the tenant lock,
+  first counts the cap, then marks the drop link session used
+  (`UPDATE deposit_sessions SET used_at = ? WHERE … AND used_at IS NULL`, `DropLinks.UseSessionTx`):
+  no row updated means the session already deposited (`403 deposit-not-allowed`), and a later
+  refusal in the same transaction rolls the mark back. `max_deposits_per_hour` bounds the
+  sessions of the link **used** in the sliding last hour, all depositors together, on top of
+  the external quotas, counted through `deposit_sessions_drop_link_used_idx`: before a code is
+  sent (no code bombing through a busy link) and again in the creation transaction. The
+  cleanup task keeps a session used less than one hour ago even when it is ended or expired
+  (`DepositSessions.Purge`), so that it still counts. The data-subject erasure deletes the
+  sessions of the address, and with them their uses: an administrator action, accepted.
+  Beyond the cap: `429 rate-limited`, `rate_limited` with `scope="drop_link"`.
+- **Codes per link.** At most 3 × `max_deposits_per_hour` deposit codes are sent through one
+  link in the sliding hour, all addresses and IPs together, counted on
+  `verification_challenges_drop_link_idx` (0031) in the transaction that records the code
+  (the cleanup keeps the challenges of the last hour for the rate limits).
+- **Unused links.** Not stored: the API computes `unused` (not revoked, `last_used_at`, else
+  `created_at`, older than 12 months). The 12 months are one constant,
+  `store.DropLinkRetentionMonths`, shared with the purge of revoked or expired links.
+- **SQLite.** Three `ADD COLUMN` (constant default, check on the new column only) and one
+  partial index: no rebuild. PostgreSQL alters both tables in place, keeping their policies.
+- **Tests.** `TestDropLinksExpiryAndCap`, `TestDropLinkUseSession`, `TestDropLinkUsageSince` (store), the upgrade
+  test counts.
+
 ## 3. PostgreSQL RLS summary
 
 Templates: tenant isolation (`tenant_id = app.tenant_id OR system scope`, as `tenant_network_rules`),
@@ -326,6 +410,7 @@ SELECT, as `audit_events` without the tenant INSERT).
 | `transfer_proofs` | New | `transfer_proofs_isolation` + immutability trigger. |
 | `drop_links` | New | `drop_links_isolation`. |
 | `tenants`, `confidentiality_levels`, `transfers`, `transfer_files`, `deposit_sessions` | columns, checks | Unchanged. |
+| `verification_challenges` | `drop_link_id` (0031) | Unchanged (`verification_challenges_isolation`). |
 
 `DB.Verify` and `test/isolation/rls_test.go` cover every new table (new tenant tables through
 their `tenant_id` column, new instance tables through the explicit list).
@@ -340,13 +425,13 @@ their `tenant_id` column, new instance tables through the explicit list).
 | `admin_sessions.auth_method`, `sso_issuer`, `sso_client_id`, `sso_mfa` | Follow the session (existing purge). |
 | `proof_signing_keys` | Kept for ever (public keys must keep verifying old PDFs). The private key of a retired key may be erased. No personal data. |
 | `transfer_proofs` | **12 months** after creation (`expires_at`), independent of the transfer; deleted by the data-subject erasure when the statement names the address; deleted with the tenant. |
-| `drop_links` | Configuration, kept while active; **purged 12 months after revocation** (`revoked_at`) by the lifecycle task through `drop_links_revoked_idx` (partial, migration 0029), once no transfer references the link (otherwise the link is kept until its transfers are purged). `recipients` holds internal addresses: the data-subject erasure removes the address from the list and disables the link when the list becomes empty. |
+| `drop_links` | Configuration, kept while active; **purged 12 months after revocation** (`revoked_at`) **or expiry** (`expires_at`, 0032) by the lifecycle task (at most 100 links per tenant, read in the tenant scope), once no transfer references the link (otherwise the link is kept until its transfers are purged). `recipients` holds internal addresses: the data-subject erasure removes the address from the list and disables the link when the list becomes empty. |
 | `transfers.e2e_message`, `transfer_files.e2e_metadata` | Follow the transfer (existing purge). Ciphertext only: unreadable by the server. |
 
 ## 5. Impact on existing behaviour
 
 - **Store inserts.** `INSERT INTO transfers`, `transfer_files`, `deposit_sessions`, `admin_sessions` keep working unchanged (every new column has a default or is nullable). Raw test inserts on `security_events` must give `last_seen_at`.
-- **Upgrade tests.** The tests that count applied migrations now expect 17 from a V1 database (0014 to 0030) and 10 from 0020; `migrate` from scratch applies 30. The index check of the rebuilt SQLite tables now includes `admins` and the two new indexes. `TestV2SchemaConstraints` (`internal/store/migrate_v2_internal_test.go`) checks the V2 invariants on both engines.
+- **Upgrade tests.** The tests that count applied migrations now expect 19 from a V1 database (0014 to 0032) and 12 from 0020; `migrate` from scratch applies 32. The index check of the rebuilt SQLite tables now includes `admins`, `verification_challenges` (0031) and the new indexes. `TestV2SchemaConstraints` (`internal/store/migrate_v2_internal_test.go`) checks the V2 invariants on both engines.
 - **Schema parity.** The new named indexes exist on both engines.
 - **Rebuilt tables on SQLite.** `admins`, `system_secrets`, `transfers`, `transfer_files`, `deposit_sessions` keep their rows; the V1.1 upgrade test (populated V1 database, row counts, foreign key and integrity checks) now runs through 0030.
 
@@ -380,7 +465,9 @@ erDiagram
 | Identity key (S1) | `admin_identities` unique `(issuer, client_id, subject)` and `(admin_id, issuer, client_id)` | §2.2 |
 | Tenant policies (S2) | `link_only_allowed`, `e2e_policy` of the tenant: super admin only; a level only tightens, tenant `forbidden` and `required` both hold | §2.4 |
 | Scan status (C2) | Flat `not_scanned_e2e` | §2.4 |
-| Link-only | Shared link token; reissue replaces it | §2.4 |
+| Link-only | Shared link token, drawn at finalization, hash only (no sealed copy); reissue replaces it | §2.4 |
+| Drop link codes | `verification_challenges.drop_link_id` (0031) | §2.6 |
+| Drop link limits (P63) | `drop_links.expires_at`, `max_deposits_per_hour` (0032); `unused` computed | §2.7 |
 | E2E message (A7) | `transfers.e2e_message`, plaintext `message` empty | §2.4 |
 
 Points that were open, all **decided (2026-11-04)** with the validation of the design:
@@ -388,7 +475,7 @@ Points that were open, all **decided (2026-11-04)** with the validation of the d
 1. **Proof retention**: 12 months after the fact, kept even after the transfer is deleted, erased by the data-subject erasure.
 2. **Proof erasure by address**: text prefilter on `statement` plus JSON confirmation, no address column.
 3. **Proofs and tenant deletion**: deleted with their tenant (cascade).
-4. **Revoked drop links**: purged 12 months after revocation (lifecycle purge, `drop_links_revoked_idx` on `(revoked_at, id) WHERE revoked_at IS NOT NULL`, both engines).
+4. **Revoked drop links**: purged 12 months after revocation (and, since 0032, 12 months after their expiry) (lifecycle purge, `drop_links_revoked_idx` on `(revoked_at, id) WHERE revoked_at IS NOT NULL`, both engines).
 5. **Scan status value**: the flat `not_scanned_e2e`, in the database, the API `ScanStatus` and the threat model, like `not_scanned_disabled`.
 6. **SSO-only accounts**: explicit column `admins.sso_only` (migration 0026), no activation row for `delivery: none`, `admin_activations.delivery` not widened.
 7. **Drop link level**: stored as the level key without foreign key; the store refuses deleting a level used by an enabled drop link.

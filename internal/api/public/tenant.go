@@ -172,6 +172,7 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		RecipientVerification: true,
 		RecipientRestrictions: restricted,
 		Antivirus:             antivirus,
+		LinkOnly:              &t.LinkOnlyAllowed,
 	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},
@@ -195,6 +196,7 @@ func publicLevels(levels []tenantadmin.PublicConfidentialityLevel) *[]gen.Public
 				RequireRecipientVerification:  l.Rules.RequireRecipientVerification,
 				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
+				LinkOnlyAllowed:               new(!l.Rules.LinkOnlyForbidden),
 			},
 		}
 		if l.Description != "" {

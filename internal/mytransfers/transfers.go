@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -21,6 +22,12 @@ type Transfer struct {
 	// the transfer, in its language (then the tenant default, then
 	// English); "" without level.
 	LevelLabel string
+	// DropLinkLabel is, for a transfer deposited through a permanent drop
+	// link, the label of the link ("" when it is gone), shown instead of
+	// the recipients: those are never disclosed to the depositor (threat
+	// model T-311), so Recipients is nil and DownloadedBy 0 for such a
+	// transfer. "" otherwise.
+	DropLinkLabel string
 }
 
 // TransferDetail is a transfer as "my transfers" shows it (OpenAPI
@@ -30,6 +37,9 @@ type TransferDetail struct {
 	store.SenderTransferDetail
 	// LevelLabel is as in [Transfer].
 	LevelLabel string
+	// DropLinkLabel is as in [Transfer]; Recipients and Tracking are nil
+	// and DownloadedBy 0 for a drop link transfer.
+	DropLinkLabel string
 	// ExtendableTo is the latest expiry [Service.Extend] could set now,
 	// zero when the transfer cannot be extended (see [ExtendableTo]).
 	ExtendableTo time.Time
@@ -77,11 +87,22 @@ func levelLabel(tn *tenant.Tenant, t store.Transfer) string {
 	return store.LevelLabel(t.ConfidentialityLabel, t.Language, tn.DefaultLanguage, "en")
 }
 
-// detail renders d for the session.
-func (s *Service) detail(t *tenant.Tenant, d store.SenderTransferDetail) TransferDetail {
-	return TransferDetail{
+// detail renders d for the session, hiding the recipients of a drop link
+// transfer.
+func (s *Service) detail(ctx context.Context, t *tenant.Tenant, d store.SenderTransferDetail) (TransferDetail, error) {
+	out := TransferDetail{
 		SenderTransferDetail: d, LevelLabel: levelLabel(t, d.Transfer), ExtendableTo: ExtendableTo(d.Transfer, s.now()),
 	}
+	if d.DropLinkID == "" {
+		return out, nil
+	}
+	labels, err := s.repo.dropLinkLabels(ctx, t.ID)
+	if err != nil {
+		return TransferDetail{}, fmt.Errorf("mytransfers: read drop links: %w", err)
+	}
+	out.DropLinkLabel = labels[d.DropLinkID]
+	out.Recipients, out.Tracking, out.DownloadedBy = nil, nil, 0
+	return out, nil
 }
 
 // List returns a page of the transfers in progress (scanning or
@@ -99,8 +120,20 @@ func (s *Service) List(ctx context.Context, t *tenant.Tenant, sess SessionInfo, 
 		return store.Page[Transfer]{}, fmt.Errorf("mytransfers: list transfers: %w", err)
 	}
 	out := store.Page[Transfer]{Items: make([]Transfer, len(page.Items)), NextCursor: page.NextCursor}
+	var labels map[string]string
 	for i, it := range page.Items {
 		out.Items[i] = Transfer{SenderTransfer: it, LevelLabel: levelLabel(t, it.Transfer)}
+		if it.DropLinkID == "" {
+			continue
+		}
+		// The recipients of a drop link stay hidden from its depositor.
+		if labels == nil {
+			if labels, err = s.repo.dropLinkLabels(ctx, t.ID); err != nil {
+				return store.Page[Transfer]{}, fmt.Errorf("mytransfers: read drop links: %w", err)
+			}
+		}
+		out.Items[i].DropLinkLabel = labels[it.DropLinkID]
+		out.Items[i].Recipients, out.Items[i].DownloadedBy = nil, 0
 	}
 	return out, nil
 }
@@ -117,7 +150,7 @@ func (s *Service) Get(ctx context.Context, t *tenant.Tenant, sess SessionInfo, t
 	case err != nil:
 		return TransferDetail{}, fmt.Errorf("mytransfers: read transfer: %w", err)
 	}
-	return s.detail(t, d), nil
+	return s.detail(ctx, t, d)
 }
 
 // Delete deletes the transfer trfID of tenant t sent by the session
@@ -209,5 +242,43 @@ func (s *Service) Extend(ctx context.Context, t *tenant.Tenant, sess SessionInfo
 			Recipients: slices.Clone(d.Recipients), At: now, ClientIP: ip,
 		})
 	}
-	return s.detail(t, d), nil
+	return s.detail(ctx, t, d)
+}
+
+// ReissueLink issues a new download link for the link-only transfer trfID
+// of tenant t sent by the session address (since 2.0, OpenAPI
+// reissueMyTransferLink), whose link was lost: a new token is drawn, only
+// its SHA-256 replaces the previous one (which stops working at once), and
+// the link is returned once, built from the registered FQDN of t. A
+// transfer that is not one of the sender in progress is ErrNotFound; one
+// that is not link-only, neither scanning nor available, or available past
+// its expiry is ErrNotReissuable. A link reissued while the transfer is
+// scanning works once it becomes available. It is audited as transfer.link_reissued, naming the
+// transfer only (never the link).
+func (s *Service) ReissueLink(ctx context.Context, t *tenant.Tenant, sess SessionInfo, ip netip.Addr, trfID string) (string, error) {
+	token, err := s.newToken(id.DownloadTokenPrefix, id.DownloadTokenBytes)
+	if err != nil {
+		return "", fmt.Errorf("mytransfers: new download token: %w", err)
+	}
+	now := s.now()
+	err = s.repo.reissue(ctx, t.ID, trfID, sess.Email, id.HashToken(token), func(d store.SenderTransferDetail) error {
+		// While scanning, the expiry is only provisional: the new link
+		// works once the transfer is available.
+		if !d.LinkOnly || (d.Status != store.TransferAvailable && d.Status != store.TransferScanning) ||
+			(d.Status == store.TransferAvailable && !d.ExpiresAt.After(now)) {
+			return ErrNotReissuable
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, ErrNotReissuable), errors.Is(err, store.ErrConflict):
+		// ErrConflict: the transfer stopped being available meanwhile.
+		return "", ErrNotReissuable
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrInvalid):
+		return "", ErrNotFound
+	case err != nil:
+		return "", fmt.Errorf("mytransfers: reissue link: %w", err)
+	}
+	s.record(ctx, t, ip, sess.Email, audit.ActionTransferLinkReissued, audit.ObjectTransfer, trfID, nil)
+	return id.DownloadURL(t.FQDN, token), nil
 }

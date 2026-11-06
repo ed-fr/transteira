@@ -222,6 +222,9 @@ func printStatement(w io.Writer, st proof.Statement, data []byte) error {
 		p("Level:              %s", q(st.ConfidentialityLevel))
 	}
 	p("End-to-end:         %t", st.EndToEndEncrypted)
+	if st.LinkOnly {
+		p("Link only:          recipient not identified (no mail sent; anyone holding the link may have downloaded)")
+	}
 	p("Deposited:          %s", q(st.DepositedAt))
 	p("Expires:            %s", q(st.ExpiresAt))
 	if st.FirstDownloadedAt != nil {

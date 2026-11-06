@@ -119,6 +119,9 @@ const (
 	// originReply is a reply of a recipient to the sender of a transfer
 	// (spec 10).
 	originReply = "reply"
+	// originDropLink is a transfer deposited through a permanent drop link
+	// (since 2.0).
+	originDropLink = "drop_link"
 	// deletedBySender tells that the sender canceled the transfer.
 	deletedBySender = "sender"
 )
@@ -190,10 +193,18 @@ type Options struct {
 // comes from CreateRequest.SenderEmail, and the other operations use the
 // address stored on the transfer). The HTTP layer has already checked the
 // client IP against the ranges of the token.
+//
+// A drop link sender (Kind store.DepositorDropLink, since 2.0) has its
+// link in DropLinkID and its deposit session in SessionID: a drop link
+// session deposits one transfer only.
 type Sender struct {
 	store.Depositor
 	// ClientIP is the real client IP of the request (trusted-proxy aware).
 	ClientIP netip.Addr
+	// SessionID is, for a drop link sender, its deposit session
+	// (deposit.SessionInfo.ID, "ds_" + ULID), marked used by the creation
+	// of its transfer; ignored otherwise.
+	SessionID string
 }
 
 // Service creates, follows, cancels and finalizes transfers on behalf of
@@ -217,6 +228,9 @@ type Service struct {
 	clock       func() time.Time
 	newID       func(p id.Prefix) (string, error)
 	newUploadID func() (string, error)
+	// newDownloadToken draws the token of a link-only transfer at its
+	// finalization (id.NewDownloadToken; replaced by the tests).
+	newDownloadToken func() (string, error)
 	// linkMode is the link mode of the created transfers: always
 	// store.LinkModePerRecipient since 1.1 (P27). Only the tests of this
 	// package replace it, with store.LinkModeShared, to exercise the
@@ -258,7 +272,8 @@ func New(db *store.DB, keys DataKeys, uploads Uploads, seclog SecurityLog, opts 
 		logger: opts.Logger, maxRecipients: opts.MaxRecipients, maxOpen: opts.MaxOpenTransfers,
 		uploadMaxAge: opts.UploadMaxAge,
 		onFinalized:  opts.OnFinalized, onQuota: opts.OnQuota, audit: opts.Audit, usage: opts.Usage, abuse: opts.Abuse,
-		avDisabled: opts.AntivirusDisabled, clock: opts.Now, newUploadID: id.NewUploadToken, linkMode: store.LinkModePerRecipient,
+		avDisabled: opts.AntivirusDisabled, clock: opts.Now, newUploadID: id.NewUploadToken,
+		newDownloadToken: id.NewDownloadToken, linkMode: store.LinkModePerRecipient,
 	}
 	s.newID = id.NewGenerator(s.clock, nil).New
 	return s
@@ -274,11 +289,13 @@ func (s *Service) now() time.Time {
 // address. A malformed sender is a wiring error of the caller (the session
 // holds a normalized address), not a client error. An API token sender
 // without address is valid and gets "". Only a reply sender has a
-// ReplyToTransferID, always well formed, and never an invitation.
+// ReplyToTransferID, always well formed, and never an invitation; only a
+// drop link sender has a DropLinkID, always well formed, with its
+// well-formed session, and neither invitation nor source transfer.
 func normalize(sender Sender) (string, error) {
 	if sender.APITokenID != "" {
 		if !id.Valid(id.APIToken, sender.APITokenID) || sender.Kind != store.DepositorInternal || sender.InvitationID != "" ||
-			sender.ReplyToTransferID != "" {
+			sender.ReplyToTransferID != "" || sender.DropLinkID != "" {
 			return "", errors.New("transfer: malformed api token sender")
 		}
 		if sender.Email == "" {
@@ -291,6 +308,11 @@ func normalize(sender Sender) (string, error) {
 	}
 	var ok bool
 	switch {
+	case (sender.Kind == store.DepositorDropLink) != (sender.DropLinkID != ""):
+		ok = false
+	case sender.Kind == store.DepositorDropLink:
+		ok = sender.InvitationID == "" && sender.ReplyToTransferID == "" && id.Valid(id.DropLink, sender.DropLinkID) &&
+			id.Valid(id.DepositSession, sender.SessionID)
 	case sender.Kind == store.DepositorReply:
 		ok = sender.InvitationID == "" && id.Valid(id.Transfer, sender.ReplyToTransferID)
 	case sender.ReplyToTransferID != "":
@@ -316,7 +338,8 @@ func ownerOf(sender Sender, email string) owner {
 }
 
 // openCap returns the cap on the unfinished transfers of sender: the
-// external cap for an invited external sender and a reply sender.
+// external cap for an invited external sender, a reply sender and a drop
+// link sender.
 func (s *Service) openCap(sender Sender) int {
 	if sender.Kind.IsExternal() {
 		return MaxOpenTransfersExternal
@@ -370,45 +393,79 @@ func (s *Service) refuse(ctx context.Context, t *tenant.Tenant, ip netip.Addr, r
 // token) or invitation, and returns ErrForbidden. A token revoked, expired
 // or deleted meanwhile is ErrForbidden too, not logged (the HTTP layer
 // refuses its next request). The refusals of the reply rule are policy
-// refusals, never logged.
-func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (email, recipient string, err error) {
-	email, err = normalize(sender)
+// refusals, never logged. A drop link sender (since 2.0) passes the
+// blocklist check, then its link must still be enabled and not revoked
+// (ErrForbidden otherwise, not logged); its forced recipients are those of
+// the link, and the link is returned.
+func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Sender) (string, forced, error) {
+	email, err := normalize(sender)
 	if err != nil {
-		return "", "", err
+		return "", forced{}, err
 	}
 	if email == "" {
-		return "", "", errors.New("transfer: api token sender without address")
+		return "", forced{}, errors.New("transfer: api token sender without address")
 	}
 	blocked, err := s.repo.blocked(ctx, t.ID, email, "")
 	if err != nil {
-		return "", "", fmt.Errorf("transfer: check blocklist: %w", err)
+		return "", forced{}, fmt.Errorf("transfer: check blocklist: %w", err)
 	}
 	if blocked {
-		return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonBlocklist)
+		return "", forced{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonBlocklist)
 	}
 	switch sender.Kind {
 	case store.DepositorReply:
-		recipient, err = s.checkReply(ctx, t, sender.ReplyToTransferID, email)
+		recipient, err := s.checkReply(ctx, t, sender.ReplyToTransferID, email)
 		if err != nil {
-			return "", "", err
+			return "", forced{}, err
 		}
-		return email, recipient, nil
+		return email, forced{recipients: []string{recipient}}, nil
 	case store.DepositorExternal:
 		inv, err := s.repo.invitation(ctx, t.ID, sender.InvitationID)
 		switch {
 		case errors.Is(err, store.ErrNotFound):
-			return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+			return "", forced{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
 		case err != nil:
-			return "", "", fmt.Errorf("transfer: read invitation: %w", err)
+			return "", forced{}, fmt.Errorf("transfer: read invitation: %w", err)
 		case !inv.Active(s.now()) || inv.Email != email:
-			return "", "", s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
+			return "", forced{}, s.refuse(ctx, t, sender.ClientIP, securitylog.ReasonInvitation)
 		}
-		return email, inv.InvitedBy, nil
+		return email, forced{recipients: []string{inv.InvitedBy}}, nil
+	case store.DepositorDropLink:
+		l, err := s.repo.dropLink(ctx, t.ID, sender.DropLinkID)
+		switch {
+		case errors.Is(err, store.ErrNotFound) || (err == nil && !l.Usable(s.now())):
+			// Disabled, revoked, expired or purged meanwhile: the deposit service
+			// ends such sessions and logs the invalid link at their next
+			// use; nothing is logged here, as for a revoked API token.
+			return "", forced{}, ErrForbidden
+		case err != nil:
+			return "", forced{}, fmt.Errorf("transfer: read drop link: %w", err)
+		}
+		// The recipients must still be internal (T-312): a link whose
+		// recipient left the internal domains is refused like a disabled
+		// one.
+		rules, err := s.repo.networkRules(ctx, t.ID)
+		if err != nil {
+			return "", forced{}, fmt.Errorf("transfer: read network rules: %w", err)
+		}
+		if !netpolicy.AllDomainsInternal(netpolicy.Rules{Domains: rules.Domains}, l.Recipients) {
+			return "", forced{}, ErrForbidden
+		}
+		return email, forced{recipients: l.Recipients, link: &l}, nil
 	}
 	if err := s.checkInternal(ctx, t, sender, email); err != nil {
-		return "", "", err
+		return "", forced{}, err
 	}
-	return email, "", nil
+	return email, forced{}, nil
+}
+
+// forced is what the eligibility of checkEligible imposes on a transfer:
+// the recipients of an external, reply or drop link sender (nil for an
+// internal sender, who names them), and the drop link of a drop link
+// sender, whose validity and level the transfer takes.
+type forced struct {
+	recipients []string
+	link       *store.DropLink
 }
 
 // checkReply applies the reply rule of spec 10 to the replier email of
@@ -640,6 +697,8 @@ func origin(sender Sender) string {
 		return originInvitation
 	case sender.Kind == store.DepositorReply:
 		return originReply
+	case sender.Kind == store.DepositorDropLink:
+		return originDropLink
 	}
 	return originInternal
 }

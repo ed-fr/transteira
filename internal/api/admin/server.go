@@ -116,6 +116,9 @@ type Server struct {
 	// tokenSvc manages the API tokens of the tenants; nil until
 	// WithAPITokenService.
 	tokenSvc APITokenService
+	// dropLinkSvc manages the permanent drop links of the tenants; nil
+	// until WithDropLinkService.
+	dropLinkSvc DropLinkService
 	// webhookSvc manages the webhooks of the tenants and of the instance;
 	// nil until WithWebhookService.
 	webhookSvc WebhookService
