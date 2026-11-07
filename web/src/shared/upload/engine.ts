@@ -1,11 +1,15 @@
 // Upload engine of the deposit page (CLAUDE.md section 8.6): sends the files of a transfer one
 // after the other through tus, in Blob.slice chunks (a chunk is never read into memory), and
-// survives cuts, stalls and server restarts by asking the server where to resume (HEAD).
+// survives cuts, stalls and server restarts by asking the server where to resume (HEAD). A file
+// may instead provide its chunks through readChunk (an end-to-end encrypted file, whose bytes are
+// produced on demand by the encryption Worker): every attempt, retries included, reads its range
+// again, so the source must return the same bytes for the same range.
 //
 // Retry policy:
 // - network error, 5xx, 408 or stall (no progress for 45 s): HEAD then resume, after an
 //   exponential delay 1, 2, 4... s capped at 30 s; the browser "online" event retries at once;
 // - 429 / 503: waits Retry-After (not counted as a failure);
+// - 400 with the problem e2e-format-invalid (refused TTE2 stream): fatal e2e-format-invalid;
 // - 409 / 400 (offset conflict, or the server still holds the upload lock of a request it has
 //   not yet seen die): HEAD then resume after an exponential delay 1, 2, 4... s capped at 10 s;
 //   conflicts are not counted as failures during the first 90 s of a streak (the server releases
@@ -49,6 +53,13 @@ export interface UploadFileSpec {
   file?: Blob;
   /** Size in bytes, required when file is absent (otherwise file.size). */
   size?: number;
+  /**
+   * Source of the bytes [start, end) to send, used instead of file when present (file is then
+   * ignored and size is required). It must be deterministic: a retry reads the same range
+   * again. A rejection is a fatal file-unreadable error, unless it rejects with an UploadError,
+   * whose code is kept (file-changed).
+   */
+  readChunk?: (start: number, end: number) => Promise<Blob | Uint8Array<ArrayBuffer>>;
   /** tus upload URL returned by createTransfer (or getTransfer when resuming). */
   uploadUrl: string;
   /** Known server offset (uploadOffset); when absent the engine asks the server first (HEAD). */
@@ -64,7 +75,16 @@ export type UploadErrorCode =
   | 'insufficient-storage'
   | 'protocol-error'
   /** The content of a file still to upload was not provided. */
-  | 'file-missing';
+  | 'file-missing'
+  /** The content of a file could not be read (file changed or removed, encryption failure). */
+  | 'file-unreadable'
+  /**
+   * The content of an end-to-end encrypted file differs from the one hashed before the transfer
+   * was created (it must never be encrypted again under the same nonces).
+   */
+  | 'file-changed'
+  /** The server refused an end-to-end encrypted stream (400 problem e2e-format-invalid). */
+  | 'e2e-format-invalid';
 
 /** Fatal upload error: retrying cannot help. */
 export class UploadError extends Error {
@@ -245,7 +265,7 @@ export function createUploadEngine(specs: UploadFileSpec[], deps: UploadEngineDe
   const { transport } = deps;
 
   const files: FileState[] = specs.map((spec) => {
-    const size = spec.file?.size ?? spec.size ?? 0;
+    const size = (spec.readChunk === undefined ? spec.file?.size : undefined) ?? spec.size ?? 0;
     const offset = Math.min(spec.offset ?? 0, size);
     return { spec, size, offset, sent: 0, needHead: spec.offset === undefined, done: false };
   });
@@ -452,6 +472,25 @@ export function createUploadEngine(specs: UploadFileSpec[], deps: UploadEngineDe
     }
   }
 
+  /** Body of the PATCH at [start, end): a slice of the file, or the bytes of readChunk. */
+  async function readBody(f: FileState, start: number, end: number): Promise<Blob> {
+    const { readChunk, file } = f.spec;
+    if (readChunk === undefined) {
+      if (file === undefined) throw new UploadError('file-missing');
+      return file.slice(start, end);
+    }
+    let chunk: Blob | Uint8Array<ArrayBuffer>;
+    try {
+      chunk = await readChunk(start, end);
+    } catch (err) {
+      if (err instanceof UploadError) throw err;
+      throw new UploadError('file-unreadable');
+    }
+    const body = chunk instanceof Blob ? chunk : new Blob([chunk]);
+    if (body.size !== end - start) throw new UploadError('file-unreadable');
+    return body;
+  }
+
   /** Uploads one file. Returns false when superseded (pause, cancel). */
   async function uploadFile(gen: number, f: FileState): Promise<boolean> {
     for (;;) {
@@ -474,9 +513,9 @@ export function createUploadEngine(specs: UploadFileSpec[], deps: UploadEngineDe
       }
       if (f.offset >= f.size) return true;
 
-      if (f.spec.file === undefined) throw new UploadError('file-missing');
       const start = f.offset;
-      const body = f.spec.file.slice(start, Math.min(start + chunkSize, f.size));
+      const body = await readBody(f, start, Math.min(start + chunkSize, f.size));
+      if (gen !== generation) return false;
       const r = await call((signal, touch) =>
         transport.patch(f.spec.uploadUrl, start, body, {
           signal,
@@ -494,7 +533,10 @@ export function createUploadEngine(specs: UploadFileSpec[], deps: UploadEngineDe
         if (!(await recover(gen, f, retryDelay(failures + 1), true))) return false;
         continue;
       }
-      const { status, offset, retryAfterSeconds } = r.value;
+      const { status, offset, retryAfterSeconds, problemCode } = r.value;
+      if (status === 400 && problemCode === 'e2e-format-invalid') {
+        throw new UploadError('e2e-format-invalid', status);
+      }
       if (status === 204) {
         const next = offset ?? start + body.size;
         if (next > start) {

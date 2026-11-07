@@ -276,6 +276,18 @@
     "path": "{lang}/deposit-code.png"
   },
   {
+    "name": "deposit-e2e-key",
+    "screen": "public / (recap: end-to-end encrypted transfer, decryption key shown once)",
+    "profile": "depositor",
+    "path": "{lang}/deposit-e2e-key.png"
+  },
+  {
+    "name": "deposit-e2e-option",
+    "screen": "public / (transfer form, end-to-end encryption option)",
+    "profile": "depositor",
+    "path": "{lang}/deposit-e2e-option.png"
+  },
+  {
     "name": "deposit-email",
     "screen": "public / (email step)",
     "profile": "depositor",
@@ -310,6 +322,12 @@
     "screen": "public /d/:token",
     "profile": "recipient",
     "path": "{lang}/download.png"
+  },
+  {
+    "name": "download-e2e-key",
+    "screen": "public /d/:token (end-to-end encrypted transfer: decryption key prompt)",
+    "profile": "recipient",
+    "path": "{lang}/download-e2e-key.png"
   },
   {
     "name": "download-password",

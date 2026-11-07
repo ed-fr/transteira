@@ -39,6 +39,16 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     screen: 'public / (recap: link-only transfer, download link shown once)',
     profile: 'depositor',
   },
+  {
+    name: 'deposit-e2e-option',
+    screen: 'public / (transfer form, end-to-end encryption option)',
+    profile: 'depositor',
+  },
+  {
+    name: 'deposit-e2e-key',
+    screen: 'public / (recap: end-to-end encrypted transfer, decryption key shown once)',
+    profile: 'depositor',
+  },
   { name: 'drop-link', screen: 'public /drop/:token (drop link landing)', profile: 'depositor' },
   { name: 'invite', screen: 'public /invite', profile: 'depositor' },
   { name: 'invitation-landing', screen: 'public /i/:token', profile: 'depositor' },
@@ -68,6 +78,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
   {
     name: 'reply-form',
     screen: 'public /d/:token/reply (reply form: the files go to the sender)',
+    profile: 'recipient',
+  },
+  {
+    name: 'download-e2e-key',
+    screen: 'public /d/:token (end-to-end encrypted transfer: decryption key prompt)',
     profile: 'recipient',
   },
   { name: 'download-password', screen: 'public /d/:token (password required)', profile: 'recipient' },

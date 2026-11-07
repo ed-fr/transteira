@@ -294,8 +294,13 @@ func (c *Content) Close(ctx context.Context) error {
 	c.closed = true
 	defer c.release()
 	c.svc.bytesServed(c.t.ID, c.served)
-	if c.allowed && !c.delivered {
-		c.svc.touchStart(c.t.ID, c.d.ID, linkIDOf(c.link), c.file.ID, c.ip, c.claimed)
+	// The window of an end-to-end encrypted transfer moves at the end of
+	// every response, delivered or not: the browser fetches its files one
+	// after the other to build their archive, and a file delivered after
+	// a long download must not leave the next one outside the window (up
+	// to the ceiling).
+	if c.allowed && (!c.delivered || c.d.E2E) {
+		c.svc.touchStart(c.t.ID, c.d.ID, linkIDOf(c.link), c.file.ID, c.d.E2E, c.ip, c.claimed)
 	}
 	err := c.osf.Close()
 	if c.track && (len(c.spans) > 0 || (c.file.Size == 0 && c.delivered)) {

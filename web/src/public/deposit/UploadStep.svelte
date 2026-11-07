@@ -43,6 +43,9 @@
 
 {#if snapshot}
   <p class="tt-text-bold">{t(`upload.phase.${phase}`)}</p>
+  {#if flow.e2eActive}
+    <p class="tt-text-muted tt-text-sm">{t('deposit.e2e.uploadNote')}</p>
+  {/if}
 
   <ProgressBar
     label={t('deposit.upload.overall')}

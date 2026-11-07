@@ -118,6 +118,30 @@ Ces fichiers sont tout de même transmis, car ils peuvent être parfaitement lé
 
 > **Note** Si l’expéditeur a limité le nombre de téléchargements, chaque début de téléchargement compte, quelle que soit la personne qui télécharge. Quand la page affiche **Nombre maximal de téléchargements atteint**, le transfert ne peut plus être téléchargé : demandez à l’expéditeur de renvoyer les fichiers.
 
+<!-- topic: download-e2e -->
+## Transfert chiffré de bout en bout
+
+Certains transferts sont chiffrés de bout en bout : les fichiers ont été chiffrés dans le navigateur de l’expéditeur, et le serveur ne peut pas les lire. Pour les ouvrir, il vous faut une **clé de déchiffrement**. L’expéditeur doit vous la transmettre **par un autre canal** que le mail du lien (téléphone, SMS, autre messagerie).
+
+Deux cas :
+
+- si le lien que vous avez reçu se termine par `#k=` suivi de la clé, la page la lit toute seule ;
+- sinon, la page affiche **Clé de déchiffrement**. Collez la clé (43 caractères) ou le lien complet qui la contient, puis cliquez sur **Déchiffrer**.
+
+![La page de téléchargement d’un transfert chiffré, avec le champ Clé de déchiffrement et le bouton Déchiffrer](../screenshots/fr/download-e2e-key.png)
+
+La clé n’est jamais envoyée au serveur. Si elle est fausse, la page le dit : **Cette clé n’ouvre pas ce transfert**. Vérifiez-la auprès de l’expéditeur. Si la page indique qu’un fichier a été retiré ou modifié, n’utilisez pas ce transfert et contactez l’expéditeur.
+
+Le téléchargement se passe comme d’habitude, avec quelques différences :
+
+- **Le navigateur déchiffre pendant le téléchargement.** Le fichier est contrôlé au fur et à mesure (taille et empreinte SHA-256). S’il est abîmé ou modifié, le téléchargement échoue : n’utilisez pas ce qui a pu être enregistré et recommencez.
+- **Tous les fichiers en une archive ZIP** : c’est votre navigateur qui construit l’archive. Elle n’est pas compressée.
+- **Deux empreintes** sont affichées. L’empreinte du fichier d’origine est annoncée par l’expéditeur et vérifiée pendant le téléchargement. L’empreinte du fichier chiffré est calculée par le serveur.
+- **Aucune analyse antivirus** : les fichiers sont marqués « non analysé : chiffré de bout en bout ». Appliquez les précautions de la section [Fichiers non analysés par l’antivirus](topic:download-not-scanned).
+- Si le nombre de téléchargements est limité, l’archive ZIP compte pour **un seul** téléchargement, et non un par fichier.
+
+Il faut un navigateur récent, avec les services en arrière-plan (« Service Workers ») autorisés. Dans certains modes de navigation privée, ils sont désactivés : le navigateur déchiffre alors en mémoire, jusqu’à 512 Mio. Au-delà, la page vous propose d’utiliser un autre navigateur (Firefox, Chrome, Edge ou Safari, hors navigation privée).
+
 <!-- topic: download-report -->
 ## Signaler un abus
 

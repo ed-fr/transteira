@@ -122,5 +122,40 @@
       "invalid": "The report is invalid: check the reason and the length of the message.",
       "error": "The report could not be sent. Try again."
     }
+  },
+  "e2e": {
+    "lockedNotice": "This transfer is end-to-end encrypted: once unlocked, you will also need its decryption key, given to you by the sender.",
+    "notice": "The files of this transfer are end-to-end encrypted: they are decrypted in your browser with the key given by the sender, and the server cannot read them. For this reason they were not analysed by the antivirus: open them only if you trust the sender.",
+    "notScanned": "Not analysed by the antivirus: this file is end-to-end encrypted, the server cannot read it.",
+    "opening": "Decrypting the list of files…",
+    "opened": "Transfer decrypted: the files are listed.",
+    "tampered": "This transfer cannot be decrypted safely: a file was removed or altered. Do not use it and contact the sender.",
+    "sha256Plain": "Fingerprint of the original file, declared by the sender",
+    "sha256Cipher": "Fingerprint of the encrypted file",
+    "copyCipherSha": "Copy the fingerprint of the encrypted file {name}",
+    "integrity": "Each file is checked against the fingerprint declared by the sender while it is decrypted: a damaged or altered file makes the download fail.",
+    "archiveHint": "The archive is decrypted and built in your browser. It is not compressed: its size is close to the total size of the files.",
+    "busy": "Decrypting…",
+    "unsupported": "This browser cannot decrypt the files of this transfer: a secure connection (https) and a recent browser are needed. Open the link in a recent version of Firefox, Chrome, Edge or Safari.",
+    "busyName": "Decrypting {name}…",
+    "started": "Download of {name} started.",
+    "done": "Download of {name} complete.",
+    "key": {
+      "title": "Decryption key",
+      "text": "This transfer is end-to-end encrypted. Enter the decryption key the sender gave you through another channel, or paste the complete link that contains it.",
+      "label": "Decryption key",
+      "hint": "43 characters, or the complete link ending with #k=…",
+      "submit": "Decrypt",
+      "required": "Enter the decryption key.",
+      "invalid": "This is not a valid key: check that you copied it completely.",
+      "wrong": "This key does not open this transfer: check it with the sender.",
+      "wrongLink": "The key contained in the link does not open this transfer. Enter the key the sender gave you."
+    },
+    "error": {
+      "corrupt": "The file could not be decrypted: it is damaged or was altered. Do not use what may have been saved, and download it again.",
+      "unsupportedBrowser": "This browser cannot decrypt such a large file. Use a recent version of Firefox, Chrome, Edge or Safari, outside private browsing.",
+      "network": "The download was interrupted by a network error. Try again.",
+      "unavailable": "Your access to the files has expired or the transfer is no longer available: the page has been refreshed."
+    }
   }
 }

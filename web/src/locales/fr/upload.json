@@ -44,7 +44,10 @@
     "payload-too-large": "Un fichier dépasse la taille déclarée ou autorisée. Commencez un nouveau transfert.",
     "insufficient-storage": "Le serveur manque d’espace de stockage. Réessayez plus tard ou contactez votre administrateur.",
     "protocol-error": "Le serveur a donné une réponse inattendue. Rechargez la page et réessayez.",
-    "file-missing": "Un fichier à envoyer est manquant. Sélectionnez à nouveau les mêmes fichiers."
+    "file-missing": "Un fichier à envoyer est manquant. Sélectionnez à nouveau les mêmes fichiers.",
+    "file-unreadable": "Un fichier n’a pas pu être lu (il a peut-être été déplacé ou modifié). Commencez un nouveau transfert.",
+    "file-changed": "Un fichier a été modifié après la préparation du chiffrement : il ne peut pas être renvoyé sans risque. Commencez un nouveau transfert.",
+    "e2e-format-invalid": "Le serveur a refusé les données chiffrées d’un fichier. Commencez un nouveau transfert."
   },
   "finalize": {
     "scanning": "L’antivirus analyse les fichiers. Vous pouvez fermer cette page : vous serez prévenu par mail quand le transfert sera prêt.",

@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node scripts/build-help.mjs && vitest run --coverage",
-    "build": "node scripts/build-help.mjs && vite build && node scripts/keep-dist.mjs && node scripts/check-dist.mjs"
+    "build": "node scripts/build-help.mjs && vite build && vite build --config vite.sw.config.ts && node scripts/keep-dist.mjs && node scripts/check-dist.mjs"
   },
   "dependencies": {
     "svelte": "5.57.2"

@@ -1251,10 +1251,10 @@ default): beyond it, `startDepositSession` and `createTransfer` answer `429 rate
 ## 12. End-to-end encrypted transfer by script
 
 Since 2.0 a transfer can be encrypted by the sender so that the server never holds the key and
-cannot read the files. The browser interface for it arrives in a later step of version 2.0; until
-then, only a client that implements the `TTE2` format can send such a transfer. A future version
-of the TransTeira command-line client will do it; for now, follow the steps below with your own
-implementation. The format (key derivation, header, chunks, sealed metadata and messages) is
+cannot read the files. The browser interface does it for the person sending (a box in the transfer form); this
+section is for scripts. A future version of the TransTeira command-line client will do it; for now,
+follow the steps below with your own implementation. The browser implementation is described in
+[`docs/architecture/e2e-format.md`](../architecture/e2e-format.md), section 7. The format (key derivation, header, chunks, sealed metadata and messages) is
 specified in [`docs/architecture/e2e-format.md`](../architecture/e2e-format.md); the reference
 implementation is the Go package `internal/tte2`, and its test vectors,
 `internal/tte2/testdata/vectors.json`, are the reference for any other implementation.

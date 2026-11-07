@@ -559,3 +559,27 @@ func TestTokenAPIRobots(t *testing.T) {
 		})
 	}
 }
+
+// TestWebUIServiceWorkerScript checks that the Service Worker of the
+// end-to-end encrypted downloads (web/src/e2e-sw, built to dist/e2e-sw.js)
+// is served like the other root scripts: JavaScript, the public CSP (its
+// fetches and its script-src 'self' rule) and revalidated on every use, so
+// that a new build replaces the worker at once. Its scope /e2e/ is below
+// the script's directory: no Service-Worker-Allowed header is needed.
+// Without an active worker, /e2e/<id> is the public application with 404.
+func TestWebUIServiceWorkerScript(t *testing.T) {
+	t.Parallel()
+	const swJS = "self.addEventListener('fetch', () => {})"
+	build := testWebUI()
+	build["e2e-sw.js"] = &fstest.MapFile{Data: []byte(swJS)}
+	e := newEnv(t, envConfig{webUI: build})
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		rec := e.do(t, method, "/e2e-sw.js", hostA, nil)
+		uiResponse(t, rec, method, http.StatusOK, swJS, jsContentType, PublicUICSP, PublicUICacheControl, true)
+		if got := rec.Header().Get("Service-Worker-Allowed"); got != "" {
+			t.Errorf("Service-Worker-Allowed %q, want none", got)
+		}
+		rec = e.do(t, method, "/e2e/AAAAAAAAAAAAAAAAAAAAAA", hostA, nil)
+		uiResponse(t, rec, method, http.StatusNotFound, publicPage, htmlContentType, PublicUICSP, PublicUICacheControl, false)
+	}
+}

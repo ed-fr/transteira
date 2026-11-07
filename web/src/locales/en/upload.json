@@ -44,7 +44,10 @@
     "payload-too-large": "A file is larger than the size declared or allowed. Start a new transfer.",
     "insufficient-storage": "The server has run out of storage space. Try again later or contact your administrator.",
     "protocol-error": "The server gave an unexpected answer. Reload the page and try again.",
-    "file-missing": "A file to send is missing. Select the same files again."
+    "file-missing": "A file to send is missing. Select the same files again.",
+    "file-unreadable": "A file could not be read (it may have been moved or modified). Start a new transfer.",
+    "file-changed": "A file was modified after the encryption was prepared: it cannot be sent again safely. Start a new transfer.",
+    "e2e-format-invalid": "The server refused the encrypted data of a file. Start a new transfer."
   },
   "finalize": {
     "scanning": "The antivirus is analysing the files. You can close this page: you will be notified by email when the transfer is ready.",

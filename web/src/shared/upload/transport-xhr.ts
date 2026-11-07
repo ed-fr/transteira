@@ -11,6 +11,8 @@ export interface XhrLike {
   send(body?: Blob | null): void;
   abort(): void;
   readonly status: number;
+  /** Body of the answer as text (read only for a 400 problem). */
+  readonly responseText?: string;
   onload: (() => void) | null;
   onerror: (() => void) | null;
   ontimeout: (() => void) | null;
@@ -39,6 +41,22 @@ export function parseIntHeader(value: string | null): number | undefined {
     return undefined;
   }
   return Number(value.trim());
+}
+
+/**
+ * Problem code of a 400 answer whose body is application/problem+json (RFC 9457), undefined
+ * otherwise or when the body cannot be read.
+ */
+export function problemCodeOf(xhr: Pick<XhrLike, 'getResponseHeader' | 'responseText'>): string | undefined {
+  const type = xhr.getResponseHeader('Content-Type') ?? '';
+  if (!/^application\/problem\+json\s*(;|$)/i.test(type.trim())) return undefined;
+  try {
+    const body: unknown = JSON.parse(xhr.responseText ?? '');
+    const code = typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : undefined;
+    return typeof code === 'string' ? code : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Creates the XMLHttpRequest transport of the upload engine. */
@@ -126,6 +144,10 @@ export function createXhrTransport(deps: XhrTransportDeps): UploadTransport {
         result.offset = parseIntHeader(xhr.getResponseHeader('Upload-Offset'));
       } else {
         result.retryAfterSeconds = parseIntHeader(xhr.getResponseHeader('Retry-After'));
+        if (xhr.status === 400) {
+          const code = problemCodeOf(xhr);
+          if (code !== undefined) result.problemCode = code;
+        }
       }
       return result;
     },

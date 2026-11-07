@@ -245,6 +245,7 @@ export const FIELD_ORDER = [
   'maxDownloads',
   'recipientVerification',
   'linkOnly',
+  'endToEnd',
   'files',
 ] as const;
 

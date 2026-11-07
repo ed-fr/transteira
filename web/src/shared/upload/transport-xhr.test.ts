@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createXhrTransport, parseIntHeader, type XhrLike } from './transport-xhr';
+import { createXhrTransport, parseIntHeader, problemCodeOf, type XhrLike } from './transport-xhr';
 import { TransportError } from './tus';
 
 class FakeXhr implements XhrLike {
@@ -33,9 +33,11 @@ class FakeXhr implements XhrLike {
     this.aborted = true;
     this.onabort?.();
   }
-  respond(status: number, headers: Record<string, string> = {}): void {
+  responseText = '';
+  respond(status: number, headers: Record<string, string> = {}, body = ''): void {
     this.status = status;
     this.responseHeaders = headers;
+    this.responseText = body;
     this.onload?.();
   }
 }
@@ -66,6 +68,30 @@ describe('parseIntHeader', () => {
     expect(parseIntHeader('-1')).toBeUndefined();
     expect(parseIntHeader('1.5')).toBeUndefined();
     expect(parseIntHeader('Wed, 21 Oct 2026 07:28:00 GMT')).toBeUndefined();
+  });
+});
+
+describe('problemCodeOf', () => {
+  const xhr = (type: string | null, responseText?: string) => ({
+    getResponseHeader: (name: string) => (name === 'Content-Type' ? type : null),
+    ...(responseText === undefined ? {} : { responseText }),
+  });
+
+  it('reads the code of an application/problem+json body only', () => {
+    expect(problemCodeOf(xhr('application/problem+json', '{"code":"e2e-format-invalid"}'))).toBe(
+      'e2e-format-invalid',
+    );
+    expect(problemCodeOf(xhr('Application/Problem+JSON', '{"code":"x"}'))).toBe('x');
+    expect(problemCodeOf(xhr('application/json', '{"code":"x"}'))).toBeUndefined();
+    expect(problemCodeOf(xhr('application/problem+jsonx', '{"code":"x"}'))).toBeUndefined();
+    expect(problemCodeOf(xhr(null, '{"code":"x"}'))).toBeUndefined();
+  });
+
+  it('ignores unreadable bodies and codes that are not strings', () => {
+    expect(problemCodeOf(xhr('application/problem+json'))).toBeUndefined();
+    expect(problemCodeOf(xhr('application/problem+json', 'not json'))).toBeUndefined();
+    expect(problemCodeOf(xhr('application/problem+json', 'null'))).toBeUndefined();
+    expect(problemCodeOf(xhr('application/problem+json', '{"code":4}'))).toBeUndefined();
   });
 });
 
@@ -113,6 +139,20 @@ describe('XHR transport', () => {
     expect(last().headers['X-CSRF-Token']).toBeUndefined();
     last().respond(503, { 'Retry-After': '30' });
     await expect(p).resolves.toEqual({ status: 503, retryAfterSeconds: 30 });
+  });
+
+  it('PATCH 400 reads the code of a problem body', async () => {
+    const { transport, last } = harness();
+    const p = transport.patch('/u', 0, new Blob(['x']));
+    last().respond(
+      400,
+      { 'Content-Type': 'application/problem+json; charset=utf-8' },
+      JSON.stringify({ status: 400, code: 'e2e-format-invalid' }),
+    );
+    await expect(p).resolves.toEqual({ status: 400, problemCode: 'e2e-format-invalid' });
+    const q = transport.patch('/u', 0, new Blob(['x']));
+    last().respond(400);
+    await expect(q).resolves.toEqual({ status: 400 });
   });
 
   it('DELETE terminates with the CSRF token', async () => {

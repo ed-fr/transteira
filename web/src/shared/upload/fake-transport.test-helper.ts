@@ -10,7 +10,7 @@ import {
 
 export type Fault =
   | { kind: 'ok' }
-  | { kind: 'status'; status: number; retryAfter?: number; offset?: number }
+  | { kind: 'status'; status: number; retryAfter?: number; offset?: number; problemCode?: string }
   | { kind: 'cut'; keep: number }
   | { kind: 'stall'; keep: number }
   | { kind: 'steps'; steps: [delayMs: number, bytes: number][] };
@@ -84,6 +84,7 @@ export class FakeServer implements UploadTransport {
       const r: PatchResult = { status: fault.status };
       if (fault.retryAfter !== undefined) r.retryAfterSeconds = fault.retryAfter;
       if (fault.offset !== undefined) r.offset = fault.offset;
+      if (fault.problemCode !== undefined) r.problemCode = fault.problemCode;
       return r;
     }
     if (u === undefined) return { status: 404 };

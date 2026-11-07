@@ -648,6 +648,64 @@ test.describe('depositor', () => {
     }
   });
 
+  test('end-to-end encrypted transfer', async ({ newContext, state }) => {
+    test.setTimeout(180_000);
+    const senders: Record<Lang, string> = { en: 'erin@example.com', fr: 'elise@example.com' };
+    const recipients: Record<Lang, string> = { en: 'evan@example.org', fr: 'eliott@example.org' };
+    // End-to-end encryption is forbidden by default: allowed for this test only.
+    const api = superAdminApi();
+    await api.ok('PATCH', `/admin/tenants/${state.tenants.a.id}`, { e2ePolicy: 'allowed' });
+    try {
+      for (const lang of LANGS) {
+        const page = await openPage(newContext, lang);
+        const email = senders[lang];
+        await page.goto(`${ORIGINS.a}/`);
+        await heading(page, lang, 'deposit.email.title');
+        await page.getByLabel(startsWith(msg(lang, 'deposit.email.label'))).fill(email);
+        const after = Date.now() - 2000;
+        await page.getByRole('button', { name: msg(lang, 'deposit.email.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.code.title');
+        await page
+          .getByLabel(startsWith(msg(lang, 'deposit.code.label')))
+          .fill(await waitForCode(email, after));
+        await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.form.title');
+        await page
+          .getByRole('textbox', { name: startsWith(msg(lang, 'deposit.form.recipients.label')) })
+          .fill(recipients[lang]);
+        const file = lang === 'en' ? 'board-minutes.pdf' : 'proces-verbal.pdf';
+        await page
+          .getByLabel(startsWith(msg(lang, 'deposit.form.files.label')))
+          .setInputFiles([
+            { name: file, mimeType: 'application/pdf', buffer: makeFile(file, 96 * 1024).buffer },
+          ]);
+        await expect(page.getByText(file).first()).toBeVisible();
+        const option = page.getByRole('checkbox', { name: startsWith(msg(lang, 'deposit.e2e.label')) });
+        await option.check();
+        await option.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await shoot(page, lang, 'deposit-e2e-option');
+
+        await page.getByRole('button', { name: msg(lang, 'deposit.form.submit'), exact: true }).click();
+        await heading(page, lang, 'deposit.done.title');
+        const key = page.getByTestId('deposit-e2e-key');
+        await expect(key).toBeVisible();
+        await key.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        // The key changes at every run: masked.
+        await shoot(page, lang, 'deposit-e2e-key', [key]);
+
+        // The recipient opens the link without the key.
+        const notification = await waitForMail(recipients[lang]);
+        const rpage = await openPage(newContext, lang);
+        await rpage.goto(mailLink(notification, '/d/', ORIGINS.a));
+        await heading(rpage, lang, 'download.title');
+        await expect(rpage.locator('#tt-e2e-key')).toBeVisible();
+        await shoot(rpage, lang, 'download-e2e-key');
+      }
+    } finally {
+      await api.ok('PATCH', `/admin/tenants/${state.tenants.a.id}`, { e2ePolicy: 'forbidden' });
+    }
+  });
+
   test('drop link landing', async ({ newContext }) => {
     for (const lang of LANGS) {
       const page = await openPage(newContext, lang);

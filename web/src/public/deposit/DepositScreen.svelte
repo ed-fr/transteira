@@ -28,6 +28,7 @@
     type ReplyContext,
     type Step,
   } from './flow.svelte';
+  import PrepareStep from './PrepareStep.svelte';
   import ResumePrompt from './ResumePrompt.svelte';
   import TransferForm from './TransferForm.svelte';
   import UploadStep from './UploadStep.svelte';
@@ -116,6 +117,8 @@
     <CodeStep {flow} />
   {:else if flow.step === 'form'}
     <TransferForm {flow} {onnavigate} />
+  {:else if flow.step === 'preparing'}
+    <PrepareStep {flow} />
   {:else if flow.step === 'resume'}
     <ResumePrompt {flow} />
   {:else if flow.step === 'upload'}

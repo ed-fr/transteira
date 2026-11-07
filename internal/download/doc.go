@@ -171,6 +171,18 @@
 //     transfer due for deletion Options.Grace later (the grace period of
 //     the deletion after the first download, P23); the existing deletion
 //     sweep erases it, and the link then answers ErrGone.
+//   - The files of an end-to-end encrypted transfer are one object (since
+//     2.0): the server cannot build their archive, so the browser fetches
+//     them one after the other to build it, and a client fetching them
+//     all within the window counts one start. Its window moves at the end
+//     of every response, delivered or not (up to the ceiling), so that a
+//     long file does not leave the next one outside it. Each file start
+//     still has its audit event only when it is counted; clients sharing
+//     an address count once for all the files (accepted, T-197). The
+//     start reaching the limit makes such a transfer due for deletion
+//     after the longer of Options.Grace and the ceiling of the window
+//     (4 hours by default), so that its files stay available until the
+//     counted client has fetched the last one.
 //   - A HEAD request is never counted and remembers nothing; it is refused
 //     like the GET would be when the limit is reached (from the state read
 //     when the request was opened).

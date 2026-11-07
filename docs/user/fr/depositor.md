@@ -81,6 +81,7 @@ Remplissez les champs :
 - **Niveau de confidentialité** : si votre organisation propose plusieurs niveaux, choisissez celui qui correspond à la sensibilité des fichiers ; sa description s’affiche sous le niveau. Un niveau peut imposer des règles : restreindre les durées disponibles, rendre le mot de passe obligatoire, imposer la suppression après le premier téléchargement, limiter les destinataires à l’organisation ou plafonner le nombre maximal de téléchargements. Le formulaire limite alors les choix ou renseigne les options à votre place, et vous explique pourquoi. Si votre organisation n’a qu’un niveau, le sélecteur n’est pas affiché mais ses règles s’appliquent quand même.
 - **Les destinataires doivent vérifier leur adresse par un code** : proposé si votre organisation l’offre. Chaque destinataire reçoit alors un lien personnel et doit saisir un code envoyé à sa propre adresse avant de télécharger : un lien transféré à quelqu’un d’autre est inutilisable. Demandez à vos destinataires de ne pas transférer leur lien. Un niveau de confidentialité peut rendre cette option obligatoire : elle est alors cochée et non modifiable. Les destinataires qui n’ont pas téléchargé les fichiers reçoivent un mail de rappel la veille de l’expiration du transfert.
 - **Nombre maximal de téléchargements** : facultatif, de 1 à 1000. Le transfert compte chaque début de téléchargement, tous destinataires confondus (un téléchargement interrompu puis repris compte une fois). Une fois le nombre atteint, le transfert ne peut plus être téléchargé et il est supprimé quelques minutes plus tard. Laissez le champ vide pour ne pas limiter, sauf si le niveau choisi impose un plafond.
+- **Chiffrer de bout en bout dans mon navigateur** : proposé si votre organisation l’autorise (ou imposé, ou absent si elle l’interdit). Vos fichiers sont chiffrés avant de quitter votre ordinateur : voir [Chiffrer de bout en bout](topic:deposit-e2e). Cette option n’existe pas pour un envoi par lien de dépôt.
 - **Fichiers à envoyer** : faites glisser vos fichiers sur la zone **Glissez-déposez des fichiers ici, ou** cliquez sur **choisissez des fichiers**. Pour retirer un fichier de la liste, utilisez le bouton de retrait à côté de son nom. Sous la liste, le formulaire affiche **Total :** suivi de la taille de vos fichiers et de la taille autorisée.
 
 <!-- rules: levels -->
@@ -189,6 +190,36 @@ Quand vous cliquez sur **Envoyer**, le lien s’affiche **une seule fois**, à l
 > **À savoir** Sans destinataire identifié, le suivi des téléchargements ne désigne personne.
 
 Si vous perdez le lien, ouvrez [Mes envois](topic:my-transfers) et cliquez sur **Nouveau lien** : l’ancien lien cesse de fonctionner.
+
+<!-- topic: deposit-e2e -->
+## Chiffrer de bout en bout
+
+Le chiffrement de bout en bout protège vos fichiers même contre le serveur. Vos fichiers sont chiffrés **dans votre navigateur**, avant l’envoi. La clé n’est jamais transmise au serveur : lui-même ne peut donc pas les lire. Seules les personnes à qui vous donnez la clé peuvent les ouvrir.
+
+Dans le formulaire [Nouveau transfert](topic:deposit-options), cochez **Chiffrer de bout en bout dans mon navigateur**. Selon les règles de votre organisation et du niveau de confidentialité choisi, la case est proposée, déjà cochée et non modifiable (chiffrement imposé), ou absente (chiffrement interdit). Elle n’est jamais proposée pour un envoi par lien de dépôt.
+
+![Formulaire Nouveau transfert avec la case Chiffrer de bout en bout dans mon navigateur cochée](../screenshots/fr/deposit-e2e-option.png)
+
+Quand vous cliquez sur **Envoyer** :
+
+1. Le navigateur **lit d’abord chaque fichier** pour calculer son empreinte SHA-256. Comptez environ une minute et demie par tranche de 10 Go. La page indique l’avancement.
+2. Il chiffre ensuite les fichiers **pendant l’envoi**. Votre ordinateur travaille un peu plus que d’habitude : gardez la page ouverte.
+3. Les noms des fichiers, les dossiers, les types, les tailles, les empreintes et votre message sont chiffrés eux aussi. Le serveur ne voit que des noms génériques.
+
+À la fin, l’écran **Transfert envoyé** affiche la **clé de chiffrement**. Elle n’est affichée **qu’une seule fois** : copiez-la avant de quitter la page. Les mails envoyés aux destinataires contiennent le lien, mais **jamais la clé**. Envoyez-la vous-même **par un autre canal** que le mail du lien (téléphone, SMS, autre messagerie). Sans elle, personne ne peut ouvrir les fichiers, pas même vous ni votre administrateur.
+
+![Écran Transfert envoyé avec la clé de chiffrement à transmettre par un autre canal et le bouton Copier la clé](../screenshots/fr/deposit-e2e-key.png)
+
+Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien complet**, qui se termine par `#k=` suivi de la clé. Ce lien suffit à ouvrir les fichiers : transmettez-le avec soin.
+
+**Si la page est rechargée ou fermée par erreur**, l’envoi peut reprendre. Le navigateur garde la clé et les informations de reprise dans la mémoire de l’onglet, jusqu’à la fin ou l’abandon de l’envoi. Revenez sur la page d’envoi dans le même onglet et suivez [Suivre l’envoi](topic:deposit-upload).
+
+À savoir :
+
+- **Pas d’analyse antivirus.** Le serveur ne peut pas lire les fichiers : ils ne sont jamais analysés. Ils sont marqués « non analysé : chiffré de bout en bout », pour vous et pour les destinataires.
+- **Pas d’archive ZIP côté serveur.** Les destinataires déchiffrent dans leur navigateur, qui construit l’archive lui-même.
+- Le serveur voit toujours la taille et le nombre des fichiers, l’expéditeur, les destinataires et les dates.
+- Un navigateur récent est nécessaire (chiffrement, tâches en arrière-plan et flux de données). Sans lui, la case n’est pas utilisable.
 
 <!-- topic: my-transfers -->
 ## Mes envois

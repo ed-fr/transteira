@@ -1,7 +1,7 @@
 # TTE2: end-to-end encryption format
 
 > V2, step 7. Status: **reference specification**, implemented by `internal/tte2` (Go) and
-> reproduced by the browser (TypeScript, step 8) and the command-line client (step 9).
+> reproduced by the browser (TypeScript, step 8, section 7) and the command-line client (step 9).
 > Test vectors: [`internal/tte2/testdata/vectors.json`](../../internal/tte2/testdata/vectors.json).
 > Threat model: section 6.53 (T-318 to T-327, T-336), decision P66.
 
@@ -250,3 +250,95 @@ base64 with padding, sealed values are base64url without padding as on the wire.
 the Go sentinel names (`ErrAuth`, `ErrTruncated`, `ErrTrailingData`, `ErrBadHeader`, `ErrFormat`,
 `ErrEncoding`, `ErrInvalidMetadata`, `ErrInvalidMessage`); other implementations map their
 errors to these names.
+
+## 7. Browser implementation (step 8)
+
+The browser code lives in `web/src/shared/e2e/` (format and download), `web/src/e2e-sw/` (Service
+Worker) and `web/src/public/deposit/` (deposit screens). It follows the vectors of section 6.
+
+### 7.1 Deposit
+
+1. **Preparation pass.** Before the upload, each file is read once to compute its plaintext
+   SHA-256 (`sha256.ts`, pure TypeScript, about 100 MB/s or more: roughly 1.5 minutes per 10 GB).
+   The hash must be known before the upload because it is sealed in the metadata.
+2. **Key.** `K` is drawn with `crypto.getRandomValues`. The page imports it as a
+   **non-extractable HKDF `CryptoKey`** and never hands the raw bytes to the encryption code.
+3. **Encryption in a Web Worker** (`upload.worker.ts`, `upload-crypto*.ts`). The Worker receives
+   the HKDF key, derives each file key from the file salt, and encrypts chunk by chunk while the
+   tus engine uploads. Nothing is held in memory beyond a few chunks.
+4. **Sealed values.** Names, folders, media types, sizes, plaintext SHA-256 and the message are
+   sealed (`sealed.ts`) before `createTransfer`. The server only gets generic names.
+5. **End of deposit.** The done screen shows the key once, to be sent by another channel. For a
+   link-only transfer, it shows the full link ending with `#k=<key>`.
+
+**Resume after a reload.** `K` and the per-file salts are kept in the `sessionStorage` of the tab
+(record `tt.upload`, with the transfer identifier and the file descriptions). They are erased at
+the end or at the abandon of the upload. Without them, a resumed upload could not produce the same
+ciphertext. Decision of 2026-11-07. The record also holds the plaintext SHA-256 of each file:
+after a reload, the reselected files are hashed again before anything is encrypted, and a file
+whose fingerprint differs is refused (the transfer is abandoned). During the upload, each plaintext
+chunk is compared with the SHA-256 of that chunk taken at the preparation pass before it is
+encrypted (`file-changed` otherwise). A salt and its nonces therefore never encrypt two different
+plaintexts, even when a file changes behind the browser. Residual: a script injected in the page could read them, but
+it would read the plaintext files as well (threat model T-160, T-319, T-320).
+
+### 7.2 Download
+
+- **Key.** Read from the fragment `#k=` then removed from the URL (`history.replaceState`), or
+  typed in a field (bare key or full link). It is kept in memory only.
+- **Checks.** A wrong key is detected when no sealed item opens. A count or index mismatch in the
+  sealed metadata means tampering (T-322).
+- **Fingerprints.** The page shows the plaintext SHA-256 (declared by the sender, verified while
+  downloading) and the ciphertext SHA-256 (computed by the server).
+
+### 7.3 Service Worker protocol
+
+Decryption is done in streaming by the Service Worker `/e2e-sw.js` (scope `/e2e/`). The shared
+types are in `sw-protocol.ts`.
+
+1. The page posts `register` over a `MessageChannel` with an entry: for each file, the
+   same-origin ciphertext URL, the **non-extractable HKDF base key** (never the raw `K`), the file
+   index, the sanitized name, the declared size and the declared plaintext SHA-256. An entry is
+   either one file or an archive of several.
+2. The Service Worker answers `registered` (or `rejected`). The page then navigates to
+   `/e2e/<id>`, where `<id>` is 128 random bits in base64url (22 characters).
+3. The Service Worker fetches the ciphertext, derives the file key once the 32-byte header has
+   arrived, decrypts chunk by chunk, checks the size and the plaintext SHA-256 **while
+   streaming**, and answers with `Content-Disposition: attachment`. On any mismatch it errors the
+   stream, so the browser marks the download as failed.
+4. For an archive, it builds the **ZIP in the browser** (store mode, ZIP64, names sanitized by
+   `archive-names.ts`), file after file.
+5. It reports `started`, then `done` or `failed` (with a code) to the page.
+
+An entry is **single use** and valid for **60 seconds** (`ENTRY_TTL_MS`); at most 32 entries wait
+at once; an entry dropped for age or room reports `failed` with the code `unavailable`. The
+Service Worker only handles `/e2e/` requests; an unknown, used or expired identifier is answered
+`204 No Content`, so that the download page stays in place. The page starts one download at a
+time: the next one waits until the previous one has started or failed.
+
+### 7.4 Fallback without Service Worker
+
+Some private browsing modes forbid Service Workers. The page then decrypts in memory and saves a
+`Blob`, up to **512 MiB** of plaintext (`MEMORY_LIMIT`). The ciphertext read is capped at the
+largest valid size for the declared plaintext size, and it is decrypted chunk by chunk. A browser
+without WebCrypto (for example a page served over plain HTTP) is told so, instead of a tamper
+warning. Beyond that, it shows a message
+suggesting another browser (the command-line client will cover this case at step 9).
+
+### 7.5 Download limit counting
+
+The server cannot build a ZIP of an encrypted transfer, so the browser downloads the files one by
+one. To keep the "maximum number of downloads" meaningful, the files of an end-to-end encrypted
+transfer count as **one download start per client within the window**
+(`dedupObject` in `internal/download/started.go`): a browser ZIP counts once, not once per file.
+This applies only to transfers with a download limit; without a limit every file start is recorded
+and audited as before. The window of the counted client moves at the end of every response, so
+that a long file does not push the next one outside it (up to the 4-hour ceiling). The start that
+reaches the limit makes the transfer due for deletion after the longer of the grace period and that
+ceiling, so that the files stay available until the counted client has fetched the last one; every
+other client is refused at the limit meanwhile. Clients sharing one address on a shared link count
+once for all the files (accepted, T-197).
+
+### 7.6 Browser requirements
+
+A modern browser with WebCrypto, Web Workers, Service Workers and streams.

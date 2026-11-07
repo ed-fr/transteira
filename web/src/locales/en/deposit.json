@@ -199,5 +199,42 @@
     "select": "Select the same files again",
     "ready": "All the files needed are selected.",
     "continue": "Continue the upload"
+  },
+  "e2e": {
+    "label": "Encrypt end to end in my browser",
+    "hint": "The files, their names and the message are encrypted in your browser before being sent: the server cannot read them. They are not analysed by the antivirus. At the end you get a decryption key: send it to the recipients through another channel (phone, text message), never in the same email. Without it, the files cannot be opened.",
+    "requiredHint": "Required by your organisation for this transfer. The files, their names and the message are encrypted in your browser and are not analysed by the antivirus. At the end you get a decryption key to send to the recipients through another channel.",
+    "required": "This transfer must be encrypted end to end.",
+    "forbidden": "End-to-end encryption is not allowed for this transfer.",
+    "unsupported": "This browser cannot encrypt the files (a secure connection and a recent browser are needed). Use another browser.",
+    "prepareFailed": "The files could not be prepared for encryption. Check that they are still available, then try again.",
+    "resumeChanged": "A selected file is not exactly the one of the interrupted transfer (its content changed). For your security this transfer cannot be resumed: start a new transfer.",
+    "scanStatus": "not analysed (encrypted end to end)",
+    "notScanned": "Encrypted end to end: the antivirus cannot analyse this file.",
+    "uploadNote": "The files are encrypted in your browser as they are sent.",
+    "preparing": {
+      "title": "Preparing the encryption",
+      "text": "Your browser reads each file once to compute its fingerprint before encrypting it. The files do not leave your computer during this step.",
+      "progress": "Preparation of the files",
+      "value": "{hashed} of {total} read ({percent}%)",
+      "cancel": "Cancel",
+      "cancelled": "The preparation was cancelled. You can change the transfer and send it again.",
+      "announce": "Preparation: {percent}%.",
+      "done": "Preparation complete, the transfer is being created.",
+      "resumeTitle": "Checking the files",
+      "resumeText": "Your browser reads each file again to check that it is exactly the one selected before the interruption. The files do not leave your computer during this step.",
+      "resumeCancelled": "The check was cancelled. Select the files again to resume the upload."
+    },
+    "done": {
+      "title": "Decryption key",
+      "intro": "The files are encrypted end to end. The recipients need this key to open them: send it to them through another channel than the download link (phone, text message).",
+      "shownOnce": "This key is shown only once and is not kept anywhere: copy it now. Without it, the files cannot be opened, even by the administrators.",
+      "label": "Decryption key",
+      "copy": "Copy the key",
+      "linkLabel": "Download link with its key",
+      "linkNote": "This link contains the decryption key: anyone who has it can open the files.",
+      "encryption": "Encryption",
+      "encryptionNote": "End to end: the server cannot read the files, their names or the message."
+    }
   }
 }

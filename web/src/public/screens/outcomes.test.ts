@@ -206,6 +206,12 @@ describe('downloadView', () => {
     expect(view.deleteAfterFirstDownload).toBe(true);
   });
 
+  it('flags end-to-end encrypted files as not analysed', () => {
+    const view = downloadView(transfer({ files: [file({ scanStatus: 'not_scanned_e2e' })] }));
+    expect(view.hasUnscanned).toBe(true);
+    expect(view.archiveHref).toBeUndefined();
+  });
+
   it('has no archive link without files', () => {
     const view = downloadView(transfer({ archiveUrl: '/api/v1/downloads/dl_x/archive' }));
     expect(view.files).toEqual([]);
@@ -219,6 +225,7 @@ describe('isNotScanned', () => {
     expect(isNotScanned('not_scanned_too_large')).toBe(true);
     expect(isNotScanned('not_scanned_disabled')).toBe(true);
     expect(isNotScanned('not_scanned_encrypted')).toBe(true);
+    expect(isNotScanned('not_scanned_e2e')).toBe(true);
     expect(isNotScanned('clean')).toBe(false);
   });
 });

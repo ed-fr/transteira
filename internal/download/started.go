@@ -21,11 +21,29 @@ const (
 	// archiveObject is the detail of an audit event recording the start of
 	// an archive download, in place of a file ID.
 	archiveObject = "archive"
+	// e2eObject replaces the object in the deduplication key of the
+	// counted starts of an end-to-end encrypted transfer with a download
+	// limit: the server cannot build its archive, so the browser fetches
+	// every file one after the other to build it (spec 22). The files of
+	// such a transfer are one object, so that a client fetching them all
+	// within the window counts one start against the limit, like an archive
+	// download. Without limit, every file start is recorded and audited.
+	e2eObject = "e2e"
 	// linkActor is the actor of a download: in V1 the single download link
 	// of a transfer does not identify which recipient uses it; since 1.1 the
 	// details of a download through a recipient link name the link.
 	linkActor = "link"
 )
+
+// dedupObject returns the object of the deduplication key of a start of
+// object: e2eObject for every file of an end-to-end encrypted transfer
+// (e2e), object otherwise. The audit event keeps the file ID.
+func dedupObject(object string, e2e bool) string {
+	if e2e {
+		return e2eObject
+	}
+	return object
+}
 
 // linkIDOf returns the ID of the recipient link l, "" for a shared link
 // (nil).
@@ -134,7 +152,7 @@ func (s *Service) downloadStarted(ctx context.Context, t *tenant.Tenant, trfID, 
 // An allowed GET returns the time its start was counted, for
 // [Service.touchStart]; the zero time otherwise.
 func (s *Service) claimStart(ctx context.Context, t *tenant.Tenant, d store.TransferDetails, linkID, object string, ip netip.Addr, get bool) (time.Time, error) {
-	k := linkStartKey(t.ID, d.ID, linkID, object, ip)
+	k := linkStartKey(t.ID, d.ID, linkID, dedupObject(object, d.E2E), ip)
 	unlock := s.lock(key{tid: t.ID, id: d.ID})
 	defer unlock()
 	now := s.now()
@@ -149,7 +167,16 @@ func (s *Service) claimStart(ctx context.Context, t *tenant.Tenant, d store.Tran
 	}
 	cctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
-	_, err := s.repo.claim(cctx, t.ID, d.ID, linkID, itemOf(object), now, now.Add(s.opts.Grace), startEvent(d.ID, linkID, object, ip))
+	// The grace period of an end-to-end encrypted transfer lasts at least
+	// the ceiling of the window of its counted client: the browser fetches
+	// its files one after the other to build their archive, and none may
+	// be gone before the last one is fetched. Every other client is
+	// refused at the limit meanwhile.
+	deleteAt := now.Add(s.opts.Grace)
+	if d.E2E {
+		deleteAt = now.Add(max(s.opts.Grace, s.starts.ceiling))
+	}
+	_, err := s.repo.claim(cctx, t.ID, d.ID, linkID, itemOf(object), now, deleteAt, startEvent(d.ID, linkID, object, ip))
 	switch {
 	case errors.Is(err, store.ErrMaxDownloads):
 		return time.Time{}, ErrMaxDownloads
@@ -179,8 +206,8 @@ func (s *Service) claimStart(ctx context.Context, t *tenant.Tenant, d store.Tran
 // chose to end before it: a client downloading the same file again after
 // the window is counted again, and a client looping on a short range
 // cannot keep its window open.
-func (s *Service) touchStart(tid tenant.ID, trfID, linkID, object string, ip netip.Addr, claimed time.Time) {
-	s.starts.extend(linkStartKey(tid, trfID, linkID, object, ip), claimed, s.now())
+func (s *Service) touchStart(tid tenant.ID, trfID, linkID, object string, e2e bool, ip netip.Addr, claimed time.Time) {
+	s.starts.extend(linkStartKey(tid, trfID, linkID, dedupObject(object, e2e), ip), claimed, s.now())
 }
 
 // bytesServed counts n plaintext bytes served for tenant tid, if any.

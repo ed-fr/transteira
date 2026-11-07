@@ -44,6 +44,7 @@
     maxDownloads: 'tt-deposit-max-downloads',
     recipientVerification: 'tt-deposit-recipient-verification',
     linkOnly: 'tt-deposit-link-only',
+    endToEnd: 'tt-deposit-e2e',
     files: 'tt-deposit-files',
   };
 
@@ -116,6 +117,8 @@
         return t('deposit.form.recipientVerification.label');
       case 'linkOnly':
         return t('deposit.form.linkOnly.label');
+      case 'endToEnd':
+        return t('deposit.e2e.label');
       case 'files':
         return t('deposit.form.files.label');
     }
@@ -303,6 +306,18 @@
       error={say(errors['linkOnly'])}
       checked={flow.form.linkOnly}
       onchange={(e) => flow.setLinkOnly(e.currentTarget.checked)}
+    />
+  {/if}
+
+  {#if flow.e2eOffered}
+    <Checkbox
+      id={ids.endToEnd}
+      label={t('deposit.e2e.label')}
+      hint={flow.e2eRequired ? t('deposit.e2e.requiredHint') : t('deposit.e2e.hint')}
+      disabled={flow.e2eRequired}
+      error={say(errors['endToEnd'])}
+      checked={flow.e2eEffective}
+      onchange={(e) => (flow.form.endToEnd = e.currentTarget.checked)}
     />
   {/if}
 

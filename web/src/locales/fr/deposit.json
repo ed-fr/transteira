@@ -199,5 +199,42 @@
     "select": "Sélectionnez de nouveau les mêmes fichiers",
     "ready": "Tous les fichiers nécessaires sont sélectionnés.",
     "continue": "Reprendre l’envoi"
+  },
+  "e2e": {
+    "label": "Chiffrer de bout en bout dans mon navigateur",
+    "hint": "Les fichiers, leurs noms et le message sont chiffrés dans votre navigateur avant l’envoi : le serveur ne peut pas les lire. Ils ne sont pas analysés par l’antivirus. À la fin, vous obtenez une clé de déchiffrement : transmettez-la aux destinataires par un autre canal (téléphone, SMS), jamais dans le même mail. Sans elle, les fichiers ne peuvent pas être ouverts.",
+    "requiredHint": "Imposé par votre organisation pour ce transfert. Les fichiers, leurs noms et le message sont chiffrés dans votre navigateur et ne sont pas analysés par l’antivirus. À la fin, vous obtenez une clé de déchiffrement à transmettre aux destinataires par un autre canal.",
+    "required": "Ce transfert doit être chiffré de bout en bout.",
+    "forbidden": "Le chiffrement de bout en bout n’est pas autorisé pour ce transfert.",
+    "unsupported": "Ce navigateur ne peut pas chiffrer les fichiers (une connexion sécurisée et un navigateur récent sont nécessaires). Utilisez un autre navigateur.",
+    "prepareFailed": "Les fichiers n’ont pas pu être préparés pour le chiffrement. Vérifiez qu’ils sont toujours disponibles, puis réessayez.",
+    "resumeChanged": "Un fichier sélectionné n’est pas exactement celui du transfert interrompu (son contenu a changé). Par sécurité, ce transfert ne peut pas être repris : commencez un nouveau transfert.",
+    "scanStatus": "non analysé (chiffré de bout en bout)",
+    "notScanned": "Chiffré de bout en bout : l’antivirus ne peut pas analyser ce fichier.",
+    "uploadNote": "Les fichiers sont chiffrés dans votre navigateur au fil de l’envoi.",
+    "preparing": {
+      "title": "Préparation du chiffrement",
+      "text": "Votre navigateur lit chaque fichier une fois pour calculer son empreinte avant de le chiffrer. Les fichiers ne quittent pas votre ordinateur pendant cette étape.",
+      "progress": "Préparation des fichiers",
+      "value": "{hashed} sur {total} lus ({percent} %)",
+      "cancel": "Annuler",
+      "cancelled": "La préparation a été annulée. Vous pouvez modifier le transfert et l’envoyer à nouveau.",
+      "announce": "Préparation : {percent} %.",
+      "done": "Préparation terminée, création du transfert.",
+      "resumeTitle": "Vérification des fichiers",
+      "resumeText": "Votre navigateur relit chaque fichier pour vérifier qu’il est exactement celui sélectionné avant l’interruption. Les fichiers ne quittent pas votre ordinateur pendant cette étape.",
+      "resumeCancelled": "La vérification a été annulée. Sélectionnez à nouveau les fichiers pour reprendre l’envoi."
+    },
+    "done": {
+      "title": "Clé de déchiffrement",
+      "intro": "Les fichiers sont chiffrés de bout en bout. Les destinataires ont besoin de cette clé pour les ouvrir : transmettez-la par un autre canal que le lien de téléchargement (téléphone, SMS).",
+      "shownOnce": "Cette clé n’est affichée qu’une seule fois et n’est conservée nulle part : copiez-la maintenant. Sans elle, les fichiers ne peuvent pas être ouverts, pas même par les administrateurs.",
+      "label": "Clé de déchiffrement",
+      "copy": "Copier la clé",
+      "linkLabel": "Lien de téléchargement avec sa clé",
+      "linkNote": "Ce lien contient la clé de déchiffrement : toute personne qui le possède peut ouvrir les fichiers.",
+      "encryption": "Chiffrement",
+      "encryptionNote": "De bout en bout : le serveur ne peut lire ni les fichiers, ni leurs noms, ni le message."
+    }
   }
 }

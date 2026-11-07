@@ -2,6 +2,16 @@
 // and the fingerprints of its files (name, folder, size, last modification), never their content or
 // the CSRF token. The browser cannot reopen a file by itself: the user selects the same files
 // again and matchFiles pairs them with the transfer's files.
+//
+// For an end-to-end encrypted transfer the record also keeps the transfer key K and the header
+// salt of each file (decision of 2026-11-07, T-160): the encryption is deterministic once the salt
+// is drawn, so the bytes regenerated after a reload match those the server already holds. It
+// also keeps the plaintext SHA-256 of each file: a reselected file is matched by its fingerprint
+// only, so it is hashed again and refused when its content differs (the same key, salt and
+// nonces must never encrypt another plaintext). The record is cleared at the end of the upload
+// and on abandon, and dies with the tab.
+import { decodeBase64Url } from '../e2e/base64url';
+import { KEY_SIZE, SALT_SIZE, validChunkSize } from '../e2e/tte2';
 
 /** Fingerprint of a selected file. */
 export interface FileFingerprint {
@@ -12,11 +22,25 @@ export interface FileFingerprint {
   path?: string | undefined;
 }
 
+/** Encryption state of an end-to-end encrypted transfer being uploaded. */
+export interface ResumeE2E {
+  /** Transfer key K, base64url without padding. */
+  key: string;
+  /** Header salt of each file, base64url without padding, in the declared order. */
+  salts: string[];
+  /** Plaintext SHA-256 of each file, lowercase hexadecimal, in the declared order. */
+  sha256: string[];
+  /** Plaintext chunk size of the streams. */
+  chunkSize: number;
+}
+
 /** What is kept between reloads. */
 export interface ResumeRecord {
   transferId: string;
   /** Fingerprints in the declared order of the transfer's files. */
   files: FileFingerprint[];
+  /** Present for an end-to-end encrypted transfer. */
+  e2e?: ResumeE2E | undefined;
 }
 
 /** Persistent store of the transfer being uploaded. */
@@ -56,6 +80,29 @@ function isFingerprint(value: unknown): value is FileFingerprint {
   );
 }
 
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+function hasBytes(value: unknown, size: number): boolean {
+  return typeof value === 'string' && decodeBase64Url(value)?.length === size;
+}
+
+/** Validates the encryption part of a record holding count files. */
+export function isResumeE2E(value: unknown, count: number): value is ResumeE2E {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    hasBytes(v.key, KEY_SIZE) &&
+    Array.isArray(v.salts) &&
+    v.salts.length === count &&
+    v.salts.every((salt) => hasBytes(salt, SALT_SIZE)) &&
+    Array.isArray(v.sha256) &&
+    v.sha256.length === count &&
+    v.sha256.every((h) => typeof h === 'string' && SHA256_HEX.test(h)) &&
+    typeof v.chunkSize === 'number' &&
+    validChunkSize(v.chunkSize)
+  );
+}
+
 /** Validates a parsed record (the storage may hold anything). */
 export function isResumeRecord(value: unknown): value is ResumeRecord {
   if (typeof value !== 'object' || value === null) return false;
@@ -65,7 +112,8 @@ export function isResumeRecord(value: unknown): value is ResumeRecord {
     v.transferId !== '' &&
     Array.isArray(v.files) &&
     v.files.length > 0 &&
-    v.files.every(isFingerprint)
+    v.files.every(isFingerprint) &&
+    (v.e2e === undefined || isResumeE2E(v.e2e, v.files.length))
   );
 }
 
@@ -80,7 +128,12 @@ export function createResumeStore(
   return {
     save(record) {
       try {
-        storage()?.setItem(key, JSON.stringify({ transferId: record.transferId, files: record.files }));
+        const kept: ResumeRecord = { transferId: record.transferId, files: record.files };
+        if (record.e2e !== undefined) {
+          const { key: k, salts, sha256, chunkSize } = record.e2e;
+          kept.e2e = { key: k, salts, sha256, chunkSize };
+        }
+        storage()?.setItem(key, JSON.stringify(kept));
       } catch {
         // Not persisted: resuming after a reload is a convenience.
       }
@@ -92,7 +145,12 @@ export function createResumeStore(
         const parsed: unknown = JSON.parse(raw);
         if (!isResumeRecord(parsed)) return undefined;
         // Records saved before folders existed have no path: the root.
-        return { ...parsed, files: parsed.files.map((fp) => ({ ...fp, path: fp.path ?? '' })) };
+        const out: ResumeRecord = {
+          ...parsed,
+          files: parsed.files.map((fp) => ({ ...fp, path: fp.path ?? '' })),
+        };
+        if (parsed.e2e === undefined) delete out.e2e;
+        return out;
       } catch {
         return undefined;
       }

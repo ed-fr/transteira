@@ -19,6 +19,8 @@ export default defineConfig({
       // types, tests and the browser entry point excepted; .svelte components are not measured).
       include: [
         'src/shared/{api,router,i18n,upload,safe,theme,validation}/**/*.ts',
+        'src/shared/e2e/**/*.ts',
+        'src/e2e-sw/**/*.ts',
         'src/public/**/*.ts',
         'src/admin/**/*.ts',
         'src/help/**/*.ts',
@@ -29,6 +31,8 @@ export default defineConfig({
         'src/help/types.ts',
         'src/public/main.ts',
         'src/admin/main.ts',
+        // Thin Service Worker entry point (event wiring only); its logic is e2e-sw/handler.ts.
+        'src/e2e-sw/sw.ts',
         '**/*.d.ts',
         '**/*.test.ts',
         '**/*.test-helper.ts',

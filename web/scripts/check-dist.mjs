@@ -2,6 +2,10 @@
 // internal/httpserver/webui.go (threat model T-91, T-95):
 //
 //   - both entry pages exist and every asset they reference (transitively) exists;
+//   - the Service Worker of the end-to-end encrypted downloads, a root file of fixed name
+//     (SERVICE_WORKER, built by vite.sw.config.ts), exists and is self-contained: a classic
+//     script that loads nothing (no import, no importScripts, no reference to a build asset), checked
+//     like the files of the public application (it runs on the tenant hosts);
 //   - no inline <script> (every <script> has a same-origin src: a fingerprinted /assets/ file,
 //     or an allowlisted root file of the build, ROOT_SCRIPTS, copied from static/), no <style>
 //     element, no inline event handler attribute (onclick=...) in the HTML;
@@ -36,6 +40,8 @@ const URL_ALLOW = [
 ];
 // Root scripts the entry pages may load besides /assets/: adding one is a deliberate change here.
 const ROOT_SCRIPTS = new Set(['/theme-init.js']);
+// Service Worker script registered by the public application (shared/e2e/sw-protocol.ts SW_URL).
+const SERVICE_WORKER = 'e2e-sw.js';
 
 const violations = [];
 const report = (file, message) => violations.push(`${file}: ${message}`);
@@ -103,6 +109,17 @@ function reachable(entry) {
 }
 const publicFiles = contents.has('public/index.html') ? reachable('public/index.html') : new Set();
 if (contents.has('admin/index.html')) reachable('admin/index.html');
+
+const sw = contents.get(SERVICE_WORKER);
+if (sw === undefined) {
+  report(SERVICE_WORKER, 'missing Service Worker script (vite.sw.config.ts)');
+} else {
+  publicFiles.add(SERVICE_WORKER);
+  if (/\bimportScripts\s*\(|\bimport\s*\(|^\s*import[\s{*'"]|^\s*export\s/m.test(sw)) {
+    report(SERVICE_WORKER, 'not a self-contained classic script (import, importScripts or export)');
+  }
+  if (/assets\/[A-Za-z0-9_.-]+\.[A-Za-z0-9]+/.test(sw)) report(SERVICE_WORKER, 'references a build asset');
+}
 
 for (const [file, text] of contents) {
   if (file.endsWith('.html')) {

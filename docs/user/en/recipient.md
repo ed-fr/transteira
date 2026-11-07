@@ -118,6 +118,30 @@ These files are delivered anyway, because they may be perfectly legitimate. Befo
 
 > **Note** If the sender has limited the number of downloads, every start of a download counts, whoever downloads. When the page shows **Maximum number of downloads reached**, the transfer can no longer be downloaded: ask the sender to send the files again.
 
+<!-- topic: download-e2e -->
+## End-to-end encrypted transfer
+
+Some transfers are encrypted end to end: the files were encrypted in the sender's browser, and the server cannot read them. To open them, you need a **decryption key**. The sender must give it to you **through another channel** than the email with the link (phone, text message, another messenger).
+
+Two cases:
+
+- if the link you received ends with `#k=` followed by the key, the page reads it by itself;
+- otherwise, the page shows **Decryption key**. Paste the key (43 characters) or the complete link that contains it, then click **Decrypt**.
+
+![The download page of an encrypted transfer, with the Decryption key field and the Decrypt button](../screenshots/en/download-e2e-key.png)
+
+The key is never sent to the server. If it is wrong, the page says so: **This key does not open this transfer**. Check it with the sender. If the page says a file was removed or altered, do not use this transfer and contact the sender.
+
+The download works as usual, with a few differences:
+
+- **Your browser decrypts while downloading.** The file is checked as it goes (size and SHA-256 fingerprint). If it is damaged or altered, the download fails: do not use what may have been saved, and start again.
+- **All files in a ZIP archive**: your browser builds the archive. It is not compressed.
+- **Two fingerprints** are shown. The fingerprint of the original file is declared by the sender and checked during the download. The fingerprint of the encrypted file is computed by the server.
+- **No antivirus analysis**: the files are marked "not analysed: end-to-end encrypted". Apply the precautions of the section [Files not analysed by the antivirus](topic:download-not-scanned).
+- If the number of downloads is limited, the ZIP archive counts as **one** download, not one per file.
+
+A recent browser is required, with background services ("Service Workers") allowed. In some private browsing modes they are disabled: the browser then decrypts in memory, up to 512 MiB. Beyond that, the page suggests another browser (Firefox, Chrome, Edge or Safari, outside private browsing).
+
 <!-- topic: download-report -->
 ## Reporting abuse
 

@@ -81,6 +81,7 @@ Fill in the fields:
 - **Confidentiality level**: if your organisation offers several levels, choose the one that matches the sensitivity of the files; its description appears under it. A level can impose rules: it may restrict the available durations, make the password mandatory, force the deletion after the first download, limit the recipients to the organisation, or cap the maximum number of downloads. The form then limits the choices or fills in the options for you, and tells you why. If your organisation has a single level, the selector is not shown but its rules still apply.
 - **Recipients must verify their address by a code**: shown when your organisation offers it. Each recipient then receives a personal link and must type a code sent to their own address before downloading, so a link forwarded to someone else is useless. Tell your recipients not to forward their link. A confidentiality level can make this option mandatory: it is then checked and cannot be changed. The recipients who have not downloaded the files receive a reminder email the day before the transfer expires.
 - **Maximum number of downloads**: optional, from 1 to 1000. The transfer counts every start of a download, by all the recipients together (an interrupted download that resumes counts once). Once the number is reached, the transfer can no longer be downloaded and is deleted a few minutes later. Leave the field empty for no limit, unless the chosen level sets a cap.
+- **Encrypt end to end in my browser**: offered if your organisation allows it (or required, or absent if it forbids it). Your files are encrypted before they leave your computer: see [End-to-end encryption](topic:deposit-e2e). This option does not exist for a deposit through a drop link.
 - **Files to send**: drag your files onto the area **Drag and drop files here, or** click **choose files**. To remove a file from the list, use the remove button next to its name. Under the list, the form shows **Total:** followed by the size of your files and the size allowed.
 
 <!-- rules: levels -->
@@ -189,6 +190,36 @@ When you click **Send**, the link is shown **only once**, at the end of the depo
 > **Good to know** With no identified recipient, the download tracking names nobody.
 
 If you lose the link, open [My transfers](topic:my-transfers) and click **New link**: the old link stops working.
+
+<!-- topic: deposit-e2e -->
+## End-to-end encryption
+
+End-to-end encryption protects your files even from the server. Your files are encrypted **in your browser**, before they are sent. The key is never sent to the server, so the server cannot read them. Only the people you give the key to can open them.
+
+In the [New transfer](topic:deposit-options) form, tick **Encrypt end to end in my browser**. Depending on the rules of your organisation and of the chosen confidentiality level, the box is offered, already ticked and locked (encryption required), or absent (encryption forbidden). It is never offered for a deposit through a drop link.
+
+![New transfer form with the box Encrypt end to end in my browser ticked](../screenshots/en/deposit-e2e-option.png)
+
+When you click **Send**:
+
+1. The browser **first reads each file** to compute its SHA-256 fingerprint. Allow about a minute and a half per 10 GB. The page shows the progress.
+2. It then encrypts the files **while they are sent**. Your computer works a little harder than usual: keep the page open.
+3. File names, folders, types, sizes, fingerprints and your message are encrypted too. The server only sees generic names.
+
+At the end, the page shows the **decryption key**. It is shown **only once**: copy it before leaving the page. The emails sent to the recipients contain the link, but **never the key**. Send it yourself **through another channel** than the one that carries the link (phone, text message, another messenger). Without it, nobody can open the files, not even you or your administrator.
+
+![Decryption key screen with the key to send through another channel and the Copy the key button](../screenshots/en/deposit-e2e-key.png)
+
+For a [link-only](topic:link-only) transfer, the screen shows the **complete link**, which ends with `#k=` followed by the key. That link is enough to open the files: pass it on carefully.
+
+**If the page is reloaded or closed by mistake**, the upload can resume. The browser keeps the key and the resume information in the memory of the tab until the upload ends or is cancelled. Come back to the upload page in the same tab and follow [Following the upload](topic:deposit-upload).
+
+Good to know:
+
+- **No antivirus analysis.** The server cannot read the files, so they are never analysed. They are marked "not analysed: end-to-end encrypted", for you and for the recipients.
+- **No ZIP archive on the server.** Recipients decrypt in their browser, which builds the archive itself.
+- The server still sees the size and number of files, the sender, the recipients and the dates.
+- A recent browser is required (encryption, background tasks and data streams). Without it, the box cannot be used.
 
 <!-- topic: my-transfers -->
 ## My transfers

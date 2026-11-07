@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createResumeStore,
   fingerprint,
+  isResumeE2E,
   isResumeRecord,
   matchFiles,
   RESUME_STORAGE_KEY,
@@ -50,6 +51,54 @@ const record: ResumeRecord = {
     { name: 'b.bin', size: 0, lastModified: 3, path: '' },
   ],
 };
+
+const KEY = 'A'.repeat(43);
+const SALT = 'B'.repeat(21) + 'A';
+const SHA = 'ab'.repeat(32);
+const e2eRecord: ResumeRecord = {
+  ...record,
+  e2e: { key: KEY, salts: [SALT, SALT, SALT], sha256: [SHA, SHA, SHA], chunkSize: 1024 * 1024 },
+};
+
+describe('resume store with end-to-end encryption', () => {
+  it('saves, loads and clears the key and the salts', () => {
+    const storage = new MemoryStorage();
+    const store = createResumeStore(() => storage);
+    store.save({ ...e2eRecord, e2e: { ...e2eRecord.e2e, extra: 1 } } as ResumeRecord);
+    expect(JSON.parse(storage.getItem(RESUME_STORAGE_KEY) ?? '')).toEqual(e2eRecord);
+    expect(store.load()).toEqual(e2eRecord);
+    store.clear();
+    expect(storage.length).toBe(0);
+    store.save(record);
+    expect(store.load()).not.toHaveProperty('e2e');
+  });
+
+  it('validates the encryption part strictly', () => {
+    expect(isResumeE2E(e2eRecord.e2e, 3)).toBe(true);
+    expect(isResumeRecord(e2eRecord)).toBe(true);
+    const bad: unknown[] = [
+      null,
+      'x',
+      { ...e2eRecord.e2e, key: 'A'.repeat(42) },
+      { ...e2eRecord.e2e, key: 'A'.repeat(42) + 'B' },
+      { ...e2eRecord.e2e, key: 7 },
+      { ...e2eRecord.e2e, salts: [SALT, SALT] },
+      { ...e2eRecord.e2e, salts: 'x' },
+      { ...e2eRecord.e2e, salts: [SALT, SALT, 'AAAA'] },
+      { ...e2eRecord.e2e, sha256: [SHA, SHA] },
+      { ...e2eRecord.e2e, sha256: 'x' },
+      { ...e2eRecord.e2e, sha256: [SHA, SHA, SHA.toUpperCase()] },
+      { ...e2eRecord.e2e, sha256: [SHA, SHA, 7] },
+      { ...e2eRecord.e2e, sha256: undefined },
+      { ...e2eRecord.e2e, chunkSize: 1000 },
+      { ...e2eRecord.e2e, chunkSize: '1048576' },
+    ];
+    for (const e2e of bad) {
+      expect(isResumeE2E(e2e, 3)).toBe(false);
+      expect(isResumeRecord({ ...record, e2e })).toBe(false);
+    }
+  });
+});
 
 describe('resume store', () => {
   it('saves, loads and clears the record', () => {

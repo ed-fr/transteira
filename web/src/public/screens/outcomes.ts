@@ -221,6 +221,7 @@ export const NOT_SCANNED: readonly ScanStatus[] = [
   'not_scanned_too_large',
   'not_scanned_encrypted',
   'not_scanned_disabled',
+  'not_scanned_e2e',
 ];
 
 /** Reports whether a file was delivered without antivirus analysis. */

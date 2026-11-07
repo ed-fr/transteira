@@ -491,6 +491,116 @@ describe('upload engine', () => {
     await expect(engine.start()).rejects.toMatchObject({ code: 'file-missing' });
   });
 
+  describe('readChunk sources', () => {
+    function source(data: Uint8Array, as: 'bytes' | 'blob' = 'bytes') {
+      const reads: [number, number][] = [];
+      const readChunk = vi.fn(async (start: number, end: number) => {
+        reads.push([start, end]);
+        const part = data.slice(start, end);
+        return as === 'bytes' ? part : new Blob([part]);
+      });
+      return { reads, readChunk };
+    }
+
+    function engineWith(spec: Partial<UploadFileSpec>, server: FakeServer) {
+      return createUploadEngine([{ name: 'e', uploadUrl: '/api/v1/uploads/e', ...spec }], {
+        transport: server,
+        cancelTransfer: async () => {},
+        chunkSize: CHUNK,
+        onOnline: () => () => {},
+      });
+    }
+
+    it('sends the bytes of the source, re-reading the same range after a cut', async () => {
+      const data = content(25, 7);
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 25);
+      server.patchFaults.push({ kind: 'cut', keep: 3 });
+      const { reads, readChunk } = source(data);
+      // file is ignored when readChunk is present (its size differs from the declared one).
+      const engine = engineWith({ size: 25, offset: 0, readChunk, file: blob(3) }, server);
+      const done = engine.start();
+      await tick(1000);
+      await expect(done).resolves.toBe('completed');
+      expect(engine.getSnapshot().totalBytes).toBe(25);
+      expect(server.bytes('/api/v1/uploads/e')).toEqual(data);
+      expect(reads).toEqual([
+        [0, 10],
+        [3, 13],
+        [13, 23],
+        [23, 25],
+      ]);
+    });
+
+    it('accepts Blob chunks', async () => {
+      const data = content(12, 3);
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 12);
+      const engine = engineWith({ size: 12, offset: 0, readChunk: source(data, 'blob').readChunk }, server);
+      await expect(engine.start()).resolves.toBe('completed');
+      expect(server.bytes('/api/v1/uploads/e')).toEqual(data);
+    });
+
+    it('fails with file-unreadable when the source rejects or returns a wrong length', async () => {
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 12);
+      const rejecting = engineWith(
+        { size: 12, offset: 0, readChunk: () => Promise.reject(new Error('NotReadableError')) },
+        server,
+      );
+      await expect(rejecting.start()).rejects.toMatchObject({ code: 'file-unreadable' });
+      const short = engineWith({ size: 12, offset: 0, readChunk: async () => new Uint8Array(2) }, server);
+      await expect(short.start()).rejects.toMatchObject({ code: 'file-unreadable' });
+      expect(server.calls).toEqual([]);
+    });
+
+    it('drops a chunk read after a pause', async () => {
+      const data = content(12, 3);
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 12);
+      let release: (() => void) | undefined;
+      const readChunk = vi.fn(
+        (start: number, end: number) =>
+          new Promise<Uint8Array<ArrayBuffer>>((resolve) => {
+            release = () => resolve(data.slice(start, end));
+          }),
+      );
+      const engine = engineWith({ size: 12, offset: 0, readChunk }, server);
+      const done = engine.start();
+      await tick();
+      engine.pause();
+      release?.();
+      await tick();
+      expect(server.calls).toEqual([]);
+      engine.resume();
+      await tick();
+      release?.();
+      await tick();
+      release?.();
+      await expect(done).resolves.toBe('completed');
+      expect(server.bytes('/api/v1/uploads/e')).toEqual(data);
+    });
+
+    it('fails at once when the server refuses the encrypted stream', async () => {
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 12);
+      server.patchFaults.push({ kind: 'status', status: 400, problemCode: 'e2e-format-invalid' });
+      const engine = engineWith({ size: 12, offset: 0, readChunk: source(content(12)).readChunk }, server);
+      await expect(engine.start()).rejects.toMatchObject({ code: 'e2e-format-invalid', status: 400 });
+      expect(engine.getSnapshot().phase).toBe('failed');
+    });
+
+    it('still treats another 400 as a conflict', async () => {
+      const server = new FakeServer();
+      server.add('/api/v1/uploads/e', 12);
+      server.patchFaults.push({ kind: 'status', status: 400, problemCode: 'validation-failed' });
+      const engine = engineWith({ size: 12, offset: 0, readChunk: source(content(12)).readChunk }, server);
+      const done = engine.start();
+      await tick(1000);
+      await expect(done).resolves.toBe('completed');
+    });
+  });
+
   it('skips files already complete without content', async () => {
     const server = new FakeServer();
     server.add('/api/v1/uploads/v', 0);

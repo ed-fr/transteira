@@ -147,8 +147,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   the forms whether to offer the option.
   Guides (French and English), API integration guide (section 11) and threat model updated.
 - End-to-end encryption, format and server support (threats T-318 to T-327 and T-336, decision
-  P66; the browser interface comes in a later step, so for now only API clients implementing the
-  format can send such transfers). Format `TTE2` (AES-256-GCM chunks, HKDF-derived per-file keys,
+  P66; the browser interface is described in the next entry). Format `TTE2` (AES-256-GCM chunks, HKDF-derived per-file keys,
   key only in the link fragment `#k=`) specified in `docs/architecture/e2e-format.md`, with the
   Go reference implementation `internal/tte2` and shared test vectors. `createTransfer` accepts
   `endToEndEncrypted` with generic names `file-<n>.tte2`, `encryptedMetadata` per file and an
@@ -164,6 +163,31 @@ and the project follows [Semantic Versioning](https://semver.org/).
   key nor message and gain the `e2e_notice` template variable. Administration: policy selectors
   and a badge in the transfer lists. Documentation: threat model, API errors and integration
   guide (section 12), super admin and delegated admin guides.
+- End-to-end encryption in the browser (V2 step 8, threats T-318 to T-327, T-160). Deposit: a
+  box "Encrypt end to end in my browser" offered by the entity and level policy (allowed,
+  required or forbidden, never for drop links). A preparation pass reads each file to compute its
+  plaintext SHA-256 (pure TypeScript, about 1.5 minutes per 10 GB), then the files are encrypted
+  during the tus upload in a Web Worker that only receives a non-extractable HKDF key. Names,
+  folders, types, sizes, SHA-256 and the message are sealed. The done screen shows the key once
+  (to send through another channel), or the full link with `#k=` for a link-only transfer.
+  Resume after a reload: the key and the per-file salts stay in the `sessionStorage` of the tab
+  (record `tt.upload`) until the end or the abandon of the upload (decision of 2026-11-07).
+  Download: the key is read from `#k=` (then removed from the URL) or typed (bare key or full
+  link); a wrong key and a tampered transfer are detected. A Service Worker (`/e2e-sw.js`, scope
+  `/e2e/`) decrypts in streaming, checks the size and the plaintext SHA-256, and builds the ZIP
+  archive in the browser (store mode, ZIP64); it never receives the raw key. Without Service
+  Worker, an in-memory fallback works up to 512 MiB. Both fingerprints (plaintext and ciphertext)
+  are shown. Documentation: depositor and recipient guides (French and English), format
+  specification (section 7), threat model.
+
+### Changed
+
+- The files of an end-to-end encrypted transfer now count as one download start per client within
+  the window, so that a ZIP archive built by the browser counts once against the maximum number of
+  downloads instead of once per file (transfers with a download limit only; without a limit every
+  file start is still recorded and audited). The window moves at the end of every file response,
+  and the start reaching the limit makes such a transfer due for deletion after the longer of the
+  grace period and the 4-hour window ceiling, so that the browser can fetch the last file.
 
 ## [1.2.1] - 2026-11-04
 

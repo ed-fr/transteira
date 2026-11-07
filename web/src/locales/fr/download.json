@@ -122,5 +122,40 @@
       "invalid": "Le signalement est invalide : vérifiez le motif et la longueur du message.",
       "error": "Le signalement n’a pas pu être envoyé. Réessayez."
     }
+  },
+  "e2e": {
+    "lockedNotice": "Ce transfert est chiffré de bout en bout : une fois déverrouillé, il vous faudra aussi sa clé de déchiffrement, que l’expéditeur vous transmet.",
+    "notice": "Les fichiers de ce transfert sont chiffrés de bout en bout : ils sont déchiffrés dans votre navigateur avec la clé transmise par l’expéditeur, et le serveur ne peut pas les lire. Pour cette raison, ils n’ont pas été analysés par l’antivirus : ne les ouvrez que si vous faites confiance à l’expéditeur.",
+    "notScanned": "Non analysé par l’antivirus : ce fichier est chiffré de bout en bout, le serveur ne peut pas le lire.",
+    "opening": "Déchiffrement de la liste des fichiers…",
+    "opened": "Transfert déchiffré : les fichiers sont affichés.",
+    "tampered": "Ce transfert ne peut pas être déchiffré en toute sécurité : un fichier a été retiré ou modifié. Ne l’utilisez pas et contactez l’expéditeur.",
+    "sha256Plain": "Empreinte du fichier d’origine, déclarée par l’expéditeur",
+    "sha256Cipher": "Empreinte du fichier chiffré",
+    "copyCipherSha": "Copier l’empreinte du fichier chiffré {name}",
+    "integrity": "Chaque fichier est contrôlé pendant son déchiffrement avec l’empreinte déclarée par l’expéditeur : un fichier abîmé ou modifié fait échouer le téléchargement.",
+    "archiveHint": "L’archive est déchiffrée et construite dans votre navigateur. Elle n’est pas compressée : sa taille est proche de la taille totale des fichiers.",
+    "busy": "Déchiffrement…",
+    "unsupported": "Ce navigateur ne peut pas déchiffrer les fichiers de ce transfert : une connexion sécurisée (https) et un navigateur récent sont nécessaires. Ouvrez le lien dans une version récente de Firefox, Chrome, Edge ou Safari.",
+    "busyName": "Déchiffrement de {name}…",
+    "started": "Le téléchargement de {name} a commencé.",
+    "done": "Le téléchargement de {name} est terminé.",
+    "key": {
+      "title": "Clé de déchiffrement",
+      "text": "Ce transfert est chiffré de bout en bout. Saisissez la clé de déchiffrement que l’expéditeur vous a transmise par un autre canal, ou collez le lien complet qui la contient.",
+      "label": "Clé de déchiffrement",
+      "hint": "43 caractères, ou le lien complet terminé par #k=…",
+      "submit": "Déchiffrer",
+      "required": "Saisissez la clé de déchiffrement.",
+      "invalid": "Ce n’est pas une clé valide : vérifiez que vous l’avez copiée en entier.",
+      "wrong": "Cette clé n’ouvre pas ce transfert : vérifiez-la auprès de l’expéditeur.",
+      "wrongLink": "La clé contenue dans le lien n’ouvre pas ce transfert. Saisissez la clé que l’expéditeur vous a transmise."
+    },
+    "error": {
+      "corrupt": "Le fichier n’a pas pu être déchiffré : il est abîmé ou a été modifié. N’utilisez pas ce qui a pu être enregistré, et téléchargez-le à nouveau.",
+      "unsupportedBrowser": "Ce navigateur ne peut pas déchiffrer un fichier aussi volumineux. Utilisez une version récente de Firefox, Chrome, Edge ou Safari, hors navigation privée.",
+      "network": "Le téléchargement a été interrompu par une erreur réseau. Réessayez.",
+      "unavailable": "Votre accès aux fichiers a expiré ou le transfert n’est plus disponible : la page a été actualisée."
+    }
   }
 }

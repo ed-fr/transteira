@@ -12,7 +12,7 @@ const workers = Number(process.env.E2E_WORKERS ?? Math.max(1, Math.min(4, Math.f
 // Specs that change state shared by every test of the run (maintenance mode refuses deposits on
 // every entity): they run in the "system-serial" project, one test at a time, after the main
 // project has finished. Run one alone with `--project=system-serial --no-deps`.
-const SERIAL_SPECS = /admin-system\.spec\.ts$/;
+const SERIAL_SPECS = /(admin-system|public-e2e)\.spec\.ts$/;
 
 // Documentation screenshots (specs/screenshots.spec.ts): only with SCREENSHOTS=1 (`make
 // screenshots`), alone, on one worker and in order, so that the data shown is deterministic.

@@ -10,7 +10,7 @@ export const CHUNK_SIZE = 32 * 1024 * 1024;
 
 /** Outcome of a HEAD request on an upload resource. */
 export interface HeadResult {
-  /** HTTP status (200 on success; tus errors have no body, the status is the whole answer). */
+  /** HTTP status (200 on success; tus errors carry no useful body, the status is the answer). */
   status: number;
   /** Upload-Offset: bytes already received by the server (present on 200). */
   offset?: number;
@@ -28,6 +28,8 @@ export interface PatchResult {
   offset?: number;
   /** Retry-After in seconds (429, 503). */
   retryAfterSeconds?: number;
+  /** Problem code of a 400 answer with an application/problem+json body (e2e-format-invalid). */
+  problemCode?: string;
 }
 
 /** Options of a PATCH request. */

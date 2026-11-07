@@ -4,6 +4,9 @@
   // decision D2): the recipients receive it by mail. The one exception is a link-only transfer
   // (since 2.0): no mail is sent, and the link received once in the answer of the finalization
   // is shown here with a Copy button and a warning that it will not be shown again.
+  // For an end-to-end encrypted transfer (since 2.0) the decryption key is shown once, to be sent
+  // through another channel; a link-only transfer then shows its full link, key included
+  // (".../d/<token>#k=<key>"). The key only lives in the flow until this step is left.
   import { Alert, Button, CopyButton } from '../../shared/components';
   import { formatDate, t } from '../../shared/i18n/i18n.svelte';
   import type { DepositFlow } from './flow.svelte';
@@ -20,6 +23,12 @@
   const transfer = $derived(flow.transfer);
   const available = $derived(flow.outcome === 'available');
   const linkOnly = $derived(available && transfer?.linkOnly === true);
+  const e2eKey = $derived(available ? flow.e2eKey : undefined);
+  const fullLink = $derived(
+    flow.linkOnlyUrl === undefined || e2eKey === undefined
+      ? flow.linkOnlyUrl
+      : `${flow.linkOnlyUrl}#k=${e2eKey}`,
+  );
 </script>
 
 <SessionBar {flow} {onnavigate} />
@@ -42,10 +51,17 @@
       <Alert severity="warning" live={false}>
         <p class="tt-text-bold tt-mb-0">{t('deposit.done.linkOnly.shownOnce')}</p>
       </Alert>
-      <p class="tt-mb-0" id="tt-done-link-label">{t('deposit.done.linkOnly.label')}</p>
-      <code class="tt-done-link" aria-labelledby="tt-done-link-label">{flow.linkOnlyUrl}</code>
+      <p class="tt-mb-0" id="tt-done-link-label">
+        {e2eKey ? t('deposit.e2e.done.linkLabel') : t('deposit.done.linkOnly.label')}
+      </p>
+      <code class="tt-done-link" aria-labelledby="tt-done-link-label" data-testid="deposit-done-link"
+        >{fullLink}</code
+      >
+      {#if e2eKey}
+        <p class="tt-text-sm tt-mb-0">{t('deposit.e2e.done.linkNote')}</p>
+      {/if}
       <div>
-        <CopyButton text={flow.linkOnlyUrl} label={t('deposit.done.linkOnly.copy')} />
+        <CopyButton text={fullLink ?? ''} label={t('deposit.done.linkOnly.copy')} />
       </div>
     {:else}
       <Alert severity="info" live={false}>
@@ -57,6 +73,26 @@
         {/if}
       </Alert>
     {/if}
+  </section>
+{/if}
+
+{#if e2eKey}
+  <section aria-labelledby="tt-done-key-title" class="tt-stack" data-testid="deposit-e2e-key-section">
+    <h2 id="tt-done-key-title">{t('deposit.e2e.done.title')}</h2>
+    <p>{t('deposit.e2e.done.intro')}</p>
+    <Alert severity="warning" live={false}>
+      <p class="tt-text-bold tt-mb-0">{t('deposit.e2e.done.shownOnce')}</p>
+    </Alert>
+    <p class="tt-mb-0" id="tt-done-key-label">{t('deposit.e2e.done.label')}</p>
+    <code
+      class="tt-done-link"
+      id="tt-done-key"
+      aria-labelledby="tt-done-key-label"
+      data-testid="deposit-e2e-key">{e2eKey}</code
+    >
+    <div>
+      <CopyButton text={e2eKey} label={t('deposit.e2e.done.copy')} />
+    </div>
   </section>
 {/if}
 
@@ -81,6 +117,10 @@
       <dt>{t('deposit.done.expires')}</dt>
       <dd>{formatDate(transfer.expiresAt, { dateStyle: 'full', timeStyle: 'short' })}</dd>
     {/if}
+    {#if transfer.endToEndEncrypted}
+      <dt>{t('deposit.e2e.done.encryption')}</dt>
+      <dd>{t('deposit.e2e.done.encryptionNote')}</dd>
+    {/if}
     {#if transfer.passwordProtected}
       <dt>{t('deposit.done.password')}</dt>
       <dd>{t('deposit.done.passwordNote')}</dd>
@@ -92,7 +132,7 @@
   </dl>
 
   <h2>{t('deposit.done.files')}</h2>
-  <ScanList {transfer} />
+  <ScanList {transfer} e2eFiles={flow.e2eFiles} />
 {/if}
 
 <div class="tt-cluster">

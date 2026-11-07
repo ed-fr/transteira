@@ -69,6 +69,17 @@ func TestE2EMails(t *testing.T) {
 			}
 			jobs = append(jobs, build(t, rj[0]), rj[0].Message.Text, rj[0].Message.HTML)
 
+			// The per-recipient mails carry the same notices (regression: the flag was dropped).
+			pj, err := e.n.PerRecipientJobs(ctx, e.t, tr, []RecipientLink{{Email: "r1@example.org", Link: testLink}})
+			if err != nil || len(pj) != 1 {
+				t.Fatalf("per-recipient jobs: %v (%d)", err, len(pj))
+			}
+			for _, w := range tc.wants[2:4] {
+				if !strings.Contains(pj[0].Message.Text, w) {
+					t.Errorf("per-recipient notification lacks %q:\n%s", w, pj[0].Message.Text)
+				}
+			}
+
 			sc, err := e.n.SenderConfirmation(ctx, e.t, tr, testLink)
 			if err != nil {
 				t.Fatal(err)

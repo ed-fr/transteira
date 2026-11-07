@@ -42,6 +42,6 @@
   <Spinner label={t('deposit.finalizing.spinner')} showLabel />
   <p>{t('upload.finalize.scanning')}</p>
   {#if flow.transfer}
-    <ScanList transfer={flow.transfer} />
+    <ScanList transfer={flow.transfer} e2eFiles={flow.e2eFiles} />
   {/if}
 {/if}

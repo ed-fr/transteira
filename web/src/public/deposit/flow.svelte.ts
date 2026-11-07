@@ -7,11 +7,20 @@
 //   loading → (maintenance | email | form | resume | error)
 //   email → code (202) | form (201)          code → form | email (code exhausted)
 //   form → upload → finalizing → done        upload → form (cancelled)
+//   form → preparing (end-to-end encryption: hash pass) → form (transfer created) → upload;
+//          preparing → form (cancelled)
 //   resume (reload during an upload) → upload | form
 //   reload during the antivirus analysis → finalizing (polling only) → done; reload once the
 //   transfer is decided → done
 // The download link of a transfer is never shown to the depositor (design decision D2): the
 // done step is a recap only.
+//
+// End-to-end encryption (V2, docs/architecture/e2e-format.md): the browser draws the transfer key
+// K, hashes every plaintext file (phase "preparing"), seals the metadata and the message, then
+// declares the generic names and the ciphertext sizes. The upload engine reads each tus chunk from
+// the encryption Worker (deterministic once the salt of a file is drawn), so that any resume,
+// after a reload too (K and the salts are in the resume record), regenerates the same bytes. K is
+// shown once on the done step and then forgotten.
 import { ApiProblem, NetworkError, type ApiClient } from '../../shared/api/client';
 import { problemMessage, type Translator } from '../../shared/api/problem';
 import { languageValues, type components } from '../../shared/api/schema';
@@ -30,7 +39,22 @@ import {
   type FinalizeOutcome,
   type SenderTransfer,
 } from '../../shared/upload/finalize';
-import { withPath, type AcceptedFile } from '../../shared/components/folders';
+import { fullName, withPath, type AcceptedFile } from '../../shared/components/folders';
+import { decodeBase64Url, encodeBase64Url } from '../../shared/e2e/base64url';
+import { sealMessage, sealMetadata } from '../../shared/e2e/sealed';
+import {
+  DEFAULT_CHUNK_SIZE,
+  SALT_SIZE,
+  ciphertextSize,
+  e2eFileName,
+  encodeKey,
+  generateTransferKey,
+  importTransferKey,
+  parseKey,
+  randomBytes,
+} from '../../shared/e2e/tte2';
+import { isAbortError, isFileChangedError } from '../../shared/e2e/upload-crypto-core';
+import { openUploadCrypto, type UploadCrypto } from '../../shared/e2e/upload-crypto';
 import {
   fingerprint,
   matchFiles,
@@ -74,6 +98,8 @@ export type VerificationChallenge = components['schemas']['VerificationChallenge
 export type TransferCreate = components['schemas']['TransferCreate'];
 /** Scan status of a file. */
 export type ScanStatus = components['schemas']['ScanStatus'];
+/** End-to-end encryption policy (tenant or level). */
+export type E2ePolicy = components['schemas']['E2ePolicy'];
 
 /** Invitation the depositor arrived with (/i/:token, after the invitation landing). */
 export interface InvitationContext {
@@ -117,6 +143,7 @@ export type Step =
   | 'email'
   | 'code'
   | 'form'
+  | 'preparing'
   | 'resume'
   | 'upload'
   | 'finalizing'
@@ -145,6 +172,8 @@ export interface DepositForm {
   recipientVerification: boolean;
   /** Link-only transfer: no mail to the recipients, the sender passes the link on (since 2.0). */
   linkOnly: boolean;
+  /** End-to-end encryption chosen by the sender (since 2.0); imposed when the policy requires it. */
+  endToEnd: boolean;
   /** Key of the chosen confidentiality level; undefined when the tenant has none. */
   confidentialityLevel: string | undefined;
   files: DepositFile[];
@@ -155,6 +184,28 @@ export type StepError = { message: Message } | { cause: unknown };
 
 /** Outcome of finalizeAndWait (injected). */
 export type FinalizeFn = (transferId: string, options: FinalizeOptions) => Promise<FinalizeOutcome>;
+
+/** Progress of the hash pass of an end-to-end encrypted transfer. */
+export interface Preparation {
+  /** create: before the transfer is created; resume: check of the files reselected after a reload. */
+  kind: 'create' | 'resume';
+  hashedBytes: number;
+  totalBytes: number;
+  /** Integer percentage (100 for empty files). */
+  percent: number;
+}
+
+/** Plaintext description of a file of an end-to-end encrypted transfer, known to the browser only. */
+export interface E2EFileInfo {
+  name: string;
+  /** Relative folder, '' for the root. */
+  path: string;
+  /** SHA-256 of the plaintext (computed by this page, or kept by the resume record). */
+  sha256?: string | undefined;
+}
+
+/** Opens the encryption service of a transfer (injected; openUploadCrypto by default). */
+export type CryptoFactory = (key: CryptoKey) => Promise<UploadCrypto>;
 
 /** Builds the upload engine of a transfer (injected). */
 export type EngineFactory = (specs: UploadFileSpec[], cancelTransfer: () => Promise<void>) => UploadEngine;
@@ -183,7 +234,36 @@ export interface DepositFlowDeps {
   newKey?: () => string;
   /** Clock (Date.now by default), for rate-limit countdowns. */
   now?: () => number;
+  /** Encryption service of an end-to-end encrypted transfer (Worker, else in the page). */
+  openCrypto?: CryptoFactory;
 }
+
+/** Encryption state of the end-to-end encrypted transfer being prepared or uploaded. */
+interface E2EState {
+  key: Uint8Array<ArrayBuffer>;
+  /** Header salt of each file, in the declared order. */
+  salts: Uint8Array<ArrayBuffer>[];
+  chunkSize: number;
+  /** Opened on first use, released with the state. */
+  crypto?: Promise<UploadCrypto> | undefined;
+  /** Set once the state is released: its encryption service is never opened again. */
+  released?: boolean;
+  /** Encryption prepared per file index, for the given content (plain array: not reactive). */
+  prepared: ({ file: Blob; size: Promise<number> } | undefined)[];
+}
+
+/** createTransfer body sealed for one submission, reused as is when it is retried. */
+interface SealedBody {
+  /** Serialized plaintext form of the submission (see submitTransfer). */
+  signature: string;
+  files: readonly Blob[];
+  body: TransferCreate;
+  state: E2EState;
+  info: E2EFileInfo[];
+}
+
+/** Announcement steps of the preparation (percent). */
+const PREPARE_ANNOUNCE_STEP = 10;
 
 /** Text of an upload engine announcement (pure). */
 export function announcementText(tr: Pick<Translator, 't'>, a: UploadAnnouncement): string {
@@ -212,6 +292,7 @@ export function finalizeErrorKey(code: string): string {
 
 /** Translation key of a scan status, for the recap (a generic key for a status unknown here). */
 export function scanStatusKey(tr: Pick<Translator, 'has'>, status: ScanStatus): string {
+  if (status === 'not_scanned_e2e') return 'deposit.e2e.scanStatus';
   const key = `deposit.scan.${status}`;
   return tr.has(key) ? key : 'deposit.scan.other';
 }
@@ -231,6 +312,9 @@ export function scanWarningKey(status: ScanStatus): string | undefined {
     case 'not_scanned_encrypted':
     case 'not_scanned_disabled':
       return 'deposit.done.warning.notScanned';
+    case 'not_scanned_e2e':
+      // Neutral note: the sender chose the encryption knowing it excludes the antivirus.
+      return 'deposit.e2e.notScanned';
     case 'scan_error':
       return 'deposit.done.warning.scanError';
     default:
@@ -253,6 +337,7 @@ function emptyForm(expiryDays: readonly number[] = [], levels: readonly PublicLe
     maxDownloadsText: '',
     recipientVerification: false,
     linkOnly: false,
+    endToEnd: false,
     confidentialityLevel: level?.key,
     files: [],
   };
@@ -319,6 +404,15 @@ export class DepositFlow {
   resumeRecord = $state.raw<ResumeRecord | undefined>(undefined);
   /** Files reselected on the resume step. */
   resumeFiles = $state.raw<DepositFile[]>([]);
+  /** Hash pass of an end-to-end encrypted transfer (step preparing). */
+  preparation = $state.raw<Preparation | undefined>(undefined);
+  /**
+   * Transfer key (base64url) of the end-to-end encrypted transfer just delivered, shown once on
+   * the done step; forgotten when the done step is left.
+   */
+  e2eKey = $state<string | undefined>(undefined);
+  /** Real names (and plaintext SHA-256) of the files of the end-to-end encrypted transfer. */
+  e2eFiles = $state.raw<E2EFileInfo[] | undefined>(undefined);
 
   readonly tenant: PublicTenant;
   readonly invitation: InvitationContext | undefined;
@@ -334,6 +428,13 @@ export class DepositFlow {
   #unsubscribe: (() => void)[] = [];
   #contents: (Blob | undefined)[] = [];
   #finalizeAbort: AbortController | undefined;
+  #prepareAbort: AbortController | undefined;
+  /** Number of end-to-end encrypted submissions started (see submitTransfer). */
+  #submissions = 0;
+  /** Sealed body of the current submission (end-to-end encryption), until it is created. */
+  #sealed: SealedBody | undefined;
+  /** Encryption state of the transfer being uploaded. */
+  #e2e: E2EState | undefined;
   #disposed = false;
 
   constructor(
@@ -474,6 +575,38 @@ export class DepositFlow {
     if (on) this.form.recipientVerification = false;
   }
 
+  /**
+   * End-to-end encryption policy that applies: the effective policy of the chosen level when
+   * the tenant has levels (already merged with the tenant's by the server), else the tenant's;
+   * forbidden when absent, and always for a drop link (the server refuses it there).
+   */
+  get e2ePolicy(): E2ePolicy {
+    if (this.isDropLink) return 'forbidden';
+    const level = this.level;
+    if (level !== undefined) return level.e2ePolicy ?? 'forbidden';
+    return this.tenant.features?.e2ePolicy ?? 'forbidden';
+  }
+
+  /** The end-to-end encryption option is shown. */
+  get e2eOffered(): boolean {
+    return this.e2ePolicy !== 'forbidden';
+  }
+
+  /** End-to-end encryption is imposed (the option is checked and locked). */
+  get e2eRequired(): boolean {
+    return this.e2ePolicy === 'required';
+  }
+
+  /** End-to-end encryption as sent. */
+  get e2eEffective(): boolean {
+    return this.e2eOffered && (this.e2eRequired || this.form.endToEnd);
+  }
+
+  /** The transfer being uploaded is end-to-end encrypted. */
+  get e2eActive(): boolean {
+    return this.#e2e !== undefined;
+  }
+
   /** Recipient verification as sent: forced by the level or chosen by the sender. */
   get recipientVerificationEffective(): boolean {
     if (this.form.linkOnly && this.linkOnlyOffered) return false;
@@ -505,6 +638,7 @@ export class DepositFlow {
 
   #syncLevel(): void {
     if (!this.linkOnlyOffered || this.linkOnlyBlockedByVerification) this.form.linkOnly = false;
+    if (!this.e2eOffered) this.form.endToEnd = false;
     this.form.expiryDays = keepExpiry(this.form.expiryDays, this.expiryOptions);
     this.form.maxDownloadsText = keepMaxDownloads(this.form.maxDownloadsText, this.rules);
   }
@@ -514,9 +648,13 @@ export class DepositFlow {
     return this.session?.limits ?? this.tenant.limits;
   }
 
-  /** Total size of the selected files. */
+  /**
+   * Total size the transfer declares: that of the selected files, or of their encrypted streams
+   * (slightly larger) with end-to-end encryption, which is what the size limit applies to.
+   */
   get totalBytes(): number {
-    return this.form.files.reduce((sum, f) => sum + f.size, 0);
+    const e2e = this.e2eEffective;
+    return this.form.files.reduce((sum, f) => sum + (e2e ? encryptedSize(f.size) : f.size), 0);
   }
 
   /** Addresses parsed from the recipients field. */
@@ -736,9 +874,14 @@ export class DepositFlow {
     const needRecipients =
       session.kind !== 'external' && session.kind !== 'reply' && session.kind !== 'drop_link';
     const linkOnly = this.linkOnlyEffective;
+    const e2e = this.e2eEffective;
+    // The size limit applies to the declared sizes: those of the encrypted streams with E2E.
+    const checked = e2e
+      ? { ...this.form, files: this.form.files.map((f) => ({ name: f.name, size: encryptedSize(f.size) })) }
+      : this.form;
     const errors = {
       ...validateForm(
-        this.form,
+        checked,
         { ...session.limits, expiryDays: this.expiryOptions },
         needRecipients,
         linkOnly,
@@ -783,15 +926,32 @@ export class DepositFlow {
     if ((languageValues as readonly string[]).includes(language)) {
       body.language = language as TransferCreate['language'];
     }
-    // The key is kept across transient failures only while the request stays the same.
+    if (e2e) body.endToEndEncrypted = true;
+    // The key is kept across transient failures only while the request stays the same. With
+    // end-to-end encryption the plaintext form is compared, and the body sealed for it (random
+    // key, salts and nonces) is reused as is, so that a retry sends exactly the same request.
     const serialized = JSON.stringify(body);
-    if (this.#lastBody !== undefined && this.#lastBody !== serialized) this.#key.renew();
+    if (this.#lastBody !== undefined && this.#lastBody !== serialized) this.#renewKey();
     this.#lastBody = serialized;
     this.busy = true;
+    let sealed: SealedBody | undefined;
+    if (e2e) {
+      const run = ++this.#submissions;
+      sealed = this.#sealedFor(serialized, files) ?? (await this.#prepareE2E(serialized, body, files));
+      if (sealed === undefined) {
+        // A cancelled preparation may settle after the next submission has started.
+        if (run === this.#submissions) this.busy = false;
+        return;
+      }
+      this.#sealed = sealed;
+    }
     let transfer: SenderTransfer;
     try {
       transfer = (
-        await this.#deps.api.post('/transfers', { body, headers: { 'Idempotency-Key': this.#key.value } })
+        await this.#deps.api.post('/transfers', {
+          body: sealed?.body ?? body,
+          headers: { 'Idempotency-Key': this.#key.value },
+        })
       ).data;
     } catch (err) {
       this.busy = false;
@@ -799,11 +959,43 @@ export class DepositFlow {
       return;
     }
     this.busy = false;
+    const record: ResumeRecord = { transferId: transfer.id, files: files.map((f) => fingerprint(f)) };
+    this.#clearE2E();
+    this.e2eFiles = undefined;
+    if (sealed !== undefined) {
+      // The state now belongs to the upload: keep it out of #renewKey's reach.
+      this.#sealed = undefined;
+      this.#e2e = sealed.state;
+      this.e2eFiles = sealed.info;
+      record.e2e = {
+        key: encodeKey(sealed.state.key),
+        salts: sealed.state.salts.map(encodeBase64Url),
+        sha256: sealed.info.map((f) => f.sha256 ?? ''),
+        chunkSize: sealed.state.chunkSize,
+      };
+    }
     this.#renewKey();
     this.retryAt = undefined;
-    this.#deps.resumeStore.save({ transferId: transfer.id, files: files.map((f) => fingerprint(f)) });
+    this.#deps.resumeStore.save(record);
     this.form.password = '';
     this.#runUpload(transfer, files, true);
+  }
+
+  /**
+   * Cancels the hash pass of an end-to-end encrypted transfer: back to the form, or to the resume
+   * step when it was the check of the files reselected after a reload.
+   */
+  cancelPreparing(): void {
+    if (this.#prepareAbort === undefined) return;
+    const resuming = this.preparation?.kind === 'resume';
+    this.#prepareAbort.abort();
+    this.#prepareAbort = undefined;
+    this.preparation = undefined;
+    this.busy = false;
+    this.step = resuming ? 'resume' : 'form';
+    this.notice = {
+      key: resuming ? 'deposit.e2e.preparing.resumeCancelled' : 'deposit.e2e.preparing.cancelled',
+    };
   }
 
   // ---- Upload -----------------------------------------------------------------------------
@@ -839,6 +1031,8 @@ export class DepositFlow {
     if (this.#disposed || this.#engine !== engine) return;
     this.#deps.resumeStore.clear();
     this.#disposeEngine();
+    this.#clearE2E();
+    this.e2eFiles = undefined;
     this.transfer = undefined;
     this.upload = undefined;
     this.notice = failed ? undefined : { key: 'deposit.upload.cancelled' };
@@ -865,12 +1059,29 @@ export class DepositFlow {
     this.addResumeFiles(files.map(withPath));
   }
 
-  /** Continues the interrupted upload with the reselected files. */
-  continueResume(): void {
+  /**
+   * Continues the interrupted upload with the reselected files. For an end-to-end encrypted
+   * transfer every reselected file is first hashed again (step preparing) and compared with the
+   * SHA-256 of the record: the fingerprint (name, size, date) does not prove the content, and a
+   * different plaintext must never be encrypted with the stored key and salt. A file that differs
+   * ends the transfer (deposit.e2e.resumeChanged): it is abandoned and the record dropped.
+   */
+  async continueResume(): Promise<void> {
     const record = this.resumeRecord;
     const transfer = this.transfer;
-    if (record === undefined || transfer === undefined || this.resumeMissing.length > 0) return;
+    if (this.busy || record === undefined || transfer === undefined || this.resumeMissing.length > 0) {
+      return;
+    }
     const match = matchFiles(record, this.resumeFiles);
+    const state = this.#e2e;
+    if (state !== undefined && record.e2e !== undefined) {
+      const verdict = await this.#checkResumed(state, record.e2e.sha256, match.files);
+      if (verdict === 'stopped' || this.#disposed || this.#e2e !== state) return;
+      if (verdict === 'changed') {
+        await this.#refuseChanged(transfer.id);
+        return;
+      }
+    }
     this.resumeRecord = undefined;
     this.resumeFiles = [];
     this.#runUpload(transfer, match.files, false);
@@ -883,6 +1094,8 @@ export class DepositFlow {
     this.resumeRecord = undefined;
     this.resumeFiles = [];
     this.transfer = undefined;
+    this.#clearE2E();
+    this.e2eFiles = undefined;
     this.step = 'form';
     // The previous page may have left an upload whose lock the server still holds.
     if (transfer !== undefined && !(await this.#cancelOnServer(transfer.id, true)) && this.step === 'form') {
@@ -901,6 +1114,10 @@ export class DepositFlow {
     this.upload = undefined;
     this.outcome = undefined;
     this.linkOnlyUrl = undefined;
+    this.#clearE2E();
+    this.#cancelPrepare();
+    this.e2eKey = undefined;
+    this.e2eFiles = undefined;
     this.blockedFiles = undefined;
     this.finalizeError = undefined;
     this.stepError = undefined;
@@ -949,8 +1166,12 @@ export class DepositFlow {
   dispose(): void {
     this.#disposed = true;
     this.linkOnlyUrl = undefined;
+    this.e2eKey = undefined;
     this.#abortFinalize();
+    this.#cancelPrepare();
     this.#disposeEngine();
+    this.#clearE2E();
+    this.#dropSealed();
   }
 
   // ---- Internals --------------------------------------------------------------------------
@@ -1014,6 +1235,10 @@ export class DepositFlow {
 
   async #afterSession(session: DepositSession): Promise<void> {
     this.session = session;
+    // An encryption state left by an expired session is rebuilt from the resume record, if any.
+    // The engine goes first: a chunk read after the release would reopen the service.
+    this.#disposeEngine();
+    this.#clearE2E();
     this.fieldError = undefined;
     this.stepError = undefined;
     this.attemptsRemaining = undefined;
@@ -1026,6 +1251,13 @@ export class DepositFlow {
         const transfer = (
           await this.#deps.api.get('/transfers/{transferId}', { path: { transferId: record.transferId } })
         ).data;
+        if ((transfer.endToEndEncrypted === true) !== (record.e2e !== undefined)) {
+          // A record that does not match the transfer cannot regenerate its bytes.
+          this.#deps.resumeStore.clear();
+          this.step = 'form';
+          return;
+        }
+        this.#restoreE2E(record);
         if (transfer.status === 'uploading' && transfer.files.length === record.files.length) {
           this.transfer = transfer;
           this.resumeRecord = record;
@@ -1043,9 +1275,15 @@ export class DepositFlow {
           this.#deps.resumeStore.clear();
           this.transfer = transfer;
           this.outcome = transfer.status;
+          if (this.#e2e !== undefined && transfer.status === 'available') {
+            this.e2eKey = encodeKey(this.#e2e.key);
+          }
+          this.#clearE2E();
           this.step = 'done';
           return;
         }
+        this.#clearE2E();
+        this.e2eFiles = undefined;
         this.#deps.resumeStore.clear();
       } catch (err) {
         if (!(err instanceof NetworkError)) {
@@ -1125,6 +1363,11 @@ export class DepositFlow {
     } else if (isProblem(err, 'transfer-too-large')) {
       this.formErrors = { files: { key: 'deposit.form.files.tooLarge' } };
       this.formRefusals++;
+    } else if (isProblem(err, 'e2e-required') || isProblem(err, 'e2e-forbidden')) {
+      this.formErrors = {
+        endToEnd: { key: `deposit.e2e.${err.code === 'e2e-required' ? 'required' : 'forbidden'}` },
+      };
+      this.formRefusals++;
     } else if (isProblem(err, 'abuse-threshold-blocked')) {
       this.stepError = { message: { key: 'deposit.form.abuseBlocked' } };
     } else if (isProblem(err, 'deposit-not-allowed')) {
@@ -1157,6 +1400,269 @@ export class DepositFlow {
   #renewKey(): void {
     this.#key.renew();
     this.#lastBody = undefined;
+    this.#dropSealed();
+  }
+
+  // ---- End-to-end encryption ----------------------------------------------------------------
+
+  /** The sealed body of this very submission (same plaintext form, same files), if any. */
+  #sealedFor(signature: string, files: readonly Blob[]): SealedBody | undefined {
+    const sealed = this.#sealed;
+    if (sealed === undefined || sealed.signature !== signature || sealed.files.length !== files.length) {
+      return undefined;
+    }
+    return sealed.files.every((f, i) => f === files[i]) ? sealed : undefined;
+  }
+
+  /**
+   * Draws the transfer key and the salts, hashes every file (step preparing, with progress) and
+   * seals the metadata and the message into the createTransfer body. Returns undefined when the
+   * preparation was cancelled or failed (the error is shown on the form).
+   */
+  async #prepareE2E(
+    signature: string,
+    plain: TransferCreate,
+    files: readonly DepositFile[],
+  ): Promise<SealedBody | undefined> {
+    if (globalThis.crypto?.subtle === undefined) {
+      this.stepError = { message: { key: 'deposit.e2e.unsupported' } };
+      return undefined;
+    }
+    const controller = new AbortController();
+    this.#prepareAbort = controller;
+    const state: E2EState = {
+      key: generateTransferKey(),
+      salts: files.map(() => randomBytes(SALT_SIZE)),
+      chunkSize: DEFAULT_CHUNK_SIZE,
+      prepared: [],
+    };
+    const total = files.reduce((sum, f) => sum + f.size, 0);
+    let before = 0;
+    let announced = 0;
+    const progress = (bytes: number): void => {
+      if (controller.signal.aborted) return;
+      const hashed = before + bytes;
+      const percent = total === 0 ? 100 : Math.floor((hashed * 100) / total);
+      this.preparation = { kind: 'create', hashedBytes: hashed, totalBytes: total, percent };
+      if (
+        percent < 100 &&
+        Math.floor(percent / PREPARE_ANNOUNCE_STEP) > Math.floor(announced / PREPARE_ANNOUNCE_STEP)
+      ) {
+        announced = percent;
+        this.#deps.announce(this.#deps.tr.t('deposit.e2e.preparing.announce', { percent }));
+      }
+    };
+    this.preparation = { kind: 'create', hashedBytes: 0, totalBytes: total, percent: total === 0 ? 100 : 0 };
+    this.step = 'preparing';
+    try {
+      const crypto = await this.#e2eCrypto(state);
+      const hashes: string[] = [];
+      for (const [i, file] of files.entries()) {
+        hashes.push(await crypto.hash(i, file, state.chunkSize, progress, controller.signal));
+        before += file.size;
+      }
+      const info = files.map((file, i) => ({ name: file.name, path: file.path ?? '', sha256: hashes[i] }));
+      const count = files.length;
+      const declared = await Promise.all(
+        files.map(async (file, i) => ({
+          name: e2eFileName(i),
+          size: ciphertextSize(file.size, state.chunkSize),
+          encryptedMetadata: await sealMetadata(state.key, i, {
+            index: i,
+            count,
+            name: file.name,
+            path: file.path ?? '',
+            type: file.type,
+            size: file.size,
+            sha256: hashes[i] as string,
+          }),
+        })),
+      );
+      const body: TransferCreate = { ...plain, files: declared };
+      delete body.message;
+      if (plain.message !== undefined) body.encryptedMessage = await sealMessage(state.key, plain.message);
+      if (controller.signal.aborted) throw new DOMException('aborted', 'AbortError');
+      this.#prepareAbort = undefined;
+      this.preparation = undefined;
+      this.step = 'form';
+      this.#deps.announce(this.#deps.tr.t('deposit.e2e.preparing.done'));
+      return { signature, files, body, state, info };
+    } catch (err) {
+      this.#releaseCrypto(state);
+      if (controller.signal.aborted || isAbortError(err) || this.#disposed) return undefined;
+      this.#prepareAbort = undefined;
+      this.preparation = undefined;
+      this.step = 'form';
+      this.stepError = { message: { key: 'deposit.e2e.prepareFailed' } };
+      return undefined;
+    }
+  }
+
+  /** The encryption service of state, opened on first use. */
+  #e2eCrypto(state: E2EState): Promise<UploadCrypto> {
+    if (state.released === true) return Promise.reject(new Error('upload crypto: released'));
+    state.crypto ??= importTransferKey(state.key).then((key) =>
+      (this.#deps.openCrypto ?? openUploadCrypto)(key),
+    );
+    return state.crypto;
+  }
+
+  /** Encrypted bytes [start, end) of file index, for the upload engine. */
+  async #readEncrypted(
+    state: E2EState,
+    index: number,
+    file: Blob,
+    expectedSize: number,
+    start: number,
+    end: number,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    // A detached engine (state released or replaced) must not reopen the service.
+    if (this.#e2e !== state) throw new Error('upload crypto: state replaced');
+    try {
+      return await this.#encryptedRange(state, index, file, expectedSize, start, end);
+    } catch (err) {
+      if (isFileChangedError(err)) throw new UploadError('file-changed');
+      throw err;
+    }
+  }
+
+  async #encryptedRange(
+    state: E2EState,
+    index: number,
+    file: Blob,
+    expectedSize: number,
+    start: number,
+    end: number,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    const crypto = await this.#e2eCrypto(state);
+    let entry = state.prepared[index];
+    if (entry?.file !== file) {
+      // One salt per declared file (built with the files, or checked by isResumeRecord).
+      const salt = state.salts[index] as Uint8Array;
+      entry = { file, size: crypto.prepare(index, file, salt, state.chunkSize) };
+      state.prepared[index] = entry;
+    }
+    if ((await entry.size) !== expectedSize) {
+      throw new Error(`file ${index}: encrypted size differs from the declared one`);
+    }
+    return crypto.range(index, start, end);
+  }
+
+  /** Rebuilds the encryption state of an interrupted transfer from its resume record. */
+  #restoreE2E(record: ResumeRecord): void {
+    this.#clearE2E();
+    const saved = record.e2e;
+    if (saved === undefined) return;
+    this.#e2e = {
+      key: parseKey(saved.key),
+      // isResumeRecord checked every salt.
+      salts: saved.salts.map((salt) => decodeBase64Url(salt) as Uint8Array<ArrayBuffer>),
+      chunkSize: saved.chunkSize,
+      prepared: [],
+    };
+    this.e2eFiles = record.files.map((fp, i) => ({
+      name: fp.name,
+      path: fp.path ?? '',
+      sha256: saved.sha256[i],
+    }));
+  }
+
+  /**
+   * Hashes the reselected files of an end-to-end encrypted transfer again (step preparing, kind
+   * resume) and compares them with expected, the SHA-256 kept by the record. The pass also records
+   * the chunk digests the encryption checks (UploadCryptoCore). Files absent (already complete on
+   * the server) are skipped. Returns stopped when cancelled, the page left or the hash failed
+   * (error shown on the resume step).
+   */
+  async #checkResumed(
+    state: E2EState,
+    expected: readonly string[],
+    files: readonly (Blob | undefined)[],
+  ): Promise<'same' | 'changed' | 'stopped'> {
+    const controller = new AbortController();
+    this.#prepareAbort = controller;
+    this.busy = true;
+    this.stepError = undefined;
+    this.notice = undefined;
+    const total = files.reduce((sum, f) => sum + (f?.size ?? 0), 0);
+    let before = 0;
+    const progress = (bytes: number): void => {
+      if (controller.signal.aborted) return;
+      const hashed = before + bytes;
+      const percent = total === 0 ? 100 : Math.floor((hashed * 100) / total);
+      this.preparation = { kind: 'resume', hashedBytes: hashed, totalBytes: total, percent };
+    };
+    this.preparation = { kind: 'resume', hashedBytes: 0, totalBytes: total, percent: total === 0 ? 100 : 0 };
+    this.step = 'preparing';
+    try {
+      const crypto = await this.#e2eCrypto(state);
+      for (const [i, file] of files.entries()) {
+        if (file === undefined) continue;
+        const hash = await crypto.hash(i, file, state.chunkSize, progress, controller.signal);
+        if (controller.signal.aborted) return 'stopped';
+        if (hash !== expected[i]) return 'changed';
+        before += file.size;
+      }
+      if (controller.signal.aborted) return 'stopped';
+      return 'same';
+    } catch (err) {
+      if (controller.signal.aborted || isAbortError(err) || this.#disposed) return 'stopped';
+      this.step = 'resume';
+      this.stepError = { message: { key: 'deposit.e2e.prepareFailed' } };
+      return 'stopped';
+    } finally {
+      if (this.#prepareAbort === controller) {
+        this.#prepareAbort = undefined;
+        this.preparation = undefined;
+        this.busy = false;
+      }
+    }
+  }
+
+  /** Ends a resume whose reselected file differs from the original: abandoned, record dropped. */
+  async #refuseChanged(transferId: string): Promise<void> {
+    this.#deps.resumeStore.clear();
+    this.resumeRecord = undefined;
+    this.resumeFiles = [];
+    this.transfer = undefined;
+    this.#clearE2E();
+    this.e2eFiles = undefined;
+    this.step = 'form';
+    this.stepError = { message: { key: 'deposit.e2e.resumeChanged' } };
+    this.#deps.announce(this.#deps.tr.t('deposit.e2e.resumeChanged'), 'assertive');
+    // Best effort: the transfer expires on the server anyway (TT_UPLOAD_TTL).
+    await this.#cancelOnServer(transferId, true);
+  }
+
+  /** Releases the Worker of state. */
+  #releaseCrypto(state: E2EState): void {
+    const crypto = state.crypto;
+    state.crypto = undefined;
+    state.released = true;
+    state.prepared = [];
+    crypto?.then(
+      (c) => c.dispose(),
+      () => {},
+    );
+  }
+
+  /** Forgets the encryption state of the transfer being uploaded. */
+  #clearE2E(): void {
+    if (this.#e2e !== undefined) this.#releaseCrypto(this.#e2e);
+    this.#e2e = undefined;
+  }
+
+  /** Forgets the body sealed for a submission that will not be retried. */
+  #dropSealed(): void {
+    if (this.#sealed !== undefined) this.#releaseCrypto(this.#sealed.state);
+    this.#sealed = undefined;
+  }
+
+  /** Aborts a hash pass in progress (page left, new transfer). */
+  #cancelPrepare(): void {
+    this.#prepareAbort?.abort();
+    this.#prepareAbort = undefined;
+    this.preparation = undefined;
   }
 
   /**
@@ -1169,7 +1675,22 @@ export class DepositFlow {
     this.#contents = [...contents];
     this.finalizeError = undefined;
     this.blockedFiles = undefined;
-    const engine = this.#deps.createEngine(uploadSpecs(transfer, contents, fresh), async () => {
+    const specs = uploadSpecs(transfer, contents, fresh);
+    const state = this.#e2e;
+    if (state !== undefined) {
+      specs.forEach((spec, i) => {
+        // The plaintext is never handed to the engine: its size is not the declared one.
+        const content = spec.file;
+        delete spec.file;
+        const info = this.e2eFiles?.[i];
+        if (info !== undefined) spec.name = fullName(info.path, info.name);
+        if (content !== undefined) {
+          const expected = spec.size ?? 0;
+          spec.readChunk = (start, end) => this.#readEncrypted(state, i, content, expected, start, end);
+        }
+      });
+    }
+    const engine = this.#deps.createEngine(specs, async () => {
       if (!(await this.#cancelOnServer(transfer.id, true))) {
         throw new Error('transfer not cancelled');
       }
@@ -1227,6 +1748,8 @@ export class DepositFlow {
         this.outcome = outcome.kind;
         this.#deps.resumeStore.clear();
         this.#disposeEngine();
+        if (this.#e2e !== undefined && outcome.kind === 'available') this.e2eKey = encodeKey(this.#e2e.key);
+        this.#clearE2E();
         this.step = 'done';
         this.#deps.announce(
           this.#deps.tr.t(
@@ -1327,4 +1850,9 @@ export class DepositFlow {
     this.#engine?.stop();
     this.#engine = undefined;
   }
+}
+
+/** Size of the encrypted stream of a plaintext of size bytes (DEFAULT_CHUNK_SIZE chunks). */
+export function encryptedSize(size: number): number {
+  return ciphertextSize(size, DEFAULT_CHUNK_SIZE);
 }
