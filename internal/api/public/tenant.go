@@ -158,7 +158,7 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 	}
 	body.Limits.MaxTransferBytes = t.MaxTransferBytes
 	body.Limits.ExpiryDays = append([]gen.ExpiryDays{}, expiryDays...)
-	body.ConfidentialityLevels = publicLevels(levels)
+	body.ConfidentialityLevels = publicLevels(t.E2EPolicy, levels)
 	// The features announce what the server really offers.
 	antivirus := gen.Enabled
 	if !svc.AntivirusEffective(t) {
@@ -173,15 +173,25 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		RecipientRestrictions: restricted,
 		Antivirus:             antivirus,
 		LinkOnly:              &t.LinkOnlyAllowed,
+		E2ePolicy:             e2eFeature(t.E2EPolicy),
 	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},
 	}, nil
 }
 
+// e2eFeature renders an end-to-end encryption policy; an unknown value is
+// rendered "forbidden", as the transfer creation treats it.
+func e2eFeature(p tenant.E2EPolicy) *gen.E2ePolicy {
+	v := gen.E2ePolicy(tenant.EffectiveE2EPolicy(p, nil))
+	return &v
+}
+
 // publicLevels renders the confidentiality levels of the public
-// configuration.
-func publicLevels(levels []tenantadmin.PublicConfidentialityLevel) *[]gen.PublicConfidentialityLevel {
+// configuration, each with the effective end-to-end policy: the one of
+// the tenant, tightened by the level ([tenant.EffectiveE2EPolicy]). The
+// raw policy of a level is not part of its public rules.
+func publicLevels(tenantPolicy tenant.E2EPolicy, levels []tenantadmin.PublicConfidentialityLevel) *[]gen.PublicConfidentialityLevel {
 	out := make([]gen.PublicConfidentialityLevel, len(levels))
 	for i, l := range levels {
 		days := make([]gen.ExpiryDays, len(l.Rules.AllowedExpiryDays))
@@ -190,6 +200,7 @@ func publicLevels(levels []tenantadmin.PublicConfidentialityLevel) *[]gen.Public
 		}
 		out[i] = gen.PublicConfidentialityLevel{
 			Key: l.Key, Label: l.Label, IsDefault: l.IsDefault,
+			E2ePolicy: e2eFeature(tenant.EffectiveE2EPolicy(tenantPolicy, l.Rules.E2EPolicy)),
 			Rules: gen.ConfidentialityRules{
 				AllowedExpiryDays: days, MaxDownloads: l.Rules.MaxDownloads,
 				RequirePassword:               l.Rules.RequirePassword,

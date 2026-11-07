@@ -366,6 +366,8 @@ func TestTransferError(t *testing.T) {
 		{err: transfer.ErrOriginalGone, code: problem.CodeTransferGone},
 		{err: transfer.ErrLinkOnlyForbidden, code: problem.CodeLinkOnlyForbidden},
 		{err: transfer.ErrLinkOnlyConflict, code: problem.CodeLinkOnlyConflict},
+		{err: transfer.ErrE2EForbidden, code: problem.CodeE2EForbidden},
+		{err: fmt.Errorf("w: %w", transfer.ErrE2ERequired), code: problem.CodeE2ERequired},
 		{err: transfer.ErrDropLinkUsed, code: problem.CodeDepositNotAllowed},
 		{err: transfer.ErrNotFound, code: problem.CodeNotFound},
 		{err: transfer.ErrConflict, code: problem.CodeStateConflict},
@@ -536,7 +538,7 @@ func TestAppendUploadChunk(t *testing.T) {
 		t.Errorf("append got offset %d body %q id %q", f.offset, f.body, f.id)
 	}
 	resp, _ = NewServer(WithUploads(f)).AppendUploadChunk(depositCtx(t, &info), gen.AppendUploadChunkRequestObject{})
-	if resp != (gen.AppendUploadChunk400Response{}) {
+	if resp != (appendBadRequest{}) {
 		t.Errorf("nil body: %T", resp)
 	}
 	for err, want := range map[error]any{
@@ -546,8 +548,8 @@ func TestAppendUploadChunk(t *testing.T) {
 		upload.ErrFinalized:      gen.AppendUploadChunk409Response{},
 		upload.ErrExpired:        gen.AppendUploadChunk410Response{},
 		upload.ErrTooLarge:       gen.AppendUploadChunk413Response{},
-		upload.ErrInvalid:        gen.AppendUploadChunk400Response{},
-		upload.ErrInterrupted:    gen.AppendUploadChunk400Response{},
+		upload.ErrInvalid:        appendBadRequest{},
+		upload.ErrInterrupted:    appendBadRequest{},
 	} {
 		resp, gotErr := NewServer(WithUploads(&fakeUploads{err: err})).AppendUploadChunk(depositCtx(t, &info),
 			gen.AppendUploadChunkRequestObject{Body: stringsReader("x")})

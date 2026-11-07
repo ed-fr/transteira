@@ -506,6 +506,24 @@ export function linkOnlyPatch(tenant: Pick<Tenant, 'linkOnlyAllowed'>, allowed: 
   return linkOnlyEnabled(tenant) === allowed ? {} : { linkOnlyAllowed: allowed };
 }
 
+/** E2E policies in the order of the selects. */
+export const E2E_POLICIES = ['forbidden', 'allowed', 'required'] as const;
+/** End-to-end encryption policy of a tenant (since 2.0; absent means forbidden). */
+export type E2ePolicy = (typeof E2E_POLICIES)[number];
+
+/** Effective end-to-end encryption policy of a tenant (absent means forbidden). */
+export function e2ePolicyOf(tenant: Pick<Tenant, 'e2ePolicy'>): E2ePolicy {
+  return tenant.e2ePolicy ?? 'forbidden';
+}
+
+/** Merge patch for the end-to-end encryption policy: empty when it already has the wanted value. */
+export function e2ePolicyPatch(tenant: Pick<Tenant, 'e2ePolicy'>, policy: string): TenantUpdateBody {
+  if (!(E2E_POLICIES as readonly string[]).includes(policy)) {
+    return {};
+  }
+  return e2ePolicyOf(tenant) === policy ? {} : { e2ePolicy: policy as E2ePolicy };
+}
+
 /** Merge patch that switches the antivirus analysis of a tenant on or off. */
 export function antivirusPatch(enabled: boolean): TenantUpdateBody {
   return { antivirusEnabled: enabled };

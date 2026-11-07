@@ -44,7 +44,8 @@ func isTusPattern(pattern string) bool {
 //
 //   - every response carries Tus-Resumable, and its error responses (4xx and
 //     503) have no body, whoever writes them (session, CSRF and maintenance
-//     middlewares included); a 500 keeps its Problem body;
+//     middlewares included); a 500 keeps its Problem body, and so does the
+//     400 Problem of a PATCH (e2e-format-invalid, since 2.0);
 //   - a request whose Tus-Resumable header is not exactly TusVersion gets
 //     412 with Tus-Version (a missing header is caught earlier, by the
 //     parameter binding: see tusParamError);
@@ -93,7 +94,10 @@ func tusParamError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // tusWriter adds Tus-Resumable to the response and drops the body of the
-// error responses but 500 (see tusMiddleware). An error response also
+// error responses but 500 (see tusMiddleware) and, since 2.0, the 400
+// problem of a PATCH (appendUploadChunk), whose only use is
+// e2e-format-invalid: the client must tell a malformed end-to-end
+// encrypted stream from an interrupted body (bare 400). An error response also
 // carries Connection: close: the request body may be unread, and the
 // connection is not worth keeping for it (net/http then drains at most a
 // bounded part of it, under the read deadline set by idleBodyHandler). It
@@ -103,11 +107,12 @@ type tusWriter struct {
 	http.ResponseWriter
 	wroteHeader bool
 	discard     bool
+	patch       bool
 }
 
-// newTusWriter wraps w for a tus request.
-func newTusWriter(w http.ResponseWriter, _ *http.Request) *tusWriter {
-	return &tusWriter{ResponseWriter: w}
+// newTusWriter wraps w for a tus request r.
+func newTusWriter(w http.ResponseWriter, r *http.Request) *tusWriter {
+	return &tusWriter{ResponseWriter: w, patch: r.Method == http.MethodPatch}
 }
 
 // WriteHeader implements http.ResponseWriter.
@@ -120,13 +125,23 @@ func (w *tusWriter) WriteHeader(code int) {
 	h.Set(headerTusResumable, public.TusVersion)
 	if code >= http.StatusBadRequest {
 		h.Set("Connection", "close")
-		if code != http.StatusInternalServerError {
+		if code != http.StatusInternalServerError && !w.patchProblem(code) {
 			w.discard = true
 			h.Del("Content-Type")
 			h.Del("Content-Length")
 		}
 	}
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// patchProblem reports whether a response of code is the 400 problem of a
+// PATCH, kept with its body.
+func (w *tusWriter) patchProblem(code int) bool {
+	if !w.patch || code != http.StatusBadRequest {
+		return false
+	}
+	mt, _, err := mime.ParseMediaType(w.Header().Get("Content-Type"))
+	return err == nil && mt == "application/problem+json"
 }
 
 // Write implements http.ResponseWriter.

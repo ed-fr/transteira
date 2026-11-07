@@ -43,6 +43,10 @@ type txRepo interface {
 	// not_scanned_disabled in the same transaction, and their number is
 	// returned.
 	finalize(ctx context.Context, trfID string, now time.Time, unscanned bool) (int, error)
+	// finalizeE2E moves the end-to-end encrypted transfer to scanning, its
+	// pending files getting not_scanned_e2e in the same transaction, and
+	// returns their number (see [store.Transfers.FinalizeE2ETx]).
+	finalizeE2E(ctx context.Context, trfID string, now time.Time) (int, error)
 	deleteTransfer(ctx context.Context, trfID string) error
 	// useDropLinkSession marks the drop link session sessionID of the link
 	// linkID used (see [store.DropLinks.UseSessionTx]).
@@ -184,6 +188,10 @@ func (t storeTx) finalize(ctx context.Context, trfID string, now time.Time, unsc
 		return t.db.Transfers().FinalizeUnscannedTx(ctx, t.tx, trfID, now)
 	}
 	return 0, t.db.Transfers().FinalizeTx(ctx, t.tx, trfID, now)
+}
+
+func (t storeTx) finalizeE2E(ctx context.Context, trfID string, now time.Time) (int, error) {
+	return t.db.Transfers().FinalizeE2ETx(ctx, t.tx, trfID, now)
 }
 
 func (t storeTx) deleteTransfer(ctx context.Context, trfID string) error {

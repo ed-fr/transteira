@@ -770,7 +770,7 @@ use to ban the client IP.
 
 - **HTTP status:** 403 Forbidden
 - **Since:** 2.0.
-- **Meaning:** end-to-end encryption (`endToEndEncrypted`) was asked for but the policy of the entity or of the confidentiality level forbids it.
+- **Meaning:** end-to-end encryption (`endToEndEncrypted`) was asked for but the effective policy of the entity or of the confidentiality level forbids it, or the depositor cannot encrypt: a permanent drop link depositor never can.
 - **Typical endpoints:** `POST /transfers`.
 - **What to do:** send the transfer without end-to-end encryption.
 
@@ -778,9 +778,9 @@ use to ban the client IP.
 
 - **HTTP status:** 400 Bad Request
 - **Since:** 2.0.
-- **Meaning:** the policy of the entity or of the confidentiality level requires end-to-end encryption and the transfer was created without it.
+- **Meaning:** the effective policy of the entity or of the confidentiality level requires end-to-end encryption and the transfer was created without it. A depositor who cannot encrypt, such as a permanent drop link depositor, receives this code too: under a required policy that deposit is impossible.
 - **Typical endpoints:** `POST /transfers`.
-- **What to do:** encrypt the files in the browser and set `endToEndEncrypted` (the web interface does it by itself).
+- **What to do:** encrypt the files with a client that implements the format and set `endToEndEncrypted` (see the integration guide), or choose a confidentiality level whose policy does not require it.
 
 ### e2e-archive-unavailable
 
@@ -794,9 +794,9 @@ use to ban the client IP.
 
 - **HTTP status:** 400 Bad Request
 - **Since:** 2.0.
-- **Meaning:** the upload of an end-to-end encrypted file is not a well-formed `TTE2` stream: the server checks the magic, the header, the chunk lengths and the final chunk while streaming and refuses the upload.
-- **Typical endpoints:** `PATCH /uploads/{uploadId}`, `POST /transfers/{transferId}/finalize`.
-- **What to do:** encrypt the file again in the browser (the web interface does it by itself) and restart its upload.
+- **Meaning:** the upload of an end-to-end encrypted file does not start with a valid `TTE2` header, or its declared size is not a valid `TTE2` stream size for the chunk size of that header. The server holds no key: it judges each header byte as it arrives (magic, version, kind, reserved bytes, chunk size) and the declared size against the chunk layout as soon as the chunk size is known; it does not authenticate the chunks, which only the recipient does. The refused slice is never stored; the bytes accepted before it are kept.
+- **Typical endpoints:** `PATCH /uploads/{uploadId}`. Unlike the other `400` answers of the tus endpoints, which have no body, this one carries a problem body with this code.
+- **What to do:** produce the stream again with a client that implements the format (`docs/architecture/e2e-format.md`) and send it again; a corrected stream may resume at the offset the server kept.
 
 ### internal-error
 

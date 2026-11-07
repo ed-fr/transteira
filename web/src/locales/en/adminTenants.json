@@ -162,6 +162,15 @@
       "saved": "Setting saved.",
       "statusOn": "Link-only transfers are allowed for this entity (set by the super admin).",
       "statusOff": "Link-only transfers are not allowed for this entity (set by the super admin)."
+    },
+    "e2e": {
+      "title": "End-to-end encryption",
+      "intro": "When allowed, senders can encrypt their files in the browser: the key stays in the link and the server can never read them.",
+      "label": "End-to-end encryption policy",
+      "hint": "Forbidden by default. Required means that no file of this entity is analysed by the antivirus, since the server cannot read it. Each confidentiality level can only tighten this policy.",
+      "save": "Save",
+      "saved": "Setting saved.",
+      "status": "End-to-end encryption policy of this entity (set by the super admin): {policy}."
     }
   },
   "branding": {
@@ -640,7 +649,8 @@
       "internalRecipientsOnly": "Internal recipients only",
       "forceDeleteAfterFirstDownload": "Delete after the first download (forced)",
       "maxDownloads": "Maximum number of downloads (cap)",
-      "linkOnlyAllowed": "Link-only allowed"
+      "linkOnlyAllowed": "Link-only allowed",
+      "e2ePolicy": "End-to-end encryption"
     },
     "hints": {
       "key": "Lowercase letters, digits, hyphen or underscore, starting with a letter (32 characters at most). Identifies the level in the API; keep it stable.",
@@ -648,7 +658,8 @@
       "recipientVerification": "Takes effect once per-recipient links are available. Until then, the option is stored but not applied.",
       "internalRecipientsOnly": "Recipients must belong to the internal domains of the entity.",
       "maxDownloads": "Optional, from 1 to {max}. Caps the number of downloads a sender can set; empty for no cap.",
-      "linkOnlyAllowed": "Lets senders send at this level without any mail to the recipients: the sender passes the link on themselves. Cannot be combined with recipient verification. Has no effect while the entity does not allow link-only transfers."
+      "linkOnlyAllowed": "Lets senders send at this level without any mail to the recipients: the sender passes the link on themselves. Cannot be combined with recipient verification. Has no effect while the entity does not allow link-only transfers.",
+      "e2ePolicy": "Can only tighten the policy of the entity: with an entity policy of Forbidden or Required, this choice has no effect. Encrypted files are never analysed by the antivirus."
     },
     "dayChoice": {
       "one": "{count} day",
@@ -676,7 +687,10 @@
       "daysRequired": "Allow at least one duration.",
       "capInvalid": "Enter a whole number between 1 and {max}, or leave the field empty."
     },
-    "levelInUse": "This level is used by an active drop link. Change or revoke that link first (\"Drop links\" screen), then try again."
+    "levelInUse": "This level is used by an active drop link. Change or revoke that link first (\"Drop links\" screen), then try again.",
+    "e2ePolicy": {
+      "inherit": "Inherit the policy of the entity"
+    }
   },
   "abuse": {
     "title": "Abuse detection"
@@ -802,5 +816,10 @@
     "errors": {
       "location": "Error in the file at {location}"
     }
+  },
+  "e2ePolicy": {
+    "forbidden": "Forbidden",
+    "allowed": "Allowed",
+    "required": "Required"
   }
 }

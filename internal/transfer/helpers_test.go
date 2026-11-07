@@ -405,6 +405,13 @@ func (t faultTx) finalize(ctx context.Context, trfID string, now time.Time, unsc
 	return t.inner.finalize(ctx, trfID, now, unscanned)
 }
 
+func (t faultTx) finalizeE2E(ctx context.Context, trfID string, now time.Time) (int, error) {
+	if err := t.r.check("finalizeE2E"); err != nil {
+		return 0, err
+	}
+	return t.inner.finalizeE2E(ctx, trfID, now)
+}
+
 func (t faultTx) deleteTransfer(ctx context.Context, trfID string) error {
 	if err := t.r.check("deleteTransfer"); err != nil {
 		return err

@@ -10,7 +10,6 @@ import (
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
-	"github.com/ed-fr/transteira/internal/tenant"
 )
 
 // Field error codes of the admin operations.
@@ -107,17 +106,6 @@ func formatCode(address bool) string {
 // validationFailed returns a 400 validation-failed Problem naming field.
 func validationFailed(field, code string) *problem.Problem {
 	return problem.New(problem.CodeValidationFailed, problem.WithFieldErrors(problem.FieldError{Field: field, Code: code}))
-}
-
-// unsupportedInTenant returns the 400 not-supported Problem of a member of
-// API 2.0 that is not implemented yet, only when the admin may reach the
-// tenant: for any other the service answers its usual 404, so that the
-// refusal never tells that a tenant exists.
-func unsupportedInTenant(p adminauth.Principal, tid, field string) *problem.Problem {
-	if !adminauth.CanAccessTenant(p.Admin, tenant.ID(tid)) {
-		return nil
-	}
-	return validationFailed(field, fieldNotSupported)
 }
 
 // principal returns the admin session put in ctx by the session middleware.

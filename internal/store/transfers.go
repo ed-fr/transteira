@@ -70,6 +70,11 @@ const (
 	// disabled (instance engine "none" or tenant flag off), accepted and
 	// flagged; it is decided at finalization (decision D8).
 	ScanNotScannedDisabled ScanStatus = "not_scanned_disabled"
+	// ScanNotScannedE2E is a file of an end-to-end encrypted transfer
+	// (since 2.0), which the server cannot read: accepted and flagged, it
+	// is decided at finalization ([Transfers.FinalizeE2ETx]) and never sent
+	// to the antivirus.
+	ScanNotScannedE2E ScanStatus = "not_scanned_e2e"
 	// ScanError is a file that could not be analyzed (withheld).
 	ScanError ScanStatus = "scan_error"
 )
@@ -95,6 +100,14 @@ const (
 	MaxIdempotencyKeyLen = 64
 	// MaxPasswordHashLen bounds the PHC string of a transfer password.
 	MaxPasswordHashLen = 512
+	// MaxE2EMessageLen bounds the encrypted message of an end-to-end
+	// encrypted transfer (base64url), in bytes (OpenAPI
+	// TransferCreate.encryptedMessage).
+	MaxE2EMessageLen = 32768
+	// MaxE2EMetadataLen bounds the encrypted metadata of a file of an
+	// end-to-end encrypted transfer (base64url of at most 4 KiB), in bytes
+	// (OpenAPI EncryptedMetadata).
+	MaxE2EMetadataLen = 5462
 	// StorageNameLen is the length of a storage name: 128 random bits in
 	// lowercase hexadecimal.
 	StorageNameLen = 32
@@ -112,7 +125,7 @@ const transferColumns = `id, status, sender_email, sender_kind, invitation_id, m
 	`ended_at, sender_ip, download_count, api_token_id, max_downloads, confidentiality_level, confidentiality_label, ` +
 	`rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, rule_require_recipient_verification, ` +
 	`rule_internal_recipients_only, rule_force_delete_after_first_download, link_mode, recipient_verification, ` +
-	`expiry_reminder_at, extension_count, extended_at, reply_to_transfer_id, link_only, drop_link_id`
+	`expiry_reminder_at, extension_count, extended_at, reply_to_transfer_id, link_only, drop_link_id, e2e, e2e_message`
 
 // reasonTransferTenantActive is the review of qTransferTenantActive: the
 // tenant slot filters transfers, and the join reads the tenants row of the
@@ -136,7 +149,7 @@ const reasonTransferEndLinkKeys = "transfer end: refuse while a recipient link o
 
 // fileColumns is the column list read by the file queries.
 const fileColumns = `id, transfer_id, position, path, name, size, media_type, expected_sha256, sha256, dek_key_id, ` +
-	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status`
+	`storage_name, upload_id, ciphertext_size, uploaded_at, scanned_at, scan_signature, scan_attempts, scan_status, e2e_metadata`
 
 // Statements of the Transfers and TransferFiles repositories. All of them
 // are single-table tenant queries: a transfer and its files are read with
@@ -150,8 +163,8 @@ var (
 		created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id,
 		confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password,
 		rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download,
-		link_only, drop_link_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		link_only, drop_link_id, e2e, e2e_message)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qTransferReleaseKey clears an idempotency key of the sender (deposit
 	// session transfers) older than the retention, so that the key can be
 	// reused.
@@ -243,8 +256,8 @@ var (
 
 	qFileInsert = tenantQuery(
 		`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, path, name, size, media_type, expected_sha256,
-		sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status, e2e_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	qFileList = tenantQuery(
 		`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`)
 	qFileGetByUpload = tenantQuery(
@@ -415,6 +428,16 @@ type Transfer struct {
 	// DepositorDropLink, "" for any other kind. It must be enabled and not
 	// revoked at the creation.
 	DropLinkID string
+	// E2E marks an end-to-end encrypted transfer (since 2.0, spec 22): its
+	// files were encrypted in the browser, every one carries its
+	// [TransferFile.E2EMetadata], and they get [ScanNotScannedE2E] at the
+	// finalization ([Transfers.FinalizeE2ETx]). Its plaintext Message is
+	// empty, and its sender kind is not DepositorDropLink.
+	E2E bool
+	// E2EMessage is the message of an end-to-end encrypted transfer,
+	// encrypted in the browser (base64url, 1 to MaxE2EMessageLen bytes), ""
+	// when it has none (stored as NULL). It is "" for any other transfer.
+	E2EMessage string
 }
 
 // LinkMode is how the recipients of a transfer get their download link.
@@ -490,6 +513,14 @@ type TransferFile struct {
 	// ScanAttempts counts the file-specific analysis failures
 	// ([TransferFiles.IncrementScanAttempt]); 0 for a new file.
 	ScanAttempts int
+	// E2EMetadata is the encrypted metadata of a file of an end-to-end
+	// encrypted transfer (since 2.0: name, type, folder and plaintext
+	// SHA-256 encrypted in the browser, base64url, 1 to MaxE2EMetadataLen
+	// bytes), which the server stores as is and cannot read. Every file of
+	// an E2E transfer has one, the files of any other transfer none ("",
+	// stored as NULL). For such a file, Name is the generic name, Size and
+	// SHA256 those of the ciphertext.
+	E2EMetadata string
 }
 
 // Completed reports whether the upload of the file is complete.
@@ -582,6 +613,22 @@ func validFilePath(s string) bool {
 		!strings.HasPrefix(s, "/") && !strings.HasSuffix(s, "/")
 }
 
+// isBase64URL reports whether s holds 1 to maxLen bytes of the unpadded
+// base64url alphabet (the encrypted values of an end-to-end encrypted
+// transfer, OpenAPI pattern ^[A-Za-z0-9_-]+$).
+func isBase64URL(s string, maxLen int) bool {
+	if s == "" || len(s) > maxLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			return false
+		}
+	}
+	return true
+}
+
 // validExpiryDays reports whether d is an allowed validity (spec 8.2).
 func validExpiryDays(d int) bool {
 	return d == 1 || d == 7 || d == 30
@@ -652,6 +699,14 @@ func normalizeTransfer(t Transfer, total int64) (Transfer, error) {
 		return Transfer{}, invalid("recipient verification needs per-recipient links")
 	case t.LinkOnly && t.LinkMode == LinkModePerRecipient:
 		return Transfer{}, invalid("a link-only transfer needs the shared link")
+	case t.E2E && t.Message != "":
+		return Transfer{}, invalid("an end-to-end encrypted transfer has no plaintext message")
+	case !t.E2E && t.E2EMessage != "":
+		return Transfer{}, invalid("only an end-to-end encrypted transfer has an encrypted message")
+	case t.E2EMessage != "" && !isBase64URL(t.E2EMessage, MaxE2EMessageLen):
+		return Transfer{}, invalid("encrypted message must be base64url of at most %d bytes", MaxE2EMessageLen)
+	case t.E2E && t.SenderKind == DepositorDropLink:
+		return Transfer{}, invalid("a drop link transfer cannot be end-to-end encrypted")
 	case !t.ExpiryReminderAt.IsZero():
 		return Transfer{}, invalid("a new transfer cannot be reminded")
 	}
@@ -724,6 +779,8 @@ func normalizeFile(f TransferFile, trfID string, pos int) (TransferFile, error) 
 		return TransferFile{}, invalid("a completed file needs its sha256 and ciphertext size")
 	case !f.Completed() && (f.SHA256 != "" || f.CiphertextSize != 0):
 		return TransferFile{}, invalid("an incomplete file has no sha256 or ciphertext size")
+	case f.E2EMetadata != "" && !isBase64URL(f.E2EMetadata, MaxE2EMetadataLen):
+		return TransferFile{}, invalid("encrypted metadata must be base64url of at most %d bytes", MaxE2EMetadataLen)
 	}
 	f.TransferID, f.Position, f.ScanStatus = trfID, pos, ScanPending
 	return f, nil
@@ -790,6 +847,9 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		if fs[i], err = normalizeFile(f, t.ID, i); err != nil {
 			return err
 		}
+		if (f.E2EMetadata != "") != t.E2E {
+			return invalid("every file of an end-to-end encrypted transfer has encrypted metadata, a file of another transfer none")
+		}
 		if f.Size > math.MaxInt64-total {
 			return invalid("total size overflows")
 		}
@@ -853,7 +913,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		t.RecipientVerification, nullText(t.ReplyToTransferID),
 	}
 	args = append(args, levelArgs(t)...)
-	_, err = tx.Exec(ctx, qTransferInsert, append(args, t.LinkOnly, nullText(t.DropLinkID))...)
+	_, err = tx.Exec(ctx, qTransferInsert, append(args, t.LinkOnly, nullText(t.DropLinkID), t.E2E, nullText(t.E2EMessage))...)
 	if err != nil {
 		return err
 	}
@@ -879,7 +939,7 @@ func (r *Transfers) create(ctx context.Context, tx *ScopedTx, t Transfer, recipi
 		}
 		_, err := tx.Exec(ctx, qFileInsert, f.ID, f.TransferID, f.Position, f.Path, f.Name, f.Size, f.MediaType,
 			nullText(f.ExpectedSHA256), nullText(f.SHA256), f.DEKKeyID, f.StorageName, f.UploadID, ctSize,
-			uploaded, string(f.ScanStatus))
+			uploaded, string(f.ScanStatus), nullText(f.E2EMetadata))
 		if err != nil {
 			return err
 		}
@@ -893,7 +953,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		t                                Transfer
 		status, kind                     string
 		inv, pwd, key, fp, tokenKey, ip  sql.NullString
-		replyTo, dropLink                sql.NullString
+		replyTo, dropLink, e2eMessage    sql.NullString
 		apiToken, level, label           sql.NullString
 		created                          int64
 		finalized, available, expiration sql.NullInt64
@@ -907,7 +967,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 		&pwd, &t.DeleteAfterFirstDownload, &t.TotalBytes, &key, &fp, &created, &finalized, &t.DownloadTokenHash,
 		&tokenKey, &available, &expiration, &downloaded, &deleteAfter, &ended, &ip, &t.DownloadCount, &apiToken,
 		&maxDownloads, &level, &label, &mask, &maxCap, &pwdRule, &verifRule, &intRule, &del, &linkMode,
-		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended, &replyTo, &t.LinkOnly, &dropLink)
+		&t.RecipientVerification, &reminded, &t.ExtensionCount, &extended, &replyTo, &t.LinkOnly, &dropLink, &t.E2E, &e2eMessage)
 	if err != nil {
 		return Transfer{}, err
 	}
@@ -930,7 +990,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	t.SenderIP, t.APITokenID = parseIP(ip.String), apiToken.String
 	t.LinkMode, t.ExpiryReminderAt = LinkMode(linkMode), nullMillis(reminded)
 	t.ExtendedAt, t.ReplyToTransferID = nullMillis(extended), replyTo.String
-	t.DropLinkID = dropLink.String
+	t.DropLinkID, t.E2EMessage = dropLink.String, e2eMessage.String
 	return t, nil
 }
 
@@ -939,17 +999,18 @@ func scanFile(row interface{ Scan(...any) error }) (TransferFile, error) {
 	var (
 		f                               TransferFile
 		expected, sum, keyID, signature sql.NullString
+		metadata                        sql.NullString
 		ctSize, uploaded, scanned       sql.NullInt64
 		scan                            string
 	)
 	err := row.Scan(&f.ID, &f.TransferID, &f.Position, &f.Path, &f.Name, &f.Size, &f.MediaType, &expected, &sum, &keyID,
-		&f.StorageName, &f.UploadID, &ctSize, &uploaded, &scanned, &signature, &f.ScanAttempts, &scan)
+		&f.StorageName, &f.UploadID, &ctSize, &uploaded, &scanned, &signature, &f.ScanAttempts, &scan, &metadata)
 	if err != nil {
 		return TransferFile{}, err
 	}
 	f.ExpectedSHA256, f.SHA256, f.DEKKeyID = expected.String, sum.String, keyID.String
 	f.CiphertextSize, f.UploadedAt, f.ScanStatus = ctSize.Int64, nullMillis(uploaded), ScanStatus(scan)
-	f.ScannedAt, f.ScanSignature = nullMillis(scanned), signature.String
+	f.ScannedAt, f.ScanSignature, f.E2EMetadata = nullMillis(scanned), signature.String, metadata.String
 	return f, nil
 }
 
@@ -1306,6 +1367,37 @@ func (r *Transfers) FinalizeUnscannedTx(ctx context.Context, tx *ScopedTx, trfID
 		return 0, wrap("finalize transfer", err)
 	}
 	res, err := tx.Exec(ctx, qFileReleaseDisabled, toMillis(now), trfID)
+	if err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	return int(n), nil
+}
+
+// FinalizeE2ETx is [Transfers.FinalizeTx] for an end-to-end encrypted
+// transfer ([Transfer.E2E], since 2.0): in the same transaction, every
+// uploaded file of the transfer still pending gets [ScanNotScannedE2E]
+// with ScannedAt = now, so that the antivirus worker concludes the
+// transfer without ever reading its files (the server cannot). It applies
+// whatever the antivirus switch of the tenant. It returns the number of
+// files released, ErrInvalid (changing nothing) when the transfer is not
+// end-to-end encrypted, and the errors of FinalizeTx. After an error, the
+// caller must abort the transaction.
+func (r *Transfers) FinalizeE2ETx(ctx context.Context, tx *ScopedTx, trfID string, now time.Time) (int, error) {
+	t, err := scanTransfer(tx.QueryRow(ctx, qTransferGet, trfID))
+	if err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	if !t.E2E {
+		return 0, wrap("finalize transfer", invalid("the transfer is not end-to-end encrypted"))
+	}
+	if err := setStatus(ctx, tx, trfID, TransferUploading, TransferScanning, now); err != nil {
+		return 0, wrap("finalize transfer", err)
+	}
+	res, err := tx.Exec(ctx, qFileReleaseE2E, toMillis(now), trfID)
 	if err != nil {
 		return 0, wrap("finalize transfer", err)
 	}

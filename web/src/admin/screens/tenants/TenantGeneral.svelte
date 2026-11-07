@@ -37,6 +37,7 @@
   import { adminApi, adminSession } from '../../api';
   import ByteSizeField from '../../components/ByteSizeField.svelte';
   import ConfirmDialog from '../../components/ConfirmDialog.svelte';
+  import SelectField from '../../components/SelectField.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
@@ -50,6 +51,9 @@
     antivirusPatch,
     antivirusState,
     linkOnlyEnabled,
+    e2ePolicyOf,
+    e2ePolicyPatch,
+    E2E_POLICIES,
     linkOnlyPatch,
     changesProfile,
     deletionResumes,
@@ -104,6 +108,8 @@
   let includeAddresses = $state(false);
   // Link-only transfers (since 2.0, super admin).
   let linkOnly = $state(false);
+  // End-to-end encryption policy (since 2.0, super admin).
+  let e2e = $state<string>('forbidden');
   // Export of the configuration: include the branding files.
   let exportBranding = $state(false);
 
@@ -122,6 +128,9 @@
   const webhookPatch = $derived(tenant === undefined ? {} : includeAddressesPatch(tenant, includeAddresses));
   const linkOnlyDirty = $derived(
     !deleted && tenant !== undefined && Object.keys(linkOnlyPatch(tenant, linkOnly)).length > 0,
+  );
+  const e2eDirty = $derived(
+    !deleted && tenant !== undefined && Object.keys(e2ePolicyPatch(tenant, e2e)).length > 0,
   );
   const webhookDirty = $derived(!deleted && Object.keys(webhookPatch).length > 0);
   const dirty = $derived(
@@ -160,6 +169,7 @@
     form = formFromTenant(next);
     includeAddresses = includesAddresses(next);
     linkOnly = linkOnlyEnabled(next);
+    e2e = e2ePolicyOf(next);
   }
 
   async function load(): Promise<void> {
@@ -271,6 +281,24 @@
       tenant = res.data;
       linkOnly = linkOnlyEnabled(res.data);
       return { ok: true, message: t('adminTenants.general.linkOnly.saved') };
+    } catch (err) {
+      return { ok: false, message: describeError(i18n, err).message };
+    }
+  }
+
+  async function saveE2e(): Promise<SubmitOutcome> {
+    if (tenant === undefined) {
+      return { ok: false, message: t('errors.unknown') };
+    }
+    const patch = e2ePolicyPatch(tenant, e2e);
+    if (Object.keys(patch).length === 0) {
+      return { ok: true, message: t('admin.common.noChanges') };
+    }
+    try {
+      const res = await adminApi.patch('/admin/tenants/{tenantId}', { path: { tenantId }, body: patch });
+      tenant = res.data;
+      e2e = e2ePolicyOf(res.data);
+      return { ok: true, message: t('adminTenants.general.e2e.saved') };
     } catch (err) {
       return { ok: false, message: describeError(i18n, err).message };
     }
@@ -596,6 +624,37 @@
           {tenant && linkOnlyEnabled(tenant)
             ? t('adminTenants.general.linkOnly.statusOn')
             : t('adminTenants.general.linkOnly.statusOff')}
+        </p>
+      </section>
+    {/if}
+
+    {#if isSuper}
+      <FormSection
+        title={t('adminTenants.general.e2e.title')}
+        intro={t('adminTenants.general.e2e.intro')}
+        dirty={e2eDirty}
+        addGuard={(guard) => nav.addGuard(guard)}
+        onsubmit={saveE2e}
+        disabled={deleting}
+        saveLabel={t('adminTenants.general.e2e.save')}
+        successMessage={t('adminTenants.general.e2e.saved')}
+      >
+        <SelectField
+          id="{uid}-e2e"
+          label={t('adminTenants.general.e2e.label')}
+          hint={t('adminTenants.general.e2e.hint')}
+          disabled={deleting}
+          options={E2E_POLICIES.map((p) => ({ value: p, label: t(`adminTenants.e2ePolicy.${p}`) }))}
+          bind:value={e2e}
+        />
+      </FormSection>
+    {:else}
+      <section aria-labelledby="{uid}-e2e-ro">
+        <h2 id="{uid}-e2e-ro">{t('adminTenants.general.e2e.title')}</h2>
+        <p>
+          {t('adminTenants.general.e2e.status', {
+            policy: t(`adminTenants.e2ePolicy.${tenant ? e2ePolicyOf(tenant) : 'forbidden'}`),
+          })}
         </p>
       </section>
     {/if}

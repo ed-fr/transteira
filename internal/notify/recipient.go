@@ -120,7 +120,7 @@ func (n *Notifier) ExpiryReminderJobs(ctx context.Context, t *tenant.Tenant, tr 
 		data := mail.ExpiryReminderData{
 			TenantName: t.Name, SenderEmail: v.sender, Link: l.Link, Files: v.files, ExpiresAt: tr.ExpiresAt,
 			PasswordRequired: tr.PasswordProtected, VerificationRequired: verificationRequired,
-			ConfidentialityLabel: label,
+			ConfidentialityLabel: label, E2E: tr.E2E,
 		}
 		m, err := n.render(ctx, t, tr, mail.TemplateExpiryReminder, data)
 		if err != nil {

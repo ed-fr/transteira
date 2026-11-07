@@ -43,11 +43,6 @@ const (
 	// fieldDropLinkToken is the pointer of the drop link token of
 	// startDepositSession.
 	fieldDropLinkToken = "/dropLinkToken"
-	// fieldNotSupported is a member of API 2.0 that this server does not
-	// implement yet (drop link, link-only, end-to-end encryption): refused
-	// rather than ignored (fail closed), so that a client never believes it
-	// was applied.
-	fieldNotSupported = "not-supported"
 )
 
 // technicalCookie returns the Set-Cookie value of a technical cookie: host

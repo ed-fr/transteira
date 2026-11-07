@@ -42,6 +42,19 @@
 // recorded in the database (the only database write of an upload besides
 // its creation) and the checkpoint is removed.
 //
+// # End-to-end encrypted files
+//
+// The bytes of a file of an end-to-end encrypted transfer (since 2.0,
+// store.TransferFile.E2EMetadata set) are TTE2 ciphertext that the server
+// cannot read. Every slice read from the request goes through a
+// tte2.Validator before it is written: a bad header field, or a declared
+// length that is no valid stream size for the chunk size of the header,
+// refuses the slice (ErrE2EFormat, 400) and writes nothing of it; the bytes
+// accepted before are saved, so the client may resume with correct bytes.
+// The validator state (at most the 32-byte header prefix) is saved after
+// the SHA-256 state in the checkpoint extra payload of these files only;
+// the payload of ordinary files is unchanged.
+//
 // # Reset
 //
 // An upload is never truncated and resumed with the same key. When the

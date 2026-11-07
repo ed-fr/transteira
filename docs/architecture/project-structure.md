@@ -68,6 +68,10 @@ transteira/
 │   │                                # au plus une par minute et par jeton, mémoire bornée
 │   ├── download/                    # Accès par jeton, mot de passe et blocage, cookie de déverrouillage, fichier avec
 │   │                                # Range, archive, suivi des plages servies et premier téléchargement
+│   ├── tte2/                        # Format de chiffrement de bout en bout TTE2 (docs/architecture/e2e-format.md) :
+│   │                                # Writer/Reader de référence, scellement des métadonnées et des messages, Validator
+│   │                                # sans clé utilisé par le serveur pendant l'envoi tus, vecteurs testdata/vectors.json
+│   │                                # (réutilisés par le navigateur à l'étape 8 et par le client à l'étape 9)
 │   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
 │   ├── lifecycle/                   # Tâche périodique unique (§20, §23) : suppression après premier téléchargement,
 │   │                                # expirations, uploads abandonnés, purge des lignes (transferts terminés depuis

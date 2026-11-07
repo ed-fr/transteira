@@ -63,9 +63,9 @@ type ExportedSettings struct {
 	// LinkOnlyAllowed is the link-only switch of the tenant (since 2.0,
 	// super admin only: the import is a super admin operation).
 	LinkOnlyAllowed *bool `json:"linkOnlyAllowed,omitempty"`
-	// E2EPolicy is a member of the 2.0 contract that this version does not
-	// store yet: an export never sets it, and an import accepts only its
-	// default (absent or "forbidden").
+	// E2EPolicy is the end-to-end encryption policy of the tenant (since
+	// 2.0, super admin only like the import); always exported, absent on
+	// import means "forbidden".
 	E2EPolicy *string `json:"e2ePolicy,omitempty"`
 }
 
@@ -134,8 +134,9 @@ type ExportedLevelRules struct {
 	RequireRecipientVerification  bool  `json:"requireRecipientVerification"`
 	InternalRecipientsOnly        bool  `json:"internalRecipientsOnly"`
 	ForceDeleteAfterFirstDownload bool  `json:"forceDeleteAfterFirstDownload"`
-	// E2EPolicy is a member of the 2.0 contract not stored yet: never
-	// exported; an import accepts it only absent.
+	// E2EPolicy is the end-to-end encryption policy of the level (since
+	// 2.0), exported only when the level has its own; absent means the
+	// tenant's.
 	E2EPolicy *string `json:"e2ePolicy,omitempty"`
 	// LinkOnlyAllowed is the link-only switch of the level (since 2.0),
 	// always exported; absent on import means true.
@@ -227,6 +228,7 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 			AllowTransferReply:         ptrTo(t.AllowTransferReply),
 			WebhookIncludeAddresses:    ptrTo(t.WebhookIncludeAddresses),
 			LinkOnlyAllowed:            ptrTo(t.LinkOnlyAllowed),
+			E2EPolicy:                  ptrTo(string(t.E2EPolicy)),
 		},
 	}
 	if out.Branding, err = s.exportBranding(t, includeBranding); err != nil {
@@ -313,6 +315,9 @@ func levelToExport(l ConfidentialityLevel) ExportedLevel {
 			ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
 			LinkOnlyAllowed:               ptrTo(!l.Rules.LinkOnlyForbidden),
 		},
+	}
+	if l.Rules.E2EPolicy != nil {
+		out.Rules.E2EPolicy = ptrTo(string(*l.Rules.E2EPolicy))
 	}
 	if len(l.Descriptions) > 0 {
 		out.Descriptions = l.Descriptions

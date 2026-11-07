@@ -254,6 +254,48 @@ func TestGetDownload(t *testing.T) {
 	wantProblem(t, err, problem.CodeMaxDownloadsReached)
 }
 
+// TestGetDownloadE2E checks the end-to-end encryption members of the
+// download page (since 2.0).
+func TestGetDownloadE2E(t *testing.T) {
+	t.Parallel()
+	expires := time.Date(2026, 11, 7, 16, 20, 0, 0, time.UTC)
+	f := &fakeDownloads{view: download.View{
+		SenderEmail: "alice@entity-a.example.com", ExpiresAt: expires, TotalBytes: 60, E2E: true, EncryptedMessage: "c2VhbGVk",
+		Files: []download.FileView{{ID: "fil_1", Name: "file-1.tte2", Size: 60, SHA256: "aa", ScanStatus: store.ScanNotScannedE2E, EncryptedMetadata: "bWV0YQ"}},
+	}}
+	resp, err := NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse))
+	if got.EndToEndEncrypted == nil || !*got.EndToEndEncrypted || got.EncryptedMessage == nil || *got.EncryptedMessage != "c2VhbGVk" ||
+		got.Message != nil || got.ArchiveUrl != nil || got.Files == nil || len(*got.Files) != 1 {
+		t.Fatalf("e2e view = %+v", got)
+	}
+	if fl := (*got.Files)[0]; fl.EncryptedMetadata == nil || *fl.EncryptedMetadata != "bWV0YQ" || fl.ScanStatus != "not_scanned_e2e" || fl.MediaType != nil {
+		t.Errorf("file = %+v", fl)
+	}
+
+	// Locked: the flag only, no encrypted message nor files.
+	f.view = download.View{SenderEmail: "alice@entity-a.example.com", ExpiresAt: expires, PasswordProtected: true, Locked: true, E2E: true, EncryptedMessage: "c2VhbGVk"}
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse)); got.EndToEndEncrypted == nil || !*got.EndToEndEncrypted ||
+		got.EncryptedMessage != nil || got.Files != nil || got.ArchiveUrl != nil {
+		t.Errorf("locked e2e view = %+v", got)
+	}
+
+	// An ordinary transfer has no end-to-end member.
+	f.view = download.View{
+		SenderEmail: "alice@entity-a.example.com", ExpiresAt: expires, ArchiveAvailable: true,
+		Files: []download.FileView{{ID: "fil_1", Name: "a.txt", Size: 1, SHA256: "aa", ScanStatus: store.ScanClean}},
+	}
+	resp, _ = NewServer(WithDownloads(f)).GetDownload(downloadCtx(t, nil), gen.GetDownloadRequestObject{LinkToken: linkToken})
+	if got := gen.PublicTransfer(resp.(gen.GetDownload200JSONResponse)); got.EndToEndEncrypted != nil || got.EncryptedMessage != nil ||
+		(*got.Files)[0].EncryptedMetadata != nil {
+		t.Errorf("ordinary view = %+v", got)
+	}
+}
+
 // TestGetDownloadLimitAndLevel checks downloadsRemaining and the
 // confidentiality level of the download page (since 1.1).
 func TestGetDownloadLimitAndLevel(t *testing.T) {
@@ -392,6 +434,7 @@ func TestDownloadError(t *testing.T) {
 		{err: download.ErrGone, code: problem.CodeTransferGone},
 		{err: download.ErrMaxDownloads, code: problem.CodeMaxDownloadsReached},
 		{err: download.ErrDownloadLocked, code: problem.CodeDownloadLocked},
+		{err: download.ErrE2EArchiveUnavailable, code: problem.CodeE2EArchiveUnavailable},
 		{err: download.ErrNoClientIP, code: problem.CodeInternalError},
 		{err: boom, code: problem.CodeInternalError},
 		{err: download.ErrVerificationRequired, code: problem.CodeRecipientVerificationRequired},
@@ -709,6 +752,9 @@ func TestDownloadArchive(t *testing.T) {
 	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrNotFound})).DownloadArchive(
 		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
 	wantProblem(t, err, problem.CodeNotFound)
+	_, err = NewServer(WithDownloads(&fakeDownloads{err: download.ErrE2EArchiveUnavailable})).DownloadArchive(
+		downloadCtx(t, httptest.NewRequest(http.MethodGet, "/", nil)), gen.DownloadArchiveRequestObject{})
+	wantProblem(t, err, problem.CodeE2EArchiveUnavailable)
 }
 
 func TestAttachment(t *testing.T) {

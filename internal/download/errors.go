@@ -109,6 +109,11 @@ var (
 	// or is longer than MaxReportMessageRunes characters once sanitized
 	// (400 validation-failed, field /message, code invalid-format).
 	ErrInvalidMessage = errors.New("download: invalid abuse report message")
+	// ErrE2EArchiveUnavailable reports an archive asked for an end-to-end
+	// encrypted transfer (since 2.0): the server cannot read its files, the
+	// browser builds the archive after decrypting them (409
+	// e2e-archive-unavailable).
+	ErrE2EArchiveUnavailable = errors.New("download: no server archive for an end-to-end encrypted transfer")
 )
 
 // WrongCodeError reports a wrong verification code. It matches

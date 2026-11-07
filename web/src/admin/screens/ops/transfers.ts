@@ -112,6 +112,7 @@ const SCAN_VARIANTS: Readonly<Record<string, StatusVariant>> = {
   not_scanned_too_large: 'warning',
   not_scanned_encrypted: 'warning',
   not_scanned_disabled: 'warning',
+  not_scanned_e2e: 'info',
   scan_error: 'error',
 };
 

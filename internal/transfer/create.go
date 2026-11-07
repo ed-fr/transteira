@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,7 @@ import (
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/textsafe"
+	"github.com/ed-fr/transteira/internal/tte2"
 )
 
 // Limits of a creation request (OpenAPI TransferCreate and FileDeclaration).
@@ -62,7 +64,8 @@ type CreateRequest struct {
 	// link sender, omitted or equal to the recipients of the link, in any
 	// order.
 	Recipients []string
-	// Message is the optional plain-text message.
+	// Message is the optional plain-text message; it must be empty for an
+	// end-to-end encrypted transfer, which uses EncryptedMessage.
 	Message string
 	// ExpiryDays is the validity: 1, 7 or 30 days after the finalization;
 	// for a drop link sender, the validity of the link.
@@ -94,6 +97,19 @@ type CreateRequest struct {
 	// mailed; the recipients become optional. Internal senders and API
 	// tokens only, when the tenant and the level allow it.
 	LinkOnly bool
+	// EndToEndEncrypted declares files encrypted in the browser (since 2.0,
+	// spec 22): every file carries its EncryptedMetadata and the generic
+	// name of [E2EFileName], without media type nor path, its Size (at
+	// least tte2.MinFileSize) and ExpectedSHA256 being those of the
+	// ciphertext; Message must be empty. Allowed when the effective policy
+	// of the tenant and the level allows it, never for a drop link
+	// depositor.
+	EndToEndEncrypted bool
+	// EncryptedMessage is the optional message of an end-to-end encrypted
+	// transfer, encrypted in the browser (unpadded base64url, at most
+	// store.MaxE2EMessageLen bytes); "" for none. Refused on any other
+	// transfer.
+	EncryptedMessage string
 }
 
 // FileDeclaration declares one file of a transfer (OpenAPI
@@ -111,6 +127,18 @@ type FileDeclaration struct {
 	// Path is the folder of the file inside the transfer ("a/b"), "" at
 	// the root (OpenAPI FilePath).
 	Path string
+	// EncryptedMetadata is, for a file of an end-to-end encrypted transfer
+	// (since 2.0), its name, type, folder and plaintext SHA-256 encrypted in
+	// the browser (unpadded base64url, at most store.MaxE2EMetadataLen
+	// bytes); "" otherwise, and refused on any other transfer.
+	EncryptedMetadata string
+}
+
+// E2EFileName returns the generic name of the file at position i (from 0)
+// of an end-to-end encrypted transfer: "file-<i+1>.tte2". The real name is
+// in its encrypted metadata.
+func E2EFileName(i int) string {
+	return fmt.Sprintf("file-%d.tte2", i+1)
 }
 
 // plan is a validated creation request.
@@ -119,6 +147,9 @@ type plan struct {
 	sender     string
 	recipients []string
 	message    string
+	// e2eMessage is the encrypted message of an end-to-end encrypted
+	// request, "" for none.
+	e2eMessage string
 	password   []byte
 	files      []store.TransferFile
 	total      int64
@@ -170,6 +201,10 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 		p.recipients = s.validateRecipients(&v, req.Recipients, req.LinkOnly)
 	}
 	switch {
+	case req.EndToEndEncrypted && req.Message != "":
+		// The server must never hold the plaintext of an encrypted
+		// transfer: its message is encrypted too (EncryptedMessage).
+		v.add(FieldMessage, CodeNotAllowed)
 	case !utf8.ValidString(req.Message):
 		v.add(FieldMessage, CodeInvalidFormat)
 	case utf8.RuneCountInString(textsafe.SanitizeMessage(req.Message)) > MaxMessageRunes:
@@ -202,7 +237,18 @@ func (s *Service) validate(req CreateRequest, sender Sender, key string) (plan, 
 	if k := req.ConfidentialityLevel; k != "" && !store.ValidLevelKey(k) {
 		v.add(FieldConfidentialityLevel, CodeInvalidFormat)
 	}
-	p.files, p.total = validateFiles(&v, req.Files)
+	switch m := req.EncryptedMessage; {
+	case m == "":
+	case !req.EndToEndEncrypted:
+		v.add(FieldEncryptedMessage, CodeNotAllowed)
+	case len(m) > store.MaxE2EMessageLen:
+		v.add(FieldEncryptedMessage, CodeTooLong)
+	case !validBase64URL(m), tte2.CheckMessageFraming(m) != nil:
+		v.add(FieldEncryptedMessage, CodeInvalidFormat)
+	default:
+		p.e2eMessage = m
+	}
+	p.files, p.total = validateFiles(&v, req.Files, req.EndToEndEncrypted)
 	return p, v.err()
 }
 
@@ -252,8 +298,18 @@ func parseAddress(raw string) (string, bool) {
 }
 
 // validateFiles checks the file declarations and returns them as store
-// files (without identifiers or keys) with the declared total.
-func validateFiles(v *validator, decls []FileDeclaration) ([]store.TransferFile, int64) {
+// files (without identifiers or keys) with the declared total. The errors
+// of a file come in the order name, path, size, mediaType, expectedSha256,
+// encryptedMetadata. With e2e (an end-to-end encrypted request, rule 1 of
+// step 7), every file has its encrypted metadata (CodeRequired), at most
+// store.MaxE2EMetadataLen bytes (CodeTooLong) of unpadded base64url
+// (CodeInvalidFormat); its name is the generic [E2EFileName] (CodeNotAllowed:
+// the real name is encrypted); it has neither path nor media type
+// (CodeNotAllowed: they would disclose what the metadata hides); its size is
+// at least tte2.MinFileSize, the smallest TTE2 stream (CodeInvalidFormat).
+// Otherwise, the name, path and media type follow their policies and an
+// encrypted metadata is refused (CodeNotAllowed).
+func validateFiles(v *validator, decls []FileDeclaration, e2e bool) ([]store.TransferFile, int64) {
 	switch {
 	case len(decls) == 0:
 		v.add(FieldFiles, CodeRequired)
@@ -266,29 +322,76 @@ func validateFiles(v *validator, decls []FileDeclaration) ([]store.TransferFile,
 	var total int64
 	for i, d := range decls {
 		pointer := FieldFiles + "/" + strconv.Itoa(i) + "/"
-		name, err := filename.Validate(d.Name)
-		if err != nil {
-			v.add(pointer+"name", CodeInvalidFileName)
-		}
-		path, err := filename.ValidatePath(d.Path)
-		if err != nil {
-			v.add(pointer+"path", CodeInvalidFilePath)
-		}
-		if d.Size < 0 {
-			v.add(pointer+"size", CodeInvalidFormat)
+		var name, path string
+		if e2e {
+			if name = E2EFileName(i); d.Name != name {
+				v.add(pointer+"name", CodeNotAllowed)
+			}
+			if d.Path != "" {
+				v.add(pointer+"path", CodeNotAllowed)
+			}
 		} else {
+			var err error
+			if name, err = filename.Validate(d.Name); err != nil {
+				v.add(pointer+"name", CodeInvalidFileName)
+			}
+			if path, err = filename.ValidatePath(d.Path); err != nil {
+				v.add(pointer+"path", CodeInvalidFilePath)
+			}
+		}
+		switch {
+		case d.Size < 0, e2e && d.Size < tte2.MinFileSize:
+			v.add(pointer+"size", CodeInvalidFormat)
+		default:
 			total = addCapped(total, d.Size)
 		}
-		if !validMediaType(d.MediaType) {
+		switch {
+		case e2e && d.MediaType != "":
+			v.add(pointer+"mediaType", CodeNotAllowed)
+		case !validMediaType(d.MediaType):
 			v.add(pointer+"mediaType", CodeInvalidFormat)
 		}
 		sum := strings.ToLower(d.ExpectedSHA256)
 		if sum != "" && (len(sum) != sha256HexLen || strings.Trim(sum, "0123456789abcdef") != "") {
 			v.add(pointer+"expectedSha256", CodeInvalidFormat)
 		}
+		if code := metadataCode(d.EncryptedMetadata, e2e); code != "" {
+			v.add(pointer+"encryptedMetadata", code)
+		}
 		files[i] = store.TransferFile{Path: path, Name: name, Size: d.Size, MediaType: d.MediaType, ExpectedSHA256: sum}
+		if e2e {
+			files[i].E2EMetadata = d.EncryptedMetadata
+		}
 	}
 	return files, total
+}
+
+// metadataCode returns the error code of the encrypted metadata m of a
+// file, e2e telling whether the request is end-to-end encrypted, or "" when
+// it is acceptable (see validateFiles).
+func metadataCode(m string, e2e bool) string {
+	switch {
+	case !e2e && m != "":
+		return CodeNotAllowed
+	case !e2e:
+		return ""
+	case m == "":
+		return CodeRequired
+	case len(m) > store.MaxE2EMetadataLen:
+		return CodeTooLong
+	case !validBase64URL(m), tte2.CheckMetadataFraming(m) != nil:
+		return CodeInvalidFormat
+	}
+	return ""
+}
+
+// validBase64URL reports whether s is canonical unpadded base64url (OpenAPI
+// pattern ^[A-Za-z0-9_-]+$, which the store checks too, and a length and
+// trailing bits that decode exactly), so that the encrypted values stored
+// are the ones the browser will decode.
+func validBase64URL(s string) bool {
+	_, err := base64.RawURLEncoding.Strict().DecodeString(s)
+	return err == nil && !strings.ContainsAny(s, "\r\n")
 }
 
 // addCapped returns a + b (both >= 0), capped at math.MaxInt64.
@@ -344,9 +447,11 @@ const (
 // normalized sender address of an API token request (the key is scoped to
 // the token, whose deposits may use several addresses), the sorted
 // normalized recipients, the sanitized message, the validity, the presence
-// of a password (never its value), the deletion option, the language and
-// the files in order (NFC name, size, media type, lowercase expected
-// SHA-256).
+// of a password (never its value), the deletion option, the language, the
+// files in order (NFC name, size, media type, lowercase expected SHA-256,
+// folder, encrypted metadata) and the options (download limit, level,
+// recipient verification, link-only, end-to-end encryption with its
+// encrypted message).
 func fingerprint(p plan, req CreateRequest) string {
 	type file struct {
 		Name      string `json:"n"`
@@ -355,6 +460,9 @@ func fingerprint(p plan, req CreateRequest) string {
 		SHA256    string `json:"h"`
 		// Path (1.1) is omitted at the root, like the options below.
 		Path string `json:"p,omitempty"`
+		// Metadata (2.0) is the encrypted metadata of an end-to-end
+		// encrypted file, omitted otherwise.
+		Metadata string `json:"k,omitempty"`
 	}
 	canonical := struct {
 		Sender     string   `json:"s,omitempty"`
@@ -372,15 +480,22 @@ func fingerprint(p plan, req CreateRequest) string {
 		Verification bool   `json:"v,omitempty"`
 		// The link-only option of version 2.0, omitted when unset.
 		LinkOnly bool `json:"o,omitempty"`
+		// The end-to-end encryption of version 2.0 and its encrypted
+		// message, omitted when unset.
+		E2E        bool   `json:"z,omitempty"`
+		E2EMessage string `json:"q,omitempty"`
 	}{
 		Sender:     p.sender,
 		Recipients: slices.Sorted(slices.Values(p.recipients)), Message: p.message, ExpiryDays: req.ExpiryDays,
 		Password: p.password != nil, Delete: req.DeleteAfterFirstDownload, Language: req.Language,
 		Files: make([]file, len(p.files)), MaxDownloads: req.MaxDownloads, Level: req.ConfidentialityLevel,
 		Verification: req.RecipientVerification, LinkOnly: req.LinkOnly,
+		E2E: req.EndToEndEncrypted, E2EMessage: p.e2eMessage,
 	}
 	for i, f := range p.files {
-		canonical.Files[i] = file{Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256, Path: f.Path}
+		canonical.Files[i] = file{
+			Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.ExpectedSHA256, Path: f.Path, Metadata: f.E2EMetadata,
+		}
 	}
 	b, _ := json.Marshal(canonical) //nolint:errchkjson // strings, integers and booleans only: it cannot fail
 	sum := sha256.Sum256(b)
@@ -402,7 +517,11 @@ func fingerprint(p plan, req CreateRequest) string {
 //     deposit_refused; for a reply sender, after the blocklist, the reply
 //     rule (see checkReply): ErrReplyNotAllowed or ErrOriginalGone, never
 //     logged;
-//  2. validation of every field (*ValidationError): a remote internal
+//  2. validation of every field (*ValidationError; an end-to-end encrypted
+//     request follows the file rules of validateFiles and carries no
+//     plaintext message); field errors come before the end-to-end
+//     encryption policy of step 3, so a malformed encrypted request gets
+//     400 validation-failed even where the policy forbids it: a remote internal
 //     sender names its recipients like an internal one, and the tenant
 //     policies of step 3 apply to it the same way; the recipients of an
 //     external sender are ignored and replaced by the inviter (T-17), those
@@ -413,7 +532,9 @@ func fingerprint(p plan, req CreateRequest) string {
 //     token, without the IP part, replaced by the ranges of the token)
 //     applies to the validated SenderEmail;
 //  3. the tenant policies (see applyPolicies): confidentiality level
-//     (unknown key: *ValidationError), its rules (*RuleError,
+//     (unknown key: *ValidationError), the link-only rule
+//     (ErrLinkOnlyForbidden), the end-to-end encryption policy
+//     (ErrE2EForbidden, ErrE2ERequired), its rules (*RuleError,
 //     ErrConfidentialityRule), then the recipient domain rules (*RuleError,
 //     ErrRecipientDomainRefused, audited as transfer.recipient_refused);
 //     the forced deletion after the first download and the download cap
@@ -453,7 +574,8 @@ func fingerprint(p plan, req CreateRequest) string {
 //
 // After the commit, Options.OnQuota is called (refused false) and the
 // transfer.created audit event is recorded (best effort; details.remote
-// true for a remote internal sender, whose origin stays internal; origin
+// true for a remote internal sender, whose origin stays internal;
+// details.linkOnly and details.endToEndEncrypted true for those options; origin
 // reply for a reply, followed by transfer.reply_created whose details name
 // the original transfer in replyTo), followed for an
 // API token by api_token.used, whose actor is the sender address (a
@@ -539,6 +661,7 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 		// a link-only transfer has a single shared link, never mailed.
 		LinkMode: s.linkMode, RecipientVerification: req.RecipientVerification,
 		LinkOnly: req.LinkOnly, DropLinkID: sender.DropLinkID,
+		E2E: req.EndToEndEncrypted, E2EMessage: p.e2eMessage,
 	}
 	if req.LinkOnly {
 		rec.LinkMode = store.LinkModeShared
@@ -654,6 +777,9 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender Sender, r
 	}
 	if req.LinkOnly {
 		created["linkOnly"] = true
+	}
+	if req.EndToEndEncrypted {
+		created["endToEndEncrypted"] = true
 	}
 	if sender.DropLinkID != "" {
 		created["dropLinkId"] = sender.DropLinkID

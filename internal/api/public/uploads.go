@@ -104,14 +104,15 @@ func (s *Server) GetUploadOffset(ctx context.Context, req gen.GetUploadOffsetReq
 
 // AppendUploadChunk streams the request body into an upload (tus PATCH).
 // The tus version, the media type and the idle read timeout are enforced
-// by the HTTP layer before the handler runs. Errors have no body.
+// by the HTTP layer before the handler runs. Errors have no body, except
+// e2e-format-invalid (since 2.0), a problem.
 func (s *Server) AppendUploadChunk(ctx context.Context, req gen.AppendUploadChunkRequestObject) (gen.AppendUploadChunkResponseObject, error) {
 	t, p, err := s.uploadPrincipal(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if req.Body == nil {
-		return gen.AppendUploadChunk400Response{}, nil
+		return appendBadRequest{}, nil
 	}
 	st, err := s.uploads.Append(ctx, t.ID, p, req.UploadId, req.Params.UploadOffset, req.Body)
 	switch {
@@ -126,7 +127,14 @@ func (s *Server) AppendUploadChunk(ctx context.Context, req gen.AppendUploadChun
 	case errors.Is(err, upload.ErrInvalid), errors.Is(err, upload.ErrInterrupted):
 		// For an interrupted body the progress is saved; the client, if
 		// still there, resumes after a HEAD.
-		return gen.AppendUploadChunk400Response{}, nil
+		return appendBadRequest{}, nil
+	case errors.Is(err, upload.ErrE2EFormat):
+		// e2e-format-invalid: the bytes of an end-to-end encrypted file
+		// are not a TTE2 stream of the declared length. The refused slice
+		// is not written. Unlike the other tus errors, the 400 carries a
+		// problem, so that the client can tell it from an interrupted body
+		// and stop retrying the same bytes.
+		return nil, problem.New(problem.CodeE2EFormatInvalid)
 	case err != nil:
 		return nil, err
 	}
@@ -153,4 +161,15 @@ func (s *Server) TerminateUpload(ctx context.Context, req gen.TerminateUploadReq
 		return nil, err
 	}
 	return gen.TerminateUpload204Response{Headers: gen.TerminateUpload204ResponseHeaders{TusResumable: tusVersion()}}, nil
+}
+
+// appendBadRequest is the bodyless 400 of AppendUploadChunk (missing or
+// malformed Upload-Offset, interrupted body). The generated 400 response
+// carries a problem, which only e2e-format-invalid uses.
+type appendBadRequest struct{}
+
+// VisitAppendUploadChunkResponse writes the bare 400.
+func (appendBadRequest) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(http.StatusBadRequest)
+	return nil
 }

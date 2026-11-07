@@ -359,10 +359,11 @@ func (s *Service) importTenantRow(in ImportInput) (*tenant.Tenant, error) {
 	if st == nil {
 		st = &ExportedSettings{}
 	}
-	// Not stored before the end-to-end step of version 2: only the default
-	// can be imported without losing a setting.
-	if st.E2EPolicy != nil && *st.E2EPolicy != e2eForbidden {
-		return nil, importErr(ptrSettings+"/e2ePolicy", "not supported yet")
+	e2e := tenant.E2EForbidden
+	if st.E2EPolicy != nil {
+		if e2e = tenant.E2EPolicy(*st.E2EPolicy); !e2e.Valid() {
+			return nil, importErr(ptrSettings+"/e2ePolicy", "must be forbidden, allowed or required")
+		}
 	}
 	create := TenantCreate{
 		Name: in.Name, FQDN: in.FQDN, DefaultLanguage: tenant.Languages()[0], StorageQuotaBytes: in.StorageQuotaBytes,
@@ -394,12 +395,9 @@ func (s *Service) importTenantRow(in ImportInput) (*tenant.Tenant, error) {
 	t.AllowTransferReply = deref(st.AllowTransferReply)
 	t.WebhookIncludeAddresses = deref(st.WebhookIncludeAddresses)
 	t.LinkOnlyAllowed = deref(st.LinkOnlyAllowed)
+	t.E2EPolicy = e2e
 	return t, nil
 }
-
-// e2eForbidden is the default end-to-end encryption policy, the only one
-// an import accepts until the policy is stored.
-const e2eForbidden = "forbidden"
 
 // deref returns *p, or the zero value for nil.
 func deref[T any](p *T) T {
@@ -502,10 +500,13 @@ func planLevels(items []ExportedLevel) ([]store.ConfidentialityLevel, error) {
 	levels := make([]ConfidentialityLevel, len(items))
 	for i, l := range items {
 		rules := ptrLevels + strictjson.Pointer("items", i, "rules")
-		// Not stored before the end-to-end step of version 2: only the
-		// default can be imported.
+		var e2e *tenant.E2EPolicy
 		if l.Rules.E2EPolicy != nil {
-			return nil, importErr(rules+"/e2ePolicy", "not supported yet")
+			pol := tenant.E2EPolicy(*l.Rules.E2EPolicy)
+			if !pol.Valid() {
+				return nil, importErr(rules+"/e2ePolicy", "must be forbidden, allowed or required")
+			}
+			e2e = &pol
 		}
 		levels[i] = ConfidentialityLevel{
 			Key: l.Key, Labels: l.Labels, Descriptions: l.Descriptions, IsDefault: l.IsDefault,
@@ -516,6 +517,7 @@ func planLevels(items []ExportedLevel) ([]store.ConfidentialityLevel, error) {
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
 				// Absent means allowed.
 				LinkOnlyForbidden: l.Rules.LinkOnlyAllowed != nil && !*l.Rules.LinkOnlyAllowed,
+				E2EPolicy:         e2e,
 			},
 		}
 	}

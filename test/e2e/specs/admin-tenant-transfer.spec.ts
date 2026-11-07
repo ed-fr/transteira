@@ -209,6 +209,10 @@ test.describe('tenant configuration export and import', () => {
       await expectHeading(page, 'Setup');
       const newId = /\/tenants\/([^/]+)\/setup$/.exec(page.url())![1]!;
       created = { id: newId, name, fqdn: `t-${id}.localhost` };
+      // The setup screen keeps loading the tenant (network rules, etc.): let
+      // its requests end before the cleanup deletes the tenant, or a late
+      // one answers 404 and the console guard fails the test under load.
+      await page.waitForLoadState('networkidle');
     } finally {
       await deleteTenant(created);
       await deleteTenant(source);

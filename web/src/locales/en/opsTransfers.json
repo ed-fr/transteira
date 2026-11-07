@@ -22,7 +22,8 @@
     "not_scanned_too_large": "Not scanned: too large",
     "not_scanned_encrypted": "Not scanned: encrypted",
     "not_scanned_disabled": "Not scanned: antivirus disabled",
-    "scan_error": "Scan failed, file withheld"
+    "scan_error": "Scan failed, file withheld",
+    "not_scanned_e2e": "Not scanned: end-to-end encrypted"
   },
   "wait": {
     "seconds": {
@@ -132,7 +133,9 @@
       "noDownloads": "Nothing downloaded",
       "trackingNone": "This transfer uses a single shared link: there is no per-recipient tracking.",
       "trackingPending": "Each recipient gets a personal link when the transfer becomes available: no link exists yet."
-    }
+    },
+    "endToEnd": "End-to-end encrypted",
+    "endToEndNoMessage": "The message, if any, is encrypted and unreadable by the server."
   },
   "resend": {
     "button": "Resend the notification",
@@ -169,5 +172,6 @@
       "uploadingNoDelay": "An upload of this transfer is in progress. Try again in a moment.",
       "notFound": "This transfer no longer exists."
     }
-  }
+  },
+  "e2eBadge": "End-to-end encrypted"
 }

@@ -671,6 +671,12 @@ type spec struct {
 	// sender adjusts the transfer record before it is stored (sender kind,
 	// invitation, API token, reply source), nil for an internal sender.
 	sender func(*store.Transfer)
+	// e2e makes the transfer end-to-end encrypted (since 2.0): no plain
+	// message, e2eMessage as its encrypted message, encrypted metadata
+	// "meta-<i>" for every file, generic names, and every file
+	// not_scanned_e2e (statuses are ignored).
+	e2e        bool
+	e2eMessage string
 }
 
 // random returns n random bytes.
@@ -748,6 +754,9 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 			if sz, ok := sp.sizes[i]; ok {
 				f.Size = sz
 			}
+			if sp.e2e {
+				f.Name, f.MediaType, f.E2EMetadata = fmt.Sprintf("file-%d.tte2", i+1), "", fmt.Sprintf("meta-%d", i)
+			}
 			ev.secrets = append(ev.secrets, f.Name)
 			files = append(files, f)
 		}
@@ -772,13 +781,23 @@ func (ev *env) publish(tn *tenant.Tenant, sp spec) published {
 		if sp.sender != nil {
 			sp.sender(&tr)
 		}
+		if sp.e2e {
+			tr.E2E, tr.Message, tr.E2EMessage = true, "", sp.e2eMessage
+		}
 		if err := ev.db.Transfers().CreateTx(ctx, tx, tr, recipients, files); err != nil {
 			return err
 		}
-		if err := ev.db.Transfers().FinalizeTx(ctx, tx, p.id, now); err != nil {
+		if sp.e2e {
+			if _, err := ev.db.Transfers().FinalizeE2ETx(ctx, tx, p.id, now); err != nil {
+				return err
+			}
+		} else if err := ev.db.Transfers().FinalizeTx(ctx, tx, p.id, now); err != nil {
 			return err
 		}
 		for i, f := range files {
+			if sp.e2e {
+				break
+			}
 			st := store.ScanClean
 			if i < len(sp.statuses) {
 				st = sp.statuses[i]

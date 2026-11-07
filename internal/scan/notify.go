@@ -29,7 +29,8 @@ func one(j mail.Job, err error) ([]mail.Job, error) {
 
 // notifyAvailable sends the mails of a transfer made available: one to each
 // recipient, the confirmation to the sender, and the "file problems"
-// (infected or withheld files) and "file not scanned" alerts when they apply.
+// (infected or withheld files) and "file not scanned" alerts when they apply
+// (never the latter for an end-to-end encrypted transfer).
 // A shared transfer has a single link, sent to every recipient and shown in
 // the confirmation. A transfer with one link per recipient has links (link
 // is ""): each recipient gets their own link, and the confirmation carries
@@ -62,7 +63,10 @@ func (w *Worker) notifyAvailable(ctx context.Context, k key, t *tenant.Tenant, d
 	if count(v, notify.ScanInfected)+count(v, notify.ScanWithheld) > 0 {
 		builders = append(builders, w.problemsBuilder(ctx, t, v))
 	}
-	if count(v, notify.ScanTooLarge)+count(v, notify.ScanEncrypted)+count(v, notify.ScanDisabled) > 0 {
+	// The sender of an end-to-end encrypted transfer chose a transfer the
+	// antivirus cannot read: no "file not scanned" alert (the confirmation
+	// says so).
+	if !d.E2E && count(v, notify.ScanTooLarge)+count(v, notify.ScanEncrypted)+count(v, notify.ScanDisabled) > 0 {
 		builders = append(builders, builder{mail.TemplateFileNotScanned, func() ([]mail.Job, error) {
 			return one(w.notifier.FileNotScanned(ctx, t, v))
 		}})

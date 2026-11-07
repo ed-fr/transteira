@@ -1067,3 +1067,15 @@ func TestOptionalHelpers(t *testing.T) {
 		t.Error("optional helpers")
 	}
 }
+
+// TestTenantBodyE2EPolicy renders the policy of a tenant, and nothing for a
+// view built without one.
+func TestTenantBodyE2EPolicy(t *testing.T) {
+	t.Parallel()
+	if b := tenantBody(tenantadmin.TenantView{E2EPolicy: tenant.E2ERequired}); b.E2ePolicy == nil || *b.E2ePolicy != gen.E2ePolicyRequired {
+		t.Errorf("policy %v", b.E2ePolicy)
+	}
+	if b := tenantBody(tenantadmin.TenantView{}); b.E2ePolicy != nil {
+		t.Errorf("unknown policy rendered: %v", *b.E2ePolicy)
+	}
+}

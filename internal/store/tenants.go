@@ -27,7 +27,7 @@ const (
 const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max_transfer_ceiling, storage_quota_bytes, ` +
 	`status, primary_color, accent_color, has_logo, has_background, background_preset, webhook_include_addresses, allow_remote_internal_deposit, allow_transfer_reply, ` +
 	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, network_reviewed_at, created_at, updated_at, provisioned_by, ` +
-	`link_only_allowed`
+	`link_only_allowed, e2e_policy`
 
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
@@ -35,7 +35,7 @@ var (
 	qTenantInsert = systemQuery(
 		// The setup state is always written explicitly, from the Go value
 		// (migration 0022 drops its default on PostgreSQL, T-261).
-		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
 		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
@@ -64,6 +64,11 @@ var (
 	// tenant (super admin only, since 2.0).
 	qTenantSetLinkOnly = systemQuery(
 		`UPDATE tenants SET link_only_allowed = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantSetE2EPolicy sets the end-to-end encryption policy of an
+	// active tenant (super admin only, since 2.0).
+	qTenantSetE2EPolicy = systemQuery(
+		`UPDATE tenants SET e2e_policy = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	// qTenantSetSMTPTested records the SMTP configuration of an active
 	// tenant that passed a test send (Tenants.SetSMTPTested).
@@ -193,17 +198,17 @@ func presetArg(preset string) any {
 // scanTenant reads one row of tenantColumns.
 func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	var (
-		t                  tenant.Tenant
-		tid, status, setup string
-		created, updated   int64
-		preset, provBy     sql.NullString
-		tested, reviewed   sql.NullInt64
-		networkReviewed    sql.NullInt64
+		t                       tenant.Tenant
+		tid, status, setup, e2e string
+		created, updated        int64
+		preset, provBy          sql.NullString
+		tested, reviewed        sql.NullInt64
+		networkReviewed         sql.NullInt64
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
-		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed); err != nil {
+		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed, &e2e); err != nil {
 		return nil, err
 	}
 	t.BackgroundPreset = preset.String // NULL is the default preset, ""
@@ -211,6 +216,7 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 	t.ID = tenant.ID(tid)
 	t.Status = tenant.Status(status)
 	t.SetupState = tenant.SetupState(setup)
+	t.E2EPolicy = tenant.E2EPolicy(e2e)
 	if tested.Valid {
 		t.SMTPTestedAt = fromMillis(tested.Int64)
 	}
@@ -235,8 +241,9 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // antivirus enabled, whatever t.AntivirusEnabled
 // ([Tenants.SetAntivirusEnabled] changes it), with no SMTP test and no
 // review of its mail templates or of its network rules recorded. It stores
-// t.LinkOnlyAllowed as given (false for the zero value): the caller checks
-// that only a super admin sets it. It returns the stored tenant,
+// t.LinkOnlyAllowed and t.E2EPolicy as given (false and
+// [tenant.E2EForbidden] for the zero values): the caller checks that only a
+// super admin sets them. It returns the stored tenant,
 // ErrInvalid for invalid fields (including a preset ID, a status other
 // than active, a missing or unknown setup state, a transfer limit above
 // the ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
@@ -269,6 +276,9 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 		return nil, invalid("tenant id is assigned by the store")
 	}
 	c := t.WithDefaults()
+	if c.E2EPolicy == "" {
+		c.E2EPolicy = tenant.E2EForbidden
+	}
 	if c.Status != tenant.StatusActive {
 		return nil, invalid("a new tenant is active")
 	}
@@ -298,7 +308,7 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 			c.MaxTransferBytes, c.MaxTransferCeiling, c.StorageQuotaBytes, string(c.Status),
 			c.PrimaryColor, c.AccentColor, c.HasLogo, c.HasBackground, presetArg(c.BackgroundPreset), c.WebhookIncludeAddresses, c.AllowRemoteInternalDeposit,
 			c.AllowTransferReply, c.AntivirusEnabled, string(c.SetupState), nil, nil, nil,
-			toMillis(now), toMillis(now), nullText(c.ProvisionedBy), c.LinkOnlyAllowed)
+			toMillis(now), toMillis(now), nullText(c.ProvisionedBy), c.LinkOnlyAllowed, string(c.E2EPolicy))
 		if err != nil {
 			return err
 		}
@@ -396,7 +406,9 @@ func (r *Tenants) List(ctx context.Context, opts TenantListOptions) (Page[*tenan
 // [Tenants.UpdateWithAntivirus] or [Tenants.SetAntivirusEnabled]
 // (t.AntivirusEnabled is ignored here), and the link-only switch with
 // [Tenants.UpdateWithPolicies] or [Tenants.SetLinkOnlyAllowed]
-// (t.LinkOnlyAllowed is ignored here), so t.Status must merely be valid.
+// (t.LinkOnlyAllowed is ignored here), and the end-to-end encryption
+// policy with [Tenants.UpdateWithPolicies] or [Tenants.SetE2EPolicy]
+// (t.E2EPolicy is ignored here), so t.Status must merely be valid.
 // The transfer limit must not exceed the ceiling, itself at most
 // [tenant.MaxTransferLimit]; who may change which field is the caller's
 // rule. It returns the stored tenant, ErrInvalid for invalid fields,
@@ -416,13 +428,17 @@ type TenantParts struct {
 	Antivirus bool
 	// LinkOnly writes t.LinkOnlyAllowed (super admin only, since 2.0).
 	LinkOnly bool
+	// E2E writes t.E2EPolicy (super admin only, since 2.0), which must be a
+	// valid [tenant.E2EPolicy].
+	E2E bool
 }
 
 // UpdateWithPolicies writes the parts of t selected by parts in one
 // transaction (a failure stores nothing) and refreshes UpdatedAt: the
 // general fields as [Tenants.Update] does, and the super admin switches
-// (antivirus, link-only transfers) as [Tenants.SetAntivirusEnabled] and
-// [Tenants.SetLinkOnlyAllowed] do. Callers check the caller's scope for
+// (antivirus, link-only transfers, end-to-end encryption policy) as
+// [Tenants.SetAntivirusEnabled], [Tenants.SetLinkOnlyAllowed] and
+// [Tenants.SetE2EPolicy] do. Callers check the caller's scope for
 // each switch. It returns the stored tenant and the errors of
 // [Tenants.Update]; selecting no part only reads the tenant back.
 func (r *Tenants) UpdateWithPolicies(ctx context.Context, t *tenant.Tenant, parts TenantParts) (*tenant.Tenant, error) {
@@ -465,9 +481,22 @@ func (r *Tenants) SetLinkOnlyAllowed(ctx context.Context, tid tenant.ID, allowed
 	return r.update(ctx, &tenant.Tenant{ID: tid, LinkOnlyAllowed: allowed}, TenantParts{LinkOnly: true}, "set tenant link-only")
 }
 
+// SetE2EPolicy sets the end-to-end encryption policy of the active tenant
+// tid (since 2.0, spec 22) and refreshes UpdatedAt (super admin only:
+// callers check the caller's scope). It applies to the transfers created
+// afterwards. It returns the stored tenant, ErrInvalid for an unknown
+// policy, and ErrNotFound when the tenant does not exist or is being
+// deleted. Callers must invalidate the tenant.Resolver cache of its FQDN.
+func (r *Tenants) SetE2EPolicy(ctx context.Context, tid tenant.ID, policy tenant.E2EPolicy) (*tenant.Tenant, error) {
+	if err := tid.Validate(); err != nil {
+		return nil, fmt.Errorf("store: set tenant e2e policy: %w", ErrNotFound)
+	}
+	return r.update(ctx, &tenant.Tenant{ID: tid, E2EPolicy: policy}, TenantParts{E2E: true}, "set tenant e2e policy")
+}
+
 // update implements Update, UpdateWithAntivirus, UpdateWithPolicies,
-// SetAntivirusEnabled and SetLinkOnlyAllowed: the parts of t selected by
-// parts, in one transaction.
+// SetAntivirusEnabled, SetLinkOnlyAllowed and SetE2EPolicy: the parts of t
+// selected by parts, in one transaction.
 func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantParts, op string) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
 		return nil, invalid("tenant id is required")
@@ -476,6 +505,9 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 		if err := t.Validate(); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
+	}
+	if parts.E2E && !t.E2EPolicy.Valid() {
+		return nil, invalid("unknown end-to-end encryption policy")
 	}
 	now := toMillis(r.db.now())
 	var out *tenant.Tenant
@@ -503,6 +535,15 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 		}
 		if parts.LinkOnly {
 			res, err := tx.Exec(ctx, qTenantSetLinkOnly, t.LinkOnlyAllowed, now, string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if parts.E2E {
+			res, err := tx.Exec(ctx, qTenantSetE2EPolicy, string(t.E2EPolicy), now, string(t.ID))
 			if err == nil {
 				err = expectOne(res)
 			}

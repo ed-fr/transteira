@@ -3,7 +3,6 @@ package public
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/ed-fr/transteira/internal/api/apiutil"
@@ -102,9 +101,6 @@ func (s *Server) CreateTransfer(ctx context.Context, req gen.CreateTransferReque
 	if req.Body == nil {
 		return nil, validationFailed(transfer.FieldFiles, transfer.CodeRequired)
 	}
-	if prob := unsupportedTransferCreate(req.Body); prob != nil {
-		return nil, prob
-	}
 	d, err := s.transfers.Create(ctx, t, sender, createRequest(req.Body), deref(req.Params.IdempotencyKey))
 	if err != nil {
 		return nil, transferError(err)
@@ -155,26 +151,6 @@ func (s *Server) FinalizeTransfer(ctx context.Context, req gen.FinalizeTransferR
 	return gen.FinalizeTransfer202JSONResponse(transferBody(d)), nil
 }
 
-// unsupportedTransferCreate refuses the members of TransferCreate added by
-// API 2.0 that are not implemented yet (endToEndEncrypted,
-// encryptedMessage and the encryptedMetadata of a file) with a 400
-// validation-failed naming the first one present, or returns nil. A false
-// boolean is the default and harmless.
-func unsupportedTransferCreate(b *gen.TransferCreate) *problem.Problem {
-	if deref(b.EndToEndEncrypted) {
-		return validationFailed("/endToEndEncrypted", fieldNotSupported)
-	}
-	if b.EncryptedMessage != nil {
-		return validationFailed("/encryptedMessage", fieldNotSupported)
-	}
-	for i, f := range b.Files {
-		if f.EncryptedMetadata != nil {
-			return validationFailed(fmt.Sprintf("/files/%d/encryptedMetadata", i), fieldNotSupported)
-		}
-	}
-	return nil
-}
-
 // createRequest converts the OpenAPI TransferCreate body.
 func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 	req := transfer.CreateRequest{
@@ -189,6 +165,8 @@ func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 		ConfidentialityLevel:     string(deref(b.ConfidentialityLevel)),
 		RecipientVerification:    deref(b.RecipientVerification),
 		LinkOnly:                 deref(b.LinkOnly),
+		EndToEndEncrypted:        deref(b.EndToEndEncrypted),
+		EncryptedMessage:         deref(b.EncryptedMessage),
 	}
 	if b.Recipients != nil {
 		req.Recipients = make([]string, len(*b.Recipients))
@@ -199,7 +177,7 @@ func createRequest(b *gen.TransferCreate) transfer.CreateRequest {
 	for i, f := range b.Files {
 		req.Files[i] = transfer.FileDeclaration{
 			Name: f.Name, Size: f.Size, MediaType: deref(f.MediaType), ExpectedSHA256: deref(f.ExpectedSha256),
-			Path: deref(f.Path),
+			Path: deref(f.Path), EncryptedMetadata: deref(f.EncryptedMetadata),
 		}
 	}
 	return req
@@ -228,6 +206,9 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		// A drop link transfer: the service hid its recipients (T-311).
 		body.DropLinkLabel = &d.DropLinkLabel
 	}
+	if d.E2E {
+		body.EndToEndEncrypted, body.EncryptedMessage = &d.E2E, optional(d.EncryptedMessage)
+	}
 	// A transfer with one link per recipient never shows a link (P27): the
 	// sender follows the recipients through their tracking only.
 	if d.RecipientTracking != nil {
@@ -241,6 +222,7 @@ func transferBody(d transfer.Details) gen.SenderTransfer {
 		file := gen.SenderFile{
 			Id: f.ID, Path: optional(f.Path), Name: f.Name, Size: f.Size, MediaType: optional(f.MediaType),
 			Sha256: optional(f.SHA256), ScanStatus: gen.ScanStatus(f.ScanStatus), ScanSignature: optional(f.ScanSignature),
+			EncryptedMetadata: optional(f.EncryptedMetadata),
 		}
 		if f.UploadID != "" {
 			url, offset := uploadPath+f.UploadID, f.UploadOffset
@@ -341,6 +323,10 @@ func transferError(err error) error {
 		return problem.New(problem.CodeLinkOnlyForbidden)
 	case errors.Is(err, transfer.ErrLinkOnlyConflict):
 		return problem.New(problem.CodeLinkOnlyConflict)
+	case errors.Is(err, transfer.ErrE2EForbidden): // a policy refusal, never in the security log
+		return problem.New(problem.CodeE2EForbidden)
+	case errors.Is(err, transfer.ErrE2ERequired):
+		return problem.New(problem.CodeE2ERequired)
 	case errors.Is(err, transfer.ErrForbidden):
 		return problem.New(problem.CodeDepositNotAllowed)
 	case errors.Is(err, transfer.ErrNotFound):

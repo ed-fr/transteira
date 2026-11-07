@@ -30,6 +30,7 @@ network, never on the network shared with the reverse proxy.
 | `infected` | Threat found: the file key is destroyed and the file erased; the row stays so that the sender knows which file it was. | no |
 | `not_scanned_too_large` | Larger than `TT_CLAMAV_MAX_SCAN_BYTES`, refused by clamd's stream limit, or only partly analysed because of clamd's archive limits (`Heuristics.Limits.Exceeded`). Accepted, and flagged to the sender and recipients (section 11). | yes |
 | `not_scanned_encrypted` | Encrypted (password-protected) archive that clamd cannot analyse (`Heuristics.Encrypted`). Accepted and flagged the same way. | yes |
+| `not_scanned_e2e` | File of an end-to-end encrypted transfer (2.0): the server only holds ciphertext, so no engine can analyse it. Set at finalization, audit event `file.not_scanned` with reason `e2e`; the sender gets no "file not scanned" mail and the download page and mails say so. | yes |
 | `scan_error` | The file could not be analysed after 3 attempts: unexpected engine reply, unreadable file, the engine timing out on it, or the engine dropping the connection on it while still answering its probe. Withheld for safety. | no |
 
 4. When every file is done:

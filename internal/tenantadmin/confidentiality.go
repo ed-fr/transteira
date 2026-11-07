@@ -40,6 +40,11 @@ type ConfidentialityRules struct {
 	// them, as an absent linkOnlyAllowed does; the tenant switch still
 	// applies.
 	LinkOnlyForbidden bool
+	// E2EPolicy is the end-to-end encryption policy of the level (since
+	// 2.0, OpenAPI rules.e2ePolicy), nil to follow the tenant. A level
+	// only tightens the tenant policy: the effective policy is computed by
+	// [tenant.EffectiveE2EPolicy].
+	E2EPolicy *tenant.E2EPolicy
 }
 
 // ConfidentialityLevel is a confidentiality level of a tenant (OpenAPI
@@ -76,7 +81,7 @@ func levelOf(l store.ConfidentialityLevel) ConfidentialityLevel {
 			AllowedExpiryDays: r.AllowedExpiryDays(), MaxDownloads: r.MaxDownloadsCap,
 			RequirePassword: r.RequirePassword, RequireRecipientVerification: r.RequireRecipientVerification,
 			InternalRecipientsOnly: r.InternalRecipientsOnly, ForceDeleteAfterFirstDownload: r.ForceDeleteAfterFirstDownload,
-			LinkOnlyForbidden: !l.LinkOnlyAllowed,
+			LinkOnlyForbidden: !l.LinkOnlyAllowed, E2EPolicy: l.E2EPolicy,
 		},
 	}
 }
@@ -176,9 +181,12 @@ func levelsToStore(levels []ConfidentialityLevel) ([]store.ConfidentialityLevel,
 		if err != nil {
 			return nil, err
 		}
+		if l.Rules.E2EPolicy != nil && !l.Rules.E2EPolicy.Valid() {
+			return nil, invalid(at+"/rules/e2ePolicy", "must be forbidden, allowed or required")
+		}
 		out[i] = store.ConfidentialityLevel{
 			Key: l.Key, Position: i, Labels: l.Labels, Descriptions: l.Descriptions, IsDefault: l.IsDefault, Rules: rules,
-			LinkOnlyAllowed: !l.Rules.LinkOnlyForbidden,
+			LinkOnlyAllowed: !l.Rules.LinkOnlyForbidden, E2EPolicy: cloneE2E(l.Rules.E2EPolicy),
 		}
 	}
 	if defaults == 0 {
@@ -244,4 +252,14 @@ func (s *Service) PublicConfidentialityLevels(ctx context.Context, t *tenant.Ten
 		}
 	}
 	return out, nil
+}
+
+// cloneE2E copies an optional policy so that the stored level does not
+// share memory with the caller's.
+func cloneE2E(p *tenant.E2EPolicy) *tenant.E2EPolicy {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
 }

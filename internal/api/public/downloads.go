@@ -181,8 +181,11 @@ func downloadLanguage(ctx context.Context, t *tenant.Tenant) string {
 // publicTransfer renders a view as the OpenAPI PublicTransfer, the label
 // of its confidentiality level in lang (else in English, else in any
 // language). A locked view only carries the sender, the expiry and the
-// flags (with the masked address of a link awaiting its verification),
-// never the confidentiality level.
+// flags (with the masked address of a link awaiting its verification, and
+// endToEndEncrypted), never the confidentiality level nor the encrypted
+// message. An end-to-end encrypted view has no archiveUrl
+// (View.ArchiveAvailable is false) and carries encryptedMessage and the
+// encryptedMetadata of every file.
 func publicTransfer(token string, v download.View, lang string) gen.PublicTransfer {
 	out := gen.PublicTransfer{
 		SenderEmail: gen.Email(v.SenderEmail), ExpiresAt: v.ExpiresAt, PasswordProtected: v.PasswordProtected, Locked: v.Locked,
@@ -193,10 +196,15 @@ func publicTransfer(token string, v download.View, lang string) gen.PublicTransf
 		out.VerificationRequired, out.Verified = &required, &verified
 		out.RecipientEmailMasked = optional(v.RecipientEmailMasked)
 	}
+	if v.E2E {
+		e2e := true
+		out.EndToEndEncrypted = &e2e
+	}
 	if v.Locked {
 		out.ConfidentialityLevel = nil
 		return out
 	}
+	out.EncryptedMessage = optional(v.EncryptedMessage)
 	allowed := v.ReplyAllowed
 	out.ReplyAllowed = &allowed
 	if v.Reply {
@@ -223,6 +231,7 @@ func publicTransfer(token string, v download.View, lang string) gen.PublicTransf
 			p := gen.FilePath(f.Path)
 			files[i].Path = &p
 		}
+		files[i].EncryptedMetadata = optional(f.EncryptedMetadata)
 	}
 	out.Files = &files
 	return out
@@ -469,6 +478,8 @@ func downloadError(err error) error {
 		return problem.New(problem.CodeMaxDownloadsReached)
 	case errors.Is(err, download.ErrDownloadLocked):
 		return problem.New(problem.CodeDownloadLocked)
+	case errors.Is(err, download.ErrE2EArchiveUnavailable):
+		return problem.New(problem.CodeE2EArchiveUnavailable)
 	default:
 		return err
 	}

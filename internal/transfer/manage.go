@@ -87,6 +87,13 @@ type Details struct {
 	// T-311), so Recipients and RecipientTracking are nil for such a
 	// transfer. "" otherwise (and when the link is gone).
 	DropLinkLabel string
+	// E2E marks an end-to-end encrypted transfer (since 2.0): Message is
+	// empty, the files carry their EncryptedMetadata, their names are
+	// generic and their sizes and SHA-256 those of the ciphertext.
+	E2E bool
+	// EncryptedMessage is the encrypted message of an end-to-end encrypted
+	// transfer, as sent; "" for none.
+	EncryptedMessage string
 }
 
 // File is a file of a transfer as its sender sees it (OpenAPI SenderFile).
@@ -117,6 +124,9 @@ type File struct {
 	// UploadOffset is the durable upload offset (Size once complete); it is
 	// meaningful only when UploadID is set.
 	UploadOffset int64
+	// EncryptedMetadata is the encrypted metadata of a file of an
+	// end-to-end encrypted transfer (since 2.0), "" otherwise.
+	EncryptedMetadata string
 }
 
 // details converts d, a transfer of tenant t. While d is uploading, the
@@ -137,7 +147,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 		CreatedAt: d.CreatedAt, FinalizedAt: d.FinalizedAt, Files: make([]File, len(d.Files)),
 		MaxDownloads: d.MaxDownloads, ConfidentialityLevel: d.ConfidentialityLevel, Rules: d.Rules,
 		RecipientVerification: d.RecipientVerification, ReplyToTransferID: d.ReplyToTransferID,
-		LinkOnly: d.LinkOnly,
+		LinkOnly: d.LinkOnly, E2E: d.E2E, EncryptedMessage: d.E2EMessage,
 	}
 	if d.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(d.ConfidentialityLabel, d.Language, t.DefaultLanguage, "en")
@@ -169,7 +179,7 @@ func (s *Service) details(ctx context.Context, t *tenant.Tenant, d store.Transfe
 	for i, f := range d.Files {
 		file := File{
 			ID: f.ID, Path: f.Path, Name: f.Name, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
-			ScanSignature: f.ScanSignature,
+			ScanSignature: f.ScanSignature, EncryptedMetadata: f.E2EMetadata,
 		}
 		if uploading {
 			file.UploadID, file.UploadOffset = f.UploadID, f.Size
@@ -291,12 +301,24 @@ func (s *Service) Cancel(ctx context.Context, t *tenant.Tenant, sender Sender, t
 //  7. no computed SHA-256 is on the tenant blocklist (T-27):
 //     ErrBlockedFile, logged as deposit_refused with reason blocklist. The
 //     transfer stays uploading and is never made available; the sender may
-//     cancel it, and the cleanup purges it after the upload TTL.
+//     cancel it, and the cleanup purges it after the upload TTL. Skipped
+//     for an end-to-end encrypted transfer: the SHA-256 of a ciphertext
+//     matches no known file (residual of T-318; the address and domain
+//     blocklist of step 1 still applies).
 //
 // When the antivirus is not effective for t ([Service.AntivirusEffective]),
 // the files get not_scanned_disabled in the finalization transaction
 // (decision D8), and a file.not_scanned event with reason disabled is
 // recorded for each of them.
+//
+// The files of an end-to-end encrypted transfer (since 2.0) get
+// not_scanned_e2e in the finalization transaction instead, whatever the
+// antivirus switch (store.Transfers.FinalizeE2ETx), and a file.not_scanned
+// event with reason e2e is recorded for each of them: the server cannot
+// read them, so they are never analyzed. Options.OnFinalized is still
+// called: the antivirus worker finds every file final, scans nothing and
+// only concludes the transfer (available, mails, proof of deposit), as for
+// a transfer finalized while the antivirus is disabled.
 //
 // A link-only transfer (since 2.0) gets its download token now: only its
 // SHA-256 is stored, in the finalization transaction, never a sealed copy,
@@ -350,8 +372,10 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	if len(mismatch) > 0 {
 		return Details{}, &FilesError{Kind: ErrChecksumMismatch, FileIDs: mismatch}
 	}
-	if err := s.checkBlockedFiles(ctx, t, sender, d.Files); err != nil {
-		return Details{}, err
+	if !d.E2E {
+		if err := s.checkBlockedFiles(ctx, t, sender, d.Files); err != nil {
+			return Details{}, err
+		}
 	}
 	var token string
 	if d.LinkOnly {
@@ -360,9 +384,15 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 		}
 	}
 	now := s.now()
-	unscanned := !s.AntivirusEffective(t)
+	unscanned := !d.E2E && !s.AntivirusEffective(t)
 	err = s.repo.tx(ctx, t.ID, func(tx txRepo) error {
-		if _, err := tx.finalize(ctx, trfID, now, unscanned); err != nil {
+		var err error
+		if d.E2E {
+			_, err = tx.finalizeE2E(ctx, trfID, now)
+		} else {
+			_, err = tx.finalize(ctx, trfID, now, unscanned)
+		}
+		if err != nil {
 			return err
 		}
 		if token == "" {
@@ -379,8 +409,11 @@ func (s *Service) Finalize(ctx context.Context, t *tenant.Tenant, sender Sender,
 	}
 	s.record(ctx, t, sender, email, audit.ActionTransferFinalized, trfID,
 		map[string]any{"fileCount": len(d.Files), "totalBytes": total})
-	if unscanned {
-		s.recordUnscanned(ctx, t, trfID, d.Files)
+	switch {
+	case d.E2E:
+		s.recordUnscanned(ctx, t, trfID, d.Files, audit.NotScannedE2E)
+	case unscanned:
+		s.recordUnscanned(ctx, t, trfID, d.Files, audit.NotScannedDisabled)
 	}
 	if d, err = s.load(ctx, t.ID, sender, trfID); err != nil {
 		return Details{}, err
@@ -401,15 +434,17 @@ func (s *Service) AntivirusEffective(t *tenant.Tenant) bool {
 	return t.AntivirusEffective(s.avDisabled)
 }
 
-// recordUnscanned records file.not_scanned, reason disabled, for each file
-// of the transfer trfID finalized while the antivirus was not effective,
-// as the antivirus worker does for the files it cannot analyze.
-func (s *Service) recordUnscanned(ctx context.Context, t *tenant.Tenant, trfID string, files []store.TransferFile) {
+// recordUnscanned records file.not_scanned with reason (NotScannedDisabled
+// for a transfer finalized while the antivirus was not effective,
+// NotScannedE2E for an end-to-end encrypted one) for each file of the
+// transfer trfID, as the antivirus worker does for the files it cannot
+// analyze.
+func (s *Service) recordUnscanned(ctx context.Context, t *tenant.Tenant, trfID string, files []store.TransferFile, reason string) {
 	for _, f := range files {
 		s.write(ctx, t, audit.Event{
 			ActorKind: store.ActorSystem, Actor: audit.ActorAntivirus,
 			Action: audit.ActionFileNotScanned, ObjectKind: audit.ObjectFile, ObjectID: f.ID,
-			Details: map[string]any{"transferId": trfID, "reason": audit.NotScannedDisabled},
+			Details: map[string]any{"transferId": trfID, "reason": reason},
 		})
 	}
 }

@@ -131,9 +131,14 @@ func refusedRecipients(recipients []string, set store.RecipientRuleSet) ([]Field
 //
 //  1. the level: the default one when req names none, an unknown key is a
 //     *ValidationError (400); for a link-only request, the link-only rule
-//     (see checkLinkOnly): ErrLinkOnlyForbidden (403);
+//     (see checkLinkOnly): ErrLinkOnlyForbidden (403); then the end-to-end
+//     encryption policy (see checkE2E): ErrE2EForbidden (403) or
+//     ErrE2ERequired (400). Both read the tenant again, once, so that a
+//     change of its options applies at once (a tenant whose deletion
+//     started is ErrForbidden);
 //  2. its rules: every broken rule at once, as a *RuleError matching
-//     ErrConfidentialityRule (422);
+//     ErrConfidentialityRule (422); they apply to an end-to-end encrypted
+//     request too (a level that requires a password requires it there);
 //  3. the recipient domain rules: every refused recipient at once, as a
 //     *RuleError matching ErrRecipientDomainRefused (403), recorded as
 //     transfer.recipient_refused with the refused domains only (no
@@ -154,10 +159,20 @@ func (s *Service) applyPolicies(ctx context.Context, t *tenant.Tenant, sender Se
 	if err != nil {
 		return policy{}, err
 	}
+	cur, err := s.repo.tenant(ctx, t.ID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return policy{}, ErrForbidden
+	case err != nil:
+		return policy{}, fmt.Errorf("transfer: read tenant: %w", err)
+	}
 	if req.LinkOnly {
-		if err := s.checkLinkOnly(ctx, t, sender, level); err != nil {
+		if err := checkLinkOnly(cur, sender, level); err != nil {
 			return policy{}, err
 		}
+	}
+	if err := checkE2E(cur, sender, level, req.EndToEndEncrypted); err != nil {
+		return policy{}, err
 	}
 	var rules netpolicy.Rules
 	if level != nil && level.Rules.InternalRecipientsOnly {
@@ -196,25 +211,49 @@ func (s *Service) applyPolicies(ctx context.Context, t *tenant.Tenant, sender Se
 }
 
 // checkLinkOnly applies the link-only rule (since 2.0, decision 4) to a
-// link-only request of sender at level (nil without level): the sender is
-// internal (internal, internal_remote or an API token: an invited
-// external, a reply or a drop link depositor has an imposed recipient who
-// must be mailed), the tenant allows link-only transfers (read again, so
-// that turning the option off applies at once) and so does the level.
-// ErrLinkOnlyForbidden otherwise, a policy refusal never written to the
-// security log; a tenant whose deletion started is ErrForbidden.
-func (s *Service) checkLinkOnly(ctx context.Context, t *tenant.Tenant, sender Sender, level *store.ConfidentialityLevel) error {
-	if !sender.Kind.IsInternal() {
+// link-only request of sender at level (nil without level), cur being the
+// tenant as just read: the sender is internal (internal, internal_remote or
+// an API token: an invited external, a reply or a drop link depositor has
+// an imposed recipient who must be mailed), the tenant allows link-only
+// transfers and so does the level. ErrLinkOnlyForbidden otherwise, a policy
+// refusal never written to the security log.
+func checkLinkOnly(cur *tenant.Tenant, sender Sender, level *store.ConfidentialityLevel) error {
+	if !sender.Kind.IsInternal() || !cur.LinkOnlyAllowed || level != nil && !level.LinkOnlyAllowed {
 		return ErrLinkOnlyForbidden
 	}
-	cur, err := s.repo.tenant(ctx, t.ID)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return ErrForbidden
-	case err != nil:
-		return fmt.Errorf("transfer: read tenant: %w", err)
-	case !cur.LinkOnlyAllowed, level != nil && !level.LinkOnlyAllowed:
-		return ErrLinkOnlyForbidden
+	return nil
+}
+
+// checkE2E applies the end-to-end encryption policy (since 2.0, spec 22) to
+// a request of sender at level (nil without level), e2e telling whether it
+// is end-to-end encrypted, cur being the tenant as just read. A drop link
+// depositor cannot encrypt in 2.0 (its landing page has no encryption, and
+// the store refuses such a transfer): ErrE2EForbidden whatever the policy.
+// Otherwise the effective policy ([tenant.EffectiveE2EPolicy] of the tenant
+// and the level) decides: forbidden refuses an encrypted request
+// (ErrE2EForbidden), required refuses a plain one (ErrE2ERequired, also
+// for a drop link depositor, who then cannot deposit at that level). Every
+// other depositor (internal, internal_remote, API token, invited external,
+// reply) may encrypt. Both are policy refusals, never written to the
+// security log.
+func checkE2E(cur *tenant.Tenant, sender Sender, level *store.ConfidentialityLevel, e2e bool) error {
+	if e2e && sender.Kind == store.DepositorDropLink {
+		return ErrE2EForbidden
+	}
+	var levelPolicy *tenant.E2EPolicy
+	if level != nil {
+		levelPolicy = level.E2EPolicy
+	}
+	switch tenant.EffectiveE2EPolicy(cur.E2EPolicy, levelPolicy) {
+	case tenant.E2ERequired:
+		if !e2e {
+			return ErrE2ERequired
+		}
+	case tenant.E2EAllowed:
+	default:
+		if e2e {
+			return ErrE2EForbidden
+		}
 	}
 	return nil
 }

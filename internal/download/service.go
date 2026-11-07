@@ -327,37 +327,55 @@ func (s *Service) log(ctx context.Context, level slog.Level, msg string, tid ten
 type FileView struct {
 	// ID is the file identifier ("fil_" + ULID).
 	ID string
-	// Name is the original file name, to be shown as text.
+	// Name is the original file name, to be shown as text. For an
+	// end-to-end encrypted file, it is the generic name file-<n>.tte2; the
+	// real one is in EncryptedMetadata.
 	Name string
 	// Path is the folder of the file inside the transfer, "" at the root
 	// (since 1.1), to be shown as text.
 	Path string
-	// Size is the size of the clear file in bytes.
+	// Size is the size of the clear file in bytes (for an end-to-end
+	// encrypted file, of the TTE2 ciphertext the server stores).
 	Size int64
-	// MediaType is the informational media type, "" when unknown.
+	// MediaType is the informational media type, "" when unknown (always
+	// for an end-to-end encrypted file).
 	MediaType string
-	// SHA256 is the lowercase hexadecimal SHA-256 of the clear file.
+	// SHA256 is the lowercase hexadecimal SHA-256 of the clear file (for an
+	// end-to-end encrypted file, of its ciphertext).
 	SHA256 string
 	// ScanStatus is the antivirus status: store.ScanClean,
-	// store.ScanNotScannedTooLarge, store.ScanNotScannedEncrypted or
-	// store.ScanNotScannedDisabled (the last three flagged as not scanned
-	// on the page).
+	// store.ScanNotScannedTooLarge, store.ScanNotScannedEncrypted,
+	// store.ScanNotScannedDisabled or store.ScanNotScannedE2E (the last
+	// four flagged as not scanned on the page).
 	ScanStatus store.ScanStatus
+	// EncryptedMetadata is the encrypted metadata of an end-to-end
+	// encrypted file (since 2.0), opaque to the server; "" otherwise.
+	EncryptedMetadata string
 }
 
 // View is a transfer as a recipient sees it (OpenAPI PublicTransfer). The
 // other recipients and the scan signatures are never part of it. While
-// Locked, only SenderEmail, ExpiresAt, PasswordProtected, Locked and the
-// verification fields are set, as the specification requires; every other
-// field is zero, including Confidentiality.
+// Locked, only SenderEmail, ExpiresAt, PasswordProtected, Locked, E2E and
+// the verification fields are set, as the specification requires; every
+// other field is zero, including Confidentiality and EncryptedMessage.
 type View struct {
 	// TransferID identifies the transfer, for the logs and the audit; it is
 	// not part of the response.
 	TransferID string
 	// SenderEmail is the verified address of the sender.
 	SenderEmail string
-	// Message is the plain-text message of the sender, "" when none.
+	// Message is the plain-text message of the sender, "" when none (always
+	// for an end-to-end encrypted transfer).
 	Message string
+	// E2E is set for an end-to-end encrypted transfer (since 2.0): the
+	// files are TTE2 streams whose key is only in the link fragment, there
+	// is no server archive, and the names and hashes are in the encrypted
+	// metadata of the files. Also set while Locked, so that the page can
+	// tell the recipient that the key of the link is needed.
+	E2E bool
+	// EncryptedMessage is the encrypted message of an end-to-end encrypted
+	// transfer, "" when none or while Locked.
+	EncryptedMessage string
 	// ExpiresAt is when the link expires.
 	ExpiresAt time.Time
 	// PasswordProtected tells whether a password protects the transfer.
@@ -382,7 +400,8 @@ type View struct {
 	TotalBytes int64
 	// ArchiveAvailable is set when the archive of the deliverable files may
 	// be downloaded by this browser: the transfer is not Locked (it always
-	// has a deliverable file). The HTTP layer then sets archiveUrl.
+	// has a deliverable file) and not end-to-end encrypted. The HTTP layer
+	// then sets archiveUrl.
 	ArchiveAvailable bool
 	// Files are the deliverable files, by position.
 	Files []FileView
@@ -615,7 +634,7 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 	v := View{
 		TransferID: a.d.ID, SenderEmail: a.d.SenderEmail, ExpiresAt: a.d.ExpiresAt,
 		PasswordProtected: a.d.PasswordProtected(), Locked: !a.unlocked || a.awaiting(),
-		VerificationRequired: a.verify, Verified: a.verified,
+		VerificationRequired: a.verify, Verified: a.verified, E2E: a.d.E2E,
 	}
 	if a.awaiting() {
 		v.RecipientEmailMasked = MaskEmail(a.link.Email)
@@ -631,7 +650,8 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 	}
 	v.Reply = a.d.SenderKind == store.DepositorReply
 	v.Confidentiality = confidentiality(a.d)
-	v.Message, v.DeleteAfterFirstDownload, v.ArchiveAvailable = a.d.Message, a.d.DeleteAfterFirstDownload, true
+	v.Message, v.DeleteAfterFirstDownload, v.ArchiveAvailable = a.d.Message, a.d.DeleteAfterFirstDownload, !a.d.E2E
+	v.EncryptedMessage = a.d.E2EMessage
 	if m := a.d.MaxDownloads; m != nil {
 		left := int(int64(*m) - a.d.DownloadCount)
 		v.DownloadsRemaining = &left
@@ -640,6 +660,7 @@ func (s *Service) Resolve(ctx context.Context, t *tenant.Tenant, rawToken string
 		v.TotalBytes += f.Size
 		v.Files = append(v.Files, FileView{
 			ID: f.ID, Name: f.Name, Path: f.Path, Size: f.Size, MediaType: f.MediaType, SHA256: f.SHA256, ScanStatus: f.ScanStatus,
+			EncryptedMetadata: f.E2EMetadata,
 		})
 	}
 	return v, nil

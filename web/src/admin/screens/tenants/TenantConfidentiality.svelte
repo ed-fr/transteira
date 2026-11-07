@@ -20,6 +20,7 @@
   } from '../../../shared/components';
   import { i18n, locale, t } from '../../../shared/i18n/i18n.svelte';
   import { adminApi } from '../../api';
+  import SelectField from '../../components/SelectField.svelte';
   import FormSection from '../../components/FormSection.svelte';
   import { errorFor, type SubmitOutcome, type SummaryError } from '../../components/form';
   import type { AdminScreenProps } from '../types';
@@ -298,6 +299,18 @@
           label={t('adminTenants.confidentiality.fields.linkOnlyAllowed')}
           hint={t('adminTenants.confidentiality.hints.linkOnlyAllowed')}
           bind:checked={draft.linkOnlyAllowed}
+        />
+        <SelectField
+          id={fieldId(draft, 'e2ePolicy')}
+          label={t('adminTenants.confidentiality.fields.e2ePolicy')}
+          hint={t('adminTenants.confidentiality.hints.e2ePolicy')}
+          options={[
+            { value: '', label: t('adminTenants.confidentiality.e2ePolicy.inherit') },
+            { value: 'forbidden', label: t('adminTenants.e2ePolicy.forbidden') },
+            { value: 'allowed', label: t('adminTenants.e2ePolicy.allowed') },
+            { value: 'required', label: t('adminTenants.e2ePolicy.required') },
+          ]}
+          bind:value={draft.e2ePolicy}
         />
         <TextField
           id={fieldId(draft, 'maxDownloads')}

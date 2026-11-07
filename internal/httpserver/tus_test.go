@@ -199,6 +199,36 @@ func TestTusWriter(t *testing.T) {
 	}
 }
 
+func TestTusWriterPatchProblem(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		method, ct string
+		code       int
+		keep       bool
+	}{
+		{http.MethodPatch, "application/problem+json", http.StatusBadRequest, true},
+		{http.MethodPatch, "application/problem+json; charset=utf-8", http.StatusBadRequest, true},
+		{http.MethodPatch, "application/json", http.StatusBadRequest, false},
+		{http.MethodPatch, "", http.StatusBadRequest, false},
+		{http.MethodPatch, "application/problem+json", http.StatusNotFound, false},
+		{http.MethodPost, "application/problem+json", http.StatusBadRequest, false},
+	} {
+		rec := httptest.NewRecorder()
+		w := newTusWriter(rec, httptest.NewRequest(tc.method, "/api/v1/uploads/upl_1", nil))
+		if tc.ct != "" {
+			w.Header().Set("Content-Type", tc.ct)
+		}
+		w.WriteHeader(tc.code)
+		_, _ = w.Write([]byte(`{"code":"e2e-format-invalid"}`))
+		if kept := rec.Body.Len() > 0; kept != tc.keep {
+			t.Errorf("%s %q %d: body kept %v, want %v", tc.method, tc.ct, tc.code, kept, tc.keep)
+		}
+		if tc.keep && rec.Header().Get("Content-Type") == "" {
+			t.Errorf("%s %q: Content-Type dropped", tc.method, tc.ct)
+		}
+	}
+}
+
 // TestTusIdleTimeout sends the head and part of a PATCH body on a real
 // connection, then stalls: the body read fails after the idle timeout, the
 // handler answers 400 and the bytes received reached the upload engine.

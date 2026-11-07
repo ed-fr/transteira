@@ -447,6 +447,35 @@ func TestMyTransferDropLinkLabel(t *testing.T) {
 	}
 }
 
+func TestMyTransferE2EFlag(t *testing.T) {
+	t.Parallel()
+	tr := sampleTransfer()
+	if b := myTransferBody(tr, nil, 1, 0, "", ""); b.EndToEndEncrypted != nil {
+		t.Errorf("endToEndEncrypted rendered for a regular transfer: %v", *b.EndToEndEncrypted)
+	}
+	tr.E2E = true
+	if b := myTransferBody(tr, nil, 1, 0, "", ""); b.EndToEndEncrypted == nil || !*b.EndToEndEncrypted {
+		t.Error("endToEndEncrypted missing")
+	}
+	var d mytransfers.TransferDetail
+	d.Transfer = tr
+	d.E2EMessage = "ciphertext"
+	b := myTransferDetailBody(d)
+	if b.EndToEndEncrypted == nil || !*b.EndToEndEncrypted {
+		t.Error("endToEndEncrypted missing from the detail")
+	}
+	if b.Message != nil {
+		t.Errorf("message of an encrypted transfer rendered: %q", *b.Message)
+	}
+	if raw, _ := json.Marshal(b); strings.Contains(string(raw), "ciphertext") {
+		t.Errorf("encrypted message leaked: %s", raw)
+	}
+	d.E2E = false
+	if b := myTransferDetailBody(d); b.EndToEndEncrypted != nil {
+		t.Error("endToEndEncrypted rendered in the detail of a regular transfer")
+	}
+}
+
 func TestMyTransferLinkOnlyFlag(t *testing.T) {
 	t.Parallel()
 	tr := sampleTransfer()

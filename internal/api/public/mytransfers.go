@@ -249,6 +249,9 @@ func myTransferBody(t store.Transfer, recipients []string, fileCount, downloaded
 	if t.LinkOnly {
 		body.LinkOnly = &t.LinkOnly
 	}
+	if t.E2E {
+		body.EndToEndEncrypted = &t.E2E
+	}
 	if t.DropLinkID != "" {
 		body.DropLinkLabel = &dropLinkLabel
 	}
@@ -268,8 +271,8 @@ func myTransferDetailBody(d mytransfers.TransferDetail) gen.MyTransferDetail {
 		Id: head.Id, Status: head.Status, Recipients: head.Recipients, FileCount: head.FileCount,
 		TotalBytes: head.TotalBytes, ExpiryDays: head.ExpiryDays, CreatedAt: head.CreatedAt, ExpiresAt: head.ExpiresAt,
 		PasswordProtected: head.PasswordProtected, RecipientVerification: head.RecipientVerification,
-		ConfidentialityLevel: head.ConfidentialityLevel, DownloadedBy: head.DownloadedBy, LinkOnly: head.LinkOnly,
-		DropLinkLabel: head.DropLinkLabel, Message: optional(t.Message), DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, MaxDownloads: t.MaxDownloads,
+		ConfidentialityLevel: head.ConfidentialityLevel, DownloadedBy: head.DownloadedBy, LinkOnly: head.LinkOnly, EndToEndEncrypted: head.EndToEndEncrypted,
+		DropLinkLabel: head.DropLinkLabel, Message: optional(plainMessage(t)), DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, MaxDownloads: t.MaxDownloads,
 		DownloadCount: int(t.DownloadCount), ExtensionCount: &count, ExtendableTo: optionalTime(d.ExtendableTo),
 		RecipientTracking: apiutil.RecipientTracking(d.Tracking),
 	}
@@ -332,4 +335,14 @@ func myTransfersError(err error) error {
 	default:
 		return err
 	}
+}
+
+// plainMessage is the plaintext message of t: none for an end-to-end
+// encrypted transfer, whose message (if any) is ciphertext that the server
+// never renders.
+func plainMessage(t store.Transfer) string {
+	if t.E2E {
+		return ""
+	}
+	return t.Message
 }

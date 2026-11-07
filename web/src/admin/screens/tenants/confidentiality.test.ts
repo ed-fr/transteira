@@ -50,6 +50,20 @@ describe('drafts', () => {
     expect(fromDraft(toDraft(level, 1))).toEqual(level);
   });
 
+  it('round-trips the end-to-end policy, null included', () => {
+    expect(toDraft(level, 1).e2ePolicy).toBe('');
+    expect(fromDraft(toDraft(level, 1)).rules).not.toHaveProperty('e2ePolicy');
+    for (const policy of ['forbidden', 'allowed', 'required'] as const) {
+      const set = { ...level, rules: { ...level.rules, e2ePolicy: policy } };
+      expect(toDraft(set, 1).e2ePolicy).toBe(policy);
+      expect(fromDraft(toDraft(set, 1)).rules.e2ePolicy).toBe(policy);
+    }
+    const inherit = { ...level, rules: { ...level.rules, e2ePolicy: null } };
+    expect(toDraft(inherit, 1).e2ePolicy).toBe('');
+    expect(fromDraft(toDraft(inherit, 1)).rules).not.toHaveProperty('e2ePolicy');
+    expect(newDraft(2, false).e2ePolicy).toBe('');
+  });
+
   it('reads an absent linkOnlyAllowed as true and writes only a prohibition', () => {
     expect(toDraft(level, 1).linkOnlyAllowed).toBe(true);
     const forbidden = { ...level, rules: { ...level.rules, linkOnlyAllowed: false } };

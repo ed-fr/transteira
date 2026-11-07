@@ -300,6 +300,9 @@ const (
 	// NotScannedDisabled: the antivirus was disabled (instance engine
 	// "none" or tenant switch off) when the file was finalized.
 	NotScannedDisabled = "disabled"
+	// NotScannedE2E: the file is end-to-end encrypted (since 2.0): the
+	// server cannot read it, it is never sent to the antivirus.
+	NotScannedE2E = "e2e"
 )
 
 // Object kinds.

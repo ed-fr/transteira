@@ -158,6 +158,12 @@ const (
 	// NotScannedDisabled is a file finalized while the antivirus was
 	// disabled (instance engine "none" or tenant flag off).
 	NotScannedDisabled NotScannedReason = "disabled"
+	// NotScannedE2E is a file of an end-to-end encrypted transfer (since
+	// 2.0): the server only holds ciphertext, so the antivirus cannot read
+	// it. The mails show such a file by its rank and size only ("Encrypted
+	// file 2"), never by name, and label its digest as the one of the
+	// encrypted file.
+	NotScannedE2E NotScannedReason = "e2e"
 )
 
 // FileInfo describes one file of a transfer in the transfer mails.
@@ -205,6 +211,12 @@ type TransferNotificationData struct {
 	// QR shows the QR code of Link, an inline part of Content-ID
 	// [QRContentID] that the caller attaches.
 	QR bool
+	// E2E marks an end-to-end encrypted transfer (since 2.0): the mail
+	// tells that the decryption key is not in it and comes from the sender
+	// through another channel, and that the files were not analyzed. Link
+	// never carries a key, and Message must be empty (an encrypted message
+	// is ciphertext, never mailed).
+	E2E bool
 }
 
 // TransferConfirmationData is the data of [TemplateTransferConfirmation].
@@ -243,6 +255,11 @@ type TransferConfirmationData struct {
 	DropLink bool
 	// DropLinkLabel is the label of that drop link.
 	DropLinkLabel string
+	// E2E marks an end-to-end encrypted transfer (since 2.0): the mail
+	// reminds the sender that the recipients get no key by mail and must
+	// receive it through another channel, and that the files were not
+	// analyzed.
+	E2E bool
 }
 
 // InfectedFile is a file deleted because the antivirus found it infected.
@@ -325,6 +342,9 @@ type ExpiryReminderData struct {
 	// transfer, already localized in the language of the mail; empty shows no
 	// level.
 	ConfidentialityLabel string
+	// E2E marks an end-to-end encrypted transfer (since 2.0), see
+	// [TransferNotificationData.E2E].
+	E2E bool
 }
 
 // RecipientVerificationCodeData is the data of

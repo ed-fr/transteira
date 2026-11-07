@@ -6,6 +6,8 @@ import {
   antivirusPatch,
   antivirusState,
   linkOnlyEnabled,
+  e2ePolicyOf,
+  e2ePolicyPatch,
   linkOnlyPatch,
   TENANT_FIELDS,
   appendPage,
@@ -611,5 +613,24 @@ describe('link-only switch', () => {
     expect(linkOnlyPatch({ linkOnlyAllowed: true }, false)).toEqual({ linkOnlyAllowed: false });
     expect(linkOnlyPatch({ linkOnlyAllowed: true }, true)).toEqual({});
     expect(linkOnlyPatch({}, false)).toEqual({});
+  });
+});
+
+describe('end-to-end encryption policy', () => {
+  it('reads an absent policy as forbidden', () => {
+    expect(e2ePolicyOf({})).toBe('forbidden');
+    expect(e2ePolicyOf({ e2ePolicy: 'required' })).toBe('required');
+  });
+
+  it('builds a merge patch only when the value changes', () => {
+    expect(e2ePolicyPatch({}, 'allowed')).toEqual({ e2ePolicy: 'allowed' });
+    expect(e2ePolicyPatch({ e2ePolicy: 'allowed' }, 'required')).toEqual({ e2ePolicy: 'required' });
+    expect(e2ePolicyPatch({ e2ePolicy: 'allowed' }, 'allowed')).toEqual({});
+    expect(e2ePolicyPatch({}, 'forbidden')).toEqual({});
+    expect(e2ePolicyPatch({}, 'bogus')).toEqual({});
+  });
+
+  it('is part of the super admin fields only', () => {
+    expect(TENANT_FIELDS).not.toContain('e2ePolicy');
   });
 });

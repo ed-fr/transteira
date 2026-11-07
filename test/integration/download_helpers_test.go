@@ -52,9 +52,9 @@ const (
 // Members allowed by the PublicTransfer and PublicFile schemas, the
 // required ones, and the members of a locked page (exactly these).
 var (
-	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files", "confidentialityLevel", "downloadsRemaining", "replyAllowed", "reply"}
+	publicTransferMembers  = []string{"senderEmail", "message", "expiresAt", "passwordProtected", "locked", "deleteAfterFirstDownload", "totalBytes", "archiveUrl", "files", "confidentialityLevel", "downloadsRemaining", "replyAllowed", "reply", "endToEndEncrypted", "encryptedMessage"}
 	publicTransferRequired = []string{"senderEmail", "expiresAt", "passwordProtected", "locked"}
-	publicFileMembers      = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "downloadUrl"}
+	publicFileMembers      = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "downloadUrl", "encryptedMetadata"}
 	publicFileRequired     = []string{"id", "name", "size", "sha256", "scanStatus", "downloadUrl"}
 	lockedPageMembers      = []string{"senderEmail", "expiresAt", "passwordProtected", "locked"}
 )
@@ -68,6 +68,8 @@ type publicFileJSON struct {
 	Sha256      string `json:"sha256"`
 	ScanStatus  string `json:"scanStatus"`
 	DownloadURL string `json:"downloadUrl"`
+	// EncryptedMetadata is present on the files of an end-to-end encrypted transfer.
+	EncryptedMetadata string `json:"encryptedMetadata"`
 }
 
 // publicTransferJSON is the PublicTransfer schema.
@@ -81,6 +83,8 @@ type publicTransferJSON struct {
 	TotalBytes               *int64           `json:"totalBytes"`
 	ArchiveURL               *string          `json:"archiveUrl"`
 	Files                    []publicFileJSON `json:"files"`
+	EndToEndEncrypted        bool             `json:"endToEndEncrypted"`
+	EncryptedMessage         string           `json:"encryptedMessage"`
 }
 
 // recipient is a client of the download API: a tenant host, a client IP
@@ -326,6 +330,9 @@ func parsePage(t *testing.T, resp response) publicTransferJSON {
 		for k := range members {
 			keys = append(keys, k)
 		}
+		// endToEndEncrypted (since 2.0) is the only extra member of a locked page: the
+		// browser needs it to ask for the password before it shows the key prompt.
+		keys = slices.DeleteFunc(keys, func(k string) bool { return k == "endToEndEncrypted" })
 		slices.Sort(keys)
 		want := slices.Sorted(slices.Values(lockedPageMembers))
 		if !slices.Equal(keys, want) {

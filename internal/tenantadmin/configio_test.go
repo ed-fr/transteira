@@ -292,7 +292,7 @@ func TestExportConfig(t *testing.T) {
 		st := out.Settings
 		if *st.DefaultLanguage != "fr" || *st.MaxTransferBytes != 12<<30 || *st.MaxTransferCeiling != 15<<30 ||
 			!*st.AllowRemoteInternalDeposit || !*st.AllowTransferReply || !*st.WebhookIncludeAddresses ||
-			st.LinkOnlyAllowed == nil || *st.LinkOnlyAllowed || st.E2EPolicy != nil {
+			st.LinkOnlyAllowed == nil || *st.LinkOnlyAllowed || st.E2EPolicy == nil || *st.E2EPolicy != "forbidden" {
 			t.Errorf("settings = %+v", st)
 		}
 		b := out.Branding
@@ -561,8 +561,8 @@ func TestImportMinimal(t *testing.T) {
 		ctx := context.Background()
 		ev := newEnv(t, e)
 		in := minimalImport("c1.example.com")
-		// The default of the pending e2ePolicy member is accepted; the
-		// link-only switches are stored (since step 6 of V2).
+		// The link-only switches are stored (since step 6 of V2); the
+		// end-to-end policies are stored too (see TestImportExportE2E).
 		in.Config.Settings = &ExportedSettings{LinkOnlyAllowed: ptr(true), E2EPolicy: ptr("forbidden")}
 		in.Config.Branding = &ExportedBranding{AccentColor: ptr("#00aa00")}
 		lvl := levelToExport(goodLevel("public", true))
@@ -725,7 +725,7 @@ func TestImportValidation(t *testing.T) {
 			{"limit above ceiling", "/config/settings/maxTransferBytes", settings(func(s *ExportedSettings) {
 				s.MaxTransferBytes, s.MaxTransferCeiling = ptr(int64(10)), ptr(int64(5))
 			})},
-			{"e2e", "/config/settings/e2ePolicy", settings(func(s *ExportedSettings) { s.E2EPolicy = ptr("allowed") })},
+			{"e2e", "/config/settings/e2ePolicy", settings(func(s *ExportedSettings) { s.E2EPolicy = ptr("sometimes") })},
 			{"preset", "/config/branding/backgroundPreset", func(in *ImportInput) {
 				in.Config.Branding = &ExportedBranding{BackgroundPreset: ptr("../../etc/passwd")}
 			}},
@@ -768,7 +768,7 @@ func TestImportValidation(t *testing.T) {
 			{"level expiry", "/config/confidentialityLevels/items/0/rules/allowedExpiryDays", level(func(l *ExportedLevel) {
 				l.Rules.AllowedExpiryDays = []int{2}
 			})},
-			{"level e2e", "/config/confidentialityLevels/items/0/rules/e2ePolicy", level(func(l *ExportedLevel) { l.Rules.E2EPolicy = ptr("forbidden") })},
+			{"level e2e", "/config/confidentialityLevels/items/0/rules/e2ePolicy", level(func(l *ExportedLevel) { l.Rules.E2EPolicy = ptr("sometimes") })},
 			{"office start", "/config/abuseThresholds/officeHours/start", abuse(func(a *ExportedAbuseThresholds) {
 				a.OfficeHours = &ExportedOfficeHours{Start: "25:00", End: "18:00", Weekdays: []int{1}}
 			})},

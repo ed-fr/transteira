@@ -259,9 +259,11 @@ e2e_metadata TEXT CHECK (e2e_metadata IS NULL OR octet_length(e2e_metadata) BETW
 CHECK (scan_status <> 'not_scanned_e2e' OR e2e_metadata IS NOT NULL)
 ```
 
-- An E2E file gets `not_scanned_e2e` at finalization (like `not_scanned_disabled`), so `scanned_at` is set as the existing check requires. Decided: the value is the flat `not_scanned_e2e` everywhere (database, `ScanStatus` of the API, threat model), like `not_scanned_disabled`; there is no separate reason field.
+- An E2E file gets `not_scanned_e2e` at finalization (like `not_scanned_disabled`), so `scanned_at` is set as the existing check requires. Decided: the value is the flat `not_scanned_e2e` everywhere (database, `ScanStatus` of the API, threat model), like `not_scanned_disabled`; there is no separate reason field. The audit event `file.not_scanned` carries the reason `e2e` for these files (the other reasons are `too_large`, `encrypted` and `disabled`), and no "file not scanned" mail is sent to the sender.
 - `e2e_metadata` is the base64url `encryptedMetadata` (≤ 4 KiB decoded, so ≤ 5462 characters encoded; the store enforces the exact limit). For an E2E file, `name` is the generic `file-<n>.tte2`, `media_type` is `''`, and `sha256` is the SHA-256 of the ciphertext the server computes. At rest the ciphertext is still TTEF-encrypted with a per-file key, so cryptographic erasure is unchanged.
 - SQLite rebuilds `transfer_files` (not referenced by any table; index `transfer_files_tenant_id_idx` recreated). PostgreSQL replaces `transfer_files_scan_status_check` and adds `transfer_files_e2e_check`.
+
+**Public and admin views (implementation, step 7).** `TenantFeatures.e2ePolicy` and the public confidentiality level `e2ePolicy` carry the **effective** policy (the level combined with the tenant as above), never the raw level value; the admin level resource keeps the raw value (`null` = follow the tenant). The tenant configuration export and import carry both.
 
 **Deposit sessions.**
 

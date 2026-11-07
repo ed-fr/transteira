@@ -887,3 +887,57 @@ func TestTemplatesReplyNoticeForced(t *testing.T) {
 		}
 	}
 }
+
+// TestTemplatesE2ENotice checks the notice of an end-to-end encrypted
+// transfer in the three mails that carry it: shown by the default
+// templates, forced into a customized template that leaves the placeholder
+// out, absent for a regular transfer, and files shown by rank.
+func TestTemplatesE2ENotice(t *testing.T) {
+	files := []FileInfo{{Name: "file-1.tte2", Size: 100, SHA256: strings.Repeat("ab", 32), NotScanned: NotScannedE2E}}
+	data := map[string]any{
+		TemplateTransferNotification: TransferNotificationData{
+			TenantName: "A", Link: "https://x.example.com/d/1", Files: files, ExpiresAt: sampleTime, E2E: true,
+		},
+		TemplateTransferConfirmation: TransferConfirmationData{TenantName: "A", Files: files, ExpiresAt: sampleTime, E2E: true},
+		TemplateExpiryReminder: ExpiryReminderData{
+			TenantName: "A", Link: "https://x.example.com/d/1", Files: files, ExpiresAt: sampleTime, E2E: true,
+		},
+	}
+	for lang, notice := range map[string]string{"en": "decryption key", "fr": "clé de déchiffrement"} {
+		for name, d := range data {
+			m, err := Render(name, lang, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(m.Text, notice) || !strings.Contains(m.HTML, notice) || strings.Contains(m.Text, "file-1.tte2") {
+				t.Errorf("%s/%s: notice missing or name shown:\n%s", name, lang, m.Text)
+			}
+			body := map[string]string{
+				TemplateTransferNotification: "{{download_link}} {{password_notice}} {{files}}",
+				TemplateTransferConfirmation: "{{password_notice}}",
+				TemplateExpiryReminder:       "{{download_link}} {{password_notice}}",
+			}[name]
+			c, err := RenderOverride(name, lang, d, &TemplateSource{Subject: "S", HTML: "<p>" + body + "</p>", Text: body})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(c.Text, notice) || !strings.HasPrefix(c.Text, "Ce transfert") && !strings.HasPrefix(c.Text, "This transfer") || !strings.Contains(c.HTML, notice) {
+				t.Errorf("%s/%s: notice not forced: %q", name, lang, c.Text)
+			}
+		}
+	}
+	// The not-analyzed list gives the end-to-end reason.
+	for lang, want := range map[string]string{"en": "end-to-end encrypted, so the antivirus", "fr": "chiffré de bout en bout, l'antivirus"} {
+		m, err := Render(TemplateFileNotScanned, lang, FileNotScannedData{TenantName: "A", Files: files})
+		if err != nil || !strings.Contains(m.Text, want) || strings.Contains(m.Text, "file-1.tte2") {
+			t.Errorf("not scanned %s: %v\n%s", lang, err, m.Text)
+		}
+	}
+	// A regular transfer shows nothing.
+	n := data[TemplateTransferNotification].(TransferNotificationData)
+	n.E2E, n.Files = false, sampleFiles()
+	m, err := Render(TemplateTransferNotification, "en", n)
+	if err != nil || strings.Contains(m.Text, "decryption key") {
+		t.Errorf("regular transfer: %v\n%s", err, m.Text)
+	}
+}

@@ -22,7 +22,8 @@
     "not_scanned_too_large": "Non analysé : trop gros",
     "not_scanned_encrypted": "Non analysé : chiffré",
     "not_scanned_disabled": "Non analysé : antivirus désactivé",
-    "scan_error": "Échec de l’analyse, fichier retenu"
+    "scan_error": "Échec de l’analyse, fichier retenu",
+    "not_scanned_e2e": "Chiffré de bout en bout"
   },
   "wait": {
     "seconds": {
@@ -132,7 +133,9 @@
       "noDownloads": "Rien de téléchargé",
       "trackingNone": "Ce transfert utilise un lien unique partagé : il n’y a pas de suivi par destinataire.",
       "trackingPending": "Chaque destinataire reçoit un lien personnel lorsque le transfert devient disponible : aucun lien n’existe encore."
-    }
+    },
+    "endToEnd": "Chiffré de bout en bout",
+    "endToEndNoMessage": "Message chiffré, non lisible par le serveur."
   },
   "resend": {
     "button": "Renvoyer la notification",
@@ -169,5 +172,6 @@
       "uploadingNoDelay": "Un envoi de ce transfert est en cours. Réessayez dans un instant.",
       "notFound": "Ce transfert n’existe plus."
     }
-  }
+  },
+  "e2eBadge": "Chiffré de bout en bout"
 }

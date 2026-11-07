@@ -70,6 +70,7 @@ const (
 	FieldMaxTransferBytes   = "/maxTransferBytes"
 	FieldMaxTransferCeiling = "/maxTransferCeiling"
 	FieldSetupState         = "/setupState"
+	FieldE2EPolicy          = "/e2ePolicy"
 	FieldConfirm            = "confirm"
 	FieldPrimaryColor       = "/primaryColor"
 	FieldAccentColor        = "/accentColor"

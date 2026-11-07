@@ -1096,7 +1096,7 @@ them. They carry identifiers and counts (for example `fileCount`,
 | Configuration export and import (2.0) | `tenant.exported` (on the exported tenant; details: `includeBranding`), `tenant.imported` (on the new tenant; details: the name and FQDN of the new tenant, the `sourceVersion` and `exportedAt` of the file and, in `counts`, the size of each imported section and the number of webhooks not recreated, never a setting value) |
 | Transfers | `transfer.created`, `transfer.finalized`, `transfer.downloaded` (start of a file or archive download, never HEAD requests or resumed ranges; details: the file ID or `archive`), `transfer.deleted` (admin, with the redacted reason), `transfer.notification_resent` (number of recipients only), `transfer.recipient_refused` (refused by the recipient domain rules; details: the refused domains; never written to the security log) |
 | Invitations and addresses | `invitation.created`, `invitation.used`, `invitation.revoked`, `address.verified` |
-| Antivirus | `file.infected` (signature name), `file.not_scanned` (reason `too_large` or `encrypted`) |
+| Antivirus | `file.infected` (signature name), `file.not_scanned` (reason `too_large`, `encrypted`, `disabled` or, since 2.0, `e2e`) |
 | Quotas | `quota.warning` (80 %), `quota.reached` (100 %), see [Tenants](tenants.md#quota-alerts) |
 | Blocklist | `blocklist.updated` (`op`, `kind`, `entryId`, and the value for a domain or a fingerprint) |
 | API tokens | `api_token.created`, `api_token.updated`, `api_token.revoked` (by an admin; object: the token, never its secret), `api_token.used` (once per transfer created with the token; actor: the sender address, as a `depositor`, so a GDPR erasure of that address pseudonymises it; object: the token) |

@@ -51,6 +51,9 @@ type TenantView struct {
 	// LinkOnlyAllowed tells whether senders may create link-only transfers
 	// (since 2.0, changed by the super admin only).
 	LinkOnlyAllowed bool
+	// E2EPolicy is the end-to-end encryption policy of the tenant (since
+	// 2.0, changed by the super admin only).
+	E2EPolicy tenant.E2EPolicy
 	// SetupState is setup while the tenant is being configured, active
 	// afterwards (since V1.2, read only: see [Service.CompleteSetup]).
 	SetupState tenant.SetupState
@@ -134,6 +137,10 @@ type TenantUpdate struct {
 	// LinkOnlyAllowed allows or forbids the link-only transfers of the
 	// tenant, super admin only (since 2.0).
 	LinkOnlyAllowed *bool
+	// E2EPolicy sets the end-to-end encryption policy of the tenant, super
+	// admin only (since 2.0); an unknown value is an *InvalidError on
+	// [FieldE2EPolicy].
+	E2EPolicy *string
 }
 
 // view builds the administrator view of t with its storage usage.
@@ -149,7 +156,7 @@ func (s *Service) view(ctx context.Context, t *tenant.Tenant) (TenantView, error
 		WebhookIncludeAddresses:    t.WebhookIncludeAddresses,
 		AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit, AllowTransferReply: t.AllowTransferReply,
 		AntivirusEnabled: t.AntivirusEnabled, AntivirusEffective: s.AntivirusEffective(t),
-		LinkOnlyAllowed: t.LinkOnlyAllowed, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		LinkOnlyAllowed: t.LinkOnlyAllowed, E2EPolicy: t.E2EPolicy, SetupState: t.SetupState, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}, nil
 }
 
@@ -369,10 +376,10 @@ func createLimits(in TenantCreate) (limit, ceiling int64, err error) {
 // below the limit lowers the limit. A delegated admin may only change the
 // default language, the webhook address option and the remote deposit option, and set the transfer
 // limit at most to the ceiling:
-// another changed field (including the antivirus and link-only switches),
+// another changed field (including the antivirus and link-only switches and the end-to-end policy),
 // or a limit above the ceiling, is ErrForbidden and changes nothing.
 // The tenant.updated audit event names the changed fields (linkOnlyAllowed
-// included, since 2.0); a change of the
+// and e2ePolicy included, since 2.0); a change of the
 // antivirus switch is recorded apart, as tenant.antivirus_disabled or
 // tenant.antivirus_enabled, only when its value really changes.
 func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid tenant.ID, in TenantUpdate, ip netip.Addr) (TenantView, error) {
@@ -392,11 +399,20 @@ func (s *Service) UpdateTenant(ctx context.Context, p adminauth.Principal, tid t
 		return s.view(ctx, cur)
 	}
 	loChanged := next.LinkOnlyAllowed != cur.LinkOnlyAllowed
+	e2eChanged := next.E2EPolicy != cur.E2EPolicy
+	general := len(changed)
+	if loChanged {
+		general--
+	}
+	if e2eChanged {
+		general--
+	}
 	// One transaction: a failure stores nothing, and the events are
 	// recorded only once every change is committed. The link-only switch
-	// is among the changed fields but written apart from the general ones.
+	// and the end-to-end policy are among the changed fields but written
+	// apart from the general ones.
 	t, err := s.repo.updateTenantParts(ctx, next, store.TenantParts{
-		General: len(changed) > 0 && (!loChanged || len(changed) > 1), Antivirus: avChanged, LinkOnly: loChanged,
+		General: general > 0, Antivirus: avChanged, LinkOnly: loChanged, E2E: e2eChanged,
 	})
 	if err != nil {
 		return TenantView{}, updateError("update tenant", err)
@@ -467,6 +483,13 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	if in.LinkOnlyAllowed != nil {
 		next.LinkOnlyAllowed = *in.LinkOnlyAllowed
 	}
+	if in.E2EPolicy != nil {
+		pol := tenant.E2EPolicy(*in.E2EPolicy)
+		if !pol.Valid() {
+			return nil, invalid(FieldE2EPolicy, "must be forbidden, allowed or required")
+		}
+		next.E2EPolicy = pol
+	}
 	if in.MaxTransferCeiling != nil {
 		if err := checkTransferBytes(FieldMaxTransferCeiling, *in.MaxTransferCeiling); err != nil {
 			return nil, err
@@ -491,7 +514,7 @@ func (s *Service) applyUpdate(cur *tenant.Tenant, in TenantUpdate, super bool) (
 	}
 	if !super && (next.Name != cur.Name || next.FQDN != cur.FQDN ||
 		next.StorageQuotaBytes != cur.StorageQuotaBytes || next.MaxTransferCeiling != cur.MaxTransferCeiling ||
-		next.AntivirusEnabled != cur.AntivirusEnabled || next.LinkOnlyAllowed != cur.LinkOnlyAllowed) {
+		next.AntivirusEnabled != cur.AntivirusEnabled || next.LinkOnlyAllowed != cur.LinkOnlyAllowed || next.E2EPolicy != cur.E2EPolicy) {
 		return nil, ErrForbidden
 	}
 	return next, nil
@@ -516,6 +539,7 @@ func changedFields(a, b *tenant.Tenant) []string {
 	add(a.AllowRemoteInternalDeposit != b.AllowRemoteInternalDeposit, "allowRemoteInternalDeposit")
 	add(a.AllowTransferReply != b.AllowTransferReply, "allowTransferReply")
 	add(a.LinkOnlyAllowed != b.LinkOnlyAllowed, "linkOnlyAllowed")
+	add(a.E2EPolicy != b.E2EPolicy, "e2ePolicy")
 	return out
 }
 

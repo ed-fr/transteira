@@ -155,6 +155,9 @@
 {#snippet statusCell(row: TransferSummary)}
   {@const view = statusView(row.status, t)}
   <StatusBadge variant={view.variant} label={view.label} />
+  {#if row.endToEndEncrypted}
+    <StatusBadge variant="info" label={t('opsTransfers.e2eBadge')} />
+  {/if}
 {/snippet}
 
 {#snippet originCell(row: TransferSummary)}

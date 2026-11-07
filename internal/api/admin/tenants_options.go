@@ -2,7 +2,6 @@ package admin
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
@@ -37,13 +36,6 @@ func (s *Server) UpdateConfidentialityLevels(ctx context.Context, req gen.Update
 	}
 	in := make([]tenantadmin.ConfidentialityLevel, len(req.Body.Items))
 	for i, l := range req.Body.Items {
-		// The end-to-end policy of API 2.0 is not implemented yet: refused
-		// rather than silently dropped.
-		if l.Rules.E2ePolicy != nil {
-			if prob := unsupportedInTenant(p, req.TenantId, fmt.Sprintf("/items/%d/rules/e2ePolicy", i)); prob != nil {
-				return nil, prob
-			}
-		}
 		in[i] = tenantadmin.ConfidentialityLevel{
 			Key: l.Key, Labels: l.Labels, Descriptions: deref(l.Descriptions), IsDefault: l.IsDefault,
 			Rules: tenantadmin.ConfidentialityRules{
@@ -54,6 +46,7 @@ func (s *Server) UpdateConfidentialityLevels(ctx context.Context, req gen.Update
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
 				// Absent means allowed.
 				LinkOnlyForbidden: l.Rules.LinkOnlyAllowed != nil && !*l.Rules.LinkOnlyAllowed,
+				E2EPolicy:         e2eRule(l.Rules.E2ePolicy),
 			},
 		}
 	}
@@ -94,6 +87,7 @@ func levelListBody(levels []tenantadmin.ConfidentialityLevel) gen.Confidentialit
 				InternalRecipientsOnly:        l.Rules.InternalRecipientsOnly,
 				ForceDeleteAfterFirstDownload: l.Rules.ForceDeleteAfterFirstDownload,
 				LinkOnlyAllowed:               new(!l.Rules.LinkOnlyForbidden),
+				E2ePolicy:                     e2eRuleOut(l.Rules.E2EPolicy),
 			},
 		}
 	}
@@ -139,4 +133,23 @@ func recipientBody(r tenantadmin.RecipientRules) gen.RecipientRules {
 	return gen.RecipientRules{
 		AllowedDomains: append([]string{}, r.Allowed...), DeniedDomains: append([]string{}, r.Denied...),
 	}
+}
+
+// e2eRule converts the optional end-to-end policy of a level rule; an
+// unknown value is kept as is for the service to refuse.
+func e2eRule(p *gen.E2ePolicy) *tenant.E2EPolicy {
+	if p == nil {
+		return nil
+	}
+	v := tenant.E2EPolicy(*p)
+	return &v
+}
+
+// e2eRuleOut renders the optional end-to-end policy of a level rule.
+func e2eRuleOut(p *tenant.E2EPolicy) *gen.E2ePolicy {
+	if p == nil {
+		return nil
+	}
+	v := gen.E2ePolicy(*p)
+	return &v
 }

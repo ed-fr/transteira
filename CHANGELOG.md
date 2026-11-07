@@ -146,6 +146,24 @@ and the project follows [Semantic Versioning](https://semver.org/).
   recipient not identified" (PDF and `transteira proof verify`). `TenantFeatures.linkOnly` tells
   the forms whether to offer the option.
   Guides (French and English), API integration guide (section 11) and threat model updated.
+- End-to-end encryption, format and server support (threats T-318 to T-327 and T-336, decision
+  P66; the browser interface comes in a later step, so for now only API clients implementing the
+  format can send such transfers). Format `TTE2` (AES-256-GCM chunks, HKDF-derived per-file keys,
+  key only in the link fragment `#k=`) specified in `docs/architecture/e2e-format.md`, with the
+  Go reference implementation `internal/tte2` and shared test vectors. `createTransfer` accepts
+  `endToEndEncrypted` with generic names `file-<n>.tte2`, `encryptedMetadata` per file and an
+  optional `encryptedMessage` (a plaintext message is refused); a transfer password is allowed.
+  The server holds no key and checks only the header (each byte judged on arrival) and the
+  declared size: a refused slice answers `400 e2e-format-invalid` with a problem body and is
+  never stored. Policy `e2ePolicy` per entity (forbidden by default, super admin only, audited)
+  and per level (follow the entity, can only tighten), carried by the export and import;
+  depositor rules (drop links cannot encrypt), `e2e-forbidden`, `e2e-required`. Files get
+  `not_scanned_e2e` (audit reason `e2e`, no "file not scanned" mail), the SHA-256 is the one of
+  the ciphertext, the proof of deposit says `endToEndEncrypted`, ciphertext is served as is
+  (ranges work) and the ZIP archive answers `409 e2e-archive-unavailable`. Mails carry neither
+  key nor message and gain the `e2e_notice` template variable. Administration: policy selectors
+  and a badge in the transfer lists. Documentation: threat model, API errors and integration
+  guide (section 12), super admin and delegated admin guides.
 
 ## [1.2.1] - 2026-11-04
 

@@ -4,6 +4,7 @@
 // the request body, dirty state and the mapping of server field errors to the drafts.
 import type { FieldMessage } from '../../../shared/api/problem';
 import { languageValues, type components } from '../../../shared/api/schema';
+import { e2ePolicyValues } from '../../../shared/api/schema';
 import type { FieldRef, SummaryError } from '../../components/form';
 
 /** A confidentiality level as stored by the API. */
@@ -43,6 +44,8 @@ export interface LevelDraft {
   forceDeleteAfterFirstDownload: boolean;
   /** Link-only transfers are allowed at this level (since 2.0; absent from the API means true). */
   linkOnlyAllowed: boolean;
+  /** End-to-end encryption policy of the level (since 2.0); empty to inherit the tenant policy. */
+  e2ePolicy: string;
   /** Cap of the number of downloads as typed; empty for none. */
   maxDownloadsText: string;
 }
@@ -74,6 +77,7 @@ export function toDraft(level: ConfidentialityLevel, uid: number): LevelDraft {
     internalRecipientsOnly: level.rules.internalRecipientsOnly,
     forceDeleteAfterFirstDownload: level.rules.forceDeleteAfterFirstDownload,
     linkOnlyAllowed: level.rules.linkOnlyAllowed !== false,
+    e2ePolicy: level.rules.e2ePolicy ?? '',
     maxDownloadsText: level.rules.maxDownloads === null ? '' : String(level.rules.maxDownloads),
   };
 }
@@ -92,6 +96,7 @@ export function newDraft(uid: number, isDefault: boolean): LevelDraft {
     internalRecipientsOnly: false,
     forceDeleteAfterFirstDownload: false,
     linkOnlyAllowed: true,
+    e2ePolicy: '',
     maxDownloadsText: '',
   };
 }
@@ -136,6 +141,10 @@ export function fromDraft(draft: LevelDraft): ConfidentialityLevel {
   };
   if (Object.keys(descriptions).length > 0) {
     level.descriptions = descriptions;
+  }
+  // Absent (or null) inherits the tenant policy; an unknown value is treated as inheriting.
+  if ((e2ePolicyValues as readonly string[]).includes(draft.e2ePolicy)) {
+    level.rules.e2ePolicy = draft.e2ePolicy as components['schemas']['E2ePolicy'];
   }
   // Absent means allowed: only a prohibition is written.
   if (!draft.linkOnlyAllowed) {

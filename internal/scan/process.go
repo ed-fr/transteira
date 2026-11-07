@@ -65,6 +65,17 @@ func (w *Worker) process(ctx context.Context, k key) time.Duration {
 		if final(f.ScanStatus) {
 			continue
 		}
+		if f.E2EMetadata != "" {
+			// Unreachable: the finalization gives every file of an
+			// end-to-end encrypted transfer not_scanned_e2e. Its content
+			// is never sent to an engine (the server cannot read it, and a
+			// remote engine must not receive it); the transfer is left
+			// scanning, never delivered, and looked at again by the
+			// start-up sweep.
+			w.log(ctx, slog.LevelError, "end-to-end encrypted file without a final status: not analyzed", k,
+				slog.String("file", f.ID))
+			return 0
+		}
 		switch outcome, retry := w.scanFile(ctx, k, f, d.SenderEmail); outcome {
 		case fileRetry:
 			return retry
@@ -236,6 +247,7 @@ var notScannedReasons = map[store.ScanStatus]string{
 	store.ScanNotScannedTooLarge:  audit.NotScannedTooLarge,
 	store.ScanNotScannedEncrypted: audit.NotScannedEncrypted,
 	store.ScanNotScannedDisabled:  audit.NotScannedDisabled,
+	store.ScanNotScannedE2E:       audit.NotScannedE2E,
 }
 
 // recorded follows the final status of the file f once committed: an

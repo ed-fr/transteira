@@ -194,6 +194,13 @@ type Tenant struct {
 	// store.Tenants.SetLinkOnlyAllowed or UpdateWithPolicies, never with
 	// the general update).
 	LinkOnlyAllowed bool
+	// E2EPolicy is the end-to-end encryption policy of the tenant (since
+	// 2.0, spec 22): a confidentiality level may only tighten it
+	// ([EffectiveE2EPolicy]). E2EForbidden by default; only the super admin
+	// changes it (the store writes it at creation, "" meaning E2EForbidden,
+	// and with store.Tenants.SetE2EPolicy or UpdateWithPolicies, never with
+	// the general update).
+	E2EPolicy E2EPolicy
 	// ProvisionedBy is the identifier ("prv_" + ULID) of the provisioning
 	// token that created the tenant, "" for a tenant created by a super
 	// admin (V1.2). It is set at creation only, by the store.
@@ -284,6 +291,9 @@ func (t *Tenant) Validate() error {
 	}
 	if t.BackgroundPreset != "" && !ValidPresetID(t.BackgroundPreset) {
 		return fmt.Errorf("%w: invalid background preset %q", ErrInvalidTenant, truncate(t.BackgroundPreset))
+	}
+	if t.E2EPolicy != "" && !t.E2EPolicy.Valid() {
+		return fmt.Errorf("%w: unknown end-to-end encryption policy %q", ErrInvalidTenant, truncate(string(t.E2EPolicy)))
 	}
 	return nil
 }

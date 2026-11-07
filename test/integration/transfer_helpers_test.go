@@ -62,6 +62,8 @@ type fileDecl struct {
 	Size           int64  `json:"size"`
 	MediaType      string `json:"mediaType,omitempty"`
 	ExpectedSha256 string `json:"expectedSha256,omitempty"`
+	// EncryptedMetadata is the sealed metadata of an end-to-end encrypted file.
+	EncryptedMetadata string `json:"encryptedMetadata,omitempty"`
 }
 
 // transferCreate is the TransferCreate schema.
@@ -79,6 +81,8 @@ type transferCreate struct {
 	ConfidentialityLevel     string     `json:"confidentialityLevel,omitempty"`
 	RecipientVerification    bool       `json:"recipientVerification,omitempty"`
 	LinkOnly                 bool       `json:"linkOnly,omitempty"`
+	EndToEndEncrypted        bool       `json:"endToEndEncrypted,omitempty"`
+	EncryptedMessage         string     `json:"encryptedMessage,omitempty"`
 }
 
 // senderFileJSON is the SenderFile schema.
@@ -92,6 +96,8 @@ type senderFileJSON struct {
 	ScanSig      string `json:"scanSignature"`
 	UploadURL    string `json:"uploadUrl"`
 	UploadOffset *int64 `json:"uploadOffset"`
+	// EncryptedMetadata is present on the files of an end-to-end encrypted transfer.
+	EncryptedMetadata string `json:"encryptedMetadata"`
 }
 
 // senderTransferJSON is the SenderTransfer schema.
@@ -113,14 +119,16 @@ type senderTransferJSON struct {
 	Files                    []senderFileJSON `json:"files"`
 	ReplyToTransferID        string           `json:"replyToTransferId"`
 	DropLinkLabel            string           `json:"dropLinkLabel"`
+	EndToEndEncrypted        bool             `json:"endToEndEncrypted"`
+	EncryptedMessage         string           `json:"encryptedMessage"`
 }
 
 // Members allowed by the SenderTransfer and SenderFile schemas, and the
 // required ones.
 var (
-	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking", "replyToTransferId", "linkOnly", "dropLinkLabel"}
+	transferMembers         = []string{"id", "status", "senderEmail", "recipients", "message", "expiryDays", "expiresAt", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "uploadExpiresAt", "finalizedAt", "downloadUrl", "files", "recipientVerification", "maxDownloads", "confidentialityLevel", "recipientTracking", "replyToTransferId", "linkOnly", "dropLinkLabel", "endToEndEncrypted", "encryptedMessage"}
 	transferRequiredMembers = []string{"id", "status", "senderEmail", "recipients", "expiryDays", "passwordProtected", "deleteAfterFirstDownload", "totalBytes", "createdAt", "files"}
-	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset"}
+	fileMembers             = []string{"id", "name", "size", "mediaType", "sha256", "scanStatus", "scanSignature", "uploadUrl", "uploadOffset", "encryptedMetadata"}
 	fileRequiredMembers     = []string{"id", "name", "size", "scanStatus"}
 )
 

@@ -264,9 +264,6 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 	if req.Body == nil {
 		return nil, validationFailed("", fieldRequired)
 	}
-	if prob := unsupportedTenantPatch(p, req.TenantId, *req.Body); prob != nil {
-		return nil, prob
-	}
 	in, err := decodeTenantUpdate(*req.Body)
 	if err != nil {
 		return nil, err
@@ -276,34 +273,6 @@ func (s *Server) UpdateTenant(ctx context.Context, req gen.UpdateTenantRequestOb
 		return nil, tenantError(err)
 	}
 	return gen.UpdateTenant200JSONResponse(tenantBody(v)), nil
-}
-
-// unsupportedTenantPatchFields are the members of TenantUpdate added by API
-// 2.0 that are not implemented yet, in the order they are reported.
-var unsupportedTenantPatchFields = []string{"e2ePolicy"}
-
-// unsupportedTenantPatch refuses a member of API 2.0 that is not
-// implemented yet, before the unknown-member check. These members are
-// super admin only, like antivirusEnabled: an admin outside the tenant gets
-// nothing here (the service answers its 404), another admin of the tenant
-// gets 403 forbidden as the service gives for antivirusEnabled, and the
-// super admin the 400 validation-failed (not-supported). A body that is not
-// an object is left to decodeTenantUpdate.
-func unsupportedTenantPatch(p adminauth.Principal, tid string, raw []byte) *problem.Problem {
-	var members map[string]json.RawMessage
-	if json.Unmarshal(raw, &members) != nil {
-		return nil
-	}
-	for _, name := range unsupportedTenantPatchFields {
-		if _, ok := members[name]; ok {
-			prob := unsupportedInTenant(p, tid, "/"+name)
-			if prob != nil && p.Admin.Role != store.RoleSuperAdmin {
-				return problem.New(problem.CodeForbidden)
-			}
-			return prob
-		}
-	}
-	return nil
 }
 
 // tenantPatch is the OpenAPI TenantUpdate, decoded by the handler itself
@@ -323,9 +292,8 @@ type tenantPatch struct {
 	// LinkOnlyAllowed (API 2.0) is super admin only, like
 	// AntivirusEnabled (the service refuses it to a delegated admin).
 	LinkOnlyAllowed *bool `json:"linkOnlyAllowed"`
-	// E2EPolicy (API 2.0) is a known member so that a tenant outside the
-	// admin's scope answers its 404; it is refused earlier
-	// (unsupportedTenantPatch) for an admin of the tenant.
+	// E2EPolicy (API 2.0) is super admin only, like AntivirusEnabled (the
+	// service refuses it to a delegated admin).
 	E2EPolicy *string `json:"e2ePolicy"`
 }
 
@@ -379,6 +347,7 @@ func decodeTenantUpdate(raw []byte) (tenantadmin.TenantUpdate, error) {
 		AllowTransferReply:         b.AllowTransferReply,
 		AntivirusEnabled:           b.AntivirusEnabled,
 		LinkOnlyAllowed:            b.LinkOnlyAllowed,
+		E2EPolicy:                  b.E2EPolicy,
 	}, nil
 }
 
@@ -404,8 +373,18 @@ func tenantBody(v tenantadmin.TenantView) gen.Tenant {
 		WebhookIncludeAddresses: &v.WebhookIncludeAddresses, AllowRemoteInternalDeposit: &v.AllowRemoteInternalDeposit,
 		AllowTransferReply: &v.AllowTransferReply, AntivirusEnabled: &v.AntivirusEnabled,
 		AntivirusEffective: &v.AntivirusEffective, SetupState: setupStateOf(v.SetupState),
-		LinkOnlyAllowed: &v.LinkOnlyAllowed, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
+		LinkOnlyAllowed: &v.LinkOnlyAllowed, E2ePolicy: e2ePolicyOf(v.E2EPolicy), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt,
 	}
+}
+
+// e2ePolicyOf renders the end-to-end policy of a tenant, nil when unknown
+// (a view built without one; a stored tenant always has one).
+func e2ePolicyOf(p tenant.E2EPolicy) *gen.E2ePolicy {
+	if !p.Valid() {
+		return nil
+	}
+	v := gen.E2ePolicy(p)
+	return &v
 }
 
 // setupStateOf renders the setup state of a tenant, nil when unknown (a
@@ -456,7 +435,7 @@ func tenantCreatedBody(c tenantadmin.TenantCreated) gen.TenantCreated {
 		WebhookIncludeAddresses: t.WebhookIncludeAddresses, AllowRemoteInternalDeposit: t.AllowRemoteInternalDeposit,
 		AllowTransferReply: t.AllowTransferReply, AntivirusEnabled: t.AntivirusEnabled,
 		AntivirusEffective: t.AntivirusEffective, SetupState: t.SetupState, LinkOnlyAllowed: t.LinkOnlyAllowed,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		E2ePolicy: t.E2ePolicy, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 

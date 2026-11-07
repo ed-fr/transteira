@@ -310,7 +310,16 @@
       <h2 id="{uid}-meta">{t('opsTransfers.detail.metadataTitle')}</h2>
       <dl class="tt-dl">
         <dt>{t('opsTransfers.detail.status')}</dt>
-        <dd><StatusBadge variant={status.variant} label={status.label} /></dd>
+        <dd>
+          <StatusBadge variant={status.variant} label={status.label} />
+          {#if transfer.endToEndEncrypted}
+            <StatusBadge variant="info" label={t('opsTransfers.e2eBadge')} />
+          {/if}
+        </dd>
+        {#if transfer.endToEndEncrypted}
+          <dt>{t('opsTransfers.detail.endToEnd')}</dt>
+          <dd>{t('opsTransfers.detail.endToEndNoMessage')}</dd>
+        {/if}
         <dt>{t('opsTransfers.detail.created')}</dt>
         <dd>{dateTime(transfer.createdAt)}</dd>
         <dt>{t('opsTransfers.detail.expires')}</dt>

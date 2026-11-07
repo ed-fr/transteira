@@ -284,6 +284,7 @@ Pour chaque niveau, renseignez :
 - **Destinataires internes uniquement** : les destinataires doivent appartenir aux domaines internes de l’entité (voir [Réseau](topic:tenant-network)).
 - **Suppression après le premier téléchargement (imposée)**.
 - **Lien seul autorisé** : autorise (par défaut) ou interdit l’option « lien seul » pour ce niveau, voir « Envoyer en lien seul » (guide du déposant). Elle n’est offerte que si le super administrateur l’a autorisée pour l’entité. Un niveau qui impose la vérification du destinataire ne permet pas le lien seul, les deux options étant incompatibles.
+- **Chiffrement de bout en bout** : **Suivre l’entité** (par défaut), **interdit**, **autorisé** ou **imposé**. Un niveau ne peut que **durcir** le réglage choisi par le super administrateur pour l’entité : si l’entité l’interdit ou l’impose, cela s’applique à tous les niveaux quel que soit votre choix ici ; ce n’est que lorsque l’entité l’autorise qu’un niveau peut l’interdire ou l’imposer. Un fichier chiffré n’est jamais analysé par l’antivirus : n’imposez donc le chiffrement que pour des niveaux dont vous maîtrisez les destinataires. Les transferts chiffrés ainsi portent le badge « chiffré de bout en bout » dans vos listes de transferts.
 - **Nombre maximal de téléchargements (plafond)** : facultatif, de 1 à 1000. Il plafonne le nombre de téléchargements que l’expéditeur peut fixer ; si l’expéditeur n’en fixe aucun, le plafond s’applique.
 
 Utilisez les flèches pour réordonner les niveaux, **Ajouter un niveau** pour en créer un et **Enregistrer** pour appliquer. L’écran signale les erreurs niveau par niveau.
@@ -332,6 +333,7 @@ La liste présente chaque modèle dans chaque langue, marqué **Personnalisé** 
 Cliquez sur un modèle pour ouvrir l’éditeur. Il comporte trois champs : **Objet**, **Corps HTML** et **Corps texte** (version en texte brut, lue par les messageries qui n’affichent pas le HTML).
 
 - **Variables disponibles** : cliquez sur une variable pour l’insérer à la position du curseur, dans le dernier champ utilisé. Les variables s’écrivent entre doubles accolades, par exemple `{{download_link}}`. Les variables marquées obligatoires doivent figurer dans les deux corps ; une variable absente ou inconnue est signalée.
+- **Transferts chiffrés de bout en bout** (2.0) : les modèles de notification de transfert, de confirmation d’envoi et de rappel d’expiration proposent la variable `{{e2e_notice}}`, l’avis indiquant que la clé est transmise par l’expéditeur par un autre canal et que les fichiers n’ont pas été analysés. Comme pour l’avertissement de réponse, l’avis est ajouté en tête du mail même si votre modèle omet la variable, et les mails d’un tel transfert ne contiennent jamais la clé ni le message.
 - Par sécurité, le HTML est filtré : pas de scripts, pas d’images distantes, et uniquement des liens https et mailto.
 - **Prévisualiser** affiche le mail avec des données d’exemple, sans ses styles et avec les images remplacées par leur description.
 - **Enregistrer le modèle** l’enregistre ; **Revenir au modèle par défaut** supprime votre personnalisation pour cette langue.

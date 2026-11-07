@@ -33,6 +33,7 @@ administration.
 - [9. Proofs of deposit and delivery](#9-proofs-of-deposit-and-delivery)
 - [10. Exporting and duplicating a tenant configuration](#10-exporting-and-duplicating-a-tenant-configuration)
 - [11. Link-only transfers and drop links](#11-link-only-transfers-and-drop-links)
+- [12. End-to-end encrypted transfer by script](#12-end-to-end-encrypted-transfer-by-script)
 
 ## Basics
 
@@ -405,7 +406,9 @@ Poll every 10 to 30 seconds:
 Per file, `scanStatus` is `clean`, `infected` (erased, the sender is alerted),
 `not_scanned_too_large` or `not_scanned_encrypted` (delivered with a warning on the download
 page), or `scan_error` (withheld). Since 1.1, `not_scanned_disabled` marks files delivered
-unscanned because the antivirus is disabled for the instance or the entity.
+unscanned because the antivirus is disabled for the instance or the entity. Since 2.0,
+`not_scanned_e2e` marks the files of an end-to-end encrypted transfer, which the server cannot
+read (section 12).
 
 Since version 1.1, each recipient gets **their own** download link, mailed to them only: the
 link is never returned to the sender nor to an API token, and `downloadUrl` is absent for
@@ -1244,3 +1247,55 @@ link may carry an expiry (`expiresAt`, after which it answers `404 drop-link-inv
 disabled link) and caps the transfers created through it per hour (`maxDepositsPerHour`, 20 by
 default): beyond it, `startDepositSession` and `createTransfer` answer `429 rate-limited` with
 `Retry-After`.
+
+## 12. End-to-end encrypted transfer by script
+
+Since 2.0 a transfer can be encrypted by the sender so that the server never holds the key and
+cannot read the files. The browser interface for it arrives in a later step of version 2.0; until
+then, only a client that implements the `TTE2` format can send such a transfer. A future version
+of the TransTeira command-line client will do it; for now, follow the steps below with your own
+implementation. The format (key derivation, header, chunks, sealed metadata and messages) is
+specified in [`docs/architecture/e2e-format.md`](../architecture/e2e-format.md); the reference
+implementation is the Go package `internal/tte2`, and its test vectors,
+`internal/tte2/testdata/vectors.json`, are the reference for any other implementation.
+
+Prerequisite: the effective end-to-end policy must be `allowed` or `required` (the tenant policy
+is set by the super admin, a confidentiality level can only tighten it); with `forbidden`,
+`createTransfer` answers `403 e2e-forbidden`. The public tenant and level resources show the
+effective policy (`e2ePolicy`).
+
+1. **Make a transfer key** `K`: 32 random bytes from a cryptographic generator, new for every
+   transfer. It is never sent to the server.
+2. **Encrypt each file** into a `TTE2` stream (one stream per file, the file index is its
+   position in `files`). The stream is at least 48 bytes long and its size must be a valid
+   stream size for its chunk size.
+3. **Seal one metadata blob per file** (`encryptedMetadata`: name, type, SHA-256 of the
+   plaintext) and, optionally, the message (`encryptedMessage`), as the format specifies.
+4. **Create the transfer** with `endToEndEncrypted: true`. Every file has a generic name
+   `file-0.tte2`, `file-1.tte2`, … in order, its `size` is the **ciphertext** size, its
+   `expectedSha256` the SHA-256 of the **ciphertext**, and its `encryptedMetadata`; it has no
+   `mediaType` and no `path`. The plaintext `message` must be empty (a plaintext message answers
+   `400 validation-failed` on `/message`, member code `not-allowed`). A transfer password is
+   allowed: it gates access to the ciphertext, and a level that requires a password still
+   requires it. `linkOnly` can be combined with end-to-end encryption.
+5. **Upload each stream with tus** exactly as in section 2. The server checks only the header
+   and the declared size, byte by byte on arrival; a refused slice answers `400` with the
+   problem `e2e-format-invalid` (the only tus `400` with a body) and is never stored, the bytes
+   before it are kept, and a corrected stream may resume.
+6. **Finalize.** The files get the status `not_scanned_e2e` and the transfer becomes available
+   without analysis; the sender gets no "file not scanned" mail.
+7. **Build the link yourself**: `<link from the response>#k=<K in base64url without padding>`
+   (43 characters). The server never sees the fragment. The mails sent to the recipients carry
+   the link **without** the key and say it comes from the sender through another channel: give
+   the recipients the key out of band (telephone, another messaging service), not with the link.
+
+Things to know. The server computes and shows the SHA-256 of the **ciphertext**; the recipient's
+client compares the plaintext SHA-256 from the metadata after decrypting. The ZIP archive is not
+available for such a transfer (`409 e2e-archive-unavailable`, after the password and
+verification checks): files are downloaded one by one, as ciphertext served as is (ranges work),
+and decrypted by the client. The address and domain blocklists apply; the blocklist by
+fingerprint does not (it cannot match a ciphertext). Internal, remote internal, API token,
+invited external and reply depositors may encrypt; a permanent drop link depositor cannot
+(`403 e2e-forbidden`, or `400 e2e-required` under a required policy, in which case that deposit
+is impossible). The checks run in this order: unknown level `400`, link-only `403`,
+end-to-end `403 e2e-forbidden` or `400 e2e-required`, level rules `422`, recipient domains `403`.

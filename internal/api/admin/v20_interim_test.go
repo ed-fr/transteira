@@ -8,6 +8,7 @@ import (
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
 	"github.com/ed-fr/transteira/internal/store"
+	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/tenantadmin"
 )
 
@@ -86,92 +87,52 @@ func TestInterimNotSupportedV20(t *testing.T) {
 	if len(tsvc.args["ImportTenant"]) != 0 {
 		t.Errorf("import tenant delivery none: the service was called")
 	}
-	// The end-to-end policies of an import are not stored before step 7:
-	// the service refuses any value but the default, answered 422
-	// import-invalid at its pointer (not a silent loss).
-	for _, ptr := range []string{
-		"/config/settings/e2ePolicy",
-		"/config/confidentialityLevels/items/0/rules/e2ePolicy",
-	} {
-		tsvc = &fakeTenantService{err: &tenantadmin.ImportError{Pointer: ptr, Reason: "not supported yet"}}
-		_, err = tenantServer(tsvc).ImportTenant(importCtx(super, validImport), importReq())
-		p := expectProblem(t, err, problem.CodeImportInvalid)
-		if len(p.Errors) != 1 || p.Errors[0].Field != ptr {
-			t.Errorf("import %s: errors %+v", ptr, p.Errors)
-		}
+	// Tenant merge patch: the end-to-end policy reaches the service for
+	// every admin (the service refuses a delegated admin with 403 and a
+	// tenant outside the scope with 404, tested in tenantadmin).
+	tsvc = &fakeTenantService{}
+	_, err = tenantServer(tsvc).UpdateTenant(super, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(`{"e2ePolicy":"allowed"}`)})
+	if err != nil {
+		t.Errorf("e2ePolicy patch: %v", err)
+	} else if u := tsvc.args["UpdateTenant"][2].(tenantadmin.TenantUpdate); u.E2EPolicy == nil || *u.E2EPolicy != "allowed" {
+		t.Errorf("e2ePolicy patch: service got %+v", u)
 	}
-
-	// Tenant merge patch: the end-to-end policy is super admin only, like
-	// antivirusEnabled. The super admin gets not-supported, a delegated
-	// admin of the tenant 403 forbidden; the service is never reached.
-	for _, body := range []string{`{"e2ePolicy":"allowed"}`, `{"name":"x","e2ePolicy":"forbidden"}`} {
-		tsvc = &fakeTenantService{}
-		_, err = tenantServer(tsvc).UpdateTenant(super, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(body)})
-		p := expectProblem(t, err, problem.CodeValidationFailed)
-		if len(p.Errors) != 1 || p.Errors[0].Code != "not-supported" {
-			t.Errorf("%s: errors %+v", body, p.Errors)
-		}
-		_, err = tenantServer(tsvc).UpdateTenant(deleg, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(body)})
-		expectProblem(t, err, problem.CodeForbidden)
-		if len(tsvc.args["UpdateTenant"]) != 0 {
-			t.Errorf("%s: the service was called", body)
-		}
-	}
-	// A tenant outside the scope of the admin stays a 404 from the service.
+	tsvc = &fakeTenantService{err: tenantadmin.ErrForbidden}
+	_, err = tenantServer(tsvc).UpdateTenant(deleg, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(`{"e2ePolicy":"required"}`)})
+	expectProblem(t, err, problem.CodeForbidden)
 	tsvc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	_, err = tenantServer(tsvc).UpdateTenant(deleg, gen.UpdateTenantRequestObject{TenantId: "ten_b", Body: patchBody(`{"e2ePolicy":"allowed"}`)})
 	expectProblem(t, err, problem.CodeNotFound)
+	tsvc = &fakeTenantService{}
+	_, err = tenantServer(tsvc).UpdateTenant(super, gen.UpdateTenantRequestObject{TenantId: "ten_a", Body: patchBody(`{"e2ePolicy":null}`)})
+	expectProblem(t, err, problem.CodeValidationFailed)
 
-	// Confidentiality levels: the policies of a rule.
+	// Confidentiality levels: the policy of a rule reaches the service, as
+	// the pointer (nil when absent), and is rendered back.
 	allowed := gen.E2ePolicy("allowed")
 	rules := gen.ConfidentialityRules{AllowedExpiryDays: []gen.ExpiryDays{gen.N1}}
-	for name, tc := range map[string]struct {
-		set   func(*gen.ConfidentialityRules)
-		field string
-	}{
-		"e2e": {func(r *gen.ConfidentialityRules) { r.E2ePolicy = &allowed }, "/items/1/rules/e2ePolicy"},
-	} {
+	{
 		r := rules
-		tc.set(&r)
+		r.E2ePolicy = &allowed
 		levels := &gen.ConfidentialityLevelList{Items: []gen.ConfidentialityLevel{
 			{Key: "a", IsDefault: true, Rules: rules}, {Key: "b", Rules: r},
 		}}
 		tsvc = &fakeTenantService{}
 		_, err = tenantServer(tsvc).UpdateConfidentialityLevels(deleg, gen.UpdateConfidentialityLevelsRequestObject{TenantId: "ten_a", Body: levels})
-		wantNotSupported(t, name, err, tc.field)
-		if len(tsvc.args["UpdateConfidentialityLevels"]) != 0 {
-			t.Errorf("%s: the service was called", name)
+		if err != nil {
+			t.Fatalf("levels with e2ePolicy: %v", err)
+		}
+		in := tsvc.args["UpdateConfidentialityLevels"][2].([]tenantadmin.ConfidentialityLevel)
+		if in[0].Rules.E2EPolicy != nil || in[1].Rules.E2EPolicy == nil || *in[1].Rules.E2EPolicy != tenant.E2EAllowed {
+			t.Errorf("levels sent to the service: %+v", in)
+		}
+		body := levelListBody(in)
+		if body.Items[0].Rules.E2ePolicy != nil || body.Items[1].Rules.E2ePolicy == nil || *body.Items[1].Rules.E2ePolicy != allowed {
+			t.Errorf("levels rendered: %+v", body.Items)
 		}
 		// Outside the scope of the admin: the service answers (404).
 		tsvc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 		_, err = tenantServer(tsvc).UpdateConfidentialityLevels(deleg, gen.UpdateConfidentialityLevelsRequestObject{TenantId: "ten_b", Body: levels})
 		expectProblem(t, err, problem.CodeNotFound)
-	}
-}
-
-// The link-only switch of a level (since step 6 of V2): absent means
-// allowed, false forbids, and the answer always carries it.
-func TestLevelLinkOnlyAllowed(t *testing.T) {
-	t.Parallel()
-	ctx := ctxWith(store.SessionAuthenticated, delegated)
-	no := false
-	rules := gen.ConfidentialityRules{AllowedExpiryDays: []gen.ExpiryDays{gen.N1}}
-	off := rules
-	off.LinkOnlyAllowed = &no
-	tsvc := &fakeTenantService{}
-	resp, err := tenantServer(tsvc).UpdateConfidentialityLevels(ctx, gen.UpdateConfidentialityLevelsRequestObject{
-		TenantId: "ten_a",
-		Body:     &gen.ConfidentialityLevelList{Items: []gen.ConfidentialityLevel{{Key: "a", IsDefault: true, Rules: rules}, {Key: "b", Rules: off}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	in := tsvc.args["UpdateConfidentialityLevels"][2].([]tenantadmin.ConfidentialityLevel)
-	if in[0].Rules.LinkOnlyForbidden || !in[1].Rules.LinkOnlyForbidden {
-		t.Errorf("service got %+v", in)
-	}
-	out := resp.(gen.UpdateConfidentialityLevels200JSONResponse).Items
-	if a, b := out[0].Rules.LinkOnlyAllowed, out[1].Rules.LinkOnlyAllowed; a == nil || !*a || b == nil || *b {
-		t.Errorf("answer %v %v", a, b)
 	}
 }

@@ -95,6 +95,14 @@ var (
 	qFileReleaseDisabled = tenantQuery(
 		`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ?
 		WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending'`)
+	// qFileReleaseE2E freezes the pending files of an end-to-end encrypted
+	// transfer being finalized (FinalizeE2ETx). The metadata condition
+	// mirrors the check transfer_files_e2e_check: only an E2E file may get
+	// the status.
+	qFileReleaseE2E = tenantQuery(
+		`UPDATE transfer_files SET scan_status = 'not_scanned_e2e', scanned_at = ?
+		WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending'
+		AND e2e_metadata IS NOT NULL`)
 	// qFileReleaseAllDisabled releases, across tenants, the files of the
 	// scanning transfers still waiting for an analysis, when the instance
 	// starts with the antivirus engine "none". The tenant of each file is
@@ -152,14 +160,15 @@ func (s ScanStatus) final() bool {
 }
 
 // Deliverable reports whether a file with the scan status s may be
-// downloaded: ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted
-// or ScanNotScannedDisabled (the last three flagged as not scanned). Every
+// downloaded: ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted,
+// ScanNotScannedDisabled or ScanNotScannedE2E (the last four flagged as
+// not scanned). Every
 // other status is withheld: pending or scanning (not analyzed yet),
 // infected (erased) and scan_error. It is the single rule shared by the
 // antivirus worker, the mails and the download endpoints.
 func (s ScanStatus) Deliverable() bool {
 	switch s {
-	case ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted, ScanNotScannedDisabled:
+	case ScanClean, ScanNotScannedTooLarge, ScanNotScannedEncrypted, ScanNotScannedDisabled, ScanNotScannedE2E:
 		return true
 	}
 	return false
@@ -508,6 +517,9 @@ func setScanResult(ctx context.Context, tx *ScopedTx, fileID string, status Scan
 	switch {
 	case !status.final():
 		return invalid("scan result must be a final scan status")
+	case status == ScanNotScannedE2E:
+		// Decided at finalization only (FinalizeE2ETx), never by the worker.
+		return invalid("an end-to-end encrypted file is never analyzed")
 	case signature != "" && status != ScanInfected:
 		return invalid("only an infected file has a signature")
 	case len(signature) > MaxScanSignatureBytes || !validText(signature, MaxScanSignatureBytes, true):

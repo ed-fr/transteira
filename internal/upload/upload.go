@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/tte2"
 )
 
 // Errors returned by the engine. Callers test them with errors.Is. The
@@ -57,6 +59,16 @@ var (
 	// context.Canceled). HTTP: usually none, the client is gone; 400 if a
 	// response can still be written.
 	ErrInterrupted = errors.New("upload: request interrupted")
+	// ErrE2EFormat reports bytes of an end-to-end encrypted file (since
+	// 2.0, spec 22) that cannot belong to a TTE2 stream of the declared
+	// length: a bad header field or a declared length that is not a valid
+	// stream size for the chunk size of the header (tte2.Validator). It
+	// also wraps the tte2 error (tte2.ErrFormat). The slice holding the
+	// first bad byte is never written; the bytes accepted before it are
+	// saved and the returned Status holds the durable offset, so the client
+	// may resume with correct bytes. HTTP 400 (e2e-format-invalid; the tus
+	// errors have no body).
+	ErrE2EFormat = errors.New("upload: invalid end-to-end encrypted stream")
 )
 
 // errInconsistent marks a checkpoint and a file that disagree: the upload
@@ -485,6 +497,9 @@ type session struct {
 	h       hash.Hash
 	dst     io.Writer // h and w
 	durable int64     // offset of the last persisted checkpoint
+	// v validates the stream of an end-to-end encrypted file before it is
+	// written; nil for an ordinary file. Its offset is always w.Offset().
+	v *tte2.Validator
 }
 
 // newSession returns a session over f, whose current size is size.
@@ -504,11 +519,16 @@ func (s *session) close() { _ = s.f.Close() }
 
 // create creates the encrypted file of f and starts a new writer.
 func (e *Engine) create(tid tenant.ID, f store.TransferFile, dek []byte) (*session, error) {
+	v, err := newE2EValidator(f)
+	if err != nil {
+		return nil, err
+	}
 	file, err := e.files.Create(tid, f.StorageName)
 	if err != nil {
 		return nil, fmt.Errorf("upload: create file: %w", err)
 	}
 	s := newSession(file, 0)
+	s.v = v
 	w, err := e.newWriter(&s.cw, dek, string(tid), f.ID, crypto.WithChunkSize(chunkSize))
 	if err != nil {
 		s.close()
@@ -539,9 +559,9 @@ func (e *Engine) resume(tid tenant.ID, f store.TransferFile, dek []byte, st *cry
 		}
 		return nil, fmt.Errorf("upload: resume file: %w", err)
 	}
-	if err := s.h.(encoding.BinaryUnmarshaler).UnmarshalBinary(extra); err != nil {
+	if err := s.restore(f, extra, w.Offset()); err != nil {
 		s.close()
-		return nil, fmt.Errorf("%w: hash state", errInconsistent)
+		return nil, err
 	}
 	s.start(w)
 	return s, nil
@@ -551,8 +571,7 @@ func (e *Engine) resume(tid tenant.ID, f store.TransferFile, dek []byte, st *cry
 // file, then write the checkpoint atomically. A writer broken by a failed
 // write returns its error here.
 func (e *Engine) checkpoint(tid tenant.ID, name string, s *session) error {
-	extra, _ := s.h.(encoding.BinaryMarshaler).MarshalBinary() // never fails for SHA-256
-	st, err := s.w.Checkpoint(extra)
+	st, err := s.w.Checkpoint(s.extra())
 	if err != nil {
 		return fmt.Errorf("upload: checkpoint: %w", err)
 	}
@@ -662,8 +681,11 @@ func (e *Engine) scrub(ctx context.Context) {
 // context canceled before the end returns ErrInterrupted with the saved
 // offset.
 //
-// On error, the returned Status is meaningful for ErrTooLarge and
-// ErrInterrupted only.
+// The bytes of an end-to-end encrypted file go through a tte2.Validator
+// before they are written (ErrE2EFormat).
+//
+// On error, the returned Status is meaningful for ErrTooLarge,
+// ErrInterrupted and ErrE2EFormat only.
 func (e *Engine) Append(ctx context.Context, tid tenant.ID, p Principal, uploadID string, offset int64, body io.Reader) (Status, error) {
 	if offset < 0 || body == nil {
 		return Status{}, ErrInvalid
@@ -722,8 +744,16 @@ func (e *Engine) Append(ctx context.Context, tid tenant.ID, p Principal, uploadI
 		// empty file is created at once, to be completed.
 		var first []byte
 		if f.Size > 0 {
-			var one [1]byte
-			n, rerr := io.ReadFull(body, one[:])
+			// The first byte, or for an end-to-end encrypted file the
+			// whole header (fewer bytes if the body ends sooner), is read
+			// before the file is created: a malformed header is refused
+			// with no file on disk, so that a client repeating it cannot
+			// make every next attempt reset the upload (new DEK, logged).
+			head := make([]byte, 1, tte2.HeaderSize)
+			if f.E2EMetadata != "" {
+				head = head[:min(int64(tte2.HeaderSize), f.Size)]
+			}
+			n, rerr := io.ReadFull(body, head)
 			if n == 0 {
 				st := Status{Length: f.Size, ExpiresAt: expires}
 				if errors.Is(rerr, io.EOF) {
@@ -731,7 +761,17 @@ func (e *Engine) Append(ctx context.Context, tid tenant.ID, p Principal, uploadI
 				}
 				return st, fmt.Errorf("%w: %w", ErrInterrupted, rerr)
 			}
-			first = one[:]
+			first = head[:n]
+			if f.E2EMetadata != "" {
+				if err := checkE2EPrefix(f.Size, first); err != nil {
+					return Status{Length: f.Size, ExpiresAt: expires}, err
+				}
+			}
+			if rerr != nil && !errors.Is(rerr, io.ErrUnexpectedEOF) {
+				// The body failed after n bytes: the bytes are kept and
+				// the stream below reports the interruption.
+				body = failedReader{rerr}
+			}
 		}
 		if s, err = e.create(tid, f, dek); err != nil {
 			return Status{}, err
@@ -762,7 +802,7 @@ func (e *Engine) stream(ctx context.Context, tid tenant.ID, u store.FileUpload, 
 	buf := *bp
 	remaining := f.Size - s.w.Offset()
 	var since int64
-	var cause error
+	var cause, formatErr error
 	broken := false
 	for remaining > 0 {
 		if err := ctx.Err(); err != nil {
@@ -771,6 +811,15 @@ func (e *Engine) stream(ctx context.Context, tid tenant.ID, u store.FileUpload, 
 		}
 		n, err := body.Read(buf[:min(int64(len(buf)), remaining)])
 		if n > 0 {
+			if s.v != nil {
+				// Rule 5: the bytes of an end-to-end encrypted file are
+				// validated before they are written; Check is atomic, so
+				// nothing of a refused slice is written.
+				if verr := s.v.Check(buf[:n]); verr != nil {
+					formatErr = fmt.Errorf("%w: %w", ErrE2EFormat, verr)
+					break
+				}
+			}
 			if _, werr := s.dst.Write(buf[:n]); werr != nil {
 				// The writer is broken (sticky error): the checkpoint
 				// below returns that error and nothing is saved.
@@ -794,7 +843,7 @@ func (e *Engine) stream(ctx context.Context, tid tenant.ID, u store.FileUpload, 
 			break
 		}
 	}
-	if remaining == 0 && cause == nil && !overflows(body) {
+	if remaining == 0 && cause == nil && formatErr == nil && !overflows(body) {
 		return e.complete(ctx, tid, f, s)
 	}
 	if s.w.Offset() != s.durable || broken {
@@ -809,6 +858,8 @@ func (e *Engine) stream(ctx context.Context, tid tenant.ID, u store.FileUpload, 
 	}
 	st := Status{Offset: s.durable, Length: f.Size, ExpiresAt: expires}
 	switch {
+	case formatErr != nil:
+		return st, formatErr
 	case cause != nil:
 		return st, fmt.Errorf("%w: %w", ErrInterrupted, cause)
 	case remaining == 0:
@@ -821,6 +872,11 @@ func (e *Engine) stream(ctx context.Context, tid tenant.ID, u store.FileUpload, 
 // database (the only database write of the upload), then removal of the
 // checkpoint. The database write is not canceled with the request.
 func (e *Engine) complete(ctx context.Context, tid tenant.ID, f store.TransferFile, s *session) (Status, error) {
+	if s.v != nil && !s.v.Complete() {
+		// Unreachable: the validator accepted exactly the bytes written,
+		// and the file is complete at its declared size.
+		return Status{}, errors.New("upload: end-to-end encrypted stream incomplete at completion")
+	}
 	if err := s.w.Close(); err != nil {
 		return Status{}, fmt.Errorf("upload: finish file: %w", err)
 	}
@@ -948,4 +1004,100 @@ func (e *Engine) writeEmpty(cw *countingWriter, file *os.File, tid tenant.ID, fi
 		return err
 	}
 	return e.files.Sync(file)
+}
+
+// e2eExtraTag is the first byte of the checkpoint extra data of an
+// end-to-end encrypted file. The extra data of an ordinary file is the bare
+// SHA-256 state, which starts with "sha", so the two never collide.
+const e2eExtraTag = 0xE2
+
+// newE2EValidator returns the validator of the file f: a fresh one at offset
+// 0 for an end-to-end encrypted file (its declared size f.Size, at least
+// tte2.MinFileSize, otherwise ErrE2EFormat), nil for an ordinary file.
+func newE2EValidator(f store.TransferFile) (*tte2.Validator, error) {
+	if f.E2EMetadata == "" {
+		return nil, nil
+	}
+	v, err := tte2.NewValidator(f.Size)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrE2EFormat, err)
+	}
+	return v, nil
+}
+
+// failedReader is a body that failed: every Read returns its error.
+type failedReader struct{ err error }
+
+// Read returns the error of r.
+func (r failedReader) Read([]byte) (int, error) { return 0, r.err }
+
+// checkE2EPrefix validates the first bytes p of an end-to-end encrypted
+// stream of declared size, with a throw-away validator.
+func checkE2EPrefix(size int64, p []byte) error {
+	v, err := tte2.NewValidator(size)
+	if err == nil {
+		err = v.Check(p)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrE2EFormat, err)
+	}
+	return nil
+}
+
+// extra returns the checkpoint extra data of s. For an ordinary file it is
+// the SHA-256 state, unchanged since 1.0 (uploads in flight across an
+// upgrade resume). For an end-to-end encrypted file it is
+//
+//	0xE2 | len(SHA-256 state) (u16 BE) | SHA-256 state | validator state
+//
+// at most 3 + 108 + tte2.MaxValidatorStateSize bytes, far below
+// crypto.MaxCheckpointExtra.
+func (s *session) extra() []byte {
+	sha, _ := s.h.(encoding.BinaryMarshaler).MarshalBinary() // never fails for SHA-256
+	if s.v == nil {
+		return sha
+	}
+	vs, _ := s.v.MarshalBinary() // never fails
+	b := make([]byte, 0, 3+len(sha)+len(vs))
+	b = append(b, e2eExtraTag)
+	b = binary.BigEndian.AppendUint16(b, uint16(len(sha))) //nolint:gosec // G115: a SHA-256 state is about 108 bytes.
+	b = append(b, sha...)
+	return append(b, vs...)
+}
+
+// restore decodes the checkpoint extra data of the file f into s (see
+// extra), strictly: the hash state, and for an end-to-end encrypted file the
+// validator state, which must declare f.Size and stand at offset, the
+// plaintext offset of the resumed writer. Any disagreement, including an
+// extra data of the other kind, wraps errInconsistent (a server-side
+// corruption, handled by a reset), never a client error.
+func (s *session) restore(f store.TransferFile, extra []byte, offset int64) error {
+	sha := extra
+	var vs []byte
+	if f.E2EMetadata != "" {
+		if len(extra) < 3 || extra[0] != e2eExtraTag {
+			return fmt.Errorf("%w: end-to-end extra data", errInconsistent)
+		}
+		n := int(extra[1])<<8 | int(extra[2])
+		if n > len(extra)-3 {
+			return fmt.Errorf("%w: end-to-end extra data", errInconsistent)
+		}
+		sha, vs = extra[3:3+n], extra[3+n:]
+	}
+	if err := s.h.(encoding.BinaryUnmarshaler).UnmarshalBinary(sha); err != nil {
+		return fmt.Errorf("%w: hash state", errInconsistent)
+	}
+	if f.E2EMetadata == "" {
+		return nil
+	}
+	var v tte2.Validator
+	if err := v.UnmarshalBinary(vs); err != nil {
+		return fmt.Errorf("%w: %w", errInconsistent, err)
+	}
+	if v.DeclaredSize() != f.Size || v.Offset() != offset {
+		return fmt.Errorf("%w: validator state at %d of %d, file at %d of %d",
+			errInconsistent, v.Offset(), v.DeclaredSize(), offset, f.Size)
+	}
+	s.v = &v
+	return nil
 }

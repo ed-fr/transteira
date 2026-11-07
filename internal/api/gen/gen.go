@@ -3317,7 +3317,7 @@ type EmailTemplateUpdate struct {
 	Subject  string `json:"subject"`
 }
 
-// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it.
+// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it; it only checks the framing of a sealed blob (canonical unpadded base64url, version byte 1, room for the 12-byte nonce and the 16-byte tag), else `400 validation-failed` (`invalid-format`). Format: docs/architecture/e2e-format.md.
 type EncryptedMetadata = string
 
 // ExpiryDays defines model for ExpiryDays.
@@ -3332,7 +3332,7 @@ type ExportedAsset struct {
 
 // FileDeclaration defines model for FileDeclaration.
 type FileDeclaration struct {
-	// EncryptedMetadata Since 2.0. Required for an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then a generic name (`file-<n>.tte2`) and `size` the size of the ciphertext.
+	// EncryptedMetadata Since 2.0. Required on every file of an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then the generic `file-<n>.tte2` (n from 1, in order), `mediaType` and `path` are absent, `size` is the size of the ciphertext (at least 48 bytes) and `expectedSha256` its SHA-256.
 	EncryptedMetadata *EncryptedMetadata `json:"encryptedMetadata,omitempty"`
 	ExpectedSha256    *Sha256            `json:"expectedSha256,omitempty"`
 
@@ -4190,7 +4190,10 @@ type ProvisioningTokenCreated struct {
 type PublicConfidentialityLevel struct {
 	// Description Description in the response language; absent when none is written.
 	Description *string `json:"description,omitempty"`
-	IsDefault   bool    `json:"isDefault"`
+
+	// E2ePolicy Since 2.0. Effective end-to-end encryption policy of a transfer at this level, computed by the server from the tenant policy and the level's own (`rules.e2ePolicy`): a tenant `forbidden` or `required` holds at every level; under a tenant `allowed`, the level's policy, or `allowed` when it has none. `forbidden` when absent.
+	E2ePolicy *E2ePolicy `json:"e2ePolicy,omitempty"`
+	IsDefault bool       `json:"isDefault"`
 
 	// Key Since 1.1. Key of a confidentiality level, unique within the tenant.
 	Key   ConfidentialityLevelKey `json:"key"`
@@ -4213,7 +4216,7 @@ type PublicDropLink struct {
 type PublicFile struct {
 	DownloadUrl string `json:"downloadUrl"`
 
-	// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it.
+	// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it; it only checks the framing of a sealed blob (canonical unpadded base64url, version byte 1, room for the 12-byte nonce and the 16-byte tag), else `400 validation-failed` (`invalid-format`). Format: docs/architecture/e2e-format.md.
 	EncryptedMetadata *EncryptedMetadata `json:"encryptedMetadata,omitempty"`
 	Id                string             `json:"id"`
 	MediaType         *string            `json:"mediaType,omitempty"`
@@ -4322,7 +4325,7 @@ type PublicTransfer struct {
 	// EncryptedMessage Since 2.0. The message of an end-to-end encrypted transfer, encrypted (`message` is absent): the browser decrypts it with the key of the link fragment.
 	EncryptedMessage *string `json:"encryptedMessage,omitempty"`
 
-	// EndToEndEncrypted Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`.
+	// EndToEndEncrypted Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`. Present while `locked` too (the only member added to a locked page); `encryptedMessage` and the files only once unlocked.
 	EndToEndEncrypted *bool     `json:"endToEndEncrypted,omitempty"`
 	ExpiresAt         time.Time `json:"expiresAt"`
 
@@ -4473,7 +4476,7 @@ type SecurityEventType string
 
 // SenderFile defines model for SenderFile.
 type SenderFile struct {
-	// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it.
+	// EncryptedMetadata Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it; it only checks the framing of a sealed blob (canonical unpadded base64url, version byte 1, room for the 12-byte nonce and the 16-byte tag), else `400 validation-failed` (`invalid-format`). Format: docs/architecture/e2e-format.md.
 	EncryptedMetadata *EncryptedMetadata `json:"encryptedMetadata,omitempty"`
 	Id                string             `json:"id"`
 	MediaType         *string            `json:"mediaType,omitempty"`
@@ -4988,6 +4991,9 @@ type TenantFeatures struct {
 	// Antivirus `disabled` when files of the tenant are not analysed (instance engine `none` or tenant flag off): the download page tells recipients so.
 	Antivirus TenantFeaturesAntivirus `json:"antivirus"`
 
+	// E2ePolicy Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten.
+	E2ePolicy *E2ePolicy `json:"e2ePolicy,omitempty"`
+
 	// Folders Folders may be dropped and keep their tree.
 	Folders bool `json:"folders"`
 
@@ -5225,10 +5231,10 @@ type TransferCreate struct {
 	// DeleteAfterFirstDownload Delete the transfer after its first complete download. Since 1.1, with per-recipient links: once every recipient has completed at least one download (bounded by the expiry).
 	DeleteAfterFirstDownload *bool `json:"deleteAfterFirstDownload,omitempty"`
 
-	// EncryptedMessage Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB). Required in place of `message` when `endToEndEncrypted` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise.
+	// EncryptedMessage Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB), framed like `EncryptedMetadata` (the server checks the framing only: `invalid-format`). Optional with `endToEndEncrypted`, which takes it in place of `message` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise.
 	EncryptedMessage *string `json:"encryptedMessage,omitempty"`
 
-	// EndToEndEncrypted Since 2.0. The files are encrypted in the browser: every file declares its `encryptedMetadata`, the key stays in the link fragment `#k=` and never reaches the server. Needs the tenant and level `e2ePolicy` (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false). No antivirus, no server archive.
+	// EndToEndEncrypted Since 2.0. The files are encrypted in the browser: the key stays in the link fragment `#k=` and never reaches the server. Every file declares its `encryptedMetadata`, the generic name `file-<n>.tte2` (n from 1, in order), no `mediaType` nor `path`, the ciphertext `size` (at least 48) and, optionally, the ciphertext `expectedSha256`; `message` must be empty (`encryptedMessage` optional); a `password` is allowed. Needs the effective `e2ePolicy` of the level (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false; a drop link session gets `403 e2e-forbidden`). No antivirus, no server archive, no blocklist check of the file hashes.
 	EndToEndEncrypted *bool             `json:"endToEndEncrypted,omitempty"`
 	ExpiryDays        ExpiryDays        `json:"expiryDays"`
 	Files             []FileDeclaration `json:"files"`
@@ -29306,12 +29312,18 @@ func (response AppendUploadChunk204Response) VisitAppendUploadChunkResponse(w ht
 	return nil
 }
 
-type AppendUploadChunk400Response struct {
-}
+type AppendUploadChunk400ApplicationProblemPlusJSONResponse Problem
 
-func (response AppendUploadChunk400Response) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+func (response AppendUploadChunk400ApplicationProblemPlusJSONResponse) VisitAppendUploadChunkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(400)
-	return nil
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type AppendUploadChunk401Response struct {

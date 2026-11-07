@@ -23,6 +23,14 @@ type labels struct {
 	disabledLabel         string
 	disabledText          string
 	reasonDisabled        string
+	e2eLabel              string // status label of an end-to-end encrypted file
+	e2eText               string
+	reasonE2E             string
+	e2eFileName           string // %d: rank of the file
+	shaEncrypted          string // prefix of the digest of an encrypted file
+	e2eNoticeRecipient    string // key not in the mail, sent by the sender through another channel
+	e2eNoticeSender       string // the sender must give the key through another channel
+	e2eNotScanned         string // the files were not analyzed
 	infectedIntro         string
 	threat                string
 	withheldIntro         string
@@ -66,6 +74,8 @@ func (l *labels) statusFor(r NotScannedReason) (label, text string) {
 		return l.encryptedLabel, l.encryptedText
 	case NotScannedDisabled:
 		return l.disabledLabel, l.disabledText
+	case NotScannedE2E:
+		return l.e2eLabel, l.e2eText
 	}
 	return "", ""
 }
@@ -89,6 +99,14 @@ var allLabels = map[string]*labels{
 		disabledLabel:         "Not scanned:",
 		disabledText:          " antivirus disabled.",
 		reasonDisabled:        "Reason: the antivirus is disabled, so the file was not analyzed.",
+		e2eLabel:              "Not scanned:",
+		e2eText:               " end-to-end encrypted file, unreadable by the antivirus.",
+		reasonE2E:             "Reason: the file is end-to-end encrypted, so the antivirus cannot read it.",
+		e2eFileName:           "Encrypted file %d",
+		shaEncrypted:          "SHA-256 of the encrypted file: ",
+		e2eNoticeRecipient:    "This transfer is end-to-end encrypted. The decryption key is not in this message: the sender gives it to you through another channel. Without it the files cannot be opened.",
+		e2eNoticeSender:       "This transfer is end-to-end encrypted. The recipients' e-mail contains no decryption key: give it to them through another channel (phone, text message...), never in the same e-mail as the link.",
+		e2eNotScanned:         "The files were not analyzed by the antivirus (end-to-end encrypted): the server can never read them.",
 		infectedIntro:         "The antivirus found a threat in the following files of your transfer. They have been deleted.",
 		threat:                "Detected threat: ",
 		withheldIntro:         "The following files could not be analyzed by the antivirus and are withheld for safety: they cannot be downloaded.",
@@ -140,6 +158,14 @@ var allLabels = map[string]*labels{
 		disabledLabel:         "Non analysé :",
 		disabledText:          " antivirus désactivé.",
 		reasonDisabled:        "Motif : l'antivirus est désactivé, le fichier n'a donc pas été analysé.",
+		e2eLabel:              "Non analysé :",
+		e2eText:               " fichier chiffré de bout en bout, illisible par l'antivirus.",
+		reasonE2E:             "Motif : le fichier est chiffré de bout en bout, l'antivirus ne peut donc pas le lire.",
+		e2eFileName:           "Fichier chiffré %d",
+		shaEncrypted:          "SHA-256 du fichier chiffré : ",
+		e2eNoticeRecipient:    "Ce transfert est chiffré de bout en bout. La clé de déchiffrement ne figure pas dans ce message : l'expéditeur vous la transmet par un autre canal. Sans elle, les fichiers ne peuvent pas être ouverts.",
+		e2eNoticeSender:       "Ce transfert est chiffré de bout en bout. L'e-mail des destinataires ne contient aucune clé de déchiffrement : transmettez-la-leur par un autre canal (téléphone, SMS...), jamais dans le même e-mail que le lien.",
+		e2eNotScanned:         "Les fichiers n'ont pas été analysés par l'antivirus (chiffrés de bout en bout) : le serveur ne peut jamais les lire.",
 		infectedIntro:         "L'antivirus a détecté une menace dans les fichiers suivants de votre transfert. Ils ont été supprimés.",
 		threat:                "Menace détectée : ",
 		withheldIntro:         "Les fichiers suivants n'ont pas pu être analysés par l'antivirus et sont retenus par sécurité : ils ne peuvent pas être téléchargés.",

@@ -71,7 +71,10 @@ type Transfer struct {
 	DropLinkID string
 	// LinkOnly marks a link-only transfer (since 2.0): never mailed, its
 	// link is never shown to the administration.
-	LinkOnly                 bool
+	LinkOnly bool
+	// E2E marks an end-to-end encrypted transfer (since 2.0): its files
+	// are ciphertext and carry generic names, its message is never shown.
+	E2E                      bool
 	FileCount                int
 	TotalBytes               int64
 	PasswordProtected        bool
@@ -178,7 +181,7 @@ func transferOf(t store.Transfer, recipients []string, fileCount int, lang strin
 		DeleteAfterFirstDownload: t.DeleteAfterFirstDownload, CreatedAt: t.CreatedAt,
 		FirstDownloadedAt: t.FirstDownloadedAt, DownloadCount: t.DownloadCount,
 		MaxDownloads: t.MaxDownloads, ConfidentialityLevel: t.ConfidentialityLevel, Rules: t.Rules,
-		RecipientVerification: t.RecipientVerification, DropLinkID: t.DropLinkID, LinkOnly: t.LinkOnly,
+		RecipientVerification: t.RecipientVerification, DropLinkID: t.DropLinkID, LinkOnly: t.LinkOnly, E2E: t.E2E,
 	}
 	if t.ConfidentialityLevel != "" {
 		out.ConfidentialityLabel = store.LevelLabel(t.ConfidentialityLabel, t.Language, lang, "en")

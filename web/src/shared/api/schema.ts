@@ -481,12 +481,31 @@ export interface paths {
          *       one (`internal`, `internal_remote`) or an API token (an invited external, a reply or a
          *       drop link depositor, whose recipient is imposed and must be mailed);
          *       `400 link-only-conflict` with `recipientVerification`;
-         *     - `endToEndEncrypted` declares files encrypted in the browser (`encryptedMetadata` on every
-         *       file, generic names, ciphertext sizes): `403 e2e-forbidden` when the policy of the tenant
-         *       or level forbids it, `400 e2e-required` when it is required and the member is false;
+         *     - `endToEndEncrypted` declares files encrypted in the browser (the field rules below are
+         *       checked first: a malformed request gets `400 validation-failed` before any policy
+         *       answer): `403 e2e-forbidden` when the
+         *       effective policy of the level (`PublicConfidentialityLevel.e2ePolicy`: the tenant policy,
+         *       which a level can only tighten) forbids it, `400 e2e-required` when it is required and
+         *       the member is false. An end-to-end encrypted transfer must follow these rules, else
+         *       `400 validation-failed` with a pointer to the member:
+         *       - every file carries its `encryptedMetadata` (and no file of another transfer does);
+         *       - the file `name` is the generic `file-<n>.tte2`, `n` counting from 1 in the order of
+         *         `files` (`file-1.tte2`, `file-2.tte2`, ...); `mediaType` and `path` are absent (the
+         *         real name, type and folder are in the encrypted metadata);
+         *       - `size` is the size of the ciphertext, at least 48 bytes (header and empty final chunk);
+         *       - `message` is empty or absent; `encryptedMessage` is optional;
+         *       - `expectedSha256`, when given, is the SHA-256 of the ciphertext (the plaintext hash is in
+         *         the encrypted metadata);
+         *       - a transfer `password` is allowed, on top of the key in the link fragment;
          *       the server still encrypts the ciphertext at rest and computes its own SHA-256 of it, and
-         *       checks the framing of each upload while streaming (magic, header, chunk lengths, final
-         *       chunk): a malformed one is refused with `400 e2e-format-invalid` at the tus upload;
+         *       checks the framing of each upload while streaming (the header, and the declared size
+         *       against the chunk layout of the header): a malformed one is refused with
+         *       `400 e2e-format-invalid` at the tus upload (the chunks are authenticated by the recipient). The
+         *       blocklist still applies to the addresses and domains, but not to the SHA-256 of the files
+         *       (the hash of a ciphertext matches no known file);
+         *     - depositors that cannot encrypt are refused explicitly: a drop link session gets
+         *       `403 e2e-forbidden` with `endToEndEncrypted`, and `400 e2e-required` without it when the
+         *       effective policy of its level is `required` (it cannot deposit at such a level);
          *     - a deposit session of kind `drop_link` addresses the transfer to the recipients of the
          *       link, with its validity and level (end-to-end encryption is refused there in 2.0:
          *       `403 e2e-forbidden`). `recipients` must be omitted: any non-empty list, whatever its
@@ -801,9 +820,11 @@ export interface paths {
          * Download page content
          * @description Returns the transfer as seen by a recipient. When the transfer is password protected and
          *     not yet unlocked by this browser (no valid `__Host-tt_dl` grant), only `senderEmail`,
-         *     `expiresAt`, `passwordProtected` and `locked: true` are returned: no message, no file
-         *     list, no archive URL. Only the deliverable files are listed (`clean`,
-         *     `not_scanned_too_large`, `not_scanned_encrypted`): infected files and files withheld
+         *     `expiresAt`, `passwordProtected` and `locked: true` are returned (since 2.0, plus
+         *     `endToEndEncrypted` for an end-to-end encrypted transfer, so that the page can ask for the
+         *     key): no message, no file list, no archive URL. Only the deliverable files are listed
+         *     (`clean`, `not_scanned_too_large`, `not_scanned_encrypted`, `not_scanned_disabled`,
+         *     `not_scanned_e2e`): infected files and files withheld
          *     after an analysis error are never listed, and neither the other recipients nor the scan
          *     signatures are exposed. A known link whose transfer is no longer available (expired,
          *     deleted after its first download, rejected) gets `410`; an unknown link, or one of another
@@ -4564,7 +4585,7 @@ export interface components {
             mediaType?: string;
             expectedSha256?: components["schemas"]["Sha256"];
             path?: components["schemas"]["FilePath"];
-            /** @description Since 2.0. Required for an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then a generic name (`file-<n>.tte2`) and `size` the size of the ciphertext. */
+            /** @description Since 2.0. Required on every file of an end-to-end encrypted transfer (`endToEndEncrypted`), forbidden otherwise; `name` is then the generic `file-<n>.tte2` (n from 1, in order), `mediaType` and `path` are absent, `size` is the size of the ciphertext (at least 48 bytes) and `expectedSha256` its SHA-256. */
             encryptedMetadata?: components["schemas"]["EncryptedMetadata"];
         };
         /**
@@ -4617,10 +4638,10 @@ export interface components {
              * @default false
              */
             linkOnly?: boolean;
-            /** @description Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB). Required in place of `message` when `endToEndEncrypted` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise. */
+            /** @description Since 2.0. End-to-end encryption: the message encrypted in the browser, base64url (5000 characters of plaintext, up to 4 bytes each, with the framing, fit in 32 KiB), framed like `EncryptedMetadata` (the server checks the framing only: `invalid-format`). Optional with `endToEndEncrypted`, which takes it in place of `message` (a plaintext `message` is refused with `400 validation-failed`); forbidden otherwise. */
             encryptedMessage?: string;
             /**
-             * @description Since 2.0. The files are encrypted in the browser: every file declares its `encryptedMetadata`, the key stays in the link fragment `#k=` and never reaches the server. Needs the tenant and level `e2ePolicy` (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false). No antivirus, no server archive.
+             * @description Since 2.0. The files are encrypted in the browser: the key stays in the link fragment `#k=` and never reaches the server. Every file declares its `encryptedMetadata`, the generic name `file-<n>.tte2` (n from 1, in order), no `mediaType` nor `path`, the ciphertext `size` (at least 48) and, optionally, the ciphertext `expectedSha256`; `message` must be empty (`encryptedMessage` optional); a `password` is allowed. Needs the effective `e2ePolicy` of the level (`403 e2e-forbidden`; `400 e2e-required` when it is required and the member is false; a drop link session gets `403 e2e-forbidden`). No antivirus, no server archive, no blocklist check of the file hashes.
              * @default false
              */
             endToEndEncrypted?: boolean;
@@ -4792,7 +4813,7 @@ export interface components {
             reply?: boolean;
             /** @description Since 2.0. The message of an end-to-end encrypted transfer, encrypted (`message` is absent): the browser decrypts it with the key of the link fragment. */
             encryptedMessage?: string;
-            /** @description Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`. */
+            /** @description Since 2.0. The files are encrypted end to end: the key is in the link fragment `#k=` (never sent to the server), the antivirus could not analyse them, there is no server archive (`archiveUrl` absent) and the file names and hashes shown are decrypted by the browser from `encryptedMetadata`. Present while `locked` too (the only member added to a locked page); `encryptedMessage` and the files only once unlocked. */
             endToEndEncrypted?: boolean;
         };
         SetupStatus: {
@@ -6033,6 +6054,8 @@ export interface components {
             antivirus: "enabled" | "disabled";
             /** @description Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them. */
             linkOnly?: boolean;
+            /** @description Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten. */
+            e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
         /**
          * @description Since 1.1. Key of a confidentiality level, unique within the tenant.
@@ -6082,6 +6105,8 @@ export interface components {
             description?: string;
             isDefault: boolean;
             rules: components["schemas"]["ConfidentialityRules"];
+            /** @description Since 2.0. Effective end-to-end encryption policy of a transfer at this level, computed by the server from the tenant policy and the level's own (`rules.e2ePolicy`): a tenant `forbidden` or `required` holds at every level; under a tenant `allowed`, the level's policy, or `allowed` when it has none. `forbidden` when absent. */
+            e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
         /** @description Since 1.1. Confidentiality level of a transfer, snapshotted when the transfer was created: key, label (in the transfer language) and the rules applied, which later changes of the level never affect; absent when the transfer has none. */
         ConfidentialityLevelRef: {
@@ -6266,7 +6291,7 @@ export interface components {
          * @enum {string}
          */
         E2ePolicy: "forbidden" | "allowed" | "required";
-        /** @description Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it. */
+        /** @description Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it; it only checks the framing of a sealed blob (canonical unpadded base64url, version byte 1, room for the 12-byte nonce and the 16-byte tag), else `400 validation-failed` (`invalid-format`). Format: docs/architecture/e2e-format.md. */
         EncryptedMetadata: string;
         /** @description Since 2.0. What the landing page of a drop link needs. */
         PublicDropLink: {
@@ -9017,12 +9042,24 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `Upload-Offset` header missing or malformed, or request body interrupted (the bytes received are kept; resume after `HEAD`). */
+            /**
+             * @description `Upload-Offset` header missing or malformed, or request body interrupted (the bytes
+             *     received are kept; resume after `HEAD`): no body.
+             *     Since 2.0, for a file of an end-to-end encrypted transfer, bytes that are not a `TTE2`
+             *     stream of the declared length (magic, version, kind, reserved bytes or chunk size of
+             *     the header, or a declared size that no chunk layout matches) are refused with the
+             *     problem `e2e-format-invalid`: the refused bytes are not written, the bytes accepted
+             *     before them are kept (`HEAD` gives the offset). Each header byte is judged as it
+             *     arrives, so a corrected stream may resume; the chunks themselves are authenticated
+             *     only by the recipient, who holds the key.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             /** @description Missing deposit session or `Authorization` header, or invalid, revoked or expired API token (written to the security log). No body. */
             401: {

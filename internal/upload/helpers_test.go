@@ -398,6 +398,13 @@ func (ev *env) newUpload(t *testing.T, tid tenant.ID, p Principal, size int64, c
 // per size, created at createdAt (now when zero), and returns its uploads.
 func (ev *env) newTransfer(t *testing.T, tid tenant.ID, p Principal, sizes []int64, createdAt time.Time) []upl {
 	t.Helper()
+	return ev.newTransferE2E(t, tid, p, sizes, createdAt, false)
+}
+
+// newTransferE2E is newTransfer, for an end-to-end encrypted transfer when
+// e2e is set (every file then has encrypted metadata).
+func (ev *env) newTransferE2E(t *testing.T, tid tenant.ID, p Principal, sizes []int64, createdAt time.Time, e2e bool) []upl {
+	t.Helper()
 	ctx := t.Context()
 	if createdAt.IsZero() {
 		createdAt = time.Now()
@@ -426,6 +433,9 @@ func (ev *env) newTransfer(t *testing.T, tid tenant.ID, p Principal, sizes []int
 			files[i] = store.TransferFile{
 				ID: u.fileID, Name: "data.bin", Size: u.size, DEKKeyID: wk, StorageName: storage.NewName(), UploadID: u.id,
 			}
+			if e2e {
+				files[i].Name, files[i].E2EMetadata = "file-1.tte2", "c2VhbGVkLW1ldGFkYXRh"
+			}
 		}
 		sender := p.Email
 		if p.APITokenID != "" {
@@ -433,7 +443,7 @@ func (ev *env) newTransfer(t *testing.T, tid tenant.ID, p Principal, sizes []int
 		}
 		tr := store.Transfer{
 			ID: trfID, SenderEmail: sender, SenderKind: p.Kind, InvitationID: p.InvitationID,
-			APITokenID: p.APITokenID, ExpiryDays: 7, CreatedAt: createdAt,
+			APITokenID: p.APITokenID, ExpiryDays: 7, CreatedAt: createdAt, E2E: e2e,
 		}
 		return ev.db.Transfers().CreateTx(ctx, tx, tr, []string{"carol@partner.example.org"}, files)
 	})

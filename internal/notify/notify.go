@@ -83,6 +83,10 @@ const (
 	// (instance engine "none" or tenant flag off): delivered, flagged as
 	// not analyzed.
 	ScanDisabled
+	// ScanE2E is a file of an end-to-end encrypted transfer (since 2.0):
+	// delivered as ciphertext, never analyzed. The mails show it by rank
+	// and size, not by name.
+	ScanE2E
 )
 
 // Delivered reports whether a file with this result is downloadable.
@@ -90,7 +94,7 @@ const (
 // It matches store.ScanStatus.Deliverable: clean, too large, encrypted or
 // antivirus disabled.
 func (r ScanResult) Delivered() bool {
-	return r == ScanClean || r == ScanTooLarge || r == ScanEncrypted || r == ScanDisabled
+	return r == ScanClean || r == ScanTooLarge || r == ScanEncrypted || r == ScanDisabled || r == ScanE2E
 }
 
 // notScanned returns why the antivirus could not analyze a delivered file,
@@ -103,6 +107,8 @@ func (r ScanResult) notScanned() mail.NotScannedReason {
 		return mail.NotScannedEncrypted
 	case ScanDisabled:
 		return mail.NotScannedDisabled
+	case ScanE2E:
+		return mail.NotScannedE2E
 	}
 	return ""
 }
@@ -162,6 +168,12 @@ type TransferView struct {
 	// never mailed and may be none; the sender confirmation carries no link
 	// and says so.
 	LinkOnly bool
+	// E2E marks an end-to-end encrypted transfer (since 2.0): the mails
+	// carry no key and no message (an encrypted message is ciphertext and
+	// never mailed), tell that the key comes from the sender through
+	// another channel and that the files were not analyzed, and show the
+	// files by rank and size, their digest being the one of the ciphertext.
+	E2E bool
 	// DropLink marks a transfer deposited through a permanent drop link
 	// (since 2.0): the sender confirmation never lists its recipients
 	// (threat model T-311) and names the link instead, by DropLinkLabel
@@ -359,7 +371,7 @@ func (n *Notifier) RecipientJobs(ctx context.Context, t *tenant.Tenant, tr Trans
 	data := mail.TransferNotificationData{
 		TenantName: t.Name, SenderEmail: v.sender, Message: v.message, Link: link,
 		Files: v.files, ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, QR: true,
-		ConfidentialityLabel: n.levelLabel(t, tr), ReplyToCreatedAt: tr.replyCreatedAt(),
+		ConfidentialityLabel: n.levelLabel(t, tr), ReplyToCreatedAt: tr.replyCreatedAt(), E2E: tr.E2E,
 	}
 	msg, err := n.render(ctx, t, tr, mail.TemplateTransferNotification, data)
 	if err != nil {
@@ -412,7 +424,7 @@ func (n *Notifier) SenderConfirmation(ctx context.Context, t *tenant.Tenant, tr 
 	data := mail.TransferConfirmationData{
 		TenantName: t.Name, Link: link, Recipients: recipients, Files: v.files,
 		ExpiresAt: tr.ExpiresAt, PasswordRequired: tr.PasswordProtected, Withheld: withheldFiles(tr.Files),
-		ConfidentialityLabel: n.levelLabel(t, tr), LinkOnly: tr.LinkOnly,
+		ConfidentialityLabel: n.levelLabel(t, tr), LinkOnly: tr.LinkOnly, E2E: tr.E2E,
 		DropLink: tr.DropLink, DropLinkLabel: tr.DropLinkLabel,
 	}
 	if t.FQDN != "" {
@@ -554,6 +566,9 @@ func (n *Notifier) prepareTransfer(tr TransferView) (downloadView, error) {
 		return downloadView{}, fmt.Errorf("%w: no delivered file", ErrInvalidTransfer)
 	}
 	msg := textsafe.SanitizeMessage(strings.ToValidUTF8(tr.Message, "\uFFFD"))
+	if tr.E2E {
+		msg = "" // never a message in the mail of an encrypted transfer
+	}
 	return downloadView{sender: sender, message: msg, files: files}, nil
 }
 
@@ -686,7 +701,7 @@ func normalizeRecipients(in []string) ([]string, error) {
 // checkScans refuses a file without a known scan result.
 func checkScans(files []FileView) error {
 	for _, f := range files {
-		if f.Scan < ScanClean || f.Scan > ScanDisabled {
+		if f.Scan < ScanClean || f.Scan > ScanE2E {
 			return fmt.Errorf("%w: file without a scan result", ErrInvalidTransfer)
 		}
 	}
@@ -785,7 +800,10 @@ func ViewOf(d store.TransferDetails) TransferView {
 	v := TransferView{
 		ID: d.ID, Language: d.Language, SenderEmail: d.SenderEmail, Recipients: d.Recipients,
 		Message: d.Message, ExpiresAt: d.ExpiresAt, PasswordProtected: d.PasswordProtected(),
-		ReplyTo: replyInfoOf(d.Transfer), LinkOnly: d.LinkOnly, DropLink: d.DropLinkID != "",
+		ReplyTo: replyInfoOf(d.Transfer), LinkOnly: d.LinkOnly, E2E: d.E2E, DropLink: d.DropLinkID != "",
+	}
+	if v.E2E {
+		v.Message = ""
 	}
 	if d.ConfidentialityLevel != "" {
 		v.ConfidentialityLabels = maps.Clone(d.ConfidentialityLabel)
@@ -801,6 +819,8 @@ func ViewOf(d store.TransferDetails) TransferView {
 			fv.Scan = ScanEncrypted
 		case store.ScanNotScannedDisabled:
 			fv.Scan = ScanDisabled
+		case store.ScanNotScannedE2E:
+			fv.Scan = ScanE2E
 		case store.ScanInfected:
 			fv.Scan, fv.Signature = ScanInfected, f.ScanSignature
 		default:

@@ -162,6 +162,15 @@
       "saved": "Réglage enregistré.",
       "statusOn": "Les transferts par lien seul sont autorisés pour cette entité (réglage du super administrateur).",
       "statusOff": "Les transferts par lien seul ne sont pas autorisés pour cette entité (réglage du super administrateur)."
+    },
+    "e2e": {
+      "title": "Chiffrement de bout en bout",
+      "intro": "Lorsqu’il est autorisé, les expéditeurs peuvent chiffrer leurs fichiers dans le navigateur : la clé reste dans le lien et le serveur ne peut jamais les lire.",
+      "label": "Politique de chiffrement de bout en bout",
+      "hint": "Interdit par défaut. Obligatoire signifie qu’aucun fichier de cette entité n’est analysé par l’antivirus, le serveur ne pouvant pas les lire. Chaque niveau de confidentialité peut seulement durcir cette politique.",
+      "save": "Enregistrer",
+      "saved": "Réglage enregistré.",
+      "status": "Politique de chiffrement de bout en bout de cette entité (définie par le super admin) : {policy}."
     }
   },
   "branding": {
@@ -640,7 +649,8 @@
       "internalRecipientsOnly": "Destinataires internes uniquement",
       "forceDeleteAfterFirstDownload": "Suppression après le premier téléchargement (imposée)",
       "maxDownloads": "Nombre maximal de téléchargements (plafond)",
-      "linkOnlyAllowed": "Lien seul autorisé"
+      "linkOnlyAllowed": "Lien seul autorisé",
+      "e2ePolicy": "Chiffrement de bout en bout"
     },
     "hints": {
       "key": "Lettres minuscules, chiffres, tiret ou tiret bas, en commençant par une lettre (32 caractères au plus). Identifie le niveau dans l’API : gardez-la stable.",
@@ -648,7 +658,8 @@
       "recipientVerification": "Prend effet lorsque les liens propres à chaque destinataire seront disponibles. D’ici là, l’option est enregistrée mais pas appliquée.",
       "internalRecipientsOnly": "Les destinataires doivent appartenir aux domaines internes de l’entité.",
       "maxDownloads": "Facultatif, de 1 à {max}. Plafonne le nombre de téléchargements que l’expéditeur peut fixer ; vide pour aucun plafond.",
-      "linkOnlyAllowed": "Permet aux expéditeurs d’envoyer à ce niveau sans que les destinataires reçoivent de mail : l’expéditeur transmet lui-même le lien. Ne peut pas se combiner avec la vérification du destinataire. Sans effet si l’entité n’autorise pas le lien seul."
+      "linkOnlyAllowed": "Permet aux expéditeurs d’envoyer à ce niveau sans que les destinataires reçoivent de mail : l’expéditeur transmet lui-même le lien. Ne peut pas se combiner avec la vérification du destinataire. Sans effet si l’entité n’autorise pas le lien seul.",
+      "e2ePolicy": "Ne peut que durcir la politique de l’entité : si celle-ci est Interdit ou Obligatoire, ce choix est sans effet. Les fichiers chiffrés ne sont jamais analysés par l’antivirus."
     },
     "dayChoice": {
       "one": "{count} jour",
@@ -676,7 +687,10 @@
       "daysRequired": "Autorisez au moins une durée.",
       "capInvalid": "Saisissez un nombre entier entre 1 et {max}, ou laissez le champ vide."
     },
-    "levelInUse": "Ce niveau est utilisé par un lien de dépôt actif. Modifiez ou révoquez d’abord ce lien (écran « Liens de dépôt »), puis réessayez."
+    "levelInUse": "Ce niveau est utilisé par un lien de dépôt actif. Modifiez ou révoquez d’abord ce lien (écran « Liens de dépôt »), puis réessayez.",
+    "e2ePolicy": {
+      "inherit": "Hériter de la politique de l’entité"
+    }
   },
   "abuse": {
     "title": "Détection des abus"
@@ -802,5 +816,10 @@
     "errors": {
       "location": "Erreur dans le fichier à l’emplacement {location}"
     }
+  },
+  "e2ePolicy": {
+    "forbidden": "Interdit",
+    "allowed": "Autorisé",
+    "required": "Obligatoire"
   }
 }

@@ -117,6 +117,7 @@ describe('labels and badges', () => {
     expect(scanView('infected', t).variant).toBe('error');
     expect(scanView('not_scanned_too_large', t).variant).toBe('warning');
     expect(scanView('not_scanned_disabled', t).variant).toBe('warning');
+    expect(scanView('not_scanned_e2e', t).variant).toBe('info');
     expect(scanView('not_scanned_encrypted', t).variant).toBe('warning');
     expect(scanView('scan_error', t).variant).toBe('error');
     expect(scanView('pending', t).variant).toBe('info');

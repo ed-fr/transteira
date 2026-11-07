@@ -69,6 +69,9 @@ func TestTenantValidate(t *testing.T) {
 		{"empty preset", func(x *Tenant) { x.BackgroundPreset = "" }, true},
 		{"preset upper case", func(x *Tenant) { x.BackgroundPreset = "Aurora" }, false},
 		{"preset slash", func(x *Tenant) { x.BackgroundPreset = "a/b" }, false},
+		{"e2e policy unset", func(x *Tenant) { x.E2EPolicy = "" }, true},
+		{"e2e policy required", func(x *Tenant) { x.E2EPolicy = E2ERequired }, true},
+		{"e2e policy unknown", func(x *Tenant) { x.E2EPolicy = "maybe" }, false},
 		{"zero quota", func(x *Tenant) { x.StorageQuotaBytes = 0 }, false},
 		{"negative quota", func(x *Tenant) { x.StorageQuotaBytes = -5 }, false},
 	}

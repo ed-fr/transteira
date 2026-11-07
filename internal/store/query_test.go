@@ -368,8 +368,8 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM confidentiality_levels WHERE tenant_id = ?`:                                        0,
 	`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, descriptions, is_default, ` +
 		`require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only, ` +
-		`force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed, e2e_policy) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT DISTINCT confidentiality_level FROM drop_links ` +
 		`WHERE tenant_id = ? AND enabled AND revoked_at IS NULL AND confidentiality_level IS NOT NULL`: 0,
 	`SELECT kind, domain FROM recipient_domain_rules WHERE tenant_id = ?`:                          0,
@@ -461,8 +461,8 @@ var tenantAllowlist = map[string]int{
 		`created_at, sender_ip, api_token_id, max_downloads, link_mode, recipient_verification, reply_to_transfer_id, ` +
 		`confidentiality_level, confidentiality_label, rule_expiry_days_mask, rule_max_downloads_cap, rule_require_password, ` +
 		`rule_require_recipient_verification, rule_internal_recipients_only, rule_force_delete_after_first_download, ` +
-		`link_only, drop_link_id) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`link_only, drop_link_id, e2e, e2e_message) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
 		`WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND idempotency_key = ? AND created_at < ?`: 0,
 	`UPDATE transfers SET idempotency_key = NULL ` +
@@ -532,8 +532,8 @@ var tenantAllowlist = map[string]int{
 	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND drop_link_id = ?`:                      0,
 	// Transfer files.
 	`INSERT INTO transfer_files (tenant_id, id, transfer_id, position, path, name, size, media_type, expected_sha256, ` +
-		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
+		`sha256, dek_key_id, storage_name, upload_id, ciphertext_size, uploaded_at, scan_status, e2e_metadata) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 0,
 	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND transfer_id = ? ORDER BY position`: 0,
 	`SELECT ` + fileColumns + ` FROM transfer_files WHERE tenant_id = ? AND upload_id = ?`:                     0,
 	`SELECT count(*) FROM transfer_files WHERE tenant_id = ? AND id = ?`:                                       0,
@@ -566,6 +566,9 @@ var tenantAllowlist = map[string]int{
 		`WHERE tenant_id = ? AND id = ? AND uploaded_at IS NOT NULL AND scan_status IN ('pending', 'scanning')`: 3,
 	`UPDATE transfer_files SET scan_status = 'not_scanned_disabled', scanned_at = ? ` +
 		`WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending'`: 1,
+	`UPDATE transfer_files SET scan_status = 'not_scanned_e2e', scanned_at = ? ` +
+		`WHERE tenant_id = ? AND transfer_id = ? AND uploaded_at IS NOT NULL AND scan_status = 'pending' ` +
+		`AND e2e_metadata IS NOT NULL`: 1,
 	`UPDATE transfer_files SET scan_attempts = scan_attempts + 1 ` +
 		`WHERE tenant_id = ? AND id = ? AND scan_status IN ('pending', 'scanning') RETURNING scan_attempts`: 0,
 	// First download and deletion after it.
@@ -900,7 +903,7 @@ var systemAllowlist = map[string]string{
 	`CREATE TABLE IF NOT EXISTS schema_migrations ( version BIGINT NOT NULL PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL )`: "schema migrations: create the bookkeeping table",
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
-	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                               reasonTenantAdmin,
+	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                            reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
 	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
@@ -909,6 +912,7 @@ var systemAllowlist = map[string]string{
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:                                  reasonTenantAdmin,
 	`UPDATE tenants SET antivirus_enabled = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`UPDATE tenants SET link_only_allowed = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`UPDATE tenants SET e2e_policy = ?, updated_at = ? WHERE id = ? AND status = 'active'`:        reasonTenantAdmin,
 	`UPDATE tenants SET smtp_tested_at = ? WHERE id = ? AND status = 'active'`:                    reasonTenantAdmin,
 	`UPDATE tenants SET network_reviewed_at = ? WHERE id = ? AND status = 'active'`:               reasonTenantNetwork,
 	`UPDATE tenants SET setup_state = 'active', mail_templates_reviewed_at = COALESCE(?, mail_templates_reviewed_at), updated_at = ? WHERE id = ? AND status = 'active' AND setup_state = 'setup'`: reasonTenantAdmin,

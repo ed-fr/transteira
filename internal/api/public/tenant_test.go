@@ -240,6 +240,9 @@ func TestGetPublicTenantOptions(t *testing.T) {
 	if b.Features.LinkOnly == nil || *b.Features.LinkOnly {
 		t.Errorf("link-only announced for a tenant that does not allow it: %+v", b.Features)
 	}
+	if b.Features.E2ePolicy == nil || *b.Features.E2ePolicy != gen.E2ePolicyForbidden {
+		t.Errorf("e2e policy of a default tenant: %v", b.Features.E2ePolicy)
+	}
 	if b.Features.RemoteInternalDeposit {
 		t.Errorf("remote deposit announced for a tenant that does not allow it: %+v", b.Features)
 	}
@@ -485,6 +488,41 @@ func TestGetPublicTenantSetupState(t *testing.T) {
 			t.Errorf("unknown state rendered as %q", *got)
 		case state != "" && (got == nil || *got != gen.TenantSetupState(state)):
 			t.Errorf("state %q rendered as %v", state, got)
+		}
+	}
+}
+
+// TestPublicLevelsE2EPolicy computes the effective end-to-end policy of each
+// level from the policy of the tenant: it holds when forbidden or required,
+// and the level decides when the tenant allows it.
+func TestPublicLevelsE2EPolicy(t *testing.T) {
+	t.Parallel()
+	pol := func(p tenant.E2EPolicy) *tenant.E2EPolicy { return &p }
+	levels := []tenantadmin.PublicConfidentialityLevel{
+		{Key: "a", Rules: tenantadmin.ConfidentialityRules{AllowedExpiryDays: []int{1}}},
+		{Key: "b", Rules: tenantadmin.ConfidentialityRules{AllowedExpiryDays: []int{1}, E2EPolicy: pol(tenant.E2ERequired)}},
+		{Key: "c", Rules: tenantadmin.ConfidentialityRules{AllowedExpiryDays: []int{1}, E2EPolicy: pol(tenant.E2EForbidden)}},
+	}
+	for _, tc := range []struct {
+		tenant tenant.E2EPolicy
+		want   [3]gen.E2ePolicy
+	}{
+		{tenant.E2EForbidden, [3]gen.E2ePolicy{"forbidden", "forbidden", "forbidden"}},
+		{"", [3]gen.E2ePolicy{"forbidden", "forbidden", "forbidden"}},
+		{tenant.E2EAllowed, [3]gen.E2ePolicy{"allowed", "required", "forbidden"}},
+		{tenant.E2ERequired, [3]gen.E2ePolicy{"required", "required", "required"}},
+	} {
+		got := *publicLevels(tc.tenant, levels)
+		for i, l := range got {
+			if l.E2ePolicy == nil || *l.E2ePolicy != tc.want[i] {
+				t.Errorf("tenant %q level %s: policy %v, want %s", tc.tenant, l.Key, l.E2ePolicy, tc.want[i])
+			}
+			if l.Rules.E2ePolicy != nil {
+				t.Errorf("tenant %q level %s: raw policy leaked into the public rules", tc.tenant, l.Key)
+			}
+		}
+		if f := e2eFeature(tc.tenant); tc.tenant != "" && *f != gen.E2ePolicy(tc.tenant) {
+			t.Errorf("feature %q = %s", tc.tenant, *f)
 		}
 	}
 }

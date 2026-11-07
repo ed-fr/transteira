@@ -148,15 +148,16 @@ var keyDefs = map[string]keyDef{
 			confidentialityVar,
 			{"reply_notice", VarBlock, false, "Warning that the transfer is a reply from an external sender whose address was verified by a code; empty when it is not a reply. Added at the start of a body that leaves it out."},
 			{"qr_code", VarBlock, false, "QR code of the download link (HTML only; empty in the text body)."},
+			e2eVar,
 			filesVar(true),
 			{"file_count", VarText, false, "Number of files."},
 		},
 		values: notificationValues,
-		forced: []string{"reply_notice"},
+		forced: []string{"reply_notice", "e2e_notice"},
 		sample: TransferNotificationData{
 			TenantName: sampleTenant, SenderEmail: sampleSender, Message: sampleMessage, Link: sampleLink,
 			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true, QR: true, ConfidentialityLabel: "Confidential",
-			ReplyToCreatedAt: sampleTime.AddDate(0, 0, -2),
+			ReplyToCreatedAt: sampleTime.AddDate(0, 0, -2), E2E: true,
 		},
 	},
 	TemplateTransferConfirmation: {
@@ -167,6 +168,7 @@ var keyDefs = map[string]keyDef{
 			{"expiry_datetime", VarText, false, "Date and time when the transfer expires."},
 			{"password_notice", VarBlock, true, "Reminder to give the password through another channel; empty without password."},
 			confidentialityVar,
+			e2eVar,
 			{"recipients", VarBlock, false, "List of the recipients; for a deposit through a drop link, a sentence naming the link instead (its recipients are never disclosed to the depositor)."},
 			filesVar(false),
 			{"file_count", VarText, false, "Number of delivered files."},
@@ -174,11 +176,12 @@ var keyDefs = map[string]keyDef{
 			{"my_transfers_notice", VarBlock, false, "Sentence and link to the My transfers page, to manage the transfer; empty when unknown."},
 		},
 		values: confirmationValues,
+		forced: []string{"e2e_notice"},
 		sample: TransferConfirmationData{
 			TenantName: sampleTenant, Link: sampleLink, Recipients: []string{"bob@example.com", "carol@example.org"},
 			Files: sampleFiles(), ExpiresAt: sampleTime.AddDate(0, 0, 7), PasswordRequired: true,
 			ConfidentialityLabel: "Confidential", Withheld: []FileInfo{{Name: "archive.zip", Size: 3 << 20}},
-			MyTransfersLink: "https://transfer.entity-a.example.com/me",
+			MyTransfersLink: "https://transfer.entity-a.example.com/me", E2E: true,
 		},
 	},
 	TemplateFileProblems: {
@@ -228,14 +231,16 @@ var keyDefs = map[string]keyDef{
 			{"password_notice", VarBlock, true, "Notice that the password comes through another channel; empty without password."},
 			confidentialityVar,
 			{"verification_notice", VarBlock, false, "Notice that a code will be asked before the download; empty when the transfer has no recipient verification."},
+			e2eVar,
 			{"files", VarBlock, false, "List of the files (name and size)."},
 			{"file_count", VarText, false, "Number of files."},
 		},
 		values: expiryReminderValues,
+		forced: []string{"e2e_notice"},
 		sample: ExpiryReminderData{
 			TenantName: sampleTenant, SenderEmail: sampleSender, Link: sampleLink, Files: sampleFiles(),
 			ExpiresAt: sampleTime.AddDate(0, 0, 1), PasswordRequired: true, VerificationRequired: true,
-			ConfidentialityLabel: "Confidential",
+			ConfidentialityLabel: "Confidential", E2E: true,
 		},
 	},
 	TemplateRecipientVerificationCode: {
@@ -545,6 +550,7 @@ func notificationValues(l *labels, lang string, data any) (map[string]value, boo
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
 		"reply_notice":           replyBlock(l, lang, d),
 		"qr_code":                qrBlock(l, d.QR),
+		"e2e_notice":             e2eNoticeBlock(l, d.E2E, false),
 		"files":                  filesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
 	}, true
@@ -562,6 +568,7 @@ func confirmationValues(l *labels, lang string, data any) (map[string]value, boo
 		"expiry_datetime":        textValue(FormatDateTime(lang, d.ExpiresAt)),
 		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelSender, true),
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
+		"e2e_notice":             e2eNoticeBlock(l, d.E2E, true),
 		"recipients":             confirmationRecipientsBlock(l, d),
 		"files":                  filesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
@@ -644,7 +651,7 @@ func firstDownloadValues(l *labels, lang string, data any) (map[string]value, bo
 	return map[string]value{
 		"tenant_name":       textValue(d.TenantName),
 		"download_datetime": textValue(FormatDateTime(lang, d.DownloadedAt)),
-		"files":             simpleFilesBlock(lang, d.Files),
+		"files":             simpleFilesBlock(l, lang, d.Files),
 		"recipient_notice":  noticeBlock(d.RecipientEmail != "", l.downloadedBy+d.RecipientEmail, false),
 		"deletion_notice":   deletion,
 	}, true
@@ -663,7 +670,8 @@ func expiryReminderValues(l *labels, lang string, data any) (map[string]value, b
 		"password_notice":        noticeBlock(d.PasswordRequired, l.otherChannelRecipient, true),
 		"confidentiality_notice": confidentialityBlock(l, d.ConfidentialityLabel),
 		"verification_notice":    noticeBlock(d.VerificationRequired, l.verificationNotice, false),
-		"files":                  simpleFilesBlock(lang, d.Files),
+		"e2e_notice":             e2eNoticeBlock(l, d.E2E, false),
+		"files":                  simpleFilesBlock(l, lang, d.Files),
 		"file_count":             textValue(strconv.Itoa(len(d.Files))),
 	}, true
 }
@@ -954,6 +962,24 @@ func noticeBlock(on bool, text string, strong bool) value {
 	return blockValue(trustedHTML("<p>"+h+"</p>"), text)
 }
 
+// e2eVar is the variable telling the readers of an end-to-end encrypted
+// transfer that the key is not in the mail and that the files were not
+// analyzed.
+var e2eVar = varSpec{"e2e_notice", VarBlock, false, "Notice of an end-to-end encrypted transfer: the decryption key is not in this e-mail but comes from the sender through another channel, and the files were not analyzed by the antivirus; empty for any other transfer. Added at the start of a body that leaves it out."}
+
+// e2eNoticeBlock is the notice of an end-to-end encrypted transfer, worded
+// for the sender or for the recipients, or nothing when on is not set.
+func e2eNoticeBlock(l *labels, on, sender bool) value {
+	if !on {
+		return blockValue("", "")
+	}
+	text := l.e2eNoticeRecipient
+	if sender {
+		text = l.e2eNoticeSender
+	}
+	return blockValue(trustedHTML("<p><strong>"+esc(text)+"</strong></p>\n<p>"+esc(l.e2eNotScanned)+"</p>"), text+"\n\n"+l.e2eNotScanned)
+}
+
 // linkNoticeBlock is the download link paragraph of the sender confirmation,
 // or, when link is empty, the sentence saying why: a link-only transfer
 // (linkOnly, whose link was shown once to the sender and never mailed), or
@@ -1044,16 +1070,28 @@ func listBlock(hs, ts []string) value {
 }
 
 // fileTitle is the name and size of a file.
-func fileTitle(lang string, f FileInfo) (h, t string) {
+// A file of an end-to-end encrypted transfer is shown by its rank i (from
+// 0) and size only, never by name.
+func fileTitle(l *labels, lang string, i int, f FileInfo) (h, t string) {
 	size := FormatSize(lang, f.Size)
-	return `<strong style="` + styleName + `">` + esc(f.Name) + "</strong> (" + esc(size) + ")",
-		"- " + f.Name + " (" + size + ")"
+	name := f.Name
+	if f.NotScanned == NotScannedE2E {
+		name = fmt.Sprintf(l.e2eFileName, i+1)
+	}
+	return `<strong style="` + styleName + `">` + esc(name) + "</strong> (" + esc(size) + ")",
+		"- " + name + " (" + size + ")"
 }
 
 // fileDigest is the SHA-256 line of a file.
+// The digest of an end-to-end encrypted file is the one of the ciphertext,
+// and is labeled so.
 func fileDigest(l *labels, f FileInfo) (h, t string) {
-	return smallSpanOpen + esc(l.sha) + `<code style="` + styleCode + `">` + esc(f.SHA256) + "</code></span>",
-		"  " + l.sha + f.SHA256
+	sha := l.sha
+	if f.NotScanned == NotScannedE2E {
+		sha = l.shaEncrypted
+	}
+	return smallSpanOpen + esc(sha) + `<code style="` + styleCode + `">` + esc(f.SHA256) + "</code></span>",
+		"  " + sha + f.SHA256
 }
 
 // filesBlock lists delivered files with their digest and antivirus status.
@@ -1061,7 +1099,7 @@ func filesBlock(l *labels, lang string, files []FileInfo) value {
 	hs := make([]string, len(files))
 	ts := make([]string, len(files))
 	for i, f := range files {
-		th, tt := fileTitle(lang, f)
+		th, tt := fileTitle(l, lang, i, f)
 		dh, dt := fileDigest(l, f)
 		h := itemOpen + th + "<br>\n" + dh
 		t := tt + "\n" + dt
@@ -1081,7 +1119,7 @@ func notScannedBlock(l *labels, lang string, files []FileInfo) value {
 	hs := make([]string, len(files))
 	ts := make([]string, len(files))
 	for i, f := range files {
-		th, tt := fileTitle(lang, f)
+		th, tt := fileTitle(l, lang, i, f)
 		dh, dt := fileDigest(l, f)
 		reason := l.reasonTooLarge
 		switch f.NotScanned {
@@ -1089,6 +1127,8 @@ func notScannedBlock(l *labels, lang string, files []FileInfo) value {
 			reason = l.reasonEncrypted
 		case NotScannedDisabled:
 			reason = l.reasonDisabled
+		case NotScannedE2E:
+			reason = l.reasonE2E
 		}
 		hs[i] = itemOpen + th + "<br>\n" + dh + "<br>\n" + smallSpanOpen + esc(reason) + "</span></li>"
 		ts[i] = tt + "\n" + dt + "\n  " + reason
@@ -1097,11 +1137,11 @@ func notScannedBlock(l *labels, lang string, files []FileInfo) value {
 }
 
 // simpleFilesBlock lists files with their name and size only.
-func simpleFilesBlock(lang string, files []FileInfo) value {
+func simpleFilesBlock(l *labels, lang string, files []FileInfo) value {
 	hs := make([]string, len(files))
 	ts := make([]string, len(files))
 	for i, f := range files {
-		th, tt := fileTitle(lang, f)
+		th, tt := fileTitle(l, lang, i, f)
 		hs[i], ts[i] = itemOpen+th+"</li>", tt
 	}
 	return listBlock(hs, ts)
@@ -1129,7 +1169,7 @@ func withheldProblemsBlock(l *labels, lang string, files []FileInfo) value {
 	if len(files) == 0 {
 		return blockValue("", "")
 	}
-	list := simpleFilesBlock(lang, files)
+	list := simpleFilesBlock(l, lang, files)
 	return blockValue("<p>"+trustedHTML(esc(l.withheldIntro))+"</p>\n"+list.html, l.withheldIntro+"\n\n"+list.text)
 }
 
@@ -1139,7 +1179,7 @@ func withheldConfirmationBlock(l *labels, lang string, files []FileInfo) value {
 	if len(files) == 0 {
 		return blockValue("", "")
 	}
-	list := simpleFilesBlock(lang, files)
+	list := simpleFilesBlock(l, lang, files)
 	h := `<h2 style="` + styleH2 + `">` + esc(l.withheldHeading) + "</h2>\n" + string(list.html) +
 		"\n<p>" + esc(l.withheldNote) + "</p>"
 	return blockValue(trustedHTML(h), l.withheldHeading+l.colon+"\n"+list.text+"\n\n"+l.withheldNote)

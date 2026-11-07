@@ -506,13 +506,14 @@ func TestTransferOrigin(t *testing.T) {
 		{store.Transfer{SenderKind: store.DepositorReply, ReplyToTransferID: origID}, OriginReply, "", origID},
 		{store.Transfer{SenderKind: store.DepositorInternalRemote}, OriginInternalRemote, "", ""},
 		{store.Transfer{SenderKind: store.DepositorDropLink, DropLinkID: dropID, LinkOnly: true}, OriginDropLink, "", ""},
+		{store.Transfer{SenderKind: store.DepositorInternal, E2E: true}, OriginInternal, "", ""},
 	} {
 		got := transferOf(c.tr, nil, 0, "en")
 		if got.Origin != c.want || got.APITokenID != c.token || got.ReplyToTransferID != c.replyTo {
 			t.Errorf("transferOf(%+v) = origin %q token %q reply to %q, want %q %q %q", c.tr, got.Origin, got.APITokenID,
 				got.ReplyToTransferID, c.want, c.token, c.replyTo)
 		}
-		if got.DropLinkID != c.tr.DropLinkID || got.LinkOnly != c.tr.LinkOnly {
+		if got.DropLinkID != c.tr.DropLinkID || got.LinkOnly != c.tr.LinkOnly || got.E2E != c.tr.E2E {
 			t.Errorf("transferOf(%+v) = drop link %q link-only %v", c.tr, got.DropLinkID, got.LinkOnly)
 		}
 	}

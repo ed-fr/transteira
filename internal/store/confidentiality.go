@@ -181,6 +181,14 @@ type ConfidentialityLevel struct {
 	// not part of the snapshot of a transfer: the outcome is recorded by
 	// [Transfer.LinkOnly].
 	LinkOnlyAllowed bool
+	// E2EPolicy is the end-to-end encryption policy of the level (since
+	// 2.0, spec 22), nil when the level follows the tenant (the database
+	// default, and the value of the seeded levels). It only counts when the
+	// tenant allows end-to-end encryption: [tenant.EffectiveE2EPolicy]
+	// computes the policy that applies. Like LinkOnlyAllowed, it is
+	// configuration, not part of the snapshot of a transfer: the outcome is
+	// recorded by [Transfer.E2E].
+	E2EPolicy *tenant.E2EPolicy
 	// UpdatedAt is when the list was last replaced (zero for the levels
 	// seeded with the tenant).
 	UpdatedAt time.Time
@@ -193,7 +201,7 @@ type ConfidentialityLevel struct {
 // queries.
 const levelColumns = `key, position, labels, descriptions, is_default, require_recipient_verification, ` +
 	`require_password, allowed_validity_days, internal_recipients_only, force_delete_after_download, ` +
-	`max_downloads_cap, updated_at, updated_by, link_only_allowed`
+	`max_downloads_cap, updated_at, updated_by, link_only_allowed, e2e_policy`
 
 // Statements of the ConfidentialityLevels repository.
 var (
@@ -208,8 +216,8 @@ var (
 	qLevelInsert = tenantQuery(
 		`INSERT INTO confidentiality_levels (tenant_id, key, position, labels, descriptions, is_default,
 		require_recipient_verification, require_password, allowed_validity_days, internal_recipients_only,
-		force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		force_delete_after_download, max_downloads_cap, updated_at, updated_by, link_only_allowed, e2e_policy)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	// qLevelDropLinkKeys lists the level keys used by the enabled,
 	// non-revoked drop links of the tenant, which a replace must keep.
 	qLevelDropLinkKeys = tenantQuery(
@@ -307,19 +315,39 @@ func normalizeLevels(levels []ConfidentialityLevel, by string, now time.Time) ([
 		if err := l.Rules.validate(); err != nil {
 			return nil, err
 		}
+		if l.E2EPolicy != nil && !l.E2EPolicy.Valid() {
+			return nil, invalid("unknown end-to-end encryption policy")
+		}
 		if l.IsDefault {
 			defaults++
 		}
 		out[i] = ConfidentialityLevel{
 			Key: l.Key, Position: i, Labels: labels, Descriptions: descriptions, IsDefault: l.IsDefault,
-			Rules: l.Rules.clone(), LinkOnlyAllowed: l.LinkOnlyAllowed, UpdatedAt: now.Truncate(time.Millisecond),
-			UpdatedBy: by,
+			Rules: l.Rules.clone(), LinkOnlyAllowed: l.LinkOnlyAllowed, E2EPolicy: cloneE2EPolicy(l.E2EPolicy),
+			UpdatedAt: now.Truncate(time.Millisecond), UpdatedBy: by,
 		}
 	}
 	if defaults != 1 {
 		return nil, invalid("exactly one level must be the default")
 	}
 	return out, nil
+}
+
+// cloneE2EPolicy returns an independent copy of p, nil when p is nil.
+func cloneE2EPolicy(p *tenant.E2EPolicy) *tenant.E2EPolicy {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	return &c
+}
+
+// e2ePolicyArg is the column value of a level policy: NULL when nil.
+func e2ePolicyArg(p *tenant.E2EPolicy) any {
+	if p == nil {
+		return nil
+	}
+	return string(*p)
 }
 
 // scanLevel reads one row of levelColumns.
@@ -329,12 +357,17 @@ func scanLevel(row interface{ Scan(...any) error }) (ConfidentialityLevel, error
 		labels, descriptions string
 		maxCap               sql.NullInt64
 		updated              int64
+		e2e                  sql.NullString
 	)
 	err := row.Scan(&l.Key, &l.Position, &labels, &descriptions, &l.IsDefault, &l.Rules.RequireRecipientVerification,
 		&l.Rules.RequirePassword, &l.Rules.ExpiryDaysMask, &l.Rules.InternalRecipientsOnly,
-		&l.Rules.ForceDeleteAfterFirstDownload, &maxCap, &updated, &l.UpdatedBy, &l.LinkOnlyAllowed)
+		&l.Rules.ForceDeleteAfterFirstDownload, &maxCap, &updated, &l.UpdatedBy, &l.LinkOnlyAllowed, &e2e)
 	if err != nil {
 		return ConfidentialityLevel{}, err
+	}
+	if e2e.Valid {
+		p := tenant.E2EPolicy(e2e.String)
+		l.E2EPolicy = &p
 	}
 	if json.Unmarshal([]byte(labels), &l.Labels) != nil || json.Unmarshal([]byte(descriptions), &l.Descriptions) != nil {
 		return ConfidentialityLevel{}, invalid("stored confidentiality level is malformed")
@@ -469,7 +502,7 @@ func replaceLevels(ctx context.Context, tx *ScopedTx, levels []ConfidentialityLe
 		_, err := tx.Exec(ctx, qLevelInsert, l.Key, l.Position, string(labels), string(descriptions), l.IsDefault,
 			l.Rules.RequireRecipientVerification, l.Rules.RequirePassword, l.Rules.ExpiryDaysMask,
 			l.Rules.InternalRecipientsOnly, l.Rules.ForceDeleteAfterFirstDownload, nullInt(l.Rules.MaxDownloadsCap),
-			toMillis(l.UpdatedAt), l.UpdatedBy, l.LinkOnlyAllowed)
+			toMillis(l.UpdatedAt), l.UpdatedBy, l.LinkOnlyAllowed, e2ePolicyArg(l.E2EPolicy))
 		if err != nil {
 			return err
 		}

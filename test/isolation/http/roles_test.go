@@ -479,6 +479,53 @@ func TestAuditorRoleEveryOperation(t *testing.T) {
 			}
 		})
 
+		t.Run("end-to-end policy is super admin only", func(t *testing.T) {
+			// The tenant's e2ePolicy (since 2.0) is changed by the super admin
+			// only: 403 for the delegated admin of A, 404 for B (like an unknown
+			// tenant), 403 read-only-role for the auditor. A level policy is not
+			// the tenant's: the delegated admin writes it on A and gets the answer
+			// of an unknown tenant on B; the auditor cannot write it.
+			deleg := h.session(t)
+			body := `{"e2ePolicy":"allowed"}`
+			resp := h.adminCall(t, deleg, http.MethodPatch, tenantPath(h.tenantA.ID, ""), body)
+			if resp.status != http.StatusForbidden || problemCode(resp) != "forbidden" {
+				t.Errorf("delegated admin e2ePolicy on A: %d %s, want 403 forbidden", resp.status, resp.body)
+			}
+			resp = h.adminCall(t, deleg, http.MethodPatch, tenantPath(h.tenantB.ID, ""), body)
+			if resp.status != http.StatusNotFound || problemCode(resp) != "not-found" {
+				t.Errorf("delegated admin e2ePolicy on B: %d %s, want 404 not-found", resp.status, resp.body)
+			}
+			h.noDataOfB(t, operation{id: "updateTenant"}, "delegated admin on B", resp)
+			resp = h.adminCall(t, auditor, http.MethodPatch, tenantPath(h.tenantA.ID, ""), body)
+			if resp.status != http.StatusForbidden || problemCode(resp) != "read-only-role" {
+				t.Errorf("auditor e2ePolicy on A: %d %s, want 403 read-only-role", resp.status, resp.body)
+			}
+			levels := `{"items":[{"key":"roles-e2e","labels":{"en":"R","fr":"R"},"isDefault":true,"rules":{"requireRecipientVerification":false,` +
+				`"requirePassword":false,"allowedExpiryDays":[1],"internalRecipientsOnly":false,"forceDeleteAfterFirstDownload":false,` +
+				`"maxDownloads":null,"e2ePolicy":"forbidden"}}]}`
+			resp = h.adminCall(t, auditor, http.MethodPut, tenantPath(h.tenantA.ID, "/confidentiality-levels"), levels)
+			if resp.status != http.StatusForbidden || problemCode(resp) != "read-only-role" {
+				t.Errorf("auditor level e2ePolicy on A: %d %s, want 403 read-only-role", resp.status, resp.body)
+			}
+			resp = h.adminCall(t, deleg, http.MethodPut, tenantPath(h.tenantA.ID, "/confidentiality-levels"), levels)
+			if resp.status != http.StatusOK {
+				t.Errorf("delegated admin level e2ePolicy on A: %d %s, want 200", resp.status, resp.body)
+			}
+			resp = h.adminCall(t, deleg, http.MethodPut, tenantPath(h.tenantB.ID, "/confidentiality-levels"), levels)
+			if resp.status != http.StatusNotFound || problemCode(resp) != "not-found" {
+				t.Errorf("delegated admin level e2ePolicy on B: %d %s, want 404 not-found", resp.status, resp.body)
+			}
+			super := h.superSession(t)
+			resp = h.adminCall(t, super, http.MethodPatch, tenantPath(h.tenantB.ID, ""), body)
+			if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"e2ePolicy":"allowed"`) {
+				t.Errorf("super admin e2ePolicy on B: %d %s, want 200", resp.status, resp.body)
+			}
+			resp = h.adminCall(t, super, http.MethodGet, tenantPath(h.tenantA.ID, ""), "")
+			if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"e2ePolicy":"forbidden"`) {
+				t.Errorf("tenant A after the refused changes and B's change: %d %s, want e2ePolicy forbidden", resp.status, resp.body)
+			}
+		})
+
 		t.Run("adminLogout", func(t *testing.T) {
 			if logout == nil {
 				t.Fatal("adminLogout is not in the specification")

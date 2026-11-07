@@ -108,6 +108,17 @@ var (
 	// deposit-not-allowed). It matches ErrForbidden; it is not written to
 	// the security log.
 	ErrDropLinkUsed = fmt.Errorf("%w: the drop link session already deposited a transfer", ErrForbidden)
+	// ErrE2EForbidden reports an end-to-end encrypted request (since 2.0,
+	// spec 22) that the effective policy of the tenant and the
+	// confidentiality level forbids, or that comes from a drop link
+	// depositor, who cannot encrypt in 2.0 (403 e2e-forbidden). It is a
+	// policy refusal, never written to the security log.
+	ErrE2EForbidden = errors.New("transfer: end-to-end encryption not allowed")
+	// ErrE2ERequired reports a request that is not end-to-end encrypted
+	// while the effective policy requires it (400 e2e-required), including
+	// a drop link depositor at such a level. It is a policy refusal, never
+	// written to the security log.
+	ErrE2ERequired = errors.New("transfer: end-to-end encryption required")
 )
 
 // AbuseBlockedError reports a creation refused by the abuse detection. It
@@ -144,6 +155,10 @@ const (
 	FieldConfidentialityLevel  = "/confidentialityLevel"
 	FieldRecipientVerification = "/recipientVerification"
 	FieldIdempotencyKey        = "Idempotency-Key"
+	// FieldEncryptedMessage is the encrypted message of an end-to-end
+	// encrypted transfer (since 2.0); the encrypted metadata of a file is
+	// /files/<i>/encryptedMetadata.
+	FieldEncryptedMessage = "/encryptedMessage"
 )
 
 // Codes of a [FieldError] (the code member of the validation-failed

@@ -62,6 +62,11 @@ type Archive struct {
 // this browser, ErrDownloadLocked for a password-protected transfer not
 // unlocked by this browser, a *TooManyStreamsError (ErrTooManyStreams) over
 // the concurrent stream limits, and ErrNoClientIP for an invalid clientIP.
+//
+// An end-to-end encrypted transfer has no server archive:
+// ErrE2EArchiveUnavailable. It is returned after the verification and
+// password gates, so that a browser that has not unlocked the transfer
+// learns nothing more than the locked view tells.
 func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken string, clientIP netip.Addr, cookies Cookies) (*Archive, error) {
 	a, err := s.resolve(ctx, t, rawToken, cookies, false)
 	if err != nil {
@@ -72,6 +77,9 @@ func (s *Service) PrepareArchive(ctx context.Context, t *tenant.Tenant, rawToken
 	}
 	if !a.unlocked {
 		return nil, ErrDownloadLocked
+	}
+	if a.d.E2E {
+		return nil, ErrE2EArchiveUnavailable
 	}
 	files := make([]filename.ArchiveFile, len(a.files))
 	for i, f := range a.files {

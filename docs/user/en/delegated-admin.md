@@ -284,6 +284,7 @@ For each level, fill in:
 - **Internal recipients only**: recipients must belong to the internal domains of the entity (see [Network](topic:tenant-network)).
 - **Delete after the first download (forced)**.
 - **Link-only allowed**: allows (the default) or forbids the "link only" option for this level, see “Sending with a link only” (depositor guide). It is offered only if the super admin has allowed it for the entity. A level that requires recipient verification does not allow link-only, as the two options are incompatible.
+- **End-to-end encryption**: **Follow the entity** (the default), **forbidden**, **allowed** or **required**. A level can only **tighten** the setting the super admin chose for the entity: if the entity forbids or requires it, that applies to every level whatever you choose here; only when the entity allows it can a level forbid or require it. An encrypted file is never analysed by the antivirus, so require it only for levels whose recipients you control. Transfers encrypted this way show the badge "end-to-end encrypted" in your transfer lists.
 - **Maximum number of downloads (cap)**: optional, from 1 to 1000. It caps the number of downloads the sender can set; if the sender sets none, the cap applies.
 
 Use the arrows to reorder the levels, **Add a level** to create one, and **Save** to apply. The screen reports errors level by level.
@@ -332,6 +333,7 @@ The list shows each template in each language, marked **Customized** or **Defaul
 Click a template to open the editor. It has three fields: **Subject**, **HTML body** and **Text body** (plain text version, read by mail clients that do not display HTML).
 
 - **Available variables**: click a variable to insert it at the cursor, in the last field used. Variables are written between double braces, for example `{{download_link}}`. Variables marked required must appear in both bodies; a missing or unknown variable is flagged.
+- **End-to-end encrypted transfers** (2.0): the transfer, confirmation and expiry reminder templates offer the variable `{{e2e_notice}}`, the notice saying that the key comes from the sender through another channel and that the files were not analysed. As for the reply warning, the notice is added at the top of the email even if your template omits the variable, and the mails of such a transfer never contain the key nor the message.
 - For security, the HTML is filtered: no scripts, no remote images, and only https and mailto links.
 - **Preview** shows the email with sample data, without its styles and with images replaced by their description.
 - **Save the template** saves it; **Restore the default template** deletes your customisation for this language.

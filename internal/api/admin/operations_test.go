@@ -445,11 +445,21 @@ func TestTransferOperations(t *testing.T) {
 	if _, body := decode(t, resp); body["items"].([]any)[0].(map[string]any)["dropLinkId"] != "drl_01" {
 		t.Errorf("drop link item = %v", body["items"])
 	}
+	// An end-to-end encrypted transfer is flagged in the list and detail;
+	// a regular one carries no such member.
+	if _, body := decode(t, resp); body["items"].([]any)[0].(map[string]any)["endToEndEncrypted"] != nil {
+		t.Errorf("endToEndEncrypted on a regular transfer: %v", body["items"])
+	}
+	o.transfer.E2E = true
+	resp, _ = s.ListTenantTransfers(ctx, gen.ListTenantTransfersRequestObject{TenantId: "ten_a"})
+	if _, body := decode(t, resp); body["items"].([]any)[0].(map[string]any)["endToEndEncrypted"] != true {
+		t.Errorf("e2e item = %v", body["items"])
+	}
 	saved := o.detail
 	o.detail.Transfer = o.transfer
 	got, _ = s.GetTenantTransfer(ctx, gen.GetTenantTransferRequestObject{TenantId: "ten_a", TransferId: "trf_01"})
 	o.detail = saved
-	if _, body := decode(t, got); body["linkOnly"] != true || body["dropLinkId"] != "drl_01" || body["origin"] != "drop_link" {
+	if _, body := decode(t, got); body["endToEndEncrypted"] != true || body["linkOnly"] != true || body["dropLinkId"] != "drl_01" || body["origin"] != "drop_link" {
 		t.Errorf("drop link detail = %v", body)
 	}
 	if _, ok := f1["mediaType"]; ok {
