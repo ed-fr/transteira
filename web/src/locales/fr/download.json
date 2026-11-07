@@ -151,6 +151,10 @@
       "wrong": "Cette clé n’ouvre pas ce transfert : vérifiez-la auprès de l’expéditeur.",
       "wrongLink": "La clé contenue dans le lien n’ouvre pas ce transfert. Saisissez la clé que l’expéditeur vous a transmise."
     },
+    "downgrade": {
+      "title": "Transfert non conforme au lien",
+      "text": "Ce lien contient une clé de chiffrement, mais le serveur présente ce transfert comme non chiffré. Par sécurité, rien n’est téléchargé : ne continuez pas et prévenez l’expéditeur ou votre administrateur."
+    },
     "error": {
       "corrupt": "Le fichier n’a pas pu être déchiffré : il est abîmé ou a été modifié. N’utilisez pas ce qui a pu être enregistré, et téléchargez-le à nouveau.",
       "unsupportedBrowser": "Ce navigateur ne peut pas déchiffrer un fichier aussi volumineux. Utilisez une version récente de Firefox, Chrome, Edge ou Safari, hors navigation privée.",

@@ -248,3 +248,38 @@ func FuzzOpenMessage(f *testing.F) {
 		}
 	})
 }
+
+// FuzzOpenChunk opens arbitrary bytes as a chunk: it must fail with a known
+// error and no plaintext, and an accepted chunk must reseal to the same bytes.
+func FuzzOpenChunk(f *testing.F) {
+	h := Header{ChunkSize: MinChunkSize}
+	copy(h.Salt[:], "fuzz-chunk-salt!")
+	c, err := NewChunkCipher(fuzzKey, 0, h)
+	if err != nil {
+		f.Fatal(err)
+	}
+	middle, _ := c.Seal(nil, 0, pattern(MinChunkSize), false)
+	final, _ := c.Seal(nil, 1, pattern(300), true)
+	empty, _ := c.Seal(nil, 0, nil, true)
+	f.Add(middle, uint64(0), false)
+	f.Add(final, uint64(1), true)
+	f.Add(empty, uint64(0), true)
+	f.Add(final[:TagSize-1], uint64(1), true)
+	f.Add(final, uint64(MaxChunks), true)
+	f.Fuzz(func(t *testing.T, sealed []byte, n uint64, last bool) {
+		plain, err := c.Open(nil, n, sealed, last)
+		if err != nil {
+			if plain != nil {
+				t.Fatal("plaintext returned on error")
+			}
+			if errorName(err) == "other" {
+				t.Fatalf("unclassified error %v", err)
+			}
+			return
+		}
+		again, err := c.Seal(nil, n, plain, last)
+		if err != nil || !bytes.Equal(again, sealed) {
+			t.Fatal("accepted a chunk that does not reseal identically")
+		}
+	})
+}

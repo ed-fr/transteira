@@ -230,6 +230,8 @@ Every variable, with its default and its limits, is documented in [`.env.example
   running instance
 - [API integration guide](docs/api/integration.md): API tokens and scripted, resumable uploads
   with tus (bash/curl and PowerShell examples); [error codes](docs/api/errors.md)
+- [Command-line client guide](docs/api/cli.md): `transteira-cli` deposits, downloads (including
+  end-to-end encrypted transfers) and verifies proofs from a terminal or a script
 - [Provisioning API guide](docs/api/provisioning.md): provisioning tokens, creating entities for
   managed service providers, on-demand TLS
 - [Project structure](docs/architecture/project-structure.md)

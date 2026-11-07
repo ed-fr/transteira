@@ -32,6 +32,16 @@
 // truncation, appended data, a swapped file index and a wrong key are all
 // detected (see Reader). Sizes follow CiphertextSize and PlaintextSize.
 //
+// # Chunk API
+//
+// Writer and Reader are built on ChunkCipher, which seals and opens chunk n of
+// a stream directly, with the same nonce, AAD, last-flag and length rules.
+// The command-line client uses it to encrypt a file twice identically (a
+// hashing pass, then the upload, sharing a header from NewHeader through
+// WithHeader or NewChunkCipher), to resume an upload from the chunk holding a
+// ciphertext offset (ChunkAt) and to resume a download from chunk n after
+// re-reading the header (ParseHeader, ChunkOffset, ChunkCount).
+//
 // # Sealed blobs
 //
 // Metadata (JSON, see Metadata) and the message (UTF-8 text) are sealed as

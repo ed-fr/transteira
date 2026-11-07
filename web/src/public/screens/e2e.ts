@@ -16,6 +16,15 @@ export function isEndToEnd(transfer: PublicTransfer): boolean {
 }
 
 /**
+ * Whether the page is asked to downgrade: the link carries a key but the server presents the
+ * transfer as not end-to-end encrypted. A compromised server or proxy could then serve plaintext
+ * with fingerprints of its choice, so the page must refuse rather than fall back to a plain download.
+ */
+export function isDowngrade(transfer: PublicTransfer, keyFromLink: Uint8Array | undefined): boolean {
+  return keyFromLink !== undefined && !isEndToEnd(transfer);
+}
+
+/**
  * Parses a key typed or pasted by the recipient (the bare key, "k=<key>" or the whole link):
  * the 32 bytes, or undefined when the text holds no valid key.
  */

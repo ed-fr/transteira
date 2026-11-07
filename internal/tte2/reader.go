@@ -1,7 +1,6 @@
 package tte2
 
 import (
-	"crypto/cipher"
 	"errors"
 	"fmt"
 	"io"
@@ -35,8 +34,7 @@ import (
 //     (missing final chunk), otherwise ErrAuth.
 type Reader struct {
 	src       io.Reader
-	aead      cipher.AEAD
-	aad       [HeaderSize]byte
+	cipher    *ChunkCipher
 	chunkSize int
 	buf       []byte // one encrypted chunk and the look-ahead byte
 	plain     []byte // plaintext of the last authenticated chunk
@@ -66,8 +64,10 @@ func NewReader(src io.Reader, key []byte, index int) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	aead := fileAEAD(key, index, &h)
-	return &Reader{src: src, aead: aead, aad: raw, chunkSize: h.ChunkSize}, nil
+	// ParseHeader has validated the chunk size, so NewChunkCipher cannot
+	// fail: key and index are checked above.
+	c, _ := NewChunkCipher(key, index, h)
+	return &Reader{src: src, cipher: c, chunkSize: h.ChunkSize}, nil
 }
 
 // ChunkSize returns the plaintext chunk size recorded in the header.
@@ -174,11 +174,12 @@ func (r *Reader) fill(limit int) (int, error) {
 // ciphertext intact so that a failed attempt can be retried with the other
 // last flag.
 func (r *Reader) open(chunk []byte, last bool) ([]byte, bool) {
-	nonce := chunkNonce(r.counter, last)
 	if cap(r.plain) < len(chunk)-TagSize {
 		r.plain = make([]byte, 0, len(chunk)-TagSize)
 	}
-	plain, err := r.aead.Open(r.plain[:0], nonce[:], chunk, r.aad[:])
+	// next only passes lengths that follow the chunk layout, so the only
+	// possible failure is ErrAuth.
+	plain, err := r.cipher.Open(r.plain[:0], uint64(r.counter), chunk, last)
 	if err != nil {
 		return nil, false
 	}

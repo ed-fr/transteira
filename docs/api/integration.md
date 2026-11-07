@@ -14,7 +14,8 @@ The reference is the OpenAPI specification:
   admins (also on the tenant FQDNs, without authentication, when the operator sets
   `TT_API_DOCS_PUBLIC=true`).
 
-Error codes are described in [errors.md](errors.md). Managed service providers that create
+A ready-made command-line client, `transteira-cli`, deposits and downloads without a script:
+see [cli.md](cli.md). Error codes are described in [errors.md](errors.md). Managed service providers that create
 entities by script should read [provisioning.md](provisioning.md). The examples use fictitious hosts:
 `transfer.entity-a.example.com` for the tenant, `admin.transfer.example.com` for the
 administration.
@@ -34,6 +35,7 @@ administration.
 - [10. Exporting and duplicating a tenant configuration](#10-exporting-and-duplicating-a-tenant-configuration)
 - [11. Link-only transfers and drop links](#11-link-only-transfers-and-drop-links)
 - [12. End-to-end encrypted transfer by script](#12-end-to-end-encrypted-transfer-by-script)
+- Also: the [command-line client](cli.md), which does all of this for you
 
 ## Basics
 
@@ -1252,8 +1254,9 @@ default): beyond it, `startDepositSession` and `createTransfer` answer `429 rate
 
 Since 2.0 a transfer can be encrypted by the sender so that the server never holds the key and
 cannot read the files. The browser interface does it for the person sending (a box in the transfer form); this
-section is for scripts. A future version of the TransTeira command-line client will do it; for now,
-follow the steps below with your own implementation. The browser implementation is described in
+section is for scripts. The TransTeira command-line client does it for you
+(`transteira-cli upload --e2e`, see [cli.md](cli.md)); to write your own implementation,
+follow the steps below. The browser implementation is described in
 [`docs/architecture/e2e-format.md`](../architecture/e2e-format.md), section 7. The format (key derivation, header, chunks, sealed metadata and messages) is
 specified in [`docs/architecture/e2e-format.md`](../architecture/e2e-format.md); the reference
 implementation is the Go package `internal/tte2`, and its test vectors,
@@ -1266,13 +1269,14 @@ effective policy (`e2ePolicy`).
 
 1. **Make a transfer key** `K`: 32 random bytes from a cryptographic generator, new for every
    transfer. It is never sent to the server.
-2. **Encrypt each file** into a `TTE2` stream (one stream per file, the file index is its
-   position in `files`). The stream is at least 48 bytes long and its size must be a valid
+2. **Encrypt each file** into a `TTE2` stream (one stream per file; the file index used in the
+   key derivation is its 0-based position in `files`). The stream is at least 48 bytes long and its size must be a valid
    stream size for its chunk size.
 3. **Seal one metadata blob per file** (`encryptedMetadata`: name, type, SHA-256 of the
    plaintext) and, optionally, the message (`encryptedMessage`), as the format specifies.
 4. **Create the transfer** with `endToEndEncrypted: true`. Every file has a generic name
-   `file-0.tte2`, `file-1.tte2`, … in order, its `size` is the **ciphertext** size, its
+   `file-1.tte2`, `file-2.tte2`, … in order (numbered from 1, as in the specification and the
+   browser: the name of the file at 0-based index `i` is `file-<i+1>.tte2`), its `size` is the **ciphertext** size, its
    `expectedSha256` the SHA-256 of the **ciphertext**, and its `encryptedMetadata`; it has no
    `mediaType` and no `path`. The plaintext `message` must be empty (a plaintext message answers
    `400 validation-failed` on `/message`, member code `not-allowed`). A transfer password is

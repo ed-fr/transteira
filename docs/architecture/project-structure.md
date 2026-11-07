@@ -6,7 +6,7 @@
 ## 1. Principes d'organisation
 
 - **Un seul binaire** (`cmd/transteira`) avec des sous-commandes : `serve`, `migrate`, `rotate-master-key`, `backup`, `healthcheck` (pour le `HEALTHCHECK` Docker d'une image `scratch` sans shell), `version`.
-- **Tout le code applicatif est dans `internal/`** : rien n'est importable par des tiers, ce qui laisse l'API Go interne libre d'évoluer. Le futur client en ligne de commande (V2) vivra dans `cmd/transteira-cli` et consommera l'API HTTP, pas les packages internes.
+- **Tout le code applicatif est dans `internal/`** : rien n'est importable par des tiers, ce qui laisse l'API Go interne libre d'évoluer. Le client en ligne de commande (V2, `cmd/transteira-cli`) ne consomme que l'API HTTP : il n'utilise que ses propres packages `internal/cli/*` et quelques bibliothèques partagées sans lien avec le serveur (`tte2`, `filename`, `textsafe`, `proofverify`, `version`).
 - **Des packages par domaine** (transfer, invitation, download…), pas par couche technique. Chaque domaine expose un service et dépend d'interfaces de stockage. Ces packages indépendants peuvent être développés en parallèle, chacun par un sous-agent.
 - **API first** : `api/openapi.yaml` est la source de vérité. Les types et l'interface serveur sont **générés** (`oapi-codegen`, mode *strict server*) dans `internal/api/gen`. Les handlers implémentent cette interface, si bien qu'un écart avec la spécification ne compile pas.
 - **Ressources embarquées** (`go:embed`) : spécification OpenAPI, interface web compilée, documentation interactive de l'API, aide utilisateur (générée dans le build de l'interface web, captures comprises), traductions, modèles de mails, migrations. Comme `go:embed` ne peut pas remonter dans l'arborescence, chaque dossier embarqué contient un petit fichier `embed.go`.
@@ -17,9 +17,11 @@
 ```text
 transteira/
 ├── cmd/
-│   └── transteira/
-│       ├── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
-│       └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from (auditée, acteur cli)
+│   ├── transteira/
+│   │   ├── main.go                  # Sous-commandes : serve, migrate, rotate-master-key, backup, healthcheck, version
+│   │   └── rotate.go                # rotate-master-key : rotation reprenable, -abandon, -recover-from (auditée, acteur cli)
+│   └── transteira-cli/              # Client en ligne de commande (V2, guide docs/api/cli.md) : upload, download, proof verify,
+│                                    # config check / profiles, version ; consomme l'API HTTP, pas les packages métier
 │
 ├── api/
 │   ├── openapi.yaml                 # Spécification OpenAPI 3.1 (source de vérité)
@@ -72,6 +74,12 @@ transteira/
 │   │                                # Writer/Reader de référence, scellement des métadonnées et des messages, Validator
 │   │                                # sans clé utilisé par le serveur pendant l'envoi tus, vecteurs testdata/vectors.json
 │   │                                # (réutilisés par le navigateur à l'étape 8 et par le client à l'étape 9)
+│   ├── proofverify/                 # Vérification des preuves signées (clés publiques, PDF), partagée par transteira et transteira-cli
+│   ├── cli/                         # Client en ligne de commande (cmd/transteira-cli), sans dépendance aux packages métier du serveur
+│   │   ├── client/                  # Configuration (profils, contrôle des droits), transport HTTPS sans redirection, jeton, nouvelles tentatives, erreurs RFC 9457
+│   │   ├── safepath/                # Noms et chemins sûrs, écriture confinée (os.Root), .part puis renommage
+│   │   ├── upload/                  # Déclaration, fichier d'état de reprise, tus, chemin chiffré de bout en bout
+│   │   └── download/                # Page, vérification du destinataire, déverrouillage, Range, déchiffrement
 │   ├── zipstream/                   # Écrivain ZIP64 déterministe en mode store (taille exacte calculée d'avance)
 │   ├── lifecycle/                   # Tâche périodique unique (§20, §23) : suppression après premier téléchargement,
 │   │                                # expirations, uploads abandonnés, purge des lignes (transferts terminés depuis
@@ -330,6 +338,7 @@ transteira/
 ├── Dockerfile                       # Multi-étapes : web (node) → go build → image scratch (utilisateur
 │                                    # 10001:10001, volumes /data, /var/lib/transteira/db, /backups, /logs,
 │                                    # HEALTHCHECK transteira healthcheck) ; construit par make docker
+├── dist/cli/                        # (non versionné) binaires et SHA256SUMS produits par make cli
 ├── Makefile                         # make check, make test, make lint, make e2e, make screenshots, make bigfile, make generate…
 ├── .golangci.yml
 ├── .spectral.yaml                   # Lint OpenAPI : chaque opération décrite et accompagnée d'un exemple

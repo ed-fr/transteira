@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  isDowngrade,
   isEndToEnd,
   keyFromFragment,
   openEndToEnd,
@@ -71,6 +72,22 @@ describe('key input', () => {
   it('recognises an end-to-end encrypted transfer', () => {
     expect(isEndToEnd({ endToEndEncrypted: true } as PublicTransfer)).toBe(true);
     expect(isEndToEnd({} as PublicTransfer)).toBe(false);
+  });
+});
+
+describe('isDowngrade', () => {
+  const plain = {} as PublicTransfer;
+  const sealed = { endToEndEncrypted: true } as PublicTransfer;
+  const key = new Uint8Array(32);
+
+  it('refuses a link with a key to a transfer served as plain', () => {
+    expect(isDowngrade(plain, key)).toBe(true);
+  });
+
+  it('accepts an encrypted transfer, or a link without key', () => {
+    expect(isDowngrade(sealed, key)).toBe(false);
+    expect(isDowngrade(sealed, undefined)).toBe(false);
+    expect(isDowngrade(plain, undefined)).toBe(false);
   });
 });
 

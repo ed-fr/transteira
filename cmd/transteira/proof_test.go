@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/masterkey"
 	"github.com/ed-fr/transteira/internal/proof"
+	"github.com/ed-fr/transteira/internal/proofverify"
 	"github.com/ed-fr/transteira/internal/store"
 )
 
@@ -249,7 +249,6 @@ func TestProofVerifyKeyFiles(t *testing.T) {
 		"short key":     strings.Replace(good, b64, b64[:10], 1),
 		"bad created":   strings.Replace(good, `"createdAt":"`, `"createdAt":"x`, 1),
 		"bad retired":   strings.Replace(good, `"retiredAt":null`, `"retiredAt":"x"`, 1),
-		"too large":     strings.Repeat(" ", maxKeysBytes+1),
 	} {
 		code, _, errOut := runCmd("proof", "verify", "--keys", writeFile(t, "k.json", []byte(content)), pdf)
 		if code != exitError || !strings.Contains(errOut, "public keys:") {
@@ -265,60 +264,18 @@ func TestProofVerifyURL(t *testing.T) {
 	e := newProofEnv(t)
 	pdf := writePDF(t, statement(e.pub.KeyID), e.priv)
 	list := keyListJSONOf(t, e.pub)
-
-	var gotPath string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/proof-keys", func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		_, _ = w.Write(list)
-	})
-	mux.HandleFunc("/custom/keys", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(list) })
-	mux.HandleFunc("/huge", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(make([]byte, maxKeysBytes+1)) })
-	mux.HandleFunc("/redirect", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "http://example.com/keys", http.StatusFound)
-	})
-	srv := httptest.NewTLSServer(mux)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(list) }))
 	defer srv.Close()
-	old := keysClient
-	t.Cleanup(func() { keysClient = old })
-	keysClient = newKeysClient()
-	keysClient.Transport = srv.Client().Transport
+	client := proofverify.NewKeysClient()
+	client.Transport = srv.Client().Transport
 
-	for _, u := range []string{srv.URL, srv.URL + "/", srv.URL + "/custom/keys"} {
-		code, out, errOut := runCmd("proof", "verify", "--url", u, pdf)
-		if code != exitOK || !strings.Contains(out, "OK: signature valid") {
-			t.Errorf("--url %s = %d, %q, %q", u, code, out, errOut)
-		}
+	var stdout, stderr strings.Builder
+	if code := runProofVerifyWith(context.Background(), client, []string{"--url", srv.URL, pdf}, &stdout, &stderr); code != exitOK ||
+		!strings.Contains(stdout.String(), "OK: signature valid") {
+		t.Errorf("--url = %d, %q, %q", code, stdout.String(), stderr.String())
 	}
-	if gotPath != "/api/v1/proof-keys" {
-		t.Errorf("path = %q", gotPath)
-	}
-	for _, u := range []string{srv.URL + "/huge", srv.URL + "/missing", srv.URL + "/redirect", "http://example.com", "ftp://x", "https://", "://bad", "https://127.0.0.1:1"} {
-		if code, _, errOut := runCmd("proof", "verify", "--url", u, pdf); code != exitError || !strings.Contains(errOut, "public keys:") {
-			t.Errorf("--url %s = %d, %q", u, code, errOut)
-		}
-	}
-	// Redirect loop.
-	loop := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, r.URL.Path+"x", http.StatusFound) }))
-	defer loop.Close()
-	keysClient.Transport = loop.Client().Transport
-	if code, _, errOut := runCmd("proof", "verify", "--url", loop.URL+"/a", pdf); code != exitError || !strings.Contains(errOut, "redirects") {
-		t.Errorf("redirect loop = %d, %q", code, errOut)
-	}
-}
-
-func TestCheckKeysURL(t *testing.T) {
-	for raw, ok := range map[string]bool{
-		"https://a.example.com": true, "http://localhost:8080": true, "http://app.localhost": true, "http://127.0.0.1": true,
-		"http://a.example.com": false, "http://localhost.example.com": false, "file:///x": false, "https://": false,
-	} {
-		u, err := url.Parse(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := checkKeysURL(u) == nil; got != ok {
-			t.Errorf("checkKeysURL(%q) = %v", raw, got)
-		}
+	if code, _, errOut := runCmd("proof", "verify", "--url", "http://example.com", pdf); code != exitError || !strings.Contains(errOut, "public keys:") {
+		t.Errorf("http url = %d, %q", code, errOut)
 	}
 }
 
@@ -404,21 +361,6 @@ func TestProofKeysEmptyAndErrors(t *testing.T) {
 
 func TestStdinIsTerminal(_ *testing.T) {
 	_ = stdinIsTerminal() // under go test stdin is not a terminal; only exercise the code path
-}
-
-func TestSafeText(t *testing.T) {
-	for in, want := range map[string]string{
-		"plain é 😀 name.txt": "plain é 😀 name.txt",
-		"a\u202eb":           "a\\u202Eb",
-		"a\x07b\nc\td":       "a\\u0007b\\u000Ac\\u0009d",
-		"a\xffb":             "a\\xFFb",
-		"z\u200bw\u00a0":     "z\\u200Bw\\u00A0",
-		"t\U000E0001":        "t\\U000E0001",
-	} {
-		if got := safeText(in); got != want {
-			t.Errorf("safeText(%q) = %q, want %q", in, got, want)
-		}
-	}
 }
 
 func TestProofVerifyEscapesSignedFields(t *testing.T) {

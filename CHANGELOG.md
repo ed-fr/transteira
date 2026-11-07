@@ -179,6 +179,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
   Worker, an in-memory fallback works up to 512 MiB. Both fingerprints (plaintext and ciphertext)
   are shown. Documentation: depositor and recipient guides (French and English), format
   specification (section 7), threat model.
+- Command-line client `transteira-cli` (V2 step 9, threats T-328 to T-331 and T-337): a static
+  binary for Linux, macOS and Windows (amd64, arm64) that deposits files and folders with an API
+  token and tus (resumes inside a run and between two runs, from a state file), downloads a link
+  (per file or as the server ZIP, `.part` files with `Range` resume, SHA-256 checked before the
+  rename, no overwrite without `--force`, names sanitised and writing confined to the output
+  folder), handles recipient verification and transfer passwords, sends and opens end-to-end
+  encrypted transfers (`--e2e`, key delivered out of band or read from a file or the standard
+  input) and verifies proofs (`proof verify`). Configuration by flags, environment and a profile
+  file (`TT_URL`, `TT_TOKEN_FILE`, `TT_SENDER`, ...); the token is never a flag; HTTPS only with
+  no way to disable verification and no redirect followed. `make cli` builds the six binaries
+  with `SHA256SUMS` into `dist/cli`; the `cli-cross` gate of `make check` cross-compiles for
+  Windows and macOS. Guide: `docs/api/cli.md`.
 
 ### Changed
 

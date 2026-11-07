@@ -240,6 +240,8 @@ pour Docker.
   instance en fonctionnement
 - [Guide d'intégration de l'API](docs/api/integration.md) : jetons d'API et envois scriptés et
   reprenables avec tus (exemples bash/curl et PowerShell) ; [codes d'erreur](docs/api/errors.md)
+- [Guide du client en ligne de commande](docs/api/cli.md) : `transteira-cli` dépose, télécharge (y compris
+  les transferts chiffrés de bout en bout) et vérifie des preuves depuis un terminal ou un script
 - [Guide de l'API de provisionnement](docs/api/provisioning.md) : jetons de provisionnement, création
   d'entités pour les prestataires de services managés, TLS à la demande
 - [Structure du projet](docs/architecture/project-structure.md)

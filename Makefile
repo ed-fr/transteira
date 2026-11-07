@@ -46,7 +46,7 @@ LDFLAGS := -s -w \
 
 .PHONY: help check check-full web-install web-gen web-check web-build fmt fmt-check vet lint vuln secrets api-lint generate generate-check \
 	test test-sqlite test-pg test-clamav test-env-up test-env-down cover env-example env-example-check build hooks \
-	e2e e2e-run e2e-install e2e-browser e2e-lint screenshots screenshots-run screenshots-check bigfile clean
+	e2e e2e-run e2e-install e2e-browser e2e-lint screenshots screenshots-run screenshots-check bigfile clean cli cli-cross
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -56,7 +56,7 @@ help: ## Show available targets
 # suite runs after the Go tests. The Docker gates (docker-check, proxy-configs-check,
 # deploy-config-check) are appended to this list in their own sections below, so they run after
 # `e2e`, in that order; bigfile (5 GB through Caddy, 20 GB in check-full) is appended last.
-CHECK_GATES := web-install web-check web-build fmt-check vet lint vuln secrets api-lint generate-check \
+CHECK_GATES := web-install web-check web-build fmt-check vet lint cli-cross vuln secrets api-lint generate-check \
 	env-example-check e2e-lint screenshots-check test cover e2e
 
 # --- Docker image ---
@@ -316,6 +316,30 @@ env-example-check: ## Fail if .env.example is out of date
 build: web-build ## Build the static binary into bin/ (with the web interface embedded)
 	@test -f web/dist/public/index.html || { echo "web/dist/public/index.html missing: the web build failed"; exit 1; }
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/transteira ./cmd/transteira
+
+# The command-line client (cmd/transteira-cli): pure Go, no web interface, so no web-build dependency.
+# `cli` builds the release binaries for the six supported platforms plus SHA256SUMS (relative names, as
+# `sha256sum -c` expects); the cosign signature of the sums is added by the release step.
+CLI_DIR       := dist/cli
+CLI_PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+
+cli: ## Build the command-line client for linux, darwin and windows (amd64, arm64) into dist/cli with SHA256SUMS
+	@command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || { echo "cli: sha256sum (or shasum) is required to write SHA256SUMS" >&2; exit 1; }
+	mkdir -p $(CLI_DIR)
+	@set -e; for p in $(CLI_PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; ext=""; [ "$$os" = windows ] && ext=".exe"; \
+		out="$(CLI_DIR)/transteira-cli_$(VERSION)_$${os}_$${arch}$$ext"; \
+		echo "building $$out"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o "$$out" ./cmd/transteira-cli; \
+	done
+	@cd $(CLI_DIR) && if command -v sha256sum >/dev/null 2>&1; then sha256sum transteira-cli_$(VERSION)_* > SHA256SUMS; else shasum -a 256 transteira-cli_$(VERSION)_* > SHA256SUMS; fi
+	@echo "wrote $(CLI_DIR)/SHA256SUMS"
+
+cli-cross: ## Compile-only check of the command-line client for windows/amd64 and darwin/arm64 (OS-specific code)
+	@set -e; for p in windows/amd64 darwin/arm64; do \
+		echo "cross-compiling cmd/transteira-cli for $$p"; \
+		CGO_ENABLED=0 GOOS=$${p%/*} GOARCH=$${p#*/} $(GO) build -trimpath -o /dev/null ./cmd/transteira-cli; \
+	done
 
 hooks: ## Install the local git hooks (gitleaks on pre-push)
 	chmod +x scripts/hooks/*

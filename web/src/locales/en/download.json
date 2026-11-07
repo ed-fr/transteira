@@ -151,6 +151,10 @@
       "wrong": "This key does not open this transfer: check it with the sender.",
       "wrongLink": "The key contained in the link does not open this transfer. Enter the key the sender gave you."
     },
+    "downgrade": {
+      "title": "Transfer does not match the link",
+      "text": "This link contains an encryption key, but the server presents this transfer as not encrypted. For your safety nothing is downloaded: do not continue and tell the sender or your administrator."
+    },
     "error": {
       "corrupt": "The file could not be decrypted: it is damaged or was altered. Do not use what may have been saved, and download it again.",
       "unsupportedBrowser": "This browser cannot decrypt such a large file. Use a recent version of Firefox, Chrome, Edge or Safari, outside private browsing.",

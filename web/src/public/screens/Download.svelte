@@ -29,6 +29,7 @@
   } from '../../shared/e2e/download';
   import { Countdown } from './countdown.svelte';
   import {
+    isDowngrade,
     isEndToEnd,
     openEndToEnd,
     parseKeyText,
@@ -59,6 +60,7 @@
     | { kind: 'not-found' }
     | { kind: 'gone' }
     | { kind: 'max-downloads' }
+    | { kind: 'downgrade' }
     | { kind: 'error' };
 
   let { tenant, params, nav }: ScreenProps = $props();
@@ -212,6 +214,10 @@
     lastLoadAt = Date.now();
     try {
       const { data } = await api.get('/downloads/{linkToken}', { path: { linkToken } });
+      if (isDowngrade(data, keyFromLink)) {
+        view = { kind: 'downgrade' };
+        return;
+      }
       view = { kind: 'ready', transfer: data };
       void openTransfer(data, false);
     } catch (err) {
@@ -229,6 +235,10 @@
     lastLoadAt = Date.now();
     try {
       const { data } = await api.get('/downloads/{linkToken}', { path: { linkToken: token } });
+      if (isDowngrade(data, keyFromLink)) {
+        view = { kind: 'downgrade' };
+        return;
+      }
       view = { kind: 'ready', transfer: data };
       void openTransfer(data, false);
       if (wasUnlocked && needsVerification(data)) {
@@ -389,6 +399,13 @@
     {nav}
     title={t('download.maxDownloads.title')}
     text={t('download.maxDownloads.text')}
+    homeLink={false}
+  />
+{:else if view.kind === 'downgrade'}
+  <NotFound
+    {nav}
+    title={t('download.e2e.downgrade.title')}
+    text={t('download.e2e.downgrade.text')}
     homeLink={false}
   />
 {:else if view.kind === 'error'}
