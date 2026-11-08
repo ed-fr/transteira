@@ -200,7 +200,7 @@ signed, multi-architecture image published with each release, pinned by digest a
 
 **Release signatures.** Images and client binaries are signed with the key `cosign.pub` of this repository.
 
-cosign.pub SHA-256 fingerprint: (published with the first signed release)
+cosign.pub SHA-256 fingerprint: 30f33ae8d62c33e510c39079e77f0c68b3068a052da870847414367988a83e77
 
 ## Configuration
 

@@ -43,7 +43,7 @@ Since 2.0.0, the Docker image (multi-architecture) and the command-line client a
 repository (also attached to each GitHub release); the signatures are recorded in the public
 Rekor transparency log.
 
-cosign.pub SHA-256 fingerprint: (published with the first signed release)
+cosign.pub SHA-256 fingerprint: 30f33ae8d62c33e510c39079e77f0c68b3068a052da870847414367988a83e77
 
 Verification needs cosign 3.0 or later. Compare `sha256sum cosign.pub` with the line above, with
 `README.md`, `README.fr.md`, the GitHub release asset and the Docker Hub repository description.

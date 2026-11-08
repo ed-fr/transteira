@@ -209,7 +209,7 @@ signée publiée avec chaque version, épinglée par condensé et vérifiée ave
 
 **Signatures des versions.** Les images et les binaires du client sont signés avec la clé `cosign.pub` de ce dépôt.
 
-cosign.pub SHA-256 fingerprint: (published with the first signed release)
+cosign.pub SHA-256 fingerprint: 30f33ae8d62c33e510c39079e77f0c68b3068a052da870847414367988a83e77
 
 ## Configuration
 
