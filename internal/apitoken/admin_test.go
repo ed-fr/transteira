@@ -330,6 +330,20 @@ func TestAdminValidation(t *testing.T) {
 	}
 }
 
+// TestAdminCreateNoEntropy is not parallel: it replaces the package-level
+// newSecret, which the parallel tests use (Go runs them only after every
+// sequential test is done).
+func TestAdminCreateNoEntropy(t *testing.T) {
+	ev := newEnv(t, storetest.SQLite(t))
+	saved := newSecret
+	newSecret = func() (string, error) { return "", errBoom }
+	defer func() { newSecret = saved }()
+	ok := CreateInput{Name: "n", AllowedCIDRs: []string{"192.0.2.0/24"}}
+	if _, err := ev.svc.Create(context.Background(), ev.super, ev.a.ID, ok, adminIP); !errors.Is(err, errBoom) {
+		t.Errorf("Create(no entropy) = %v", err)
+	}
+}
+
 func TestAdminStoreFailures(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -355,13 +369,6 @@ func TestAdminStoreFailures(t *testing.T) {
 		t.Errorf("Create(failure) = %v", err)
 	}
 	ev.repo.createErr = nil
-	saved := newSecret
-	newSecret = func() (string, error) { return "", errBoom }
-	_, err = ev.svc.Create(ctx, ev.super, ev.a.ID, ok, adminIP)
-	newSecret = saved
-	if !errors.Is(err, errBoom) {
-		t.Errorf("Create(no entropy) = %v", err)
-	}
 	ev.repo.updateErr = errBoom
 	if _, err := ev.svc.Update(ctx, ev.super, ev.a.ID, tokID, UpdateInput{Name: strPtr("x")}, adminIP); !errors.Is(err, errBoom) {
 		t.Errorf("Update(failure) = %v", err)
