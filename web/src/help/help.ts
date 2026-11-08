@@ -71,8 +71,9 @@ export function visibleSections(guide: HelpGuide, features: HelpFeatures): HelpS
 /**
  * Resolves /help (topic undefined: the index) or /help/<topic>: the guide holding the topic and
  * its section, or the index with the unknown topic when the topic does not exist or is in a guide
- * that is not offered (unless it has an auditor-<topic> counterpart in an offered guide). A topic in a section hidden for the tenant (visibleSections) opens its
- * guide at the top: the address is valid, the option is just not offered here.
+ * that is not offered (unless it has an auditor-<topic> counterpart in an offered guide). A topic
+ * in a section hidden for the tenant (visibleSections) opens its guide at the top: the address is
+ * valid, the option is just not offered here.
  */
 export function resolveHelp(
   set: HelpGuideSet,

@@ -6,6 +6,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-08
+
 The V2 scope of the specification (CLAUDE.md section 2, "enterprise"), on top of 1.0, 1.1 and
 1.2: OpenID Connect single sign-on per entity (Microsoft Entra ID, Keycloak), read-only auditor
 role with security events in the database, signed proofs of deposit and delivery in PDF, entity
@@ -15,7 +17,14 @@ command-line client, a signed multi-architecture image published with its SBOM, 
 kit (GDPR record of processing, ISO/IEC 27001:2022 Annex A mapping). Still compatible with 1.x:
 the API stays `/api/v1` with additions only, and an upgrade from 1.2 needs no configuration
 change (migrations 0026 to 0032 are applied at start-up; see
-[Upgrade](docs/operations/upgrade.md#from-12-to-20)). Threat model 2.0 in force.
+[Upgrade](docs/operations/upgrade.md#from-12-to-20)). Threat model 2.0 in force. Validated by
+`make check` and `make check-full` (unit, integration, contract, tenant isolation, fuzzing,
+end-to-end on SQLite and PostgreSQL, race detector, automated 20 GB test, release dry run with a
+local registry).
+
+Human trial before the release: single sign-on with a real Microsoft Entra ID tenant with
+`require_mfa` on, and an end-to-end encrypted transfer of about 10 GB in the browser behind
+Caddy, downloaded and checked. Both passed.
 
 ### Added
 

@@ -897,9 +897,9 @@ export interface BuildResult {
 /**
  * Parses every guide and checks them together: each language has the five guides, topics are
  * unique in a language, internal links resolve (a section of the same guide, a topic of the same
- * application, never a topic of the super-admin or auditor guide from the delegated-admin guide, nor a topic of
- * another guide from the auditor guide: the roles cannot read them), and every guide has the same topics in every language (the language switch keeps
- * the topic).
+ * application, never a topic of the super-admin or auditor guide from the delegated-admin guide,
+ * nor a topic of another guide from the auditor guide: the roles cannot read them), and every
+ * guide has the same topics in every language (the language switch keeps the topic).
  */
 export function buildHelp(sources: readonly GuideSource[], options: BuildOptions): BuildResult {
   const errors: HelpError[] = [];

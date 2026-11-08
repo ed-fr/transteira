@@ -230,9 +230,10 @@ the Unicode line and paragraph separators, and the bidirectional formatting char
 U+202E, U+2066 to U+2069), invisible in a review. Errors inside a paragraph, list item or note
 point to the line of the faulty construct. Across the guides, the build also refuses a missing
 guide, a topic used twice in a language, a broken section or topic link, a topic link to a guide
-of the other application, a topic link from the delegated-admin guide to the super-admin or auditor
-guide, or from the auditor guide to any other guide (which those roles cannot read), and a guide whose topics differ between English and French
-(the language switch keeps the current topic).
+of the other application, a topic link from the delegated-admin guide to the super-admin or
+auditor guide, or from the auditor guide to any other guide (which those roles cannot read), and
+a guide whose topics differ between English and French (the language switch keeps the current
+topic).
 
 ### Loading
 
