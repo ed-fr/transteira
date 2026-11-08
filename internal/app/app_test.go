@@ -40,10 +40,11 @@ const (
 const (
 	// startupTimeout bounds the start-up of Run in the tests (start,
 	// waitListening): it applies every schema migration on a fresh
-	// database, which takes seconds on a loaded PostgreSQL. The requests
-	// keep the shorter timeout of memListener.client, once the server
-	// listens.
-	startupTimeout = 2 * time.Minute
+	// database, which takes seconds on a loaded PostgreSQL and up to two
+	// minutes under -race next to the 20 GB test (make check-full). The
+	// requests keep the shorter timeout of memListener.client, once the
+	// server listens.
+	startupTimeout = 5 * time.Minute
 	// listeningLog is the message Run logs once its HTTP server serves.
 	listeningLog = "HTTP server listening"
 )
