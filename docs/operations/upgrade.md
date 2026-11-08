@@ -66,10 +66,20 @@ PostgreSQL (and any file of your own), or set `COMPOSE_FILE` in
      make docker                       # transteira:<new version> and transteira:local
      ```
 
-   - Published image (when available): `docker pull <image>:<new version>`.
+   - Published, signed image: **verify it before using it**, never pull a
+     bare tag.
+     1. Get the new **index digest** from the release (`image-digest.txt`) or
+        from Docker Hub, and the release's `cosign.pub`; check its fingerprint
+        (`sha256sum cosign.pub`) against `README.md`, `SECURITY.md`, the release
+        and the Docker Hub description.
+     2. Run `cosign verify --key cosign.pub docker.io/<account>/transteira@sha256:<index digest>`
+        and `cosign verify-attestation --key cosign.pub --type spdxjson` on the
+        platform digest of your architecture (cosign 3.0 or later; see
+        [Installation, section 5](../install/docker.md#5-image)).
+     3. Pin `TRANSTEIRA_IMAGE=docker.io/<account>/transteira:<new version>@sha256:<index digest>`.
 
-   Set `TRANSTEIRA_IMAGE` in `deploy/.env` to the new tag
-   (`transteira:<new version>`): pinning a version, rather than
+   For a locally built image, set `TRANSTEIRA_IMAGE` in `deploy/.env` to the
+   new tag (`transteira:<new version>`): pinning a version, rather than
    `transteira:local`, keeps the rollback a one-line change.
 2. **Apply the changes** listed in the CHANGELOG to `deploy/.env`, and
    update the proxy configuration if it says so.

@@ -191,6 +191,21 @@ and the project follows [Semantic Versioning](https://semver.org/).
   no way to disable verification and no redirect followed. `make cli` builds the six binaries
   with `SHA256SUMS` into `dist/cli`; the `cli-cross` gate of `make check` cross-compiles for
   Windows and macOS. Guide: `docs/api/cli.md`.
+- Signed multi-architecture image, SBOM and `make release` (V2 step 10, threats T-331 to T-335):
+  `make release-keygen` creates the cosign key pair (public key `cosign.pub` committed, private key
+  in the vault); `make release` refuses a dirty tree, requires a signed tag `vX.Y.Z` on HEAD, a
+  `make check-full` green on this exact commit, a private key outside the repository (mode 0600)
+  matching `cosign.pub`, and the `cosign.pub` fingerprint in `README.md`, `README.fr.md` and
+  `SECURITY.md`. It builds linux/amd64 and linux/arm64 by cross-compilation without cache (full
+  commit SHA in the binary and the image label), pushes the image by digest only, generates an SPDX
+  SBOM per platform with syft (Go modules and the interface npm dependency), signs the index and the
+  platform manifests with cosign, attaches each SBOM as a signed attestation of its platform digest
+  (recorded in Rekor), self-verifies, and only then tags `X.Y.Z`, `X.Y` and, for the highest stable
+  version only, `latest`; the CLI binaries get a signed `SHA256SUMS` and a signed SBOM.
+  `make release-dry` runs the whole chain against a local registry (part of `make check-full`;
+  `RELEASE_REPRO=1` compares two `--no-cache` builds). Verification needs cosign 3.0 or later.
+  Guides: `docs/operations/release.md`, `docs/install/docker.md` (verification before deploying),
+  `docs/operations/upgrade.md`, `SECURITY.md` (key replacement).
 
 ### Changed
 

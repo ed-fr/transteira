@@ -12,7 +12,7 @@
   "upToDate": "This instance is up to date.",
   "available": "Version {version} is available.",
   "releaseLink": "See version {version} on GitHub",
-  "procedure": "TransTeira never updates itself. Read the CHANGELOG and the update procedure in the documentation before moving to the new version.",
+  "procedure": "TransTeira never updates itself. Read the CHANGELOG and follow the update procedure in the documentation, which verifies the image signature before updating.",
   "disabled": "The check for new versions is disabled. To enable it, remove TT_UPDATE_CHECK=false from the server environment and restart the application.",
   "newWindow": "(opens in a new window)",
   "disabledNow": "The update check has just been disabled on this server.",

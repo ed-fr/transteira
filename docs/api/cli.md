@@ -57,9 +57,20 @@ chmod +x transteira-cli_*_linux_amd64
 Select-String 'windows_amd64' .\SHA256SUMS
 ```
 
-The checksums are published with the release. Verifying the signature of `SHA256SUMS` is
-documented in `docs/install` once the signed release is available; until then, take the sums
-from the release page of the project, not from the place where you downloaded the binary.
+The checksums are published with the release, and `SHA256SUMS` is signed. Verify the
+signature first, with the project public key `cosign.pub` (from the repository at the release
+tag or from the release assets), then the binary against the sums:
+
+```bash
+cosign verify-blob --key cosign.pub --bundle SHA256SUMS.sigstore.json SHA256SUMS
+sha256sum -c --ignore-missing SHA256SUMS
+```
+
+The release also carries the SBOM of the client, `transteira-cli_<version>_sbom.spdx.json`, with
+its bundle `transteira-cli_<version>_sbom.spdx.json.sigstore.json`, verified the same way with
+`cosign verify-blob`. Take `cosign.pub` from the project, not from the place where you
+downloaded the binary, and compare `sha256sum cosign.pub` with the fingerprint line of
+`README.md` and `SECURITY.md`. Verification needs cosign 3.0 or later.
 
 The client never updates itself.
 

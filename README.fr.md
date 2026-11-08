@@ -203,6 +203,13 @@ docker compose -f deploy/docker-compose.yml logs transteira | grep "Setup token"
 Ouvrez ensuite `https://<admin host>/admin/setup`, créez le super admin (TOTP obligatoire) puis les
 entités. Le guide pas à pas, avec le DNS, la variante PostgreSQL, la supervision et les sauvegardes,
 est [docs/install/fr/docker.md](docs/install/fr/docker.md).
+À la place de la construction (étape 2), vous pouvez utiliser l'image multi-architecture
+signée publiée avec chaque version, épinglée par condensé et vérifiée avec `cosign` et la clé
+`cosign.pub` de ce dépôt (voir la section 5 du même guide).
+
+**Signatures des versions.** Les images et les binaires du client sont signés avec la clé `cosign.pub` de ce dépôt.
+
+cosign.pub SHA-256 fingerprint: (published with the first signed release)
 
 ## Configuration
 

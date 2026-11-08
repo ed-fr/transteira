@@ -198,11 +198,22 @@ check: ## Run every quality gate (must be green before each commit; 20 GB test w
 		echo "make check: ALL GREEN"; \
 	fi
 
-check-full: ## make check with the 20 GB test forced at full size and the race detector (before every release)
+# check-full also runs the release dry run, and records the commit in .cache/check-full.ok when
+# everything is green on a clean working tree: `make release` requires it (scripts/release.sh).
+check-full: ## make check with the 20 GB test forced at full size, the race detector and the release dry run (before every release)
+	@rm -f .cache/check-full.ok
 	@if [ -z "$(RACE_IF_CC)" ]; then \
 		echo "make check-full: WARNING: no C compiler (gcc), the Go tests run WITHOUT the race detector"; \
 	fi
-	@$(MAKE) --no-print-directory check BIGFILE=1 RACE='$(RACE_IF_CC)' TEST_TIMEOUT=90m
+	@clean=$$([ -z "$$(git status --porcelain)" ] && echo 1 || echo 0); \
+	$(MAKE) --no-print-directory check BIGFILE=1 RACE='$(RACE_IF_CC)' TEST_TIMEOUT=90m && \
+	$(MAKE) --no-print-directory release-dry VERSION='$(VERSION)' && \
+	if [ "$$clean" = 1 ] && [ -z "$$(git status --porcelain)" ]; then \
+		mkdir -p .cache && git rev-parse HEAD > .cache/check-full.ok; \
+		echo "make check-full: ALL GREEN (recorded for $$(git rev-parse --short HEAD), make release may run)"; \
+	else \
+		echo "make check-full: ALL GREEN (working tree not clean: not recorded, make release will refuse)"; \
+	fi
 
 # Web interface (web/, Node 24 + npm 11; see web/README.md). npm runs with --ignore-scripts:
 # no dependency install script is ever executed.
@@ -340,6 +351,26 @@ cli-cross: ## Compile-only check of the command-line client for windows/amd64 an
 		echo "cross-compiling cmd/transteira-cli for $$p"; \
 		CGO_ENABLED=0 GOOS=$${p%/*} GOARCH=$${p#*/} $(GO) build -trimpath -o /dev/null ./cmd/transteira-cli; \
 	done
+
+# --- Release (scripts/release.sh, docs/operations/release.md) ---
+# Signed multi-architecture image on a registry, SBOMs attested, signed command-line client.
+# cosign and syft run with pinned `go run`, like gitleaks: nothing to install but Go.
+COSIGN := env GOFLAGS= $(GO) run github.com/sigstore/cosign/v3/cmd/cosign@v3.1.4
+SYFT   := env GOFLAGS= $(GO) run github.com/anchore/syft/cmd/syft@v1.57.0
+RELEASE_REPRO ?= 0
+RELEASE_ENV = DOCKER='$(DOCKER)' MAKE='$(MAKE)' COSIGN='$(COSIGN)' SYFT='$(SYFT)'
+
+.PHONY: release release-dry release-keygen
+
+release: ## Publish the signed image and client of the signed tag at HEAD (RELEASE_IMAGE, COSIGN_KEY; after check-full)
+	@$(RELEASE_ENV) bash scripts/release.sh release
+
+release-dry: ## Whole release chain against a throwaway local registry and key (RELEASE_REPRO=1 checks reproducibility)
+	@$(RELEASE_ENV) VERSION='$(VERSION)' RELEASE_REPRO='$(RELEASE_REPRO)' bash scripts/release.sh dry
+
+release-keygen: ## Create the cosign key pair in RELEASE_KEY_DIR (outside the repository) and copy cosign.pub here
+	@$(RELEASE_ENV) bash scripts/release.sh keygen
+# --- end of release ---
 
 hooks: ## Install the local git hooks (gitleaks on pre-push)
 	chmod +x scripts/hooks/*

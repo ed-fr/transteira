@@ -143,12 +143,59 @@ docker build -t transteira:local .
 ```
 
 (`make docker` also stamps the version, commit and date into the binary.)
-A published image on a registry will come later; `TRANSTEIRA_IMAGE` then
-points at it, pinned to a version (never `latest`).
+
+### Published, signed image (alternative to building)
+
+From 2.0.0, each release publishes a multi-architecture image (linux/amd64 and
+linux/arm64) on a public registry, **signed with cosign** and accompanied by its
+**SBOM** (SPDX JSON, one per platform, attached as a signed attestation to the
+digest of each platform). Use it instead of building, and **verify it before
+deploying and at every update**. Verification needs **cosign 3.0 or later**
+(the signatures use the bundle format of cosign 3).
+
+1. Get the project public key `cosign.pub`: from the repository **at the tag you
+   deploy** (`git show v2.0.0:cosign.pub`), or from the assets of the GitHub release.
+   Compute `sha256sum cosign.pub` and compare it with the line
+   `cosign.pub SHA-256 fingerprint: ...` of `README.md` and `SECURITY.md`, with
+   the GitHub release and with the Docker Hub repository description (a channel
+   outside GitHub). A key that differs between these channels must not be trusted.
+2. Verify the signature of the image **index**, by digest (`image-digest.txt` of the
+   release gives `<repository>@sha256:<index digest>`); with `--recursive` at signing
+   time, it covers the index and each platform manifest:
+
+   ```sh
+   cosign verify --key cosign.pub docker.io/<account>/transteira@sha256:<index digest>
+   ```
+
+3. Verify the SBOM attestation of **your architecture** and extract the SBOM. The
+   attestation is attached to the platform digest: take it from `platform-digests.txt`
+   of the release (lines `linux/amd64 sha256:...`), or from
+   `docker buildx imagetools inspect docker.io/<account>/transteira@sha256:<index digest>`:
+
+   ```sh
+   cosign verify-attestation --key cosign.pub --type spdxjson \
+     docker.io/<account>/transteira@sha256:<platform digest> \
+     | jq -r '.payload' | base64 -d | jq '.predicate' > sbom.spdx.json
+   ```
+
+   (One JSON line is printed per attestation.) The signatures are also recorded in the
+   public Rekor transparency log.
+4. **Pin by digest** in `deploy/.env`, never a mutable tag such as `latest`:
+
+   ```sh
+   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.0.0@sha256:<index digest>
+   ```
+
+   The compose files keep `${TRANSTEIRA_IMAGE:-transteira:local}`. At each update,
+   repeat steps 1 to 4 with the new digest (see [Upgrade](../operations/upgrade.md)).
+
+`cosign` is a single binary ([installation](https://docs.sigstore.dev/cosign/system_config/installation/)).
+Building locally with `make docker` stays possible and needs none of this.
 
 The image is built `FROM scratch`: the static binary, the CA certificates and
-the minimal files of the `transteira` user (UID and GID **10001**), nothing
-else (no shell). It writes only to its volumes: `/data` (encrypted files),
+the minimal files of the `transteira` user (UID and GID **10001**), and an inert
+`/usr/share/transteira/web-deps/` (the `package.json` manifests of the npm production
+dependencies, read only to build the SBOM), nothing else (no shell). It writes only to its volumes: `/data` (encrypted files),
 `/var/lib/transteira/db` (SQLite), `/backups` (database copies) and `/logs`
 (security log).
 

@@ -150,12 +150,59 @@ docker build -t transteira:local .
 ```
 
 (`make docker` inscrit aussi la version, le commit et la date dans le binaire.)
-Une image publiée sur un registre viendra plus tard ; `TRANSTEIRA_IMAGE`
-pointera alors vers elle, épinglée sur une version (jamais `latest`).
+
+### Image publiée et signée (alternative à la construction)
+
+À partir de la 2.0.0, chaque version publie sur un registre public une image multi-architecture
+(linux/amd64 et linux/arm64), **signée avec cosign** et accompagnée de son **SBOM** (SPDX JSON,
+un par plateforme, attaché comme attestation signée au condensé de chaque plateforme). Utilisez-la
+à la place de la construction, et **vérifiez-la avant de déployer et à chaque mise à jour**. La
+vérification exige **cosign 3.0 ou plus récent** (les signatures utilisent le format de bundle de
+cosign 3).
+
+1. Récupérez la clé publique du projet `cosign.pub` : depuis le dépôt **à l’étiquette que vous
+   déployez** (`git show v2.0.0:cosign.pub`), ou depuis les fichiers joints à la release GitHub.
+   Calculez `sha256sum cosign.pub` et comparez-le avec la ligne
+   `cosign.pub SHA-256 fingerprint: ...` de `README.md` et de `SECURITY.md`, avec la release
+   GitHub et avec la description du dépôt Docker Hub (un canal hors de GitHub). Une clé qui diffère
+   d’un canal à l’autre ne doit pas être crue.
+2. Vérifiez la signature de l’**index** de l’image, par condensé (`image-digest.txt` de la release
+   donne `<dépôt>@sha256:<condensé de l’index>`) ; grâce à `--recursive` à la signature, elle couvre
+   l’index et chaque manifeste de plateforme :
+
+   ```sh
+   cosign verify --key cosign.pub docker.io/<account>/transteira@sha256:<condensé de l’index>
+   ```
+
+3. Vérifiez l’attestation du SBOM de **votre architecture** et extrayez le SBOM. L’attestation est
+   attachée au condensé de la plateforme : prenez-le dans `platform-digests.txt` de la release
+   (lignes `linux/amd64 sha256:...`), ou avec
+   `docker buildx imagetools inspect docker.io/<account>/transteira@sha256:<condensé de l’index>` :
+
+   ```sh
+   cosign verify-attestation --key cosign.pub --type spdxjson \
+     docker.io/<account>/transteira@sha256:<condensé de la plateforme> \
+     | jq -r '.payload' | base64 -d | jq '.predicate' > sbom.spdx.json
+   ```
+
+   (Une ligne JSON est affichée par attestation.) Les signatures sont aussi inscrites dans le
+   journal de transparence public Rekor.
+4. **Épinglez par condensé** dans `deploy/.env`, jamais une étiquette mobile comme `latest` :
+
+   ```sh
+   TRANSTEIRA_IMAGE=docker.io/<account>/transteira:2.0.0@sha256:<condensé de l’index>
+   ```
+
+   Les fichiers compose gardent `${TRANSTEIRA_IMAGE:-transteira:local}`. À chaque mise à jour,
+   refaites les étapes 1 à 4 avec le nouveau condensé (voir [Mise à jour](../../operations/upgrade.md)).
+
+`cosign` est un binaire unique ([installation](https://docs.sigstore.dev/cosign/system_config/installation/)).
+La construction locale avec `make docker` reste possible et n’exige rien de tout cela.
 
 L’image est construite `FROM scratch` : le binaire statique, les certificats des autorités de certification et
-les fichiers minimaux de l’utilisateur `transteira` (UID et GID **10001**), rien
-d’autre (pas de shell). Elle n’écrit que dans ses volumes : `/data` (fichiers chiffrés),
+les fichiers minimaux de l’utilisateur `transteira` (UID et GID **10001**), un
+dossier inerte `/usr/share/transteira/web-deps/` (les manifestes `package.json` des dépendances npm de
+production, lus seulement pour produire le SBOM), rien d’autre (pas de shell). Elle n’écrit que dans ses volumes : `/data` (fichiers chiffrés),
 `/var/lib/transteira/db` (SQLite), `/backups` (copies de la base) et `/logs`
 (journal de sécurité).
 

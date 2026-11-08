@@ -12,7 +12,7 @@
   "upToDate": "Cette instance est à jour.",
   "available": "La version {version} est disponible.",
   "releaseLink": "Voir la version {version} sur GitHub",
-  "procedure": "TransTeira ne se met jamais à jour tout seul. Lisez le CHANGELOG et la procédure de mise à jour de la documentation avant de passer à la nouvelle version.",
+  "procedure": "TransTeira ne se met jamais à jour tout seul. Lisez le CHANGELOG et suivez la procédure de mise à jour de la documentation, qui vérifie la signature de l’image avant la mise à jour.",
   "disabled": "La recherche de nouvelles versions est désactivée. Pour l’activer, retirez TT_UPDATE_CHECK=false de l’environnement du serveur puis redémarrez l’application.",
   "newWindow": "(s’ouvre dans une nouvelle fenêtre)",
   "disabledNow": "La recherche de nouvelles versions vient d’être désactivée sur ce serveur.",
