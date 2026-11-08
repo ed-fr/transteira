@@ -6,7 +6,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+The V2 scope of the specification (CLAUDE.md section 2, "enterprise"), on top of 1.0, 1.1 and
+1.2: OpenID Connect single sign-on per entity (Microsoft Entra ID, Keycloak), read-only auditor
+role with security events in the database, signed proofs of deposit and delivery in PDF, entity
+configuration export and import, permanent drop links, link-only transfers without email,
+optional end-to-end encryption in the browser and in the command-line client, the `transteira-cli`
+command-line client, a signed multi-architecture image published with its SBOM, and a compliance
+kit (GDPR record of processing, ISO/IEC 27001:2022 Annex A mapping). Still compatible with 1.x:
+the API stays `/api/v1` with additions only, and an upgrade from 1.2 needs no configuration
+change (migrations 0026 to 0032 are applied at start-up; see
+[Upgrade](docs/operations/upgrade.md#from-12-to-20)). Threat model 2.0 in force.
+
 ### Added
+
+- Compliance kit (`docs/compliance/`, in English and in French): a pre-filled GDPR record of
+  processing activities (article 30) with the real data categories and retention periods, and a
+  mapping of the ISO/IEC 27001:2022 Annex A controls to the mechanisms of TransTeira, the
+  operator's share and the threat model.
+- Auditor guide (`docs/user/en/auditor.md`, `docs/user/fr/auditor.md`), served as the integrated
+  help of an auditor; security log sections in the delegated admin and super admin guides; the
+  command-line client in the delegated admin and sender guides; new screenshots.
 
 - Design of version 2.0 ("enterprise"): OpenAPI specification 2.0.0, still `/api/v1` and
   additive only (23 new operations: auditor role and security events in the database, OpenID
@@ -208,6 +227,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `docs/operations/upgrade.md`, `SECURITY.md` (key replacement).
 
 ### Changed
+
+- The shipped fail2ban filter and CrowdSec scenario now count `drop_link_invalid` (unknown,
+  revoked, disabled or expired permanent drop link), as the threat model states (T-311); the event
+  is documented in `docs/operations/security-log.md`, and a test checks that every declared
+  security event is covered by the integrations. Copy the integration files again when upgrading.
+- `scripts/release.sh` keeps a `COSIGN_PASSWORD` exported by the caller away from docker, make,
+  syft and git: only cosign receives it.
+- The help topics of the security log screens now open their own guide sections
+  (`tenant-security-log`, `system-security-log`) instead of the audit log sections.
 
 - The files of an end-to-end encrypted transfer now count as one download start per client within
   the window, so that a ZIP archive built by the browser counts once against the maximum number of

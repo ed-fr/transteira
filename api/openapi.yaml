@@ -361,7 +361,7 @@ paths:
               schema: { $ref: '#/components/schemas/Health' }
               example:
                 status: ok
-                version: 1.2.0
+                version: 2.0.0
                 maintenance: false
                 checks: { database: ok, antivirus: ok, storage: ok }
         '503':
@@ -371,7 +371,7 @@ paths:
               schema: { $ref: '#/components/schemas/Health' }
               example:
                 status: degraded
-                version: 1.2.0
+                version: 2.0.0
                 maintenance: false
                 checks: { database: ok, antivirus: unavailable, storage: ok }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -488,7 +488,7 @@ paths:
               schema: { $ref: '#/components/schemas/InstanceStatus' }
               example:
                 status: ok
-                version: 1.1.0
+                version: 2.0.0
                 checkedAt: '2026-10-27T09:00:00Z'
                 uptimeSeconds: 864000
                 maintenance: false
@@ -593,7 +593,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VersionInfo' }
-              example: { version: 1.2.0, apiVersion: v1, commit: 3f9c2ab }
+              example: { version: 2.0.0, apiVersion: v1, commit: 3f9c2ab }
         '421': { $ref: '#/components/responses/UnknownTenant' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -7232,19 +7232,19 @@ paths:
                 updateAvailable:
                   summary: A newer release exists
                   value:
-                    version: 1.2.0
+                    version: 2.0.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 1.2.1
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v1.2.1
+                      latestVersion: 2.0.1
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.0.1
                       updateAvailable: true
                       checkedAt: '2026-10-31T06:00:00Z'
                       lastError: none
                 disabled:
                   summary: Check disabled (TT_UPDATE_CHECK=false)
                   value:
-                    version: 1.2.0
+                    version: 2.0.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: false
@@ -7280,24 +7280,24 @@ paths:
                 upToDate:
                   summary: Already the latest release
                   value:
-                    version: 1.2.0
+                    version: 2.0.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 1.2.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v1.2.0
+                      latestVersion: 2.0.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.0.0
                       updateAvailable: false
                       checkedAt: '2026-10-31T10:15:00Z'
                       lastError: none
                 networkError:
                   summary: GitHub unreachable; the last good result is kept
                   value:
-                    version: 1.2.0
+                    version: 2.0.0
                     commit: 3f9c2ab
                     updateCheck:
                       enabled: true
-                      latestVersion: 1.2.0
-                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v1.2.0
+                      latestVersion: 2.0.0
+                      releaseUrl: https://github.com/ed-fr/transteira/releases/tag/v2.0.0
                       updateAvailable: false
                       checkedAt: '2026-10-30T06:00:00Z'
                       lastError: network

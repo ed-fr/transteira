@@ -150,10 +150,11 @@ La page **Administrateurs** liste tous les comptes qui ont accès à l’adminis
 <!-- topic: admin-create -->
 ### Créer un administrateur délégué
 
-Un administrateur délégué ne gère que les entités que vous rattachez à son compte. Cliquez sur **Créer un administrateur** et remplissez le formulaire.
+Un administrateur délégué ne gère que les entités que vous rattachez à son compte. Un **auditeur** est un compte en lecture seule sur les entités que vous lui rattachez (voir le [guide de l’auditeur](topic:auditor)), par exemple pour un RSSI ou un audit. Cliquez sur **Créer un administrateur** et remplissez le formulaire.
 
 ![Formulaire de création d’un administrateur délégué avec l’identifiant, l’adresse électronique, les entités rattachées et l’exigence de double authentification](../screenshots/fr/admin-admin-create.png)
 
+- **Rôle** : **Administrateur délégué** (configure et exploite les entités rattachées) ou **Auditeur (lecture seule)** (les consulte et ne modifie rien). L’auditeur ne peut lire ni la configuration ni les écrans de l’instance. Un super administrateur n’est jamais créé ici : promouvez plutôt un compte activé (voir [Modifier un compte](topic:admin-edit)) ; le rôle d’un compte existant peut aussi devenir auditeur de cette façon.
 - **Identifiant** : de 3 à 64 caractères, lettres minuscules, chiffres, point, tiret ou tiret bas. Il ne peut plus être modifié ensuite.
 - **Adresse électronique** : elle reçoit les alertes de quota des entités rattachées.
 - **Entités rattachées** : sélectionnez au moins une entité.
@@ -198,7 +199,7 @@ Si vous êtes le seul super administrateur et que vous avez perdu votre appareil
 
 ## Système
 
-L’entrée **Système** regroupe les réglages de toute l’instance. Sa sous-navigation comporte sept écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit**, **Clé maître** et **Jetons de provisionnement**. Les administrateurs délégués ne la voient pas.
+L’entrée **Système** regroupe les réglages de toute l’instance. Sa sous-navigation comporte huit écrans : **Vue d’ensemble**, **Maintenance**, **Paramètres**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Clé maître** et **Jetons de provisionnement**. Les administrateurs délégués ne la voient pas.
 
 <!-- topic: system-overview -->
 ### Vue d’ensemble du système
@@ -281,6 +282,13 @@ Le journal d’audit global regroupe les événements d’audit de toutes les en
 ![Journal d’audit global avec le filtre Entité et la colonne Entité](../screenshots/fr/admin-system-audit.png)
 
 Avec **Toutes les entités et l’instance**, le journal montre aussi les événements de l’instance, marqués **Instance** : initialisation, connexions et comptes administrateurs, mode maintenance, paramètres du système, alertes disque, alertes antivirus, rotations de la clé maître et jetons de provisionnement (**Jeton de provisionnement créé** et **Jeton de provisionnement révoqué**). Les événements d’une entité comprennent désormais **Configuration de l’entité terminée**, **Entité créée par provisionnement** et **Création d’entité par provisionnement refusée**, et l’envoi d’une invitation à un administrateur délégué est consigné sous **Administrateur invité**. Lorsqu’une entité est choisie, seuls ses événements s’affichent. Les événements sont conservés 12 mois.
+
+<!-- topic: system-security-log -->
+### Journal de sécurité global
+
+Le journal de sécurité global regroupe les événements de sécurité de toutes les entités et de l’instance elle-même, sur les 12 derniers mois. Il fonctionne comme le [journal de sécurité](topic:tenant-security-log) d’une entité, avec un filtre et une colonne **Entité** en plus. Ce sont les événements que fail2ban et CrowdSec lisent dans le fichier du journal de sécurité (voir la documentation d’exploitation `docs/operations/security-log.md`) ; l’écran n’en montre que la copie en base. Le journal ne contient jamais d’adresse mail.
+
+Filtrez par **Entité** (avec **Toutes les entités et l’instance**, les événements sans entité sont aussi affichés, marqués **Instance** ; avec une entité choisie, ils ne le sont pas), par **Type d’événement** et par période avec **Du** et **Au**. Les événements de l’instance sont ceux qui ne concernent aucune entité : **Adresse (FQDN) inconnue**, **Échec de connexion d’administrateur**, **Échec de l’authentification unique** avant que l’entité soit connue, **Jeton de métriques invalide** et **Jeton de provisionnement invalide**. Les événements d’une entité supprimée restent lisibles ici jusqu’à la purge à 12 mois. Les administrateurs délégués et les auditeurs ne voient que les événements de leurs propres entités, dans le journal de sécurité de chaque entité.
 
 <!-- topic: system-provisioning -->
 ### Jetons de provisionnement

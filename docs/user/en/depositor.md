@@ -324,6 +324,12 @@ The form then shows the service the files will be sent to, with nothing to type:
 
 If the page says the link was not found, it is incomplete, disabled, revoked or replaced by a new one: ask the person who gave it to you for the current address.
 
+## Sending from a script
+
+To send files automatically (a nightly export, a tool that deposits files), the transfer form is not needed: ask the administrator of your entity for an **API token**. A token lets a script deposit files without a person verifying an address, within the limits the administrator set for it (allowed network addresses and senders).
+
+Your administrator can also give you the command-line client `transteira-cli`, which deposits and downloads from a terminal or a script, with the token, and resumes an interrupted upload by itself. Its binaries are published with each release on GitHub, with a signature to check before running them. The full guide is `docs/api/cli.md` in the TransTeira repository. Never paste a token in a message or a shared document: it gives the same access as a script of your entity.
+
 <!-- topic: deposit-problems -->
 ## Common problems
 

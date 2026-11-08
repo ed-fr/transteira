@@ -7876,7 +7876,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "1.2.0",
+                     *       "version": "2.0.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -7899,7 +7899,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "degraded",
-                     *       "version": "1.2.0",
+                     *       "version": "2.0.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -7990,7 +7990,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "1.1.0",
+                     *       "version": "2.0.0",
                      *       "checkedAt": "2026-10-27T09:00:00Z",
                      *       "uptimeSeconds": 864000,
                      *       "maintenance": false,
@@ -8118,7 +8118,7 @@ export interface operations {
                 content: {
                     /**
                      * @example {
-                     *       "version": "1.2.0",
+                     *       "version": "2.0.0",
                      *       "apiVersion": "v1",
                      *       "commit": "3f9c2ab"
                      *     }

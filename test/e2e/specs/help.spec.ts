@@ -11,8 +11,10 @@
 // "<!-- topic: x -->" markers), so that an editorial change of a heading does not break the
 // scenarios, while a topic moved to another section or guide does.
 import type { Page, Request } from '@playwright/test';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { request } from '../support/api';
 import { internalEmail, textFile } from '../support/data';
 import { recipientPath, tokenDeposit } from '../support/deposit';
 import { HOSTS, ORIGINS, REPO_ROOT, STORAGE_DELEGATE, STORAGE_SUPER } from '../support/env';
@@ -20,7 +22,7 @@ import { checkA11y, expect, expectCleanStorage, test } from '../support/fixtures
 import { BROWSER_LOCALE, LANGS, msg, type Lang } from '../support/i18n';
 import { loadState, superAdminApi } from '../support/state';
 
-type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin';
+type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin' | 'auditor';
 
 /** A section of a guide, as written in the Markdown source. */
 interface Section {
@@ -370,10 +372,10 @@ test.describe('admin contextual help', () => {
     await expectGuideImagesLoaded(page, guideImages('en', 'super-admin'));
   });
 
-  test('the help index of a super admin lists both admin guides', async ({ page }) => {
+  test('the help index of a super admin lists the three admin guides', async ({ page }) => {
     await page.goto(`${ORIGINS.admin}/admin/help`);
     await expect(page.getByRole('heading', { name: msg('en', 'common.help.title'), level: 1 })).toBeVisible();
-    for (const guide of ['delegated-admin', 'super-admin'] as const) {
+    for (const guide of ['delegated-admin', 'super-admin', 'auditor'] as const) {
       await expect(page.getByRole('link', { name: outline('en', guide).title, exact: true })).toBeVisible();
     }
   });
@@ -403,6 +405,66 @@ test.describe('delegated admin help', () => {
     await page.goto(`${ORIGINS.admin}/admin/`);
     await footerHelp(page).click();
     await expectHelpSection(page, 'en', 'delegated-admin', 'admin', '/admin');
+  });
+});
+
+test.describe('auditor help', () => {
+  test('an auditor only gets the auditor guide, opened by the topics of its screens', async ({
+    page,
+    state,
+  }) => {
+    // An auditor of entity A, activated through the API (no second factor), then signed in.
+    const api = superAdminApi();
+    const username = `help-auditor-${crypto.randomBytes(4).toString('hex')}`;
+    const password = `e2e-auditor-${crypto.randomBytes(12).toString('base64url')}`;
+    const created = await api.ok<{ activationUrl: string }>(
+      'POST',
+      '/admin/admins',
+      {
+        username,
+        email: `${username}@example.com`,
+        role: 'auditor',
+        tenantIds: [state.tenants.a.id],
+        requireTotp: false,
+      },
+      [201],
+    );
+    const activated = await request(state.serverPort, 'POST', '/api/v1/admin/activation', {
+      body: { activationToken: new URL(created.activationUrl).hash.slice(1), password },
+      headers: { Origin: ORIGINS.admin, 'Sec-Fetch-Site': 'same-origin' },
+    });
+    expect(activated.status).toBeLessThan(300);
+    await page.goto(`${ORIGINS.admin}/admin/login`);
+    await page.getByLabel(/^Username/).fill(username);
+    await page.getByLabel(/^Password/).fill(password);
+    await page.getByRole('button', { name: msg('en', 'adminAuth.login.submit'), exact: true }).click();
+    await expect(page.getByRole('heading', { name: msg('en', 'admin.home.title'), level: 1 })).toBeVisible();
+
+    // The index offers the auditor guide only.
+    await page.goto(`${ORIGINS.admin}/admin/help`);
+    await expect(page.getByRole('heading', { name: msg('en', 'common.help.title'), level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: outline('en', 'auditor').title, exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: outline('en', 'delegated-admin').title })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: outline('en', 'super-admin').title })).toHaveCount(0);
+
+    // The topic of a screen opens its auditor counterpart, focused, with the auditor guide title.
+    for (const [screen, topic] of [
+      [`/admin/tenants/${state.tenants.a.id}/audit`, 'tenant-audit'],
+      [`/admin/tenants/${state.tenants.a.id}/security-events`, 'tenant-security-log'],
+    ] as const) {
+      await page.goto(`${ORIGINS.admin}${screen}`);
+      await expect(footerHelp(page)).toHaveAttribute('href', `/admin/help/${topic}`);
+      await footerHelp(page).click();
+      await expect(page).toHaveURL(new RegExp(`/admin/help/${topic}$`));
+      await expect(sectionHeading(page, section('en', 'auditor', `auditor-${topic}`))).toBeFocused();
+      await expect(page).toHaveTitle(
+        new RegExp(`^${escapeRegExp(helpTitle('en', 'auditor', `auditor-${topic}`))}( – |$)`),
+      );
+    }
+
+    // A topic of the other guides is unknown to an auditor.
+    await page.goto(`${ORIGINS.admin}/admin/help/tenant-network`);
+    await expect(page.getByText(msg('en', 'help.unknownTopic', { topic: 'tenant-network' }))).toBeVisible();
   });
 });
 

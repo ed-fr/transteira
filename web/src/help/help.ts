@@ -11,17 +11,27 @@ export type HelpFeatures = HelpTenantRules['features'];
 /** Guides of the public application. */
 export const PUBLIC_GUIDES: readonly GuideId[] = ['depositor', 'recipient'];
 
-/** Guides of the administration (the super-admin guide only for a super admin, see adminGuides). */
-export const ADMIN_GUIDES: readonly GuideId[] = ['delegated-admin', 'super-admin'];
+/**
+ * Guides of the administration, in display order (the super-admin and auditor guides are only
+ * offered to some roles, see adminGuides).
+ */
+export const ADMIN_GUIDES: readonly GuideId[] = ['delegated-admin', 'super-admin', 'auditor'];
 
 /**
  * Guides offered by the administration: a signed-in delegated admin only gets the delegated-admin
- * guide; a super admin, and a visitor not signed in (first-run setup, sign-in, activation), get
- * both.
+ * guide and a signed-in auditor only the auditor guide (each guide only describes what its role
+ * can do, and never links to a guide the role cannot read); a super admin, and a visitor not
+ * signed in (first-run setup, sign-in, activation), get all three.
  */
 export function adminGuides(signedInRole: string | undefined): readonly GuideId[] {
+  if (signedInRole === 'auditor') {
+    return ['auditor'];
+  }
   return signedInRole === undefined || signedInRole === 'super_admin' ? ADMIN_GUIDES : ['delegated-admin'];
 }
+
+/** Prefix of the topics of the auditor guide: auditor-<topic> is the auditor version of <topic>. */
+export const AUDITOR_TOPIC_PREFIX = 'auditor-';
 
 /** What the help screen shows. */
 export type HelpView =
@@ -61,7 +71,7 @@ export function visibleSections(guide: HelpGuide, features: HelpFeatures): HelpS
 /**
  * Resolves /help (topic undefined: the index) or /help/<topic>: the guide holding the topic and
  * its section, or the index with the unknown topic when the topic does not exist or is in a guide
- * that is not offered. A topic in a section hidden for the tenant (visibleSections) opens its
+ * that is not offered (unless it has an auditor-<topic> counterpart in an offered guide). A topic in a section hidden for the tenant (visibleSections) opens its
  * guide at the top: the address is valid, the option is just not offered here.
  */
 export function resolveHelp(
@@ -74,7 +84,14 @@ export function resolveHelp(
   if (topic === undefined || topic === '') {
     return { kind: 'index', guides };
   }
-  const target = Object.hasOwn(set.topics, topic) ? set.topics[topic] : undefined;
+  let target = Object.hasOwn(set.topics, topic) ? set.topics[topic] : undefined;
+  if (guides.every((g) => g.id !== target?.guide)) {
+    // A topic is unique across the guides, so the screens of an auditor (who only reads the
+    // auditor guide) point to topics of the delegated-admin guide: auditor-<topic> is the same
+    // section written for the auditor.
+    const alias = `${AUDITOR_TOPIC_PREFIX}${topic}`;
+    target = Object.hasOwn(set.topics, alias) ? set.topics[alias] : target;
+  }
   const guide = guides.find((g) => g.id === target?.guide);
   const section = guide?.sections.find((s) => s.id === target?.section);
   if (guide === undefined || section === undefined) {

@@ -5,10 +5,11 @@ As a delegated administrator, you configure and operate the entities attached to
 <!-- topic: admin-roles -->
 ## Roles
 
-TransTeira has two administrator roles, and the role shown under your username tells you which one you have.
+TransTeira has three administrator roles, and the role shown under your username tells you which one you have.
 
 - **Super administrator**: manages every entity, creates the entities and the administrator accounts, and handles the system settings of the service.
 - **Delegated administrator**: manages only the entities attached to the account. Another entity is invisible to you: if you open its address, the administration answers as if it did not exist.
+- **Auditor**: consults the entities attached to the account in read-only mode (summary, audit log, security log, statistics, transfers and proofs, drop links) and changes nothing, except its own password and second factor. Auditor accounts are created by a super administrator, for example for a security officer or an audit; an auditor cannot open any configuration screen.
 
 Within your entities, you can change almost everything. A few settings are reserved to the super administrator: the name of the entity, its public address (FQDN), its storage quota, the ceiling of the size per transfer, and the deletion of the entity. Ask your super administrator when one of them needs to change.
 
@@ -130,7 +131,7 @@ Creating and deleting entities is reserved to the super administrator: these act
 Once an entity is open, a navigation bar shows its name and two groups of screens.
 
 - **Configuration**: **General**, **Branding**, **Network**, **Recipient domains**, **Confidentiality levels**, **Mail (SMTP)**, **Email templates**, **Legal information**.
-- **Operations**: **Transfers**, **Invitations**, **Drop links**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Statistics**, **Personal data**.
+- **Operations**: **Transfers**, **Invitations**, **Drop links**, **Blocklist**, **API tokens**, **Webhooks**, **Audit log**, **Security log**, **Statistics**, **Personal data**.
 
 The filters of the lists are kept in the page address, so you can bookmark a filtered view or share it with another administrator of the entity. Long lists show their first rows; click **Load more** to see the next ones. If you leave a form with unsaved changes, the administration asks for confirmation first.
 
@@ -478,6 +479,8 @@ The secret of the token is shown **only once**. Click **Copy the secret**, tick 
 
 **Edit** changes the name, the ranges and the senders (not the expiry: create a new token instead). **Revoke** refuses every request made with the token from now on; this is final, and transfers already created stay available to their recipients. To write a script, see the integration guide `docs/api/integration.md` in the TransTeira repository and click **Open the API documentation**.
 
+To deposit or download from a script without writing HTTP calls, the person in charge can use the command-line client `transteira-cli`. Its binaries (Linux, macOS and Windows) are published with each release on GitHub, with a signature to check before running them, and it authenticates with an API token and resumes interrupted uploads. The full guide is `docs/api/cli.md` in the TransTeira repository.
+
 <!-- topic: tenant-webhooks -->
 ### Webhooks
 
@@ -520,6 +523,17 @@ Filter by **Action** (grouped by theme), by **Actor** (exact email address or ad
 ![Audit log of an entity with the filters and the list of events](../screenshots/en/admin-audit.png)
 
 An address erased at the request of the person concerned appears as a pseudonym starting with `erased-`.
+
+<!-- topic: tenant-security-log -->
+### Security log
+
+The Security log screen shows the security events of the entity over the last 12 months. It is distinct from the audit log: it records what an attacker or a mistake produces (wrong codes and passwords, refused deposits, rate limits, invalid tokens), the same events that fail2ban and CrowdSec read to ban addresses. It never contains an email address.
+
+Filter by **Event type** (a type in the list, or **Other type** and the code of the type, for example `rate_limited`) and by period with **From** and **To**, then click **Apply**; **Reset** clears the filters. The columns show the **Date**, the **Type** (with its technical code under it), the **Reason**, the **IP address** and the **Occurrences**. Identical events (same type, reason and address) seen within about a minute are grouped in one row: the number of occurrences is shown, with the date of the last one. Click **Load more** to see older events.
+
+![Security log of an entity with the filters and the list of events](../screenshots/en/admin-security-log.png)
+
+The types you can meet are **Wrong verification code**, **Wrong transfer password**, **Invalid API token**, **Deposit refused** (reason `ip` for an address outside the ranges, `domain`, `blocklist` or `invitation`), **Rate limit exceeded**, **Invalid access link**, **Invalid drop link** and **Failed single sign-on**. A burst of events from one address (many wrong codes, many refused deposits) usually means a guessing attempt: you can add the sender to the [Blocklist](topic:tenant-blocklist) if it is a deposit, and the operator can ban the address with the intrusion prevention tool. Events that belong to no entity (unknown address, administrator sign-in, provisioning token) are only visible to the super administrator, in the global security log. The meaning of every event is documented in `docs/operations/security-log.md` in the TransTeira repository. Events are kept 12 months.
 
 <!-- topic: tenant-stats -->
 ### Statistics

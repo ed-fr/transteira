@@ -259,6 +259,7 @@ function sources(overrides: Partial<Record<string, string>> = {}): GuideSource[]
     recipient: '<!-- topic: download -->\n## Download\n\n![Alt](../screenshots/LANG/download.png)',
     'delegated-admin': '<!-- topic: tenant-smtp -->\n## SMTP\n\nSee [above](#smtp).',
     'super-admin': '<!-- topic: tenant-create -->\n## Create\n\n[Back](#create), [SMTP](topic:tenant-smtp)',
+    auditor: '<!-- topic: auditor-tenants -->\n## Entities\n\nSee [above](#entities).',
   };
   return ['en', 'fr'].flatMap((lang) =>
     GUIDE_IDS.map((id) =>
@@ -273,12 +274,14 @@ describe('buildHelp', () => {
     expect(errors).toEqual([]);
     expect(sets.map(moduleFileName)).toEqual(['en-public.ts', 'en-admin.ts', 'fr-public.ts', 'fr-admin.ts']);
     const frAdmin = sets[3];
-    expect(frAdmin?.guides.map((g) => g.id)).toEqual(['delegated-admin', 'super-admin']);
+    expect(frAdmin?.guides.map((g) => g.id)).toEqual(['delegated-admin', 'super-admin', 'auditor']);
     expect(frAdmin?.topics).toEqual({
       'delegated-admin': { guide: 'delegated-admin', section: 'delegated-admin-fr' },
       'tenant-smtp': { guide: 'delegated-admin', section: 'smtp' },
       'super-admin': { guide: 'super-admin', section: 'super-admin-fr' },
       'tenant-create': { guide: 'super-admin', section: 'create' },
+      auditor: { guide: 'auditor', section: 'auditor-fr' },
+      'auditor-tenants': { guide: 'auditor', section: 'entities' },
     });
   });
 
@@ -668,6 +671,32 @@ describe('buildHelp audience checks', () => {
     );
     expect(errors.map(formatError)).toEqual([
       'docs/user/en/delegated-admin.md:6: link topic:tenant-create points to the super-admin guide, which a delegated admin cannot read',
+    ]);
+  });
+
+  it('refuses a topic link from the delegated-admin guide to the auditor guide', () => {
+    const { errors } = buildHelp(
+      sources({
+        'en/delegated-admin': '<!-- topic: tenant-smtp -->\n## SMTP\n\nSee [auditor](topic:auditor-tenants).',
+      }),
+      { manifest },
+    );
+    expect(errors.map(formatError)).toEqual([
+      'docs/user/en/delegated-admin.md:6: link topic:auditor-tenants points to the auditor guide, which a delegated admin cannot read',
+    ]);
+  });
+
+  it('refuses a topic link from the auditor guide to another guide, and allows its own', () => {
+    const { errors } = buildHelp(
+      sources({
+        'en/auditor':
+          '<!-- topic: auditor-tenants -->\n## Entities\n\nSee [smtp](topic:tenant-smtp) and [create](topic:tenant-create) and [self](topic:auditor-tenants).',
+      }),
+      { manifest },
+    );
+    expect(errors.map(formatError)).toEqual([
+      'docs/user/en/auditor.md:6: link topic:tenant-smtp points to the delegated-admin guide, which an auditor cannot read',
+      'docs/user/en/auditor.md:6: link topic:tenant-create points to the super-admin guide, which an auditor cannot read',
     ]);
   });
 

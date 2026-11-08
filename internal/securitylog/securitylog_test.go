@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"net/netip"
 	"os"
@@ -26,7 +29,7 @@ const tenantA = "transfer.entity-a.example.com"
 var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
 	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
-	AccessLinkInvalid, ProvisioningTokenInvalid, SSOFailed,
+	AccessLinkInvalid, ProvisioningTokenInvalid, SSOFailed, DropLinkInvalid,
 }
 
 // ownFilterEvents are the events counted by integrations of their own,
@@ -112,6 +115,12 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: ProvisioningTokenInvalid, IP: netip.MustParseAddr("192.0.2.15")},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.15 tenant=- event=provisioning_token_invalid`,
 		banIP: "192.0.2.15",
+	},
+	{
+		name:  "drop link invalid",
+		ev:    Event{Type: DropLinkInvalid, IP: netip.MustParseAddr("192.0.2.16"), Tenant: tenantA},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.16 tenant=transfer.entity-a.example.com event=drop_link_invalid`,
+		banIP: "192.0.2.16",
 	},
 	{
 		// Counted by its own filter and scenario only (ownFilterEvents):
@@ -747,3 +756,55 @@ const (
 	nonPrintable = "\x00\xff" + lineSep
 	eAcute       = "\xc3\xa9"
 )
+
+// TestAllEventsListsEveryEventType parses securitylog.go and checks that
+// allEvents holds every EventType constant, so that a new event cannot be
+// left out of the fail2ban and CrowdSec coverage tests (release review of
+// 2.0: drop_link_invalid had been missed).
+func TestAllEventsListsEveryEventType(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "securitylog.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[EventType]bool{}
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			if ident, ok := vs.Type.(*ast.Ident); !ok || ident.Name != "EventType" {
+				continue
+			}
+			for _, v := range vs.Values {
+				lit, ok := v.(*ast.BasicLit)
+				if !ok {
+					t.Fatalf("EventType constant with a non-literal value at %s", fset.Position(v.Pos()))
+				}
+				declared[EventType(strings.Trim(lit.Value, `"`))] = true
+			}
+		}
+	}
+	listed := map[EventType]bool{}
+	for _, e := range allEvents {
+		listed[e] = true
+	}
+	for e := range declared {
+		if !listed[e] {
+			t.Errorf("event %q is declared but missing from allEvents", e)
+		}
+	}
+	for e := range listed {
+		if !declared[e] {
+			t.Errorf("event %q is in allEvents but not declared in securitylog.go", e)
+		}
+	}
+	if len(declared) == 0 {
+		t.Fatal("no EventType constant found")
+	}
+}

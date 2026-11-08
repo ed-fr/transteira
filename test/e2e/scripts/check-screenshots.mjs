@@ -22,7 +22,7 @@ const CATALOG =
   process.env.SCREENSHOTS_CATALOG ??
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'support', 'screenshots.ts');
 const LANGS = ['en', 'fr'];
-const PROFILES = new Set(['depositor', 'recipient', 'delegated-admin', 'super-admin']);
+const PROFILES = new Set(['depositor', 'recipient', 'delegated-admin', 'super-admin', 'auditor']);
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const WIDTH = 1280;
 const HEIGHT = 800;

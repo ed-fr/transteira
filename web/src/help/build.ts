@@ -46,7 +46,13 @@ import type {
 export const HELP_LANGUAGES: readonly string[] = ['en', 'fr'];
 
 /** Guides in display order. */
-export const GUIDE_IDS: readonly GuideId[] = ['depositor', 'recipient', 'delegated-admin', 'super-admin'];
+export const GUIDE_IDS: readonly GuideId[] = [
+  'depositor',
+  'recipient',
+  'delegated-admin',
+  'super-admin',
+  'auditor',
+];
 
 /** Application showing each guide. */
 export const GUIDE_APPS: Readonly<Record<GuideId, HelpApp>> = {
@@ -54,6 +60,7 @@ export const GUIDE_APPS: Readonly<Record<GuideId, HelpApp>> = {
   recipient: 'public',
   'delegated-admin': 'admin',
   'super-admin': 'admin',
+  auditor: 'admin',
 };
 
 /** Pattern of a help topic (same as HELP_TOPIC of shared/components/helpers.ts). */
@@ -888,9 +895,10 @@ export interface BuildResult {
 }
 
 /**
- * Parses every guide and checks them together: each language has the four guides, topics are
+ * Parses every guide and checks them together: each language has the five guides, topics are
  * unique in a language, internal links resolve (a section of the same guide, a topic of the same
- * application, never a topic of the super-admin guide from the delegated-admin guide), and every guide has the same topics in every language (the language switch keeps
+ * application, never a topic of the super-admin or auditor guide from the delegated-admin guide, nor a topic of
+ * another guide from the auditor guide: the roles cannot read them), and every guide has the same topics in every language (the language switch keeps
  * the topic).
  */
 export function buildHelp(sources: readonly GuideSource[], options: BuildOptions): BuildResult {
@@ -975,11 +983,17 @@ export function buildHelp(sources: readonly GuideSource[], options: BuildOptions
               line: link.line,
               message: `link topic:${link.target} points to a guide of the other application (${target.id})`,
             });
-          } else if (id === 'delegated-admin' && target.id === 'super-admin') {
+          } else if (id === 'delegated-admin' && (target.id === 'super-admin' || target.id === 'auditor')) {
             errors.push({
               file: entry.source.file,
               line: link.line,
-              message: `link topic:${link.target} points to the super-admin guide, which a delegated admin cannot read`,
+              message: `link topic:${link.target} points to the ${target.id} guide, which a delegated admin cannot read`,
+            });
+          } else if (id === 'auditor' && target.id !== 'auditor') {
+            errors.push({
+              file: entry.source.file,
+              line: link.line,
+              message: `link topic:${link.target} points to the ${target.id} guide, which an auditor cannot read`,
             });
           }
         }

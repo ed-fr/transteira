@@ -150,10 +150,11 @@ The **Administrators** page lists every account with access to the administratio
 <!-- topic: admin-create -->
 ### Creating a delegated administrator
 
-A delegated administrator manages only the entities you attach to their account. Click **Create an administrator** and fill in the form.
+A delegated administrator manages only the entities you attach to their account. An **auditor** is a read-only account on the entities you attach to it (see the [auditor guide](topic:auditor)), for example for a security officer or an audit. Click **Create an administrator** and fill in the form.
 
 ![Form to create a delegated administrator with username, email address, attached entities and the two-factor requirement](../screenshots/en/admin-admin-create.png)
 
+- **Role**: **Delegated administrator** (configures and operates the attached entities) or **Auditor (read-only)** (consults them and changes nothing). The auditor can read neither the configuration nor the instance screens. A super administrator is never created here: promote an activated account instead (see [Editing an account](topic:admin-edit)), and the role of an existing account can be changed to auditor the same way.
 - **Username**: 3 to 64 characters, lowercase letters, digits, dot, hyphen or underscore. It cannot be changed afterwards.
 - **Email address**: it receives the quota alerts of the attached entities.
 - **Attached entities**: select at least one entity.
@@ -198,7 +199,7 @@ If you are the only super administrator and lost your device, sign in with a rec
 
 ## System
 
-The **System** entry gathers the settings of the whole instance. Its sub-navigation has seven screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Master key** and **Provisioning tokens**. Delegated administrators do not see it.
+The **System** entry gathers the settings of the whole instance. Its sub-navigation has eight screens: **Overview**, **Maintenance**, **Settings**, **Webhooks**, **Audit log**, **Security log**, **Master key** and **Provisioning tokens**. Delegated administrators do not see it.
 
 <!-- topic: system-overview -->
 ### System overview
@@ -281,6 +282,13 @@ The global audit log gathers the audit events of every entity and of the instanc
 ![Global audit log with the Entity filter and the Entity column](../screenshots/en/admin-system-audit.png)
 
 With **All entities and the instance**, the log also shows the events of the instance, marked **Instance**: setup, sign-ins and administrator accounts, maintenance mode, system settings, disk alerts, antivirus alerts, master key rotations and provisioning tokens (**Provisioning token created** and **Provisioning token revoked**). The events of an entity now include **Entity setup completed**, **Entity created by provisioning** and **Entity creation by provisioning refused**, and the sending of an invitation to a delegated administrator is recorded as **Administrator invited**. With an entity selected, only the events of that entity are shown. Events are kept 12 months.
+
+<!-- topic: system-security-log -->
+### Global security log
+
+The global security log gathers the security events of every entity and of the instance itself, over the last 12 months. It works like the [Security log](topic:tenant-security-log) of an entity, with an extra **Entity** filter and column. These are the events that fail2ban and CrowdSec read from the security log file (see the operations documentation `docs/operations/security-log.md`); the screen only shows their copy in the database. The log never contains an email address.
+
+Filter by **Entity** (with **All entities and the instance**, the events without entity are shown too, marked **Instance**; with an entity selected, they are not), by **Event type** and by period with **From** and **To**. The events of the instance are the ones that concern no entity: **Unknown address (FQDN)**, **Failed administrator sign-in**, **Failed single sign-on** before the entity is known, **Invalid metrics token** and **Invalid provisioning token**. Events of a deleted entity stay readable here until the 12-month purge. Delegated administrators and auditors only see the events of their own entities, in the security log of each entity.
 
 <!-- topic: system-provisioning -->
 ### Provisioning tokens

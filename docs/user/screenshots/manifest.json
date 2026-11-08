@@ -54,6 +54,12 @@
     "path": "{lang}/admin-drop-links.png"
   },
   {
+    "name": "admin-home-auditor",
+    "screen": "admin /admin/ (auditor)",
+    "profile": "auditor",
+    "path": "{lang}/admin-home-auditor.png"
+  },
+  {
     "name": "admin-home-delegate",
     "screen": "admin /admin/",
     "profile": "delegated-admin",
@@ -94,6 +100,12 @@
     "screen": "admin /admin/system/provisioning-tokens",
     "profile": "super-admin",
     "path": "{lang}/admin-provisioning-tokens.png"
+  },
+  {
+    "name": "admin-security-log",
+    "screen": "admin /admin/tenants/:id/security-events",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-security-log.png"
   },
   {
     "name": "admin-stats",
@@ -256,6 +268,12 @@
     "screen": "admin /admin/tenants/:id/transfers/:transferId",
     "profile": "delegated-admin",
     "path": "{lang}/admin-transfer-detail.png"
+  },
+  {
+    "name": "admin-transfer-detail-auditor",
+    "screen": "admin /admin/tenants/:id/transfers/:transferId (auditor: no action)",
+    "profile": "auditor",
+    "path": "{lang}/admin-transfer-detail-auditor.png"
   },
   {
     "name": "admin-transfers",

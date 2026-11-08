@@ -5,10 +5,11 @@ En tant qu’administrateur délégué, vous configurez et exploitez les entité
 <!-- topic: admin-roles -->
 ## Rôles
 
-TransTeira distingue deux rôles d’administrateur ; le rôle affiché sous votre identifiant indique le vôtre.
+TransTeira distingue trois rôles d’administrateur ; le rôle affiché sous votre identifiant indique le vôtre.
 
 - **Super administrateur** : gère toutes les entités, crée les entités et les comptes d’administrateurs, et s’occupe des réglages système du service.
 - **Administrateur délégué** : ne gère que les entités rattachées à son compte. Une autre entité vous est invisible : si vous ouvrez son adresse, l’administration répond comme si elle n’existait pas.
+- **Auditeur** : consulte en lecture seule les entités rattachées à son compte (résumé, journal d’audit, journal de sécurité, statistiques, transferts et preuves, liens de dépôt) et ne modifie rien, hormis son propre mot de passe et son second facteur. Les comptes d’auditeur sont créés par un super administrateur, par exemple pour un RSSI ou un audit ; un auditeur ne peut ouvrir aucun écran de configuration.
 
 Dans vos entités, vous pouvez modifier presque tout. Quelques réglages sont réservés au super administrateur : le nom de l’entité, son adresse publique (FQDN), son quota de stockage, le plafond de la taille par envoi et la suppression de l’entité. Adressez-vous à votre super administrateur lorsque l’un d’eux doit changer.
 
@@ -130,7 +131,7 @@ La création et la suppression d’une entité sont réservées au super adminis
 Une fois une entité ouverte, une barre de navigation affiche son nom et deux groupes d’écrans.
 
 - **Configuration** : **Général**, **Habillage**, **Réseau**, **Domaines destinataires**, **Niveaux de confidentialité**, **Messagerie (SMTP)**, **Modèles de mails**, **Mentions légales**.
-- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Statistiques**, **Données personnelles**.
+- **Exploitation** : **Transferts**, **Invitations**, **Liens de dépôt**, **Liste de blocage**, **Jetons d’API**, **Webhooks**, **Journal d’audit**, **Journal de sécurité**, **Statistiques**, **Données personnelles**.
 
 Les filtres des listes sont conservés dans l’adresse de la page : vous pouvez mettre une vue filtrée en favori ou la partager avec un autre administrateur de l’entité. Les longues listes affichent leurs premières lignes ; cliquez sur **Charger plus** pour voir la suite. Si vous quittez un formulaire avec des modifications non enregistrées, l’administration vous demande d’abord confirmation.
 
@@ -478,6 +479,8 @@ Le secret du jeton n’est affiché **qu’une seule fois**. Cliquez sur **Copie
 
 **Modifier** change le nom, les plages et les expéditeurs (pas l’expiration : créez plutôt un nouveau jeton). **Révoquer** refuse dès maintenant toute requête faite avec le jeton ; c’est définitif, et les transferts déjà créés restent disponibles pour leurs destinataires. Pour écrire un script, consultez le guide d’intégration `docs/api/integration.md` dans le dépôt TransTeira et cliquez sur **Ouvrir la documentation de l’API**.
 
+Pour déposer ou télécharger depuis un script sans écrire d’appels HTTP, la personne responsable peut utiliser le client en ligne de commande `transteira-cli`. Ses binaires (Linux, macOS et Windows) sont publiés avec chaque version sur GitHub, avec une signature à vérifier avant de les exécuter ; il s’authentifie avec un jeton d’API et reprend les envois interrompus. Le guide complet est `docs/api/cli.md` dans le dépôt TransTeira.
+
 <!-- topic: tenant-webhooks -->
 ### Webhooks
 
@@ -520,6 +523,17 @@ Filtrez par **Action** (regroupées par thème), par **Acteur** (adresse mail ex
 ![Journal d’audit d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-audit.png)
 
 Une adresse effacée à la demande de la personne concernée apparaît sous la forme d’un pseudonyme commençant par `erased-`.
+
+<!-- topic: tenant-security-log -->
+### Journal de sécurité
+
+L’écran Journal de sécurité présente les événements de sécurité de l’entité au cours des 12 derniers mois. Il se distingue du journal d’audit : il enregistre ce que produisent une attaque ou une erreur (codes et mots de passe erronés, dépôts refusés, limitations de débit, jetons invalides), c’est-à-dire les événements que fail2ban et CrowdSec lisent pour bannir des adresses. Il ne contient jamais d’adresse mail.
+
+Filtrez par **Type d’événement** (un type de la liste, ou **Autre type** et le code du type, par exemple `rate_limited`) et par période avec **Du** et **Au**, puis cliquez sur **Appliquer** ; **Réinitialiser** efface les filtres. Les colonnes indiquent la **Date**, le **Type** (avec son code technique en dessous), le **Motif**, l’**Adresse IP** et les **Occurrences**. Les événements identiques (même type, même motif, même adresse) survenus en environ une minute sont regroupés sur une ligne : le nombre d’occurrences est affiché, avec la date du dernier. Cliquez sur **Charger plus** pour voir les événements plus anciens.
+
+![Journal de sécurité d’une entité avec les filtres et la liste des événements](../screenshots/fr/admin-security-log.png)
+
+Les types que vous pouvez rencontrer sont **Code de vérification erroné**, **Mot de passe de transfert erroné**, **Jeton d’API invalide**, **Dépôt refusé** (motif `ip` pour une adresse hors des plages, `domain`, `blocklist` ou `invitation`), **Limitation de débit dépassée**, **Lien d’accès invalide**, **Lien de dépôt invalide** et **Échec de l’authentification unique**. Une rafale d’événements venant d’une même adresse (nombreux codes erronés, nombreux dépôts refusés) signale en général une tentative d’essais successifs : vous pouvez ajouter l’expéditeur à la [Liste de blocage](topic:tenant-blocklist) s’il s’agit d’un dépôt, et l’exploitant peut bannir l’adresse avec l’outil de prévention d’intrusion. Les événements qui n’appartiennent à aucune entité (adresse inconnue, connexion d’administrateur, jeton de provisionnement) ne sont visibles que du super administrateur, dans le journal de sécurité global. La signification de chaque événement est documentée dans `docs/operations/security-log.md` dans le dépôt TransTeira. Les événements sont conservés 12 mois.
 
 <!-- topic: tenant-stats -->
 ### Statistiques

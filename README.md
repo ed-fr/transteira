@@ -3,13 +3,14 @@
 **English** | [Français](README.fr.md)
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** is a self-hosted, multi-tenant large file transfer service, in the spirit of
 WeTransfer or SwissTransfer, designed for organisations made of several entities.
 
-> **Status: stable.** Version 1.2.1 delivers the V1 scope (the core), the V1.1 scope
-> (operations) and the V1.2 scope (onboarding); see [Versions](#versions) for what comes next.
+> **Status: stable.** Version 2.0.0 delivers the V1 scope (the core), the V1.1 scope
+> (operations), the V1.2 scope (onboarding) and the V2 scope (enterprise); see
+> [Versions](#versions).
 
 ## Highlights
 
@@ -72,6 +73,23 @@ WeTransfer or SwissTransfer, designed for organisations made of several entities
 - **Updates (V1.2)**: the running version is shown in the administration, and the super admin is
   told when a newer release exists (daily check, never an automatic update; `TT_UPDATE_CHECK=false`
   turns off every outbound connection).
+- **Single sign-on (V2)**: OpenID Connect per entity for delegated admins and auditors (Microsoft
+  Entra ID, Keycloak), accounts pre-created by the super admin, password sign-in refusable per
+  entity; the super admin always keeps its local account with TOTP ([guide](docs/operations/sso.md)).
+- **Auditor role (V2)**: read-only access to the audit log, security events, statistics and
+  transfers of one or more entities, for a CISO or an ISO 27001 audit.
+- **Proofs (V2)**: proofs of deposit and delivery as PDF files signed by the instance (Ed25519),
+  verifiable offline ([guide](docs/operations/proofs.md)).
+- **More ways to share (V2)**: permanent drop links for collecting files from third parties,
+  link-only transfers without email, entity configuration export and import.
+- **Optional end-to-end encryption (V2)**: files encrypted in the sender's browser, the key never
+  reaches the server (antivirus analysis is then impossible, and the download page says so);
+  allowed, required or forbidden per entity and confidentiality level.
+- **Command-line client (V2)**: `transteira-cli` for scripted deposits and downloads with
+  automatic resume ([guide](docs/api/cli.md)).
+- **Signed releases (V2)**: multi-architecture image signed with cosign and published with its
+  SBOM; compliance kit with a GDPR record of processing and an ISO 27001 Annex A mapping
+  ([docs/compliance](docs/compliance/README.md)).
 
 ## How it works
 
@@ -226,7 +244,7 @@ Every variable, with its default and its limits, is documented in [`.env.example
 ## Documentation
 
 - [User guides](docs/user/README.md), in English and in French, one per profile: sender,
-  recipient, delegated administrator and super administrator. The same guides are built into the
+  recipient, delegated administrator, auditor and super administrator. The same guides are built into the
   application as its integrated help (`/help` on every entity host, `/admin/help` on the admin
   host), with a help link in the footer and contextual help icons on the complex screens.
 
@@ -243,6 +261,10 @@ Every variable, with its default and its limits, is documented in [`.env.example
 - [Project structure](docs/architecture/project-structure.md)
 - [Web interface](web/README.md): build, development loop, dependency policy, CSP rules
 - [Threat model (STRIDE, in French)](docs/security/threat-model.md)
+- [Compliance kit](docs/compliance/README.md): GDPR record of processing and ISO/IEC 27001:2022
+  Annex A mapping ([en français](docs/compliance/fr/README.md))
+- [Releasing](docs/operations/release.md) (maintainers): signed tag, `make release`, signatures
+  and SBOM
 
 Installation:
 
@@ -326,11 +348,13 @@ returned by `/api/v1/version` and `/healthz` and printed by `transteira version`
 |---|---|
 | V1, the core (1.0) | Core transfer, security, administration and API features. |
 | V1.1, operations (1.1) | Monitoring, abuse detection, sharing controls, "My transfers", dark mode, antivirus engines. |
-| **V1.2, onboarding** (1.2, current) | Everything listed above. |
-| V2, enterprise (planned) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
+| V1.2, onboarding (1.2) | Entity setup, delegated admin invitation, branding library, provisioning API, update check. |
+| **V2, enterprise** (2.0, current) | OpenID Connect SSO (Entra ID), auditor role, proof of deposit and delivery, entity configuration export and import, permanent deposit links, signed image with SBOM, command line client, link-only option without email, optional end-to-end encryption, compliance kit. |
 
-The API reserves the paths and fields of these later scopes, so they are planned as minor
-versions (1.x): a new major version is released only for an incompatible change. A release is
+Version 2.0 marks the enterprise scope. It stays compatible with 1.x: the API is still `/api/v1`
+with additions only, the configuration and the data are migrated automatically, and an
+upgrade from 1.2 needs no change ([upgrade guide](docs/operations/upgrade.md)). Next planned
+scope: V2.1, one-time secret sharing. A release is
 the commit tagged `vX.Y.Z`; `make build` and `make docker` take the version from that tag.
 
 ## Security

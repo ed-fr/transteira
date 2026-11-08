@@ -20,10 +20,14 @@ de chaque écran et par l’icône « ? » à côté du titre des écrans comple
 - [Delegated administrator guide](en/delegated-admin.md): for the administrators of one or more
   entities: sign-in and two-factor authentication, entity configuration (branding, network, SMTP,
   email templates, legal texts) and operations (transfers, invitations, blocklist, API tokens,
-  audit log, statistics, personal data).
+  audit log, security log, statistics, personal data).
 - [Super administrator guide](en/super-admin.md): for the operator of the instance: first launch,
   entities and administrator accounts, system screens, maintenance mode, disk alert, global audit
-  log and master key rotation.
+  log, global security log and master key rotation.
+- [Auditor guide](en/auditor.md): for the read-only role (a security officer or an audit): activating
+  the account, signing in with a password and a second factor or with single sign-on, and
+  consulting the summary, audit log, security log, statistics, transfers with their proofs and drop
+  links of the entities attached to the account.
 
 ## Français
 
@@ -40,7 +44,11 @@ de chaque écran et par l’icône « ? » à côté du titre des écrans comple
   de blocage, jetons d’API, journal d’audit, statistiques, données personnelles).
 - [Guide du super administrateur](fr/super-admin.md) : pour l’exploitant de l’instance : premier
   lancement, entités et comptes administrateurs, écrans du système, mode maintenance, alerte
-  d’espace disque, journal d’audit global et rotation de la clé maître.
+  d’espace disque, journal d’audit global, journal de sécurité global et rotation de la clé maître.
+- [Guide de l’auditeur](fr/auditor.md) : pour le rôle en lecture seule (RSSI ou audit) : activation
+  du compte, connexion par mot de passe et second facteur ou par authentification unique, et
+  consultation du résumé, du journal d’audit, du journal de sécurité, des statistiques, des
+  transferts et de leurs preuves, et des liens de dépôt des entités rattachées au compte.
 
 ## Screenshots / Captures d’écran
 

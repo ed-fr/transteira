@@ -44,11 +44,21 @@ const superGuide: HelpGuide = {
     { id: 'key', level: 2, title: 'Master key', topic: 'system-master-key', blocks: [] },
   ],
 };
+const auditorGuide: HelpGuide = {
+  id: 'auditor',
+  title: 'Auditor guide',
+  sections: [
+    { id: 'auditor-guide', level: 1, title: 'Auditor guide', topic: 'auditor', blocks: [] },
+    { id: 'auditor-entities', level: 2, title: 'Entities', topic: 'auditor-tenants', blocks: [] },
+  ],
+};
 const set: HelpGuideSet = {
   lang: 'en',
   app: 'admin',
-  guides: [delegated, superGuide],
+  guides: [delegated, superGuide, auditorGuide],
   topics: {
+    auditor: { guide: 'auditor', section: 'auditor-guide' },
+    'auditor-tenants': { guide: 'auditor', section: 'auditor-entities' },
     'delegated-admin': { guide: 'delegated-admin', section: 'delegated-admin-guide' },
     tenants: { guide: 'delegated-admin', section: 'entities' },
     'tenant-network': { guide: 'delegated-admin', section: 'network' },
@@ -61,13 +71,14 @@ const set: HelpGuideSet = {
 describe('guides offered', () => {
   it('splits the guides between the applications', () => {
     expect(PUBLIC_GUIDES).toEqual(['depositor', 'recipient']);
-    expect(ADMIN_GUIDES).toEqual(['delegated-admin', 'super-admin']);
+    expect(ADMIN_GUIDES).toEqual(['delegated-admin', 'super-admin', 'auditor']);
   });
 
-  it('hides the super-admin guide from a signed-in delegated admin only', () => {
+  it('offers each signed-in role its own guide, and every guide to a super admin or a visitor', () => {
     expect(adminGuides('super_admin')).toEqual(ADMIN_GUIDES);
     expect(adminGuides(undefined)).toEqual(ADMIN_GUIDES);
     expect(adminGuides('delegated_admin')).toEqual(['delegated-admin']);
+    expect(adminGuides('auditor')).toEqual(['auditor']);
     expect(visibleGuides(set, ['delegated-admin'])).toEqual([delegated]);
   });
 });
@@ -76,7 +87,7 @@ describe('resolveHelp', () => {
   it('shows the index without a topic', () => {
     expect(resolveHelp(set, undefined, ADMIN_GUIDES)).toEqual({
       kind: 'index',
-      guides: [delegated, superGuide],
+      guides: [delegated, superGuide, auditorGuide],
     });
     expect(resolveHelp(set, '', ADMIN_GUIDES)).toMatchObject({ kind: 'index' });
   });
@@ -93,7 +104,7 @@ describe('resolveHelp', () => {
     for (const topic of ['nope', 'toString', '__proto__', 'broken']) {
       expect(resolveHelp(set, topic, ADMIN_GUIDES)).toEqual({
         kind: 'index',
-        guides: [delegated, superGuide],
+        guides: [delegated, superGuide, auditorGuide],
         unknownTopic: topic,
       });
     }
@@ -102,6 +113,36 @@ describe('resolveHelp', () => {
       guides: [delegated],
       unknownTopic: 'system-master-key',
     });
+  });
+});
+
+describe('resolveHelp for an auditor', () => {
+  const allowed = adminGuides('auditor');
+
+  it('opens the auditor counterpart of a topic of the delegated-admin guide', () => {
+    expect(resolveHelp(set, 'tenants', allowed)).toEqual({
+      kind: 'guide',
+      guide: auditorGuide,
+      section: auditorGuide.sections[1],
+    });
+    expect(resolveHelp(set, 'auditor-tenants', allowed)).toMatchObject({
+      kind: 'guide',
+      guide: auditorGuide,
+    });
+  });
+
+  it('does not leak the other guides: no counterpart means the index', () => {
+    expect(resolveHelp(set, 'tenant-network', allowed)).toEqual({
+      kind: 'index',
+      guides: [auditorGuide],
+      unknownTopic: 'tenant-network',
+    });
+    expect(resolveHelp(set, 'system-master-key', allowed)).toMatchObject({ kind: 'index' });
+  });
+
+  it('keeps the delegated-admin guide for the other roles', () => {
+    expect(resolveHelp(set, 'tenants', ['delegated-admin'])).toMatchObject({ guide: delegated });
+    expect(resolveHelp(set, 'tenants', ADMIN_GUIDES)).toMatchObject({ guide: delegated });
   });
 });
 

@@ -324,6 +324,12 @@ Le formulaire affiche ensuite le service auquel les fichiers seront envoyés, sa
 
 Si la page indique que le lien est introuvable, il est incomplet, désactivé, révoqué ou remplacé par un nouveau : demandez-en l’adresse actuelle à la personne qui vous l’a donné.
 
+## Envoyer depuis un script
+
+Pour envoyer des fichiers automatiquement (un export nocturne, un outil qui dépose des fichiers), le formulaire de transfert n’est pas nécessaire : demandez un **jeton d’API** à l’administrateur de votre entité. Un jeton permet à un script de déposer des fichiers sans qu’une personne vérifie une adresse, dans les limites fixées par l’administrateur (adresses réseau et expéditeurs autorisés).
+
+Votre administrateur peut aussi vous fournir le client en ligne de commande `transteira-cli`, qui dépose et télécharge depuis un terminal ou un script, avec le jeton, et reprend de lui-même un envoi interrompu. Ses binaires sont publiés avec chaque version sur GitHub, avec une signature à vérifier avant de les exécuter. Le guide complet est `docs/api/cli.md` dans le dépôt TransTeira. Ne collez jamais un jeton dans un message ou un document partagé : il donne le même accès qu’un script de votre entité.
+
 <!-- topic: deposit-problems -->
 ## Problèmes courants
 

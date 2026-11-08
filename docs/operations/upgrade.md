@@ -11,6 +11,34 @@ files of your deployment: add `-f deploy/docker-compose.postgres.yml` with
 PostgreSQL (and any file of your own), or set `COMPOSE_FILE` in
 `deploy/.env` and run `docker compose` from `deploy/`.
 
+## From 1.2 to 2.0
+
+Version 2.0 stays compatible with 1.2: follow the usual procedure below. What
+to know:
+
+- **Database**: migrations 0026 to 0032 are applied automatically at start-up
+  (auditor role, security events, single sign-on, proofs, drop links, link-only
+  and end-to-end options). With PostgreSQL, the owner role grants the runtime
+  role its rights on the new tables, as after every migration. As always, take
+  the database copy first: rolling back to 1.2 means restoring it.
+- **Configuration**: no variable is required. `TT_SSO_USE_PROXY` and
+  `TT_SSO_ALLOW_NETWORKS` (see `.env.example`) only matter if you configure
+  single sign-on with a provider behind a proxy or on a private network.
+- **Behaviour**: nothing changes until an administrator turns it on. Link-only
+  transfers are off and end-to-end encryption is forbidden by default for every
+  entity; single sign-on, auditors and drop links do not exist until created.
+  The proof signing key is created when the first proof is written (after the
+  first deposit is analysed); it is sealed by the master key.
+- **Integrations**: copy again the reverse proxy configuration
+  ([`integrations/reverse-proxy/`](../../integrations/reverse-proxy/README.md))
+  and the fail2ban or CrowdSec files you use: 2.0 bans repeated invalid drop
+  links (`drop_link_invalid`), masks the secret of the drop
+  link paths (`/drop/`) in the proxy access logs, and the ban rules ignore the
+  hourly deposit cap of a drop link (`scope="drop_link"`), a limit of the link,
+  not of the client.
+- **Image**: from 2.0, the image is published signed: verify it and pin it by
+  digest (see [Before the upgrade](#before-the-upgrade)).
+
 ## Before the upgrade
 
 1. **Read the [CHANGELOG](../../CHANGELOG.md)** for every version between

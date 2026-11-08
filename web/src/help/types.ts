@@ -7,7 +7,7 @@
 // build script (no runtime import between the two, so no file extension is needed).
 
 /** Identifier of a user guide: one guide per profile, same file name in every language. */
-export type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin';
+export type GuideId = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin' | 'auditor';
 
 /** Application that shows a guide: the public application or the administration. */
 export type HelpApp = 'public' | 'admin';

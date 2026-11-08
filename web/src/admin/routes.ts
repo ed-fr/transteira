@@ -324,7 +324,7 @@ export const routes: readonly AdminRoute[] = [
     component: SecurityLog,
     titleKey: 'adminOps.security.title',
     access: 'auth',
-    helpTopic: 'tenant-audit',
+    helpTopic: 'tenant-security-log',
     tenantNav: true,
   },
   {
@@ -409,7 +409,7 @@ export const routes: readonly AdminRoute[] = [
     component: GlobalSecurityLog,
     titleKey: 'adminSystem.security.title',
     access: 'super',
-    helpTopic: 'system-audit',
+    helpTopic: 'system-security-log',
     systemNav: true,
   },
   {

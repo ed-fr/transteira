@@ -73,10 +73,15 @@ interface ScreenshotData {
   activation: string;
   /** Password of the activated delegated admin of entities A and B (list of entities). */
   multiDelegatePassword: string;
+  /** Password of the activated auditor of entity A (read-only screens). */
+  auditorPassword: string;
 }
 
 /** Delegated admin of both entities: the list of entities is only shown with several. */
 const MULTI_DELEGATE = 'morgan';
+
+/** Auditor of entity A (read-only role). */
+const AUDITOR = 'robin';
 
 const DATA_FILE = path.join(RUN_DIR, 'screenshots-data.json');
 
@@ -286,15 +291,61 @@ async function createData(): Promise<ScreenshotData> {
     throw new Error(`activation -> ${activated.status} ${activated.text.slice(0, 300)}`);
   }
 
+  // An auditor of entity A, activated through the API (no second factor).
+  const auditor = await api.ok<{ activationUrl: string }>(
+    'POST',
+    '/admin/admins',
+    { username: AUDITOR, email: 'robin@example.com', role: 'auditor', tenantIds: [a], requireTotp: false },
+    [201],
+  );
+  const auditorPassword = `screenshots-${crypto.randomBytes(12).toString('base64url')}`;
+  const auditorActivated = await request(s.serverPort, 'POST', '/api/v1/admin/activation', {
+    body: { activationToken: new URL(auditor.activationUrl).hash.slice(1), password: auditorPassword },
+    headers: { Origin: ORIGINS.admin, 'Sec-Fetch-Site': 'same-origin' },
+  });
+  if (auditorActivated.status < 200 || auditorActivated.status >= 300) {
+    throw new Error(
+      `auditor activation -> ${auditorActivated.status} ${auditorActivated.text.slice(0, 300)}`,
+    );
+  }
+
+  // Security events of entity A for the security log screen: invalid API tokens (coalesced into
+  // one row), a deposit from outside the ranges, a wrong transfer password. Written to the
+  // database by the recorder within a few seconds, long before the screens are captured.
+  for (let i = 0; i < 3; i++) {
+    await request(s.serverPort, 'POST', '/api/v1/transfers', {
+      host: HOSTS.a,
+      clientIp: CLIENT_IP.api,
+      headers: { Authorization: 'Bearer tt_invalid_token_for_the_screenshots' },
+      body: {},
+    });
+  }
+  await request(s.serverPort, 'POST', '/api/v1/deposit-sessions', {
+    host: HOSTS.a,
+    clientIp: '203.0.113.7',
+    body: { email: API_SENDER },
+  });
+  const downloadPassword = await recipientPath(protectedTransfer, 'erin@example.net');
+  const protectedToken = /\/d\/([^/?#]+)/.exec(downloadPassword)?.[1];
+  if (protectedToken !== undefined) {
+    await request(s.serverPort, 'POST', `/api/v1/downloads/${protectedToken}/unlock`, {
+      host: HOSTS.a,
+      clientIp: CLIENT_IP.public,
+      body: { password: 'wrong password' },
+      headers: { Origin: ORIGINS.a, 'Sec-Fetch-Site': 'same-origin' },
+    });
+  }
+
   return {
     download,
     downloadVerify,
     transferId,
-    downloadPassword: await recipientPath(protectedTransfer, 'erin@example.net'),
+    downloadPassword,
     invitation,
     dropLink,
     activation: pathOf(created.activationUrl),
     multiDelegatePassword,
+    auditorPassword,
   };
 }
 
@@ -927,6 +978,7 @@ test.describe('delegated admin', () => {
     ['admin-blocklist', () => 'blocklist', 'adminOps.blocklist.title'],
     ['admin-tokens', () => 'tokens', 'adminOps.tokens.title'],
     ['admin-audit', () => 'audit', 'adminOps.audit.title'],
+    ['admin-security-log', () => 'security-events', 'adminOps.security.title'],
     ['admin-stats', () => 'stats', 'adminOps.stats.title'],
   ];
 
@@ -962,6 +1014,36 @@ test.describe('delegated admin', () => {
       // The view of a delegated admin: no creation link, no Administrators or System menu.
       await expect(page.getByRole('link', { name: msg(lang, 'adminTenants.list.create') })).toHaveCount(0);
       await shoot(page, lang, 'admin-tenants');
+    }
+  });
+
+  test('screens of an auditor', async ({ newContext, state }) => {
+    test.setTimeout(120_000);
+    for (const lang of LANGS) {
+      // Signed in as the auditor of entity A (its own context, not the shared delegated one).
+      const page = await openPage(newContext, lang);
+      await page.goto(`${ORIGINS.admin}/admin/login`);
+      await heading(page, lang, 'adminAuth.login.title');
+      await page.getByLabel(startsWith(msg(lang, 'adminAuth.login.username.label'))).fill(AUDITOR);
+      await page
+        .getByLabel(startsWith(msg(lang, 'adminAuth.login.password.label')))
+        .fill(data.auditorPassword);
+      await page.getByRole('button', { name: msg(lang, 'adminAuth.login.submit'), exact: true }).click();
+      await heading(page, lang, 'admin.home.title');
+      // The card of the entity with its figures and the read-only links (security log included).
+      await expect(
+        page.getByRole('link', {
+          name: msg(lang, 'adminHome.links.security', { name: state.tenants.a.name }),
+        }),
+      ).toBeVisible();
+      await shoot(page, lang, 'admin-home-auditor');
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/transfers/${data.transferId}`);
+      await heading(page, lang, 'adminOps.transfers.detailTitle');
+      // No resend or delete action for an auditor.
+      await expect(
+        page.getByRole('heading', { name: msg(lang, 'opsTransfers.detail.actionsTitle') }),
+      ).toHaveCount(0);
+      await shoot(page, lang, 'admin-transfer-detail-auditor');
     }
   });
 

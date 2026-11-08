@@ -43,6 +43,10 @@
 #   DOCKER, MAKE       commands (default docker, make)
 set -euo pipefail
 
+# A COSIGN_PASSWORD exported by the caller stays a shell variable of this script: only the
+# cosign() wrapper below passes it on, never docker, make, syft or git.
+export -n COSIGN_PASSWORD
+
 cd "$(git rev-parse --show-toplevel)"
 ROOT="$(pwd -P)"
 

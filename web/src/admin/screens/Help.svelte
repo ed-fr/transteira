@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Integrated help of the administration (CLAUDE.md section 4.2): the delegated-admin guide, and
-  // the super-admin guide for a super admin or a visitor not signed in (first-run setup, sign-in,
-  // activation), never for a signed-in delegated admin (src/help/HelpScreen.svelte).
+  // Integrated help of the administration (CLAUDE.md section 4.2): each signed-in role gets its
+  // own guide (delegated admin: delegated-admin; auditor: auditor, where a topic of a screen opens
+  // its auditor-<topic> counterpart); a super admin and a visitor not signed in (first-run setup,
+  // sign-in, activation) get all three (adminGuides, src/help/HelpScreen.svelte).
   import HelpScreen from '../../help/HelpScreen.svelte';
   import { loadAdminGuides } from '../../help/adminGuides';
   import { adminGuides } from '../../help/help';

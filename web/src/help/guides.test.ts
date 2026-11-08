@@ -4,9 +4,11 @@
 // every contextual help icon (HelpIcon) uses the topic of a route of its application.
 import { describe, expect, it } from 'vitest';
 import manifestEntries from '../../../docs/user/screenshots/manifest.json';
+import { auditorRedirect } from '../admin/auth/guard';
 import { notFoundRoute as adminNotFound, routes as adminRoutes } from '../admin/routes';
 import { notFoundRoute as publicNotFound, routes as publicRoutes } from '../public/routes';
 import { GUIDE_APPS, GUIDE_IDS, HELP_LANGUAGES, buildHelp, formatError, type GuideSource } from './build';
+import { AUDITOR_TOPIC_PREFIX } from './help';
 import type { GuideId, HelpGuideSet } from './types';
 
 const DOCS = '../../../docs/user/';
@@ -29,6 +31,11 @@ const { sets, errors } = buildHelp(sources, {
   manifest,
   imageExists: (lang, name) => images.has(`${DOCS}screenshots/${lang}/${name}.png`),
 });
+
+/** Reports whether an auditor may open the route (it is not redirected away from it). */
+function auditorOpens(pattern: string): boolean {
+  return auditorRedirect(pattern.replace(':id', 'ten_1').replace(':transferId', 'trf_1')) === undefined;
+}
 
 function topicGuide(set: HelpGuideSet | undefined, topic: string): GuideId | undefined {
   return set !== undefined && Object.hasOwn(set.topics, topic) ? set.topics[topic]?.guide : undefined;
@@ -59,6 +66,24 @@ describe('user guides', () => {
           problems.push(`${route.pattern}: topic ${route.helpTopic} missing`);
         } else if (route.access !== 'super' && route.access !== 'setup' && guide !== 'delegated-admin') {
           problems.push(`${route.pattern}: topic ${route.helpTopic} must be in the delegated-admin guide`);
+        }
+      }
+      expect(problems).toEqual([]);
+    },
+  );
+
+  it.each(HELP_LANGUAGES)(
+    'give an auditor a counterpart of the topic of every screen it can open (%s)',
+    (lang) => {
+      const set = sets.find((s) => s.lang === lang && s.app === 'admin');
+      const problems: string[] = [];
+      for (const route of adminRoutes) {
+        const topic = route.helpTopic;
+        if (topic === undefined || route.access !== 'auth' || !auditorOpens(route.pattern)) continue;
+        if (topicGuide(set, `${AUDITOR_TOPIC_PREFIX}${topic}`) !== 'auditor') {
+          problems.push(
+            `${route.pattern}: topic ${AUDITOR_TOPIC_PREFIX}${topic} missing in the auditor guide`,
+          );
         }
       }
       expect(problems).toEqual([]);

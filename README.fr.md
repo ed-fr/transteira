@@ -3,13 +3,14 @@
 [English](README.md) | **Français**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 
 **TransTeira** est un service de transfert de fichiers volumineux, auto-hébergé et multi-tenant, dans
 l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composées de plusieurs entités.
 
-> **Statut : stable.** La version 1.2.1 livre le périmètre V1 (le cœur), le périmètre V1.1
-> (l'exploitation) et le périmètre V1.2 (la mise en service) ; voir [Versions](#versions) pour la suite.
+> **Statut : stable.** La version 2.0.0 livre le périmètre V1 (le cœur), le périmètre V1.1
+> (l'exploitation), le périmètre V1.2 (la mise en service) et le périmètre V2 (l'entreprise) ;
+> voir [Versions](#versions).
 
 ## Points forts
 
@@ -77,6 +78,25 @@ l'esprit de WeTransfer ou SwissTransfer, conçu pour les organisations composée
 - **Mises à jour (V1.2)** : la version en cours d'exécution s'affiche dans l'administration, et le
   super admin est prévenu lorsqu'une version plus récente existe (vérification quotidienne, jamais de
   mise à jour automatique ; `TT_UPDATE_CHECK=false` coupe toute connexion sortante).
+- **Authentification unique (V2)** : OpenID Connect par entité pour les admins délégués et les
+  auditeurs (Microsoft Entra ID, Keycloak), comptes créés au préalable par le super admin, connexion
+  par mot de passe refusable par entité ; le super admin garde toujours son compte local avec TOTP
+  ([guide](docs/operations/fr/sso.md)).
+- **Rôle auditeur (V2)** : accès en lecture seule au journal d'audit, aux événements de sécurité,
+  aux statistiques et aux transferts d'une ou plusieurs entités, pour un RSSI ou un audit ISO 27001.
+- **Preuves (V2)** : preuves de dépôt et de remise en PDF signées par l'instance (Ed25519),
+  vérifiables hors ligne ([guide](docs/operations/fr/proofs.md)).
+- **Autres façons de partager (V2)** : liens de dépôt permanents pour collecter des fichiers auprès
+  de tiers, transferts par lien seul sans mail, export et import de la configuration d'une entité.
+- **Chiffrement de bout en bout en option (V2)** : fichiers chiffrés dans le navigateur de
+  l'expéditeur, la clé n'atteint jamais le serveur (l'analyse antivirus est alors impossible, et la
+  page de téléchargement l'indique) ; autorisé, imposé ou interdit par entité et par niveau de
+  confidentialité.
+- **Client en ligne de commande (V2)** : `transteira-cli` pour déposer et télécharger depuis des
+  scripts, avec reprise automatique ([guide](docs/api/cli.md)).
+- **Publications signées (V2)** : image multi-architecture signée avec cosign et publiée avec son
+  SBOM ; kit de conformité avec une fiche de registre des traitements RGPD et une correspondance
+  avec l'annexe A de l'ISO 27001 ([docs/compliance](docs/compliance/fr/README.md)).
 
 ## Comment ça marche
 
@@ -236,7 +256,7 @@ pour Docker.
 ## Documentation
 
 - [Guides utilisateur](docs/user/README.md), en anglais et en français, un par profil : déposant,
-  destinataire, administrateur délégué et super administrateur. Les mêmes guides sont intégrés à
+  destinataire, administrateur délégué, auditeur et super administrateur. Les mêmes guides sont intégrés à
   l'application comme aide intégrée (`/help` sur chaque hôte d'entité, `/admin/help` sur l'hôte
   d'administration), avec un lien d'aide dans le pied de page et des icônes d'aide contextuelle sur
   les écrans complexes.
@@ -254,6 +274,10 @@ pour Docker.
 - [Structure du projet](docs/architecture/project-structure.md)
 - [Interface web](web/README.md) : build, boucle de développement, politique de dépendances, règles CSP
 - [Modèle de menaces (STRIDE)](docs/security/threat-model.md)
+- [Kit de conformité](docs/compliance/fr/README.md) : fiche de registre des traitements RGPD et
+  correspondance avec l'annexe A de l'ISO/IEC 27001:2022
+- [Publication](docs/operations/release.md) (mainteneurs, en anglais) : étiquette signée,
+  `make release`, signatures et SBOM
 
 Installation :
 
@@ -339,12 +363,14 @@ cours est renvoyée par `/api/v1/version` et `/healthz` et affichée par `transt
 |---|---|
 | V1, le cœur (1.0) | Fonctionnalités de base de transfert, de sécurité, d'administration et d'API. |
 | V1.1, l'exploitation (1.1) | Supervision, détection des abus, maîtrise du partage, « Mes envois », mode sombre, moteurs antivirus. |
-| **V1.2, la mise en service** (1.2, actuelle) | Tout ce qui est décrit ci-dessus. |
-| V2, l'entreprise (prévue) | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise, export et import de configuration d'entité, liens de dépôt permanents, image signée avec SBOM, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option, kit de conformité. |
+| V1.2, la mise en service (1.2) | Mise en service des entités, invitation des admins délégués, bibliothèque d'images, API de provisionnement, vérification des mises à jour. |
+| **V2, l'entreprise** (2.0, actuelle) | SSO OpenID Connect (Entra ID), rôle auditeur, preuve de dépôt et de remise, export et import de configuration d'entité, liens de dépôt permanents, image signée avec SBOM, client en ligne de commande, option lien seul sans mail, chiffrement de bout en bout en option, kit de conformité. |
 
-L'API réserve les chemins et les champs de ces périmètres ultérieurs, ils sont donc prévus comme
-versions mineures (1.x) : une nouvelle version majeure n'est publiée que pour un changement
-incompatible. Une version est le commit étiqueté `vX.Y.Z` ; `make build` et `make docker` prennent
+La version 2.0 marque le périmètre entreprise. Elle reste compatible avec la 1.x : l'API est
+toujours `/api/v1`, avec des ajouts seulement, la configuration et les données sont migrées
+automatiquement, et la mise à jour depuis la 1.2 ne demande aucun changement
+([guide de mise à jour](docs/operations/upgrade.md)). Prochain périmètre prévu : V2.1, partage de
+secrets à usage unique. Une version est le commit étiqueté `vX.Y.Z` ; `make build` et `make docker` prennent
 la version depuis cette étiquette.
 
 ## Sécurité

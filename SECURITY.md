@@ -23,13 +23,16 @@ remain anonymous.
 
 | Version | Supported |
 |---|---|
-| 1.2.x | Yes |
+| 2.0.x | Yes |
+| 1.2.x | No |
 | 1.1.x | No |
 | 1.0.x | No |
 | < 1.0 (development builds `0.0.0-dev`) | No |
 
-Security fixes are provided for the latest minor version only, as patch releases (1.2.1,
-1.2.2...): when 1.3.0 is released, 1.2.x stops receiving fixes. Always run the latest patch
+Security fixes are provided for the latest minor version only, as patch releases (2.0.1,
+2.0.2...): when 2.1.0 is released, 2.0.x stops receiving fixes. 1.2.x no longer receives fixes:
+upgrade to 2.0, which needs no configuration change (see
+[Upgrade](docs/operations/upgrade.md#from-12-to-20)). Always run the latest patch
 release of the supported version.
 
 Only the provided deployment (`deploy/`, `integrations/`) is supported. The third-party images it

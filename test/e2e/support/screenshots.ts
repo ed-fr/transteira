@@ -11,7 +11,7 @@ import { REPO_ROOT } from './env';
 import type { Lang } from './i18n';
 
 /** Profile of the user guide a screenshot belongs to. */
-export type Profile = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin';
+export type Profile = 'depositor' | 'recipient' | 'delegated-admin' | 'super-admin' | 'auditor';
 
 /** One screenshot of the catalog. */
 export interface ScreenshotEntry {
@@ -155,6 +155,11 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'delegated-admin',
   },
   { name: 'admin-audit', screen: 'admin /admin/tenants/:id/audit', profile: 'delegated-admin' },
+  {
+    name: 'admin-security-log',
+    screen: 'admin /admin/tenants/:id/security-events',
+    profile: 'delegated-admin',
+  },
   { name: 'admin-stats', screen: 'admin /admin/tenants/:id/stats', profile: 'delegated-admin' },
   {
     name: 'admin-privacy',
@@ -171,6 +176,13 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     name: 'admin-tenants',
     screen: 'admin /admin/tenants (delegated admin of two entities)',
     profile: 'delegated-admin',
+  },
+  // Auditor (read-only role, entity A).
+  { name: 'admin-home-auditor', screen: 'admin /admin/ (auditor)', profile: 'auditor' },
+  {
+    name: 'admin-transfer-detail-auditor',
+    screen: 'admin /admin/tenants/:id/transfers/:transferId (auditor: no action)',
+    profile: 'auditor',
   },
   // Super admin.
   { name: 'admin-home-super', screen: 'admin /admin/', profile: 'super-admin' },
