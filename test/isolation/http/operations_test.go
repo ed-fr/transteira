@@ -894,10 +894,11 @@ func stillStub(t *testing.T, h *harness, op operation) {
 	t.Helper()
 	for _, host := range []string{hostA, hostB} {
 		resp := h.send(t, op, host)
-		if resp.status == http.StatusUnauthorized && strings.HasPrefix(op.template, "/me/") {
-			// A "My transfers" stub is behind the session middleware, which
-			// refuses the request without session before the stub, the same
-			// way under every tenant.
+		if resp.status == http.StatusUnauthorized && (strings.HasPrefix(op.template, "/me/") || strings.HasPrefix(op.template, "/secrets")) {
+			// A "My transfers" stub, or a creator operation of the one-time
+			// secrets (deposit session or API token), is behind the
+			// credential middleware, which refuses the request without
+			// credential before the stub, the same way under every tenant.
 			continue
 		}
 		if resp.status != http.StatusNotFound {

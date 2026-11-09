@@ -45,6 +45,8 @@
     "access_link_invalid": "Lien d’accès invalide",
     "provisioning_token_invalid": "Jeton de provisionnement invalide",
     "sso_failed": "Échec de l’authentification unique",
-    "drop_link_invalid": "Lien de dépôt invalide"
+    "drop_link_invalid": "Lien de dépôt invalide",
+    "secret_invalid": "Lien de secret inconnu",
+    "secret_proof_invalid": "Preuve de secret incorrecte"
   }
 }

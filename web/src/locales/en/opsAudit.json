@@ -65,7 +65,8 @@
     "provisioning_token": "Provisioning token",
     "drop_link": "Drop link",
     "admin_identity": "Sign-in identity",
-    "proof_key": "Proof signing key"
+    "proof_key": "Proof signing key",
+    "secret": "Secret"
   },
   "groups": {
     "transfers": "Transfers",
@@ -79,7 +80,8 @@
     "tenant": "Entity configuration",
     "accounts": "Administrators and sign-in",
     "instance": "Instance",
-    "dropLinks": "Drop links"
+    "dropLinks": "Drop links",
+    "secrets": "One-time secrets"
   },
   "actions": {
     "transfer": {
@@ -230,6 +232,16 @@
     "proof_key": {
       "created": "Proof signing key created",
       "retired": "Proof signing key retired"
+    },
+    "secret": {
+      "created": "Secret created",
+      "sent": "Secret link mailed",
+      "revealed": "Secret read",
+      "file_downloaded": "Secret file downloaded",
+      "expired": "Secret expired unread",
+      "deleted": "Secret deleted",
+      "locked": "Secret locked after wrong proofs",
+      "settings_updated": "Secrets settings updated"
     }
   }
 }

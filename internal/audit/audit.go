@@ -284,6 +284,30 @@ const (
 	// ActionProofKeyRetired: the active proof signing key was retired and its
 	// private part destroyed (system, without tenant; since 2.0).
 	ActionProofKeyRetired Action = "proof_key.retired"
+	// ActionSecretCreated: a one-time secret was created (since 2.1); details
+	// carry the delivery, whether it has a file and the creator kind, never
+	// the content, the key, the proof, the verifier or the token.
+	ActionSecretCreated Action = "secret.created"
+	// ActionSecretSent: the link of an e-mail secret was mailed to its
+	// recipient (since 2.1); details carry the delivery and the recipient,
+	// never the key of the link fragment.
+	ActionSecretSent Action = "secret.sent"
+	// ActionSecretRevealed: a secret was read (since 2.1).
+	ActionSecretRevealed Action = "secret.revealed"
+	// ActionSecretFileDownloaded: the file of a secret was downloaded with its
+	// one-time grant (since 2.1).
+	ActionSecretFileDownloaded Action = "secret.file_downloaded"
+	// ActionSecretExpired: a secret reached its expiry unread (since 2.1).
+	ActionSecretExpired Action = "secret.expired"
+	// ActionSecretDeleted: a secret was deleted by its creator or an admin,
+	// the actor telling which (since 2.1).
+	ActionSecretDeleted Action = "secret.deleted"
+	// ActionSecretLocked: a secret was locked after 5 wrong proofs and its
+	// content destroyed (since 2.1).
+	ActionSecretLocked Action = "secret.locked"
+	// ActionSecretSettingsUpdated: the one-time secrets settings of a tenant
+	// were changed; details hold member names only (since 2.1).
+	ActionSecretSettingsUpdated Action = "secret.settings_updated"
 )
 
 // ActorAntivirus is the system actor (store.ActorSystem) of the events of
@@ -350,6 +374,9 @@ const (
 	ObjectAdminIdentity = "admin_identity"
 	// ObjectProofKey is a proof signing key (object ID: its "psk_" ID).
 	ObjectProofKey = "proof_key"
+	// ObjectSecret is a one-time secret (object ID: its "sec_" ID, never the
+	// token; since 2.1).
+	ObjectSecret = "secret"
 	// ObjectWebhook is a webhook (object ID: its "whk_" ID, never its URL).
 	ObjectWebhook = "webhook"
 )

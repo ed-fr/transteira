@@ -66,6 +66,14 @@ var setupDecisions = map[string]setupDecision{
 	"createInvitation":             setupRefused,
 	"getInvitation":                setupRefused,
 	"getPublicDropLink":            setupRefused,
+	"createSecret":                 setupRefused,
+	"uploadSecretFile":             setupRefused,
+	"sendSecret":                   setupRefused,
+	"getSecretLink":                setupRefused,
+	"revealSecret":                 setupRefused,
+	"downloadSecretFile":           setupRefused,
+	"listMySecrets":                setupRefused,
+	"deleteMySecret":               setupRefused,
 	"getMyTransferProof":           setupRefused,
 	"reissueMyTransferLink":        setupRefused,
 	"getDownload":                  setupRefused,
@@ -183,8 +191,11 @@ func sendOperation(t *testing.T, e *env, op setupOperation) (int, http.Header, s
 	if op.id == "getMyTransferProof" {
 		target += "?kind=deposit" // required query parameter
 	}
-	rec := e.do(t, op.method, target, hostA, body,
-		"Content-Type", ct, "Tus-Resumable", "1.0.0", "Upload-Offset", "0")
+	headers := []string{"Content-Type", ct, "Tus-Resumable", "1.0.0", "Upload-Offset", "0"}
+	if op.id == "downloadSecretFile" {
+		headers = append(headers, "TransTeira-Secret-Grant", "ttg_"+strings.Repeat("x", 43)) // required header
+	}
+	rec := e.do(t, op.method, target, hostA, body, headers...)
 	return rec.Code, rec.Header(), rec.Body.String()
 }
 

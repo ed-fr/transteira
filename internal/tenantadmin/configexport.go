@@ -43,12 +43,27 @@ type ConfigExport struct {
 	RecipientRules        *ExportedRecipientRules  `json:"recipientRules,omitempty"`
 	ConfidentialityLevels *ExportedLevelList       `json:"confidentialityLevels,omitempty"`
 	AbuseThresholds       *ExportedAbuseThresholds `json:"abuseThresholds,omitempty"`
+	// SecretSettings are the one-time secrets settings (since 2.1; refused on
+	// import, with the interim not-supported, until the module is
+	// implemented).
+	SecretSettings *ExportedSecretSettings `json:"secretSettings,omitempty"`
 	// EmailTemplates are the customized templates only.
 	EmailTemplates []ExportedTemplate      `json:"emailTemplates,omitempty"`
 	LegalDocuments []ExportedLegalDocument `json:"legalDocuments,omitempty"`
 	// Webhooks are informative: never imported.
 	Webhooks  []ExportedWebhook        `json:"webhooks,omitempty"`
 	Blocklist []ExportedBlocklistEntry `json:"blocklist,omitempty"`
+}
+
+// ExportedSecretSettings are the one-time secrets settings of a tenant
+// (OpenAPI SecretSettings, since 2.1).
+type ExportedSecretSettings struct {
+	Enabled         bool     `json:"enabled"`
+	Durations       []string `json:"durations"`
+	DefaultDuration *string  `json:"defaultDuration,omitempty"`
+	FileAllowed     bool     `json:"fileAllowed"`
+	FileMaxBytes    int64    `json:"fileMaxBytes"`
+	EmailAllowed    bool     `json:"emailAllowed"`
 }
 
 // ExportedSettings are the general settings of a tenant, without its

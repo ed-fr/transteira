@@ -76,6 +76,14 @@ const (
 	// DropLinkInvalid: an unknown, revoked or disabled permanent drop link was
 	// presented (since 2.0).
 	DropLinkInvalid EventType = "drop_link_invalid"
+	// SecretInvalid: an unknown (or foreign-tenant) one-time secret token was
+	// presented on a secret link operation (since 2.1). The token is never
+	// written.
+	SecretInvalid EventType = "secret_invalid"
+	// SecretProofInvalid: a wrong reveal proof was presented for an active
+	// one-time secret (since 2.1); field reason=key|passphrase. Neither the token
+	// nor the proofs are written.
+	SecretProofInvalid EventType = "secret_proof_invalid"
 )
 
 // Well-known field keys.
@@ -119,6 +127,14 @@ const (
 	ReasonBlocklist = "blocklist"
 	// ReasonInvitation: missing, unknown or expired invitation.
 	ReasonInvitation = "invitation"
+)
+
+// Well-known values of the reason field of SecretProofInvalid (since 2.1).
+const (
+	// ReasonKey: wrong key proof (the key of the link fragment is wrong).
+	ReasonKey = "key"
+	// ReasonPassphrase: right key proof, wrong passphrase proof.
+	ReasonPassphrase = "passphrase"
 )
 
 // Well-known values of the reason field of SSOFailed (since 2.0).

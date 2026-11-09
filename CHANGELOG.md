@@ -6,6 +6,24 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Design of version 2.1, one-time secrets encrypted in the browser (specification section 22.1),
+  not implemented yet: OpenAPI 2.1.0 with the secret operations (`/secrets`,
+  `/secret-links/{secretToken}`, `/me/secrets`, administration list, deletion and settings),
+  answered by the stubs until implemented; migration 0033 on both engines
+  (`docs/architecture/data-model-v2.1.md`); secret format in `docs/architecture/e2e-format.md`
+  section 3.3 (key in the fragment, optional PBKDF2 passphrase, key and passphrase proofs
+  before any reading); threat model sections 6.56 to 6.63 (T-339 to T-375, P69 to P83); new
+  problem codes, audit actions `secret.*` and security events `secret_invalid` and
+  `secret_proof_invalid` (in the fail2ban and CrowdSec rules).
+- **Heads-up for the upgrade to 2.1:** once implemented, the one-time secrets module will be
+  **enabled by default in every entity, existing ones included** (decision P81): each entity
+  gains a channel of small end-to-end encrypted content (text and a file of up to 10 MiB by
+  default) and secret mails sent under its domain. Delegated admins and the super admin can
+  disable it per entity (`enabled` of the secret settings) or restrict it (durations, file,
+  e-mail delivery).
+
 ### Changed
 
 - TransTeira identity in the administration console: the TransTeira symbol as the favicon of the

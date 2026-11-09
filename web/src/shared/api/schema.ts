@@ -803,6 +803,295 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a one-time secret
+         * @description Since 2.1. Declares a secret sealed in the browser of the creator (see "Version 2.1
+         *     additions"): the server receives the sealed text, the verifiers of the reveal proofs and
+         *     the public parameters of the optional passphrase, never the key nor the plaintext. The
+         *     creator is a deposit session (internal user, internal user from outside when the tenant
+         *     allows it, or an external with a valid invitation) or an API token, authenticated and
+         *     checked exactly as for `createTransfer` (unknown, revoked or expired token:
+         *     `401 invalid-credentials`; client IP outside `allowedCidrs`: `403 ip-not-allowed`; with
+         *     an API token `senderEmail` is mandatory, internal and not blocklisted, and with a
+         *     session it must be omitted). Permanent drop link sessions and reply sessions cannot
+         *     create secrets (`403 deposit-not-allowed`). The blocklist applies to the creator address
+         *     and domain.
+         *
+         *     `expiresIn` must be one of the durations the tenant offers (`features.secrets.durations`
+         *     of `getPublicTenant`), else `422 secret-duration-not-offered`; the expiry clock starts
+         *     when the secret becomes `active`. `delivery` is `link` (the creator hands the link over
+         *     by any channel) or `email` (the server mails the link to `recipient`, exactly one
+         *     address, required with `email` and refused with `link`; an invited external creator can
+         *     only address the internal who invited them, the `recipient` is then forced to that
+         *     address and any other value gets `400 validation-failed`). An invited external creator
+         *     must use `delivery=email`: `link` gets `400 validation-failed` on `/delivery`, and on a
+         *     tenant whose `emailAllowed` is off it gets `403 secret-email-not-allowed` (the module is
+         *     then closed to invited externals). `delivery=email` when the tenant disallows it gets
+         *     `403 secret-email-not-allowed`; a `file` when the tenant disallows it
+         *     `403 secret-file-not-allowed`, and one larger than the tenant limit
+         *     `413 secret-file-too-large`. The module disabled for the tenant answers
+         *     `403 secrets-disabled`.
+         *
+         *     Malformed values follow one rule. The request is first validated against this schema:
+         *     any violation of a pattern, an enumeration, a length or a bound (a sealed text outside
+         *     39 to 53 372 characters or with a character outside base64url, a `verifier` or
+         *     `keyVerifier` that is not 64 lowercase hex characters, a `passphrase` whose `kdf` is not
+         *     `pbkdf2-sha256`, whose `iterations` is not 600000 or whose `salt` is not 22 canonical
+         *     base64url characters, a file size outside 48 bytes to 25 MiB) is
+         *     `400 validation-failed` with field codes. `400 secret-format-invalid` is kept for the
+         *     keyless checks the schema cannot express: the sealed text that is not canonical
+         *     base64url or whose first byte is not 1, a sealed text of exactly 29 decoded bytes (empty
+         *     text) when no `file` is declared, and file metadata that fails the framing of a sealed
+         *     blob (the server cannot read any of them; clients refuse the same values).
+         *
+         *     The answer holds the secret identifier `id` (management: `/me/secrets`, admin list,
+         *     audit) and the secret `token` (`tts_` followed by 43 base62 characters; the link is
+         *     `https://<fqdn>/s/<token>#k=<key>`, the key being added by the client and never sent
+         *     here), both returned once with the token never readable again: it is stored as a SHA-256
+         *     hash. `state` is `active` when no step remains (link delivery, no file); otherwise
+         *     `pending`: upload the file with `uploadSecretFile` (declared `file`) and, for
+         *     `email` delivery, finish with `sendSecret`. A pending secret that is not completed within
+         *     one hour is purged. The token of a pending secret answers `404 not-found` like an unknown
+         *     one (without security event).
+         *
+         *     Limits: at most 50 active or pending secrets per creator address (or per API token) and
+         *     200 creations per rolling 24 hours, else `429 secret-limit-reached` (with `Retry-After`
+         *     for the 24-hour count only: the 50 open secrets free up when they are read, expire or
+         *     are deleted, at no predictable time); the declared file
+         *     counts in the storage quota of the tenant while it exists (`507 quota-exceeded`).
+         *     Abuse detection counts secrets like transfers (count only). Audited as `secret.created`.
+         */
+        post: operations["createSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secrets/{secretId}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload the file of a pending secret
+         * @description Since 2.1. Sends the optional file declared by `createSecret`, in one request (at most
+         *     25 MiB, so no tus): the raw body is the TTE2 ciphertext stream of the file
+         *     (`Content-Type: application/octet-stream`), of exactly the declared `file.size` bytes.
+         *     The server checks the framing while streaming with the keyless TTE2 validator and
+         *     encrypts the content at rest with its own key, as for an end-to-end encrypted transfer;
+         *     the file is never scanned by the antivirus (the recipient is told). Only the creator may
+         *     upload: with a deposit session, a session of the same verified sender address and the
+         *     same creator kind (there is no session identifier on the secret, so another session of
+         *     that address in the same tenant also qualifies); with an API token, that same token.
+         *     A session never acts on a secret created with an API token, nor a token on a secret
+         *     created by a session. Only while the secret is `pending` (`409 state-conflict`
+         *     otherwise, including a second upload). A body whose length differs from the
+         *     declaration or that fails the keyless TTE2 validator gets `400 secret-format-invalid`
+         *     (checks the schema cannot express); the partial file is deleted and the secret stays
+         *     pending for a new attempt. With `link` delivery the secret becomes `active` when
+         *     the upload completes (the answer carries its `expiresAt`); with `email` delivery it stays
+         *     pending until `sendSecret`. A secret that is unknown, belongs to another creator or to
+         *     another tenant answers `404 not-found`.
+         */
+        put: operations["uploadSecretFile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secrets/{secretId}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate a secret and mail its link
+         * @description Since 2.1. Finishes a `pending` secret created with `delivery=email`: activates it
+         *     (the expiry clock starts) and mails the link to the recipient. The body carries
+         *     `fragmentKey`, the 43-character base64url key `K` of the link fragment, which the
+         *     server uses only to compose the mail: it is never stored nor logged, and a passphrase
+         *     keeps the secret unreadable to the server. Accepted risk, stated in the threat model:
+         *     the mailed link carries the key, so the creator interface recommends a passphrase sent
+         *     by another channel. The call is required for `email` delivery only (a secret with `link`
+         *     delivery gets `409 state-conflict`), and only once the declared file, if any, is
+         *     uploaded (`409 state-conflict`). Only the creator may call it, with the rule of
+         *     `uploadSecretFile` (same sender address and creator kind for a deposit session, the
+         *     same token for an API token). A `fragmentKey` that does not match its pattern (43
+         *     canonical base64url characters) is `400 validation-failed`.
+         *     Audited as `secret.sent` (delivery and recipient, never the key).
+         */
+        post: operations["sendSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secret-links/{secretToken}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Status of a secret link
+         * @description Since 2.1. Used by the page `/s/<token>` before the recipient reveals the secret. It
+         *     **consumes nothing**: link-following bots and mail scanners that issue this `GET` cannot
+         *     destroy a secret (reading requires `revealSecret` with a proof derived from the key in
+         *     the fragment, which a bot does not have). It returns what the client needs before the
+         *     reveal: the expiry, the public passphrase parameters (absent without passphrase) and the
+         *     ciphertext size of the file (`null` without file). It returns **nothing sealed** under
+         *     the secret keys: neither the text nor the file metadata, which come with the reveal
+         *     (a sealed value would let whoever holds the link alone test passphrases offline).
+         *     Answered with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+         *
+         *     It checks the expiry itself: an `active` secret past its `expiresAt` answers
+         *     `410 secret-gone` with reason `expired` even before the lifecycle task has swept it.
+         *     During the 30 days after a secret ended, the answer is `410 secret-gone` whose `reason`
+         *     (`read`, `expired`, `deleted` or `locked`) lets a recipient detect that someone read it
+         *     first. An unknown token (or the token of a secret still `pending`, or of another tenant)
+         *     gets the same `404 not-found`, and an unknown one is written to the security log
+         *     (`secret_invalid`). Rate limited per client IP.
+         */
+        get: operations["getSecretLink"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secret-links/{secretToken}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal a secret (once)
+         * @description Since 2.1. Reads the secret, a single time. The body carries two proofs, each 64
+         *     lowercase hex characters derived in the browser (a value that does not match the
+         *     pattern is `400 validation-failed`): `keyProof` (from the key of the fragment alone) and
+         *     `proof` (from the key and the passphrase). The server compares their SHA-256 with the
+         *     `keyVerifier` and the `verifier` given at creation, in constant time. The key proof is
+         *     checked first: a wrong `keyProof` (a token alone, without the key) is
+         *     `403 secret-proof-invalid` **not counted**: no `attemptsRemaining`, so that whoever knows
+         *     only the token can neither reveal nor lock the secret. With a right key proof, the
+         *     server claims an attempt slot atomically before it compares the `proof` (the failure
+         *     counter is raised in the reveal transaction while it is below 5), so that concurrent
+         *     reveals evaluate at most 5 proofs in all; a right proof releases the slot as part of
+         *     the reveal. A wrong `proof` (wrong passphrase) is `403 secret-proof-invalid`
+         *     **counted**, with `attemptsRemaining`. On success the secret becomes `read` atomically
+         *     (concurrent reveals: exactly one wins, the others get `410 secret-gone` with reason
+         *     `read`), the sealed text is returned and the server destroys its own key of the stored
+         *     copy (cryptographic erasure of the server layer; a database backup taken while the
+         *     secret was live still holds the sealed text, protected by the key of the fragment).
+         *     With a file, the sealed file metadata (`encryptedMetadata`, returned only here, never
+         *     by `getSecretLink`) and a one-time `fileGrant` are returned, valid 10 minutes
+         *     (`fileGrantExpiresAt`), to be sent to `downloadSecretFile`. If the answer is lost after the commit the secret is lost
+         *     (accepted, documented). A wrong proof never consumes the secret; the 5th counted
+         *     failure sets it `locked` (content destroyed) and answers `410 secret-gone` with reason
+         *     `locked`. Like the status call, the reveal checks `expiresAt` itself (`410` with reason
+         *     `expired` before the sweep). Both kinds of wrong proof are written to the security log
+         *     (`secret_proof_invalid`, `reason=key` or `reason=passphrase`); an unknown token (or one
+         *     of another tenant) is `404 not-found` and writes `secret_invalid`, like the status call;
+         *     a reveal is rate limited per client IP. No credential: the token and the proof are the credentials. Answered with
+         *     `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Audited as
+         *     `secret.revealed` (and `secret.locked`); a read receipt is mailed to the creator when
+         *     requested.
+         */
+        post: operations["revealSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/secret-links/{secretToken}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Download the file of a revealed secret (once)
+         * @description Since 2.1. Streams the TTE2 ciphertext of the file (the browser decrypts it with the
+         *     key of the fragment), once, with the grant returned by `revealSecret` in the
+         *     `TransTeira-Secret-Grant` header. Always sent as an attachment
+         *     (`Content-Type: application/octet-stream`, `Content-Disposition: attachment`,
+         *     `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy:
+         *     no-referrer`); no range is supported. The grant is single use: the file is deleted and
+         *     its key destroyed at the first complete download, or when the grant expires after 10
+         *     minutes. A missing, wrong, already used or expired grant gets `404 not-found`, like a
+         *     secret without file, **without** a security event: intentional, the grant has 256 bits
+         *     and the per-IP limiter bounds the attempts. An unknown token (or one of another tenant)
+         *     is `404 not-found` and writes `secret_invalid`, like the status call. Audited as
+         *     `secret.file_downloaded`. Rate limited per client IP.
+         */
+        get: operations["downloadSecretFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/downloads/{linkToken}": {
         parameters: {
             query?: never;
@@ -1428,6 +1717,62 @@ export interface paths {
          */
         post: operations["extendMyTransfer"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List my secrets
+         * @description Since 2.1. Lists, most recent first, the secrets of this tenant created by the session
+         *     address with a deposit session, whatever their state (`pending`, `active` and the ended
+         *     ones still kept as tombstones for 30 days). Never any content, key or link: the state,
+         *     the delivery, the recipient, the expiry and the reading date. Secrets created with an
+         *     API token belong to the token and are never listed. Same session as `listMyTransfers`.
+         *     A malformed `cursor` is `400 validation-failed`.
+         */
+        get: operations["listMySecrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/secrets/{secretId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one of my secrets before it is read
+         * @description Since 2.1. Deletes a `pending` or `active` secret of the session address (for example
+         *     one sent to the wrong recipient): the content is destroyed with cryptographic erasure
+         *     and the secret becomes a `deleted` tombstone, so that its link answers
+         *     `410 secret-gone` (`reason: deleted`). A secret already ended is a no-op answered `204`.
+         *     A secret of another address, tenant or created with an API token answers `404`. Audited
+         *     as `secret.deleted` with the creator as actor.
+         */
+        delete: operations["deleteMySecret"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3460,6 +3805,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tenants/{tenantId}/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the one-time secrets of the tenant
+         * @description Since 2.1. Lists the secrets of the tenant, most recent first, with filters on state and
+         *     creator address. Metadata only: never the content, the key, the proof, the verifier nor
+         *     the token. Ended secrets stay listed as tombstones for 30 days. Readable by the
+         *     delegated admins of the tenant, the super admin and, read-only, an auditor (who may not
+         *     filter by address: `403 read-only-role`). A malformed `cursor` is `400 validation-failed`.
+         */
+        get: operations["listTenantSecrets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/secrets/{secretId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a pending or active secret
+         * @description Since 2.1. Deletes a `pending` or `active` secret of the tenant before it is read:
+         *     content destroyed with cryptographic erasure, the secret becomes a `deleted` tombstone
+         *     (its link answers `410 secret-gone`, reason `deleted`). A secret already ended is a
+         *     no-op answered `204`. A secret of another tenant answers `404`. Requires the right to
+         *     change the tenant (delegated admin of the tenant, super admin; not an auditor). Audited
+         *     as `secret.deleted` with the admin as actor.
+         */
+        delete: operations["deleteTenantSecret"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantId}/secret-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One-time secrets settings
+         * @description Since 2.1. Returns the settings of the one-time secrets module of the tenant (see
+         *     `SecretSettings`). The module is on by default. Readable by the delegated admins of the
+         *     tenant and the super admin; the settings are configuration, so an auditor gets
+         *     `403 read-only-role`.
+         */
+        get: operations["getSecretSettings"];
+        /**
+         * Replace the one-time secrets settings
+         * @description Since 2.1. Replaces every setting (a missing required member is `400 validation-failed`).
+         *     The delegated admins manage all of them, `enabled` included, and so does the super admin:
+         *     the module needs no instance resource beyond the storage quota. Disabling the module
+         *     refuses new secrets (`403 secrets-disabled`) but does not touch existing ones, which are
+         *     still readable until they end. `durations` lists the offered durations (at least one);
+         *     `defaultDuration`, when given, must be one of them. `fileMaxBytes` is between 1 MiB and
+         *     25 MiB (ciphertext size). Requires the right to change the tenant. Audited as
+         *     `secret.settings_updated` with the changed member names.
+         */
+        put: operations["updateSecretSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tenants/{tenantId}/security-events": {
         parameters: {
             query?: never;
@@ -4389,6 +4840,11 @@ export interface components {
             }[];
             attemptsRemaining?: number;
             retryAfterSeconds?: number;
+            /**
+             * @description Since 2.1. With `secret-gone`: why the secret ended.
+             * @enum {string}
+             */
+            reason?: "read" | "expired" | "deleted" | "locked";
             /** Format: int64 */
             maxTransferBytes?: number;
             files?: string[];
@@ -4397,7 +4853,7 @@ export interface components {
          * @description Stable error code. See `docs/api/errors.md`.
          * @enum {string}
          */
-        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "internal-error";
+        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "secret-gone" | "secret-proof-invalid" | "secrets-disabled" | "secret-file-not-allowed" | "secret-file-too-large" | "secret-duration-not-offered" | "secret-email-not-allowed" | "secret-limit-reached" | "secret-format-invalid" | "internal-error";
         /**
          * @description Supported UI language (ISO 639-1). New languages may be added.
          * @enum {string}
@@ -5581,9 +6037,10 @@ export interface components {
          *     `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
          *     identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
          *     a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+         *     Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
          * @enum {string}
          */
-        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "proof_key.retired" | "transfer.link_reissued";
+        AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "proof_key.retired" | "transfer.link_reissued" | "secret.created" | "secret.sent" | "secret.revealed" | "secret.file_downloaded" | "secret.expired" | "secret.deleted" | "secret.locked" | "secret.settings_updated";
         AuditEvent: {
             id: string;
             /** Format: date-time */
@@ -5631,6 +6088,8 @@ export interface components {
             storageQuotaBytes: components["schemas"]["ByteSize"];
             /** @description `storageUsedBytes` / `storageQuotaBytes` (may exceed 1). */
             storageUsedRatio: number;
+            /** @description Since 2.1. One-time secrets created during the period (count only, never content). */
+            secretsCreated?: number;
             /**
              * @description Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
              *     zero-filled point for every period without activity: one point per UTC day for `7d`
@@ -5662,6 +6121,8 @@ export interface components {
             proofs?: number;
             /** @description Since 2.0. Permanent drop links, revoked ones included, whose recipients list the address. */
             dropLinks?: number;
+            /** @description Since 2.1. One-time secrets (any state) whose creator or recipient is the address. */
+            secrets?: number;
         };
         DataSubjectEraseReport: {
             transfersDeleted: number;
@@ -5679,6 +6140,8 @@ export interface components {
             dropLinksUpdated?: number;
             /** @description Since 2.0. Among dropLinksUpdated, links left without recipient, hence disabled. */
             dropLinksDisabled?: number;
+            /** @description Since 2.1. One-time secrets whose creator or recipient was the address, deleted with their content. */
+            secretsDeleted?: number;
         };
         GlobalStats: {
             /** @enum {string} */
@@ -6054,6 +6517,7 @@ export interface components {
             antivirus: "enabled" | "disabled";
             /** @description Since 2.0. The tenant allows link-only transfers; the level's linkOnlyAllowed may still forbid them. */
             linkOnly?: boolean;
+            secrets?: components["schemas"]["SecretFeatures"];
             /** @description Since 2.0. End-to-end encryption policy of the tenant (`forbidden` when absent). The policy that applies to a transfer is the `e2ePolicy` of its confidentiality level (`PublicConfidentialityLevel.e2ePolicy`), which a level can only tighten. */
             e2ePolicy?: components["schemas"]["E2ePolicy"];
         };
@@ -6293,6 +6757,195 @@ export interface components {
         E2ePolicy: "forbidden" | "allowed" | "required";
         /** @description Since 2.0. End-to-end encryption: the file name, type and plaintext SHA-256 encrypted in the browser, base64url (at most 4 KiB of ciphertext). The server stores it as is and cannot read it; it only checks the framing of a sealed blob (canonical unpadded base64url, version byte 1, room for the 12-byte nonce and the 16-byte tag), else `400 validation-failed` (`invalid-format`). Format: docs/architecture/e2e-format.md. */
         EncryptedMetadata: string;
+        /**
+         * @description Since 2.1. Duration code of a secret (from its activation): `1h`, `12h`, `1d`, `3d`, `7d` or `30d`. A tenant offers a subset (`SecretSettings.durations`).
+         * @enum {string}
+         */
+        SecretDuration: "1h" | "12h" | "1d" | "3d" | "7d" | "30d";
+        /**
+         * @description Since 2.1. `pending` (created, waiting for its file or its send call, purged after 1 hour)
+         *     then `active` (the expiry clock runs), then one of `read`, `expired`, `deleted` or
+         *     `locked`. The last four are tombstones without content, kept 30 days.
+         * @enum {string}
+         */
+        SecretState: "pending" | "active" | "read" | "expired" | "deleted" | "locked";
+        /** @description Since 2.1. The text sealed in the browser (version byte 1, nonce, ciphertext and tag), canonical unpadded base64url, 29 to 40 029 decoded bytes (0 to 10 000 Unicode code points; 39 to 53 372 characters). The length and the alphabet are checked by this schema (`400 validation-failed`); the canonical encoding, the version byte and the empty text (exactly 29 bytes, refused when no file is declared) by the keyless framing check (`400 secret-format-invalid`). The server cannot read it. Format: docs/architecture/e2e-format.md. */
+        SecretSealedText: string;
+        /** @description Since 2.1. Public parameters of the passphrase key derivation (PBKDF2-HMAC-SHA-256 of the NFC passphrase). Clients refuse any `kdf` other than `pbkdf2-sha256`, any iteration count other than 600000 and any salt other than 22 canonical base64url characters, so that a server cannot downgrade it; the server validates the same through this schema (`400 validation-failed`). */
+        SecretPassphrase: {
+            /** @enum {string} */
+            kdf: "pbkdf2-sha256";
+            /** @enum {integer} */
+            iterations: 600000;
+            /** @description 16 random bytes, base64url without padding, canonical (22 characters, the last one `A`, `Q`, `g` or `w`). Public. */
+            salt: string;
+        };
+        /** @description Since 2.1. The optional small file of a secret, an ordinary TTE2 stream sealed with the secret key. */
+        SecretFileDeclaration: {
+            /**
+             * Format: int64
+             * @description Size of the ciphertext in bytes, at least 48 (header and empty final chunk), at most 25 MiB and the tenant limit.
+             */
+            size: number;
+            /** @description The file metadata sealed under the secret root key K' (index 0, count 1). For a secret, a framing the schema cannot check (canonical encoding, version byte, room for the nonce and the tag) is `400 secret-format-invalid`. Returned to the recipient by `revealSecret` only. */
+            encryptedMetadata: components["schemas"]["EncryptedMetadata"];
+        };
+        /** @description Since 2.1. Creation of a one-time secret. */
+        SecretCreate: {
+            encryptedText: components["schemas"]["SecretSealedText"];
+            /** @description SHA-256 of the proof derived from the secret root key K' (key and passphrase), 64 lowercase hex characters. A verifier does not give the proof. */
+            verifier: string;
+            /** @description SHA-256 of the key proof derived from the key K alone (docs/architecture/e2e-format.md 3.3.4), 64 lowercase hex characters. */
+            keyVerifier: string;
+            passphrase?: components["schemas"]["SecretPassphrase"];
+            expiresIn: components["schemas"]["SecretDuration"];
+            /**
+             * @description `link`: the creator hands the link over. `email`: the server mails it to `recipient`.
+             * @enum {string}
+             */
+            delivery: "link" | "email";
+            /** @description Required with `delivery=email`, refused with `link`. One address. Forced to the inviting internal user for an invited external creator. */
+            recipient?: components["schemas"]["Email"];
+            /**
+             * @description Mail the creator when the secret is read, expires unread or is locked.
+             * @default false
+             */
+            readReceipt?: boolean;
+            file?: components["schemas"]["SecretFileDeclaration"];
+            /** @description Mandatory with an API token (internal address, the declared creator); refused with a deposit session. */
+            senderEmail?: components["schemas"]["Email"];
+        };
+        /** @description Since 2.1. A new secret: its identifier and its token, shown once. */
+        SecretCreated: {
+            id: string;
+            /** @description Shown once; only its SHA-256 is stored. The link is `https://<fqdn>/s/<token>#k=<key>`, the key being added by the client. */
+            token: string;
+            /** @enum {string} */
+            state: "pending" | "active";
+            /**
+             * Format: date-time
+             * @description Present when `state` is `active`.
+             */
+            expiresAt?: string;
+        };
+        /** @description Since 2.1. Activation of an e-mail secret. */
+        SecretSend: {
+            /** @description The 32-byte key of the link fragment, canonical base64url without padding (43 characters, the last one carrying no unused bit). Used once to compose the mail; never stored nor logged. */
+            fragmentKey: string;
+        };
+        /** @description Since 2.1. A secret as its creator sees it: no content, no key, no link. */
+        Secret: {
+            id: string;
+            state: components["schemas"]["SecretState"];
+            /** @enum {string} */
+            delivery: "link" | "email";
+            /** @description With `email` delivery. */
+            recipient?: components["schemas"]["Email"];
+            readReceipt: boolean;
+            /** @description A file was declared at creation. In a tombstone it describes what was declared, not that a file still exists (the file is deleted when the secret ends or after its download). */
+            hasFile: boolean;
+            /**
+             * Format: int64
+             * @description Declared ciphertext size of the file. Kept in a tombstone, where it describes what was declared.
+             */
+            fileSize?: number;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: date-time
+             * @description Absent while `pending`.
+             */
+            expiresAt?: string;
+            /** Format: date-time */
+            readAt?: string;
+            /**
+             * Format: date-time
+             * @description When the secret left `active` (tombstones).
+             */
+            endedAt?: string;
+            /**
+             * @description Why it ended; for `deleted`, the actor (creator or admin) is in the `secret.deleted` audit entry.
+             * @enum {string}
+             */
+            endReason?: "read" | "expired" | "deleted" | "locked";
+        };
+        SecretList: {
+            items: components["schemas"]["Secret"][];
+            nextCursor?: components["schemas"]["PageCursor"];
+        };
+        /** @description Since 2.1. A secret as the admins of the tenant see it: metadata only. */
+        AdminSecret: components["schemas"]["Secret"] & {
+            /** @enum {string} */
+            creatorKind: "internal" | "internal_remote" | "external" | "api_token";
+            senderEmail: components["schemas"]["Email"];
+        };
+        AdminSecretList: {
+            items: components["schemas"]["AdminSecret"][];
+            nextCursor?: components["schemas"]["PageCursor"];
+        };
+        /** @description Since 2.1. What the recipient page needs before the reveal. Never anything sealed under the secret keys (neither the text nor the file metadata): before a successful reveal, the server returns no value that would let whoever holds the link alone test passphrases offline. */
+        SecretStatus: {
+            /** @enum {string} */
+            state: "active";
+            /** Format: date-time */
+            expiresAt: string;
+            /** @description Public passphrase parameters; absent without passphrase. Clients refuse any other kdf, iteration count or salt length. */
+            passphrase?: components["schemas"]["SecretPassphrase"];
+            /** @description Null without file. Only the ciphertext size (not an oracle: it is chosen by the creator's client and bounded by the tenant); the sealed metadata comes with `revealSecret`. A file is never scanned by the antivirus. */
+            file: {
+                /** Format: int64 */
+                size: number;
+            } | null;
+        };
+        /** @description Since 2.1. The reveal proof. */
+        SecretReveal: {
+            /** @description The 32-byte key proof derived in the browser from the key K alone, 64 lowercase hex characters. */
+            keyProof: string;
+            /** @description The 32-byte proof derived from the key and the passphrase (K'), 64 lowercase hex characters. */
+            proof: string;
+        };
+        /** @description Since 2.1. The sealed text and, with a file, its sealed metadata and its one-time grant. */
+        SecretRevealed: {
+            encryptedText: components["schemas"]["SecretSealedText"];
+            /** @description With a file: its metadata sealed under K' (index 0, count 1), returned once, here only; the server clears it in the reveal transaction. */
+            encryptedMetadata?: components["schemas"]["EncryptedMetadata"];
+            /** @description `ttg_` and 43 base62 characters (256 bits). Sent in the `TransTeira-Secret-Grant` header of `downloadSecretFile`; stored hashed; one use. */
+            fileGrant?: string;
+            /**
+             * Format: date-time
+             * @description 10 minutes after the reveal.
+             */
+            fileGrantExpiresAt?: string;
+        };
+        /** @description Since 2.1. One-time secrets settings of a tenant. */
+        SecretSettings: {
+            /** @description The module is on by default. */
+            enabled: boolean;
+            /** @description Offered durations (default `1h`, `1d`, `7d`). */
+            durations: components["schemas"]["SecretDuration"][];
+            /** @description Preselected duration; one of `durations`. */
+            defaultDuration?: components["schemas"]["SecretDuration"];
+            /** @description Default true. */
+            fileAllowed: boolean;
+            /**
+             * Format: int64
+             * @description Largest ciphertext of a secret file: 1 MiB to 25 MiB, 10 MiB by default.
+             * @default 10485760
+             */
+            fileMaxBytes: number;
+            /** @description E-mail delivery allowed. Default true. */
+            emailAllowed: boolean;
+        };
+        /** @description Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included. */
+        SecretFeatures: {
+            enabled: boolean;
+            durations: components["schemas"]["SecretDuration"][];
+            defaultDuration?: components["schemas"]["SecretDuration"];
+            fileAllowed: boolean;
+            /** Format: int64 */
+            fileMaxBytes: number;
+            emailAllowed: boolean;
+        };
         /** @description Since 2.0. What the landing page of a drop link needs. */
         PublicDropLink: {
             label: string;
@@ -6385,7 +7038,7 @@ export interface components {
          *     be added within the API version: clients must accept unknown values.
          * @enum {string}
          */
-        SecurityEventType: "verification_code_invalid" | "transfer_password_invalid" | "admin_login_failed" | "api_token_invalid" | "unknown_fqdn" | "deposit_refused" | "rate_limited" | "metrics_token_invalid" | "access_link_invalid" | "provisioning_token_invalid" | "sso_failed" | "drop_link_invalid";
+        SecurityEventType: "verification_code_invalid" | "transfer_password_invalid" | "admin_login_failed" | "api_token_invalid" | "unknown_fqdn" | "deposit_refused" | "rate_limited" | "metrics_token_invalid" | "access_link_invalid" | "provisioning_token_invalid" | "sso_failed" | "drop_link_invalid" | "secret_invalid" | "secret_proof_invalid";
         /** @description Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address. */
         SecurityEvent: {
             id: string;
@@ -6460,6 +7113,7 @@ export interface components {
             recipientRules?: components["schemas"]["RecipientRules"];
             confidentialityLevels?: components["schemas"]["ConfidentialityLevelList"];
             abuseThresholds?: components["schemas"]["AbuseThresholds"];
+            secretSettings?: components["schemas"]["SecretSettings"];
             /** @description The customised templates only (at most one per template and language). */
             emailTemplates?: {
                 key: components["schemas"]["EmailTemplateKey"];
@@ -7316,6 +7970,19 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Since 2.1. The secret ended and is kept as a tombstone for 30 days: `secret-gone`, whose
+         *     `reason` is `read` (someone read it first), `expired`, `deleted` (by its creator or an
+         *     admin) or `locked` (5 wrong proofs). No content remains.
+         */
+        SecretGone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Since 1.2. The background preset is not one of `listBackgroundPresets`. */
         UnknownBackgroundPreset: {
             headers: {
@@ -7729,6 +8396,16 @@ export interface components {
          */
         DropLinkId: string;
         /**
+         * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+         * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+         */
+        SecretToken: string;
+        /**
+         * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+         * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+         */
+        SecretId: string;
+        /**
          * @description Since 2.0. Identifier of a pinned single sign-on identity.
          * @example aid_01JABCJ1K2M3N4P5Q6R7S8T9V0
          */
@@ -7876,7 +8553,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "2.0.0",
+                     *       "version": "2.1.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -7899,7 +8576,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "degraded",
-                     *       "version": "2.0.0",
+                     *       "version": "2.1.0",
                      *       "maintenance": false,
                      *       "checks": {
                      *         "database": "ok",
@@ -7990,7 +8667,7 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "2.0.0",
+                     *       "version": "2.1.0",
                      *       "checkedAt": "2026-10-27T09:00:00Z",
                      *       "uptimeSeconds": 864000,
                      *       "maintenance": false,
@@ -9298,6 +9975,383 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    createSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecretCreate"];
+            };
+        };
+        responses: {
+            /** @description Secret created; its token is shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretCreated"];
+                };
+            };
+            /**
+             * @description The request is invalid: `validation-failed` (any schema violation, a `recipient` that
+             *     does not match the delivery or the invitation, `link` delivery by an invited external)
+             *     or `secret-format-invalid` (sealed text or file metadata whose framing the schema
+             *     cannot check: not canonical, wrong version byte, empty text without file).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["DepositUnauthenticated"];
+            /**
+             * @description `secrets-disabled` (module disabled for the tenant), `secret-email-not-allowed`,
+             *     `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
+             *     blocklisted, or a drop link or reply session), `ip-not-allowed` (API token used from
+             *     an IP outside its `allowedCidrs`, written to the security log) or `csrf-invalid`.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `secret-file-too-large`: the declared file exceeds the limit of the tenant (`features.secrets.fileMaxBytes`). */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-file-too-large",
+                     *       "title": "Secret file too large",
+                     *       "status": 413,
+                     *       "code": "secret-file-too-large",
+                     *       "maxTransferBytes": 10485760
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            421: components["responses"]["UnknownTenant"];
+            /** @description `secret-duration-not-offered`: `expiresIn` is not one of the durations the tenant offers. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-duration-not-offered",
+                     *       "title": "Duration not offered",
+                     *       "status": 422,
+                     *       "code": "secret-duration-not-offered",
+                     *       "errors": [
+                     *         {
+                     *           "field": "/expiresIn",
+                     *           "code": "not-allowed",
+                     *           "allowed": [
+                     *             "1h",
+                     *             "1d",
+                     *             "7d"
+                     *           ]
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `secret-limit-reached` (50 open secrets or 200 creations in 24 hours for this creator) or `rate-limited`. `Retry-After` (and `retryAfterSeconds`) gives the delay for `rate-limited` and for the 24-hour creation count; it is absent when the 50 open secrets are reached (they free up when read, expired or deleted). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-limit-reached",
+                     *       "title": "Secret limit reached",
+                     *       "status": 429,
+                     *       "code": "secret-limit-reached",
+                     *       "retryAfterSeconds": 3600
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MaintenanceMode"];
+            507: components["responses"]["QuotaExceeded"];
+        };
+    };
+    uploadSecretFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @example <binary data> */
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description File stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "sec_01JABCS1T2V3W4X5Y6Z7A8B9C0",
+                     *       "state": "active",
+                     *       "delivery": "link",
+                     *       "readReceipt": false,
+                     *       "hasFile": true,
+                     *       "fileSize": 2097200,
+                     *       "createdAt": "2026-11-09T09:00:00Z",
+                     *       "expiresAt": "2026-11-10T09:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Secret"];
+                };
+            };
+            /** @description `secret-format-invalid`: the body is not a well-formed TTE2 stream of the declared size. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "type": "https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-format-invalid",
+                     *       "title": "Malformed sealed content",
+                     *       "status": 400,
+                     *       "code": "secret-format-invalid",
+                     *       "detail": "The file is not a well-formed encrypted stream."
+                     *     }
+                     */
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["DepositUnauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MaintenanceMode"];
+        };
+    };
+    sendSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "fragmentKey": "ew7WSQ3aQqhKCGs_K2QR3lal5iX7Jr66egxAI_Wmhuk"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SecretSend"];
+            };
+        };
+        responses: {
+            /** @description Secret active, mail queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "id": "sec_01JABCS2T3V4W5X6Y7Z8A9B0C1",
+                     *       "state": "active",
+                     *       "delivery": "email",
+                     *       "recipient": "carol@customer.example.net",
+                     *       "readReceipt": true,
+                     *       "hasFile": false,
+                     *       "createdAt": "2026-11-09T09:00:00Z",
+                     *       "expiresAt": "2026-11-09T10:00:00Z"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Secret"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["DepositUnauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["StateConflict"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["MaintenanceMode"];
+        };
+    };
+    getSecretLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The secret is active. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretStatus"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["SecretGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    revealSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "keyProof": "05aea5b47178848363e0661239060ca96f0a3f46b496d167b96d74cc3c666253",
+                 *       "proof": "7c3aa1eaf6a715097a2c7d5fb79ae337c773a0a1c29eabbbdb9bb2d1ae433e7b"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SecretReveal"];
+            };
+        };
+        responses: {
+            /** @description The sealed text and, with a file, its one-time grant. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecretRevealed"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /** @description `secret-proof-invalid`: a proof does not match. A wrong key proof is not counted and carries no `attemptsRemaining`; a right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`, the attempts left before the secret is locked. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["SecretGone"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    downloadSecretFile: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description One-time file grant returned by `revealSecret` (`ttg_` and 43 base62 characters, 256 bits).
+                 * @example ttg_JWcMTG3VXdY7ayD3ezWKl2Toq9SMuVcpyjtU5s0GZJF
+                 */
+                "TransTeira-Secret-Grant": string;
+            };
+            path: {
+                /**
+                 * @description Since 2.1. Token of a one-time secret (`tts_` followed by 43 base62 characters, about 256 bits), the path component of the link `/s/<token>`. Unknown, pending and foreign-tenant tokens give the same `404`.
+                 * @example tts_UEb8n51xYj4xMXBFL52EtiILriXUayRi9TbqLuPp29L
+                 */
+                secretToken: components["parameters"]["SecretToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ciphertext of the file. */
+            200: {
+                headers: {
+                    "Content-Disposition": components["headers"]["ContentDispositionAttachment"];
+                    "Content-Length": components["headers"]["ContentLength"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    "X-Content-Type-Options": components["headers"]["NoSniff"];
+                    "Content-Security-Policy": components["headers"]["SandboxCSP"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /** @example <binary data> */
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+            421: components["responses"]["UnknownTenant"];
+            429: components["responses"]["TooManyStreams"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
     getDownload: {
         parameters: {
             query?: never;
@@ -10390,6 +11444,101 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    listMySecrets: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secrets (most recent first). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "sec_01JABCS2T3V4W5X6Y7Z8A9B0C1",
+                     *           "state": "read",
+                     *           "delivery": "email",
+                     *           "recipient": "carol@customer.example.net",
+                     *           "readReceipt": true,
+                     *           "hasFile": false,
+                     *           "createdAt": "2026-11-09T09:00:00Z",
+                     *           "expiresAt": "2026-11-09T10:00:00Z",
+                     *           "readAt": "2026-11-09T09:12:00Z",
+                     *           "endedAt": "2026-11-09T09:12:00Z",
+                     *           "endReason": "read"
+                     *         },
+                     *         {
+                     *           "id": "sec_01JABCS1T2V3W4X5Y6Z7A8B9C0",
+                     *           "state": "active",
+                     *           "delivery": "link",
+                     *           "readReceipt": false,
+                     *           "hasFile": true,
+                     *           "fileSize": 2097200,
+                     *           "createdAt": "2026-11-09T09:00:00Z",
+                     *           "expiresAt": "2026-11-10T09:00:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecretList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            421: components["responses"]["UnknownTenant"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["TenantInSetup"];
+        };
+    };
+    deleteMySecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret deleted, or already ended (no-op). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
             421: components["responses"]["UnknownTenant"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["TenantInSetup"];
@@ -14949,6 +16098,217 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listTenantSecrets: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Filter by state.
+                 * @example active
+                 */
+                state?: components["schemas"]["SecretState"];
+                /**
+                 * @description Filter on creator address (exact match). Refused to an auditor (`403 read-only-role`).
+                 * @example alice@entity-a.example.com
+                 */
+                sender?: components["schemas"]["Email"];
+                /**
+                 * @description Maximum number of items per page.
+                 * @example 50
+                 */
+                limit?: components["parameters"]["Limit"];
+                /**
+                 * @description Opaque cursor returned as `nextCursor` by the previous page.
+                 * @example eyJjIjoiMjAyNi0xMC0xOVQxNjowMDowMFoiLCJpIjoidHJmXzAxIn0
+                 */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secrets (most recent first). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "items": [
+                     *         {
+                     *           "id": "sec_01JABCS1T2V3W4X5Y6Z7A8B9C0",
+                     *           "state": "active",
+                     *           "creatorKind": "internal",
+                     *           "senderEmail": "alice@entity-a.example.com",
+                     *           "delivery": "email",
+                     *           "recipient": "carol@customer.example.net",
+                     *           "readReceipt": true,
+                     *           "hasFile": false,
+                     *           "createdAt": "2026-11-09T09:00:00Z",
+                     *           "expiresAt": "2026-11-10T09:00:00Z"
+                     *         }
+                     *       ],
+                     *       "nextCursor": "eyJjIjoiMjAyNi0xMS0wOVQwOTowMDowMFoiLCJpIjoic2VjXzAxIn0"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AdminSecretList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteTenantSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+                /**
+                 * @description Since 2.1. Secret identifier (management, admin list and audit; never in the link). A secret of another creator or tenant gives `404`.
+                 * @example sec_01JABCS1T2V3W4X5Y6Z7A8B9C0
+                 */
+                secretId: components["parameters"]["SecretId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret deleted, or already ended (no-op). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSecretSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "enabled": true,
+                     *       "durations": [
+                     *         "1h",
+                     *         "1d",
+                     *         "7d"
+                     *       ],
+                     *       "defaultDuration": "1d",
+                     *       "fileAllowed": true,
+                     *       "fileMaxBytes": 10485760,
+                     *       "emailAllowed": true
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecretSettings"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateSecretSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Tenant identifier. A tenant outside the admin's scope gives `404` (never `403`) to avoid disclosing its existence.
+                 * @example ten_01JAB00000000000000ENT1TYA
+                 */
+                tenantId: components["parameters"]["TenantId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "enabled": true,
+                 *       "durations": [
+                 *         "1h",
+                 *         "1d",
+                 *         "7d"
+                 *       ],
+                 *       "defaultDuration": "1d",
+                 *       "fileAllowed": true,
+                 *       "fileMaxBytes": 10485760,
+                 *       "emailAllowed": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["SecretSettings"];
+            };
+        };
+        responses: {
+            /** @description Saved settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "enabled": true,
+                     *       "durations": [
+                     *         "1h",
+                     *         "1d",
+                     *         "7d"
+                     *       ],
+                     *       "defaultDuration": "1d",
+                     *       "fileAllowed": true,
+                     *       "fileMaxBytes": 10485760,
+                     *       "emailAllowed": false
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SecretSettings"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listTenantSecurityEvents: {
         parameters: {
             query?: {
@@ -16843,7 +18203,8 @@ type ReadonlyArray<T> = [
 ] extends [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
-export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "internal-error"];
+export const problemReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Problem"]["reason"]> = ["read", "expired", "deleted", "locked"];
+export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "secret-gone", "secret-proof-invalid", "secrets-disabled", "secret-file-not-allowed", "secret-file-too-large", "secret-duration-not-offered", "secret-email-not-allowed", "secret-limit-reached", "secret-format-invalid", "internal-error"];
 export const languageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Language"]> = ["fr", "en"];
 export const healthStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Health"]["status"]> = ["ok", "degraded"];
 export const componentHealthValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComponentHealth"]> = ["ok", "unavailable"];
@@ -16871,7 +18232,7 @@ export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<c
 export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code"];
 export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply", "drop_link"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
-export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued"];
+export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued", "secret.created", "secret.sent", "secret.revealed", "secret.file_downloaded", "secret.expired", "secret.deleted", "secret.locked", "secret.settings_updated"];
 export const auditEventActorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditEvent"]["actor"]["kind"]> = ["depositor", "recipient", "admin", "api_token", "system", "provisioning_token"];
 export const tenantStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantStats"]["period"]> = ["7d", "30d", "12m"];
 export const globalStatsPeriodValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["GlobalStats"]["period"]> = ["7d", "30d", "12m"];
@@ -16888,7 +18249,17 @@ export const ssoTestResultErrorValues: ReadonlyArray<FlattenedDeepRequired<compo
 export const proofKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProofKind"]> = ["deposit", "delivery"];
 export const proofKeyAlgorithmValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProofKey"]["algorithm"]> = ["Ed25519"];
 export const e2ePolicyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["E2ePolicy"]> = ["forbidden", "allowed", "required"];
-export const securityEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecurityEventType"]> = ["verification_code_invalid", "transfer_password_invalid", "admin_login_failed", "api_token_invalid", "unknown_fqdn", "deposit_refused", "rate_limited", "metrics_token_invalid", "access_link_invalid", "provisioning_token_invalid", "sso_failed", "drop_link_invalid"];
+export const secretDurationValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretDuration"]> = ["1h", "12h", "1d", "3d", "7d", "30d"];
+export const secretStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretState"]> = ["pending", "active", "read", "expired", "deleted", "locked"];
+export const secretPassphraseKdfValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretPassphrase"]["kdf"]> = ["pbkdf2-sha256"];
+export const secretPassphraseIterationsValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretPassphrase"]["iterations"]> = [600000];
+export const secretCreateDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretCreate"]["delivery"]> = ["link", "email"];
+export const secretCreatedStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretCreated"]["state"]> = ["pending", "active"];
+export const secretDeliveryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Secret"]["delivery"]> = ["link", "email"];
+export const secretEndReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Secret"]["endReason"]> = ["read", "expired", "deleted", "locked"];
+export const adminSecretCreatorKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AdminSecret"]["creatorKind"]> = ["internal", "internal_remote", "external", "api_token"];
+export const secretStatusStateValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecretStatus"]["state"]> = ["active"];
+export const securityEventTypeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SecurityEventType"]> = ["verification_code_invalid", "transfer_password_invalid", "admin_login_failed", "api_token_invalid", "unknown_fqdn", "deposit_refused", "rate_limited", "metrics_token_invalid", "access_link_invalid", "provisioning_token_invalid", "sso_failed", "drop_link_invalid", "secret_invalid", "secret_proof_invalid"];
 export const tenantConfigExportLegalDocumentsDocumentValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TenantConfigExport"]["legalDocuments"]["document"]> = ["legal-notice", "privacy-policy"];
 export const recipientVerificationStartPurposeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["RecipientVerificationStart"]["purpose"]> = ["download", "reply"];
 export const abuseReportCategoryValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AbuseReportCategory"]> = ["malware", "phishing", "illegal_content", "spam", "unknown_sender", "other"];

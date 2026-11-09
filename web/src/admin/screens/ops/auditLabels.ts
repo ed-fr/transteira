@@ -30,6 +30,7 @@ export type AuditGroupId =
   | 'tokens'
   | 'privacy'
   | 'dropLinks'
+  | 'secrets'
   | 'tenant'
   | 'accounts'
   | 'instance';
@@ -87,6 +88,19 @@ export const AUDIT_ACTION_GROUPS = [
   {
     id: 'dropLinks',
     actions: ['drop_link.created', 'drop_link.updated', 'drop_link.rotated', 'drop_link.revoked'],
+  },
+  {
+    id: 'secrets',
+    actions: [
+      'secret.created',
+      'secret.sent',
+      'secret.revealed',
+      'secret.file_downloaded',
+      'secret.expired',
+      'secret.deleted',
+      'secret.locked',
+      'secret.settings_updated',
+    ],
   },
   {
     id: 'tokens',
@@ -203,6 +217,7 @@ export const AUDIT_OBJECT_KINDS = [
   'drop_link',
   'admin_identity',
   'proof_key',
+  'secret',
 ] as const;
 
 /** Prefix of the pseudonym that replaces an erased address (GDPR erasure). */

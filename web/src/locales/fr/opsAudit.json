@@ -65,7 +65,8 @@
     "provisioning_token": "Jeton de provisionnement",
     "drop_link": "Lien de dépôt",
     "admin_identity": "Identité de connexion",
-    "proof_key": "Clé de signature des preuves"
+    "proof_key": "Clé de signature des preuves",
+    "secret": "Secret"
   },
   "groups": {
     "transfers": "Transferts",
@@ -79,7 +80,8 @@
     "tenant": "Configuration de l’entité",
     "accounts": "Administrateurs et connexion",
     "instance": "Instance",
-    "dropLinks": "Liens de dépôt"
+    "dropLinks": "Liens de dépôt",
+    "secrets": "Secrets à usage unique"
   },
   "actions": {
     "transfer": {
@@ -230,6 +232,16 @@
     "proof_key": {
       "created": "Clé de signature des preuves créée",
       "retired": "Clé de signature des preuves retirée"
+    },
+    "secret": {
+      "created": "Secret créé",
+      "sent": "Lien du secret envoyé par mail",
+      "revealed": "Secret lu",
+      "file_downloaded": "Fichier du secret téléchargé",
+      "expired": "Secret expiré sans lecture",
+      "deleted": "Secret supprimé",
+      "locked": "Secret verrouillé après des preuves erronées",
+      "settings_updated": "Réglages des secrets modifiés"
     }
   }
 }

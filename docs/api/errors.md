@@ -31,10 +31,11 @@ Some codes carry extension members:
 | Member | Used by | Meaning |
 |---|---|---|
 | `errors` | `validation-failed` | List of `{field, code, allowed?, line?, column?, message?}` objects, one per invalid field. `field` is the JSON pointer (RFC 6901) of the field in the request body, such as `/recipients/0` or `/files/2/name`, or the name of a header (`Idempotency-Key`) or query parameter (`confirm`). For a mail template (`code: invalid-template`), `field` names the part (`/subject`, `/bodyHtml` or `/bodyText`), `line` and `column` (1-based, the column in characters) locate the problem when it has a position, and `message` explains it in English. |
-| `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid` | Number of attempts left before lockout or invalidation. |
-| `retryAfterSeconds` | `rate-limited`, `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
-| `maxTransferBytes` | `transfer-too-large` | Per-transfer size limit of the entity, in bytes. |
+| `attemptsRemaining` | `verification-code-invalid`, `transfer-password-invalid`, `secret-proof-invalid` | Number of attempts left before lockout or invalidation. |
+| `retryAfterSeconds` | `rate-limited`, `secret-limit-reached` (24-hour creation count only), `transfer-locked`, `maintenance`, `state-conflict` (admin deletion of a transfer being uploaded, GDPR erasure blocked by an upload in progress) | Seconds to wait before retrying; the `Retry-After` header carries the same value. |
+| `maxTransferBytes` | `transfer-too-large`, `secret-file-too-large` | Per-transfer size limit of the entity, in bytes. |
 | `files` | `upload-incomplete`, `checksum-mismatch` | Identifiers of the files concerned. |
+| `reason` | `secret-gone` | Since 2.1. Why the secret ended: `read`, `expired`, `deleted` or `locked`. |
 
 Error responses are never cached (`Cache-Control: no-store`) and never contain internal details
 such as stack traces, SQL errors or file paths.
@@ -797,6 +798,78 @@ use to ban the client IP.
 - **Meaning:** the upload of an end-to-end encrypted file does not start with a valid `TTE2` header, or its declared size is not a valid `TTE2` stream size for the chunk size of that header. The server holds no key: it judges each header byte as it arrives (magic, version, kind, reserved bytes, chunk size) and the declared size against the chunk layout as soon as the chunk size is known; it does not authenticate the chunks, which only the recipient does. The refused slice is never stored; the bytes accepted before it are kept.
 - **Typical endpoints:** `PATCH /uploads/{uploadId}`. Unlike the other `400` answers of the tus endpoints, which have no body, this one carries a problem body with this code.
 - **What to do:** produce the stream again with a client that implements the format (`docs/architecture/e2e-format.md`) and send it again; a corrected stream may resume at the offset the server kept.
+
+### secret-gone
+
+- **HTTP status:** 410 Gone
+- **Since:** 2.1.
+- **Meaning:** the one-time secret ended and only its tombstone remains (kept 30 days, without content). The `reason` member says why: `read` (someone read it first, which lets a recipient detect an interception), `expired`, `deleted` (by its creator or an admin) or `locked` (5 wrong proofs).
+- **Typical endpoints:** `GET /secret-links/{secretToken}`, `POST /secret-links/{secretToken}/reveal`.
+- **What to do:** ask the creator for a new secret. If `reason` is `read` and you did not read it, tell the creator: the link may have been intercepted.
+
+### secret-proof-invalid
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.1.
+- **Meaning:** a reveal proof does not match. A wrong key proof (the key in the link is wrong or missing) is **not counted** and carries no `attemptsRemaining`. A right key proof with a wrong proof (wrong passphrase) is counted and carries `attemptsRemaining`; the 5th counted failure locks the secret (`410 secret-gone`, `reason: locked`) and destroys its content. A wrong proof never consumes the secret. Written to the security log (`secret_proof_invalid`, `reason=key` or `reason=passphrase`).
+- **Typical endpoints:** `POST /secret-links/{secretToken}/reveal`.
+- **What to do:** check that the whole link (with the part after `#`) was copied, and the passphrase, then try again within the attempts left.
+
+### secrets-disabled
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.1.
+- **Meaning:** the one-time secrets module is disabled for the entity.
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** ask the administrators of the entity to enable it.
+
+### secret-file-not-allowed
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.1.
+- **Meaning:** the entity does not allow a file in a secret (`fileAllowed` is off).
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** create the secret with the text only.
+
+### secret-file-too-large
+
+- **HTTP status:** 413 Content Too Large
+- **Since:** 2.1.
+- **Meaning:** the declared file exceeds the limit of the entity for secrets (`features.secrets.fileMaxBytes`, at most 25 MiB, counted as ciphertext). `maxTransferBytes` carries the limit.
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** send a smaller file, or use a transfer for large files.
+
+### secret-duration-not-offered
+
+- **HTTP status:** 422 Unprocessable Content
+- **Since:** 2.1.
+- **Meaning:** `expiresIn` is not one of the durations the entity offers for secrets (`features.secrets.durations`). `errors` names `/expiresIn` with `allowed`.
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** pick an offered duration.
+
+### secret-email-not-allowed
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.1.
+- **Meaning:** the entity does not allow the e-mail delivery of secrets (`emailAllowed` is off).
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** use `delivery: link` and hand the link over yourself.
+
+### secret-limit-reached
+
+- **HTTP status:** 429 Too Many Requests
+- **Since:** 2.1.
+- **Meaning:** the creator (an address, or an API token) reached 50 active or pending secrets, or 200 creations in a rolling 24 hours. `Retry-After` (and `retryAfterSeconds`) carries the delay for the 24-hour count only; it is absent when the 50 open secrets are reached, since they free up when read, expired or deleted, at no predictable time.
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** wait for secrets to be read or to expire, delete the ones no longer needed (`DELETE /me/secrets/{secretId}`), or retry after the delay.
+
+### secret-format-invalid
+
+- **HTTP status:** 400 Bad Request
+- **Since:** 2.1.
+- **Meaning:** a sealed value of a secret fails a keyless check that the OpenAPI schema cannot express: the sealed text is not canonical base64url or its first byte is not 1, the sealed text is exactly 29 decoded bytes (empty text) without a declared file, the sealed file metadata fails the framing of a sealed blob, or the uploaded file is not exactly the declared size or fails the `TTE2` validator. The server holds no key: it only checks the encoding, the version and the sizes (and, for the file, the `TTE2` header and the declared size), never the content. The refused upload leaves the secret `pending`. **Rule:** anything the schema expresses (pattern, enumeration, length, bound: a verifier that is not 64 lowercase hex characters, a passphrase descriptor other than `pbkdf2-sha256` with 600000 iterations and a canonical 22-character salt, a sealed text outside 39 to 53 372 characters, a `fragmentKey` or a proof of the wrong form) is `400 validation-failed` with field codes, checked first.
+- **Typical endpoints:** `POST /secrets`, `PUT /secrets/{secretId}/file`.
+- **What to do:** produce the sealed values again with a client that implements the format (`docs/architecture/e2e-format.md`) and send them again.
 
 ### internal-error
 

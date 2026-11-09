@@ -168,6 +168,24 @@ const (
 	CodeE2EArchiveUnavailable Code = "e2e-archive-unavailable"
 	// CodeE2EFormatInvalid means an end-to-end encrypted upload is not a well-formed TTE2 stream (since 2.0).
 	CodeE2EFormatInvalid Code = "e2e-format-invalid"
+	// CodeSecretGone means the secret ended (read, expired, deleted or locked) and only its tombstone remains; the reason member says which (since 2.1).
+	CodeSecretGone Code = "secret-gone"
+	// CodeSecretProofInvalid means the reveal proof is wrong; the 5th wrong proof locks the secret (since 2.1).
+	CodeSecretProofInvalid Code = "secret-proof-invalid"
+	// CodeSecretsDisabled means the one-time secrets module is disabled for the tenant (since 2.1).
+	CodeSecretsDisabled Code = "secrets-disabled"
+	// CodeSecretFileNotAllowed means the tenant does not allow a file in a secret (since 2.1).
+	CodeSecretFileNotAllowed Code = "secret-file-not-allowed"
+	// CodeSecretFileTooLarge means the file of a secret exceeds the limit of the tenant (since 2.1).
+	CodeSecretFileTooLarge Code = "secret-file-too-large"
+	// CodeSecretDurationNotOffered means the requested duration is not one the tenant offers for secrets (since 2.1).
+	CodeSecretDurationNotOffered Code = "secret-duration-not-offered"
+	// CodeSecretEmailNotAllowed means the tenant does not allow the e-mail delivery of secrets (since 2.1).
+	CodeSecretEmailNotAllowed Code = "secret-email-not-allowed"
+	// CodeSecretLimitReached means the creator reached the number of open secrets or the daily number of creations (since 2.1).
+	CodeSecretLimitReached Code = "secret-limit-reached"
+	// CodeSecretFormatInvalid means a sealed value of a secret (text, file metadata or uploaded file stream) fails a keyless framing check the OpenAPI schema cannot express (since 2.1); schema violations are CodeValidationFailed.
+	CodeSecretFormatInvalid Code = "secret-format-invalid"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -255,6 +273,15 @@ var catalog = map[Code]Definition{
 	CodeE2ERequired:                   {http.StatusBadRequest, "End-to-end encryption required"},
 	CodeE2EArchiveUnavailable:         {http.StatusConflict, "Archive unavailable for an end-to-end encrypted transfer"},
 	CodeE2EFormatInvalid:              {http.StatusBadRequest, "Malformed end-to-end encrypted upload"},
+	CodeSecretGone:                    {http.StatusGone, "Secret no longer available"},
+	CodeSecretProofInvalid:            {http.StatusForbidden, "Wrong proof"},
+	CodeSecretsDisabled:               {http.StatusForbidden, "Secrets not available"},
+	CodeSecretFileNotAllowed:          {http.StatusForbidden, "Files in secrets not allowed"},
+	CodeSecretFileTooLarge:            {http.StatusRequestEntityTooLarge, "Secret file too large"},
+	CodeSecretDurationNotOffered:      {http.StatusUnprocessableEntity, "Duration not offered"},
+	CodeSecretEmailNotAllowed:         {http.StatusForbidden, "E-mail delivery of secrets not allowed"},
+	CodeSecretLimitReached:            {http.StatusTooManyRequests, "Secret limit reached"},
+	CodeSecretFormatInvalid:           {http.StatusBadRequest, "Malformed sealed content"},
 	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 

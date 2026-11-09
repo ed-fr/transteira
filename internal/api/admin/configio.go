@@ -180,6 +180,11 @@ func decodeImport(raw []byte) (tenantadmin.ImportInput, error) {
 		// type (a string for a number...) is left.
 		return tenantadmin.ImportInput{}, importInvalid(decodePointer(err), string(strictjson.ReasonType))
 	}
+	// The one-time secrets settings (since 2.1) are not imported until the
+	// module is implemented: refused rather than silently ignored.
+	if b.Config.SecretSettings != nil {
+		return tenantadmin.ImportInput{}, validationFailed("/config/secretSettings", fieldNotSupported)
+	}
 	in := tenantadmin.ImportInput{Name: b.Name, FQDN: b.FQDN, StorageQuotaBytes: b.StorageQuotaBytes, Config: b.Config}
 	if d := b.DelegatedAdmin; d != nil {
 		// A new tenant has no single sign-on yet: as for createTenant, its
@@ -346,6 +351,8 @@ var (
 	importMaxLegalDocuments = len([]string{store.LegalNotice, store.PrivacyPolicy}) * len(tenant.Languages())
 	importMaxExpiryDays     = len(store.ExpiryDaysOfMask(store.ExpiryMaskAll))
 	importMaxWebhookEvents  = len(events.TenantTypes())
+	// importMaxSecretDurations is the number of duration codes of a secret.
+	importMaxSecretDurations = 6
 )
 
 // importDaysPerWeek bounds the weekdays of the office hours.
@@ -417,6 +424,11 @@ var importSchema = func() *strictjson.Schema {
 				"weekdays": arr(s(), importDaysPerWeek),
 			})).OrNull(),
 		})),
+		// Since 2.1: decoded, then refused with not-supported until the module
+		// is implemented (decodeImport).
+		"secretSettings": obj(with(scalars("enabled", "defaultDuration", "fileAllowed", "fileMaxBytes", "emailAllowed"), map[string]*strictjson.Schema{
+			"durations": arr(s(), importMaxSecretDurations),
+		})).Require("enabled", "durations", "fileAllowed", "fileMaxBytes", "emailAllowed"),
 		"emailTemplates": arr(strict(scalars("key", "language", "subject", "bodyHtml", "bodyText")), importMaxTemplates),
 		"legalDocuments": arr(strict(scalars("document", "language", "markdown")), importMaxLegalDocuments),
 		"webhooks": arr(strict(with(scalars("name", "kind", "enabled"), map[string]*strictjson.Schema{

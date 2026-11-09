@@ -40,7 +40,7 @@ timestamp.
 
 | Scenario | Events | Trigger (per client IP) |
 |---|---|---|
-| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `metrics_token_invalid`, `access_link_invalid`, `provisioning_token_invalid`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
+| `ed-fr/transteira-bf` | `verification_code_invalid`, `transfer_password_invalid`, `admin_login_failed`, `api_token_invalid`, `deposit_refused`, `metrics_token_invalid`, `access_link_invalid`, `provisioning_token_invalid`, `drop_link_invalid`, `secret_invalid`, `secret_proof_invalid`, `rate_limited` (except `scope="download_streams"`) | 10 events in a burst, one leaks per minute |
 | `ed-fr/transteira-fqdn-scan` | `unknown_fqdn` | 10 events in a burst, one leaks every 30 s |
 | `ed-fr/transteira-sso-bf` | `sso_failed` (since 2.0) | 30 events in a burst, one leaks every 30 s |
 

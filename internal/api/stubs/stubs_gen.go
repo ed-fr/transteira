@@ -125,6 +125,11 @@ func (Unimplemented) CreateProvisioningToken(_ context.Context, _ gen.CreateProv
 	return nil, ErrNotImplemented
 }
 
+// CreateSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) CreateSecret(_ context.Context, _ gen.CreateSecretRequestObject) (gen.CreateSecretResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // CreateSuperAdmin answers 404 not-found until the operation is implemented.
 func (Unimplemented) CreateSuperAdmin(_ context.Context, _ gen.CreateSuperAdminRequestObject) (gen.CreateSuperAdminResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -175,6 +180,11 @@ func (Unimplemented) DeleteDropLink(_ context.Context, _ gen.DeleteDropLinkReque
 	return nil, ErrNotImplemented
 }
 
+// DeleteMySecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) DeleteMySecret(_ context.Context, _ gen.DeleteMySecretRequestObject) (gen.DeleteMySecretResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // DeleteMyTransfer answers 404 not-found until the operation is implemented.
 func (Unimplemented) DeleteMyTransfer(_ context.Context, _ gen.DeleteMyTransferRequestObject) (gen.DeleteMyTransferResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -187,6 +197,11 @@ func (Unimplemented) DeleteSystemWebhook(_ context.Context, _ gen.DeleteSystemWe
 
 // DeleteTenant answers 404 not-found until the operation is implemented.
 func (Unimplemented) DeleteTenant(_ context.Context, _ gen.DeleteTenantRequestObject) (gen.DeleteTenantResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// DeleteTenantSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) DeleteTenantSecret(_ context.Context, _ gen.DeleteTenantSecretRequestObject) (gen.DeleteTenantSecretResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -217,6 +232,11 @@ func (Unimplemented) DownloadArchive(_ context.Context, _ gen.DownloadArchiveReq
 
 // DownloadFile answers 404 not-found until the operation is implemented.
 func (Unimplemented) DownloadFile(_ context.Context, _ gen.DownloadFileRequestObject) (gen.DownloadFileResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// DownloadSecretFile answers 404 not-found until the operation is implemented.
+func (Unimplemented) DownloadSecretFile(_ context.Context, _ gen.DownloadSecretFileRequestObject) (gen.DownloadSecretFileResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -400,6 +420,16 @@ func (Unimplemented) GetRecipientRules(_ context.Context, _ gen.GetRecipientRule
 	return nil, ErrNotImplemented
 }
 
+// GetSecretLink answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetSecretLink(_ context.Context, _ gen.GetSecretLinkRequestObject) (gen.GetSecretLinkResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// GetSecretSettings answers 404 not-found until the operation is implemented.
+func (Unimplemented) GetSecretSettings(_ context.Context, _ gen.GetSecretSettingsRequestObject) (gen.GetSecretSettingsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // GetSetupStatus answers 404 not-found until the operation is implemented.
 func (Unimplemented) GetSetupStatus(_ context.Context, _ gen.GetSetupStatusRequestObject) (gen.GetSetupStatusResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -555,6 +585,11 @@ func (Unimplemented) ListGlobalSecurityEvents(_ context.Context, _ gen.ListGloba
 	return nil, ErrNotImplemented
 }
 
+// ListMySecrets answers 404 not-found until the operation is implemented.
+func (Unimplemented) ListMySecrets(_ context.Context, _ gen.ListMySecretsRequestObject) (gen.ListMySecretsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // ListMyTransfers answers 404 not-found until the operation is implemented.
 func (Unimplemented) ListMyTransfers(_ context.Context, _ gen.ListMyTransfersRequestObject) (gen.ListMyTransfersResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -587,6 +622,11 @@ func (Unimplemented) ListTenantAuditEvents(_ context.Context, _ gen.ListTenantAu
 
 // ListTenantInvitations answers 404 not-found until the operation is implemented.
 func (Unimplemented) ListTenantInvitations(_ context.Context, _ gen.ListTenantInvitationsRequestObject) (gen.ListTenantInvitationsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// ListTenantSecrets answers 404 not-found until the operation is implemented.
+func (Unimplemented) ListTenantSecrets(_ context.Context, _ gen.ListTenantSecretsRequestObject) (gen.ListTenantSecretsResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -655,6 +695,11 @@ func (Unimplemented) ResetEmailTemplate(_ context.Context, _ gen.ResetEmailTempl
 	return nil, ErrNotImplemented
 }
 
+// RevealSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) RevealSecret(_ context.Context, _ gen.RevealSecretRequestObject) (gen.RevealSecretResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // RevokeApiToken answers 404 not-found until the operation is implemented.
 func (Unimplemented) RevokeApiToken(_ context.Context, _ gen.RevokeApiTokenRequestObject) (gen.RevokeApiTokenResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -677,6 +722,11 @@ func (Unimplemented) RotateDropLink(_ context.Context, _ gen.RotateDropLinkReque
 
 // SearchDataSubject answers 404 not-found until the operation is implemented.
 func (Unimplemented) SearchDataSubject(_ context.Context, _ gen.SearchDataSubjectRequestObject) (gen.SearchDataSubjectResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// SendSecret answers 404 not-found until the operation is implemented.
+func (Unimplemented) SendSecret(_ context.Context, _ gen.SendSecretRequestObject) (gen.SendSecretResponseObject, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -815,6 +865,11 @@ func (Unimplemented) UpdateRecipientRules(_ context.Context, _ gen.UpdateRecipie
 	return nil, ErrNotImplemented
 }
 
+// UpdateSecretSettings answers 404 not-found until the operation is implemented.
+func (Unimplemented) UpdateSecretSettings(_ context.Context, _ gen.UpdateSecretSettingsRequestObject) (gen.UpdateSecretSettingsResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
 // UpdateSmtpSettings answers 404 not-found until the operation is implemented.
 func (Unimplemented) UpdateSmtpSettings(_ context.Context, _ gen.UpdateSmtpSettingsRequestObject) (gen.UpdateSmtpSettingsResponseObject, error) {
 	return nil, ErrNotImplemented
@@ -842,5 +897,10 @@ func (Unimplemented) UpdateTenantWebhook(_ context.Context, _ gen.UpdateTenantWe
 
 // UploadBrandingAsset answers 404 not-found until the operation is implemented.
 func (Unimplemented) UploadBrandingAsset(_ context.Context, _ gen.UploadBrandingAssetRequestObject) (gen.UploadBrandingAssetResponseObject, error) {
+	return nil, ErrNotImplemented
+}
+
+// UploadSecretFile answers 404 not-found until the operation is implemented.
+func (Unimplemented) UploadSecretFile(_ context.Context, _ gen.UploadSecretFileRequestObject) (gen.UploadSecretFileResponseObject, error) {
 	return nil, ErrNotImplemented
 }

@@ -192,6 +192,8 @@ func TestRLSOwnerCannotDisablePolicies(t *testing.T) {
 		// V2 (migrations 0026 to 0029).
 		"security_events", "tenant_sso_settings", "sso_email_domains", "admin_identities",
 		"proof_signing_keys", "transfer_proofs", "drop_links",
+		// V2.1 (migration 0033).
+		"secrets",
 	} {
 		stmts := []string{
 			`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`,

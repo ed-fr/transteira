@@ -88,6 +88,72 @@ func (e AdminRole) Valid() bool {
 	}
 }
 
+// Defines values for AdminSecretCreatorKind.
+const (
+	AdminSecretCreatorKindApiToken       AdminSecretCreatorKind = "api_token"
+	AdminSecretCreatorKindExternal       AdminSecretCreatorKind = "external"
+	AdminSecretCreatorKindInternal       AdminSecretCreatorKind = "internal"
+	AdminSecretCreatorKindInternalRemote AdminSecretCreatorKind = "internal_remote"
+)
+
+// Valid indicates whether the value is a known member of the AdminSecretCreatorKind enum.
+func (e AdminSecretCreatorKind) Valid() bool {
+	switch e {
+	case AdminSecretCreatorKindApiToken:
+		return true
+	case AdminSecretCreatorKindExternal:
+		return true
+	case AdminSecretCreatorKindInternal:
+		return true
+	case AdminSecretCreatorKindInternalRemote:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminSecretDelivery.
+const (
+	AdminSecretDeliveryEmail AdminSecretDelivery = "email"
+	AdminSecretDeliveryLink  AdminSecretDelivery = "link"
+)
+
+// Valid indicates whether the value is a known member of the AdminSecretDelivery enum.
+func (e AdminSecretDelivery) Valid() bool {
+	switch e {
+	case AdminSecretDeliveryEmail:
+		return true
+	case AdminSecretDeliveryLink:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AdminSecretEndReason.
+const (
+	AdminSecretEndReasonDeleted AdminSecretEndReason = "deleted"
+	AdminSecretEndReasonExpired AdminSecretEndReason = "expired"
+	AdminSecretEndReasonLocked  AdminSecretEndReason = "locked"
+	AdminSecretEndReasonRead    AdminSecretEndReason = "read"
+)
+
+// Valid indicates whether the value is a known member of the AdminSecretEndReason enum.
+func (e AdminSecretEndReason) Valid() bool {
+	switch e {
+	case AdminSecretEndReasonDeleted:
+		return true
+	case AdminSecretEndReasonExpired:
+		return true
+	case AdminSecretEndReasonLocked:
+		return true
+	case AdminSecretEndReasonRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AntivirusEngine.
 const (
 	AntivirusEngineClamd AntivirusEngine = "clamd"
@@ -217,6 +283,14 @@ const (
 	AuditActionQuotaReached                 AuditAction = "quota.reached"
 	AuditActionQuotaWarning                 AuditAction = "quota.warning"
 	AuditActionRecipientVerified            AuditAction = "recipient.verified"
+	AuditActionSecretCreated                AuditAction = "secret.created"
+	AuditActionSecretDeleted                AuditAction = "secret.deleted"
+	AuditActionSecretExpired                AuditAction = "secret.expired"
+	AuditActionSecretFileDownloaded         AuditAction = "secret.file_downloaded"
+	AuditActionSecretLocked                 AuditAction = "secret.locked"
+	AuditActionSecretRevealed               AuditAction = "secret.revealed"
+	AuditActionSecretSent                   AuditAction = "secret.sent"
+	AuditActionSecretSettingsUpdated        AuditAction = "secret.settings_updated"
 	AuditActionSetupCompleted               AuditAction = "setup.completed"
 	AuditActionTenantAbuseSettingsUpdated   AuditAction = "tenant.abuse_settings_updated"
 	AuditActionTenantAntivirusDisabled      AuditAction = "tenant.antivirus_disabled"
@@ -385,6 +459,22 @@ func (e AuditAction) Valid() bool {
 	case AuditActionQuotaWarning:
 		return true
 	case AuditActionRecipientVerified:
+		return true
+	case AuditActionSecretCreated:
+		return true
+	case AuditActionSecretDeleted:
+		return true
+	case AuditActionSecretExpired:
+		return true
+	case AuditActionSecretFileDownloaded:
+		return true
+	case AuditActionSecretLocked:
+		return true
+	case AuditActionSecretRevealed:
+		return true
+	case AuditActionSecretSent:
+		return true
+	case AuditActionSecretSettingsUpdated:
 		return true
 	case AuditActionSetupCompleted:
 		return true
@@ -970,6 +1060,30 @@ func (e MaintenanceSource) Valid() bool {
 	}
 }
 
+// Defines values for ProblemReason.
+const (
+	ProblemReasonDeleted ProblemReason = "deleted"
+	ProblemReasonExpired ProblemReason = "expired"
+	ProblemReasonLocked  ProblemReason = "locked"
+	ProblemReasonRead    ProblemReason = "read"
+)
+
+// Valid indicates whether the value is a known member of the ProblemReason enum.
+func (e ProblemReason) Valid() bool {
+	switch e {
+	case ProblemReasonDeleted:
+		return true
+	case ProblemReasonExpired:
+		return true
+	case ProblemReasonLocked:
+		return true
+	case ProblemReasonRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProblemCode.
 const (
 	ProblemCodeAbuseThresholdBlocked         ProblemCode = "abuse-threshold-blocked"
@@ -1016,6 +1130,15 @@ const (
 	ProblemCodeRecipientDomainRefused        ProblemCode = "recipient-domain-refused"
 	ProblemCodeRecipientVerificationRequired ProblemCode = "recipient-verification-required"
 	ProblemCodeReplyNotAllowed               ProblemCode = "reply-not-allowed"
+	ProblemCodeSecretDurationNotOffered      ProblemCode = "secret-duration-not-offered"
+	ProblemCodeSecretEmailNotAllowed         ProblemCode = "secret-email-not-allowed"
+	ProblemCodeSecretFileNotAllowed          ProblemCode = "secret-file-not-allowed"
+	ProblemCodeSecretFileTooLarge            ProblemCode = "secret-file-too-large"
+	ProblemCodeSecretFormatInvalid           ProblemCode = "secret-format-invalid"
+	ProblemCodeSecretGone                    ProblemCode = "secret-gone"
+	ProblemCodeSecretLimitReached            ProblemCode = "secret-limit-reached"
+	ProblemCodeSecretProofInvalid            ProblemCode = "secret-proof-invalid"
+	ProblemCodeSecretsDisabled               ProblemCode = "secrets-disabled"
 	ProblemCodeSetupAlreadyComplete          ProblemCode = "setup-already-complete"
 	ProblemCodeSetupAlreadyDone              ProblemCode = "setup-already-done"
 	ProblemCodeSetupIncomplete               ProblemCode = "setup-incomplete"
@@ -1134,6 +1257,24 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeRecipientVerificationRequired:
 		return true
 	case ProblemCodeReplyNotAllowed:
+		return true
+	case ProblemCodeSecretDurationNotOffered:
+		return true
+	case ProblemCodeSecretEmailNotAllowed:
+		return true
+	case ProblemCodeSecretFileNotAllowed:
+		return true
+	case ProblemCodeSecretFileTooLarge:
+		return true
+	case ProblemCodeSecretFormatInvalid:
+		return true
+	case ProblemCodeSecretGone:
+		return true
+	case ProblemCodeSecretLimitReached:
+		return true
+	case ProblemCodeSecretProofInvalid:
+		return true
+	case ProblemCodeSecretsDisabled:
 		return true
 	case ProblemCodeSetupAlreadyComplete:
 		return true
@@ -1300,6 +1441,189 @@ func (e ScanStatus) Valid() bool {
 	}
 }
 
+// Defines values for SecretDelivery.
+const (
+	SecretDeliveryEmail SecretDelivery = "email"
+	SecretDeliveryLink  SecretDelivery = "link"
+)
+
+// Valid indicates whether the value is a known member of the SecretDelivery enum.
+func (e SecretDelivery) Valid() bool {
+	switch e {
+	case SecretDeliveryEmail:
+		return true
+	case SecretDeliveryLink:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretEndReason.
+const (
+	SecretEndReasonDeleted SecretEndReason = "deleted"
+	SecretEndReasonExpired SecretEndReason = "expired"
+	SecretEndReasonLocked  SecretEndReason = "locked"
+	SecretEndReasonRead    SecretEndReason = "read"
+)
+
+// Valid indicates whether the value is a known member of the SecretEndReason enum.
+func (e SecretEndReason) Valid() bool {
+	switch e {
+	case SecretEndReasonDeleted:
+		return true
+	case SecretEndReasonExpired:
+		return true
+	case SecretEndReasonLocked:
+		return true
+	case SecretEndReasonRead:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretCreateDelivery.
+const (
+	SecretCreateDeliveryEmail SecretCreateDelivery = "email"
+	SecretCreateDeliveryLink  SecretCreateDelivery = "link"
+)
+
+// Valid indicates whether the value is a known member of the SecretCreateDelivery enum.
+func (e SecretCreateDelivery) Valid() bool {
+	switch e {
+	case SecretCreateDeliveryEmail:
+		return true
+	case SecretCreateDeliveryLink:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretCreatedState.
+const (
+	SecretCreatedStateActive  SecretCreatedState = "active"
+	SecretCreatedStatePending SecretCreatedState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the SecretCreatedState enum.
+func (e SecretCreatedState) Valid() bool {
+	switch e {
+	case SecretCreatedStateActive:
+		return true
+	case SecretCreatedStatePending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretDuration.
+const (
+	SecretDurationN12h SecretDuration = "12h"
+	SecretDurationN1d  SecretDuration = "1d"
+	SecretDurationN1h  SecretDuration = "1h"
+	SecretDurationN30d SecretDuration = "30d"
+	SecretDurationN3d  SecretDuration = "3d"
+	SecretDurationN7d  SecretDuration = "7d"
+)
+
+// Valid indicates whether the value is a known member of the SecretDuration enum.
+func (e SecretDuration) Valid() bool {
+	switch e {
+	case SecretDurationN12h:
+		return true
+	case SecretDurationN1d:
+		return true
+	case SecretDurationN1h:
+		return true
+	case SecretDurationN30d:
+		return true
+	case SecretDurationN3d:
+		return true
+	case SecretDurationN7d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretPassphraseIterations.
+const (
+	N600000 SecretPassphraseIterations = 600000
+)
+
+// Valid indicates whether the value is a known member of the SecretPassphraseIterations enum.
+func (e SecretPassphraseIterations) Valid() bool {
+	switch e {
+	case N600000:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretPassphraseKdf.
+const (
+	Pbkdf2Sha256 SecretPassphraseKdf = "pbkdf2-sha256"
+)
+
+// Valid indicates whether the value is a known member of the SecretPassphraseKdf enum.
+func (e SecretPassphraseKdf) Valid() bool {
+	switch e {
+	case Pbkdf2Sha256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretState.
+const (
+	SecretStateActive  SecretState = "active"
+	SecretStateDeleted SecretState = "deleted"
+	SecretStateExpired SecretState = "expired"
+	SecretStateLocked  SecretState = "locked"
+	SecretStatePending SecretState = "pending"
+	SecretStateRead    SecretState = "read"
+)
+
+// Valid indicates whether the value is a known member of the SecretState enum.
+func (e SecretState) Valid() bool {
+	switch e {
+	case SecretStateActive:
+		return true
+	case SecretStateDeleted:
+		return true
+	case SecretStateExpired:
+		return true
+	case SecretStateLocked:
+		return true
+	case SecretStatePending:
+		return true
+	case SecretStateRead:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretStatusState.
+const (
+	SecretStatusStateActive SecretStatusState = "active"
+)
+
+// Valid indicates whether the value is a known member of the SecretStatusState enum.
+func (e SecretStatusState) Valid() bool {
+	switch e {
+	case SecretStatusStateActive:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SecurityEventType.
 const (
 	SecurityEventTypeAccessLinkInvalid        SecurityEventType = "access_link_invalid"
@@ -1310,6 +1634,8 @@ const (
 	SecurityEventTypeMetricsTokenInvalid      SecurityEventType = "metrics_token_invalid"
 	SecurityEventTypeProvisioningTokenInvalid SecurityEventType = "provisioning_token_invalid"
 	SecurityEventTypeRateLimited              SecurityEventType = "rate_limited"
+	SecurityEventTypeSecretInvalid            SecurityEventType = "secret_invalid"
+	SecurityEventTypeSecretProofInvalid       SecurityEventType = "secret_proof_invalid"
 	SecurityEventTypeSsoFailed                SecurityEventType = "sso_failed"
 	SecurityEventTypeTransferPasswordInvalid  SecurityEventType = "transfer_password_invalid"
 	SecurityEventTypeUnknownFqdn              SecurityEventType = "unknown_fqdn"
@@ -1334,6 +1660,10 @@ func (e SecurityEventType) Valid() bool {
 	case SecurityEventTypeProvisioningTokenInvalid:
 		return true
 	case SecurityEventTypeRateLimited:
+		return true
+	case SecurityEventTypeSecretInvalid:
+		return true
+	case SecurityEventTypeSecretProofInvalid:
 		return true
 	case SecurityEventTypeSsoFailed:
 		return true
@@ -2341,6 +2671,59 @@ type AdminReason struct {
 // write; created, changed and deleted by the super admin only.
 type AdminRole string
 
+// AdminSecret Since 2.1. A secret as the admins of the tenant see it: metadata only.
+type AdminSecret struct {
+	CreatedAt   time.Time              `json:"createdAt"`
+	CreatorKind AdminSecretCreatorKind `json:"creatorKind"`
+	Delivery    AdminSecretDelivery    `json:"delivery"`
+
+	// EndReason Why it ended; for `deleted`, the actor (creator or admin) is in the `secret.deleted` audit entry.
+	EndReason *AdminSecretEndReason `json:"endReason,omitempty"`
+
+	// EndedAt When the secret left `active` (tombstones).
+	EndedAt *time.Time `json:"endedAt,omitempty"`
+
+	// ExpiresAt Absent while `pending`.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// FileSize Declared ciphertext size of the file. Kept in a tombstone, where it describes what was declared.
+	FileSize *int64 `json:"fileSize,omitempty"`
+
+	// HasFile A file was declared at creation. In a tombstone it describes what was declared, not that a file still exists (the file is deleted when the secret ends or after its download).
+	HasFile     bool       `json:"hasFile"`
+	Id          string     `json:"id"`
+	ReadAt      *time.Time `json:"readAt,omitempty"`
+	ReadReceipt bool       `json:"readReceipt"`
+
+	// Recipient With `email` delivery.
+	Recipient *Email `json:"recipient,omitempty"`
+
+	// SenderEmail A bare mail address (`user@entity-a.example.com`), without display name. A request value that is not an acceptable address is refused with a `validation-failed` problem naming the field (`invalid-email`).
+	SenderEmail Email `json:"senderEmail"`
+
+	// State Since 2.1. `pending` (created, waiting for its file or its send call, purged after 1 hour)
+	// then `active` (the expiry clock runs), then one of `read`, `expired`, `deleted` or
+	// `locked`. The last four are tombstones without content, kept 30 days.
+	State SecretState `json:"state"`
+}
+
+// AdminSecretCreatorKind defines model for AdminSecret.CreatorKind.
+type AdminSecretCreatorKind string
+
+// AdminSecretDelivery defines model for AdminSecret.Delivery.
+type AdminSecretDelivery string
+
+// AdminSecretEndReason Why it ended; for `deleted`, the actor (creator or admin) is in the `secret.deleted` audit entry.
+type AdminSecretEndReason string
+
+// AdminSecretList defines model for AdminSecretList.
+type AdminSecretList struct {
+	Items []AdminSecret `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; absent on the last page.
+	NextCursor *PageCursor `json:"nextCursor,omitempty"`
+}
+
 // AdminTransfer defines model for AdminTransfer.
 type AdminTransfer struct {
 	ApiTokenId *string `json:"apiTokenId,omitempty"`
@@ -2745,6 +3128,7 @@ type ApiTokenUpdate = json.RawMessage
 // `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
 // identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 // a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -2811,6 +3195,7 @@ type AuditEvent struct {
 	// `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
 	// identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 	// a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
+	// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id string `json:"id"`
@@ -3016,8 +3401,11 @@ type DataSubjectEraseReport struct {
 	// ProofsDeleted Since 2.0. Proofs of deposit and delivery whose signed statement names the address, deleted.
 	ProofsDeleted           *int `json:"proofsDeleted,omitempty"`
 	RecipientEntriesRemoved int  `json:"recipientEntriesRemoved"`
-	TransfersDeleted        int  `json:"transfersDeleted"`
-	VerifiedAddressDeleted  bool `json:"verifiedAddressDeleted"`
+
+	// SecretsDeleted Since 2.1. One-time secrets whose creator or recipient was the address, deleted with their content.
+	SecretsDeleted         *int `json:"secretsDeleted,omitempty"`
+	TransfersDeleted       int  `json:"transfersDeleted"`
+	VerifiedAddressDeleted bool `json:"verifiedAddressDeleted"`
 }
 
 // DataSubjectRequest defines model for DataSubjectRequest.
@@ -3040,6 +3428,9 @@ type DataSubjectSummary struct {
 
 	// Proofs Since 2.0. Proofs of deposit and delivery whose signed statement names the address (erased with it).
 	Proofs *int `json:"proofs,omitempty"`
+
+	// Secrets Since 2.1. One-time secrets (any state) whose creator or recipient is the address.
+	Secrets *int `json:"secrets,omitempty"`
 
 	// SecurityEvents Always 0: the security log never records e-mail addresses.
 	SecurityEvents       int  `json:"securityEvents"`
@@ -3911,10 +4302,13 @@ type Problem struct {
 	Files *[]string `json:"files,omitempty"`
 
 	// Instance Request identifier (also in the `X-Request-Id` header and in logs).
-	Instance          *string `json:"instance,omitempty"`
-	MaxTransferBytes  *int64  `json:"maxTransferBytes,omitempty"`
-	RetryAfterSeconds *int    `json:"retryAfterSeconds,omitempty"`
-	Status            int     `json:"status"`
+	Instance         *string `json:"instance,omitempty"`
+	MaxTransferBytes *int64  `json:"maxTransferBytes,omitempty"`
+
+	// Reason Since 2.1. With `secret-gone`: why the secret ended.
+	Reason            *ProblemReason `json:"reason,omitempty"`
+	RetryAfterSeconds *int           `json:"retryAfterSeconds,omitempty"`
+	Status            int            `json:"status"`
 
 	// Title Short localised summary.
 	Title string `json:"title"`
@@ -3922,6 +4316,9 @@ type Problem struct {
 	// Type Documentation URL of the problem type.
 	Type string `json:"type"`
 }
+
+// ProblemReason Since 2.1. With `secret-gone`: why the secret ended.
+type ProblemReason string
 
 // ProblemCode Stable error code. See `docs/api/errors.md`.
 type ProblemCode string
@@ -4437,6 +4834,216 @@ type ResendRequest struct {
 // delivered unscanned and flagged like `not_scanned_too_large`.
 type ScanStatus string
 
+// Secret Since 2.1. A secret as its creator sees it: no content, no key, no link.
+type Secret struct {
+	CreatedAt time.Time      `json:"createdAt"`
+	Delivery  SecretDelivery `json:"delivery"`
+
+	// EndReason Why it ended; for `deleted`, the actor (creator or admin) is in the `secret.deleted` audit entry.
+	EndReason *SecretEndReason `json:"endReason,omitempty"`
+
+	// EndedAt When the secret left `active` (tombstones).
+	EndedAt *time.Time `json:"endedAt,omitempty"`
+
+	// ExpiresAt Absent while `pending`.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+
+	// FileSize Declared ciphertext size of the file. Kept in a tombstone, where it describes what was declared.
+	FileSize *int64 `json:"fileSize,omitempty"`
+
+	// HasFile A file was declared at creation. In a tombstone it describes what was declared, not that a file still exists (the file is deleted when the secret ends or after its download).
+	HasFile     bool       `json:"hasFile"`
+	Id          string     `json:"id"`
+	ReadAt      *time.Time `json:"readAt,omitempty"`
+	ReadReceipt bool       `json:"readReceipt"`
+
+	// Recipient With `email` delivery.
+	Recipient *Email `json:"recipient,omitempty"`
+
+	// State Since 2.1. `pending` (created, waiting for its file or its send call, purged after 1 hour)
+	// then `active` (the expiry clock runs), then one of `read`, `expired`, `deleted` or
+	// `locked`. The last four are tombstones without content, kept 30 days.
+	State SecretState `json:"state"`
+}
+
+// SecretDelivery defines model for Secret.Delivery.
+type SecretDelivery string
+
+// SecretEndReason Why it ended; for `deleted`, the actor (creator or admin) is in the `secret.deleted` audit entry.
+type SecretEndReason string
+
+// SecretCreate Since 2.1. Creation of a one-time secret.
+type SecretCreate struct {
+	// Delivery `link`: the creator hands the link over. `email`: the server mails it to `recipient`.
+	Delivery SecretCreateDelivery `json:"delivery"`
+
+	// EncryptedText Since 2.1. The text sealed in the browser (version byte 1, nonce, ciphertext and tag), canonical unpadded base64url, 29 to 40 029 decoded bytes (0 to 10 000 Unicode code points; 39 to 53 372 characters). The length and the alphabet are checked by this schema (`400 validation-failed`); the canonical encoding, the version byte and the empty text (exactly 29 bytes, refused when no file is declared) by the keyless framing check (`400 secret-format-invalid`). The server cannot read it. Format: docs/architecture/e2e-format.md.
+	EncryptedText SecretSealedText `json:"encryptedText"`
+
+	// ExpiresIn Since 2.1. Duration code of a secret (from its activation): `1h`, `12h`, `1d`, `3d`, `7d` or `30d`. A tenant offers a subset (`SecretSettings.durations`).
+	ExpiresIn SecretDuration `json:"expiresIn"`
+
+	// File Since 2.1. The optional small file of a secret, an ordinary TTE2 stream sealed with the secret key.
+	File *SecretFileDeclaration `json:"file,omitempty"`
+
+	// KeyVerifier SHA-256 of the key proof derived from the key K alone (docs/architecture/e2e-format.md 3.3.4), 64 lowercase hex characters.
+	KeyVerifier string `json:"keyVerifier"`
+
+	// Passphrase Since 2.1. Public parameters of the passphrase key derivation (PBKDF2-HMAC-SHA-256 of the NFC passphrase). Clients refuse any `kdf` other than `pbkdf2-sha256`, any iteration count other than 600000 and any salt other than 22 canonical base64url characters, so that a server cannot downgrade it; the server validates the same through this schema (`400 validation-failed`).
+	Passphrase *SecretPassphrase `json:"passphrase,omitempty"`
+
+	// ReadReceipt Mail the creator when the secret is read, expires unread or is locked.
+	ReadReceipt *bool `json:"readReceipt,omitempty"`
+
+	// Recipient Required with `delivery=email`, refused with `link`. One address. Forced to the inviting internal user for an invited external creator.
+	Recipient *Email `json:"recipient,omitempty"`
+
+	// SenderEmail Mandatory with an API token (internal address, the declared creator); refused with a deposit session.
+	SenderEmail *Email `json:"senderEmail,omitempty"`
+
+	// Verifier SHA-256 of the proof derived from the secret root key K' (key and passphrase), 64 lowercase hex characters. A verifier does not give the proof.
+	Verifier string `json:"verifier"`
+}
+
+// SecretCreateDelivery `link`: the creator hands the link over. `email`: the server mails it to `recipient`.
+type SecretCreateDelivery string
+
+// SecretCreated Since 2.1. A new secret: its identifier and its token, shown once.
+type SecretCreated struct {
+	// ExpiresAt Present when `state` is `active`.
+	ExpiresAt *time.Time         `json:"expiresAt,omitempty"`
+	Id        string             `json:"id"`
+	State     SecretCreatedState `json:"state"`
+
+	// Token Shown once; only its SHA-256 is stored. The link is `https://<fqdn>/s/<token>#k=<key>`, the key being added by the client.
+	Token string `json:"token"`
+}
+
+// SecretCreatedState defines model for SecretCreated.State.
+type SecretCreatedState string
+
+// SecretDuration Since 2.1. Duration code of a secret (from its activation): `1h`, `12h`, `1d`, `3d`, `7d` or `30d`. A tenant offers a subset (`SecretSettings.durations`).
+type SecretDuration string
+
+// SecretFeatures Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included.
+type SecretFeatures struct {
+	// DefaultDuration Since 2.1. Duration code of a secret (from its activation): `1h`, `12h`, `1d`, `3d`, `7d` or `30d`. A tenant offers a subset (`SecretSettings.durations`).
+	DefaultDuration *SecretDuration  `json:"defaultDuration,omitempty"`
+	Durations       []SecretDuration `json:"durations"`
+	EmailAllowed    bool             `json:"emailAllowed"`
+	Enabled         bool             `json:"enabled"`
+	FileAllowed     bool             `json:"fileAllowed"`
+	FileMaxBytes    int64            `json:"fileMaxBytes"`
+}
+
+// SecretFileDeclaration Since 2.1. The optional small file of a secret, an ordinary TTE2 stream sealed with the secret key.
+type SecretFileDeclaration struct {
+	// EncryptedMetadata The file metadata sealed under the secret root key K' (index 0, count 1). For a secret, a framing the schema cannot check (canonical encoding, version byte, room for the nonce and the tag) is `400 secret-format-invalid`. Returned to the recipient by `revealSecret` only.
+	EncryptedMetadata EncryptedMetadata `json:"encryptedMetadata"`
+
+	// Size Size of the ciphertext in bytes, at least 48 (header and empty final chunk), at most 25 MiB and the tenant limit.
+	Size int64 `json:"size"`
+}
+
+// SecretList defines model for SecretList.
+type SecretList struct {
+	Items []Secret `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; absent on the last page.
+	NextCursor *PageCursor `json:"nextCursor,omitempty"`
+}
+
+// SecretPassphrase Since 2.1. Public parameters of the passphrase key derivation (PBKDF2-HMAC-SHA-256 of the NFC passphrase). Clients refuse any `kdf` other than `pbkdf2-sha256`, any iteration count other than 600000 and any salt other than 22 canonical base64url characters, so that a server cannot downgrade it; the server validates the same through this schema (`400 validation-failed`).
+type SecretPassphrase struct {
+	Iterations SecretPassphraseIterations `json:"iterations"`
+	Kdf        SecretPassphraseKdf        `json:"kdf"`
+
+	// Salt 16 random bytes, base64url without padding, canonical (22 characters, the last one `A`, `Q`, `g` or `w`). Public.
+	Salt string `json:"salt"`
+}
+
+// SecretPassphraseIterations defines model for SecretPassphrase.Iterations.
+type SecretPassphraseIterations int
+
+// SecretPassphraseKdf defines model for SecretPassphrase.Kdf.
+type SecretPassphraseKdf string
+
+// SecretReveal Since 2.1. The reveal proof.
+type SecretReveal struct {
+	// KeyProof The 32-byte key proof derived in the browser from the key K alone, 64 lowercase hex characters.
+	KeyProof string `json:"keyProof"`
+
+	// Proof The 32-byte proof derived from the key and the passphrase (K'), 64 lowercase hex characters.
+	Proof string `json:"proof"`
+}
+
+// SecretRevealed Since 2.1. The sealed text and, with a file, its sealed metadata and its one-time grant.
+type SecretRevealed struct {
+	// EncryptedMetadata With a file: its metadata sealed under K' (index 0, count 1), returned once, here only; the server clears it in the reveal transaction.
+	EncryptedMetadata *EncryptedMetadata `json:"encryptedMetadata,omitempty"`
+
+	// EncryptedText Since 2.1. The text sealed in the browser (version byte 1, nonce, ciphertext and tag), canonical unpadded base64url, 29 to 40 029 decoded bytes (0 to 10 000 Unicode code points; 39 to 53 372 characters). The length and the alphabet are checked by this schema (`400 validation-failed`); the canonical encoding, the version byte and the empty text (exactly 29 bytes, refused when no file is declared) by the keyless framing check (`400 secret-format-invalid`). The server cannot read it. Format: docs/architecture/e2e-format.md.
+	EncryptedText SecretSealedText `json:"encryptedText"`
+
+	// FileGrant `ttg_` and 43 base62 characters (256 bits). Sent in the `TransTeira-Secret-Grant` header of `downloadSecretFile`; stored hashed; one use.
+	FileGrant *string `json:"fileGrant,omitempty"`
+
+	// FileGrantExpiresAt 10 minutes after the reveal.
+	FileGrantExpiresAt *time.Time `json:"fileGrantExpiresAt,omitempty"`
+}
+
+// SecretSealedText Since 2.1. The text sealed in the browser (version byte 1, nonce, ciphertext and tag), canonical unpadded base64url, 29 to 40 029 decoded bytes (0 to 10 000 Unicode code points; 39 to 53 372 characters). The length and the alphabet are checked by this schema (`400 validation-failed`); the canonical encoding, the version byte and the empty text (exactly 29 bytes, refused when no file is declared) by the keyless framing check (`400 secret-format-invalid`). The server cannot read it. Format: docs/architecture/e2e-format.md.
+type SecretSealedText = string
+
+// SecretSend Since 2.1. Activation of an e-mail secret.
+type SecretSend struct {
+	// FragmentKey The 32-byte key of the link fragment, canonical base64url without padding (43 characters, the last one carrying no unused bit). Used once to compose the mail; never stored nor logged.
+	FragmentKey string `json:"fragmentKey"`
+}
+
+// SecretSettings Since 2.1. One-time secrets settings of a tenant.
+type SecretSettings struct {
+	// DefaultDuration Preselected duration; one of `durations`.
+	DefaultDuration *SecretDuration `json:"defaultDuration,omitempty"`
+
+	// Durations Offered durations (default `1h`, `1d`, `7d`).
+	Durations []SecretDuration `json:"durations"`
+
+	// EmailAllowed E-mail delivery allowed. Default true.
+	EmailAllowed bool `json:"emailAllowed"`
+
+	// Enabled The module is on by default.
+	Enabled bool `json:"enabled"`
+
+	// FileAllowed Default true.
+	FileAllowed bool `json:"fileAllowed"`
+
+	// FileMaxBytes Largest ciphertext of a secret file: 1 MiB to 25 MiB, 10 MiB by default.
+	FileMaxBytes int64 `json:"fileMaxBytes"`
+}
+
+// SecretState Since 2.1. `pending` (created, waiting for its file or its send call, purged after 1 hour)
+// then `active` (the expiry clock runs), then one of `read`, `expired`, `deleted` or
+// `locked`. The last four are tombstones without content, kept 30 days.
+type SecretState string
+
+// SecretStatus Since 2.1. What the recipient page needs before the reveal. Never anything sealed under the secret keys (neither the text nor the file metadata): before a successful reveal, the server returns no value that would let whoever holds the link alone test passphrases offline.
+type SecretStatus struct {
+	ExpiresAt time.Time `json:"expiresAt"`
+
+	// File Null without file. Only the ciphertext size (not an oracle: it is chosen by the creator's client and bounded by the tenant); the sealed metadata comes with `revealSecret`. A file is never scanned by the antivirus.
+	File *struct {
+		Size int64 `json:"size"`
+	} `json:"file"`
+
+	// Passphrase Public passphrase parameters; absent without passphrase. Clients refuse any other kdf, iteration count or salt length.
+	Passphrase *SecretPassphrase `json:"passphrase,omitempty"`
+	State      SecretStatusState `json:"state"`
+}
+
+// SecretStatusState defines model for SecretStatus.State.
+type SecretStatusState string
+
 // SecurityEvent Since 2.0. A line of the security log, kept in the database. Never holds an e-mail address.
 type SecurityEvent struct {
 	Id string `json:"id"`
@@ -4857,6 +5464,9 @@ type TenantConfigExport struct {
 	// SchemaVersion Always 1 in this version.
 	SchemaVersion int `json:"schemaVersion"`
 
+	// SecretSettings Since 2.1. One-time secrets settings of a tenant.
+	SecretSettings *SecretSettings `json:"secretSettings,omitempty"`
+
 	// Settings General settings, without the storage quota.
 	Settings *struct {
 		AllowRemoteInternalDeposit *bool `json:"allowRemoteInternalDeposit,omitempty"`
@@ -5012,6 +5622,9 @@ type TenantFeatures struct {
 	// RemoteInternalDeposit Internal addresses already verified from the internal network may deposit from outside (code each time).
 	RemoteInternalDeposit bool `json:"remoteInternalDeposit"`
 
+	// Secrets Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included.
+	Secrets *SecretFeatures `json:"secrets,omitempty"`
+
 	// TransferReply Recipients may send files back to the sender.
 	TransferReply bool `json:"transferReply"`
 }
@@ -5134,6 +5747,9 @@ type TenantStats struct {
 	// DownloadCount Download starts of a file or of the archive during the period; HEAD requests and resumed ranges are not counted.
 	DownloadCount int               `json:"downloadCount"`
 	Period        TenantStatsPeriod `json:"period"`
+
+	// SecretsCreated Since 2.1. One-time secrets created during the period (count only, never content).
+	SecretsCreated *int `json:"secretsCreated,omitempty"`
 
 	// Series Breakdown of `transferCount` and `bytesUploaded` over the period, oldest first, with a
 	// zero-filled point for every period without activity: one point per UTC day for `7d`
@@ -5571,6 +6187,12 @@ type ProvisioningTokenId = string
 // RecognitionCookie defines model for RecognitionCookie.
 type RecognitionCookie = string
 
+// SecretId defines model for SecretId.
+type SecretId = string
+
+// SecretToken defines model for SecretToken.
+type SecretToken = string
+
 // TemplateKey Mail template of an entity. `file-problems` is the alert sent to the sender when files of
 // a transfer are infected (erased) or withheld after an analysis error (`scan_error`);
 // `file-not-scanned` tells the sender that files were released unscanned because they were
@@ -5671,6 +6293,9 @@ type QuotaExceeded = Problem
 
 // RateLimited RFC 9457 Problem Details with TransTeira extension members.
 type RateLimited = Problem
+
+// SecretGone RFC 9457 Problem Details with TransTeira extension members.
+type SecretGone = Problem
 
 // ServiceUnavailable RFC 9457 Problem Details with TransTeira extension members.
 type ServiceUnavailable = Problem
@@ -5882,6 +6507,21 @@ type ListTenantInvitationsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListTenantSecretsParams defines parameters for ListTenantSecrets.
+type ListTenantSecretsParams struct {
+	// State Filter by state.
+	State *SecretState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Sender Filter on creator address (exact match). Refused to an auditor (`403 read-only-role`).
+	Sender *Email `form:"sender,omitempty" json:"sender,omitempty"`
+
+	// Limit Maximum number of items per page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque cursor returned as `nextCursor` by the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListTenantSecurityEventsParams defines parameters for ListTenantSecurityEvents.
 type ListTenantSecurityEventsParams struct {
 	// Type Since 2.0. Filter by security event type. The list is extensible: any value of the form `^[a-z][a-z0-9_]*$` is accepted, and an unknown type matches no event.
@@ -5984,6 +6624,15 @@ type RequestMyTransfersLinkParams struct {
 	AcceptLanguage *AcceptLanguage `json:"Accept-Language,omitempty"`
 }
 
+// ListMySecretsParams defines parameters for ListMySecrets.
+type ListMySecretsParams struct {
+	// Limit Maximum number of items per page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Opaque cursor returned as `nextCursor` by the previous page.
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListMyTransfersParams defines parameters for ListMyTransfers.
 type ListMyTransfersParams struct {
 	// Limit Maximum number of items per page.
@@ -6000,6 +6649,12 @@ type GetMyTransferProofParams struct {
 
 	// Recipient Since 2.0. With `kind=delivery` on a transfer with per-recipient links: the recipient whose first download is proved. Absent, the first delivery of the transfer.
 	Recipient *ProofRecipient `form:"recipient,omitempty" json:"recipient,omitempty"`
+}
+
+// DownloadSecretFileParams defines parameters for DownloadSecretFile.
+type DownloadSecretFileParams struct {
+	// TransTeiraSecretGrant One-time file grant returned by `revealSecret` (`ttg_` and 43 base62 characters, 256 bits).
+	TransTeiraSecretGrant string `json:"TransTeira-Secret-Grant"`
 }
 
 // GetPublicTenantParams defines parameters for GetPublicTenant.
@@ -6193,6 +6848,9 @@ type UpdateNetworkRulesJSONRequestBody = NetworkRules
 // UpdateRecipientRulesJSONRequestBody defines body for UpdateRecipientRules for application/json ContentType.
 type UpdateRecipientRulesJSONRequestBody = RecipientRules
 
+// UpdateSecretSettingsJSONRequestBody defines body for UpdateSecretSettings for application/json ContentType.
+type UpdateSecretSettingsJSONRequestBody = SecretSettings
+
 // CompleteTenantSetupJSONRequestBody defines body for CompleteTenantSetup for application/json ContentType.
 type CompleteTenantSetupJSONRequestBody = TenantSetupCompletion
 
@@ -6249,6 +6907,15 @@ type ExtendMyTransferJSONRequestBody = TransferExtension
 
 // ProvisionTenantJSONRequestBody defines body for ProvisionTenant for application/json ContentType.
 type ProvisionTenantJSONRequestBody = ProvisionTenantRequest
+
+// RevealSecretJSONRequestBody defines body for RevealSecret for application/json ContentType.
+type RevealSecretJSONRequestBody = SecretReveal
+
+// CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
+type CreateSecretJSONRequestBody = SecretCreate
+
+// SendSecretJSONRequestBody defines body for SendSecret for application/json ContentType.
+type SendSecretJSONRequestBody = SecretSend
 
 // CreateTransferJSONRequestBody defines body for CreateTransfer for application/json ContentType.
 type CreateTransferJSONRequestBody = TransferCreate
@@ -6656,6 +7323,18 @@ type ServerInterface interface {
 	// UpdateRecipientRules Replace the allowed and denied recipient domains
 	// (PUT /admin/tenants/{tenantId}/recipient-rules)
 	UpdateRecipientRules(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// GetSecretSettings One-time secrets settings
+	// (GET /admin/tenants/{tenantId}/secret-settings)
+	GetSecretSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// UpdateSecretSettings Replace the one-time secrets settings
+	// (PUT /admin/tenants/{tenantId}/secret-settings)
+	UpdateSecretSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId)
+	// ListTenantSecrets List the one-time secrets of the tenant
+	// (GET /admin/tenants/{tenantId}/secrets)
+	ListTenantSecrets(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantSecretsParams)
+	// DeleteTenantSecret Delete a pending or active secret
+	// (DELETE /admin/tenants/{tenantId}/secrets/{secretId})
+	DeleteTenantSecret(w http.ResponseWriter, r *http.Request, tenantId TenantId, secretId SecretId)
 	// ListTenantSecurityEvents Security events of the tenant (12-month retention)
 	// (GET /admin/tenants/{tenantId}/security-events)
 	ListTenantSecurityEvents(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantSecurityEventsParams)
@@ -6776,6 +7455,12 @@ type ServerInterface interface {
 	// RequestMyTransfersLink Ask for a "My transfers" access link by mail
 	// (POST /me/access-links)
 	RequestMyTransfersLink(w http.ResponseWriter, r *http.Request, params RequestMyTransfersLinkParams)
+	// ListMySecrets List my secrets
+	// (GET /me/secrets)
+	ListMySecrets(w http.ResponseWriter, r *http.Request, params ListMySecretsParams)
+	// DeleteMySecret Delete one of my secrets before it is read
+	// (DELETE /me/secrets/{secretId})
+	DeleteMySecret(w http.ResponseWriter, r *http.Request, secretId SecretId)
 	// StartMyTransfersSession Open a "My transfers" session from an access link
 	// (POST /me/sessions)
 	StartMyTransfersSession(w http.ResponseWriter, r *http.Request)
@@ -6821,6 +7506,24 @@ type ServerInterface interface {
 	// GetProvisionedTenant State of a tenant created by this token
 	// (GET /provisioning/tenants/{tenantId})
 	GetProvisionedTenant(w http.ResponseWriter, r *http.Request, tenantId string)
+	// GetSecretLink Status of a secret link
+	// (GET /secret-links/{secretToken})
+	GetSecretLink(w http.ResponseWriter, r *http.Request, secretToken SecretToken)
+	// DownloadSecretFile Download the file of a revealed secret (once)
+	// (GET /secret-links/{secretToken}/file)
+	DownloadSecretFile(w http.ResponseWriter, r *http.Request, secretToken SecretToken, params DownloadSecretFileParams)
+	// RevealSecret Reveal a secret (once)
+	// (POST /secret-links/{secretToken}/reveal)
+	RevealSecret(w http.ResponseWriter, r *http.Request, secretToken SecretToken)
+	// CreateSecret Create a one-time secret
+	// (POST /secrets)
+	CreateSecret(w http.ResponseWriter, r *http.Request)
+	// UploadSecretFile Upload the file of a pending secret
+	// (PUT /secrets/{secretId}/file)
+	UploadSecretFile(w http.ResponseWriter, r *http.Request, secretId SecretId)
+	// SendSecret Activate a secret and mail its link
+	// (POST /secrets/{secretId}/send)
+	SendSecret(w http.ResponseWriter, r *http.Request, secretId SecretId)
 	// GetStatus Instance status (JSON)
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
@@ -9708,6 +10411,174 @@ func (siw *ServerInterfaceWrapper) UpdateRecipientRules(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetSecretSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetSecretSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSecretSettings(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSecretSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSecretSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSecretSettings(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTenantSecrets operation middleware
+func (siw *ServerInterfaceWrapper) ListTenantSecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTenantSecretsParams
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sender" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sender", r.URL.Query(), &params.Sender, runtime.BindQueryParameterOptions{Type: "string", Format: "email"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sender"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sender", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTenantSecrets(w, r, tenantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTenantSecret operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTenantSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tenantId" -------------
+	var tenantId TenantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenantId", r.PathValue("tenantId"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tenantId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "secretId" -------------
+	var secretId SecretId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretId", r.PathValue("secretId"), &secretId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTenantSecret(w, r, tenantId, secretId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTenantSecurityEvents operation middleware
 func (siw *ServerInterfaceWrapper) ListTenantSecurityEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -11140,6 +12011,78 @@ func (siw *ServerInterfaceWrapper) RequestMyTransfersLink(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// ListMySecrets operation middleware
+func (siw *ServerInterfaceWrapper) ListMySecrets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListMySecretsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMySecrets(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMySecret operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMySecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretId" -------------
+	var secretId SecretId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretId", r.PathValue("secretId"), &secretId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMySecret(w, r, secretId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // StartMyTransfersSession operation middleware
 func (siw *ServerInterfaceWrapper) StartMyTransfersSession(w http.ResponseWriter, r *http.Request) {
 
@@ -11474,6 +12417,178 @@ func (siw *ServerInterfaceWrapper) GetProvisionedTenant(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetProvisionedTenant(w, r, tenantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSecretLink operation middleware
+func (siw *ServerInterfaceWrapper) GetSecretLink(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken SecretToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", r.PathValue("secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSecretLink(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadSecretFile operation middleware
+func (siw *ServerInterfaceWrapper) DownloadSecretFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken SecretToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", r.PathValue("secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadSecretFileParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "TransTeira-Secret-Grant" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("TransTeira-Secret-Grant")]; found {
+		var TransTeiraSecretGrant string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "TransTeira-Secret-Grant", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "TransTeira-Secret-Grant", valueList[0], &TransTeiraSecretGrant, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "TransTeira-Secret-Grant", Err: err})
+			return
+		}
+
+		params.TransTeiraSecretGrant = TransTeiraSecretGrant
+
+	} else {
+		err := fmt.Errorf("Header parameter TransTeira-Secret-Grant is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "TransTeira-Secret-Grant", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadSecretFile(w, r, secretToken, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevealSecret operation middleware
+func (siw *ServerInterfaceWrapper) RevealSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken SecretToken
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", r.PathValue("secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevealSecret(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSecret operation middleware
+func (siw *ServerInterfaceWrapper) CreateSecret(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSecret(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadSecretFile operation middleware
+func (siw *ServerInterfaceWrapper) UploadSecretFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretId" -------------
+	var secretId SecretId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretId", r.PathValue("secretId"), &secretId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadSecretFile(w, r, secretId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendSecret operation middleware
+func (siw *ServerInterfaceWrapper) SendSecret(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "secretId" -------------
+	var secretId SecretId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretId", r.PathValue("secretId"), &secretId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendSecret(w, r, secretId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -12192,6 +13307,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/invitations/{invitationToken}", wrapper.GetInvitation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/drop-links/{dropToken}", wrapper.GetPublicDropLink)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/proof-keys", wrapper.ListProofKeys)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secrets", wrapper.CreateSecret)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/secrets/{secretId}/file", wrapper.UploadSecretFile)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secrets/{secretId}/send", wrapper.SendSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/secret-links/{secretToken}", wrapper.GetSecretLink)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/secret-links/{secretToken}/reveal", wrapper.RevealSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/secret-links/{secretToken}/file", wrapper.DownloadSecretFile)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}", wrapper.GetDownload)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/downloads/{linkToken}/unlock", wrapper.UnlockDownload)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/downloads/{linkToken}/files/{fileId}", wrapper.DownloadFile)
@@ -12210,6 +13331,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/transfers/{transferId}/proof", wrapper.GetMyTransferProof)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/transfers/{transferId}/link", wrapper.ReissueMyTransferLink)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/transfers/{transferId}/extension", wrapper.ExtendMyTransfer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/secrets", wrapper.ListMySecrets)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/secrets/{secretId}", wrapper.DeleteMySecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/setup", wrapper.GetSetupStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/setup", wrapper.CreateSuperAdmin)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/auth/login", wrapper.AdminLogin)
@@ -12294,6 +13417,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/drop-links/{dropLinkId}", wrapper.GetDropLink)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/admin/tenants/{tenantId}/drop-links/{dropLinkId}", wrapper.UpdateDropLink)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/tenants/{tenantId}/drop-links/{dropLinkId}/rotate", wrapper.RotateDropLink)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/secrets", wrapper.ListTenantSecrets)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/tenants/{tenantId}/secrets/{secretId}", wrapper.DeleteTenantSecret)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/secret-settings", wrapper.GetSecretSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/admin/tenants/{tenantId}/secret-settings", wrapper.UpdateSecretSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/security-events", wrapper.ListTenantSecurityEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/tenants/{tenantId}/transfers/{transferId}/proof", wrapper.GetTenantTransferProof)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/admins", wrapper.ListAdmins)
@@ -12451,6 +13578,8 @@ type RateLimitedApplicationProblemPlusJSONResponse struct {
 
 	Headers RateLimitedResponseHeaders
 }
+
+type SecretGoneApplicationProblemPlusJSONResponse Problem
 
 type ServiceUnavailableResponseHeaders struct {
 	RetryAfter *int
@@ -21413,6 +22542,379 @@ func (response UpdateRecipientRules500ApplicationProblemPlusJSONResponse) VisitU
 	return err
 }
 
+type GetSecretSettingsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+}
+
+type GetSecretSettingsResponseObject interface {
+	VisitGetSecretSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetSecretSettings200JSONResponse SecretSettings
+
+func (response GetSecretSettings200JSONResponse) VisitGetSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretSettings401ApplicationProblemPlusJSONResponse) VisitGetSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretSettings403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretSettings403ApplicationProblemPlusJSONResponse) VisitGetSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretSettings404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretSettings404ApplicationProblemPlusJSONResponse) VisitGetSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretSettings500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretSettings500ApplicationProblemPlusJSONResponse) VisitGetSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettingsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Body     *UpdateSecretSettingsJSONRequestBody
+}
+
+type UpdateSecretSettingsResponseObject interface {
+	VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateSecretSettings200JSONResponse SecretSettings
+
+func (response UpdateSecretSettings200JSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettings400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSecretSettings400ApplicationProblemPlusJSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettings401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSecretSettings401ApplicationProblemPlusJSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettings403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSecretSettings403ApplicationProblemPlusJSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettings404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSecretSettings404ApplicationProblemPlusJSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSecretSettings500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateSecretSettings500ApplicationProblemPlusJSONResponse) VisitUpdateSecretSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecretsRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	Params   ListTenantSecretsParams
+}
+
+type ListTenantSecretsResponseObject interface {
+	VisitListTenantSecretsResponse(w http.ResponseWriter) error
+}
+
+type ListTenantSecrets200JSONResponse AdminSecretList
+
+func (response ListTenantSecrets200JSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecrets400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantSecrets400ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecrets401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantSecrets401ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecrets403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantSecrets403ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecrets404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantSecrets404ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTenantSecrets500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListTenantSecrets500ApplicationProblemPlusJSONResponse) VisitListTenantSecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantSecretRequestObject struct {
+	TenantId TenantId `json:"tenantId"`
+	SecretId SecretId `json:"secretId"`
+}
+
+type DeleteTenantSecretResponseObject interface {
+	VisitDeleteTenantSecretResponse(w http.ResponseWriter) error
+}
+
+type DeleteTenantSecret204Response struct {
+}
+
+func (response DeleteTenantSecret204Response) VisitDeleteTenantSecretResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteTenantSecret401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantSecret401ApplicationProblemPlusJSONResponse) VisitDeleteTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantSecret403ApplicationProblemPlusJSONResponse struct {
+	AdminForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantSecret403ApplicationProblemPlusJSONResponse) VisitDeleteTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantSecret404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantSecret404ApplicationProblemPlusJSONResponse) VisitDeleteTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteTenantSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteTenantSecret500ApplicationProblemPlusJSONResponse) VisitDeleteTenantSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListTenantSecurityEventsRequestObject struct {
 	TenantId TenantId `json:"tenantId"`
 	Params   ListTenantSecurityEventsParams
@@ -26109,6 +27611,220 @@ func (response RequestMyTransfersLink503ApplicationProblemPlusJSONResponse) Visi
 	return err
 }
 
+type ListMySecretsRequestObject struct {
+	Params ListMySecretsParams
+}
+
+type ListMySecretsResponseObject interface {
+	VisitListMySecretsResponse(w http.ResponseWriter) error
+}
+
+type ListMySecrets200JSONResponse SecretList
+
+func (response ListMySecrets200JSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMySecrets400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMySecrets400ApplicationProblemPlusJSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMySecrets401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response ListMySecrets401ApplicationProblemPlusJSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMySecrets421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response ListMySecrets421ApplicationProblemPlusJSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMySecrets500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListMySecrets500ApplicationProblemPlusJSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMySecrets503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response ListMySecrets503ApplicationProblemPlusJSONResponse) VisitListMySecretsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecretRequestObject struct {
+	SecretId SecretId `json:"secretId"`
+}
+
+type DeleteMySecretResponseObject interface {
+	VisitDeleteMySecretResponse(w http.ResponseWriter) error
+}
+
+type DeleteMySecret204Response struct {
+}
+
+func (response DeleteMySecret204Response) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMySecret401ApplicationProblemPlusJSONResponse struct {
+	UnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret401ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecret403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret403ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecret404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret404ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecret421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret421ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret500ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMySecret503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMySecret503ApplicationProblemPlusJSONResponse) VisitDeleteMySecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type StartMyTransfersSessionRequestObject struct {
 	Body *StartMyTransfersSessionJSONRequestBody
 }
@@ -27806,6 +29522,989 @@ func (response GetProvisionedTenant500ApplicationProblemPlusJSONResponse) VisitG
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLinkRequestObject struct {
+	SecretToken SecretToken `json:"secretToken"`
+}
+
+type GetSecretLinkResponseObject interface {
+	VisitGetSecretLinkResponse(w http.ResponseWriter) error
+}
+
+type GetSecretLink200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetSecretLink200JSONResponse struct {
+	Body    SecretStatus
+	Headers GetSecretLink200ResponseHeaders
+}
+
+func (response GetSecretLink200JSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink404ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink410ApplicationProblemPlusJSONResponse struct {
+	SecretGoneApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink410ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink421ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink429ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink500ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSecretLink503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response GetSecretLink503ApplicationProblemPlusJSONResponse) VisitGetSecretLinkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFileRequestObject struct {
+	SecretToken SecretToken `json:"secretToken"`
+	Params      DownloadSecretFileParams
+}
+
+type DownloadSecretFileResponseObject interface {
+	VisitDownloadSecretFileResponse(w http.ResponseWriter) error
+}
+
+type DownloadSecretFile200ResponseHeaders struct {
+	CacheControl          *string
+	ContentDisposition    *string
+	ContentLength         *int
+	ContentSecurityPolicy *string
+	XContentTypeOptions   *string
+}
+
+type DownloadSecretFile200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	Headers       DownloadSecretFile200ResponseHeaders
+	ContentLength int64
+}
+
+func (response DownloadSecretFile200ApplicationoctetStreamResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.ContentDisposition != nil {
+		w.Header().Set("Content-Disposition", fmt.Sprint(*response.Headers.ContentDisposition))
+	}
+	if response.Headers.ContentLength != nil {
+		w.Header().Set("Content-Length", fmt.Sprint(*response.Headers.ContentLength))
+	}
+	if response.Headers.ContentSecurityPolicy != nil {
+		w.Header().Set("Content-Security-Policy", fmt.Sprint(*response.Headers.ContentSecurityPolicy))
+	}
+	if response.Headers.XContentTypeOptions != nil {
+		w.Header().Set("X-Content-Type-Options", fmt.Sprint(*response.Headers.XContentTypeOptions))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type DownloadSecretFile400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile400ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFile404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile404ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFile421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile421ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFile429ApplicationProblemPlusJSONResponse struct {
+	TooManyStreamsApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile429ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFile500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile500ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DownloadSecretFile503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response DownloadSecretFile503ApplicationProblemPlusJSONResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecretRequestObject struct {
+	SecretToken SecretToken `json:"secretToken"`
+	Body        *RevealSecretJSONRequestBody
+}
+
+type RevealSecretResponseObject interface {
+	VisitRevealSecretResponse(w http.ResponseWriter) error
+}
+
+type RevealSecret200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type RevealSecret200JSONResponse struct {
+	Body    SecretRevealed
+	Headers RevealSecret200ResponseHeaders
+}
+
+func (response RevealSecret200JSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret400ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret403ApplicationProblemPlusJSONResponse Problem
+
+func (response RevealSecret403ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret404ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret410ApplicationProblemPlusJSONResponse struct {
+	SecretGoneApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret410ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret421ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret429ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret500ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevealSecret503ApplicationProblemPlusJSONResponse struct {
+	TenantInSetupApplicationProblemPlusJSONResponse
+}
+
+func (response RevealSecret503ApplicationProblemPlusJSONResponse) VisitRevealSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecretRequestObject struct {
+	Body *CreateSecretJSONRequestBody
+}
+
+type CreateSecretResponseObject interface {
+	VisitCreateSecretResponse(w http.ResponseWriter) error
+}
+
+type CreateSecret201JSONResponse SecretCreated
+
+func (response CreateSecret201JSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret400ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSecret400ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret401ApplicationProblemPlusJSONResponse struct {
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSecret401ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSecret403ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret413ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSecret413ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSecret421ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSecret422ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret429ResponseHeaders struct {
+	RetryAfter *int
+}
+
+type CreateSecret429ApplicationProblemPlusJSONResponse struct {
+	Body    Problem
+	Headers CreateSecret429ResponseHeaders
+}
+
+func (response CreateSecret429ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSecret500ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret503ApplicationProblemPlusJSONResponse struct {
+	MaintenanceModeApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSecret503ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSecret507ApplicationProblemPlusJSONResponse struct {
+	QuotaExceededApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSecret507ApplicationProblemPlusJSONResponse) VisitCreateSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(507)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFileRequestObject struct {
+	SecretId SecretId `json:"secretId"`
+	Body     io.Reader
+}
+
+type UploadSecretFileResponseObject interface {
+	VisitUploadSecretFileResponse(w http.ResponseWriter) error
+}
+
+type UploadSecretFile200JSONResponse Secret
+
+func (response UploadSecretFile200JSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile400ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadSecretFile400ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile401ApplicationProblemPlusJSONResponse struct {
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile401ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile403ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile404ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile409ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile421ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile429ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile500ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSecretFile503ApplicationProblemPlusJSONResponse struct {
+	MaintenanceModeApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile503ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecretRequestObject struct {
+	SecretId SecretId `json:"secretId"`
+	Body     *SendSecretJSONRequestBody
+}
+
+type SendSecretResponseObject interface {
+	VisitSendSecretResponse(w http.ResponseWriter) error
+}
+
+type SendSecret200JSONResponse Secret
+
+func (response SendSecret200JSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret400ApplicationProblemPlusJSONResponse struct {
+	ValidationFailedApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret400ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret401ApplicationProblemPlusJSONResponse struct {
+	DepositUnauthenticatedApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret401ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.WWWAuthenticate != nil {
+		w.Header().Set("WWW-Authenticate", fmt.Sprint(*response.Headers.WWWAuthenticate))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret403ApplicationProblemPlusJSONResponse struct {
+	CsrfInvalidApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret403ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret404ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret409ApplicationProblemPlusJSONResponse struct {
+	StateConflictApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret409ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret421ApplicationProblemPlusJSONResponse struct {
+	UnknownTenantApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret421ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret429ApplicationProblemPlusJSONResponse struct {
+	RateLimitedApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret429ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret500ApplicationProblemPlusJSONResponse struct {
+	InternalErrorApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret500ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SendSecret503ApplicationProblemPlusJSONResponse struct {
+	MaintenanceModeApplicationProblemPlusJSONResponse
+}
+
+func (response SendSecret503ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -29941,6 +32640,18 @@ type StrictServerInterface interface {
 	// UpdateRecipientRules Replace the allowed and denied recipient domains
 	// (PUT /admin/tenants/{tenantId}/recipient-rules)
 	UpdateRecipientRules(ctx context.Context, request UpdateRecipientRulesRequestObject) (UpdateRecipientRulesResponseObject, error)
+	// GetSecretSettings One-time secrets settings
+	// (GET /admin/tenants/{tenantId}/secret-settings)
+	GetSecretSettings(ctx context.Context, request GetSecretSettingsRequestObject) (GetSecretSettingsResponseObject, error)
+	// UpdateSecretSettings Replace the one-time secrets settings
+	// (PUT /admin/tenants/{tenantId}/secret-settings)
+	UpdateSecretSettings(ctx context.Context, request UpdateSecretSettingsRequestObject) (UpdateSecretSettingsResponseObject, error)
+	// ListTenantSecrets List the one-time secrets of the tenant
+	// (GET /admin/tenants/{tenantId}/secrets)
+	ListTenantSecrets(ctx context.Context, request ListTenantSecretsRequestObject) (ListTenantSecretsResponseObject, error)
+	// DeleteTenantSecret Delete a pending or active secret
+	// (DELETE /admin/tenants/{tenantId}/secrets/{secretId})
+	DeleteTenantSecret(ctx context.Context, request DeleteTenantSecretRequestObject) (DeleteTenantSecretResponseObject, error)
 	// ListTenantSecurityEvents Security events of the tenant (12-month retention)
 	// (GET /admin/tenants/{tenantId}/security-events)
 	ListTenantSecurityEvents(ctx context.Context, request ListTenantSecurityEventsRequestObject) (ListTenantSecurityEventsResponseObject, error)
@@ -30061,6 +32772,12 @@ type StrictServerInterface interface {
 	// RequestMyTransfersLink Ask for a "My transfers" access link by mail
 	// (POST /me/access-links)
 	RequestMyTransfersLink(ctx context.Context, request RequestMyTransfersLinkRequestObject) (RequestMyTransfersLinkResponseObject, error)
+	// ListMySecrets List my secrets
+	// (GET /me/secrets)
+	ListMySecrets(ctx context.Context, request ListMySecretsRequestObject) (ListMySecretsResponseObject, error)
+	// DeleteMySecret Delete one of my secrets before it is read
+	// (DELETE /me/secrets/{secretId})
+	DeleteMySecret(ctx context.Context, request DeleteMySecretRequestObject) (DeleteMySecretResponseObject, error)
 	// StartMyTransfersSession Open a "My transfers" session from an access link
 	// (POST /me/sessions)
 	StartMyTransfersSession(ctx context.Context, request StartMyTransfersSessionRequestObject) (StartMyTransfersSessionResponseObject, error)
@@ -30106,6 +32823,24 @@ type StrictServerInterface interface {
 	// GetProvisionedTenant State of a tenant created by this token
 	// (GET /provisioning/tenants/{tenantId})
 	GetProvisionedTenant(ctx context.Context, request GetProvisionedTenantRequestObject) (GetProvisionedTenantResponseObject, error)
+	// GetSecretLink Status of a secret link
+	// (GET /secret-links/{secretToken})
+	GetSecretLink(ctx context.Context, request GetSecretLinkRequestObject) (GetSecretLinkResponseObject, error)
+	// DownloadSecretFile Download the file of a revealed secret (once)
+	// (GET /secret-links/{secretToken}/file)
+	DownloadSecretFile(ctx context.Context, request DownloadSecretFileRequestObject) (DownloadSecretFileResponseObject, error)
+	// RevealSecret Reveal a secret (once)
+	// (POST /secret-links/{secretToken}/reveal)
+	RevealSecret(ctx context.Context, request RevealSecretRequestObject) (RevealSecretResponseObject, error)
+	// CreateSecret Create a one-time secret
+	// (POST /secrets)
+	CreateSecret(ctx context.Context, request CreateSecretRequestObject) (CreateSecretResponseObject, error)
+	// UploadSecretFile Upload the file of a pending secret
+	// (PUT /secrets/{secretId}/file)
+	UploadSecretFile(ctx context.Context, request UploadSecretFileRequestObject) (UploadSecretFileResponseObject, error)
+	// SendSecret Activate a secret and mail its link
+	// (POST /secrets/{secretId}/send)
+	SendSecret(ctx context.Context, request SendSecretRequestObject) (SendSecretResponseObject, error)
 	// GetStatus Instance status (JSON)
 	// (GET /status)
 	GetStatus(ctx context.Context, request GetStatusRequestObject) (GetStatusResponseObject, error)
@@ -32910,6 +35645,119 @@ func (sh *strictHandler) UpdateRecipientRules(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// GetSecretSettings operation middleware
+func (sh *strictHandler) GetSecretSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request GetSecretSettingsRequestObject
+
+	request.TenantId = tenantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSecretSettings(ctx, request.(GetSecretSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSecretSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSecretSettingsResponseObject); ok {
+		if err := validResponse.VisitGetSecretSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSecretSettings operation middleware
+func (sh *strictHandler) UpdateSecretSettings(w http.ResponseWriter, r *http.Request, tenantId TenantId) {
+	var request UpdateSecretSettingsRequestObject
+
+	request.TenantId = tenantId
+
+	var body UpdateSecretSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSecretSettings(ctx, request.(UpdateSecretSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSecretSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSecretSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateSecretSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTenantSecrets operation middleware
+func (sh *strictHandler) ListTenantSecrets(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantSecretsParams) {
+	var request ListTenantSecretsRequestObject
+
+	request.TenantId = tenantId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTenantSecrets(ctx, request.(ListTenantSecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTenantSecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTenantSecretsResponseObject); ok {
+		if err := validResponse.VisitListTenantSecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteTenantSecret operation middleware
+func (sh *strictHandler) DeleteTenantSecret(w http.ResponseWriter, r *http.Request, tenantId TenantId, secretId SecretId) {
+	var request DeleteTenantSecretRequestObject
+
+	request.TenantId = tenantId
+	request.SecretId = secretId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteTenantSecret(ctx, request.(DeleteTenantSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteTenantSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteTenantSecretResponseObject); ok {
+		if err := validResponse.VisitDeleteTenantSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListTenantSecurityEvents operation middleware
 func (sh *strictHandler) ListTenantSecurityEvents(w http.ResponseWriter, r *http.Request, tenantId TenantId, params ListTenantSecurityEventsParams) {
 	var request ListTenantSecurityEventsRequestObject
@@ -34081,6 +36929,58 @@ func (sh *strictHandler) RequestMyTransfersLink(w http.ResponseWriter, r *http.R
 	}
 }
 
+// ListMySecrets operation middleware
+func (sh *strictHandler) ListMySecrets(w http.ResponseWriter, r *http.Request, params ListMySecretsParams) {
+	var request ListMySecretsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMySecrets(ctx, request.(ListMySecretsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMySecrets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMySecretsResponseObject); ok {
+		if err := validResponse.VisitListMySecretsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMySecret operation middleware
+func (sh *strictHandler) DeleteMySecret(w http.ResponseWriter, r *http.Request, secretId SecretId) {
+	var request DeleteMySecretRequestObject
+
+	request.SecretId = secretId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMySecret(ctx, request.(DeleteMySecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMySecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMySecretResponseObject); ok {
+		if err := validResponse.VisitDeleteMySecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // StartMyTransfersSession operation middleware
 func (sh *strictHandler) StartMyTransfersSession(w http.ResponseWriter, r *http.Request) {
 	var request StartMyTransfersSessionRequestObject
@@ -34470,6 +37370,184 @@ func (sh *strictHandler) GetProvisionedTenant(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetProvisionedTenantResponseObject); ok {
 		if err := validResponse.VisitGetProvisionedTenantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSecretLink operation middleware
+func (sh *strictHandler) GetSecretLink(w http.ResponseWriter, r *http.Request, secretToken SecretToken) {
+	var request GetSecretLinkRequestObject
+
+	request.SecretToken = secretToken
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSecretLink(ctx, request.(GetSecretLinkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSecretLink")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSecretLinkResponseObject); ok {
+		if err := validResponse.VisitGetSecretLinkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadSecretFile operation middleware
+func (sh *strictHandler) DownloadSecretFile(w http.ResponseWriter, r *http.Request, secretToken SecretToken, params DownloadSecretFileParams) {
+	var request DownloadSecretFileRequestObject
+
+	request.SecretToken = secretToken
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadSecretFile(ctx, request.(DownloadSecretFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadSecretFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadSecretFileResponseObject); ok {
+		if err := validResponse.VisitDownloadSecretFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevealSecret operation middleware
+func (sh *strictHandler) RevealSecret(w http.ResponseWriter, r *http.Request, secretToken SecretToken) {
+	var request RevealSecretRequestObject
+
+	request.SecretToken = secretToken
+
+	var body RevealSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevealSecret(ctx, request.(RevealSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevealSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevealSecretResponseObject); ok {
+		if err := validResponse.VisitRevealSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSecret operation middleware
+func (sh *strictHandler) CreateSecret(w http.ResponseWriter, r *http.Request) {
+	var request CreateSecretRequestObject
+
+	var body CreateSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSecret(ctx, request.(CreateSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSecretResponseObject); ok {
+		if err := validResponse.VisitCreateSecretResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadSecretFile operation middleware
+func (sh *strictHandler) UploadSecretFile(w http.ResponseWriter, r *http.Request, secretId SecretId) {
+	var request UploadSecretFileRequestObject
+
+	request.SecretId = secretId
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadSecretFile(ctx, request.(UploadSecretFileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadSecretFile")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadSecretFileResponseObject); ok {
+		if err := validResponse.VisitUploadSecretFileResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendSecret operation middleware
+func (sh *strictHandler) SendSecret(w http.ResponseWriter, r *http.Request, secretId SecretId) {
+	var request SendSecretRequestObject
+
+	request.SecretId = secretId
+
+	var body SendSecretJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendSecret(ctx, request.(SendSecretRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendSecret")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendSecretResponseObject); ok {
+		if err := validResponse.VisitSendSecretResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

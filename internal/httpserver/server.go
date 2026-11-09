@@ -361,9 +361,24 @@ var routePolicies = map[string]routePolicy{
 	http.MethodPost + " " + APIBaseURL + "/me/transfers/{transferId}/extension": mePolicy(true),
 	http.MethodGet + " " + APIBaseURL + "/me/transfers/{transferId}/proof":      mePolicy(false),
 	http.MethodPost + " " + APIBaseURL + "/me/transfers/{transferId}/link":      mePolicy(true),
-	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":             sessionPolicy(false),
-	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current":          sessionPolicy(true),
-	http.MethodPost + " " + APIBaseURL + "/invitations":                         sessionPolicy(true),
+	// One-time secrets (since API 2.1). The creator side is a deposit session
+	// or an API token like the transfers; the list and the deletion use the
+	// "my transfers" session. The recipient side needs no credential, but its
+	// wrong proofs count against the client IP: the reveal must not be
+	// triggered cross-site. The body limit of the file upload (up to 25 MiB)
+	// is set when the module is implemented.
+	http.MethodPost + " " + APIBaseURL + "/secrets":                 tokenPolicy(true),
+	http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":  tokenPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send": tokenPolicy(true),
+	http.MethodGet + " " + APIBaseURL + "/me/secrets":               mePolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/me/secrets/{secretId}": mePolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/secret-links/{secretToken}/reveal": {
+		bodyLimit: middleware.DefaultJSONBodyLimit, deadline: RequestDeadline, sameOrigin: true,
+	},
+	http.MethodGet + " " + APIBaseURL + "/secret-links/{secretToken}/file": {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
+	http.MethodGet + " " + APIBaseURL + "/deposit-sessions/current":        sessionPolicy(false),
+	http.MethodDelete + " " + APIBaseURL + "/deposit-sessions/current":     sessionPolicy(true),
+	http.MethodPost + " " + APIBaseURL + "/invitations":                    sessionPolicy(true),
 }
 
 // policyOf returns the policy of the operation matched for r.

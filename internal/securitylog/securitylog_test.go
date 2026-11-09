@@ -30,6 +30,7 @@ var allEvents = []EventType{
 	VerificationCodeInvalid, TransferPasswordInvalid, AdminLoginFailed,
 	APITokenInvalid, UnknownFQDN, DepositRefused, RateLimited, MetricsTokenInvalid,
 	AccessLinkInvalid, ProvisioningTokenInvalid, SSOFailed, DropLinkInvalid,
+	SecretInvalid, SecretProofInvalid,
 }
 
 // ownFilterEvents are the events counted by integrations of their own,
@@ -121,6 +122,18 @@ var goldenCases = []goldenCase{
 		ev:    Event{Type: DropLinkInvalid, IP: netip.MustParseAddr("192.0.2.16"), Tenant: tenantA},
 		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.16 tenant=transfer.entity-a.example.com event=drop_link_invalid`,
 		banIP: "192.0.2.16",
+	},
+	{
+		name:  "secret invalid",
+		ev:    Event{Type: SecretInvalid, IP: netip.MustParseAddr("192.0.2.17"), Tenant: tenantA},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.17 tenant=transfer.entity-a.example.com event=secret_invalid`,
+		banIP: "192.0.2.17",
+	},
+	{
+		name:  "secret proof invalid",
+		ev:    Event{Type: SecretProofInvalid, IP: netip.MustParseAddr("192.0.2.18"), Tenant: tenantA, Fields: []Field{{KeyReason, ReasonPassphrase}}},
+		line:  `2026-10-20T07:41:00.123Z ip=192.0.2.18 tenant=transfer.entity-a.example.com event=secret_proof_invalid reason="passphrase"`,
+		banIP: "192.0.2.18",
 	},
 	{
 		// Counted by its own filter and scenario only (ownFilterEvents):

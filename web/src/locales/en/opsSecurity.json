@@ -45,6 +45,8 @@
     "access_link_invalid": "Invalid access link",
     "provisioning_token_invalid": "Invalid provisioning token",
     "sso_failed": "Failed single sign-on",
-    "drop_link_invalid": "Invalid drop link"
+    "drop_link_invalid": "Invalid drop link",
+    "secret_invalid": "Unknown secret link",
+    "secret_proof_invalid": "Wrong secret proof"
   }
 }
