@@ -22,13 +22,17 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 	full := Deps{
 		Secrets: &fakeRepo{}, Creators: &fakeCreators{}, Scrubber: &fakeScrubber{}, Files: &fakeFiles{}, SecurityLog: &fakeSeclog{},
+		Directory: &fakeDirectory{}, Notifier: &fakeNotifier{}, Mailer: &fakeMailer{},
 	}
 	for name, mutate := range map[string]func(*Deps){
-		"secrets":  func(d *Deps) { d.Secrets = nil },
-		"creators": func(d *Deps) { d.Creators = nil },
-		"scrubber": func(d *Deps) { d.Scrubber = nil },
-		"files":    func(d *Deps) { d.Files = nil },
-		"seclog":   func(d *Deps) { d.SecurityLog = nil },
+		"directory": func(d *Deps) { d.Directory = nil },
+		"notifier":  func(d *Deps) { d.Notifier = nil },
+		"mailer":    func(d *Deps) { d.Mailer = nil },
+		"secrets":   func(d *Deps) { d.Secrets = nil },
+		"creators":  func(d *Deps) { d.Creators = nil },
+		"scrubber":  func(d *Deps) { d.Scrubber = nil },
+		"files":     func(d *Deps) { d.Files = nil },
+		"seclog":    func(d *Deps) { d.SecurityLog = nil },
 	} {
 		d := full
 		mutate(&d)
@@ -181,16 +185,16 @@ func TestCreateCreators(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	// An invited external must use the e-mail delivery, which is interim
-	// not-supported in step 2.
+	// An invited external must use the e-mail delivery.
 	_, err := e.svc.Create(context.Background(), testTenant, external, s.request())
 	if !slices.Equal(fieldsOf(t, err), []string{"/delivery not-allowed"}) {
 		t.Errorf("external link: %v", err)
 	}
 	mail := s.request()
 	mail.Delivery, mail.Recipient = DeliveryEmail, ptr(alice)
-	if _, err := e.svc.Create(context.Background(), testTenant, external, mail); !slices.Equal(fieldsOf(t, err), []string{"/delivery not-supported"}) {
-		t.Errorf("external e-mail: %v", err)
+	if _, err := e.svc.Create(context.Background(), testTenant, external, mail); err != nil ||
+		e.repo.gotCreate.Delivery != store.SecretDeliveryEmail || e.repo.gotCreate.CreatorKind != store.SecretCreatorExternal {
+		t.Errorf("external e-mail: %v, %+v", err, e.repo.gotCreate)
 	}
 	noMail := *testTenant
 	noMail.Secrets.EmailAllowed = false
@@ -221,7 +225,7 @@ func TestCreateExternalInvitation(t *testing.T) {
 	inv := id.New(id.Invitation)
 	external := transfer.Sender{Depositor: store.Depositor{Email: bob, Kind: store.DepositorExternal, InvitationID: inv}}
 	// The store input of an external creator carries its invitation (the
-	// settings check is bypassed to reach the store: step 3 path).
+	// input is built directly, without the settings check).
 	e := newEnv(t)
 	in := e.svc.storeInput(external, bob, plan{delivery: store.SecretDeliveryEmail}, s.request())
 	if in.InvitationID != inv || in.CreatorKind != store.SecretCreatorExternal || in.APITokenID != "" {
@@ -393,15 +397,14 @@ func TestCheckSettings(t *testing.T) {
 		t.Errorf("file too large: %v", err)
 	}
 	for name, c := range map[string]struct {
-		p    plan
-		req  CreateRequest
-		want string
+		p   plan
+		req CreateRequest
 	}{
-		"e-mail": {withSalt, CreateRequest{}, "/delivery not-supported"},
-		"file":   {link, file, "/file not-supported"},
+		"e-mail": {withSalt, CreateRequest{}},
+		"file":   {link, file},
 	} {
-		if got := fieldsOf(t, checkSettings(set(func(s *tenant.SecretSettings) { s.EmailRequiresPassphrase = true }), internal, c.p, c.req)); !slices.Equal(got, []string{c.want}) {
-			t.Errorf("interim %s: %v", name, got)
+		if err := checkSettings(set(func(s *tenant.SecretSettings) { s.EmailRequiresPassphrase = true }), internal, c.p, c.req); err != nil {
+			t.Errorf("%s: %v", name, err)
 		}
 	}
 	if err := checkSettings(set(same), internal, link, CreateRequest{}); err != nil {
@@ -439,6 +442,7 @@ func TestCreateStoreErrors(t *testing.T) {
 		{store.ErrSecretFileTooLarge, func(err error) bool {
 			return errors.As(err, &tooLarge) && tooLarge.MaxBytes == tenant.DefaultSecretFileBytes
 		}},
+		{store.ErrSecretQuotaExceeded, func(err error) bool { return errors.Is(err, ErrQuotaExceeded) }},
 		{store.ErrNotFound, func(err error) bool { return errors.Is(err, ErrForbidden) }},
 		{errBoom, func(err error) bool { return errors.Is(err, errBoom) }},
 	}
@@ -546,8 +550,10 @@ func TestDefaultLinkLimits(t *testing.T) {
 	repo := &fakeRepo{statusErr: store.ErrNotFound}
 	seclog := &fakeSeclog{}
 	now := testNow
-	svc, err := New(Deps{Secrets: repo, Creators: &fakeCreators{}, Scrubber: &fakeScrubber{}, Files: &fakeFiles{}, SecurityLog: seclog},
-		Options{Now: func() time.Time { return now }})
+	svc, err := New(Deps{
+		Secrets: repo, Creators: &fakeCreators{}, Scrubber: &fakeScrubber{}, Files: &fakeFiles{}, SecurityLog: seclog,
+		Directory: &fakeDirectory{}, Notifier: &fakeNotifier{}, Mailer: &fakeMailer{},
+	}, Options{Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +625,6 @@ func TestRevealErrors(t *testing.T) {
 		fails   int
 		actions []audit.Action
 	}{
-		{"file", store.ErrSecretFileUnsupported, func(err error) bool { return errors.Is(err, ErrNotFound) }, nil, 0, nil},
 		{"unknown", store.ErrNotFound, func(err error) bool { return errors.Is(err, ErrNotFound) }, []string{"secret_invalid"}, 1, nil},
 		{"pending", store.ErrSecretPending, func(err error) bool { return errors.Is(err, ErrNotFound) }, nil, 0, nil},
 		{"gone", &store.SecretGoneError{Reason: store.SecretEndDeletedByAdmin}, func(err error) bool {
@@ -629,7 +634,7 @@ func TestRevealErrors(t *testing.T) {
 		{"passphrase", &store.SecretProofError{ID: "sec_1", Remaining: 3}, func(err error) bool {
 			return errors.As(err, &proof) && proof.Counted && proof.Remaining == 3
 		}, []string{"secret_proof_invalid reason=passphrase"}, 1, nil},
-		{"locked", &store.SecretProofError{ID: "sec_1"}, func(err error) bool {
+		{"locked", &store.SecretProofError{ID: "sec_1", RemovedFile: "f1"}, func(err error) bool {
 			return errors.As(err, &gone) && gone.Reason == ReasonLocked
 		}, []string{"secret_proof_invalid reason=passphrase"}, 1, []audit.Action{audit.ActionSecretLocked}},
 		{"store", errBoom, func(err error) bool { return errors.Is(err, errBoom) }, nil, 0, nil},
@@ -652,8 +657,9 @@ func TestRevealErrors(t *testing.T) {
 			if got := e.audit.actions(); !slices.Equal(got, tt.actions) && (len(got) != 0 || len(tt.actions) != 0) {
 				t.Errorf("audit = %v, want %v", got, tt.actions)
 			}
-			if tt.name == "locked" && (e.scrubber.calls != 1 || e.audit.events[0].ObjectID != "sec_1") {
-				t.Errorf("locked: scrubs %d, event %+v", e.scrubber.calls, e.audit.events[0])
+			if tt.name == "locked" && (e.scrubber.calls != 1 || e.audit.events[0].ObjectID != "sec_1" ||
+				!slices.Equal(e.files.removed, []string{"f1"})) {
+				t.Errorf("locked: scrubs %d, event %+v, removed %v", e.scrubber.calls, e.audit.events[0], e.files.removed)
 			}
 		})
 	}

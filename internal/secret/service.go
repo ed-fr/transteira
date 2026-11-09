@@ -3,13 +3,17 @@ package secret
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/netip"
 	"time"
 
 	"golang.org/x/time/rate"
 
+	"github.com/ed-fr/transteira/internal/abuse"
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
@@ -58,6 +62,29 @@ type Repo interface {
 	Reveal(ctx context.Context, tid tenant.ID, token string, keyProof, proof [32]byte, now time.Time) (store.RevealedSecret, error)
 	DeleteByCreator(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, now time.Time) (store.EndedSecret, error)
 	ListBySender(ctx context.Context, tid tenant.ID, email string, opts store.SecretListOptions) (store.Page[store.Secret], error)
+	UploadFile(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, files store.SecretFiles,
+		body io.Reader, clock func() time.Time) (store.Secret, error)
+	OpenFile(ctx context.Context, tid tenant.ID, token, grant string, files store.SecretFiles, now time.Time) (*store.SecretFileDownload, error)
+	CompleteFileDownload(ctx context.Context, tid tenant.ID, secID, grant string, now time.Time) (store.EndedSecret, bool, error)
+	Get(ctx context.Context, tid tenant.ID, secID string) (store.Secret, error)
+	ActivateForSend(ctx context.Context, tid tenant.ID, secID string, actor store.SecretActor, token string, now time.Time) (store.Secret, error)
+	MarkReceiptSent(ctx context.Context, tid tenant.ID, secID string, now time.Time) (bool, error)
+}
+
+// Notifier builds the mails of the secrets. *notify.Notifier implements
+// it.
+type Notifier interface {
+	// SecretNotification builds the mail of the link to the recipient of
+	// an e-mail secret; link is never logged.
+	SecretNotification(ctx context.Context, t *tenant.Tenant, v notify.SecretView, link string) (mail.Job, error)
+	// SecretReceipt builds the read receipt to the creator.
+	SecretReceipt(ctx context.Context, t *tenant.Tenant, v notify.SecretView, outcome string, at time.Time) (mail.Job, error)
+}
+
+// Mailer queues built mails without blocking, retrying while the queue is
+// full. *mail.Retrier implements it.
+type Mailer interface {
+	Send(ctx context.Context, jobs []mail.Job, attrs ...slog.Attr)
 }
 
 // Eligibility applies the deposit eligibility rules of the transfers to a
@@ -73,10 +100,9 @@ type Scrubber interface {
 	Scrub(ctx context.Context) error
 }
 
-// Files removes the stored file of a secret. *storage.Store implements it.
-type Files interface {
-	RemoveSecretFile(tid tenant.ID, name string) error
-}
+// Files stores, opens and removes the files of the secrets.
+// *storage.Store implements it.
+type Files = store.SecretFiles
 
 // SecurityLog writes security events. *securitylog.Logger implements it.
 type SecurityLog interface {
@@ -100,6 +126,14 @@ type Failures interface {
 	Fail(key string) (locked bool, retryAfter time.Duration)
 }
 
+// StreamSlots bounds the concurrent file downloads (threat model T-55):
+// a secret file response holds the slots a transfer response holds, until
+// it ends. *download.Service implements it; a refusal is a
+// *download.TooManyStreamsError.
+type StreamSlots interface {
+	AcquireStream(ctx context.Context, t *tenant.Tenant, objectID string, ip netip.Addr) (release func(), err error)
+}
+
 // Deps are the required dependencies of a [Service].
 type Deps struct {
 	// Secrets is the store of the secrets, with its key vault.
@@ -108,10 +142,18 @@ type Deps struct {
 	Creators Eligibility
 	// Scrubber scrubs the database after a key destruction.
 	Scrubber Scrubber
-	// Files removes the files of the deleted secrets.
+	// Files stores the files of the secrets and removes those of the
+	// ended secrets.
 	Files Files
 	// SecurityLog receives the security events.
 	SecurityLog SecurityLog
+	// Directory reads the tenants, their recipient domain rules and their
+	// blocklists.
+	Directory Directory
+	// Notifier builds the link and receipt mails.
+	Notifier Notifier
+	// Mailer queues them.
+	Mailer Mailer
 }
 
 // Options tunes a [Service].
@@ -125,6 +167,18 @@ type Options struct {
 	// Failures locks out a client after its failures (by default
 	// LinkFailureLimit per LinkFailureWindow, locked for LinkLockout).
 	Failures Failures
+	// OnQuota is called after the creation of a secret with a file
+	// (refused false) and when one is refused because the storage quota of
+	// the tenant is exceeded (refused true), as transfer.Options.OnQuota,
+	// so that the quota alerts are raised. Nil does nothing.
+	OnQuota func(tid tenant.ID, refused bool)
+	// Streams bounds the concurrent file downloads; nil bounds nothing
+	// (tests only: the application always sets it).
+	Streams StreamSlots
+	// Abuse is told of every secret that becomes active (link: at the
+	// creation without file or after the upload; e-mail: after the send),
+	// alert only; nil tells nobody.
+	Abuse AbuseAlerter
 	// Now is the clock (time.Now when nil).
 	Now func() time.Time
 	// Logger receives the failures that do not fail a request (audit,
@@ -136,30 +190,40 @@ type Options struct {
 // errMissingDeps reports a Service built without one of its Deps.
 var errMissingDeps = errors.New("secret: missing dependency")
 
-// Service creates, shows, reveals, lists and deletes one-time secrets. It
-// is safe for concurrent use.
+// Service creates, sends, shows, reveals, lists and deletes one-time
+// secrets, and sends their read receipts. It is safe for concurrent use.
 type Service struct {
 	repo     Repo
 	creators Eligibility
 	scrubber Scrubber
 	files    Files
 	seclog   SecurityLog
+	dir      Directory
+	notifier Notifier
+	mailer   Mailer
 	audit    AuditRecorder
+	abuse    AbuseAlerter
+	streams  StreamSlots
 	requests Limiter
 	failures Failures
+	onQuota  func(tid tenant.ID, refused bool)
 	now      func() time.Time
 	logger   *slog.Logger
 }
 
 // New returns a Service. Every member of deps is required.
 func New(deps Deps, opts Options) (*Service, error) {
-	if deps.Secrets == nil || deps.Creators == nil || deps.Scrubber == nil || deps.Files == nil || deps.SecurityLog == nil {
+	if deps.Secrets == nil || deps.Creators == nil || deps.Scrubber == nil || deps.Files == nil || deps.SecurityLog == nil ||
+		deps.Directory == nil || deps.Notifier == nil || deps.Mailer == nil {
 		return nil, errMissingDeps
 	}
 	s := &Service{
 		repo: deps.Secrets, creators: deps.Creators, scrubber: deps.Scrubber, files: deps.Files,
-		seclog: deps.SecurityLog, audit: opts.Audit, requests: opts.Requests, failures: opts.Failures,
-		now: opts.Now, logger: opts.Logger,
+		seclog: deps.SecurityLog, dir: deps.Directory, notifier: deps.Notifier, mailer: deps.Mailer, audit: opts.Audit, requests: opts.Requests, failures: opts.Failures,
+		onQuota: opts.OnQuota, abuse: opts.Abuse, streams: opts.Streams, now: opts.Now, logger: opts.Logger,
+	}
+	if s.onQuota == nil {
+		s.onQuota = func(tenant.ID, bool) {}
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -233,4 +297,41 @@ func (s *Service) erased(ctx context.Context, t *tenant.Tenant, file string) {
 		s.logger.ErrorContext(ctx, "secret: scrubbing the destroyed keys failed",
 			slog.String("tenant", t.FQDN), slog.String("error", err.Error()))
 	}
+}
+
+// AbuseAlerter evaluates the abuse rules once a secret became active
+// (CLAUDE.md section 15, threat model T-340): the store counts the active
+// secrets of the sender in its transfer count. *abuse.Detector implements
+// it. It only alerts: the creation of a secret is never blocked by the
+// abuse thresholds (the creator limits of the store bound it).
+type AbuseAlerter interface {
+	AfterCreate(ctx context.Context, t *tenant.Tenant, f abuse.Facts)
+}
+
+// activated reports the secret sec of tenant t, just activated for the
+// client of sender, to the abuse detection (best effort, alert only).
+func (s *Service) activated(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, sec store.Secret) {
+	if s.abuse == nil {
+		return
+	}
+	f := abuse.Facts{
+		SenderEmail: sec.SenderEmail, Kind: depositorKind(sec.CreatorKind), At: sec.ActivatedAt, ClientIP: sender.ClientIP,
+	}
+	if sec.RecipientEmail != "" {
+		f.Recipients = []string{sec.RecipientEmail}
+	}
+	s.abuse.AfterCreate(context.WithoutCancel(ctx), t, f)
+}
+
+// depositorKind returns the depositor kind the abuse rules know for a
+// creator kind: an API token deposits as an internal sender, as for a
+// transfer.
+func depositorKind(k store.SecretCreatorKind) store.DepositorKind {
+	switch k {
+	case store.SecretCreatorExternal:
+		return store.DepositorExternal
+	case store.SecretCreatorInternalRemote:
+		return store.DepositorInternalRemote
+	}
+	return store.DepositorInternal
 }

@@ -79,7 +79,10 @@ func (s *Sweeper) purgePendingSecrets(ctx context.Context) error {
 }
 
 // expireSecrets expires the active secrets past their expiry and calls
-// Options.SecretExpired with each of them, once its keys and file are gone.
+// Options.SecretExpired with each of them, once its keys and file are gone;
+// then it ends the expired one-time file grants (the file of a read secret
+// not downloaded within store.SecretFileGrantLifetime), whatever the
+// outcome of the expiry.
 func (s *Sweeper) expireSecrets(ctx context.Context) error {
 	ended, err := s.sweepSecrets(ctx, "expire", func(ctx context.Context) ([]store.EndedSecret, bool, error) {
 		return s.repo.expireSecrets(ctx, s.now(), store.SecretSweepLimit)
@@ -90,7 +93,10 @@ func (s *Sweeper) expireSecrets(ctx context.Context) error {
 			s.secretExpired(ctx, e)
 		}
 	}
-	return err
+	_, gerr := s.sweepSecrets(ctx, "expire file grants", func(ctx context.Context) ([]store.EndedSecret, bool, error) {
+		return s.repo.expireSecretGrants(ctx, s.now(), store.SecretSweepLimit)
+	})
+	return errors.Join(err, gerr)
 }
 
 // recordSecretExpired records secret.expired for sec, by the system actor.

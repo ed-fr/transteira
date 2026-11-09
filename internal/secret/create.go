@@ -9,6 +9,7 @@ import (
 
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/internal/transfer"
@@ -113,14 +114,21 @@ func (v *validator) add(pointer, code string, allowed ...string) {
 //     invited external when the e-mail delivery is off, a *ValidationError
 //     on FieldDelivery for an invited external using the link delivery, a
 //     *DurationError, ErrEmailNotAllowed, ErrPassphraseRequired,
-//     ErrFileNotAllowed, a *FileTooLargeError;
-//  4. the interim refusals of step 2: a *ValidationError with
-//     CodeNotSupported on FieldDelivery for the e-mail delivery and on
-//     FieldFile for a file;
-//  5. the store, which counts the creator limits (*LimitError) and checks
-//     the settings again in its transaction.
+//     ErrFileNotAllowed, a *FileTooLargeError; then, for an e-mail
+//     delivery, the blocklist and the recipient domain rules applied to
+//     the recipient (ErrRecipientRefused, see checkRecipient), except for
+//     an invited external, whose recipient the store forces to its
+//     inviter;
+//  4. the store, which counts the creator limits (*LimitError), checks the
+//     settings again in its transaction, and, for a declared file, the
+//     storage quota of the tenant (ErrQuotaExceeded, reported to
+//     Options.OnQuota with refused true, as a refused transfer).
 //
-// It audits secret.created (and api_token.used for a token).
+// A secret with a file starts pending (its storage name drawn here, see
+// [Service.UploadFile]), as does a secret delivered by e-mail. After a
+// creation with a file, Options.OnQuota is called with refused false. It
+// audits secret.created (and api_token.used for a token), and reports a
+// secret active at once to Options.Abuse (alert only).
 func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, req CreateRequest) (Created, error) {
 	if sender.Kind == store.DepositorReply || sender.Kind == store.DepositorDropLink {
 		return Created{}, ErrForbidden
@@ -155,11 +163,25 @@ func (s *Service) Create(ctx context.Context, t *tenant.Tenant, sender transfer.
 	if err := checkSettings(t.Secrets, creatorKind(sender), p, req); err != nil {
 		return Created{}, err
 	}
+	if p.delivery == store.SecretDeliveryEmail && creatorKind(sender) != store.SecretCreatorExternal {
+		if err := s.checkRecipient(ctx, t, sender, email, p.recipient); err != nil {
+			return Created{}, err
+		}
+	}
 	out, err := s.repo.Create(ctx, t.ID, s.storeInput(sender, email, p, req))
+	if errors.Is(err, store.ErrSecretQuotaExceeded) {
+		s.onQuota(t.ID, true)
+	}
 	if err != nil {
 		return Created{}, createError(t.Secrets, err)
 	}
+	if req.File != nil {
+		s.onQuota(t.ID, false)
+	}
 	s.recordCreated(ctx, t, sender, email, out.Secret)
+	if out.Secret.State == store.SecretActive {
+		s.activated(ctx, t, sender, out.Secret)
+	}
 	return Created{ID: out.Secret.ID, Token: out.Token, State: out.Secret.State, ExpiresAt: out.Secret.ExpiresAt}, nil
 }
 
@@ -170,6 +192,9 @@ func (s *Service) storeInput(sender transfer.Sender, email string, p plan, req C
 		CreatorKind: creatorKind(sender), SenderEmail: email, Delivery: p.delivery, RecipientEmail: p.recipient,
 		ReadReceipt: req.ReadReceipt, Verifier: p.verifier, KeyVerifier: p.keyVerifier, KDFSalt: p.salt,
 		SealedText: req.EncryptedText, Duration: p.duration, Now: s.now(),
+	}
+	if f := req.File; f != nil {
+		in.FileSize, in.FileMetadata, in.FileStorageName = f.Size, f.EncryptedMetadata, storage.NewName()
 	}
 	switch in.CreatorKind {
 	case store.SecretCreatorAPIToken:
@@ -345,8 +370,7 @@ func checkFraming(req CreateRequest) error {
 }
 
 // checkSettings applies the secret settings set of the tenant to a
-// creation of kind kind (step 3 of Create), then the interim refusals of
-// step 2.
+// creation of kind kind (step 3 of Create).
 func checkSettings(set tenant.SecretSettings, kind store.SecretCreatorKind, p plan, req CreateRequest) error {
 	email := p.delivery == store.SecretDeliveryEmail
 	switch {
@@ -367,13 +391,6 @@ func checkSettings(set tenant.SecretSettings, kind store.SecretCreatorKind, p pl
 		return ErrFileNotAllowed
 	case req.File != nil && req.File.Size > set.FileMaxBytes:
 		return &FileTooLargeError{MaxBytes: set.FileMaxBytes}
-	// Interim (V2.1 step 2): the e-mail delivery and the file come with
-	// step 3, which removes these two cases (and the matching item 4 of
-	// the Create documentation) once the mail and the file upload exist.
-	case email:
-		return &ValidationError{Fields: []FieldError{{Pointer: FieldDelivery, Code: CodeNotSupported}}}
-	case req.File != nil:
-		return &ValidationError{Fields: []FieldError{{Pointer: FieldFile, Code: CodeNotSupported}}}
 	}
 	return nil
 }
@@ -398,6 +415,8 @@ func createError(set tenant.SecretSettings, err error) error {
 		return ErrFileNotAllowed
 	case errors.Is(err, store.ErrSecretFileTooLarge):
 		return &FileTooLargeError{MaxBytes: set.FileMaxBytes}
+	case errors.Is(err, store.ErrSecretQuotaExceeded):
+		return ErrQuotaExceeded
 	case errors.Is(err, store.ErrNotFound):
 		// The API token was revoked, the invitation deleted or the tenant
 		// deletion started since the eligibility check: nothing created.

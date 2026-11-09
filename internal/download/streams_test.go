@@ -257,3 +257,34 @@ func TestConcurrentWrongPasswords(t *testing.T) {
 		}
 	})
 }
+
+// TestAcquireStream takes the slots of another object (a secret file):
+// counted like a transfer, sharing the per-client bound.
+func TestAcquireStream(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e, nil)
+		ctx := context.Background()
+		const secID = "sec_01JABCDEFGHJKMNPQRSTVWXYZ0"
+		var open []func()
+		for range MaxStreamsPerTransferClient {
+			release, err := ev.svc.AcquireStream(ctx, ev.a, secID, ipOne)
+			if err != nil {
+				t.Fatal(err)
+			}
+			open = append(open, release)
+		}
+		_, err := ev.svc.AcquireStream(ctx, ev.a, secID, ipOne)
+		wantTooMany(t, err)
+		if got := ev.seclog.all(); len(got) != 1 || got[0].Fields[0].Value != secID[:transferIDLogLen] {
+			t.Errorf("events = %+v", got)
+		}
+		_, err = ev.svc.AcquireStream(ctx, ev.a, secID, netip.Addr{})
+		wantErr(t, err, ErrNoClientIP)
+		for _, c := range open {
+			c()
+		}
+		if len(ev.svc.streams.counts) != 0 {
+			t.Fatalf("slots left: %v", ev.svc.streams.counts)
+		}
+	})
+}

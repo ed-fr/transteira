@@ -3,7 +3,7 @@
 > V2.1, step 1, data part. Status: **proposal, to be validated before any code**.
 > Sources: CLAUDE.md (sections 2 and 22.1), the V2.1 step 1 design brief (sections 2, 3, 6, 7
 > and 9), `docs/architecture/data-model-v2.md`, `docs/architecture/e2e-format.md` (section 3.3,
-> secret format), migrations `internal/store/migrations/{sqlite,postgres}/0001..0032`, package
+> secret format), migrations `internal/store/migrations/{sqlite,postgres}/0001..0034`, package
 > `internal/store`, `internal/masterkey`. The migration 0033 is written alongside this document
 > (it applies on both engines and passes the store tests); the Go store code that uses it comes
 > with the implementation steps.
@@ -12,8 +12,8 @@
 
 All V1, V1.1, V1.2 and V2 conventions still apply (see `data-model-v1.1.md`, section 1,
 `data-model-v1.2.md`, section 1, and `data-model-v2.md`, section 1). V2.1 is purely additive:
-one new tenant table and new tenant columns, no widened check, so **no SQLite table is
-rebuilt**.
+one new tenant table and new tenant columns. One check is widened (0034, section 2.2), so **one
+SQLite table is rebuilt**: `tenant_email_templates`.
 
 | Topic | Rule |
 |---|---|
@@ -31,6 +31,7 @@ rebuilt**.
 | # | Name | Content |
 |---|---|---|
 | 0033 | `secrets` | `tenants`: `secrets_enabled`, `secret_durations`, `secret_default_duration`, `secret_file_allowed`, `secret_file_max_bytes`, `secret_email_allowed`, `secret_email_requires_passphrase`. New table `secrets` (one-time secrets, their optional file and its one-time download grant). |
+| 0034 | `secret_mail_templates` | `tenant_email_templates.template_key` check widened with `secret-notification` and `secret-receipt` (the two secret mails become customizable per entity, brief 12.3). SQLite rebuilds the table, PostgreSQL alters the named check. |
 
 ### 2.1 Migration 0033 `secrets`
 
@@ -194,7 +195,10 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
   public calls look the token up in the tenant scope of the host: a token of another tenant is
   simply unknown there (404 and `secret_invalid`). No sealed copy of the token is kept: the
   creator gets it once in `SecretCreated`; a lost link is a lost secret (the creator deletes it
-  and creates another one).
+  and creates another one). For the e-mail delivery the creator sends the token back once, in
+  the body of `POST /secrets/{id}/send`: the server compares its SHA-256 with `token_hash` in
+  constant time (another token: 404, like a secret of another creator) and uses it only to
+  compose the link of the mail; it is still never stored.
 - **Origin.** `creator_kind` reuses the depositor vocabulary of `transfers.sender_kind` and
   `deposit_sessions.kind` (`internal`, `internal_remote` for an internal from outside, V1.1 6.4,
   `external` for an invited external), plus `api_token` (`api_token_id` set; `sender_email` is
@@ -223,8 +227,12 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
   of an API token.
 - **Delivery.** `link`: the creator hands out the link; no recipient is recorded. `email`:
   exactly one `recipient_email` (check), mailed by `POST /secrets/{id}/send`, which receives the
-  fragment key `K` once, only to compose the mail. **`K` is never stored nor logged**; no column
-  can hold it.
+  secret token and the fragment key `K` once, only to compose the link of the mail
+  (`https://<registered fqdn>/s/<token>#k=<K>`, `e2e-format.md` §3.3.6). **Neither the token
+  nor `K` is ever stored, logged or audited**; no column can hold them. At the creation, the
+  recipient goes through the blocklist and the recipient domain rules of the tenant, as the
+  recipients of a transfer (`403 recipient-domain-refused`, audited `transfer.recipient_refused`
+  with `details.object = secret`); the inviter imposed on an invited external is not checked.
 - **Receipt.** `read_receipt` is the creator's choice; `receipt_sent_at` is set when the
   receipt mail left, only for a secret asked with a receipt and ended as `read`, `expired`
   (unread) or `locked` (brief point 8), never for `deleted` (the creator or an admin did it).
@@ -340,9 +348,13 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
   `tenants.secret_file_max_bytes` in the store and by 25 MiB in the check; `file_metadata`: the
   sealed metadata, at most 4 KiB decoded, the same bound as `transfer_files.e2e_metadata`). The
   storage name (32 random hex characters, like `transfer_files.storage_name`, unique per tenant)
-  is chosen at creation, so that an abandoned partial upload is found and removed by the
-  pending purge; the file lives at `<tenant dir>/secrets/<file_storage_name>`, never a name
-  derived from the token or the ID. `file_uploaded_at` marks a complete upload, validated by the
+  is set at creation (it reserves the file in the storage quota) and drawn afresh by each upload
+  attempt, in the transaction that attaches the file key, so that the row always names the file
+  of the current attempt and an abandoned partial upload is found and removed by the pending
+  purge; the file of an earlier failed attempt, named by no row, is left to the orphan sweep,
+  which can therefore never remove the file of a new attempt (no name reuse, threat model
+  T-360). The file lives at `<tenant dir>/secrets/<file_storage_name>`, never a name derived
+  from the token or the ID. `file_uploaded_at` marks a complete upload, validated by the
   keyless TTE2 validator; an `active` secret with a file has it (check). The stored file is
   encrypted again at rest with `file_key_id` (TTEF, like transfer files). The file counts in the
   tenant storage quota while `file_storage_name` is set. `file_size` stays in the tombstone
@@ -365,6 +377,22 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
 - **RLS.** `secrets_isolation` (usual tenant template, ENABLE + FORCE). Public lookups by token
   run in the tenant scope of the host; the lifecycle sweeps across tenants run in the system
   scope and switch to the tenant scope per secret, as the transfer sweeps do.
+
+### 2.2 Migration 0034 `secret_mail_templates`
+
+Deviation from "no widened check, no table rebuilt": a mail template an entity can customize is a
+row of `tenant_email_templates`, whose `template_key` check lists the known keys (0009, widened
+by 0020). The two new mails `secret_notification` and `secret_receipt` need the keys
+`secret-notification` and `secret-receipt`.
+
+- **SQLite**: SQLite cannot alter a check, so the table is rebuilt exactly as in 0020
+  (`tenant_email_templates_0034`, `STRICT, WITHOUT ROWID`, same columns, primary key and foreign key
+  to `tenants`; rows copied; old table dropped; copy renamed). No other table references it and it
+  has no secondary index. No backfill: without a row the default template applies.
+- **PostgreSQL**: `ALTER TABLE ... DROP CONSTRAINT tenant_email_templates_template_key_check, ADD
+  CONSTRAINT ...` with the full list. The table and its isolation policy are untouched.
+- The Go side adds `EmailTemplateSecretNotification` and `EmailTemplateSecretReceipt` to
+  `store.EmailTemplateKeys()` (14 keys) and the OpenAPI `EmailTemplateKey` enum.
 
 ## 3. PostgreSQL RLS summary
 
@@ -403,12 +431,16 @@ never carry content, key, proof, verifier or token.
 ## 5. Impact on existing behaviour
 
 - **Store inserts.** Unchanged: the new tenant columns all have defaults (`Tenants.Create` keeps
-  working; the tenants it creates have the module on). No existing check is widened, no table is
-  rebuilt.
-- **Upgrade tests.** The tests that count applied migrations now expect 20 from a V1 database
-  (0014 to 0033) and 13 from 0020; `migrate` from scratch applies 33.
+  working; the tenants it creates have the module on). One check is widened (0034, section 2.2),
+  so `tenant_email_templates` is rebuilt on SQLite; no other table is.
+- **Upgrade tests.** The tests that count applied migrations now expect 21 from a V1 database
+  (0014 to 0034) and 14 from 0020; `migrate` from scratch applies 34.
   `TestV21SchemaConstraints` (`internal/store/migrate_v21_internal_test.go`) checks the V2.1
   invariants on both engines.
+- **Abuse detection (T-340).** `Transfers.SenderActivity(Tx)` (the store query behind
+  `abuse.repo.activity(Tx)`) adds the secrets the address created in the window (`state <>
+  'pending'`, `created_at` in the window, creator kind `api_token` counted as `internal`) to the
+  **number** of transfers, never to the volume.
 - **RLS tests.** `secrets` is added to `TestRLSOwnerCannotDisablePolicies`; `verifyRLS` and
   `TestRLSRoleCannotBypass` already cover every table with a `tenant_id` column.
 - **Quota.** At step 2 the tenant storage usage adds the sizes of the stored secret files
@@ -437,7 +469,7 @@ Choices made in this design beyond the brief, validated with it on 2026-11-09:
 | D2 | Vault purpose | Both keys are `wrapped_keys` rows of the existing purpose `dek`; no new purpose, no rebuild of `wrapped_keys` | §2.1 Wrapped keys |
 | D3 | Verifiers and passphrase parameters in tombstones | `verifier`, `key_verifier`, `kdf_salt`, `kdf_iterations` NULL outside `pending` / `active` (no offline passphrase oracle after a database leak; review correction). **Residual risk:** a backup taken while the secret was live keeps `text_sealed`, its wrapped key, the verifiers and the salt; the erasure at the reveal does not reach it, the text stays protected by `K` (and the passphrase) only. Recommendation: short durations, passphrase for the e-mail delivery | §2.1 Proofs, Sealed text |
 | D10 | Key verifier | `key_verifier = SHA-256(keyProof)` (from `K` only, `e2e-format.md` §3.3.4); a wrong key proof is refused and not counted, only wrong passphrase proofs count toward the lock | §2.1 Proofs |
-| D4 | Storage name and upload mark | `file_storage_name` chosen at creation, `file_uploaded_at` added (not in the brief), so a partial upload is always found | §2.1 File |
+| D4 | Storage name and upload mark | `file_storage_name` set at creation and drawn afresh by each upload attempt, `file_uploaded_at` added (not in the brief), so a partial upload is always found and a name is never reused | §2.1 File |
 | D5 | `end_reason` values | `read`, `expired`, `locked`, `deleted_by_creator`, `deleted_by_admin`. API mapping: `endReason` (and the `reason` of `410 secret-gone`) is `deleted` for both `deleted_by_*` values, the others unchanged; the actor (creator or admin) is in the `secret.deleted` audit entry, never in the public answer | §2.1 States |
 | D6 | Abandoned pending secrets | Deleted outright after 1 hour (no tombstone) | §2.1 States, §4 |
 | D7 | Default duration | Deviation from the brief, which only hinted at an optional `defaultDuration`: optional column `secret_default_duration` (NULL: the shortest offered), exposed as `defaultDuration` in `SecretSettings` and `features.secrets` | §2.1 Tenant settings |

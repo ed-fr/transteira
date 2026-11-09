@@ -222,6 +222,37 @@ var keyDefs = map[string]keyDef{
 			DeleteAt: sampleTime.Add(15 * time.Minute), RecipientEmail: "bob@example.com",
 		},
 	},
+	TemplateSecretNotification: {
+		vars: []varSpec{
+			tenantVar,
+			{"sender_email", VarText, false, "Verified address of the person who created the secret."},
+			{"secret_link", VarURL, true, "Link that opens the secret; it can be read only once."},
+			{"expiry_datetime", VarText, false, "Date and time when the secret expires."},
+			{"passphrase_notice", VarBlock, false, "Notice that a passphrase is needed and comes from the sender through another channel; empty without passphrase."},
+			{"file_notice", VarBlock, false, "Notice that a file is attached, end-to-end encrypted and not analyzed by the antivirus; empty without file."},
+		},
+		values: secretNotificationValues,
+		sample: SecretNotificationData{
+			TenantName: sampleTenant, SenderEmail: sampleSender, Link: "https://transfer.entity-a.example.com/s/sec_sample#k=sample",
+			ExpiresAt: sampleTime.AddDate(0, 0, 1), PassphraseRequired: true, HasFile: true,
+		},
+	},
+	TemplateSecretReceipt: {
+		vars: []varSpec{
+			tenantVar,
+			{"outcome_summary", VarText, false, "Short outcome for the subject (read, expired unread, locked)."},
+			{"outcome_text", VarText, true, "Sentence telling how the secret ended."},
+			{"outcome_datetime", VarText, false, "Date and time when the secret ended."},
+			{"secret_id", VarText, false, "Identifier of the secret (sec_...)."},
+			{"created_datetime", VarText, false, "Date and time when the secret was created."},
+			{"recipient_notice", VarBlock, false, "Recipient of the e-mail delivery; empty for a link delivery."},
+		},
+		values: secretReceiptValues,
+		sample: SecretReceiptData{
+			TenantName: sampleTenant, SecretID: "sec_01J00000000000000000000000", Outcome: SecretOutcomeRead,
+			At: sampleTime, CreatedAt: sampleTime.Add(-time.Hour), RecipientEmail: "bob@example.com",
+		},
+	},
 	TemplateExpiryReminder: {
 		vars: []varSpec{
 			tenantVar,
@@ -654,6 +685,44 @@ func firstDownloadValues(l *labels, lang string, data any) (map[string]value, bo
 		"files":             simpleFilesBlock(l, lang, d.Files),
 		"recipient_notice":  noticeBlock(d.RecipientEmail != "", l.downloadedBy+d.RecipientEmail, false),
 		"deletion_notice":   deletion,
+	}, true
+}
+
+func secretNotificationValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(SecretNotificationData)
+	if !ok {
+		return nil, false
+	}
+	return map[string]value{
+		"tenant_name":       textValue(d.TenantName),
+		"sender_email":      textValue(d.SenderEmail),
+		"secret_link":       urlValue(d.Link),
+		"expiry_datetime":   textValue(FormatDateTime(lang, d.ExpiresAt)),
+		"passphrase_notice": noticeBlock(d.PassphraseRequired, l.secretPassphrase, true),
+		"file_notice":       noticeBlock(d.HasFile, l.secretFile, false),
+	}, true
+}
+
+func secretReceiptValues(l *labels, lang string, data any) (map[string]value, bool) {
+	d, ok := data.(SecretReceiptData)
+	if !ok {
+		return nil, false
+	}
+	summary, text := l.secretReadSummary, l.secretReadText
+	switch d.Outcome {
+	case SecretOutcomeExpired:
+		summary, text = l.secretExpiredSummary, l.secretExpiredText
+	case SecretOutcomeLocked:
+		summary, text = l.secretLockedSummary, l.secretLockedText
+	}
+	return map[string]value{
+		"tenant_name":      textValue(d.TenantName),
+		"outcome_summary":  textValue(summary),
+		"outcome_text":     textValue(text),
+		"outcome_datetime": textValue(FormatDateTime(lang, d.At)),
+		"secret_id":        textValue(d.SecretID),
+		"created_datetime": textValue(FormatDateTime(lang, d.CreatedAt)),
+		"recipient_notice": noticeBlock(d.RecipientEmail != "", l.secretRecipient+d.RecipientEmail, false),
 	}, true
 }
 

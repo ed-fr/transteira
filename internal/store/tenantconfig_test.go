@@ -308,7 +308,7 @@ func TestTenantsDeleteRefusedWhileKeysRemain(t *testing.T) {
 func TestEmailTemplateKeys(t *testing.T) {
 	t.Parallel()
 	keys := store.EmailTemplateKeys()
-	if len(keys) != 12 || !slices.IsSorted(keys) {
+	if len(keys) != 14 || !slices.IsSorted(keys) {
 		t.Fatalf("EmailTemplateKeys = %v", keys)
 	}
 	for _, k := range keys {
@@ -346,6 +346,17 @@ func TestTenantEmailTemplates(t *testing.T) {
 		}
 		if _, err := repo.Get(ctx, a.ID, store.EmailTemplateInvitation, "fr"); !errors.Is(err, store.ErrNotFound) {
 			t.Fatalf("Get(default) err = %v", err)
+		}
+
+		// Every known key is accepted by the table check (0034 added the
+		// two secret mails), then removed to leave the table empty.
+		for _, k := range store.EmailTemplateKeys() {
+			if _, err := repo.Put(ctx, a.ID, store.EmailTemplate{Key: k, Language: "en", Subject: "S"}); err != nil {
+				t.Fatalf("Put(%s): %v", k, err)
+			}
+			if err := repo.Delete(ctx, a.ID, k, "en"); err != nil {
+				t.Fatalf("Delete(%s): %v", k, err)
+			}
 		}
 
 		tpl := store.EmailTemplate{

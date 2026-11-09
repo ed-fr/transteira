@@ -641,6 +641,8 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM abuse_alerts WHERE tenant_id = ? AND created_at < ?`:                                                                   0,
 	`SELECT sender_kind, CAST(sum(total_bytes) AS BIGINT), count(*) FROM transfers WHERE tenant_id = ? AND sender_email = ? ` +
 		`AND ((created_at >= ? AND created_at < ?) OR (extended_at >= ? AND extended_at < ?)) GROUP BY sender_kind`: 0,
+	`SELECT creator_kind, count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND state <> 'pending' ` +
+		`AND created_at >= ? AND created_at < ? GROUP BY creator_kind`: 0,
 	`SELECT created_at, total_bytes FROM transfers WHERE tenant_id = ? AND sender_email = ? AND created_at >= ? ` +
 		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
 	`INSERT INTO abuse_reports (tenant_id, id, transfer_id, recipient_link_id, sender_email, recipient_position, ` +
@@ -816,16 +818,42 @@ var tenantAllowlist = map[string]int{
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 1,
 	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL ` +
 		`AND state IN ('pending', 'active')`: 0,
-	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND created_at > ?`:     0,
-	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND state IN ('pending', 'active')`:              0,
-	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND created_at > ?`:                              0,
-	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`:                                              0,
-	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`:                                      0,
-	`SELECT id, state, expires_at, end_reason, file_size, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`: 0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND created_at > ?`: 0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND state IN ('pending', 'active')`:          0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND created_at > ?`:                          0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`:                                          0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`:                                  0,
+	`SELECT id, state, expires_at, end_reason, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`:        0,
 	`UPDATE secrets SET failed_proofs = failed_proofs + 1 ` +
 		`WHERE tenant_id = ? AND id = ? AND state = 'active' AND expires_at > ? AND failed_proofs < 5`: 0,
-	`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata ` +
+	`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata, file_size ` +
 		`FROM secrets WHERE tenant_id = ? AND id = ?`: 0,
+	`UPDATE secrets SET state = 'read', failed_proofs = failed_proofs - 1, read_at = ?, ended_at = ?, ` +
+		`end_reason = 'read', ` + secretContentNull + `, file_grant_hash = ?, file_grant_expires_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND state = 'active' AND file_size IS NOT NULL`: 4,
+	// Secret files, send call and receipts (V2.1 step 3).
+	`SELECT CAST(COALESCE(sum(file_size), 0) AS BIGINT) FROM secrets WHERE tenant_id = ? AND file_storage_name IS NOT NULL`: 0,
+	`UPDATE secrets SET file_key_id = ?, file_storage_name = ? WHERE tenant_id = ? AND id = ? AND state = 'pending' ` +
+		`AND file_size IS NOT NULL AND file_key_id IS NULL AND file_uploaded_at IS NULL`: 2,
+	`SELECT token_hash FROM secrets WHERE tenant_id = ? AND id = ?`:                                                         0,
+	`UPDATE secrets SET file_key_id = NULL WHERE tenant_id = ? AND id = ? AND file_key_id = ? AND file_uploaded_at IS NULL`: 0,
+	`UPDATE secrets SET file_uploaded_at = ?, state = 'active', activated_at = ?, expires_at = ? ` +
+		`WHERE tenant_id = ? AND id = ? AND state = 'pending' AND delivery = 'link' AND file_key_id = ? ` +
+		`AND file_uploaded_at IS NULL`: 3,
+	`UPDATE secrets SET file_uploaded_at = ? WHERE tenant_id = ? AND id = ? AND state = 'pending' ` +
+		`AND delivery = 'email' AND file_key_id = ? AND file_uploaded_at IS NULL`: 1,
+	`UPDATE secrets SET state = 'active', activated_at = ?, expires_at = ? WHERE tenant_id = ? AND id = ? ` +
+		`AND state = 'pending' AND delivery = 'email' AND (file_size IS NULL OR file_uploaded_at IS NOT NULL)`: 2,
+	`SELECT id, state, file_size, file_storage_name, file_key_id, file_grant_hash, file_grant_expires_at ` +
+		`FROM secrets WHERE tenant_id = ? AND token_hash = ?`: 0,
+	`UPDATE secrets SET file_downloaded_at = ?, file_grant_hash = NULL, file_grant_expires_at = NULL, ` + secretFileNull +
+		` WHERE tenant_id = ? AND id = ? AND state = 'read' AND file_grant_hash = ?`: 1,
+	`UPDATE secrets SET file_grant_hash = NULL, file_grant_expires_at = NULL, ` + secretFileNull +
+		` WHERE tenant_id = ? AND id = ? AND file_grant_hash IS NOT NULL AND file_grant_expires_at <= ?`: 0,
+	`UPDATE secrets SET receipt_sent_at = ? WHERE tenant_id = ? AND id = ? AND receipt_sent_at IS NULL ` +
+		`AND read_receipt = ? AND state IN ('read', 'expired', 'locked')`: 1,
+	`SELECT file_storage_name, file_key_id FROM secrets WHERE tenant_id = ? AND file_storage_name IS NOT NULL ` +
+		`ORDER BY file_storage_name LIMIT ?`: 0,
 	`UPDATE secrets SET state = 'read', failed_proofs = failed_proofs - 1, read_at = ?, ended_at = ?, ` +
 		`end_reason = 'read', ` + secretContentNull + ` WHERE tenant_id = ? AND id = ? AND state = 'active' AND file_size IS NULL`: 2,
 	`UPDATE secrets SET state = 'locked', ended_at = ?, end_reason = 'locked', ` + secretContentNull + `, ` + secretFileNull +
@@ -858,7 +886,7 @@ var tenantAllowlist = map[string]int{
 // review reason. Each entry needs a security review.
 var reviewedAllowlist = map[string]string{
 	`SELECT n.status, n.secrets_enabled, n.secret_durations, n.secret_file_allowed, n.secret_file_max_bytes, ` +
-		`n.secret_email_allowed, n.secret_email_requires_passphrase ` +
+		`n.secret_email_allowed, n.secret_email_requires_passphrase, n.storage_quota_bytes ` +
 		`FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.id = ?`: reasonSecretSettings,
 	`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id WHERE t.tenant_id = ? AND t.id = ? ` +
 		`AND n.status = 'active'`: reasonTransferTenantActive,
@@ -1167,6 +1195,11 @@ var systemAllowlist = map[string]string{
 		`AND (created_at, tenant_id, id) > (?, ?, ?) ORDER BY created_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
 	`SELECT tenant_id, id, expires_at FROM secrets WHERE state = 'active' AND expires_at <= ? ` +
 		`AND (expires_at, tenant_id, id) > (?, ?, ?) ORDER BY expires_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
+	`SELECT tenant_id, id, file_grant_expires_at FROM secrets WHERE file_grant_hash IS NOT NULL ` +
+		`AND file_grant_expires_at <= ? AND (file_grant_expires_at, tenant_id, id) > (?, ?, ?) ` +
+		`ORDER BY file_grant_expires_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
+	`SELECT tenant_id, CAST(COALESCE(sum(file_size), 0) AS BIGINT) FROM secrets WHERE file_storage_name IS NOT NULL ` +
+		`GROUP BY tenant_id ORDER BY tenant_id`: reasonUsedBytesAll,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

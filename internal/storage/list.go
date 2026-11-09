@@ -52,6 +52,8 @@ func (k Kind) String() string {
 		return "temp"
 	case KindAsset:
 		return "asset"
+	case KindSecretFile:
+		return "secret"
 	default:
 		return "unknown"
 	}
@@ -108,7 +110,8 @@ func (s *Store) TenantDirs() ([]tenant.ID, error) {
 // list without error. The tenant directory itself must be a real directory:
 // a symbolic link in its place is refused with ErrInvalid, never followed.
 // Entries are inspected without following symbolic links. An entry removed
-// while List runs is omitted.
+// while List runs is omitted, and so is the secrets subdirectory (a real
+// directory), listed by [Store.ListSecretFiles].
 func (s *Store) List(tid tenant.ID) ([]Entry, error) {
 	if tid.Validate() != nil {
 		return nil, fmt.Errorf("%w: tenant id", ErrInvalid)
@@ -140,6 +143,10 @@ func (s *Store) List(tid tenant.ID) ([]Entry, error) {
 		}
 		if err != nil {
 			return nil, wrap("list", "", err)
+		}
+		if file == secretsDir && fi.IsDir() {
+			// The files of the one-time secrets: [Store.ListSecretFiles].
+			continue
 		}
 		ent := Entry{Name: file, File: file, Kind: KindUnknown, ModTime: fi.ModTime(), Size: fi.Size()}
 		if fi.Mode().IsRegular() {

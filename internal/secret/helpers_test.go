@@ -3,13 +3,19 @@ package secret
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"net/netip"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ed-fr/transteira/internal/abuse"
 	"github.com/ed-fr/transteira/internal/audit"
 	"github.com/ed-fr/transteira/internal/id"
+	"github.com/ed-fr/transteira/internal/mail"
+	"github.com/ed-fr/transteira/internal/notify"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -100,6 +106,164 @@ type fakeRepo struct {
 	page    store.Page[store.Secret]
 	listErr error
 	gotOpts store.SecretListOptions
+
+	uploaded  store.Secret
+	uploadErr error
+	gotBody   []byte
+	gotSecID  string
+
+	download   *store.SecretFileDownload
+	openErr    error
+	gotGrant   string
+	completed  store.EndedSecret
+	completeOK bool
+	completeEr error
+	completes  int
+
+	got         store.Secret
+	getErr      error
+	gets        int
+	activated   store.Secret
+	activateErr error
+	gotToken    string
+	gotNow      time.Time
+	marked      bool
+	markErr     error
+	marks       int
+}
+
+func (r *fakeRepo) Get(_ context.Context, _ tenant.ID, secID string) (store.Secret, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.gets++
+	r.gotSecID = secID
+	return r.got, r.getErr
+}
+
+func (r *fakeRepo) ActivateForSend(_ context.Context, _ tenant.ID, secID string, actor store.SecretActor, token string,
+	now time.Time,
+) (store.Secret, error) {
+	r.gotSecID, r.gotActor, r.gotToken, r.gotNow = secID, actor, token, now
+	return r.activated, r.activateErr
+}
+
+func (r *fakeRepo) MarkReceiptSent(context.Context, tenant.ID, string, time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.marks++
+	return r.marked, r.markErr
+}
+
+// fakeDirectory answers with the configured tenant, rules and blocklist.
+type fakeDirectory struct {
+	tenant     *tenant.Tenant
+	tenantErr  error
+	rules      store.RecipientRuleSet
+	rulesErr   error
+	blocked    bool
+	blockedErr error
+	gotEmail   string
+}
+
+func (d *fakeDirectory) Tenant(context.Context, tenant.ID) (*tenant.Tenant, error) {
+	return d.tenant, d.tenantErr
+}
+
+func (d *fakeDirectory) RecipientRules(context.Context, tenant.ID) (store.RecipientRuleSet, error) {
+	return d.rules, d.rulesErr
+}
+
+func (d *fakeDirectory) Blocked(_ context.Context, _ tenant.ID, email string) (bool, error) {
+	d.gotEmail = email
+	return d.blocked, d.blockedErr
+}
+
+// fakeNotifier records the mails it builds.
+type fakeNotifier struct {
+	mu         sync.Mutex
+	notifErr   error
+	receiptErr error
+	links      []string
+	views      []notify.SecretView
+	outcomes   []string
+	ats        []time.Time
+}
+
+func (n *fakeNotifier) SecretNotification(_ context.Context, t *tenant.Tenant, v notify.SecretView, link string) (mail.Job, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.links, n.views = append(n.links, link), append(n.views, v)
+	if n.notifErr != nil {
+		return mail.Job{}, n.notifErr
+	}
+	return mail.Job{TenantID: t.ID.String(), Template: mail.TemplateSecretNotification}, nil
+}
+
+func (n *fakeNotifier) SecretReceipt(_ context.Context, t *tenant.Tenant, v notify.SecretView, outcome string, at time.Time) (mail.Job, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.views, n.outcomes, n.ats = append(n.views, v), append(n.outcomes, outcome), append(n.ats, at)
+	if n.receiptErr != nil {
+		return mail.Job{}, n.receiptErr
+	}
+	return mail.Job{TenantID: t.ID.String(), Template: mail.TemplateSecretReceipt}, nil
+}
+
+// fakeAbuse records the facts of the activations.
+type fakeAbuse struct {
+	mu    sync.Mutex
+	facts []abuse.Facts
+}
+
+func (a *fakeAbuse) AfterCreate(_ context.Context, _ *tenant.Tenant, f abuse.Facts) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.facts = append(a.facts, f)
+}
+
+// fakeMailer records the queued mails.
+type fakeMailer struct {
+	mu   sync.Mutex
+	sent []mail.Job
+}
+
+func (m *fakeMailer) Send(_ context.Context, jobs []mail.Job, _ ...slog.Attr) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, jobs...)
+}
+
+// templates returns the templates of the queued mails.
+func (m *fakeMailer) templates() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, len(m.sent))
+	for i, j := range m.sent {
+		out[i] = j.Template
+	}
+	return out
+}
+
+func (r *fakeRepo) UploadFile(_ context.Context, _ tenant.ID, secID string, actor store.SecretActor, _ store.SecretFiles,
+	body io.Reader, clock func() time.Time,
+) (store.Secret, error) {
+	r.gotSecID, r.gotActor = secID, actor
+	r.gotBody, _ = io.ReadAll(body)
+	_ = clock()
+	return r.uploaded, r.uploadErr
+}
+
+func (r *fakeRepo) OpenFile(_ context.Context, _ tenant.ID, _, grant string, _ store.SecretFiles, _ time.Time) (*store.SecretFileDownload, error) {
+	r.gotGrant = grant
+	return r.download, r.openErr
+}
+
+func (r *fakeRepo) CompleteFileDownload(_ context.Context, _ tenant.ID, _, grant string, _ time.Time) (store.EndedSecret, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.completes++
+	r.gotGrant = grant
+	return r.completed, r.completeOK, r.completeEr
 }
 
 func (r *fakeRepo) Create(_ context.Context, _ tenant.ID, c store.CreateSecret) (store.CreatedSecret, error) {
@@ -113,7 +277,7 @@ func (r *fakeRepo) Create(_ context.Context, _ tenant.ID, c store.CreateSecret) 
 	if out.Secret.ID == "" {
 		out = store.CreatedSecret{Token: "tts_tok", Secret: store.Secret{
 			ID: id.New(id.Secret), State: store.SecretActive, CreatorKind: c.CreatorKind, Delivery: c.Delivery,
-			Duration: c.Duration, ExpiresAt: c.Now.Add(c.Duration.Duration()),
+			Duration: c.Duration, ExpiresAt: c.Now.Add(c.Duration.Duration()), SenderEmail: c.SenderEmail, ActivatedAt: c.Now,
 		}}
 	}
 	return out, nil
@@ -174,6 +338,14 @@ type fakeFiles struct {
 func (f *fakeFiles) RemoveSecretFile(_ tenant.ID, name string) error {
 	f.removed = append(f.removed, name)
 	return f.err
+}
+
+func (f *fakeFiles) CreateSecretFile(tenant.ID, string) (*os.File, error) {
+	return nil, errors.New("fakeFiles: no file system")
+}
+
+func (f *fakeFiles) OpenSecretFile(tenant.ID, string) (*os.File, int64, error) {
+	return nil, 0, errors.New("fakeFiles: no file system")
 }
 
 // fakeSeclog captures the security events.
@@ -245,6 +417,24 @@ func (f *fakeFailures) Fail(string) (bool, time.Duration) {
 	return false, 0
 }
 
+// fakeStreams counts the stream slots taken and released.
+type fakeStreams struct {
+	err      error
+	gotID    string
+	held     int
+	acquired int
+}
+
+func (f *fakeStreams) AcquireStream(_ context.Context, _ *tenant.Tenant, objectID string, _ netip.Addr) (func(), error) {
+	f.gotID = objectID
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.held++
+	f.acquired++
+	return func() { f.held-- }, nil
+}
+
 // env is a service over fakes.
 type env struct {
 	svc      *Service
@@ -256,6 +446,11 @@ type env struct {
 	audit    *fakeAudit
 	requests *fakeLimiter
 	failures *fakeFailures
+	dir      *fakeDirectory
+	notifier *fakeNotifier
+	mailer   *fakeMailer
+	abuse    *fakeAbuse
+	streams  *fakeStreams
 }
 
 func newEnv(t *testing.T) *env {
@@ -263,10 +458,13 @@ func newEnv(t *testing.T) *env {
 	e := &env{
 		repo: &fakeRepo{}, creators: &fakeCreators{}, scrubber: &fakeScrubber{}, files: &fakeFiles{},
 		seclog: &fakeSeclog{}, audit: &fakeAudit{}, requests: &fakeLimiter{}, failures: &fakeFailures{},
+		dir: &fakeDirectory{tenant: testTenant}, notifier: &fakeNotifier{}, mailer: &fakeMailer{}, abuse: &fakeAbuse{},
+		streams: &fakeStreams{},
 	}
 	svc, err := New(Deps{
 		Secrets: e.repo, Creators: e.creators, Scrubber: e.scrubber, Files: e.files, SecurityLog: e.seclog,
-	}, Options{Audit: e.audit, Requests: e.requests, Failures: e.failures, Now: func() time.Time { return testNow }})
+		Directory: e.dir, Notifier: e.notifier, Mailer: e.mailer,
+	}, Options{Audit: e.audit, Abuse: e.abuse, Streams: e.streams, Requests: e.requests, Failures: e.failures, Now: func() time.Time { return testNow }})
 	if err != nil {
 		t.Fatal(err)
 	}

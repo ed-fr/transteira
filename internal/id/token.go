@@ -50,6 +50,10 @@ const (
 	// path component of the secret link "/s/<token>", looked up by its
 	// SHA-256 hash (see HashToken).
 	SecretTokenPrefix = "tts"
+	// SecretGrantPrefix starts the one-time file grant of a revealed
+	// secret (since 2.1), sent in the TransTeira-Secret-Grant header of
+	// the file download and stored as its SHA-256 only (see HashToken).
+	SecretGrantPrefix = "ttg"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -73,6 +77,9 @@ const (
 	// SecretTokenBytes is the entropy of a secret token (256 bits): always
 	// 43 base62 characters.
 	SecretTokenBytes = 32
+	// SecretGrantBytes is the entropy of a file grant (256 bits): always
+	// 43 base62 characters.
+	SecretGrantBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
@@ -148,6 +155,42 @@ func NewSecretToken() (string, error) {
 func SecretTokenValid(s string) bool {
 	n := TokenLen(SecretTokenBytes)
 	return TokenValid(SecretTokenPrefix, s, n, n)
+}
+
+// NewSecretGrant returns a new one-time file grant: SecretGrantPrefix
+// followed by SecretGrantBytes of crypto/rand entropy in base62, exactly 43
+// characters (OpenAPI SecretRevealed.fileGrant "^ttg_[A-Za-z0-9]{43}$").
+// Only its HashToken is stored.
+func NewSecretGrant() (string, error) {
+	return NewToken(SecretGrantPrefix, SecretGrantBytes)
+}
+
+// SecretGrantValid reports whether s has the shape of a file grant
+// ("ttg_" + exactly 43 base62 characters).
+func SecretGrantValid(s string) bool {
+	n := TokenLen(SecretGrantBytes)
+	return TokenValid(SecretGrantPrefix, s, n, n)
+}
+
+// SecretPath is the path of the web page of a one-time secret link (since
+// 2.1), followed by the secret token: the link is
+// "https://" + FQDN + SecretPath + token + SecretKeyFragment + key (see
+// SecretURL, docs/architecture/e2e-format.md section 3.3.1).
+const SecretPath = "/s/"
+
+// SecretKeyFragment introduces the key of a secret link in its fragment,
+// which a browser never sends to the server.
+const SecretKeyFragment = "#k="
+
+// SecretURL returns the link of the secret token for the tenant served on
+// fqdn, with key (the 43-character base64url key K of the creator) in the
+// fragment: "https://" + fqdn + SecretPath + token + SecretKeyFragment +
+// key. As for DownloadURL, fqdn must be the host name stored for the
+// tenant, never one taken from a request (threat T-365); the arguments are
+// used as they are, without validation. The result carries two secrets: it
+// must never be stored nor logged (T-363).
+func SecretURL(fqdn, token, key string) string {
+	return "https://" + fqdn + SecretPath + token + SecretKeyFragment + key
 }
 
 // DropPath is the path of the web landing page of a permanent drop link,

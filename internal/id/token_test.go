@@ -213,6 +213,13 @@ func TestDropURL(t *testing.T) {
 	}
 }
 
+func TestSecretURL(t *testing.T) {
+	got := SecretURL("transfer.entity-a.example.com", "tts_abc", "KEY")
+	if want := "https://transfer.entity-a.example.com/s/tts_abc#k=KEY"; got != want {
+		t.Errorf("SecretURL = %q, want %q", got, want)
+	}
+}
+
 func TestHashToken(t *testing.T) {
 	want := sha256.Sum256([]byte("ttd_abc"))
 	if got := HashToken("ttd_abc"); !bytes.Equal(got, want[:]) || len(got) != sha256.Size {
@@ -250,6 +257,22 @@ func TestSecretToken(t *testing.T) {
 	for _, bad := range []string{"", "tts_short", "ttd_" + tok[4:], tok[:len(tok)-1], tok + "a", "tts_é" + tok[6:]} {
 		if SecretTokenValid(bad) {
 			t.Errorf("SecretTokenValid(%q) = true", bad)
+		}
+	}
+}
+
+func TestSecretGrant(t *testing.T) {
+	t.Parallel()
+	g, err := NewSecretGrant()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^ttg_[A-Za-z0-9]{43}$`).MatchString(g) || !SecretGrantValid(g) {
+		t.Fatalf("NewSecretGrant() = %q", g)
+	}
+	for _, bad := range []string{"", "ttg_short", "tts_" + g[4:], g[:len(g)-1], g + "a"} {
+		if SecretGrantValid(bad) {
+			t.Errorf("SecretGrantValid(%q) = true", bad)
 		}
 	}
 }

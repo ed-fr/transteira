@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -46,7 +50,48 @@ type fakeSecrets struct {
 	limit     int
 	secretID  string
 	callCount int
+
+	uploaded store.Secret
+	body     []byte
+	stream   secret.FileStream
+	grant    string
+
+	sent        store.Secret
+	fragmentKey string
 }
+
+func (f *fakeSecrets) Send(_ context.Context, _ *tenant.Tenant, sender transfer.Sender, secID, secretToken, fragmentKey string) (store.Secret, error) {
+	f.callCount++
+	f.sender, f.secretID, f.token, f.fragmentKey = sender, secID, secretToken, fragmentKey
+	return f.sent, f.err
+}
+
+func (f *fakeSecrets) UploadFile(_ context.Context, _ *tenant.Tenant, sender transfer.Sender, secID string, body io.Reader) (store.Secret, error) {
+	f.callCount++
+	f.sender, f.secretID = sender, secID
+	if body != nil {
+		f.body, _ = io.ReadAll(body)
+	}
+	return f.uploaded, f.err
+}
+
+func (f *fakeSecrets) DownloadFile(_ context.Context, _ *tenant.Tenant, ip netip.Addr, token, grant string) (secret.FileStream, error) {
+	f.callCount++
+	f.ip, f.token, f.grant = ip, token, grant
+	return f.stream, f.err
+}
+
+// fakeStream is a secret file stream.
+type fakeStream struct {
+	io.Reader
+	size      int64
+	closed    bool
+	delivered int
+}
+
+func (s *fakeStream) Close() error              { s.closed = true; return nil }
+func (s *fakeStream) Size() int64               { return s.size }
+func (s *fakeStream) Delivered(context.Context) { s.delivered++ }
 
 func (f *fakeSecrets) Create(_ context.Context, _ *tenant.Tenant, sender transfer.Sender, req secret.CreateRequest) (secret.Created, error) {
 	f.callCount++
@@ -105,6 +150,18 @@ func secretCalls(t *testing.T) map[string]func(*Server, context.Context) error {
 			_, err := s.DeleteMySecret(ctx, gen.DeleteMySecretRequestObject{SecretId: "sec_x"})
 			return err
 		},
+		"upload": func(s *Server, ctx context.Context) error {
+			_, err := s.UploadSecretFile(ctx, gen.UploadSecretFileRequestObject{SecretId: "sec_x", Body: strings.NewReader("x")})
+			return err
+		},
+		"send": func(s *Server, ctx context.Context) error {
+			_, err := s.SendSecret(ctx, gen.SendSecretRequestObject{SecretId: "sec_x", Body: &gen.SecretSend{}})
+			return err
+		},
+		"download": func(s *Server, ctx context.Context) error {
+			_, err := s.DownloadSecretFile(ctx, gen.DownloadSecretFileRequestObject{SecretToken: "tts_x"})
+			return err
+		},
 	}
 }
 
@@ -127,7 +184,143 @@ func TestSecretOperationsRequireTenantAndService(t *testing.T) {
 	wantProblem(t, calls["create"](srv, depositCtx(t, nil)), problem.CodeUnauthenticated)
 	wantProblem(t, calls["list"](srv, meCtx(t, false)), problem.CodeUnauthenticated)
 	wantProblem(t, calls["delete"](srv, meCtx(t, false)), problem.CodeUnauthenticated)
+	wantProblem(t, calls["upload"](srv, depositCtx(t, nil)), problem.CodeUnauthenticated)
+	wantProblem(t, calls["send"](srv, depositCtx(t, nil)), problem.CodeUnauthenticated)
 }
+
+func TestSendSecret(t *testing.T) {
+	t.Parallel()
+	info := internalInfo()
+	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	f := &fakeSecrets{sent: store.Secret{
+		ID: "sec_1", State: store.SecretActive, Delivery: store.SecretDeliveryEmail, RecipientEmail: "carol@customer.example.net",
+		ReadReceipt: true, CreatedAt: at, ExpiresAt: at.Add(time.Hour),
+	}}
+	token, key := "tts_"+strings.Repeat("T", 43), strings.Repeat("K", 43)
+	resp, err := NewServer(WithSecrets(f)).SendSecret(depositCtx(t, &info), gen.SendSecretRequestObject{
+		SecretId: "sec_1", Body: &gen.SecretSend{SecretToken: token, FragmentKey: key},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := resp.(gen.SendSecret200JSONResponse)
+	if !ok || got.Id != "sec_1" || got.State != "active" || got.Recipient == nil || got.ExpiresAt == nil {
+		t.Fatalf("response %T %+v", resp, resp)
+	}
+	if f.secretID != "sec_1" || f.token != token || f.fragmentKey != key || f.sender.Email != info.Email {
+		t.Errorf("call = %+v", f)
+	}
+	// Without a body: the token is required.
+	_, err = NewServer(WithSecrets(f)).SendSecret(depositCtx(t, &info), gen.SendSecretRequestObject{SecretId: "sec_1"})
+	if p := problemOf(t, err, problem.CodeValidationFailed); p.Errors[0].Field != secret.FieldSecretToken {
+		t.Errorf("no body: %+v", p)
+	}
+	for _, c := range []struct {
+		err  error
+		code problem.Code
+	}{
+		{secret.ErrConflict, problem.CodeStateConflict},
+		{secret.ErrNotFound, problem.CodeNotFound},
+		{secret.ErrMailUnavailable, problem.CodeMailUnavailable},
+		{&secret.ValidationError{Fields: []secret.FieldError{{Pointer: secret.FieldFragmentKey, Code: secret.CodeInvalidFormat}}}, problem.CodeValidationFailed},
+	} {
+		f.err = c.err
+		_, err := NewServer(WithSecrets(f)).SendSecret(depositCtx(t, &info), gen.SendSecretRequestObject{
+			SecretId: "sec_1", Body: &gen.SecretSend{SecretToken: token, FragmentKey: key},
+		})
+		wantProblem(t, err, c.code)
+		if strings.Contains(err.Error(), key) || strings.Contains(err.Error(), token) {
+			t.Errorf("error %q holds the token or the key", err)
+		}
+	}
+}
+
+func TestUploadSecretFile(t *testing.T) {
+	t.Parallel()
+	info := internalInfo()
+	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
+	f := &fakeSecrets{uploaded: store.Secret{
+		ID: "sec_1", State: store.SecretActive, Delivery: store.SecretDeliveryLink, FileSize: 2097200, CreatedAt: at,
+		ExpiresAt: at.Add(time.Hour),
+	}}
+	resp, err := NewServer(WithSecrets(f)).UploadSecretFile(depositCtx(t, &info), gen.UploadSecretFileRequestObject{
+		SecretId: "sec_1", Body: strings.NewReader("ciphertext"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := resp.(gen.UploadSecretFile200JSONResponse)
+	if !ok || got.Id != "sec_1" || got.State != "active" || !got.HasFile || got.FileSize == nil || *got.FileSize != 2097200 ||
+		got.ExpiresAt == nil {
+		t.Fatalf("response %T %+v", resp, resp)
+	}
+	if f.secretID != "sec_1" || string(f.body) != "ciphertext" || f.sender.Email != info.Email {
+		t.Errorf("call = %+v", f)
+	}
+	for _, c := range []struct {
+		err  error
+		code problem.Code
+	}{
+		{secret.ErrConflict, problem.CodeStateConflict},
+		{&secret.FormatError{}, problem.CodeSecretFormatInvalid},
+		{secret.ErrNotFound, problem.CodeNotFound},
+	} {
+		f.err = c.err
+		_, err := NewServer(WithSecrets(f)).UploadSecretFile(depositCtx(t, &info), gen.UploadSecretFileRequestObject{SecretId: "sec_1"})
+		wantProblem(t, err, c.code)
+	}
+}
+
+func TestDownloadSecretFile(t *testing.T) {
+	t.Parallel()
+	stream := &fakeStream{Reader: strings.NewReader("TTE2 ciphertext"), size: 15}
+	f := &fakeSecrets{stream: stream}
+	grant := "ttg_" + strings.Repeat("G", 43)
+	resp, err := NewServer(WithSecrets(f)).DownloadSecretFile(depositCtx(t, nil), gen.DownloadSecretFileRequestObject{
+		SecretToken: "tts_tok", Params: gen.DownloadSecretFileParams{TransTeiraSecretGrant: grant},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.token != "tts_tok" || f.grant != grant || f.ip != clientIP {
+		t.Errorf("call = %+v", f)
+	}
+	rec := httptest.NewRecorder()
+	if err := resp.VisitDownloadSecretFileResponse(rec); err != nil {
+		t.Fatal(err)
+	}
+	h := rec.Header()
+	if rec.Code != 200 || rec.Body.String() != "TTE2 ciphertext" || h.Get("Content-Type") != "application/octet-stream" ||
+		h.Get("Content-Disposition") != "attachment" || h.Get("X-Content-Type-Options") != "nosniff" ||
+		h.Get("Cache-Control") != "no-store" || h.Get("Content-Length") != "15" || h.Get("Referrer-Policy") != "no-referrer" ||
+		h.Get("Content-Security-Policy") != attachmentCSP {
+		t.Errorf("answer %d %v %q", rec.Code, h, rec.Body.String())
+	}
+	if !stream.closed || stream.delivered != 1 {
+		t.Errorf("closed %v, delivered %d", stream.closed, stream.delivered)
+	}
+	// A broken stream or client: not delivered, still closed.
+	broken := &fakeStream{Reader: iotest.ErrReader(errors.New("auth failed")), size: 15}
+	if err := (secretFileResponse{ctx: context.Background(), file: broken}).VisitDownloadSecretFileResponse(httptest.NewRecorder()); err == nil ||
+		broken.delivered != 0 || !broken.closed {
+		t.Errorf("broken stream: %v, %+v", err, broken)
+	}
+	gone := &fakeStream{Reader: strings.NewReader("x"), size: 1}
+	if err := (secretFileResponse{ctx: context.Background(), file: gone}).VisitDownloadSecretFileResponse(noFlushWriter{httptest.NewRecorder()}); err == nil ||
+		gone.delivered != 0 || !gone.closed {
+		t.Errorf("unflushable answer: %v, %+v", err, gone)
+	}
+	f.err = secret.ErrNotFound
+	_, err = NewServer(WithSecrets(f)).DownloadSecretFile(depositCtx(t, nil), gen.DownloadSecretFileRequestObject{SecretToken: "tts_tok"})
+	wantProblem(t, err, problem.CodeNotFound)
+}
+
+// noFlushWriter is a response writer that cannot flush.
+type noFlushWriter struct{ w http.ResponseWriter }
+
+func (n noFlushWriter) Header() http.Header         { return n.w.Header() }
+func (n noFlushWriter) Write(b []byte) (int, error) { return n.w.Write(b) }
+func (n noFlushWriter) WriteHeader(code int)        { n.w.WriteHeader(code) }
 
 func TestCreateSecret(t *testing.T) {
 	t.Parallel()
@@ -235,16 +428,20 @@ func TestRevealSecret(t *testing.T) {
 	}
 	got := resp.(gen.RevealSecret200JSONResponse)
 	if got.Body.EncryptedText != sealedFixture || got.Body.EncryptedMetadata != nil || got.Body.FileGrant != nil ||
+		got.Body.FileGrantExpiresAt != nil ||
 		got.Headers.CacheControl == nil || *got.Headers.CacheControl != "no-store" {
 		t.Errorf("response = %+v", got)
 	}
 	if f.token != "tts_tok" || f.keyProof != "kp" || f.proof != "p" || f.ip != clientIP {
 		t.Errorf("call = %+v", f)
 	}
-	f.revealed.EncryptedMetadata = "AQmeta"
+	exp := time.Date(2026, 11, 9, 9, 10, 0, 0, time.FixedZone("x", 3600))
+	f.revealed.EncryptedMetadata, f.revealed.FileGrant, f.revealed.FileGrantExpiresAt = "AQmeta", "ttg_g", exp
 	resp, _ = srv.RevealSecret(depositCtx(t, nil), gen.RevealSecretRequestObject{SecretToken: "tts_tok", Body: &gen.SecretReveal{}})
-	if m := resp.(gen.RevealSecret200JSONResponse).Body.EncryptedMetadata; m == nil || *m != "AQmeta" {
-		t.Errorf("metadata = %v", m)
+	b := resp.(gen.RevealSecret200JSONResponse).Body
+	if b.EncryptedMetadata == nil || *b.EncryptedMetadata != "AQmeta" || b.FileGrant == nil || *b.FileGrant != "ttg_g" ||
+		b.FileGrantExpiresAt == nil || !b.FileGrantExpiresAt.Equal(exp) || b.FileGrantExpiresAt.Location() != time.UTC {
+		t.Errorf("file members = %+v", b)
 	}
 	before := f.callCount
 	_, err = srv.RevealSecret(depositCtx(t, nil), gen.RevealSecretRequestObject{SecretToken: "tts_tok"})
@@ -359,6 +556,12 @@ func TestSecretErrors(t *testing.T) {
 		{secret.ErrEmailNotAllowed, problem.CodeSecretEmailNotAllowed, nil},
 		{secret.ErrPassphraseRequired, problem.CodeSecretPassphraseRequired, nil},
 		{secret.ErrFileNotAllowed, problem.CodeSecretFileNotAllowed, nil},
+		{secret.ErrConflict, problem.CodeStateConflict, func(p *problem.Problem) bool { return p.Status == 409 }},
+		{secret.ErrQuotaExceeded, problem.CodeQuotaExceeded, func(p *problem.Problem) bool { return p.Status == 507 }},
+		{secret.ErrRecipientRefused, problem.CodeRecipientDomainRefused, func(p *problem.Problem) bool {
+			return p.Status == 403 && len(p.Errors) == 1 && p.Errors[0].Field == "/recipient" && p.Errors[0].Code == "domain-denied"
+		}},
+		{secret.ErrMailUnavailable, problem.CodeMailUnavailable, func(p *problem.Problem) bool { return p.Status == 503 }},
 	}
 	for _, tt := range tests {
 		p := problemOf(t, secretError(tt.err), tt.code)
@@ -411,7 +614,8 @@ func TestSecretAnswersHoldNothingSealed(t *testing.T) {
 	ops := map[string]string{
 		"getSecretLink": "/secret-links/{secretToken}", "revealSecret": "/secret-links/{secretToken}/reveal",
 		"createSecret": "/secrets", "listMySecrets": "/me/secrets", "deleteMySecret": "/me/secrets/{secretId}",
-		"downloadSecretFile": "/secret-links/{secretToken}/file",
+		"downloadSecretFile": "/secret-links/{secretToken}/file", "uploadSecretFile": "/secrets/{secretId}/file",
+		"sendSecret": "/secrets/{secretId}/send",
 	}
 	for opID, path := range ops {
 		item := doc.Paths.Value(path)

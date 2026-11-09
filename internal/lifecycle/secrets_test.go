@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -15,6 +16,7 @@ import (
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
+	"github.com/ed-fr/transteira/internal/tte2"
 )
 
 // secretFile is the metadata (base64url) of the files of the test secrets.
@@ -264,6 +266,115 @@ func TestEraseTenantSecrets(t *testing.T) {
 		}
 		if _, err := ev.db.Secrets(nil).Get(ctx, ev.b.ID, other.Secret.ID); err != nil || ev.secretFiles(ev.b) != 1 {
 			t.Fatalf("tenant B secret: %v, %d files", err, ev.secretFiles(ev.b))
+		}
+	})
+}
+
+// revealedFileSecret stores a secret of tn with an uploaded file and
+// reveals it: its one-time grant is pending.
+func (ev *env) revealedFileSecret(tn *tenant.Tenant) (store.CreatedSecret, store.RevealedSecret) {
+	ev.t.Helper()
+	ctx := context.Background()
+	var kp, p [32]byte
+	_, _ = rand.Read(kp[:])
+	_, _ = rand.Read(p[:])
+	kv, v := sha256.Sum256(kp[:]), sha256.Sum256(p[:])
+	key, _ := tte2.NewKey()
+	var buf bytes.Buffer
+	w, _ := tte2.NewWriter(&buf, key, 0)
+	_, _ = w.Write([]byte("file content"))
+	_ = w.Close()
+	in := secretIn(ev.clock.Now(), true)
+	in.Verifier, in.KeyVerifier, in.FileSize = v[:], kv[:], int64(buf.Len())
+	repo := ev.db.Secrets(ev.vault)
+	cs, err := repo.Create(ctx, tn.ID, in)
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	actor := store.SecretActor{Email: alice, Kind: store.SecretCreatorInternal}
+	if _, err := repo.UploadFile(ctx, tn.ID, cs.Secret.ID, actor, ev.files, &buf, nil); err != nil {
+		ev.t.Fatal(err)
+	}
+	rv, err := repo.Reveal(ctx, tn.ID, cs.Token, kp, p, ev.clock.Now())
+	if err != nil {
+		ev.t.Fatal(err)
+	}
+	return cs, rv
+}
+
+// TestSecretGrantSweep checks that TaskExpire ends the expired file grants:
+// the file and its key go, the tombstone stays; a failure of the grant
+// sweep is returned after the expiry sweep ran.
+func TestSecretGrantSweep(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		cs, rv := ev.revealedFileSecret(ev.a)
+		if ev.secretFiles(ev.a) != 1 || ev.keyCount(ev.a) != 1 {
+			t.Fatalf("fixture: %d files, %d keys", ev.secretFiles(ev.a), ev.keyCount(ev.a))
+		}
+		ev.runTask(TaskExpire)
+		if ev.secretFiles(ev.a) != 1 {
+			t.Fatal("grant swept before its expiry")
+		}
+		ev.clock.set(rv.FileGrantExpiresAt)
+		ev.f.set("expireSecretGrants", 1, errFault)
+		if err := ev.s.RunTask(ctx, TaskExpire); !errors.Is(err, errFault) {
+			t.Fatalf("grant sweep = %v, want the fault", err)
+		}
+		ev.runTask(TaskExpire)
+		if ev.secretFiles(ev.a) != 0 || ev.keyCount(ev.a) != 0 {
+			t.Fatalf("after the sweep: %d files, %d keys", ev.secretFiles(ev.a), ev.keyCount(ev.a))
+		}
+		got, err := ev.db.Secrets(nil).Get(ctx, ev.a.ID, cs.Secret.ID)
+		if err != nil || got.State != store.SecretRead || got.FileStorageName != "" || !got.FileDownloadedAt.IsZero() {
+			t.Fatalf("tombstone = %+v, %v", got, err)
+		}
+	})
+}
+
+// TestSecretOrphanFiles covers the orphan sweep of the secrets
+// subdirectory: a file no secret names, or whose secret lost its key, goes
+// past the grace period; a referenced, young or unknown entry stays.
+func TestSecretOrphanFiles(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		old := ev.clock.Now().Add(-OrphanGrace - time.Minute)
+		_, rv := ev.revealedFileSecret(ev.a) // referenced, keyed
+		kept := filepath.Join("secrets", rv.Secret.FileStorageName)
+		ev.touch(ev.a, kept, old)
+		pend := ev.newSecret(ev.a, true) // referenced, no key yet (not uploaded)
+		keyless := filepath.Join("secrets", pend.Secret.FileStorageName)
+		ev.touch(ev.a, keyless, old)
+		stray := filepath.Join("secrets", storage.NewName())
+		ev.write(ev.a, stray, old)
+		young := filepath.Join("secrets", storage.NewName())
+		ev.write(ev.a, young, ev.clock.Now())
+		unknown := filepath.Join("secrets", "junk")
+		ev.write(ev.a, unknown, old)
+
+		for _, fault := range []string{"listSecretFiles", "secretFileRefs", "removeSecretFile"} {
+			ev.f.set(fault, 1, errFault)
+			if err := ev.s.RunTask(ctx, TaskOrphans); !errors.Is(err, errFault) {
+				t.Fatalf("%s: %v", fault, err)
+			}
+		}
+		ev.runTask(TaskOrphans)
+		for file, want := range map[string]bool{kept: true, keyless: false, stray: false, young: true, unknown: true} {
+			if ev.exists(ev.a, file) != want {
+				t.Errorf("%s exists = %v, want %v", file, !want, want)
+			}
+		}
+		if !strings.Contains(ev.logs.all(), "secrets=") || !strings.Contains(ev.logs.all(), "unknown entry left in the secrets directory") {
+			t.Errorf("logs:\n%s", ev.logs.all())
+		}
+		// Too many rows: the secret files are skipped with a warning.
+		ev.f.set("secretFileRefs", 1, store.ErrTooManyRows)
+		ev.write(ev.a, stray, old)
+		ev.runTask(TaskOrphans)
+		if !ev.exists(ev.a, stray) || !strings.Contains(ev.logs.all(), "secret files skipped by the orphan removal") {
+			t.Fatalf("too many rows: logs:\n%s", ev.logs.all())
 		}
 	})
 }

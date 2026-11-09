@@ -155,11 +155,14 @@ var isolationCases = map[string]isolationCase{
 	// unknown under B, a link token of A is unknown under B (and is not
 	// consumed there), and a secret of A's owner is never listed nor
 	// deleted by another sender of A nor by the same address in B.
-	"createSecret":   createSecretWithForeignSession,
-	"getSecretLink":  getForeignSecretLink,
-	"revealSecret":   revealForeignSecret,
-	"listMySecrets":  listMyForeignSecrets,
-	"deleteMySecret": deleteMyForeignSecret,
+	"createSecret":       createSecretWithForeignSession,
+	"getSecretLink":      getForeignSecretLink,
+	"revealSecret":       revealForeignSecret,
+	"listMySecrets":      listMyForeignSecrets,
+	"deleteMySecret":     deleteMyForeignSecret,
+	"uploadSecretFile":   uploadForeignSecretFile,
+	"downloadSecretFile": downloadForeignSecretFile,
+	"sendSecret":         sendForeignSecret,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the

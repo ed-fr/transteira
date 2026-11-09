@@ -21,8 +21,13 @@ const (
 	FieldFileSize             = "/file/size"
 	FieldFileMetadata         = "/file/encryptedMetadata"
 	FieldSenderEmail          = "/senderEmail"
+	FieldSecretToken          = "/secretToken"
+	FieldFragmentKey          = "/fragmentKey"
 	FieldKeyProof             = "/keyProof"
 	FieldProof                = "/proof"
+	// FieldGrant is the header carrying the one-time file grant of a
+	// download.
+	FieldGrant = "TransTeira-Secret-Grant"
 	// FieldCursor is the cursor query parameter of the list.
 	FieldCursor = "cursor"
 )
@@ -40,9 +45,9 @@ const (
 	// CodeNotAllowed: the value is not one of the accepted ones, or the
 	// field is not accepted here.
 	CodeNotAllowed = "not-allowed"
-	// CodeNotSupported: the feature is not implemented yet (interim answer
-	// of step 2 for the e-mail delivery and the file).
-	CodeNotSupported = "not-supported"
+	// CodeDomainDenied: the recipient is refused by the recipient domain
+	// rules or the blocklist of the tenant (as transfer.CodeDomainDenied).
+	CodeDomainDenied = "domain-denied"
 )
 
 // Errors of the service. The HTTP layer maps each one to its problem code.
@@ -64,6 +69,20 @@ var (
 	ErrPassphraseRequired = errors.New("secret: passphrase required for the e-mail delivery")
 	// ErrFileNotAllowed reports a file while the tenant forbids them.
 	ErrFileNotAllowed = errors.New("secret: file not allowed")
+	// ErrQuotaExceeded reports a declared file that does not fit in the
+	// storage quota of the tenant (quota-exceeded).
+	ErrQuotaExceeded = errors.New("secret: storage quota exceeded")
+	// ErrConflict reports a creator operation the state of the secret does
+	// not allow (state-conflict): a file upload to a secret that is not
+	// pending, has no declared file or has it already.
+	ErrConflict = errors.New("secret: state conflict")
+	// ErrRecipientRefused reports the recipient of an e-mail secret refused
+	// by the recipient domain rules or the blocklist of the tenant
+	// (recipient-domain-refused, field FieldRecipient CodeDomainDenied).
+	ErrRecipientRefused = errors.New("secret: recipient refused")
+	// ErrMailUnavailable reports a send call while the tenant has no SMTP
+	// settings (mail-unavailable): the secret stays pending.
+	ErrMailUnavailable = errors.New("secret: mail unavailable")
 )
 
 // FieldError is one invalid field of a request.
@@ -77,8 +96,7 @@ type FieldError struct {
 }
 
 // ValidationError reports a request that breaks the rules of the OpenAPI
-// schema (validation-failed), or the interim refusals of step 2
-// (CodeNotSupported).
+// schema (validation-failed).
 type ValidationError struct {
 	// Fields are the invalid fields, in the order of the request.
 	Fields []FieldError
@@ -90,7 +108,8 @@ func (e *ValidationError) Error() string { return "secret: invalid request" }
 // FormatError reports a sealed value whose framing fails a keyless check
 // the schema cannot express (secret-format-invalid).
 type FormatError struct {
-	// Fields are the malformed sealed values.
+	// Fields are the malformed sealed values; none for an uploaded file
+	// body.
 	Fields []FieldError
 }
 

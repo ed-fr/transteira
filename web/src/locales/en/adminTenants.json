@@ -459,7 +459,9 @@
       "invitation": "External invitation",
       "quota-warning": "Quota alert (80%)",
       "quota-reached": "Quota reached",
-      "antivirus-unavailable": "Antivirus unavailable"
+      "antivirus-unavailable": "Antivirus unavailable",
+      "secret-notification": "Secret notification",
+      "secret-receipt": "Secret read receipt"
     },
     "keyDescription": {
       "verification-code": "Sent to the sender to verify their address.",
@@ -471,7 +473,9 @@
       "invitation": "Sent to the external person invited to deposit.",
       "quota-warning": "Sent to the delegated administrators at 80% of the quota.",
       "quota-reached": "Sent to the delegated administrators when the quota is reached.",
-      "antivirus-unavailable": "Sent to the administrators of the entity when the antivirus has not responded for several minutes while transfers are waiting for analysis."
+      "antivirus-unavailable": "Sent to the administrators of the entity when the antivirus has not responded for several minutes while transfers are waiting for analysis.",
+      "secret-notification": "Sent to the recipient of an e-mail secret with the link to read it once.",
+      "secret-receipt": "Sent to the creator when the secret was read, expired or locked."
     },
     "editor": {
       "title": "{template} ({language})",

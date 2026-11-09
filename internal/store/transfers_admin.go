@@ -274,8 +274,9 @@ func (r *Transfers) CountRecipientsTx(ctx context.Context, tx *ScopedTx, trfID s
 
 // UsedBytesAll returns the storage used by every tenant that uses some, as
 // [Transfers.UsedBytesTx] computes it for one tenant: the declared sizes of
-// the transfers that are uploading, scanning or available. A tenant
-// without such a transfer is absent from the map. It is a system query
+// the transfers that are uploading, scanning or available, and of the
+// stored files of the one-time secrets. A tenant without such a transfer
+// or file is absent from the map. It is a system query
 // (reason "quota sweep and global statistics: storage used by each
 // tenant") and returns no personal data.
 func (r *Transfers) UsedBytesAll(ctx context.Context) (map[tenant.ID]int64, error) {
@@ -289,13 +290,22 @@ func (r *Transfers) UsedBytesAll(ctx context.Context) (map[tenant.ID]int64, erro
 			tid string
 			n   int64
 		}
-		us, err := collect(rows, func(r *sql.Rows) (usage, error) {
+		scan := func(r *sql.Rows) (usage, error) {
 			var u usage
 			err := r.Scan(&u.tid, &u.n)
 			return u, err
-		})
-		for _, u := range us {
-			out[tenant.ID(u.tid)] = u.n
+		}
+		us, err := collect(rows, scan)
+		if err != nil {
+			return err
+		}
+		rows, err = tx.Query(ctx, qSecretFileBytesAll)
+		if err != nil {
+			return err
+		}
+		ss, err := collect(rows, scan)
+		for _, u := range append(us, ss...) {
+			out[tenant.ID(u.tid)] += u.n
 		}
 		return err
 	})

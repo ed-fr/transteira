@@ -429,6 +429,8 @@ func TestPreviewAndVariables(t *testing.T) {
 		TemplateFileNotScanned:            "files",
 		TemplateFirstDownload:             "download_datetime,deletion_notice",
 		TemplateExpiryReminder:            "download_link,password_notice",
+		TemplateSecretNotification:        "secret_link",
+		TemplateSecretReceipt:             "outcome_text",
 		TemplateRecipientVerificationCode: "code",
 		TemplateMyTransfersLink:           "my_transfers_link",
 		TemplateQuotaWarning:              "usage_percent",

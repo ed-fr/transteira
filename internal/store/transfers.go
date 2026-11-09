@@ -1128,19 +1128,31 @@ func (r *Transfers) GetByIdempotencyKey(ctx context.Context, tid tenant.ID, send
 // UsedBytesTx returns the storage used by the tenant tx is bound to: the
 // sum of the declared sizes of the files of its transfers that are
 // uploading, scanning or available (the quota of spec 8.5 reserves the
-// declared size at creation). It first takes the tenant lock, so that the
-// check followed by [Transfers.CreateTx] in the same transaction is atomic
-// against concurrent creations of the tenant. After an error, the caller
-// must abort the transaction.
+// declared size at creation), plus the declared sizes of the files of its
+// one-time secrets while they are stored (file_storage_name set, from the
+// creation to the end of the secret or the download of the file). It
+// first takes the tenant lock, so that the check followed by
+// [Transfers.CreateTx] (or a secret creation) in the same transaction is
+// atomic against concurrent creations of the tenant. After an error, the
+// caller must abort the transaction.
 func (r *Transfers) UsedBytesTx(ctx context.Context, tx *ScopedTx) (int64, error) {
 	if err := tx.lock(ctx); err != nil {
 		return 0, err
 	}
-	var n int64
+	return usedBytesTx(ctx, tx)
+}
+
+// usedBytesTx is [Transfers.UsedBytesTx] without the tenant lock, which the
+// caller holds.
+func usedBytesTx(ctx context.Context, tx *ScopedTx) (int64, error) {
+	var n, secrets int64
 	if err := tx.QueryRow(ctx, qTransferUsedBytes).Scan(&n); err != nil {
 		return 0, wrap("sum used bytes", err)
 	}
-	return n, nil
+	if err := tx.QueryRow(ctx, qSecretFileBytes).Scan(&secrets); err != nil {
+		return 0, wrap("sum used bytes", err)
+	}
+	return n + secrets, nil
 }
 
 // CountUploadingTx returns the number of transfers of the tenant tx is

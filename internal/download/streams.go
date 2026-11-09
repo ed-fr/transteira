@@ -114,6 +114,19 @@ func newEventThrottle(clock func() time.Time) *ratelimit.Limiter {
 	return ratelimit.New(rate.Every(StreamEventInterval), 1, ratelimit.WithClock(clock))
 }
 
+// AcquireStream takes, for another streamed object of tenant t (the file
+// of a one-time secret, objectID its "sec_" identifier), the stream slots
+// a transfer response takes (see acquireStream): the object counts as a
+// transfer, and its responses share the per-client bound
+// MaxStreamsPerClient with the transfer downloads of the client. It
+// returns the release, to call once the response ended, or a
+// *TooManyStreamsError over a limit (written as a rate_limited event,
+// scope download_streams, whose transfer field then holds the object
+// identifier), or ErrNoClientIP for an invalid ip.
+func (s *Service) AcquireStream(ctx context.Context, t *tenant.Tenant, objectID string, ip netip.Addr) (func(), error) {
+	return s.acquireStream(ctx, t, objectID, ip)
+}
+
 // acquireStream takes the stream slots of a response of the transfer
 // trfID of tenant t to the client ip (see streams.acquire). A refusal over
 // a limit writes a rate_limited security event (scope download_streams),

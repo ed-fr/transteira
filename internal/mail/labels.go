@@ -63,6 +63,15 @@ type labels struct {
 	setupForced           string // setup completed with required items undone
 	scopeCounts           string // %d: allowed IP ranges, %d: FQDN suffixes
 	noExpiry              string // a provisioning token that never expires
+	secretPassphrase      string // the passphrase of a secret comes from the sender through another channel
+	secretFile            string // a file is attached to the secret: end-to-end encrypted, not analyzed
+	secretReadSummary     string
+	secretReadText        string
+	secretExpiredSummary  string
+	secretExpiredText     string
+	secretLockedSummary   string
+	secretLockedText      string
+	secretRecipient       string // prefix of the recipient notice of a secret receipt
 }
 
 // statusFor returns the antivirus status shown next to a delivered file.
@@ -81,7 +90,7 @@ func (l *labels) statusFor(r NotScannedReason) (label, text string) {
 }
 
 var allLabels = map[string]*labels{
-	i18n.English: {
+	i18n.English: { //nolint:gosec // G101: mail labels named "secret...", no credential
 		colon:                 ":",
 		messageIntro:          "Their message:",
 		otherChannelRecipient: "This transfer is protected by a password. The password will be sent to you by another channel; it is never written in this message.",
@@ -128,6 +137,15 @@ var allLabels = map[string]*labels{
 		setupForced:           "Completed by force: some required items were not done.",
 		scopeCounts:           "%d IP range(s), %d FQDN suffix(es)",
 		noExpiry:              "never",
+		secretPassphrase:      "This secret is protected by a passphrase. The sender gives it to you through another channel; it is never written in this message.",
+		secretFile:            "A file is attached to this secret. It is end-to-end encrypted, so it was not analyzed by the antivirus: only open it if you trust the sender.",
+		secretReadSummary:     "Your secret was read",
+		secretReadText:        "Your secret was read by its recipient and has been destroyed.",
+		secretExpiredSummary:  "Your secret expired unread",
+		secretExpiredText:     "Your secret was not read before it expired and has been destroyed.",
+		secretLockedSummary:   "Your secret was locked",
+		secretLockedText:      "Too many wrong passphrases were entered: your secret was locked and destroyed without being read.",
+		secretRecipient:       "Recipient: ",
 		waitingUnknown:        "The number of transfers waiting could not be determined.",
 		verificationNotice:    "Before downloading, you will be asked to confirm your e-mail address with a code sent to this address.",
 		downloadedBy:          "Downloaded by: ",
@@ -140,7 +158,7 @@ var allLabels = map[string]*labels{
 		myTransfersIntro:      "Manage this transfer (delete it, extend it, see who downloaded it) in My transfers",
 		replyNotice:           "This is a reply to the transfer you sent on %s. It comes from outside %s: %s proved they own this address with a code, but be careful with files you did not expect.",
 	},
-	i18n.French: {
+	i18n.French: { //nolint:gosec // G101: mail labels named "secret...", no credential
 		colon:                 " :",
 		messageIntro:          "Son message :",
 		otherChannelRecipient: "Ce transfert est protégé par un mot de passe. Le mot de passe vous sera transmis par un autre canal ; il ne figure jamais dans ce message.",
@@ -187,6 +205,15 @@ var allLabels = map[string]*labels{
 		setupForced:           "Terminée en forçant : certains éléments obligatoires n'ont pas été faits.",
 		scopeCounts:           "%d plage(s) IP, %d suffixe(s) de FQDN",
 		noExpiry:              "jamais",
+		secretPassphrase:      "Ce secret est protégé par une phrase secrète. L'expéditeur vous la transmet par un autre canal ; elle ne figure jamais dans ce message.",
+		secretFile:            "Un fichier est joint à ce secret. Il est chiffré de bout en bout, l'antivirus ne l'a donc pas analysé : ne l'ouvrez que si vous faites confiance à l'expéditeur.",
+		secretReadSummary:     "Votre secret a été lu",
+		secretReadText:        "Votre secret a été lu par son destinataire et a été détruit.",
+		secretExpiredSummary:  "Votre secret a expiré sans être lu",
+		secretExpiredText:     "Votre secret n'a pas été lu avant son expiration et a été détruit.",
+		secretLockedSummary:   "Votre secret a été verrouillé",
+		secretLockedText:      "Trop de phrases secrètes erronées ont été saisies : votre secret a été verrouillé et détruit sans avoir été lu.",
+		secretRecipient:       "Destinataire : ",
 		waitingUnknown:        "Le nombre de transferts en attente n'a pas pu être déterminé.", //nolint:misspell // French text
 		verificationNotice:    "Avant de télécharger, il vous sera demandé de confirmer votre adresse e-mail avec un code envoyé à cette adresse.",
 		downloadedBy:          "Téléchargé par : ",

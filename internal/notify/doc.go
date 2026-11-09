@@ -12,7 +12,10 @@
 //     and file_not_scanned, to the sender;
 //   - first_download, to the sender, once the transfer has been downloaded
 //     in full for the first time, with the date and, when the transfer is
-//     deleted after its first download, the grace period before erasure.
+//     deleted after its first download, the grace period before erasure;
+//   - secret_notification, to the recipient of a one-time secret (the link
+//     with its key is never logged), and secret_receipt, to its creator
+//     (read, expired unread or locked): never any content of the secret.
 //
 // A [Notifier] only builds [mail.Job] values, with the SMTP settings of the
 // tenant and its password unsealed for the job; the caller enqueues them

@@ -339,13 +339,25 @@ open.
 #### 3.3.6 Email delivery (exception: the server receives `K` once)
 
 With delivery by email, the mail must carry the full link, key included (user decision of
-2026-11-09). The creator's client therefore sends `K` (43 characters) **once**, in the body of the
-`send` request, after the creation and the optional file upload. The server:
+2026-11-09). The server keeps only the SHA-256 of the secret token, so it cannot compose the link
+alone: the creator's client sends **both halves of the link once**, in the body of the `send`
+request (`secretToken` and `fragmentKey`), after the creation and the optional file upload. The
+server:
 
-- checks only its encoding (section 1) and uses it as an **opaque string** inserted in the link
-  of the mail: it derives nothing from it, never opens the sealed text or the file with it;
-- never stores it (no column, no file, no checkpoint), never logs it (request bodies, mail bodies
-  and errors are never logged), never puts it in the audit or the security log; the mail exists
+- checks that `secretToken` has the token shape (`tts_` and 43 base62 characters) and that its
+  SHA-256 equals the stored `token_hash` of that secret, compared in constant time (another
+  token answers `404`, like an unknown secret or one of another creator; no security event: the
+  caller is the authenticated creator and the token has 256 bits);
+- checks only the encoding of `K` (section 1) and uses it as an **opaque string**: it derives
+  nothing from it, never opens the sealed text or the file with it;
+- composes the link exactly as in section 3.3.1, `https://<fqdn>/s/<token>#k=<key>`, where
+  `<fqdn>` is the **registered FQDN** of the tenant (`id.SecretURL`), never the `Host` header
+  received (threat model T-365, as the download and drop links);
+- prepares the mail before activating the secret (no SMTP settings: `503 mail-unavailable`, the
+  secret stays `pending`), then activates it and queues the mail;
+- never stores the token nor `K` (no column, no file, no checkpoint), never logs them (request
+  bodies, mail bodies and errors are never logged), never puts them in the audit (`secret.sent`
+  carries the delivery and the domain of the recipient) or the security log; the mail exists
   in the in-memory mail queue only until it is sent or dropped;
 - with a passphrase, still cannot read the secret (it lacks `P`); without a passphrase, a server
   that broke this rule could read it during the life of the secret. This is the accepted risk of

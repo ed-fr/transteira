@@ -83,6 +83,7 @@ import (
 	"github.com/ed-fr/transteira/internal/httpserver/middleware"
 	"github.com/ed-fr/transteira/internal/ratelimit"
 	"github.com/ed-fr/transteira/internal/securitylog"
+	"github.com/ed-fr/transteira/internal/tenant"
 	"github.com/ed-fr/transteira/web"
 )
 
@@ -151,6 +152,10 @@ const (
 	// cut short by this deadline or by the client goes on server side, and
 	// one interrupted otherwise resumes when repeated or at the hourly run.
 	AdminLongDeadline = 6 * time.Minute
+	// SecretFileDeadline bounds reading the file of a one-time secret (at
+	// most tenant.MaxSecretFileBytes, in one request) and writing the
+	// answer: 25 MiB in 10 minutes is about 350 kbit/s.
+	SecretFileDeadline = 10 * time.Minute
 )
 
 // Route prefixes.
@@ -365,10 +370,15 @@ var routePolicies = map[string]routePolicy{
 	// or an API token like the transfers; the list and the deletion use the
 	// "my transfers" session. The recipient side needs no credential, but its
 	// wrong proofs count against the client IP: the reveal must not be
-	// triggered cross-site. The body limit of the file upload (up to 25 MiB)
-	// is set when the module is implemented.
-	http.MethodPost + " " + APIBaseURL + "/secrets":                 tokenPolicy(true),
-	http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":  tokenPolicy(true),
+	// triggered cross-site. The file upload is a raw body of at most
+	// tenant.MaxSecretFileBytes: the limit lets one more byte through, so
+	// that a body longer than its declared size is answered by the service
+	// (secret-format-invalid), as a shorter one.
+	http.MethodPost + " " + APIBaseURL + "/secrets": tokenPolicy(true),
+	http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file": {
+		bodyLimit: tenant.MaxSecretFileBytes + 1, rawBody: true, deadline: SecretFileDeadline,
+		depositSession: true, csrf: true, apiToken: true,
+	},
 	http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send": tokenPolicy(true),
 	http.MethodGet + " " + APIBaseURL + "/me/secrets":               mePolicy(false),
 	http.MethodDelete + " " + APIBaseURL + "/me/secrets/{secretId}": mePolicy(true),

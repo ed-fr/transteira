@@ -459,7 +459,9 @@
       "invitation": "Invitation externe",
       "quota-warning": "Alerte de quota (80 %)",
       "quota-reached": "Quota atteint",
-      "antivirus-unavailable": "Antivirus indisponible"
+      "antivirus-unavailable": "Antivirus indisponible",
+      "secret-notification": "Notification de secret",
+      "secret-receipt": "Accusé de lecture de secret"
     },
     "keyDescription": {
       "verification-code": "Envoyé à l’expéditeur pour vérifier son adresse.",
@@ -471,7 +473,9 @@
       "invitation": "Envoyé à la personne externe invitée à déposer.",
       "quota-warning": "Envoyé aux administrateurs délégués à 80 % du quota.",
       "quota-reached": "Envoyé aux administrateurs délégués lorsque le quota est atteint.",
-      "antivirus-unavailable": "Envoyé aux administrateurs de l’entité lorsque l’antivirus ne répond plus depuis plusieurs minutes alors que des transferts attendent leur analyse."
+      "antivirus-unavailable": "Envoyé aux administrateurs de l’entité lorsque l’antivirus ne répond plus depuis plusieurs minutes alors que des transferts attendent leur analyse.",
+      "secret-notification": "Envoyé au destinataire d’un secret par e-mail avec le lien pour le lire une seule fois.",
+      "secret-receipt": "Envoyé au créateur quand le secret a été lu, a expiré ou a été verrouillé."
     },
     "editor": {
       "title": "{template} ({language})",

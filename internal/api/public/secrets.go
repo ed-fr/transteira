@@ -3,7 +3,10 @@ package public
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"net/netip"
+	"strconv"
 
 	"github.com/ed-fr/transteira/internal/api/gen"
 	"github.com/ed-fr/transteira/internal/api/problem"
@@ -23,6 +26,9 @@ type SecretService interface {
 	Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token, keyProof, proof string) (secret.Revealed, error)
 	ListMine(ctx context.Context, t *tenant.Tenant, email, cursor string, limit int) (store.Page[store.Secret], error)
 	DeleteMine(ctx context.Context, t *tenant.Tenant, email string, ip netip.Addr, secID string) error
+	UploadFile(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, secID string, body io.Reader) (store.Secret, error)
+	DownloadFile(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token, grant string) (secret.FileStream, error)
+	Send(ctx context.Context, t *tenant.Tenant, sender transfer.Sender, secID, secretToken, fragmentKey string) (store.Secret, error)
 }
 
 // WithSecrets serves the one-time secret operations with svc. Without it
@@ -137,7 +143,101 @@ func (s *Server) RevealSecret(ctx context.Context, req gen.RevealSecretRequestOb
 		Headers: gen.RevealSecret200ResponseHeaders{CacheControl: &cc},
 	}
 	resp.Body.EncryptedMetadata = optional(out.EncryptedMetadata)
+	if out.FileGrant != "" {
+		resp.Body.FileGrant = &out.FileGrant
+		resp.Body.FileGrantExpiresAt = optionalTime(out.FileGrantExpiresAt.UTC())
+	}
 	return resp, nil
+}
+
+// UploadSecretFile stores the file of a pending secret, sent as the raw
+// body (the TTE2 ciphertext of the file), for its creator.
+func (s *Server) UploadSecretFile(ctx context.Context, req gen.UploadSecretFileRequestObject) (gen.UploadSecretFileResponseObject, error) {
+	t, err := s.secretTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sender, err := requestSender(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sec, err := s.secrets.UploadFile(ctx, t, sender, req.SecretId, req.Body)
+	if err != nil {
+		return nil, secretError(err)
+	}
+	return gen.UploadSecretFile200JSONResponse(secretBody(sec)), nil
+}
+
+// SendSecret activates a pending e-mail secret and mails its link, for its
+// creator. The body carries the token and the key of the link, used only to
+// compose the mail: neither is logged nor kept (threat model T-363).
+func (s *Server) SendSecret(ctx context.Context, req gen.SendSecretRequestObject) (gen.SendSecretResponseObject, error) {
+	t, err := s.secretTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sender, err := requestSender(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return nil, validationFailed(secret.FieldSecretToken, fieldRequired)
+	}
+	sec, err := s.secrets.Send(ctx, t, sender, req.SecretId, req.Body.SecretToken, req.Body.FragmentKey)
+	if err != nil {
+		return nil, secretError(err)
+	}
+	return gen.SendSecret200JSONResponse(secretBody(sec)), nil
+}
+
+// DownloadSecretFile streams the file of a revealed secret, once, with the
+// one-time grant of the TransTeira-Secret-Grant header.
+func (s *Server) DownloadSecretFile(ctx context.Context, req gen.DownloadSecretFileRequestObject) (gen.DownloadSecretFileResponseObject, error) {
+	t, err := s.secretTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+	f, err := s.secrets.DownloadFile(ctx, t, middleware.ClientIP(ctx), req.SecretToken, req.Params.TransTeiraSecretGrant)
+	if err != nil {
+		return nil, secretError(err)
+	}
+	return secretFileResponse{ctx: ctx, file: f}, nil
+}
+
+// secretFileResponse streams the file of a secret as a forced download. It
+// implements the generated response interface of downloadSecretFile.
+type secretFileResponse struct {
+	ctx  context.Context
+	file secret.FileStream
+}
+
+// VisitDownloadSecretFileResponse implements
+// gen.DownloadSecretFileResponseObject. The content is never rendered nor
+// sniffed nor cached (T-358), and no range is served. The grant is ended
+// only when the whole stream was written and flushed without error: an
+// interrupted download can be retried with the same grant while it is
+// valid. The file is always closed.
+func (r secretFileResponse) VisitDownloadSecretFileResponse(w http.ResponseWriter) error {
+	defer func() { _ = r.file.Close() }()
+	h := w.Header()
+	setAttachmentHeaders(h, "application/octet-stream", "attachment")
+	h.Set("Content-Length", strconv.FormatInt(r.file.Size(), 10))
+	h.Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	_, err := io.Copy(w, r.file)
+	if err == nil {
+		err = http.NewResponseController(w).Flush()
+	}
+	if err == nil {
+		// A successful flush means the last bytes left this server, not
+		// that the client received them all (a proxy or the network may
+		// still drop them). The grant then ends anyway: the creator is
+		// told nothing more, and a client that lost the tail retries
+		// within the grant window only if it failed before this point
+		// (threat model T-359).
+		r.file.Delivered(r.ctx)
+	}
+	return err
 }
 
 // ListMySecrets lists the secrets of the "my transfers" session address.
@@ -257,6 +357,15 @@ func secretError(err error) error {
 		return problem.New(problem.CodeSecretPassphraseRequired)
 	case errors.Is(err, secret.ErrFileNotAllowed):
 		return problem.New(problem.CodeSecretFileNotAllowed)
+	case errors.Is(err, secret.ErrConflict):
+		return problem.New(problem.CodeStateConflict)
+	case errors.Is(err, secret.ErrQuotaExceeded):
+		return problem.New(problem.CodeQuotaExceeded)
+	case errors.Is(err, secret.ErrRecipientRefused): // a policy refusal, never in the security log
+		return problem.New(problem.CodeRecipientDomainRefused,
+			problem.WithFieldErrors(problem.FieldError{Field: secret.FieldRecipient, Code: secret.CodeDomainDenied}))
+	case errors.Is(err, secret.ErrMailUnavailable):
+		return problem.New(problem.CodeMailUnavailable)
 	default:
 		return err
 	}

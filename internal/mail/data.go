@@ -31,6 +31,15 @@ const (
 	// downloaded in full for the first time (CLAUDE.md section 12.2), sent
 	// once per transfer; data: [FirstDownloadData].
 	TemplateFirstDownload = "first_download"
+	// TemplateSecretNotification mails the link of a one-time secret to its
+	// single recipient (V2.1, threat model T-362 to T-366). It is a default
+	// template only: the store knows no tenant template key for it, so no
+	// entity can customize it; data: [SecretNotificationData].
+	TemplateSecretNotification = "secret_notification"
+	// TemplateSecretReceipt tells the creator of a one-time secret how it
+	// ended (read, expired unread, locked). Like [TemplateSecretNotification]
+	// it cannot be customized; data: [SecretReceiptData].
+	TemplateSecretReceipt = "secret_receipt"
 	// TemplateQuotaWarning warns the delegated administrators of an entity
 	// that 80 % of its storage quota is used (CLAUDE.md sections 8.5 and
 	// 12.2); data: [QuotaAlertData].
@@ -316,6 +325,54 @@ type FirstDownloadData struct {
 	// RecipientEmail is the address of the recipient who completed the
 	// download, for a transfer with one link per recipient; empty with a
 	// shared link (the mail then names nobody).
+	RecipientEmail string
+}
+
+// SecretNotificationData is the data of [TemplateSecretNotification]. The
+// mail never holds free text of the creator nor any content of the secret.
+type SecretNotificationData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// SenderEmail is the verified address of the creator.
+	SenderEmail string
+	// Link is the absolute URL of the secret, with its key in the fragment
+	// (#k=...). It is a secret: it is never logged.
+	Link string
+	// ExpiresAt is when the secret expires.
+	ExpiresAt time.Time
+	// PassphraseRequired tells that a passphrase protects the secret and
+	// comes from the sender through another channel.
+	PassphraseRequired bool
+	// HasFile tells that a file is attached to the secret.
+	HasFile bool
+}
+
+// Outcomes of a secret, the values of [SecretReceiptData.Outcome].
+const (
+	// SecretOutcomeRead is a secret read by its recipient.
+	SecretOutcomeRead = "read"
+	// SecretOutcomeExpired is a secret that expired unread.
+	SecretOutcomeExpired = "expired"
+	// SecretOutcomeLocked is a secret locked after too many wrong
+	// passphrases.
+	SecretOutcomeLocked = "locked"
+)
+
+// SecretReceiptData is the data of [TemplateSecretReceipt]. It never holds
+// the content of the secret, the IP address or the user agent of the reader.
+type SecretReceiptData struct {
+	// TenantName is the display name of the entity.
+	TenantName string
+	// SecretID is the identifier of the secret (sec_...).
+	SecretID string
+	// Outcome is one of the SecretOutcome constants.
+	Outcome string
+	// At is when the secret ended.
+	At time.Time
+	// CreatedAt is when the secret was created.
+	CreatedAt time.Time
+	// RecipientEmail is the recipient of an e-mail delivery; empty for a
+	// link delivery.
 	RecipientEmail string
 }
 

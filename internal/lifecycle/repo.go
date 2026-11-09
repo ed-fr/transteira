@@ -51,6 +51,8 @@ type repo interface {
 	deleteTenant(ctx context.Context, tid tenant.ID) error
 	purgePendingSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error)
 	expireSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error)
+	expireSecretGrants(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error)
+	secretFileRefs(ctx context.Context, tid tenant.ID) (map[string]bool, error)
 	deleteTenantSecrets(ctx context.Context, tid tenant.ID) ([]string, error)
 	audit(ctx context.Context, ev audit.Event) error
 
@@ -226,6 +228,14 @@ func (r storeRepo) purgePendingSecrets(ctx context.Context, now time.Time, limit
 
 func (r storeRepo) expireSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
 	return r.db.Secrets(r.vault).ExpireDue(ctx, now, limit)
+}
+
+func (r storeRepo) expireSecretGrants(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	return r.db.Secrets(r.vault).ExpireGrants(ctx, now, limit)
+}
+
+func (r storeRepo) secretFileRefs(ctx context.Context, tid tenant.ID) (map[string]bool, error) {
+	return r.db.Secrets(nil).SecretFileRefs(ctx, tid)
 }
 
 // deleteTenantSecrets deletes every secret of tid with its keys and returns

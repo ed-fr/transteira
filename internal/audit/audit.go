@@ -289,8 +289,9 @@ const (
 	// the content, the key, the proof, the verifier or the token.
 	ActionSecretCreated Action = "secret.created"
 	// ActionSecretSent: the link of an e-mail secret was mailed to its
-	// recipient (since 2.1); details carry the delivery and the recipient,
-	// never the key of the link fragment.
+	// recipient (since 2.1); details carry the delivery and the domain of
+	// the recipient (no address in the details), never the token nor the
+	// key of the link.
 	ActionSecretSent Action = "secret.sent"
 	// ActionSecretRevealed: a secret was read (since 2.1).
 	ActionSecretRevealed Action = "secret.revealed"

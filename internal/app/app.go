@@ -472,11 +472,18 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 	}, download.Options{Grace: cfg.DeleteAfterDownloadGrace, Logger: logger, Abuse: detector})
 	// The sweeper holds the antivirus worker before erasing a transfer, so
 	// that a transfer deleted while it is scanned is never made available.
+	// The one-time secrets service is built below (it needs the transfer
+	// service), before the sweeper starts: the read receipts of the secrets
+	// the sweeper expires go through it.
+	var secrets *secret.Service
+	lcOpts := lifecycleOptions(cfg, &o, logger)
+	if lcOpts.SecretExpired == nil {
+		lcOpts.SecretExpired = func(ctx context.Context, e store.EndedSecret) { secrets.Expired(ctx, e) }
+	}
 	sweeper := lifecycle.New(lifecycle.Deps{
 		DB: db, Vault: vault, Remover: uploads, Files: files, Holder: worker, Audit: auditLog,
 		Notifier: notifier, Mail: mailQueue, Opener: vault,
-	},
-		lifecycleOptions(cfg, &o, logger))
+	}, lcOpts)
 	// One OpenID Connect client and one set of pending flows per process
 	// (single sign-on of the admins, since 2.0): the flows live in memory
 	// (decision A4), their expired entries purged periodically.
@@ -554,6 +561,19 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		vault: vault, uploads: uploads, secLog: secLog, passwords: passwords, onFinalized: worker.Enqueue,
 		onQuota: quotas.Check, audit: auditLog, usage: usageCounts, abuse: createAbuse{detector},
 	}, logger)
+	// The one-time secrets (since 2.1): their creators are checked by the
+	// eligibility rules of the transfers, and their files count in the
+	// storage quota (alerts as for a transfer). Their link and receipt
+	// mails go through the retrier of the tenant queue (in memory only,
+	// threat model T-363), and their file downloads hold the stream slots
+	// of the transfer downloads (T-55).
+	secrets, err = secret.New(secret.Deps{
+		Secrets: db.Secrets(vault), Creators: transfers, Scrubber: vault, Files: files, SecurityLog: secLog,
+		Directory: secret.StoreDirectory{DB: db}, Notifier: notifier, Mailer: opsMails,
+	}, secret.Options{Audit: auditLog, OnQuota: quotas.Check, Abuse: detector, Streams: downloads, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	// The resolver of the HTTP tenant middleware is invalidated by the
 	// tenant configuration after every change of a tenant row.
 	resolver := tenant.NewResolver(db.Tenants())
@@ -697,14 +717,6 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 	proofs := proof.NewService(db, proofSigner, auditLog, nil, logger, proof.WithSecurityLog(secLog))
-	// The one-time secrets (since 2.1): their creators are checked by the
-	// eligibility rules of the transfers.
-	secrets, err := secret.New(secret.Deps{
-		Secrets: db.Secrets(vault), Creators: transfers, Scrubber: vault, Files: files, SecurityLog: secLog,
-	}, secret.Options{Audit: auditLog, Logger: logger})
-	if err != nil {
-		return fmt.Errorf("app: %w", err)
-	}
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,

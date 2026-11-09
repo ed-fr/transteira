@@ -110,7 +110,8 @@ func (f *faults) called(name string) int {
 // listing), "dueExpirations", "rejectedKeyed", "abandoned", "transfer", "finish", "scrub",
 // "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "purgeSystem:<name>", "storageRefs",
 // "availableIDs", "linkTransfers", "linkIDs", "deletingTenants", "getTenant", "transferIDs", "keyIDs",
-// "destroyKeys", "deleteTenant", "purgePendingSecrets", "expireSecrets", "deleteTenantSecrets", "audit", "backup", and "backupUnsupported" (any
+// "destroyKeys", "deleteTenant", "purgePendingSecrets", "expireSecrets", "expireSecretGrants", "secretFileRefs",
+// "deleteTenantSecrets", "audit", "backup", and "backupUnsupported" (any
 // fault makes backupSupported false). refsHook, when set, edits the storage refs
 // returned.
 type faultRepo struct {
@@ -312,6 +313,20 @@ func (r *faultRepo) expireSecrets(ctx context.Context, now time.Time, limit int)
 	return r.inner.expireSecrets(ctx, now, limit)
 }
 
+func (r *faultRepo) expireSecretGrants(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	if err := r.f.hit("expireSecretGrants"); err != nil {
+		return nil, false, err
+	}
+	return r.inner.expireSecretGrants(ctx, now, limit)
+}
+
+func (r *faultRepo) secretFileRefs(ctx context.Context, tid tenant.ID) (map[string]bool, error) {
+	if err := r.f.hit("secretFileRefs"); err != nil {
+		return nil, err
+	}
+	return r.inner.secretFileRefs(ctx, tid)
+}
+
 func (r *faultRepo) deleteTenantSecrets(ctx context.Context, tid tenant.ID) ([]string, error) {
 	if err := r.f.hit("deleteTenantSecrets"); err != nil {
 		return nil, err
@@ -396,7 +411,8 @@ func (r faultRemover) TransferActivity(ctx context.Context, tid tenant.ID, files
 }
 
 // faultFiles wraps the storage with the faults "tenantDirs", "list",
-// "removeData", "removeCheckpoint", "state", "removeTemp" and "removeDir".
+// "removeData", "removeCheckpoint", "state", "removeTemp", "removeSecretFile",
+// "listSecretFiles" and "removeDir".
 type faultFiles struct {
 	inner *storage.Store
 	f     *faults
@@ -449,6 +465,13 @@ func (s faultFiles) RemoveSecretFile(tid tenant.ID, name string) error {
 		return err
 	}
 	return s.inner.RemoveSecretFile(tid, name)
+}
+
+func (s faultFiles) ListSecretFiles(tid tenant.ID) ([]storage.Entry, error) {
+	if err := s.f.hit("listSecretFiles"); err != nil {
+		return nil, err
+	}
+	return s.inner.ListSecretFiles(tid)
 }
 
 func (s faultFiles) RemoveTenantDir(tid tenant.ID) error {

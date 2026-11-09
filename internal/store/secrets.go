@@ -50,7 +50,7 @@ type SecretState string
 // which hold no content and are purged SecretTombstoneRetention after
 // their end.
 const (
-	// SecretPending waits for its file and/or the send call (step 3).
+	// SecretPending waits for its file and/or the send call.
 	SecretPending SecretState = "pending"
 	// SecretActive is readable until its expiry.
 	SecretActive SecretState = "active"
@@ -101,8 +101,7 @@ type SecretDelivery string
 const (
 	// SecretDeliveryLink: the creator hands the link out.
 	SecretDeliveryLink SecretDelivery = "link"
-	// SecretDeliveryEmail: the server mails the link to one recipient
-	// (step 3).
+	// SecretDeliveryEmail: the server mails the link to one recipient.
 	SecretDeliveryEmail SecretDelivery = "email"
 )
 
@@ -153,6 +152,9 @@ const (
 	secretVerifierLen = sha256.Size
 	// secretStorageNameLen is the length of a file storage name.
 	secretStorageNameLen = 32
+	// SecretFileGrantLifetime is how long the one-time file grant drawn
+	// by a reveal stays valid.
+	SecretFileGrantLifetime = 10 * time.Minute
 )
 
 // Errors of the one-time secrets. Policy refusals wrap ErrSecretPolicy and
@@ -192,10 +194,29 @@ var (
 	ErrSecretKeyProof = errors.New("store: wrong secret key proof")
 	// ErrSecretProof is matched by a [*SecretProofError].
 	ErrSecretProof = errors.New("store: wrong secret proof")
-	// ErrSecretFileUnsupported reports the reveal of a secret with a file,
-	// whose one-time file grant comes with step 3 of V2.1. Such a secret
-	// cannot be active yet (no upload path), so it is not reachable.
-	ErrSecretFileUnsupported = errors.New("store: secrets with a file are not supported yet")
+	// ErrSecretQuotaExceeded reports a secret whose file does not fit in
+	// the storage quota of the tenant (spec 8.5, the same rule as a
+	// transfer).
+	ErrSecretQuotaExceeded = errors.New("store: storage quota exceeded")
+	// ErrSecretState reports a creator operation the state of the secret
+	// does not allow (the upload of a secret that is not pending, has no
+	// file, has it already or is receiving it; the send call of a secret
+	// that is not a pending e-mail secret, or whose file is missing). It
+	// wraps ErrConflict.
+	ErrSecretState = fmt.Errorf("%w: secret state", ErrConflict)
+	// ErrSecretUploadAborted is joined to the error of a secret file
+	// upload that failed after its file key was created: the key was
+	// destroyed (or is left to the orphan sweep) and the caller scrubs the
+	// database.
+	ErrSecretUploadAborted = errors.New("store: secret file upload aborted")
+	// ErrSecretFileFormat reports an uploaded file body that is not a
+	// TTE2 stream of exactly the declared size (keyless validator).
+	ErrSecretFileFormat = errors.New("store: malformed secret file")
+	// ErrSecretGrant reports a file download whose one-time grant is
+	// missing, malformed, wrong, used or expired, or a secret without file
+	// grant. It wraps ErrNotFound: answered like an unknown secret, but
+	// without the security event of an unknown token.
+	ErrSecretGrant = fmt.Errorf("%w: secret file grant", ErrNotFound)
 	// errSecretNoKeys reports a repository built without SecretKeys used
 	// for an operation that needs them.
 	errSecretNoKeys = errors.New("store: the secrets repository has no key vault")
@@ -224,6 +245,9 @@ type SecretProofError struct {
 	// Remaining is the number of attempts left; 0 means the secret is now
 	// locked and its content destroyed.
 	Remaining int
+	// RemovedFile is, when Remaining is 0, the storage name of the file
+	// the caller must remove ("" when the secret had no stored file).
+	RemovedFile string
 }
 
 // Error implements error.
@@ -282,7 +306,7 @@ type Secret struct {
 	// <tenant dir>/secrets/, "" when no file is stored.
 	FileStorageName string
 	// FileUploadedAt and FileDownloadedAt mark the upload and the first
-	// complete download (step 3).
+	// complete download.
 	FileUploadedAt   time.Time
 	FileDownloadedAt time.Time
 }
@@ -337,7 +361,7 @@ type CreateSecret struct {
 	// (RecipientEmail is ignored).
 	Delivery       SecretDelivery
 	RecipientEmail string
-	// ReadReceipt asks for the receipt mail (step 3).
+	// ReadReceipt asks for the receipt mail.
 	ReadReceipt bool
 	// Verifier is SHA-256(proof) and KeyVerifier SHA-256(keyProof), 32
 	// bytes each.
@@ -380,6 +404,12 @@ type RevealedSecret struct {
 	SealedText string
 	// FileMetadata is the sealed file metadata ("" without file).
 	FileMetadata string
+	// FileGrant is the one-time file grant ("ttg_...", "" without file),
+	// returned once: only its SHA-256 is stored.
+	FileGrant string
+	// FileGrantExpiresAt is the end of validity of FileGrant
+	// (SecretFileGrantLifetime after the reveal).
+	FileGrantExpiresAt time.Time
 }
 
 // EndedSecret describes a secret ended or removed by a deletion or a
@@ -448,7 +478,7 @@ var (
 	// secret settings of the tenant of the new secret.
 	qSecretSettings = reviewedTenantQuery(
 		`SELECT n.status, n.secrets_enabled, n.secret_durations, n.secret_file_allowed, n.secret_file_max_bytes,
-		n.secret_email_allowed, n.secret_email_requires_passphrase
+		n.secret_email_allowed, n.secret_email_requires_passphrase, n.storage_quota_bytes
 		FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.id = ?`,
 		reasonSecretSettings)
 	qSecretCountOpenBySender = tenantQuery(
@@ -466,19 +496,25 @@ var (
 	qSecretGetByHash = tenantQuery(
 		`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`)
 	qSecretKeyVerifierByHash = tenantQuery(
-		`SELECT id, state, expires_at, end_reason, file_size, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`)
+		`SELECT id, state, expires_at, end_reason, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`)
 	// qSecretClaim claims an attempt slot (e2e-format.md 3.3.4): it holds
 	// the row until the end of the transaction.
 	qSecretClaim = tenantQuery(
 		`UPDATE secrets SET failed_proofs = failed_proofs + 1
 		WHERE tenant_id = ? AND id = ? AND state = 'active' AND expires_at > ? AND failed_proofs < 5`)
 	qSecretContent = tenantQuery(
-		`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata
+		`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata, file_size
 		FROM secrets WHERE tenant_id = ? AND id = ?`)
 	qSecretMarkRead = tenantQuery(
 		`UPDATE secrets SET state = 'read', failed_proofs = failed_proofs - 1, read_at = ?, ended_at = ?,
 		end_reason = 'read', ` + secretContentNull + `
 		WHERE tenant_id = ? AND id = ? AND state = 'active' AND file_size IS NULL`)
+	// qSecretMarkReadGrant is qSecretMarkRead for a secret with a file:
+	// the stored file and its key stay, behind the one-time grant.
+	qSecretMarkReadGrant = tenantQuery(
+		`UPDATE secrets SET state = 'read', failed_proofs = failed_proofs - 1, read_at = ?, ended_at = ?,
+		end_reason = 'read', ` + secretContentNull + `, file_grant_hash = ?, file_grant_expires_at = ?
+		WHERE tenant_id = ? AND id = ? AND state = 'active' AND file_size IS NOT NULL`)
 	qSecretLock = tenantQuery(
 		`UPDATE secrets SET state = 'locked', ended_at = ?, end_reason = 'locked', ` + secretContentNull + `, ` + secretFileNull + `
 		WHERE tenant_id = ? AND id = ? AND state = 'active' AND failed_proofs = 5`)
@@ -592,6 +628,7 @@ type Secrets struct {
 	db       *DB
 	keys     SecretKeys
 	newToken func() (string, error) // id.NewSecretToken; replaced in tests
+	newGrant func() (string, error) // id.NewSecretGrant; replaced in tests
 }
 
 // Secrets returns the secret repository using keys for the server data
@@ -599,7 +636,7 @@ type Secrets struct {
 // key (Get, StatusByToken, lists, counts, PurgeTombstones); the others then
 // fail.
 func (db *DB) Secrets(keys SecretKeys) *Secrets {
-	return &Secrets{db: db, keys: keys, newToken: id.NewSecretToken}
+	return &Secrets{db: db, keys: keys, newToken: id.NewSecretToken, newGrant: id.NewSecretGrant}
 }
 
 // Stages of a reveal reported to secretRevealHook.
@@ -684,9 +721,10 @@ func normalizeCreateSecret(c CreateSecret) (CreateSecret, error) {
 // ID), the row, then the tenant settings (module on, duration offered,
 // file allowed and within the limit, e-mail delivery allowed, passphrase
 // when required). The secret is active at once (expiry from Now) for the
-// link delivery without file, pending otherwise (step 3 activates it).
-// An external creator's secret goes by e-mail to the inviter of its
-// invitation, whose address must be SenderEmail.
+// link delivery without file, pending otherwise (the upload of the file
+// or the send call activates it). An external creator's secret goes by
+// e-mail to the inviter of its invitation, whose address must be
+// SenderEmail.
 //
 // It returns the secret with its token, shown once. Errors: ErrInvalid
 // for a malformed input; ErrNotFound for an unknown or unusable API token,
@@ -726,6 +764,15 @@ func (r *Secrets) createTx(ctx context.Context, tx *ScopedTx, secID string, toke
 	if err := r.checkCreator(ctx, tx, &c, now); err != nil {
 		return Secret{}, err
 	}
+	var used int64
+	if c.FileSize > 0 {
+		// Under the tenant lock, before the row is counted: the same rule
+		// as a transfer deposit (spec 8.5).
+		var err error
+		if used, err = usedBytesTx(ctx, tx); err != nil {
+			return Secret{}, err
+		}
+	}
 	wkID, dek, err := r.keys.NewDEKTx(ctx, tx)
 	if err != nil {
 		return Secret{}, err
@@ -756,7 +803,7 @@ func (r *Secrets) createTx(ctx context.Context, tx *ScopedTx, secID string, toke
 	if err != nil {
 		return Secret{}, err
 	}
-	if err := checkSecretSettings(ctx, tx, secID, c); err != nil {
+	if err := checkSecretSettings(ctx, tx, secID, c, used); err != nil {
 		return Secret{}, err
 	}
 	row, err := scanSecret(tx.QueryRow(ctx, qSecretGet, secID), tx.Tenant())
@@ -799,16 +846,17 @@ func (r *Secrets) checkCreator(ctx context.Context, tx *ScopedTx, c *CreateSecre
 	return nil
 }
 
-// checkSecretSettings checks the new secret secID against the status and
-// the secret settings of its tenant, read in the creation transaction.
-func checkSecretSettings(ctx context.Context, tx *ScopedTx, secID string, c CreateSecret) error {
+// checkSecretSettings checks the new secret secID against the status, the
+// secret settings and the storage quota of its tenant, read in the creation
+// transaction; used is the storage the tenant used before the secret.
+func checkSecretSettings(ctx context.Context, tx *ScopedTx, secID string, c CreateSecret, used int64) error {
 	var (
 		status, durations                                      string
 		enabled, fileAllowed, emailAllowed, passphraseRequired bool
-		fileMax                                                int64
+		fileMax, quota                                         int64
 	)
 	err := tx.QueryRow(ctx, qSecretSettings, secID).Scan(&status, &enabled, &durations, &fileAllowed, &fileMax,
-		&emailAllowed, &passphraseRequired)
+		&emailAllowed, &passphraseRequired, &quota)
 	if err != nil {
 		return err
 	}
@@ -826,6 +874,8 @@ func checkSecretSettings(ctx context.Context, tx *ScopedTx, secID string, c Crea
 		return ErrSecretFileNotAllowed
 	case c.FileSize > fileMax:
 		return ErrSecretFileTooLarge
+	case c.FileSize > 0 && c.FileSize > quota-used:
+		return ErrSecretQuotaExceeded
 	case c.Delivery == SecretDeliveryEmail && !emailAllowed:
 		return ErrSecretEmailNotAllowed
 	case c.Delivery == SecretDeliveryEmail && passphraseRequired && c.KDFSalt == nil:
@@ -936,13 +986,17 @@ func (r *Secrets) StatusByToken(ctx context.Context, tid tenant.ID, token string
 //     and the sealed text decrypted and returned;
 //  4. wrong proof: the slot stays counted and a [*SecretProofError] is
 //     returned with the attempts left; the fifth locks the secret (content
-//     cleared, keys destroyed) in the same transaction, Remaining 0.
+//     cleared, keys destroyed) in the same transaction, Remaining 0 and
+//     RemovedFile the stored file the caller removes at once.
 //
 // Concurrent reveals of one secret therefore compare at most
-// SecretMaxFailedProofs proofs in all, and exactly one can succeed. A
-// secret with a file returns ErrSecretFileUnsupported until step 3 adds
-// the one-time file grant. The caller scrubs the database after a success
-// or a lock (keys destroyed).
+// SecretMaxFailedProofs proofs in all, and exactly one can succeed. For a
+// secret with a file, the success also draws the one-time file grant
+// (data-model-v2.1.md 2.1): its SHA-256 is stored, valid
+// SecretFileGrantLifetime, and the grant returned once with the sealed
+// file metadata; the stored file and its key stay until
+// [Secrets.CompleteFileDownload] or [Secrets.ExpireGrants]. The caller
+// scrubs the database after a success or a lock (keys destroyed).
 func (r *Secrets) Reveal(ctx context.Context, tid tenant.ID, token string, keyProof, proof [32]byte, now time.Time) (RevealedSecret, error) {
 	if r.keys == nil {
 		return RevealedSecret{}, errSecretNoKeys
@@ -985,10 +1039,9 @@ func checkKeyProof(ctx context.Context, tx *ScopedTx, hash []byte, keyProof [32]
 		secID, state string
 		reason       sql.NullString
 		expires      sql.NullInt64
-		fileSize     sql.NullInt64
 		keyVerifier  []byte
 	)
-	err := tx.QueryRow(ctx, qSecretKeyVerifierByHash, hash).Scan(&secID, &state, &expires, &reason, &fileSize, &keyVerifier)
+	err := tx.QueryRow(ctx, qSecretKeyVerifierByHash, hash).Scan(&secID, &state, &expires, &reason, &keyVerifier)
 	if err != nil {
 		return "", err
 	}
@@ -997,14 +1050,6 @@ func checkKeyProof(ctx context.Context, tx *ScopedTx, hash []byte, keyProof [32]
 	}
 	if gone := goneReason(SecretState(state), SecretEndReason(reason.String), nullMillis(expires), now); gone != "" {
 		return "", &SecretGoneError{Reason: gone}
-	}
-	if fileSize.Valid {
-		// Unreachable in step 2 (no secret with a file can be created, see
-		// secret.checkSettings). Step 3, which delivers the file, moves the
-		// key proof check above this return: a caller without the key must
-		// not learn that a secret holds a file, and the refusal is not an
-		// event of the security log either.
-		return "", ErrSecretFileUnsupported
 	}
 	if !tte2.VerifierMatches(keyVerifier, keyProof[:]) {
 		return "", ErrSecretKeyProof
@@ -1037,8 +1082,9 @@ func (r *Secrets) revealTx(ctx context.Context, tx *ScopedTx, secID string, proo
 		verifier, sealed []byte
 		textKey          sql.NullString
 		metadata         sql.NullString
+		fileSize         sql.NullInt64
 	)
-	err = tx.QueryRow(ctx, qSecretContent, secID).Scan(&failed, &verifier, &sealed, &textKey, &metadata)
+	err = tx.QueryRow(ctx, qSecretContent, secID).Scan(&failed, &verifier, &sealed, &textKey, &metadata, &fileSize)
 	if err != nil {
 		return RevealedSecret{}, nil, err
 	}
@@ -1052,10 +1098,11 @@ func (r *Secrets) revealTx(ctx context.Context, tx *ScopedTx, secID string, proo
 	case !proofOK && failed < SecretMaxFailedProofs:
 		return RevealedSecret{}, &SecretProofError{ID: secID, Remaining: SecretMaxFailedProofs - failed}, nil
 	case !proofOK:
-		if err := r.lockTx(ctx, tx, secID, now); err != nil {
+		file, err := r.lockTx(ctx, tx, secID, now)
+		if err != nil {
 			return RevealedSecret{}, nil, err
 		}
-		return RevealedSecret{}, &SecretProofError{ID: secID, Remaining: 0}, nil
+		return RevealedSecret{}, &SecretProofError{ID: secID, Remaining: 0, RemovedFile: file}, nil
 	}
 	dek, err := r.keys.OpenTx(ctx, tx, crypto.PurposeDEK, textKey.String)
 	if err != nil {
@@ -1066,7 +1113,18 @@ func (r *Secrets) revealTx(ctx context.Context, tx *ScopedTx, secID string, proo
 	if err != nil {
 		return RevealedSecret{}, nil, err
 	}
-	if err := execOne(ctx, tx, qSecretMarkRead, toMillis(now), toMillis(now), secID); err != nil {
+	out := RevealedSecret{SealedText: text, FileMetadata: metadata.String}
+	if fileSize.Valid {
+		if out.FileGrant, err = r.newGrant(); err != nil {
+			return RevealedSecret{}, nil, err
+		}
+		out.FileGrantExpiresAt = now.Add(SecretFileGrantLifetime)
+		err = execOne(ctx, tx, qSecretMarkReadGrant, toMillis(now), toMillis(now), id.HashToken(out.FileGrant),
+			toMillis(out.FileGrantExpiresAt), secID)
+	} else {
+		err = execOne(ctx, tx, qSecretMarkRead, toMillis(now), toMillis(now), secID)
+	}
+	if err != nil {
 		return RevealedSecret{}, nil, err
 	}
 	if err := r.keys.DestroyTx(ctx, tx, textKey.String); err != nil {
@@ -1076,20 +1134,22 @@ func (r *Secrets) revealTx(ctx context.Context, tx *ScopedTx, secID string, proo
 	if err != nil {
 		return RevealedSecret{}, nil, err
 	}
-	return RevealedSecret{Secret: row.Secret, SealedText: text, FileMetadata: metadata.String}, nil, nil
+	out.Secret = row.Secret
+	return out, nil, nil
 }
 
 // lockTx locks the active secret secID whose fifth slot is claimed:
-// content cleared, then its keys destroyed.
-func (r *Secrets) lockTx(ctx context.Context, tx *ScopedTx, secID string, now time.Time) error {
+// content cleared, then its keys destroyed. It returns the storage name of
+// the file the caller must remove ("" without stored file).
+func (r *Secrets) lockTx(ctx context.Context, tx *ScopedTx, secID string, now time.Time) (string, error) {
 	row, err := scanSecret(tx.QueryRow(ctx, qSecretGet, secID), tx.Tenant())
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := execOne(ctx, tx, qSecretLock, toMillis(now), secID); err != nil {
-		return err
+		return "", err
 	}
-	return r.destroyKeys(ctx, tx, row.keyIDs())
+	return row.FileStorageName, r.destroyKeys(ctx, tx, row.keyIDs())
 }
 
 // execOne runs q and returns ErrNotFound when it affected no row.
@@ -1341,8 +1401,8 @@ func ignoreNotFound(err error) error {
 
 // PurgeTombstones deletes the tombstones of tenant tid ended
 // SecretTombstoneRetention or more before now and holding no key (a read
-// secret whose file grant is pending is cleaned by the grant sweep first,
-// step 3), in batches of PurgeBatchSize, and returns how many it deleted.
+// secret whose file grant is pending is cleaned by [Secrets.ExpireGrants]
+// first), in batches of PurgeBatchSize, and returns how many it deleted.
 // No key is destroyed: a tombstone references none.
 func (r *Secrets) PurgeTombstones(ctx context.Context, tid tenant.ID, now time.Time) (int64, error) {
 	before := toMillis(now.Add(-SecretTombstoneRetention))

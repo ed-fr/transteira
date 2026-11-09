@@ -1,8 +1,12 @@
 package httpisolation_test
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -205,4 +209,149 @@ func deleteMyForeignSecret(t *testing.T, h *harness, op operation) {
 	if resp := h.call(t, op, hostA, params, "", senders.owner.headers()...); resp.status != http.StatusNoContent {
 		t.Fatalf("%s by its owner: %d %s", op, resp.status, resp.body)
 	}
+}
+
+// fileSecretA is a secret of tenant A with an uploaded file.
+type fileSecretA struct {
+	createdSecretA
+	stream string
+}
+
+// createFileSecretA creates, through the API under A, a secret of A's
+// owner declaring a file, and returns it with the file stream (not
+// uploaded yet).
+func (h *harness) createFileSecretA(t *testing.T) fileSecretA {
+	t.Helper()
+	s := fileSecretA{createdSecretA: createdSecretA{sealedSecret: sealSecret(t, "isolation secret with a file")}}
+	key, err := tte2.NewKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	w, _ := tte2.NewWriter(&buf, key, 0)
+	_, _ = w.Write([]byte("isolation file content"))
+	_ = w.Close()
+	s.stream = buf.String()
+	sum := sha256.Sum256([]byte("isolation file content"))
+	meta, err := tte2.SealMetadata(key, 0, tte2.Metadata{Count: 1, Name: "a.txt", Size: 22, SHA256: hex.EncodeToString(sum[:])})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Replace(s.createBody(), `}`, `,"file":{"size":`+strconv.Itoa(buf.Len())+`,"encryptedMetadata":"`+meta+`"}}`, 1)
+	resp := h.call(t, opCreateSecret, hostA, nil, body, h.owner(t).headers()...)
+	if resp.status != http.StatusCreated || json.Unmarshal(resp.body, &s.createdSecretA) != nil || !strings.Contains(string(resp.body), `"pending"`) {
+		t.Fatalf("create file secret under %s: %d %s", hostA, resp.status, resp.body)
+	}
+	return s
+}
+
+// opUploadSecretFile is the uploadSecretFile operation.
+var opUploadSecretFile = operation{id: "uploadSecretFile", verb: http.MethodPut, template: "/secrets/{secretId}/file", base: "/api/v1"}
+
+// uploadForeignSecretFile: A's session is unauthenticated under B, B's
+// session is unknown under A, and A's secret stays pending until its owner
+// uploads the file under A.
+func uploadForeignSecretFile(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	s := h.createFileSecretA(t)
+	params := map[string]string{"secretId": s.ID}
+	raw := "Content-Type"
+	resp := h.call(t, op, hostB, params, s.stream, h.owner(t).headers(raw, "application/octet-stream")...)
+	refusedUnderB(t, h, op, resp, http.StatusUnauthorized, "unauthenticated")
+	resp = h.call(t, op, hostA, params, s.stream, h.other(t).headers(raw, "application/octet-stream")...)
+	wantCode(t, op, hostA, resp, http.StatusUnauthorized, "unauthenticated")
+	noSealed(t, h, op, hostA, resp, s.createdSecretA)
+	resp = h.call(t, op, hostA, params, s.stream, h.owner(t).headers(raw, "application/octet-stream")...)
+	if resp.status != http.StatusOK || !strings.Contains(string(resp.body), `"state":"active"`) {
+		t.Fatalf("%s by its owner under %s: %d %s", op, hostA, resp.status, resp.body)
+	}
+}
+
+// downloadForeignSecretFile: the token and the grant of A's revealed
+// secret are unknown under B (the grant is not consumed), then the file is
+// downloaded under A, once.
+func downloadForeignSecretFile(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	s := h.createFileSecretA(t)
+	raw := "Content-Type"
+	if resp := h.call(t, opUploadSecretFile, hostA, map[string]string{"secretId": s.ID}, s.stream,
+		h.owner(t).headers(raw, "application/octet-stream")...); resp.status != http.StatusOK {
+		t.Fatalf("upload under %s: %d %s", hostA, resp.status, resp.body)
+	}
+	reveal := operation{id: "revealSecret", verb: http.MethodPost, template: "/secret-links/{secretToken}/reveal", base: "/api/v1"}
+	params := map[string]string{"secretToken": s.Token}
+	resp := h.call(t, reveal, hostA, params, s.revealBody())
+	var rv struct {
+		FileGrant string `json:"fileGrant"`
+	}
+	if resp.status != http.StatusOK || json.Unmarshal(resp.body, &rv) != nil || rv.FileGrant == "" {
+		t.Fatalf("reveal under %s: %d %s", hostA, resp.status, resp.body)
+	}
+	grant := []string{"TransTeira-Secret-Grant", rv.FileGrant}
+	resp = h.call(t, op, hostB, params, "", grant...)
+	wantCode(t, op, hostB, resp, http.StatusNotFound, "not-found")
+	noSealed(t, h, op, hostB, resp, s.createdSecretA)
+	if strings.Contains(string(resp.body), s.stream) {
+		t.Errorf("%s under %s leaks the file", op, hostB)
+	}
+	resp = h.call(t, op, hostA, params, "", grant...)
+	if resp.status != http.StatusOK || string(resp.body) != s.stream {
+		t.Fatalf("%s under %s: %d (%d bytes)", op, hostA, resp.status, len(resp.body))
+	}
+	resp = h.call(t, op, hostA, params, "", grant...)
+	wantCode(t, op, hostA, resp, http.StatusNotFound, "not-found")
+}
+
+// sendForeignSecret: A's session is unauthenticated under B and B's under
+// A; B's e-mail secret is unknown to A's owner under A; A's owner reaches
+// the send call of its own secret under A only (503 mail-unavailable: A
+// has no SMTP settings in the harness, so nothing is activated), and no
+// answer echoes the token or the key.
+func sendForeignSecret(t *testing.T, h *harness, op operation) {
+	t.Helper()
+	s := createdSecretA{sealedSecret: sealSecret(t, "isolation e-mail secret")}
+	resp := h.call(t, opCreateSecret, hostA, nil, s.createBodyEmail(), h.owner(t).headers()...)
+	if resp.status != http.StatusCreated || json.Unmarshal(resp.body, &s) != nil || s.Token == "" {
+		t.Fatalf("create e-mail secret under %s: %d %s", hostA, resp.status, resp.body)
+	}
+	k, err := tte2.NewKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _ := tte2.EncodeKey(k)
+	sendBody := `{"secretToken":"` + s.Token + `","fragmentKey":"` + key + `"}`
+	params := map[string]string{"secretId": s.ID}
+	check := func(host string, resp response) {
+		t.Helper()
+		noSealed(t, h, op, host, resp, s)
+		if strings.Contains(string(resp.body), key) {
+			t.Errorf("%s under %s echoes the key", op, host)
+		}
+	}
+	resp = h.call(t, op, hostB, params, sendBody, h.owner(t).headers()...)
+	refusedUnderB(t, h, op, resp, http.StatusUnauthorized, "unauthenticated")
+	check(hostB, resp)
+	resp = h.call(t, op, hostA, params, sendBody, h.other(t).headers()...)
+	wantCode(t, op, hostA, resp, http.StatusUnauthorized, "unauthenticated")
+	check(hostA, resp)
+
+	// B's own e-mail secret is unknown to A's owner, under A.
+	var b createdSecretA
+	resp = h.call(t, opCreateSecret, hostB, nil, sealSecret(t, "B").createBodyEmail(), h.other(t).headers()...)
+	if resp.status != http.StatusCreated || json.Unmarshal(resp.body, &b) != nil {
+		t.Fatalf("create e-mail secret under %s: %d %s", hostB, resp.status, resp.body)
+	}
+	foreign := `{"secretToken":"` + b.Token + `","fragmentKey":"` + key + `"}`
+	resp = h.call(t, op, hostA, map[string]string{"secretId": b.ID}, foreign, h.owner(t).headers()...)
+	wantCode(t, op, hostA, resp, http.StatusNotFound, "not-found")
+	check(hostA, resp)
+
+	resp = h.call(t, op, hostA, params, sendBody, h.owner(t).headers()...)
+	wantCode(t, op, hostA, resp, http.StatusServiceUnavailable, "mail-unavailable")
+	check(hostA, resp)
+}
+
+// createBodyEmail is the creation body of s for an e-mail delivery.
+func (s sealedSecret) createBodyEmail() string {
+	return strings.Replace(s.createBody(), `"delivery":"link"`, `"delivery":"email","recipient":"carol@customer.example.net"`, 1)
 }

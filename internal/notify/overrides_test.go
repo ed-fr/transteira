@@ -81,6 +81,12 @@ func mailKinds(n *Notifier, tn *tenant.Tenant) map[string]func() ([]mail.Job, er
 		mail.TemplateQuotaReached: func() ([]mail.Job, error) {
 			return n.QuotaAlert(ctx, tn, testQuotaData(), QuotaReached, []Contact{{Email: "admin@entity-a.example.com"}})
 		},
+		mail.TemplateSecretNotification: func() ([]mail.Job, error) {
+			return one(n.SecretNotification(ctx, tn, testSecret(), secretLink))
+		},
+		mail.TemplateSecretReceipt: func() ([]mail.Job, error) {
+			return one(n.SecretReceipt(ctx, tn, testSecret(), mail.SecretOutcomeRead, testNow))
+		},
 	}
 }
 

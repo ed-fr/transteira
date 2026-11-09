@@ -138,6 +138,15 @@ var (
 		WHERE tenant_id = ? AND sender_email = ?
 		AND ((created_at >= ? AND created_at < ?) OR (extended_at >= ? AND extended_at < ?))
 		GROUP BY sender_kind`)
+	// qSecretActivity counts, per creator kind, the one-time secrets of a
+	// sender created in a window (V2.1, threat T-340): they count as
+	// transfers in the number of deposits, never in the volume. A pending
+	// secret (creation not finished, purged after an hour) is not counted;
+	// the active one is, from its creation time.
+	qSecretActivity = tenantQuery(
+		`SELECT creator_kind, count(*) FROM secrets
+		WHERE tenant_id = ? AND sender_email = ? AND state <> 'pending' AND created_at >= ? AND created_at < ?
+		GROUP BY creator_kind`)
 	// qSenderHistory lists the creations of a sender since a time, newest
 	// first, through transfers_sender_created_idx.
 	qSenderHistory = tenantQuery(
@@ -525,6 +534,31 @@ func senderActivity(ctx context.Context, tx *ScopedTx, email string, start, end 
 			count += g.count
 		}
 	}
+	// The secrets of the sender count as transfers (number only).
+	srows, err := tx.Query(ctx, qSecretActivity, email, s, e)
+	if err != nil {
+		return 0, 0, err
+	}
+	type secretGroup struct {
+		kind  DepositorKind
+		count int
+	}
+	secrets, err := collect(srows, func(r *sql.Rows) (secretGroup, error) {
+		var g secretGroup
+		err := r.Scan(&g.kind, &g.count)
+		if g.kind == "api_token" {
+			g.kind = DepositorInternal // an API token creates for an internal sender
+		}
+		return g, err
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, g := range secrets {
+		if len(kinds) == 0 || containsKind(kinds, g.kind) {
+			count += g.count
+		}
+	}
 	return bytes, count, nil
 }
 
@@ -542,7 +576,9 @@ func containsKind(kinds []DepositorKind, k DepositorKind) bool {
 // of the transfers of the tenant tx is bound to sent by the address email
 // (normalized) that were created, or extended, at or after start and
 // before end, whatever their status: a transfer both created and extended
-// in the window counts once (decision 6 of step 8). kinds restricts the
+// in the window counts once (decision 6 of step 8). The one-time secrets
+// created by the address in the window (not pending) count as transfers in
+// the number, never in the volume (V2.1, T-340). kinds restricts the
 // sender kinds counted (nil or empty: every kind), for instance
 // DepositorExternal and DepositorReply for the external quota. The window
 // is computed by the caller (a local day of the tenant time zone). It

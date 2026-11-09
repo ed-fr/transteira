@@ -93,6 +93,10 @@ func newSecretFixtureDB(t *testing.T, db *DB) *secretFixture {
 	f := &secretFixture{db: db, keys: &fakeSecretKeys{db: db}, now: time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)}
 	f.a = newTestTenant(ctx, t, db, "a.example.com")
 	f.b = newTestTenant(ctx, t, db, "b.example.com")
+	// The test tenants have a 1-byte quota: room for the secret files.
+	if err := rawExecArgs(ctx, t, db, `UPDATE tenants SET storage_quota_bytes = ?`, int64(1<<40)); err != nil {
+		t.Fatal(err)
+	}
 	f.repo = db.Secrets(f.keys)
 	return f
 }
@@ -254,7 +258,7 @@ func TestSecretsLock(t *testing.T) {
 		for want := 4; want >= 0; want-- {
 			_, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, wrong.proof, f.now)
 			var pe *SecretProofError
-			if !errors.As(err, &pe) || pe.Remaining != want {
+			if !errors.As(err, &pe) || pe.Remaining != want || pe.RemovedFile != "" {
 				t.Fatalf("attempt for %d left: %v", want, err)
 			}
 		}
@@ -960,10 +964,7 @@ func TestSecretsFileRows(t *testing.T) {
 			}
 			return cs, p
 		}
-		cs, p := activate(strings.Repeat("1a", 16))
-		if _, err := f.repo.Reveal(ctx, f.a, cs.Token, p.key, p.proof, f.now); !errors.Is(err, ErrSecretFileUnsupported) {
-			t.Fatalf("reveal with a file: %v", err)
-		}
+		cs, _ := activate(strings.Repeat("1a", 16))
 		ended, err := f.repo.DeleteByAdmin(ctx, f.a, cs.Secret.ID, f.now)
 		if err != nil || ended.RemovedFile != strings.Repeat("1a", 16) || ended.Secret.FileStorageName != "" || ended.Secret.FileSize != 10 {
 			t.Fatalf("delete file secret = %+v, %v", ended, err)
@@ -977,10 +978,13 @@ func TestSecretsFileRows(t *testing.T) {
 		if err := rawExecArgs(ctx, t, f.db, `UPDATE secrets SET failed_proofs = 5 WHERE id = ?`, cs.Secret.ID); err != nil {
 			t.Fatal(err)
 		}
+		var removed string
 		if err := writeScoped(ctx, f.db, f.a, "lock", func(tx *ScopedTx) error {
-			return f.repo.lockTx(ctx, tx, cs.Secret.ID, f.now)
-		}); err != nil {
-			t.Fatalf("lock file secret: %v", err)
+			var err error
+			removed, err = f.repo.lockTx(ctx, tx, cs.Secret.ID, f.now)
+			return err
+		}); err != nil || removed != strings.Repeat("3c", 16) {
+			t.Fatalf("lock file secret: %q, %v", removed, err)
 		}
 		if s, _ := f.repo.Get(ctx, f.a, cs.Secret.ID); s.State != SecretLocked || s.FileStorageName != "" {
 			t.Errorf("locked file secret = %+v", s)

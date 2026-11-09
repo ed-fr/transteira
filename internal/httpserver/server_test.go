@@ -953,7 +953,12 @@ func TestRoutePolicies(t *testing.T) {
 		"POST /api/v1/transfers":                                tokenPolicy(true),
 		"GET /api/v1/transfers/{transferId}":                    tokenPolicy(false),
 		"POST /api/v1/invitations":                              sessionPolicy(true),
-		"":                                                      defaultPolicy,
+		"PUT /api/v1/secrets/{secretId}/file": {
+			bodyLimit: tenant.MaxSecretFileBytes + 1, rawBody: true, deadline: SecretFileDeadline,
+			depositSession: true, csrf: true, apiToken: true,
+		},
+		"GET /api/v1/secret-links/{secretToken}/file": {bodyLimit: middleware.DefaultJSONBodyLimit, idleWrite: true},
+		"": defaultPolicy,
 	}
 	for pattern, want := range cases {
 		r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -1007,6 +1012,7 @@ func TestDeadlineMiddleware(t *testing.T) {
 		{"POST /api/v1/admin/tenants/{tenantId}/smtp/test", AdminLongDeadline},
 		{"DELETE /api/v1/admin/tenants/{tenantId}", AdminLongDeadline},
 		{"POST /api/v1/admin/tenants/import", AdminLongDeadline},
+		{"PUT /api/v1/secrets/{secretId}/file", SecretFileDeadline},
 		{"PATCH /api/v1/uploads/{uploadId}", 0},
 		{"GET /api/v1/downloads/{linkToken}/files/{fileId}", 0},
 		{"GET /api/v1/downloads/{linkToken}/archive", 0},

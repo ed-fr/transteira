@@ -29,6 +29,8 @@ const (
 	EmailTemplateAntivirusUnavailable = "antivirus-unavailable"
 	EmailTemplateAbuseAlert           = "abuse-alert"
 	EmailTemplateAbuseReport          = "abuse-report"
+	EmailTemplateSecretNotification   = "secret-notification"
+	EmailTemplateSecretReceipt        = "secret-receipt"
 )
 
 // Legal documents of a tenant (OpenAPI LegalDocumentPath), as stored in
@@ -53,8 +55,8 @@ const (
 var emailTemplateKeys = []string{
 	EmailTemplateAbuseAlert, EmailTemplateAbuseReport, EmailTemplateAntivirusUnavailable, EmailTemplateFileNotScanned,
 	EmailTemplateFileProblems, EmailTemplateFirstDownload, EmailTemplateInvitation,
-	EmailTemplateQuotaReached, EmailTemplateQuotaWarning, EmailTemplateTransferConfirmation,
-	EmailTemplateTransferNotification, EmailTemplateVerificationCode,
+	EmailTemplateQuotaReached, EmailTemplateQuotaWarning, EmailTemplateSecretNotification, EmailTemplateSecretReceipt,
+	EmailTemplateTransferConfirmation, EmailTemplateTransferNotification, EmailTemplateVerificationCode,
 }
 
 // EmailTemplateKeys returns the known mail template keys, sorted. The slice

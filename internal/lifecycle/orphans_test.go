@@ -130,7 +130,7 @@ func TestOrphans(t *testing.T) {
 		for _, want := range []string{
 			"lifecycle: directory of an unknown tenant left in place tenant=" + string(stray),
 			"lifecycle: unknown entries left in a tenant directory tenant=" + string(ev.a.ID) + " count=2",
-			"lifecycle: orphan files removed data=4 checkpoints=6 states=4 temps=2 unknown=4",
+			"lifecycle: orphan files removed data=4 checkpoints=6 states=4 temps=2 secrets=0 unknown=4",
 		} {
 			if ev.logs.count(want) != 1 {
 				t.Fatalf("missing %q:\n%s", want, ev.logs.all())

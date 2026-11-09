@@ -70,6 +70,15 @@ func goldenData() map[string]any {
 			DownloadedAt: time.Date(2027, time.October, 14, 16, 5, 0, 0, time.UTC),
 			DeleteAt:     time.Date(2027, time.October, 14, 16, 20, 0, 0, time.UTC),
 		},
+		TemplateSecretNotification: SecretNotificationData{
+			TenantName: "Entity A & Co", SenderEmail: "alice@entity-a.example.com",
+			Link: "https://transfer.entity-a.example.com/s/sec_golden#k=golden", ExpiresAt: goldenExpiry,
+			PassphraseRequired: true, HasFile: true,
+		},
+		TemplateSecretReceipt: SecretReceiptData{
+			TenantName: "Entity A & Co", SecretID: "sec_golden", Outcome: SecretOutcomeLocked,
+			At: goldenExpiry, CreatedAt: goldenExpiry.Add(-time.Hour), RecipientEmail: "bob@example.com",
+		},
 		TemplateExpiryReminder: ExpiryReminderData{
 			TenantName: "Entity A & Co", SenderEmail: "alice@entity-a.example.com", Link: goldenLink,
 			Files: goldenFiles(), ExpiresAt: goldenExpiry, PasswordRequired: true, VerificationRequired: true,
@@ -153,7 +162,7 @@ func goldenFiles() []FileInfo {
 
 func TestTemplatesGolden(t *testing.T) {
 	tpl := DefaultTemplates()
-	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,admin_invitation,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,provisioning_token_created,quota_reached,quota_warning,recipient_verification_code,tenant_provisioned,tenant_setup_completed,transfer_confirmation,transfer_notification,verification_code" {
+	if got := strings.Join(tpl.Names(), ","); got != "abuse_alert,abuse_report,admin_invitation,antivirus_alert,antivirus_unavailable,disk_alert,expiry_reminder,file_not_scanned,file_problems,first_download,invitation,my_transfers_link,provisioning_token_created,quota_reached,quota_warning,recipient_verification_code,secret_notification,secret_receipt,tenant_provisioned,tenant_setup_completed,transfer_confirmation,transfer_notification,verification_code" {
 		t.Fatalf("Names() = %s", got)
 	}
 	for name, data := range goldenData() {
@@ -939,5 +948,44 @@ func TestTemplatesE2ENotice(t *testing.T) {
 	m, err := Render(TemplateTransferNotification, "en", n)
 	if err != nil || strings.Contains(m.Text, "decryption key") {
 		t.Errorf("regular transfer: %v\n%s", err, m.Text)
+	}
+}
+
+func TestSecretMails(t *testing.T) {
+	tpl := DefaultTemplates()
+	for _, lang := range i18n.Supported() {
+		subjects := map[string]bool{}
+		for _, o := range []string{SecretOutcomeRead, SecretOutcomeExpired, SecretOutcomeLocked} {
+			data := goldenData()[TemplateSecretReceipt].(SecretReceiptData)
+			data.Outcome, data.RecipientEmail = o, ""
+			m, err := tpl.Render(TemplateSecretReceipt, lang, data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			subjects[m.Subject] = true
+			if strings.Contains(m.Text, "bob@example.com") {
+				t.Errorf("%s/%s: recipient shown for a link delivery", lang, o)
+			}
+		}
+		if len(subjects) != 3 {
+			t.Errorf("%s: outcomes share a subject: %v", lang, subjects)
+		}
+		// Without passphrase nor file, the empty notices leave no blank
+		// lines.
+		data := goldenData()[TemplateSecretNotification].(SecretNotificationData)
+		data.PassphraseRequired, data.HasFile = false, false
+		m, err := tpl.Render(TemplateSecretNotification, lang, data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(m.Text, "\n\n\n") || strings.Contains(m.Text, "antivirus") {
+			t.Errorf("%s: empty notices: %q", lang, m.Text)
+		}
+		// Data of another template is refused.
+		for _, name := range []string{TemplateSecretReceipt, TemplateSecretNotification} {
+			if _, err := tpl.Render(name, lang, FirstDownloadData{}); err == nil {
+				t.Errorf("%s: wrong data accepted", name)
+			}
+		}
 	}
 }

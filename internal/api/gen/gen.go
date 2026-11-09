@@ -768,6 +768,8 @@ const (
 	EmailTemplateKeyQuotaReached              EmailTemplateKey = "quota-reached"
 	EmailTemplateKeyQuotaWarning              EmailTemplateKey = "quota-warning"
 	EmailTemplateKeyRecipientVerificationCode EmailTemplateKey = "recipient-verification-code"
+	EmailTemplateKeySecretNotification        EmailTemplateKey = "secret-notification"
+	EmailTemplateKeySecretReceipt             EmailTemplateKey = "secret-receipt"
 	EmailTemplateKeyTransferConfirmation      EmailTemplateKey = "transfer-confirmation"
 	EmailTemplateKeyTransferNotification      EmailTemplateKey = "transfer-notification"
 	EmailTemplateKeyVerificationCode          EmailTemplateKey = "verification-code"
@@ -799,6 +801,10 @@ func (e EmailTemplateKey) Valid() bool {
 	case EmailTemplateKeyQuotaWarning:
 		return true
 	case EmailTemplateKeyRecipientVerificationCode:
+		return true
+	case EmailTemplateKeySecretNotification:
+		return true
+	case EmailTemplateKeySecretReceipt:
 		return true
 	case EmailTemplateKeyTransferConfirmation:
 		return true
@@ -3093,7 +3099,9 @@ type ApiTokenUpdate = json.RawMessage
 // Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 // `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 // extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
-// security log) names the refused domains; `antivirus.instance_disabled` (actor `system`,
+// security log) names the refused domains (since 2.1 also for the recipient of a one-time
+// secret delivered by e-mail, with `details.object` `secret` and `details.reason`
+// `domain-rules` or `blocklist`); `antivirus.instance_disabled` (actor `system`,
 // without tenant) is recorded at every start with `TT_ANTIVIRUS_ENGINE=none`;
 // `antivirus.scans_released` (actor `system`, without tenant) counts the files released as
 // `not_scanned_disabled` at a start with `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
@@ -3131,7 +3139,7 @@ type ApiTokenUpdate = json.RawMessage
 // `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
 // identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 // a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
-// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
 type AuditAction string
 
 // AuditEvent defines model for AuditEvent.
@@ -3160,7 +3168,9 @@ type AuditEvent struct {
 	// Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
 	// `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
 	// extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
-	// security log) names the refused domains; `antivirus.instance_disabled` (actor `system`,
+	// security log) names the refused domains (since 2.1 also for the recipient of a one-time
+	// secret delivered by e-mail, with `details.object` `secret` and `details.reason`
+	// `domain-rules` or `blocklist`); `antivirus.instance_disabled` (actor `system`,
 	// without tenant) is recorded at every start with `TT_ANTIVIRUS_ENGINE=none`;
 	// `antivirus.scans_released` (actor `system`, without tenant) counts the files released as
 	// `not_scanned_disabled` at a start with `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
@@ -3198,7 +3208,7 @@ type AuditEvent struct {
 	// `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
 	// identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
 	// a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
-	// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+	// Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
 	Action AuditAction `json:"action"`
 	Actor  struct {
 		Id string `json:"id"`
@@ -3647,6 +3657,10 @@ type EmailTemplate struct {
 	// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
 	// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
 	// per-recipient link).
+	// Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+	// e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+	// (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+	// or is locked; never after a deletion).
 	Key EmailTemplateKey `json:"key"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -3676,6 +3690,10 @@ type EmailTemplate struct {
 // `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
 // (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
 // per-recipient link).
+// Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+// e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+// (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+// or is locked; never after a deletion).
 type EmailTemplateKey string
 
 // EmailTemplateSummary defines model for EmailTemplateSummary.
@@ -3697,6 +3715,10 @@ type EmailTemplateSummary struct {
 	// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
 	// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
 	// per-recipient link).
+	// Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+	// e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+	// (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+	// or is locked; never after a deletion).
 	Key EmailTemplateKey `json:"key"`
 
 	// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -5001,10 +5023,13 @@ type SecretRevealed struct {
 // SecretSealedText Since 2.1. The text sealed in the browser (version byte 1, nonce, ciphertext and tag), canonical unpadded base64url, 29 to 40 029 decoded bytes (0 to 10 000 Unicode code points; 39 to 53 372 characters). The length and the alphabet are checked by this schema (`400 validation-failed`); the canonical encoding, the version byte and the empty text (exactly 29 bytes, refused when no file is declared) by the keyless framing check (`400 secret-format-invalid`). The server cannot read it. Format: docs/architecture/e2e-format.md.
 type SecretSealedText = string
 
-// SecretSend Since 2.1. Activation of an e-mail secret.
+// SecretSend Since 2.1. Activation of an e-mail secret: the two halves of the link, sent once to compose the mail (docs/architecture/e2e-format.md 3.3.6).
 type SecretSend struct {
 	// FragmentKey The 32-byte key of the link fragment, canonical base64url without padding (43 characters, the last one carrying no unused bit). Used once to compose the mail; never stored nor logged.
 	FragmentKey string `json:"fragmentKey"`
+
+	// SecretToken The token of this secret, as returned once by `createSecret` (the server keeps only its SHA-256 and compares it in constant time). Used once to compose the link of the mail; never stored, logged nor audited.
+	SecretToken string `json:"secretToken"`
 }
 
 // SecretSettings Since 2.1. One-time secrets settings of a tenant.
@@ -5445,6 +5470,10 @@ type TenantConfigExport struct {
 		// `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
 		// (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
 		// per-recipient link).
+		// Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+		// e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+		// (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+		// or is locked; never after a deletion).
 		Key EmailTemplateKey `json:"key"`
 
 		// Language Supported UI language (ISO 639-1). New languages may be added.
@@ -6217,6 +6246,10 @@ type SecretToken = string
 // `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
 // (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
 // per-recipient link).
+// Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+// e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+// (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+// or is locked; never after a deletion).
 type TemplateKey = EmailTemplateKey
 
 // TenantId defines model for TenantId.
@@ -30272,6 +30305,22 @@ func (response UploadSecretFile409ApplicationProblemPlusJSONResponse) VisitUploa
 	return err
 }
 
+type UploadSecretFile413ApplicationProblemPlusJSONResponse struct {
+	PayloadTooLargeApplicationProblemPlusJSONResponse
+}
+
+func (response UploadSecretFile413ApplicationProblemPlusJSONResponse) VisitUploadSecretFileResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UploadSecretFile421ApplicationProblemPlusJSONResponse struct {
 	UnknownTenantApplicationProblemPlusJSONResponse
 }
@@ -30499,8 +30548,13 @@ func (response SendSecret500ApplicationProblemPlusJSONResponse) VisitSendSecretR
 	return err
 }
 
+type SendSecret503ResponseHeaders struct {
+	RetryAfter *int
+}
+
 type SendSecret503ApplicationProblemPlusJSONResponse struct {
-	MaintenanceModeApplicationProblemPlusJSONResponse
+	Body    Problem
+	Headers SendSecret503ResponseHeaders
 }
 
 func (response SendSecret503ApplicationProblemPlusJSONResponse) VisitSendSecretResponse(w http.ResponseWriter) error {

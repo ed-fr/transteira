@@ -14,7 +14,7 @@ import (
 
 // orphanCounts counts what TaskOrphans did.
 type orphanCounts struct {
-	data, checkpoints, states, temps, unknown int
+	data, checkpoints, states, temps, secrets, unknown int
 }
 
 // orphans is TaskOrphans: it reconciles the directory of every known tenant
@@ -54,10 +54,10 @@ func (s *Sweeper) orphans(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	if c.data+c.checkpoints+c.states+c.temps+c.unknown > 0 {
+	if c.data+c.checkpoints+c.states+c.temps+c.secrets+c.unknown > 0 {
 		s.logger.InfoContext(ctx, "lifecycle: orphan files removed", slog.Int("data", c.data),
 			slog.Int("checkpoints", c.checkpoints), slog.Int("states", c.states), slog.Int("temps", c.temps),
-			slog.Int("unknown", c.unknown))
+			slog.Int("secrets", c.secrets), slog.Int("unknown", c.unknown))
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -74,7 +74,9 @@ func (s *Sweeper) orphans(ctx context.Context) error {
 //     transfer is no longer uploading;
 //   - a download state that matches no available transfer, nor any
 //     recipient link of one;
-//   - a leftover temporary file.
+//   - a leftover temporary file;
+//   - a file of the secrets subdirectory that no secret names, or whose
+//     secret has no file key any more (see reconcileSecrets).
 //
 // Unknown entries are counted and logged, never removed. A tenant with
 // more rows than store.MaxReconcileRows is skipped with a warning. A
@@ -92,7 +94,47 @@ func (s *Sweeper) reconcile(ctx context.Context, tid tenant.ID, now time.Time, c
 	case err != nil:
 		return err
 	}
-	return s.removeOrphans(ctx, tid, now, entries, refs, states, c)
+	err = s.removeOrphans(ctx, tid, now, entries, refs, states, c)
+	return errors.Join(err, s.reconcileSecrets(ctx, tid, now, c))
+}
+
+// reconcileSecrets removes, past the grace period, the files of the
+// secrets subdirectory of tid that are orphans: named by no secret, or by
+// a secret without file key (a failed upload whose cleanup failed, an
+// ended secret whose file removal failed). The files are listed before the
+// secrets are read, and an upload attaches its key before it creates its
+// file, so a file being uploaded is never removed. Unknown entries are
+// counted and logged, never removed.
+func (s *Sweeper) reconcileSecrets(ctx context.Context, tid tenant.ID, now time.Time, c *orphanCounts) error {
+	entries, err := s.files.ListSecretFiles(tid)
+	if err != nil {
+		return err
+	}
+	refs, err := s.repo.secretFileRefs(ctx, tid)
+	switch {
+	case errors.Is(err, store.ErrTooManyRows):
+		s.logger.WarnContext(ctx, "lifecycle: secret files skipped by the orphan removal: too many rows", slog.String("tenant", string(tid)))
+		return nil
+	case err != nil:
+		return err
+	}
+	cutoff := now.Add(-s.orphanGrace)
+	var errs []error
+	for _, e := range entries {
+		switch {
+		case e.Kind == storage.KindUnknown:
+			c.unknown++
+			s.logger.WarnContext(ctx, "lifecycle: unknown entry left in the secrets directory", slog.String("tenant", string(tid)))
+		case e.ModTime.After(cutoff) || refs[e.Name]:
+		default:
+			if err := s.files.RemoveSecretFile(tid, e.Name); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			c.secrets++
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // references reads what the directory of tid must keep: refs, the storage

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ed-fr/transteira/internal/audit"
+	"github.com/ed-fr/transteira/internal/mail"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -32,6 +33,10 @@ type Revealed struct {
 	EncryptedText string
 	// EncryptedMetadata is the sealed file metadata, "" without file.
 	EncryptedMetadata string
+	// FileGrant is the one-time grant of the file download ("" without
+	// file), and FileGrantExpiresAt its end of validity.
+	FileGrant          string
+	FileGrantExpiresAt time.Time
 }
 
 // admit applies the limits of the client ip to a status or reveal call of
@@ -110,8 +115,10 @@ func (s *Service) Status(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 //     destroyed).
 //
 // On success the secret is read: its sealed text is returned, the server
-// key destroyed, and secret.revealed audited. A secret with a file cannot
-// be active in step 2; its reveal is answered ErrNotFound.
+// key destroyed, secret.revealed audited and the read receipt sent when
+// the creator asked for one (also after the lock). For a secret with a file, the
+// sealed file metadata and the one-time grant of [Service.DownloadFile]
+// are returned too.
 func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, token, keyProof, proof string) (Revealed, error) {
 	key, err := s.admit(ctx, t, ip)
 	if err != nil {
@@ -133,9 +140,11 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		s.record(ctx, t, audit.Event{
 			ActorKind: store.ActorRecipient, Actor: linkActor, IP: ip, Action: audit.ActionSecretRevealed, ObjectID: out.Secret.ID,
 		})
-		return Revealed{EncryptedText: out.SealedText, EncryptedMetadata: out.FileMetadata}, nil
-	case errors.Is(err, store.ErrSecretFileUnsupported):
-		return Revealed{}, ErrNotFound
+		s.receipt(ctx, t, out.Secret, mail.SecretOutcomeRead, out.Secret.ReadAt)
+		return Revealed{
+			EncryptedText: out.SealedText, EncryptedMetadata: out.FileMetadata,
+			FileGrant: out.FileGrant, FileGrantExpiresAt: out.FileGrantExpiresAt,
+		}, nil
 	case errors.Is(err, store.ErrNotFound):
 		return Revealed{}, s.unknown(ctx, t, ip, key, err)
 	case errors.As(err, &gone):
@@ -148,10 +157,12 @@ func (s *Service) Reveal(ctx context.Context, t *tenant.Tenant, ip netip.Addr, t
 		if wrong.Remaining > 0 {
 			return Revealed{}, &ProofError{Counted: true, Remaining: wrong.Remaining}
 		}
-		s.erased(ctx, t, "")
+		// The lock removes the stored file at once (threat model T-355).
+		s.erased(ctx, t, wrong.RemovedFile)
 		s.record(ctx, t, audit.Event{
 			ActorKind: store.ActorRecipient, Actor: linkActor, IP: ip, Action: audit.ActionSecretLocked, ObjectID: wrong.ID,
 		})
+		s.lockedReceipt(ctx, t, wrong.ID)
 		return Revealed{}, &GoneError{Reason: ReasonLocked}
 	}
 	return Revealed{}, fmt.Errorf("secret: reveal: %w", err)

@@ -940,18 +940,34 @@ export interface paths {
         /**
          * Activate a secret and mail its link
          * @description Since 2.1. Finishes a `pending` secret created with `delivery=email`: activates it
-         *     (the expiry clock starts) and mails the link to the recipient. The body carries
-         *     `fragmentKey`, the 43-character base64url key `K` of the link fragment, which the
-         *     server uses only to compose the mail: it is never stored nor logged, and a passphrase
-         *     keeps the secret unreadable to the server. Accepted risk, stated in the threat model:
-         *     the mailed link carries the key, so the creator interface recommends a passphrase sent
-         *     by another channel. The call is required for `email` delivery only (a secret with `link`
-         *     delivery gets `409 state-conflict`), and only once the declared file, if any, is
-         *     uploaded (`409 state-conflict`). Only the creator may call it, with the rule of
-         *     `uploadSecretFile` (same sender address and creator kind for a deposit session, the
-         *     same token for an API token). A `fragmentKey` that does not match its pattern (43
-         *     canonical base64url characters) is `400 validation-failed`.
-         *     Audited as `secret.sent` (delivery and recipient, never the key).
+         *     (the expiry clock starts) and mails the link to the recipient. The server keeps only the
+         *     SHA-256 of the secret token, so the body carries both halves of the link once:
+         *     `secretToken`, the `tts_` token returned by `createSecret`, and `fragmentKey`, the
+         *     43-character base64url key `K` of the link fragment. The server compares the SHA-256 of
+         *     `secretToken` with the stored hash in constant time, then composes the link
+         *     `https://<fqdn>/s/<secretToken>#k=<fragmentKey>` on the registered FQDN of the tenant
+         *     (never the `Host` received) and uses it only in the mail: neither the token nor the key
+         *     is ever stored, logged or audited, and a passphrase keeps the secret unreadable to the
+         *     server. Accepted risk, stated in the threat model: the mailed link carries the key, so
+         *     the creator interface recommends a passphrase sent by another channel.
+         *
+         *     The call is required for `email` delivery only (a secret with `link` delivery gets
+         *     `409 state-conflict`), and only once the declared file, if any, is uploaded
+         *     (`409 state-conflict`, also for a second call). Only the creator may call it, with the
+         *     rule of `uploadSecretFile` (same sender address and creator kind for a deposit session,
+         *     the same token for an API token); an unknown secret, one of another creator or tenant,
+         *     and a `secretToken` that is not the token of this secret all answer `404 not-found`
+         *     (without security event: the caller is the authenticated creator, and the 256-bit token
+         *     cannot be guessed). A `secretToken` or a `fragmentKey` that does not match its pattern
+         *     is `400 validation-failed`.
+         *
+         *     The mail is prepared before the activation: when the tenant has no SMTP settings the
+         *     call answers `503 mail-unavailable` and the secret stays `pending`. Once activated, the
+         *     mail is queued (in memory only) and retried while the queue is full; a mail that cannot
+         *     be delivered is not reported back (the creator deletes the secret and creates another
+         *     one). Audited as `secret.sent` (the delivery and the domain of the recipient: the audit
+         *     details never hold an address, the recipient stays on the secret; never the token nor the
+         *     key).
          */
         post: operations["sendSecret"];
         delete?: never;
@@ -1083,7 +1099,9 @@ export interface paths {
          *     secret without file, **without** a security event: intentional, the grant has 256 bits
          *     and the per-IP limiter bounds the attempts. An unknown token (or one of another tenant)
          *     is `404 not-found` and writes `secret_invalid`, like the status call. Audited as
-         *     `secret.file_downloaded`. Rate limited per client IP.
+         *     `secret.file_downloaded`. Rate limited per client IP, and bounded by the concurrent
+         *     stream limits of the transfer downloads (the secret counts as one transfer, and its
+         *     streams share the per-client cap): beyond, `429 rate-limited` (`TooManyStreams`).
          */
         get: operations["downloadSecretFile"];
         put?: never;
@@ -5792,9 +5810,13 @@ export interface components {
          *     `abuse-report` (delegated admins, report from a download page), `my-transfers-link`
          *     (sender, "My transfers" access link) and `recipient-verification-code` (recipient of a
          *     per-recipient link).
+         *     Since 2.1: `secret-notification` (the single recipient of a one-time secret delivered by
+         *     e-mail: the link, key included, never any free text of the creator) and `secret-receipt`
+         *     (the creator of a secret asked with a read receipt, once, when it is read, expires unread
+         *     or is locked; never after a deletion).
          * @enum {string}
          */
-        EmailTemplateKey: "verification-code" | "transfer-notification" | "transfer-confirmation" | "first-download" | "file-problems" | "file-not-scanned" | "invitation" | "quota-warning" | "quota-reached" | "antivirus-unavailable" | "expiry-reminder" | "abuse-alert" | "abuse-report" | "my-transfers-link" | "recipient-verification-code";
+        EmailTemplateKey: "verification-code" | "transfer-notification" | "transfer-confirmation" | "first-download" | "file-problems" | "file-not-scanned" | "invitation" | "quota-warning" | "quota-reached" | "antivirus-unavailable" | "expiry-reminder" | "abuse-alert" | "abuse-report" | "my-transfers-link" | "recipient-verification-code" | "secret-notification" | "secret-receipt";
         EmailTemplateSummary: {
             key: components["schemas"]["EmailTemplateKey"];
             language: components["schemas"]["Language"];
@@ -6003,7 +6025,9 @@ export interface components {
          *     Since 1.1: deposits from outside (`internal_remote`) carry `details.remote: true` on
          *     `transfer.created`; `transfer.extended` carries the old and new expiry and the number of
          *     extensions; `transfer.recipient_refused` (recipient domain rules, audit only, never in the
-         *     security log) names the refused domains; `antivirus.instance_disabled` (actor `system`,
+         *     security log) names the refused domains (since 2.1 also for the recipient of a one-time
+         *     secret delivered by e-mail, with `details.object` `secret` and `details.reason`
+         *     `domain-rules` or `blocklist`); `antivirus.instance_disabled` (actor `system`,
          *     without tenant) is recorded at every start with `TT_ANTIVIRUS_ENGINE=none`;
          *     `antivirus.scans_released` (actor `system`, without tenant) counts the files released as
          *     `not_scanned_disabled` at a start with `TT_ANTIVIRUS_ENGINE=none`; `antivirus.self_test` (object `system`/`antivirus`, without
@@ -6041,7 +6065,7 @@ export interface components {
          *     `proof_key.created` (object `system`/`proof_key`, actor `system`, without tenant) names the key
          *     identifier, and `proof_key.retired` (same object, actor `cli`) the retired one (since 2.0);
          *     a link-only transfer carries `details.linkOnly: true` on `transfer.created`.
-         *     Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the recipient; `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
+         *     Since 2.1: `secret.*` (object `secret`, its `sec_` ID) never carry the text, the key, the proof, the verifier nor the token; `secret.created` carries `details.delivery`, `hasFile`, `creatorKind`; `secret.sent` the delivery and the domain of the recipient (`details.recipientDomain`; the address stays on the secret); `secret.deleted` has the creator or the admin as actor; `secret.expired`, `secret.locked` and `secret.revealed` have the system or the recipient (address only when known) as actor; `secret.settings_updated` carries the names of the changed members only.
          * @enum {string}
          */
         AuditAction: "transfer.created" | "transfer.finalized" | "transfer.downloaded" | "transfer.expired" | "transfer.deleted" | "transfer.notification_resent" | "file.infected" | "file.not_scanned" | "address.verified" | "invitation.created" | "invitation.used" | "invitation.revoked" | "quota.warning" | "quota.reached" | "api_token.created" | "api_token.updated" | "api_token.used" | "api_token.revoked" | "admin.login" | "admin.login_failed" | "admin.logout" | "admin.totp_enrolled" | "admin.totp_disabled" | "admin.recovery_code_used" | "admin.password_changed" | "admin.created" | "admin.updated" | "admin.deleted" | "admin.credentials_reset" | "admin.activated" | "admin.totp_reset_local" | "admin.password_reset_local" | "tenant.created" | "tenant.updated" | "tenant.deletion_started" | "tenant.deleted" | "tenant.branding_updated" | "tenant.asset_uploaded" | "tenant.asset_deleted" | "tenant.network_updated" | "tenant.smtp_updated" | "tenant.smtp_tested" | "tenant.template_updated" | "tenant.template_reset" | "tenant.legal_updated" | "config.updated" | "blocklist.updated" | "data_subject.searched" | "data_subject.erased" | "maintenance.enabled" | "maintenance.disabled" | "master_key.rotation_started" | "master_key.rotation_completed" | "master_key.rotation_failed" | "disk.alert_raised" | "disk.alert_cleared" | "antivirus.alert_raised" | "antivirus.alert_cleared" | "setup.completed" | "transfer.extended" | "transfer.reminder_sent" | "transfer.reply_created" | "recipient.verified" | "abuse.threshold_exceeded" | "abuse.unusual_activity" | "abuse.reported" | "abuse.report_closed" | "abuse.report_reopened" | "transfer.recipient_refused" | "antivirus.instance_disabled" | "antivirus.scans_released" | "antivirus.self_test" | "webhook.created" | "webhook.updated" | "webhook.deleted" | "webhook.tested" | "tenant.confidentiality_updated" | "tenant.recipient_rules_updated" | "tenant.abuse_settings_updated" | "tenant.antivirus_disabled" | "tenant.antivirus_enabled" | "my_transfers.link_requested" | "my_transfers.signed_in" | "admin.invited" | "tenant.setup_completed" | "tenant.provisioned" | "tenant.provision_refused" | "provisioning_token.created" | "provisioning_token.revoked" | "admin.identity_linked" | "admin.identity_unlinked" | "tenant.sso_updated" | "tenant.sso_deleted" | "tenant.exported" | "tenant.imported" | "drop_link.created" | "drop_link.updated" | "drop_link.rotated" | "drop_link.revoked" | "transfer.proof_downloaded" | "proof_key.created" | "proof_key.retired" | "transfer.link_reissued" | "secret.created" | "secret.sent" | "secret.revealed" | "secret.file_downloaded" | "secret.expired" | "secret.deleted" | "secret.locked" | "secret.settings_updated";
@@ -6832,8 +6856,10 @@ export interface components {
              */
             expiresAt?: string;
         };
-        /** @description Since 2.1. Activation of an e-mail secret. */
+        /** @description Since 2.1. Activation of an e-mail secret: the two halves of the link, sent once to compose the mail (docs/architecture/e2e-format.md 3.3.6). */
         SecretSend: {
+            /** @description The token of this secret, as returned once by `createSecret` (the server keeps only its SHA-256 and compares it in constant time). Used once to compose the link of the mail; never stored, logged nor audited. */
+            secretToken: string;
             /** @description The 32-byte key of the link fragment, canonical base64url without padding (43 characters, the last one carrying no unused bit). Used once to compose the mail; never stored nor logged. */
             fragmentKey: string;
         };
@@ -10026,6 +10052,12 @@ export interface operations {
              *     requires one), `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
              *     blocklisted, or a drop link or reply session), `ip-not-allowed` (API token used from
              *     an IP outside its `allowedCidrs`, written to the security log) or `csrf-invalid`.
+             *     `recipient-domain-refused`: the `recipient` of an e-mail delivery is refused by the
+             *     recipient domain rules of the tenant or by its blocklist (address or domain), with the
+             *     field error `/recipient` `domain-denied`, audited as `transfer.recipient_refused`
+             *     (`details.object` `secret`, the refused domain only) and never written to the security
+             *     log, as for a transfer; the recipient imposed on an invited external (its inviter) is
+             *     not checked.
              */
             403: {
                 headers: {
@@ -10169,6 +10201,7 @@ export interface operations {
             403: components["responses"]["CsrfInvalid"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["StateConflict"];
+            413: components["responses"]["PayloadTooLarge"];
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
@@ -10192,6 +10225,7 @@ export interface operations {
             content: {
                 /**
                  * @example {
+                 *       "secretToken": "tts_AqRzW9Z5iijgzglbPCYje3hPsitI8uzF4oNkll2ymTV",
                  *       "fragmentKey": "ew7WSQ3aQqhKCGs_K2QR3lal5iX7Jr66egxAI_Wmhuk"
                  *     }
                  */
@@ -10228,7 +10262,16 @@ export interface operations {
             421: components["responses"]["UnknownTenant"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
-            503: components["responses"]["MaintenanceMode"];
+            /** @description Maintenance mode (`maintenance`, with `Retry-After`), a tenant still in setup (`tenant-in-setup`), or no SMTP settings for the tenant (`mail-unavailable`: nothing activated, the secret stays `pending`). Clients must branch on `code`. */
+            503: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getSecretLink: {
@@ -18238,7 +18281,7 @@ export const smtpSecurityValues: ReadonlyArray<FlattenedDeepRequired<components>
 export const smtpTestResultStageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["SmtpTestResult"]["stage"]> = ["settings", "connect", "tls", "greeting", "starttls", "auth", "envelope", "data", "done", "unknown"];
 export const dnsRecordCheckStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["DnsRecordCheck"]["status"]> = ["ok", "warning", "missing", "error"];
 export const mailDnsCheckDkimStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["MailDnsCheck"]["dkim"]["status"]> = ["ok", "warning", "missing", "error"];
-export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code"];
+export const emailTemplateKeyValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["EmailTemplateKey"]> = ["verification-code", "transfer-notification", "transfer-confirmation", "first-download", "file-problems", "file-not-scanned", "invitation", "quota-warning", "quota-reached", "antivirus-unavailable", "expiry-reminder", "abuse-alert", "abuse-report", "my-transfers-link", "recipient-verification-code", "secret-notification", "secret-receipt"];
 export const transferOriginValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["TransferOrigin"]> = ["internal", "external", "api", "internal_remote", "reply", "drop_link"];
 export const blocklistKindValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["BlocklistKind"]> = ["email", "domain", "sha256"];
 export const auditActionValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["AuditAction"]> = ["transfer.created", "transfer.finalized", "transfer.downloaded", "transfer.expired", "transfer.deleted", "transfer.notification_resent", "file.infected", "file.not_scanned", "address.verified", "invitation.created", "invitation.used", "invitation.revoked", "quota.warning", "quota.reached", "api_token.created", "api_token.updated", "api_token.used", "api_token.revoked", "admin.login", "admin.login_failed", "admin.logout", "admin.totp_enrolled", "admin.totp_disabled", "admin.recovery_code_used", "admin.password_changed", "admin.created", "admin.updated", "admin.deleted", "admin.credentials_reset", "admin.activated", "admin.totp_reset_local", "admin.password_reset_local", "tenant.created", "tenant.updated", "tenant.deletion_started", "tenant.deleted", "tenant.branding_updated", "tenant.asset_uploaded", "tenant.asset_deleted", "tenant.network_updated", "tenant.smtp_updated", "tenant.smtp_tested", "tenant.template_updated", "tenant.template_reset", "tenant.legal_updated", "config.updated", "blocklist.updated", "data_subject.searched", "data_subject.erased", "maintenance.enabled", "maintenance.disabled", "master_key.rotation_started", "master_key.rotation_completed", "master_key.rotation_failed", "disk.alert_raised", "disk.alert_cleared", "antivirus.alert_raised", "antivirus.alert_cleared", "setup.completed", "transfer.extended", "transfer.reminder_sent", "transfer.reply_created", "recipient.verified", "abuse.threshold_exceeded", "abuse.unusual_activity", "abuse.reported", "abuse.report_closed", "abuse.report_reopened", "transfer.recipient_refused", "antivirus.instance_disabled", "antivirus.scans_released", "antivirus.self_test", "webhook.created", "webhook.updated", "webhook.deleted", "webhook.tested", "tenant.confidentiality_updated", "tenant.recipient_rules_updated", "tenant.abuse_settings_updated", "tenant.antivirus_disabled", "tenant.antivirus_enabled", "my_transfers.link_requested", "my_transfers.signed_in", "admin.invited", "tenant.setup_completed", "tenant.provisioned", "tenant.provision_refused", "provisioning_token.created", "provisioning_token.revoked", "admin.identity_linked", "admin.identity_unlinked", "tenant.sso_updated", "tenant.sso_deleted", "tenant.exported", "tenant.imported", "drop_link.created", "drop_link.updated", "drop_link.rotated", "drop_link.revoked", "transfer.proof_downloaded", "proof_key.created", "proof_key.retired", "transfer.link_reissued", "secret.created", "secret.sent", "secret.revealed", "secret.file_downloaded", "secret.expired", "secret.deleted", "secret.locked", "secret.settings_updated"];

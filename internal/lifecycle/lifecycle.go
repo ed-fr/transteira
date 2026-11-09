@@ -138,6 +138,7 @@ type Files interface {
 	RemoveTemp(tid tenant.ID, file string) error
 	RemoveTenantDir(tid tenant.ID) error
 	RemoveSecretFile(tid tenant.ID, name string) error
+	ListSecretFiles(tid tenant.ID) ([]storage.Entry, error)
 }
 
 // HoldIntent tells the antivirus worker why a transfer is held, which

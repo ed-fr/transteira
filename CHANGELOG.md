@@ -28,8 +28,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   `getSecretLink`, `revealSecret` (key proof first, not counted; 5 counted wrong passphrases lock),
   `listMySecrets` and `deleteMySecret`; the page route `/s/{token}` (`Cache-Control: no-store`);
   per-client limits of the links (`rate_limited` scopes `secret_link_ip` and `secret_link`); new
-  problem code `secret-passphrase-required`. The e-mail delivery and the file are refused with
-  `400 validation-failed` (`not-supported`) until step 3.
+  problem code `secret-passphrase-required`. The e-mail delivery and the file came at step 3.
 - One-time secrets administration and lifecycle (V2.1 step 2): admin operations
   `listTenantSecrets` (metadata only, readable by an auditor), `deleteTenantSecret` (`204`, also
   when the secret had already ended), `getSecretSettings` and `updateSecretSettings` (a missing or
@@ -40,6 +39,21 @@ and the project follows [Semantic Versioning](https://semver.org/).
   pending secrets after 1 hour, tombstones after 30 days, tenant erasure); secrets counted by the
   data subject search and erasure and by the statistics; `POST /secrets`, `PUT /secrets/{id}/file`
   and `POST /secrets/{id}/send` refused during maintenance.
+- One-time secrets, file and e-mail delivery (V2.1 step 3): `uploadSecretFile` streams the TTE2
+  ciphertext of the declared file through the keyless validator into `<tenant dir>/secrets/`,
+  encrypted again at rest (a fresh storage name per attempt; a failed attempt leaves the secret
+  pending, a concurrent one is `409 state-conflict`); `revealSecret` returns a one-time file
+  grant (10 minutes) and `downloadSecretFile` streams the file once, with the grant in the
+  `TransTeira-Secret-Grant` header, bounded by the concurrent stream limits of the downloads; the
+  first complete download, the grant expiry or the lock deletes the file and destroys its key.
+  `sendSecret` takes the `secretToken` and the `fragmentKey` once to mail the link (never stored
+  nor logged), after the blocklist and the recipient domain rules were checked again. Read
+  receipts (read, expired, locked) to the creator, sent once; recipient rules and blocklist
+  applied to the recipient (`transfer.recipient_refused` with `object: secret`); active secrets
+  counted by the abuse rules (alert only); secret files counted in the storage quota and swept
+  as orphans. New mails `secret_notification` and `secret_receipt` (French and English);
+  migration 0034 lets an entity customize them (template keys `secret-notification` and
+  `secret-receipt`).
 - Reverse proxy configurations (Caddy, Nginx, Apache, Traefik) now also redact the token of
   `/s/{token}` and `/api/v1/secret-links/{token}` in the access log; `make check` asserts that
   every configuration covers every token path (`TestProxyTokenRedaction`).
