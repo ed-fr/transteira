@@ -224,7 +224,7 @@ La section **Contraste** contrôle chaque paire de couleurs utilisée par l’in
 
 Chaque image est réencodée par TransTeira, ce qui supprime ses métadonnées et tout contenu caché. Les fichiers SVG sont refusés. Une très grande photo peut être refusée à cause de ses dimensions : réduisez-la à 3840 pixels sur son plus grand côté (convertissez d’abord une image WebP en JPEG). Sans image de fond, l’image de la bibliothèque que vous avez choisie ou, à défaut, une image par défaut est utilisée.
 
-**Favicon** : l’icône affichée dans l’onglet du navigateur est générée automatiquement à partir du logo que vous téléversez (format PNG, en plusieurs tailles), sans rien à configurer. Sans logo, l’icône de TransTeira est utilisée. Remplacer ou supprimer le logo met à jour le favicon.
+**Favicon** : l’icône affichée dans l’onglet du navigateur est générée automatiquement à partir du logo que vous téléversez (format PNG, en plusieurs tailles), sans rien à configurer. Sans logo, une icône neutre par défaut est utilisée. Remplacer ou supprimer le logo met à jour le favicon.
 
 <!-- topic: tenant-network -->
 ### Réseau

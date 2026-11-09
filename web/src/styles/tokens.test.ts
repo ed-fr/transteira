@@ -115,3 +115,29 @@ describe('tokens.css, dark palette', () => {
     expect(palettes.dark.get('--tt-surface')).toBe('#111827');
   });
 });
+
+// Administration console palette: the default palette of the same theme with the TransTeira
+// greens of html[data-app='admin'] (and its dark variant) in place of the tenant colours.
+const ADMIN_TOKENS = ['--tt-primary', '--tt-link', '--tt-focus', '--tt-graphic'];
+const adminOverrides = {
+  light: block("html[data-app='admin']"),
+  dark: block("html[data-app='admin'][data-theme='dark']"),
+};
+
+describe.each(Object.entries(adminOverrides))('tokens.css, administration %s palette', (name, overrides) => {
+  const palette = new Map([...palettes[name as keyof typeof palettes], ...overrides]);
+
+  it('replaces exactly the tenant colours the console uses', () => {
+    expect([...overrides.keys()].sort()).toEqual([...ADMIN_TOKENS].sort());
+  });
+
+  it.each(TEXT_PAIRS)('%s on %s reaches AA', (fg, bg) => {
+    expect(contrastRatio(resolve(palette, fg), resolve(palette, bg))).toBeGreaterThanOrEqual(MIN_RATIO_AA);
+  });
+
+  it.each(NON_TEXT)('%s reaches 3:1 on the surface', (token) => {
+    expect(contrastRatio(resolve(palette, token), resolve(palette, '--tt-surface'))).toBeGreaterThanOrEqual(
+      MIN_RATIO_NON_TEXT,
+    );
+  });
+});

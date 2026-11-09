@@ -224,7 +224,7 @@ The **Contrast** section checks each pair of colors used by the interface. The r
 
 Every image is re-encoded by TransTeira, which removes its metadata and any hidden content. SVG files are refused. A very large photo may be refused because of its dimensions: reduce it to 3840 pixels on its longest side (convert a WebP image to JPEG first). Without a background image, the library image you chose or, failing that, a default image is used.
 
-**Favicon**: the icon shown in the browser tab is generated automatically from the logo you upload (PNG format, in several sizes), and there is nothing to configure. Without a logo, the TransTeira icon is used. Replacing or deleting the logo updates the favicon.
+**Favicon**: the icon shown in the browser tab is generated automatically from the logo you upload (PNG format, in several sizes), and there is nothing to configure. Without a logo, a neutral default icon is used. Replacing or deleting the logo updates the favicon.
 
 <!-- topic: tenant-network -->
 ### Network

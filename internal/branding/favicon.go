@@ -151,9 +151,11 @@ var defaultFavicons = sync.OnceValue(func() Favicons { return iconsFrom(renderDe
 
 // DefaultFavicon returns the built-in icon of kind k (one of [FaviconKinds])
 // served to tenants without a logo, or false for another kind. The icon is
-// generated deterministically by code (no external file) and mimics
-// web/static/favicon.svg: a blue rounded square with a white "T". The
-// returned Data is a copy the caller may keep or modify.
+// generated deterministically by code (no external file): a neutral blue
+// rounded square with a white "T", deliberately not the TransTeira symbol of
+// the administration (web/static/favicon.svg), so that the public pages of a
+// tenant stay unbranded. The returned Data is a copy the caller may keep or
+// modify.
 func DefaultFavicon(k Kind) (Image, bool) {
 	img, ok := defaultFavicons().Get(k)
 	if !ok {
@@ -168,7 +170,7 @@ func DefaultFavicon(k Kind) (Image, bool) {
 const iconSamples = 4
 
 // renderDefaultIcon draws the built-in icon on a side x side square. The
-// shapes are those of favicon.svg (a 32-unit viewBox): a #1d4ed8 square of
+// shapes are drawn on a 32-unit grid: a #1d4ed8 square of
 // radius 6 and a white "T" made of a bar (9,11)-(23,11) and a stem
 // (16,11)-(16,23), 3 units thick with round caps. Coverage is estimated by
 // supersampling, which gives smooth edges at every size.

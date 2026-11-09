@@ -21,6 +21,12 @@
     wide?: boolean;
     /** Id of the main landmark, target of the skip link. */
     mainId?: string;
+    /**
+     * Content of the brand box instead of the tenant logo or name (the administration draws its
+     * own logo); the box is then transparent, the snippet being responsible for its contrast.
+     * Fixed application content only, never a value of a tenant.
+     */
+    brand?: Snippet;
     /** Content on the right side of the header (e.g. admin menu). */
     header?: Snippet;
     /** Content above the card inside main (e.g. maintenance banner). */
@@ -37,6 +43,7 @@
     backgroundUrl,
     wide = false,
     mainId = 'main',
+    brand,
     header,
     banner,
     footer,
@@ -64,8 +71,10 @@
     <div class="tt-page__veil"></div>
   {/if}
   <header class="tt-page__header">
-    <div class="tt-page__brand">
-      {#if logo}
+    <div class="tt-page__brand" class:tt-page__brand--custom={brand !== undefined}>
+      {#if brand}
+        {@render brand()}
+      {:else if logo}
         <img class="tt-page__logo" src={logo} alt={tenantName} />
       {:else}
         <span>{tenantName}</span>

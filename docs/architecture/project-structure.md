@@ -183,7 +183,8 @@ transteira/
 │   │   ├── admin/                   # Application d'administration (hôte admin, sous /admin/) : index.html, main.ts,
 │   │   │   │                        # App.svelte (démarrage, garde, langue), routes.ts, shell.ts, api.ts (client admin
 │   │   │   │                        # et rappels onUnauthenticated / recoverCsrf), maintenance.svelte.ts (état du
-│   │   │   │                        # mode maintenance, relu à la navigation, sans minuterie), maintenanceBanner.ts (bandeau)
+│   │   │   │                        # mode maintenance, relu à la navigation, sans minuterie), maintenanceBanner.ts (bandeau),
+│   │   │   │                        # brand/ (logos TransTeira de l'en-tête, clair et sombre), icons/ (favicons PNG de l'hôte admin)
 │   │   │   │                        # et activity.ts (activité de l'admin : pas de lecture sur minuterie si inactif)
 │   │   │   ├── auth/                # Machine d'état de l'authentification, garde de navigation et safeNext,
 │   │   │   │                        # session (connexion, TOTP, activation, déconnexion), états des formulaires
@@ -300,6 +301,7 @@ transteira/
 │                                    # (V1.1 : grafana/, zabbix/)
 │
 ├── docs/
+│   ├── assets/                      # Logos TransTeira du README (fond clair, fond sombre)
 │   ├── api/                         # integration.md (jetons, dépôt tus, scripts bash/curl et PowerShell), errors.md, provisioning.md (API de provisionnement)
 │   ├── user/
 │   │   ├── README.md                # Index des guides (une ligne par guide, en anglais et en français)

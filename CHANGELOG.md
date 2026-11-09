@@ -6,6 +6,20 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- TransTeira identity in the administration console: the TransTeira symbol as the favicon of the
+  admin host (`web/static/favicon.svg`, a root file of the build also reachable on the entity
+  hosts but referenced by no public page, with 32 px and 180 px PNG variants for the console), the
+  horizontal TransTeira logo in the console header (a version for light backgrounds in the light
+  theme, one for dark backgrounds in the dark theme), and the TransTeira greens for the buttons,
+  links, focus indicator and charts of the console, in the shades that reach WCAG AA (`#00703F`,
+  6.2:1 with white text; `#00BF63` for the links, focus indicator and charts on the dark surface), checked in both themes by
+  `src/styles/tokens.test.ts`. The public pages of the entities keep their neutral default look
+  (blue palette, neutral default favicon), as does the brand preview of the administration. Logo
+  at the top of `README.md` and `README.fr.md`; administration screenshots of the user guides
+  regenerated.
+
 ## [2.0.0] - 2026-11-08
 
 The V2 scope of the specification (CLAUDE.md section 2, "enterprise"), on top of 1.0, 1.1 and

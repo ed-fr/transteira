@@ -108,6 +108,33 @@
   }
 }
 
+/*
+ * Administration console (web/src/admin/index.html sets data-app="admin" on <html>): the
+ * TransTeira greens, never a tenant colour (the administration applies none). Only the four tokens
+ * of the tenant colours that the console uses are replaced, on <html> only: on screen, the mock
+ * pages of the brand preview, which set their own data-theme, keep the default palette above (on
+ * paper the dark mock page has no palette of its own and inherits the console greens, as it already
+ * lost the tenant colours), and the public pages of the tenants are untouched. The light greens of the logo (#00BF63, #C1FF72) do not reach
+ * AA with white text: buttons use #00703F (6.2:1 with white), links #00703F on light surfaces and
+ * #00BF63 on dark ones. The dark block repeats the four tokens, since the light one is more
+ * specific than [data-theme='dark']. src/styles/tokens.test.ts checks both.
+ */
+html[data-app='admin'] {
+  --tt-primary: #00703f;
+  --tt-link: #00703f;
+  --tt-focus: #00703f;
+  --tt-graphic: #00703f;
+}
+
+@media not print {
+  html[data-app='admin'][data-theme='dark'] {
+    --tt-primary: #00703f;
+    --tt-link: #00bf63;
+    --tt-focus: #00bf63;
+    --tt-graphic: #00bf63;
+  }
+}
+
 :root {
   /* Spacing scale. */
   --tt-space-1: 0.25rem;

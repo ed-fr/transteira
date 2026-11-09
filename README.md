@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/transteira-horizontal-dark.png">
+    <img src="docs/assets/transteira-horizontal.png" alt="TransTeira" width="400">
+  </picture>
+</p>
+
 # TransTeira
 
 **English** | [Français](README.fr.md)

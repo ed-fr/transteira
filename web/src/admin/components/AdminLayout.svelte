@@ -24,6 +24,8 @@
   import { isAuditor, mainLinks, navCurrent, roleKey, systemPath } from '../shell';
   import { updateNotice } from '../version';
   import { adminVersion } from '../version.svelte';
+  import logoDark from '../brand/transteira-horizontal-dark.png';
+  import logoLight from '../brand/transteira-horizontal.png';
 
   interface Props {
     /** Profile of the authenticated admin; the navigation is hidden without it. */
@@ -99,6 +101,26 @@
   }
 </script>
 
+<!-- TransTeira logo: the version for light backgrounds in the light theme, the one for dark
+     backgrounds in the dark theme (data-theme on <html>); the hidden one is display: none, so
+     only one name is announced. -->
+{#snippet adminBrand()}
+  <img
+    class="tt-admin-logo tt-admin-logo--light"
+    src={logoLight}
+    alt={t('admin.appName')}
+    width="524"
+    height="144"
+  />
+  <img
+    class="tt-admin-logo tt-admin-logo--dark"
+    src={logoDark}
+    alt={t('admin.appName')}
+    width="524"
+    height="144"
+  />
+{/snippet}
+
 {#snippet adminHeader()}
   {#if me}
     <div class="tt-admin-header">
@@ -164,6 +186,7 @@
 
 <PageLayout
   tenantName={t('admin.appName')}
+  brand={adminBrand}
   wide
   header={showNav && me ? adminHeader : undefined}
   banner={(showNav && me) || logoutError !== undefined ? banners : undefined}
@@ -173,6 +196,29 @@
 </PageLayout>
 
 <style>
+  /* Height bounded, width following the ratio: a narrow header shrinks the logo without
+     distorting it (base.css caps every image at max-width: 100%). */
+  .tt-admin-logo {
+    display: block;
+    width: auto;
+    height: auto;
+    max-height: 3rem;
+  }
+
+  .tt-admin-logo--dark {
+    display: none;
+  }
+
+  @media not print {
+    :global([data-theme='dark']) .tt-admin-logo--light {
+      display: none;
+    }
+
+    :global([data-theme='dark']) .tt-admin-logo--dark {
+      display: block;
+    }
+  }
+
   .tt-admin-header {
     display: flex;
     flex-wrap: wrap;

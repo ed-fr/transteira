@@ -16,6 +16,7 @@ There is no SvelteKit, no component library and no CDN. The applications only ta
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | `src/public/`, `src/admin/`                      | entry pages (`index.html`, `main.ts`, `App.svelte`), routes and screens                      |
 | `src/admin/{auth,forms,components,screens}/`     | admin session and guard, pure form logic, admin components, screens                          |
+| `src/admin/{brand,icons}/`                       | TransTeira logos of the console header and PNG favicons of the admin host (fingerprinted)    |
 | `src/shared/api/`                                | `schema.ts` (generated, committed), API client, Problem mapping, CSRF store                  |
 | `src/shared/router/`, `i18n/`, `theme/`, `safe/` | router, translations, tenant theme and contrast, dark mode (`mode.svelte.ts`), `safeApiHref` |
 | `src/shared/upload/`                             | resumable upload engine (tus 1.0.0) and its transport                                        |

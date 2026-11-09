@@ -54,6 +54,11 @@
   text-decoration: none;
 }
 
+.tt-page__brand--custom {
+  padding: 0;
+  background: transparent;
+}
+
 .tt-page__logo {
   display: block;
   max-height: 3rem;
