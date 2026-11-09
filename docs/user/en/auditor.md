@@ -163,6 +163,11 @@ The **Drop links** screen lists the permanent drop links of the entity, read-onl
 
 You can neither create, change, rotate nor revoke a link. The secret of a link, which is part of its address, is never shown to you.
 
+<!-- topic: auditor-tenant-secrets -->
+## One-time secrets
+
+The **One-time secrets** screen lists, read-only, the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State** (**Pending**, **Active**, **Read**, **Expired**, **Deleted** or **Locked**), **Expiry** and **Read**. Filter by **State** or by **Author address**. You never see the content of a secret, its link or its passphrase, and you cannot delete any secret. The secrets settings are not offered to you.
+
 <!-- topic: auditor-account -->
 ## My account
 

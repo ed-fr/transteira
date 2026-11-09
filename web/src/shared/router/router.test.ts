@@ -281,6 +281,29 @@ describe('createRouter', () => {
     expect(fake.env.location.pathname).toBe('/d/tok');
   });
 
+  it('forgets a fragment the screen removed itself (syncLocation)', () => {
+    const fake = fakeEnv('/d/tok?x=1#k=secret');
+    const router = createRouter({ routes, notFound, env: fake.env, t, afterRender });
+    router.start();
+    const before = router.current;
+    expect(before.hash).toBe('#k=secret');
+    // Nothing changed: the same match is kept.
+    router.syncLocation();
+    expect(router.current).toBe(before);
+    fake.env.history.replaceState(null, '', '/d/tok?x=1');
+    router.syncLocation();
+    expect(router.current.hash).toBe('');
+    expect(router.current.search).toBe('?x=1');
+    expect(router.current.route).toBe(download);
+    expect(router.current.params).toEqual(before.params);
+    // No navigation: no focus move.
+    expect(fake.focus).not.toHaveBeenCalled();
+    // A refused back/forward navigation no longer puts the key back in the address bar.
+    router.addGuard(() => false);
+    fake.pop('/legal/legal-notice');
+    expect(fake.env.history.pushState).toHaveBeenLastCalledWith(ROUTER_ENTRY, '', '/d/tok?x=1');
+  });
+
   it('refuses a guarded link click after preventing the browser navigation', () => {
     const fake = fakeEnv('/');
     const router = createRouter({ routes, notFound, env: fake.env, t, afterRender });

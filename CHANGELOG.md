@@ -54,6 +54,20 @@ and the project follows [Semantic Versioning](https://semver.org/).
   as orphans. New mails `secret_notification` and `secret_receipt` (French and English);
   migration 0034 lets an entity customize them (template keys `secret-notification` and
   `secret-receipt`).
+- One-time secrets web interface (V2.1 step 4): a "Share a secret" tab on the deposit form
+  (text, duration, optional passphrase kept out of password managers, optional file, link or
+  e-mail delivery, read receipt; e-mail to the inviter only for an invited external), sealed in
+  the browser; the full link shown once, forgotten as soon as the end screen is left, and the
+  key bytes wiped after use; the reveal page `/s/:token` (the key leaves the address bar and the
+  router state, nothing consumed before "Show the secret", passphrase with the attempts left,
+  revealed text that can be hidden, clipboard warning, attached file downloaded once, size
+  capped while reading, decrypted and checked in memory); "My secrets" in "My transfers"
+  (metadata only, deletion before reading); administration screens for the secret settings and
+  the list of secrets of an entity (read-only for the auditor); help topics `secret-share`,
+  `secret-read`, `tenant-secrets` and `auditor-tenant-secrets` with screenshots (French and
+  English); Playwright scenarios on both engines, including a capture of every request of a
+  creation and a reading that finds the key only in the `fragmentKey` of the e-mail send
+  (T-344).
 - Reverse proxy configurations (Caddy, Nginx, Apache, Traefik) now also redact the token of
   `/s/{token}` and `/api/v1/secret-links/{token}` in the access log; `make check` asserts that
   every configuration covers every token path (`TestProxyTokenRedaction`).

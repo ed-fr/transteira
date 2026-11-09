@@ -13,7 +13,8 @@
     "abuseReports": "Signalements",
     "groupConsultation": "Consultation",
     "security": "Journal de sécurité",
-    "dropLinks": "Liens de dépôt"
+    "dropLinks": "Liens de dépôt",
+    "secrets": "Secrets à usage unique"
   },
   "transfers": {
     "title": "Transferts",
@@ -63,5 +64,10 @@
     "createTitle": "Créer un lien de dépôt",
     "intro": "Un lien de dépôt est une adresse permanente que vous donnez à des tiers (clients, fournisseurs…) pour qu’ils envoient des fichiers à un service, sans invitation. Chaque dépôt exige la confirmation de l’adresse du déposant par code. Les fichiers sont adressés aux destinataires du lien.",
     "introReadOnly": "Liens de dépôt permanents de cette entité, en lecture seule."
+  },
+  "secrets": {
+    "title": "Secrets à usage unique",
+    "intro": "Secrets créés dans cette entité, du plus récent au plus ancien. Vous ne voyez jamais leur contenu, seulement leur état. Vous pouvez supprimer un secret en attente ou actif avant sa lecture.",
+    "introReadOnly": "Secrets créés dans cette entité, du plus récent au plus ancien, en lecture seule. Le contenu n’est jamais visible."
   }
 }

@@ -4,8 +4,11 @@ import type { Component } from 'svelte';
 import type { Router } from '../../shared/router/router.svelte';
 import type { PublicTenant } from '../bootstrap';
 
-/** Navigation helpers handed to the screens (addGuard: confirm leaving during an upload). */
-export type Navigation = Pick<Router, 'href' | 'link' | 'navigate' | 'addGuard'>;
+/**
+ * Navigation helpers handed to the screens (addGuard: confirm leaving during an upload;
+ * syncLocation: after the screen removed a key from the URL fragment).
+ */
+export type Navigation = Pick<Router, 'href' | 'link' | 'navigate' | 'addGuard' | 'syncLocation'>;
 
 /** Props of a public screen. */
 export interface ScreenProps {

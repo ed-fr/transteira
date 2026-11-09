@@ -221,6 +221,31 @@ Pour un envoi en [lien seul](topic:link-only), l’écran affiche le **lien comp
 - Le serveur voit toujours la taille et le nombre des fichiers, l’expéditeur, les destinataires et les dates.
 - Un navigateur récent est nécessaire (chiffrement, tâches en arrière-plan et flux de données). Sans lui, la case n’est pas utilisable.
 
+<!-- topic: secret-share -->
+## Partager un secret
+
+Pour transmettre un mot de passe, une clé ou un code, préférez un secret à usage unique à un transfert de fichiers. Le secret est chiffré dans votre navigateur : le serveur ne le voit jamais en clair. Il ne peut être lu qu’une seule fois, puis il est détruit ; il est aussi détruit à son expiration, même si personne ne l’a lu.
+
+Une fois identifié sur la page d’envoi (voir [Vous identifier par un code](topic:deposit-identify)), choisissez l’onglet **Partager un secret**. Il n’apparaît que si votre organisation a activé les secrets.
+
+![Formulaire Partager un secret avec le champ Secret, la durée de validité, le mode de remise du lien et la phrase de passe, avec le choix d’un fichier](../screenshots/fr/secret-create.png)
+
+1. Saisissez le **Secret** : 10 000 caractères au plus. Il peut rester vide si vous joignez un fichier.
+1. Choisissez la durée dans **Valable pendant** (de 1 heure à 30 jours, selon les durées que votre organisation propose).
+1. Indiquez comment le destinataire reçoit le lien : **Je copie le lien moi-même**, ou **Envoyer le lien par mail** à une seule adresse (si votre organisation l’autorise).
+1. Ajoutez une **Phrase de passe** si vous le souhaitez. Le destinataire en aura besoin pour lire le secret, et elle n’est jamais envoyée au serveur. Transmettez-la **par un autre canal** que le lien (téléphone, SMS, de vive voix) : si le lien est envoyé par mail, une phrase de passe peut être obligatoire.
+1. Joignez au besoin un **Fichier** : un petit fichier seulement (la taille maximale est indiquée sous le champ). Il est chiffré dans votre navigateur et n’est donc pas analysé par l’antivirus ; le destinataire en est prévenu.
+1. Cochez **Me prévenir par mail quand le secret est lu** pour recevoir un accusé de lecture. Vous êtes aussi prévenu si le secret expire sans avoir été lu, ou s’il est verrouillé après trop de phrases de passe erronées.
+1. Cliquez sur **Créer le secret**.
+
+Avec **Je copie le lien moi-même**, l’écran **Secret créé** affiche le lien complet, clé comprise. **Ce lien n’est affiché qu’une seule fois** : cliquez sur **Copier le lien** avant de quitter cet écran : le lien est oublié dès que vous passez à l’autre onglet, créez un autre secret, terminez la session ou quittez la page. Le lien copié peut rester dans l’historique du presse-papiers de votre appareil : effacez-le une fois le lien transmis. Toute personne qui possède le lien peut lire le secret une fois ; transmettez-le donc par un canal de confiance. Avec l’envoi par mail, le lien part directement au destinataire et n’est pas affiché.
+
+![Écran Secret créé avec le lien complet affiché une seule fois et le bouton Copier le lien](../screenshots/fr/secret-link-shown.png)
+
+### Mes secrets
+
+Dans [Mes envois](topic:my-transfers), la section **Mes secrets** liste vos secrets, du plus récent au plus ancien, avec leur état (**En attente**, **Disponible**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**). Leur contenu n’y est jamais affiché, et le lien ne peut pas être retrouvé. Tant qu’un secret n’est pas lu, cliquez sur **Supprimer** : il est détruit aussitôt, même si le destinataire a déjà le lien.
+
 <!-- topic: my-transfers -->
 ## Mes envois
 

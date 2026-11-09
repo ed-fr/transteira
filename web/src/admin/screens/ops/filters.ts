@@ -86,6 +86,9 @@ export type AbuseReportStatus = components['schemas']['AbuseReportStatus'];
 /** Kind of a blocklist entry. */
 export type BlocklistKind = components['schemas']['BlocklistKind'];
 
+/** State of a one-time secret (since 2.1). */
+export type SecretState = components['schemas']['SecretState'];
+
 /** Values of TransferStatus. */
 export const TRANSFER_STATUSES: readonly TransferStatus[] = [
   'uploading',
@@ -102,11 +105,27 @@ export const ABUSE_REPORT_STATUSES: readonly AbuseReportStatus[] = ['open', 'clo
 /** Values of BlocklistKind. */
 export const BLOCKLIST_KINDS: readonly BlocklistKind[] = ['email', 'domain', 'sha256'];
 
+/** Values of SecretState. */
+export const SECRET_STATES: readonly SecretState[] = [
+  'pending',
+  'active',
+  'read',
+  'expired',
+  'deleted',
+  'locked',
+];
+
 /** Filters of listTenantTransfers. */
 export const TRANSFER_FILTERS = {
   status: { kind: 'enum', values: TRANSFER_STATUSES } as EnumFilter<TransferStatus>,
   email: { kind: 'email' } as EmailFilter,
   createdAfter: { kind: 'date', bound: 'start' } as DateFilter,
+} satisfies FilterSpec;
+
+/** Filters of listTenantSecrets (sender: creator address, refused to an auditor). */
+export const SECRET_FILTERS = {
+  state: { kind: 'enum', values: SECRET_STATES } as EnumFilter<SecretState>,
+  sender: { kind: 'email' } as EmailFilter,
 } satisfies FilterSpec;
 
 /** Filters of listTenantInvitations. */

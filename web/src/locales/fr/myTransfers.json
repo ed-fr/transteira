@@ -153,5 +153,45 @@
       "label": "Nouveau lien de téléchargement",
       "copy": "Copier le lien"
     }
+  },
+  "secrets": {
+    "title": "Mes secrets",
+    "intro": "Vos secrets à usage unique, du plus récent au plus ancien. Leur contenu n’est jamais affiché ici : vous voyez seulement leur état. Vous pouvez supprimer un secret tant qu’il n’a pas été lu.",
+    "caption": "Secrets à usage unique",
+    "created": "Création",
+    "deliveryColumn": "Remise",
+    "expires": "Expiration",
+    "readAt": "Lecture",
+    "notRead": "Pas encore lu",
+    "file": "Fichier joint",
+    "fileSize": "Fichier joint, {size}",
+    "loadedMore": {
+      "one": "{count} secret supplémentaire chargé.",
+      "other": "{count} secrets supplémentaires chargés."
+    },
+    "state": {
+      "column": "État",
+      "pending": "En attente",
+      "active": "Disponible",
+      "read": "Lu",
+      "expired": "Expiré",
+      "deleted": "Supprimé",
+      "locked": "Verrouillé",
+      "unknown": "Inconnu"
+    },
+    "delivery": {
+      "link": "Lien à transmettre",
+      "email": "Par mail",
+      "emailTo": "Par mail à {recipient}"
+    },
+    "delete": {
+      "button": "Supprimer",
+      "buttonFor": "le secret créé le {date}",
+      "title": "Supprimer le secret",
+      "text": "Le secret sera détruit immédiatement et ne pourra plus être lu, même par une personne qui possède déjà le lien. Cette action est irréversible.",
+      "confirmButton": "Supprimer définitivement",
+      "cancel": "Conserver le secret",
+      "done": "Secret supprimé."
+    }
   }
 }

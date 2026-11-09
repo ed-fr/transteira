@@ -18,6 +18,7 @@
     type AccessLinkApi,
     type Phase,
   } from '../mytransfers/logic';
+  import SecretList from '../mytransfers/SecretList.svelte';
   import RequestForm from '../mytransfers/RequestForm.svelte';
   import SentNotice from '../mytransfers/SentNotice.svelte';
   import SwitchConfirm from '../mytransfers/SwitchConfirm.svelte';
@@ -166,6 +167,7 @@
     onsignout={() => void signOut()}
     {signingOut}
   />
+  <SecretList onexpired={expired} />
 {:else}
   <TransferDetail
     id={selected}

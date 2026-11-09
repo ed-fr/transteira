@@ -36,6 +36,7 @@
     "legal": "Mentions légales",
     "recipientRules": "Domaines destinataires",
     "confidentiality": "Niveaux de confidentialité",
+    "secretSettings": "Réglages des secrets",
     "abuse": "Détection des abus",
     "summary": "Résumé",
     "sso": "Authentification unique"
@@ -825,5 +826,9 @@
     "forbidden": "Interdit",
     "allowed": "Autorisé",
     "required": "Obligatoire"
+  },
+  "secrets": {
+    "title": "Réglages des secrets",
+    "intro": "Les secrets à usage unique sont chiffrés dans le navigateur de leur auteur : le serveur ne les lit jamais. Choisissez ici ce que cette entité propose à ses utilisateurs."
   }
 }

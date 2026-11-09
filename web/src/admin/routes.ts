@@ -27,6 +27,7 @@ import AbuseReports from './screens/ops/AbuseReports.svelte';
 import Blocklist from './screens/ops/Blocklist.svelte';
 import InvitationList from './screens/ops/InvitationList.svelte';
 import Privacy from './screens/ops/Privacy.svelte';
+import SecretList from './screens/ops/SecretList.svelte';
 import SecurityLog from './screens/ops/SecurityLog.svelte';
 import TenantStats from './screens/ops/TenantStats.svelte';
 import DropLinkCreate from './screens/ops/DropLinkCreate.svelte';
@@ -57,6 +58,7 @@ import TenantImport from './screens/tenants/TenantImport.svelte';
 import TenantList from './screens/tenants/TenantList.svelte';
 import TenantNetwork from './screens/tenants/TenantNetwork.svelte';
 import TenantRecipientRules from './screens/tenants/TenantRecipientRules.svelte';
+import TenantSecrets from './screens/tenants/TenantSecrets.svelte';
 import TenantSetup from './screens/tenants/TenantSetup.svelte';
 import TenantSmtp from './screens/tenants/TenantSmtp.svelte';
 import TenantSso from './screens/tenants/TenantSso.svelte';
@@ -184,6 +186,14 @@ export const routes: readonly AdminRoute[] = [
     tenantNav: true,
   },
   {
+    pattern: '/tenants/:id/secret-settings',
+    component: TenantSecrets,
+    titleKey: 'adminTenants.secrets.title',
+    access: 'auth',
+    helpTopic: 'tenant-secrets',
+    tenantNav: true,
+  },
+  {
     pattern: '/tenants/:id/smtp',
     component: TenantSmtp,
     titleKey: 'adminTenants.smtp.title',
@@ -301,6 +311,14 @@ export const routes: readonly AdminRoute[] = [
     titleKey: 'adminOps.dropLinks.createTitle',
     access: 'auth',
     helpTopic: 'tenant-drop-links',
+    tenantNav: true,
+  },
+  {
+    pattern: '/tenants/:id/secrets',
+    component: SecretList,
+    titleKey: 'adminOps.secrets.title',
+    access: 'auth',
+    helpTopic: 'tenant-secrets',
     tenantNav: true,
   },
   {

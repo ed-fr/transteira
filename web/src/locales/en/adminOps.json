@@ -13,7 +13,8 @@
     "abuseReports": "Abuse reports",
     "groupConsultation": "Consultation",
     "security": "Security log",
-    "dropLinks": "Drop links"
+    "dropLinks": "Drop links",
+    "secrets": "One-time secrets"
   },
   "transfers": {
     "title": "Transfers",
@@ -63,5 +64,10 @@
     "createTitle": "Create a drop link",
     "intro": "A drop link is a permanent address you give to third parties (customers, suppliers...) so that they can send files to a service, without an invitation. Every deposit requires the depositor to confirm their address with a code. The files are addressed to the recipients of the link.",
     "introReadOnly": "Permanent drop links of this entity, read-only."
+  },
+  "secrets": {
+    "title": "One-time secrets",
+    "intro": "Secrets created in this entity, most recent first. You never see their content, only their state. You can delete a pending or active secret before it is read.",
+    "introReadOnly": "Secrets created in this entity, most recent first, read only. The content is never visible."
   }
 }

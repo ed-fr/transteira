@@ -513,6 +513,25 @@ Après 5 envois en échec consécutifs, un webhook est **Suspendu** pendant 15 m
 
 Les alertes ne contiennent jamais de nom de fichier, de lien vers un transfert ni de mot de passe. Elles ne contiennent pas non plus d’adresse mail, sauf si **Inclure les adresses dans les webhooks** est coché dans l’écran [Général](topic:tenant-general).
 
+<!-- topic: tenant-secrets -->
+### Secrets à usage unique
+
+Les secrets à usage unique permettent de transmettre un mot de passe, une clé ou un code, chiffrés dans le navigateur de l’auteur : vous ne voyez **jamais leur contenu**, ni leur lien, ni leur phrase de passe. Deux écrans leur sont consacrés dans le menu de l’entité.
+
+L’écran **Réglages des secrets** (**Secrets à usage unique**) définit les règles :
+
+- **Activer les secrets à usage unique** : désactiver le module refuse les nouveaux secrets ; ceux qui existent restent lisibles jusqu’à leur fin.
+- **Durées proposées** (au moins une) et **Durée par défaut**, qui doit faire partie des durées proposées.
+- **Autoriser un fichier joint** et **Taille maximale du fichier (Mio)**, de 1 à 25 Mio. Le fichier est chiffré dans le navigateur et n’est pas analysé par l’antivirus.
+- **Autoriser l’envoi par mail** : le serveur envoie le lien à un destinataire ; sinon, l’auteur transmet lui-même le lien.
+- **Exiger une phrase de passe pour l’envoi par mail** : le secret doit alors être protégé par une phrase de passe, à transmettre par un autre canal.
+
+![Écran des réglages des secrets avec l’activation, les durées, le fichier joint et l’envoi par mail](../screenshots/fr/admin-secret-settings.png)
+
+L’écran **Secrets à usage unique** liste les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État**, **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur** (adresse exacte). Pour un secret **En attente** ou **Actif**, **Supprimer** le détruit aussitôt, de façon définitive. Les créations, lectures et suppressions sont inscrites dans le [journal d’audit](topic:tenant-audit).
+
+![Liste des secrets à usage unique avec les filtres, l’état, l’expiration et le bouton Supprimer](../screenshots/fr/admin-secrets.png)
+
 <!-- topic: tenant-audit -->
 ### Journal d’audit
 

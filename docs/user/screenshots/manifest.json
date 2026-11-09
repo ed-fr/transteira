@@ -102,6 +102,18 @@
     "path": "{lang}/admin-provisioning-tokens.png"
   },
   {
+    "name": "admin-secret-settings",
+    "screen": "admin /admin/tenants/:id/secret-settings",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-secret-settings.png"
+  },
+  {
+    "name": "admin-secrets",
+    "screen": "admin /admin/tenants/:id/secrets",
+    "profile": "delegated-admin",
+    "path": "{lang}/admin-secrets.png"
+  },
+  {
     "name": "admin-security-log",
     "screen": "admin /admin/tenants/:id/security-events",
     "profile": "delegated-admin",
@@ -430,5 +442,29 @@
     "screen": "public /d/:token/reply (reply form: the files go to the sender)",
     "profile": "recipient",
     "path": "{lang}/reply-form.png"
+  },
+  {
+    "name": "secret-create",
+    "screen": "public / (secret creation form)",
+    "profile": "depositor",
+    "path": "{lang}/secret-create.png"
+  },
+  {
+    "name": "secret-link-shown",
+    "screen": "public / (secret created: link shown once)",
+    "profile": "depositor",
+    "path": "{lang}/secret-link-shown.png"
+  },
+  {
+    "name": "secret-reveal",
+    "screen": "public /s/:token (before the reveal, passphrase field)",
+    "profile": "recipient",
+    "path": "{lang}/secret-reveal.png"
+  },
+  {
+    "name": "secret-revealed",
+    "screen": "public /s/:token (secret revealed)",
+    "profile": "recipient",
+    "path": "{lang}/secret-revealed.png"
   }
 ]

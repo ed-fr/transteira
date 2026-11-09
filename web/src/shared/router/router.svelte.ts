@@ -12,6 +12,9 @@
 // - Navigation guards (addGuard) may refuse an in-app navigation (a link, navigate(), back or
 //   forward), for example to confirm leaving a page during an upload. A refused back/forward
 //   navigation pushes the current URL back, so the address bar keeps matching the page.
+// - A screen that rewrites its own URL with history.replaceState (removing a key from the
+//   fragment, takeKeyFromLocation) calls syncLocation(): the router then forgets the old URL, so
+//   that a refused back/forward navigation never puts the removed fragment back.
 //   navigate(path, { force: true }) bypasses the guards: only for redirects the user cannot
 //   refuse (session expired, signed out, access lost), never for a user navigation.
 // Browser objects are injected (RouterEnv) so that the router is testable in Node.
@@ -122,6 +125,11 @@ export interface Router<C = unknown> {
   stop(): void;
   /** Adds a navigation guard; returns the function that removes it. */
   addGuard(guard: NavigationGuard): () => void;
+  /**
+   * Re-reads the address bar after the screen replaced its URL itself (history.replaceState):
+   * no navigation, no focus move, no announcement.
+   */
+  syncLocation(): void;
   /** Svelte action for internal links: <a href={router.href('/x')} use:link>. */
   link: (node: LinkNode) => { destroy(): void };
 }
@@ -372,6 +380,12 @@ export function createRouter<C>(options: RouterOptions<C>): Router<C> {
     },
     stop() {
       env.removeEventListener('popstate', onPopState);
+    },
+    syncLocation() {
+      const next = resolve(env.location.pathname, env.location.search, env.location.hash);
+      if (next.path !== current.path || next.search !== current.search || next.hash !== current.hash) {
+        current = next;
+      }
     },
     addGuard(guard) {
       guards = [...guards, guard];

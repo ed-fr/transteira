@@ -71,6 +71,7 @@ export const TENANT_CONFIG_SECTIONS = [
   'recipientRules',
   'abuse',
   'confidentiality',
+  'secretSettings',
   'smtp',
   'sso',
   'templates',
@@ -85,6 +86,7 @@ export const TENANT_OPS_SECTIONS = [
   'abuseReports',
   'tokens',
   'dropLinks',
+  'secrets',
   'webhooks',
   'audit',
   'security',
@@ -108,6 +110,7 @@ export const AUDITOR_TENANT_SECTIONS = [
   'sso',
   'transfers',
   'dropLinks',
+  'secrets',
   'audit',
   'security',
   'stats',
@@ -158,6 +161,7 @@ const TENANT_SEGMENTS: Partial<Record<TenantSection, string>> = {
   recipientRules: 'recipient-rules',
   abuseReports: 'abuse-reports',
   dropLinks: 'drop-links',
+  secretSettings: 'secret-settings',
   security: 'security-events',
 };
 

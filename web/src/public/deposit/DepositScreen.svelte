@@ -11,9 +11,14 @@
   // The guard asks for a confirmation before an in-app navigation interrupts an upload.
   // For a drop link: <DepositScreen tenant={publicTenant} dropLink={{ token, label, validityDays, levelKey }} />.
   // Key the component on the invitation token: the flow is built from the initial props.
+  // On the form step, a tab list switches between sending files and sharing a one-time secret
+  // (public/secret, since 2.1) when the tenant offers secrets to this depositor.
   import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { Alert, Button, Spinner } from '../../shared/components';
   import { t } from '../../shared/i18n/i18n.svelte';
+  import { SecretCreateFlow } from '../secret/createFlow.svelte';
+  import SecretDone from '../secret/SecretDone.svelte';
+  import SecretForm from '../secret/SecretForm.svelte';
   import CodeStep from './CodeStep.svelte';
   import { browserDeps } from './deps';
   import DoneStep from './DoneStep.svelte';
@@ -54,8 +59,65 @@
 
   let { tenant, invitation, dropLink, reply, onreplyended, onnavigate, addGuard, deps }: Props = $props();
 
-  const flow = untrack(() => new DepositFlow(tenant, invitation, deps ?? browserDeps(), reply, dropLink));
+  const flowDeps = untrack(() => deps ?? browserDeps());
+  const flow = untrack(() => new DepositFlow(tenant, invitation, flowDeps, reply, dropLink));
+  const secret = new SecretCreateFlow(flow, {
+    api: flowDeps.api,
+    tr: flowDeps.tr,
+    announce: flowDeps.announce,
+    origin: () => window.location.origin,
+  });
   let container: HTMLElement | undefined = $state();
+
+  type Mode = 'files' | 'secret';
+  const modes: readonly Mode[] = ['files', 'secret'];
+  const tabIds: Record<Mode, string> = { files: 'tt-deposit-tab-files', secret: 'tt-deposit-tab-secret' };
+  const panelIds: Record<Mode, string> = {
+    files: 'tt-deposit-panel-files',
+    secret: 'tt-deposit-panel-secret',
+  };
+  const mode = $derived<Mode>(secret.offered && flow.mode === 'secret' ? 'secret' : 'files');
+
+  function selectTab(next: Mode, focus = false): void {
+    flow.mode = next;
+    if (focus) {
+      void tick().then(() => document.getElementById(tabIds[next])?.focus());
+    }
+  }
+
+  // Tabs with automatic activation (WAI-ARIA Authoring Practices): arrows, Home and End.
+  function tabKey(event: KeyboardEvent): void {
+    const at = modes.indexOf(mode);
+    let next: Mode | undefined;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = modes[(at + 1) % modes.length];
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp')
+      next = modes[(at + modes.length - 1) % modes.length];
+    else if (event.key === 'Home') next = modes[0];
+    else if (event.key === 'End') next = modes[modes.length - 1];
+    if (next !== undefined) {
+      event.preventDefault();
+      selectTab(next, true);
+    }
+  }
+
+  // The link of a created secret does not outlive the session; another address starts afresh.
+  $effect(() => {
+    secret.syncSession(flow.session?.email);
+  });
+
+  // Focus the heading when the secret is created and when another one is started.
+  let previousSecret = secret.step;
+  $effect(() => {
+    const step = secret.step;
+    if (step !== previousSecret) {
+      const moved = step === 'done' || previousSecret === 'done';
+      previousSecret = step;
+      // Not when the done screen is left for the other tab or another step (focus stays put).
+      if (moved && mode === 'secret' && flow.step === 'form') {
+        void tick().then(() => container?.querySelector<HTMLElement>('h1')?.focus());
+      }
+    }
+  });
 
   onMount(() => {
     void flow.start();
@@ -116,7 +178,38 @@
   {:else if flow.step === 'code'}
     <CodeStep {flow} />
   {:else if flow.step === 'form'}
-    <TransferForm {flow} {onnavigate} />
+    {#if secret.offered}
+      <div class="tt-deposit-tabs" role="tablist" aria-label={t('secretCreate.tabs.label')}>
+        {#each modes as m (m)}
+          <button
+            type="button"
+            role="tab"
+            id={tabIds[m]}
+            class="tt-deposit-tab"
+            aria-selected={mode === m}
+            aria-controls={mode === m ? panelIds[m] : undefined}
+            tabindex={mode === m ? 0 : -1}
+            onclick={() => selectTab(m)}
+            onkeydown={tabKey}
+          >
+            {t(`secretCreate.tabs.${m}`)}
+          </button>
+        {/each}
+      </div>
+      <div class="tt-stack" role="tabpanel" id={panelIds[mode]} aria-labelledby={tabIds[mode]}>
+        {#if mode === 'secret'}
+          {#if secret.step === 'done'}
+            <SecretDone {flow} {secret} {onnavigate} />
+          {:else}
+            <SecretForm {flow} {secret} {onnavigate} />
+          {/if}
+        {:else}
+          <TransferForm {flow} {onnavigate} />
+        {/if}
+      </div>
+    {:else}
+      <TransferForm {flow} {onnavigate} />
+    {/if}
   {:else if flow.step === 'preparing'}
     <PrepareStep {flow} />
   {:else if flow.step === 'resume'}
@@ -134,5 +227,39 @@
   /* The maintenance message keeps its line breaks (plain text, T-170). */
   .deposit-maintenance {
     white-space: pre-line;
+  }
+
+  /* Tab list of the form step: the selected tab is underlined (not by colour alone). */
+  .tt-deposit-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--tt-space-2);
+    border-bottom: var(--tt-border-width) solid var(--tt-border);
+  }
+
+  .tt-deposit-tab {
+    min-height: var(--tt-control-height);
+    padding: var(--tt-space-2) var(--tt-space-4);
+    border: 0;
+    border-bottom: 3px solid transparent;
+    margin-bottom: calc(-1 * var(--tt-border-width));
+    background: transparent;
+    color: var(--tt-text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .tt-deposit-tab[aria-selected='true'] {
+    border-bottom-color: var(--tt-primary);
+    font-weight: var(--tt-font-weight-bold);
+  }
+
+  .tt-deposit-tab:hover {
+    background: var(--tt-surface-muted);
+  }
+
+  .tt-deposit-tab:focus-visible {
+    outline: var(--tt-focus-width) solid var(--tt-focus);
+    outline-offset: 2px;
   }
 </style>

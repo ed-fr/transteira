@@ -414,6 +414,10 @@ export class DepositFlow {
   /** Real names (and plaintext SHA-256) of the files of the end-to-end encrypted transfer. */
   e2eFiles = $state.raw<E2EFileInfo[] | undefined>(undefined);
 
+  /** Tab of the form step: send files, or share a one-time secret (public/secret, since 2.1). */
+  mode = $state<'files' | 'secret'>('files');
+  /** Listeners of an explicit end of the session (onSessionEnd); not reactive. */
+  #sessionEndListeners: (() => void)[] = [];
   readonly tenant: PublicTenant;
   readonly invitation: InvitationContext | undefined;
   readonly reply: ReplyContext | undefined;
@@ -1160,6 +1164,19 @@ export class DepositFlow {
     this.step = 'email';
     this.notice = { key: 'deposit.session.ended' };
     if (this.reply !== undefined) this.replyEnded = true;
+    for (const listener of this.#sessionEndListeners) listener();
+  }
+
+  /**
+   * Registers a listener called when the depositor ends the session explicitly (endSession), not
+   * when it merely expires: the one-time secret flow then forgets its draft. Returns the function
+   * that removes the listener.
+   */
+  onSessionEnd(listener: () => void): () => void {
+    this.#sessionEndListeners = [...this.#sessionEndListeners, listener];
+    return () => {
+      this.#sessionEndListeners = this.#sessionEndListeners.filter((l) => l !== listener);
+    };
   }
 
   /** Stops background work (page left). */
@@ -1172,6 +1189,15 @@ export class DepositFlow {
     this.#disposeEngine();
     this.#clearE2E();
     this.#dropSealed();
+  }
+
+  /**
+   * Handles an error of a request made with this deposit session by another flow (the one-time
+   * secret creation, public/secret/createFlow.svelte.ts): maintenance and an expired session,
+   * exactly as for a transfer. Returns true when handled.
+   */
+  sessionError(err: unknown): boolean {
+    return (isProblem(err, 'maintenance') || isProblem(err, 'unauthenticated')) && this.#commonError(err);
   }
 
   // ---- Internals --------------------------------------------------------------------------

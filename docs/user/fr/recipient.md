@@ -186,6 +186,27 @@ Répondre depuis un navigateur met fin à tout envoi de fichiers déjà ouvert d
 
 > **Note** Si le bouton **Répondre** n’apparaît pas, ou si un refus s’affiche, écrivez simplement à l’expéditeur par mail.
 
+<!-- topic: secret-read -->
+## Lire un secret
+
+Un lien commençant par `/s/` vous donne accès à un secret à usage unique (mot de passe, clé, code). Ouvrez le lien **en entier** : sa fin, après le signe `#`, contient la clé qui déchiffre le secret. Sans elle, la page affiche **Lien incomplet**.
+
+![Page Lire un secret avant l’affichage, avec le champ Phrase de passe et le bouton Afficher le secret](../screenshots/fr/secret-reveal.png)
+
+Ouvrir la page ne consomme rien : le secret n’est lu que lorsque vous cliquez sur **Afficher le secret**. Préparez-vous donc à le copier. Si l’expéditeur l’a protégé par une phrase de passe, il vous l’a transmise par un autre canal : saisissez-la dans **Phrase de passe**. Vous avez 5 essais ; après le cinquième échec, le secret est détruit.
+
+![Page Votre secret, avec le texte du secret et le bouton Copier le secret](../screenshots/fr/secret-revealed.png)
+
+Le secret s’affiche alors, et il est **détruit sur le serveur** : copiez-le tout de suite avec **Copier le secret**, avant de quitter ou de recharger la page. **Masquer le texte** le cache à l’écran (pendant un partage d’écran, par exemple) sans empêcher de le copier. Un secret copié peut rester dans l’historique du presse-papiers de votre appareil : effacez-le une fois le secret utilisé.
+
+Si un fichier est joint, cliquez sur **Télécharger le fichier** : il ne peut l’être qu’**une seule fois, dans les 10 minutes** qui suivent l’affichage, puis il est supprimé du serveur. Comme il est chiffré par l’expéditeur, il n’est **pas analysé par l’antivirus** : ne l’ouvrez que si vous avez confiance en lui. Comparez au besoin son empreinte SHA-256 (voir [Vérifier qu’un fichier est intact](topic:download-integrity)).
+
+Les pages d’erreur possibles :
+
+- **Secret indisponible** : le secret a **déjà été lu** (si ce n’est pas vous, prévenez l’expéditeur), il a **expiré**, il a été **supprimé** par son expéditeur ou un administrateur, ou il a été **détruit après trop de phrases de passe erronées**. Demandez à l’expéditeur de le partager de nouveau.
+- **Lien incomplet** ou **Lien incorrect** : recopiez ou rouvrez le lien en entier depuis le message d’origine. Rien n’a été consommé.
+- **Lien inconnu** : le lien est faux ou incomplet.
+
 <!-- topic: download-problems -->
 ## Thème sombre
 

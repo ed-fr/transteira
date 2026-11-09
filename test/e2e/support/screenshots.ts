@@ -229,6 +229,25 @@ export const SCREENSHOT_CATALOG: readonly ScreenshotEntry[] = [
     profile: 'super-admin',
   },
   { name: 'maintenance', screen: 'public / (maintenance page)', profile: 'depositor' },
+  // One-time secrets (since 2.1).
+  { name: 'secret-create', screen: 'public / (secret creation form)', profile: 'depositor' },
+  {
+    name: 'secret-link-shown',
+    screen: 'public / (secret created: link shown once)',
+    profile: 'depositor',
+  },
+  {
+    name: 'secret-reveal',
+    screen: 'public /s/:token (before the reveal, passphrase field)',
+    profile: 'recipient',
+  },
+  { name: 'secret-revealed', screen: 'public /s/:token (secret revealed)', profile: 'recipient' },
+  {
+    name: 'admin-secret-settings',
+    screen: 'admin /admin/tenants/:id/secret-settings',
+    profile: 'delegated-admin',
+  },
+  { name: 'admin-secrets', screen: 'admin /admin/tenants/:id/secrets', profile: 'delegated-admin' },
 ];
 
 /** Directory of the screenshots (versioned). */

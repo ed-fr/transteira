@@ -12,6 +12,7 @@ import Legal from './screens/Legal.svelte';
 import MyTransfers from './screens/MyTransfers.svelte';
 import NotFound from './screens/NotFound.svelte';
 import ReplyScreen from './screens/ReplyScreen.svelte';
+import SecretReveal from './screens/SecretReveal.svelte';
 import type { ScreenComponent } from './screens/types';
 
 /** Routes of the public application. */
@@ -35,6 +36,12 @@ export const routes: readonly Route<ScreenComponent>[] = [
     component: DropLinkLanding,
     titleKey: 'dropLink.landing.title',
     helpTopic: 'drop-link',
+  },
+  {
+    pattern: '/s/:token',
+    component: SecretReveal,
+    titleKey: 'secret.reveal.title',
+    helpTopic: 'secret-read',
   },
   { pattern: '/invite', component: Invite, titleKey: 'invitation.invite.title', helpTopic: 'invite' },
   { pattern: '/me', component: MyTransfers, titleKey: 'myTransfers.title', helpTopic: 'my-transfers' },

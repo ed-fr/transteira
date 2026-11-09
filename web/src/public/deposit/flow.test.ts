@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createApiClient } from '../../shared/api/client';
+import { ApiProblem, createApiClient } from '../../shared/api/client';
 import type {
   UploadAnnouncement,
   UploadEngine,
@@ -1377,5 +1377,45 @@ describe('end of session', () => {
     expect(flow.notice).toEqual({ key: 'deposit.session.ended' });
     flow.newTransfer();
     expect(flow.step).toBe('email');
+  });
+
+  it('tells the session end listeners until they are removed', async () => {
+    const { flow } = await readyForm({ 'DELETE /deposit-sessions/current': { status: 204 } });
+    const kept = vi.fn();
+    const removed = vi.fn();
+    flow.onSessionEnd(kept);
+    const remove = flow.onSessionEnd(removed);
+    remove();
+    await flow.endSession();
+    expect(kept).toHaveBeenCalledOnce();
+    expect(removed).not.toHaveBeenCalled();
+  });
+});
+
+describe('errors of the secret creation (sessionError)', () => {
+  it('handles maintenance and an expired session only', async () => {
+    const { flow, clearCsrf } = await readyForm();
+    expect(flow.mode).toBe('files');
+    expect(
+      flow.sessionError(
+        new ApiProblem(429, { type: 'about:blank', title: 'x', status: 429, code: 'rate-limited' }),
+      ),
+    ).toBe(false);
+    expect(flow.retryAt).toBeUndefined();
+    expect(flow.sessionError(new Error('x'))).toBe(false);
+    expect(
+      flow.sessionError(
+        new ApiProblem(401, { type: 'about:blank', title: 'x', status: 401, code: 'unauthenticated' }),
+      ),
+    ).toBe(true);
+    expect(flow.step).toBe('email');
+    expect(flow.notice).toEqual({ key: 'deposit.session.expired' });
+    expect(clearCsrf).toHaveBeenCalled();
+    expect(
+      flow.sessionError(
+        new ApiProblem(503, { type: 'about:blank', title: 'x', status: 503, code: 'maintenance' }),
+      ),
+    ).toBe(true);
+    expect(flow.step).toBe('maintenance');
   });
 });

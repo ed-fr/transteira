@@ -153,5 +153,45 @@
       "label": "New download link",
       "copy": "Copy the link"
     }
+  },
+  "secrets": {
+    "title": "My secrets",
+    "intro": "Your one-time secrets, most recent first. Their content is never shown here: you only see their state. You can delete a secret as long as it has not been read.",
+    "caption": "One-time secrets",
+    "created": "Created",
+    "deliveryColumn": "Delivery",
+    "expires": "Expires",
+    "readAt": "Read",
+    "notRead": "Not read yet",
+    "file": "Attached file",
+    "fileSize": "Attached file, {size}",
+    "loadedMore": {
+      "one": "{count} more secret loaded.",
+      "other": "{count} more secrets loaded."
+    },
+    "state": {
+      "column": "State",
+      "pending": "Pending",
+      "active": "Available",
+      "read": "Read",
+      "expired": "Expired",
+      "deleted": "Deleted",
+      "locked": "Locked",
+      "unknown": "Unknown"
+    },
+    "delivery": {
+      "link": "Link to hand over",
+      "email": "By e-mail",
+      "emailTo": "By e-mail to {recipient}"
+    },
+    "delete": {
+      "button": "Delete",
+      "buttonFor": "the secret created on {date}",
+      "title": "Delete the secret",
+      "text": "The secret will be destroyed immediately and can no longer be read, even by someone who already has the link. This cannot be undone.",
+      "confirmButton": "Delete permanently",
+      "cancel": "Keep the secret",
+      "done": "Secret deleted."
+    }
   }
 }

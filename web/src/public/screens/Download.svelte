@@ -90,6 +90,8 @@
   // End-to-end encryption: the key bytes (never sent anywhere, kept in this component only). The
   // fragment is removed from the address bar at once: a reload then asks for the key.
   const keyFromLink = takeKeyFromLocation(window.location, window.history);
+  // The router still holds the fragment it read at the navigation: forget it there too.
+  onMount(() => nav.syncLocation());
   const cryptoAvailable = webCryptoAvailable();
   let keyBytes = $state.raw<Uint8Array | undefined>(keyFromLink);
   let keyText = $state('');

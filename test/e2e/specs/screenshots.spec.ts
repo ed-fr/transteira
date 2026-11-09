@@ -1264,3 +1264,91 @@ test.describe('super admin', () => {
     }
   });
 });
+
+test.describe('one-time secrets', () => {
+  const SENDER: Record<Lang, string> = { en: 'sam@example.com', fr: 'sacha@example.com' };
+  const SECRET: Record<Lang, string> = {
+    en: 'Wi-Fi password of the meeting room: Blue-Heron-4821',
+    fr: 'Mot de passe du Wi-Fi de la salle de réunion : Héron-Bleu-4821',
+  };
+  const PASSPHRASE: Record<Lang, string> = { en: 'rainy tuesday', fr: 'mardi pluvieux' };
+
+  /** Creates a secret through the public form (sender identified by a code); returns its link. */
+  async function createSecret(
+    page: Page,
+    lang: Lang,
+    opts: { passphrase?: string; shoot?: boolean } = {},
+  ): Promise<string> {
+    const email = SENDER[lang];
+    await page.goto(`${ORIGINS.a}/`);
+    await heading(page, lang, 'deposit.email.title');
+    await page.getByLabel(startsWith(msg(lang, 'deposit.email.label'))).fill(email);
+    const after = Date.now() - 2000;
+    await page.getByRole('button', { name: msg(lang, 'deposit.email.submit'), exact: true }).click();
+    await heading(page, lang, 'deposit.code.title');
+    await page.getByLabel(startsWith(msg(lang, 'deposit.code.label'))).fill(await waitForCode(email, after));
+    await page.getByRole('button', { name: msg(lang, 'deposit.code.submit'), exact: true }).click();
+    await heading(page, lang, 'deposit.form.title');
+
+    await page.getByRole('tab', { name: msg(lang, 'secretCreate.tabs.secret'), exact: true }).click();
+    await heading(page, lang, 'secretCreate.title');
+    await page.getByLabel(startsWith(msg(lang, 'secretCreate.text.label'))).fill(SECRET[lang]);
+    if (opts.passphrase !== undefined) {
+      await page.getByLabel(startsWith(msg(lang, 'secretCreate.passphrase.label'))).fill(opts.passphrase);
+    }
+    if (opts.shoot) {
+      // The capture starts at the secret field and ends after the passphrase (one viewport).
+      await page
+        .getByLabel(startsWith(msg(lang, 'secretCreate.text.label')))
+        .evaluate((el) => el.closest('.tt-field')?.scrollIntoView({ block: 'start' }));
+      await shoot(page, lang, 'secret-create');
+    }
+    await page.getByRole('button', { name: msg(lang, 'secretCreate.submit'), exact: true }).click();
+    await heading(page, lang, 'secretCreate.done.title');
+    const link = page.getByTestId('secret-done-link');
+    await expect(link).toBeVisible();
+    const url = ((await link.textContent()) ?? '').trim();
+    if (opts.shoot) await shoot(page, lang, 'secret-link-shown', [link]);
+    return url;
+  }
+
+  test('creation, link and reveal', async ({ newContext }) => {
+    test.setTimeout(180_000);
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang);
+      const url = await createSecret(page, lang, { passphrase: PASSPHRASE[lang], shoot: true });
+
+      // The recipient opens the link: nothing is consumed before "Show the secret".
+      const reader = await openPage(newContext, lang);
+      await reader.goto(`${ORIGINS.a}${pathOf(url)}`);
+      await heading(reader, lang, 'secret.reveal.title');
+      await reader.getByLabel(startsWith(msg(lang, 'secret.reveal.passphrase.label'))).fill(PASSPHRASE[lang]);
+      await shoot(reader, lang, 'secret-reveal');
+      await reader.getByRole('button', { name: msg(lang, 'secret.reveal.show'), exact: true }).click();
+      await heading(reader, lang, 'secret.reveal.revealed.title');
+      await expect(reader.locator('#tt-secret-text')).toHaveValue(SECRET[lang]);
+      await shoot(reader, lang, 'secret-revealed');
+    }
+  });
+
+  test('settings and list of an entity', async ({ newContext, state }) => {
+    test.setTimeout(180_000);
+    // A second, unread secret per language so that the list shows several states.
+    for (const lang of LANGS) {
+      await createSecret(await openPage(newContext, lang), lang);
+    }
+    for (const lang of LANGS) {
+      const page = await openPage(newContext, lang, STORAGE_DELEGATE);
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/secret-settings`);
+      await heading(page, lang, 'adminTenants.secrets.title');
+      await shoot(page, lang, 'admin-secret-settings');
+      await page.goto(`${ORIGINS.admin}/admin/tenants/${state.tenants.a.id}/secrets`);
+      await heading(page, lang, 'adminOps.secrets.title');
+      const table = page.getByRole('table');
+      await expect(table).toBeVisible();
+      // Filters and table in one viewport.
+      await table.evaluate((el) => el.scrollIntoView({ block: 'end' }));
+      await shoot(page, lang, 'admin-secrets');
+    }
+  });
+});

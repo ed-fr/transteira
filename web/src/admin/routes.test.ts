@@ -49,6 +49,8 @@ describe('admin routes', () => {
       'auth',
       'tenant-confidentiality',
     ],
+    ['/admin/tenants/ten_1/secret-settings', '/tenants/:id/secret-settings', 'auth', 'tenant-secrets'],
+    ['/admin/tenants/ten_1/secrets', '/tenants/:id/secrets', 'auth', 'tenant-secrets'],
     ['/admin/tenants/ten_1/abuse', '/tenants/:id/abuse', 'auth', 'tenant-abuse'],
     ['/admin/tenants/ten_1/abuse-reports', '/tenants/:id/abuse-reports', 'auth', 'tenant-abuse-reports'],
     ['/admin/tenants/ten_1/smtp', '/tenants/:id/smtp', 'auth', 'tenant-smtp'],

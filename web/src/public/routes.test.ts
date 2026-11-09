@@ -9,6 +9,7 @@ describe('public routes', () => {
     ['/d/dl_abc/reply', '/d/:token/reply'],
     ['/i/inv_abc', '/i/:token'],
     ['/drop/ttd_abc', '/drop/:token'],
+    ['/s/tts_abc', '/s/:token'],
     ['/invite', '/invite'],
     ['/me', '/me'],
     ['/legal/legal-notice', '/legal/:document'],

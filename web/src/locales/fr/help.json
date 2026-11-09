@@ -63,6 +63,19 @@
         "off": "Les fichiers ne sont pas analysés par un antivirus : la page de téléchargement l’indique."
       }
     },
+    "secrets": {
+      "off": "Les secrets à usage unique ne sont pas disponibles.",
+      "durations": "Un secret à usage unique peut être conservé : {durations}.",
+      "file": {
+        "on": "Un secret peut contenir un petit fichier, de {size} au plus (il n’est pas analysé par l’antivirus).",
+        "off": "Un secret ne peut pas contenir de fichier."
+      },
+      "email": {
+        "on": "Le lien d’un secret peut être envoyé par mail.",
+        "off": "Le lien d’un secret ne peut pas être envoyé par mail : vous le transmettez vous-même.",
+        "passphrase": "Un secret envoyé par mail doit avoir une phrase de passe."
+      }
+    },
     "levels": {
       "intro": "Niveaux de confidentialité que vous pouvez choisir :",
       "default": "(par défaut)",

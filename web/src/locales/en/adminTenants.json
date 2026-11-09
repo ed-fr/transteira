@@ -36,6 +36,7 @@
     "legal": "Legal information",
     "recipientRules": "Recipient domains",
     "confidentiality": "Confidentiality levels",
+    "secretSettings": "Secrets settings",
     "abuse": "Abuse detection",
     "summary": "Summary",
     "sso": "Single sign-on"
@@ -825,5 +826,9 @@
     "forbidden": "Forbidden",
     "allowed": "Allowed",
     "required": "Required"
+  },
+  "secrets": {
+    "title": "Secrets settings",
+    "intro": "One-time secrets are encrypted in their author’s browser: the server never reads them. Choose here what this entity offers to its users."
   }
 }

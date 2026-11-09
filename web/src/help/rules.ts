@@ -47,6 +47,27 @@ export function limitItems(rules: Pick<HelpTenantRules, 'limits'>, fmt: RulesFor
   ];
 }
 
+/** Rules of the one-time secrets module in words (empty with a server that does not send them). */
+export function secretItems(rules: Pick<HelpTenantRules, 'features'>, fmt: RulesFormat): string[] {
+  const secrets = rules.features?.secrets;
+  if (secrets === undefined) return [];
+  if (!secrets.enabled) return [fmt.t('help.rules.secrets.off')];
+  const durations = fmt.list(secrets.durations.map((d) => fmt.t(`secretCreate.duration.${d}`)));
+  const items = [fmt.t('help.rules.secrets.durations', { durations })];
+  items.push(
+    secrets.fileAllowed
+      ? fmt.t('help.rules.secrets.file.on', { size: fmt.bytes(secrets.fileMaxBytes) })
+      : fmt.t('help.rules.secrets.file.off'),
+  );
+  if (!secrets.emailAllowed) {
+    items.push(fmt.t('help.rules.secrets.email.off'));
+  } else {
+    items.push(fmt.t('help.rules.secrets.email.on'));
+    if (secrets.emailRequiresPassphrase === true) items.push(fmt.t('help.rules.secrets.email.passphrase'));
+  }
+  return items;
+}
+
 /**
  * Overview of the rules: size and durations, then the options that are on or off for the tenant
  * (absent with a server that does not send them).
@@ -64,6 +85,7 @@ export function summaryItems(rules: HelpTenantRules, fmt: RulesFormat): string[]
     fmt.t(`help.rules.features.recipientRestrictions.${features.recipientRestrictions ? 'on' : 'off'}`),
   );
   items.push(fmt.t(`help.rules.features.antivirus.${features.antivirus === 'disabled' ? 'off' : 'on'}`));
+  items.push(...secretItems(rules, fmt));
   return items;
 }
 

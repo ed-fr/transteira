@@ -513,6 +513,25 @@ After 5 failed deliveries in a row, a webhook is **Suspended** for 15 minutes: t
 
 The alerts never contain a file name, a link to a transfer or a password. They contain no email address either, unless **Include addresses in webhooks** is ticked on the [General](topic:tenant-general) screen.
 
+<!-- topic: tenant-secrets -->
+### One-time secrets
+
+One-time secrets let people pass on a password, a key or a code, encrypted in the author's browser: you **never see their content**, link or passphrase. Two screens in the entity menu deal with them.
+
+The **Secrets settings** screen (**One-time secrets**) sets the rules:
+
+- **Enable one-time secrets**: disabling the module refuses new secrets; existing ones stay readable until they end.
+- **Offered durations** (at least one) and **Default duration**, which must be one of the offered durations.
+- **Allow an attached file** and **Maximum file size (MiB)**, from 1 to 25 MiB. The file is encrypted in the browser and is not scanned by the antivirus.
+- **Allow delivery by e-mail**: the server sends the link to a recipient; otherwise the author hands the link over.
+- **Require a passphrase for e-mail delivery**: the secret must then be protected by a passphrase, to be passed on through another channel.
+
+![Secrets settings screen with the switch, the durations, the attached file and delivery by e-mail](../screenshots/en/admin-secret-settings.png)
+
+The **One-time secrets** screen lists the secrets of the entity, most recent first: **Created**, **Author**, **Delivery**, **File**, **State**, **Expiry** and **Read**. Filter by **State** or by **Author address** (exact address). For a **Pending** or **Active** secret, **Delete** destroys it at once, for good. Creations, reads and deletions are recorded in the [audit log](topic:tenant-audit).
+
+![List of one-time secrets with the filters, the state, the expiry and the Delete button](../screenshots/en/admin-secrets.png)
+
 <!-- topic: tenant-audit -->
 ### Audit log
 

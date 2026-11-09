@@ -163,6 +163,11 @@ L’écran **Liens de dépôt** liste en lecture seule les liens de dépôt perm
 
 Vous ne pouvez ni créer, ni modifier, ni renouveler, ni révoquer un lien. Le secret d’un lien, qui fait partie de son adresse, ne vous est jamais montré.
 
+<!-- topic: auditor-tenant-secrets -->
+## Secrets à usage unique
+
+L’écran **Secrets à usage unique** liste, en lecture seule, les secrets de l’entité, du plus récent au plus ancien : **Création**, **Auteur**, **Remise**, **Fichier**, **État** (**En attente**, **Actif**, **Lu**, **Expiré**, **Supprimé** ou **Verrouillé**), **Expiration** et **Lecture**. Filtrez par **État** ou par **Adresse de l’auteur**. Vous ne voyez jamais le contenu d’un secret, son lien ni sa phrase de passe, et vous ne pouvez supprimer aucun secret. Les réglages des secrets ne vous sont pas proposés.
+
 <!-- topic: auditor-account -->
 ## Mon compte
 

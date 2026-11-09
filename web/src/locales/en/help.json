@@ -63,6 +63,19 @@
         "off": "Files are not checked by an antivirus: the download page says so."
       }
     },
+    "secrets": {
+      "off": "One-time secrets are not available.",
+      "durations": "A one-time secret can be kept for: {durations}.",
+      "file": {
+        "on": "A secret can carry a small file, {size} at most (it is not checked by the antivirus).",
+        "off": "A secret cannot carry a file."
+      },
+      "email": {
+        "on": "The link of a secret can be sent by e-mail.",
+        "off": "The link of a secret cannot be sent by e-mail: you pass it on yourself.",
+        "passphrase": "A secret sent by e-mail must have a passphrase."
+      }
+    },
     "levels": {
       "intro": "Confidentiality levels you can choose:",
       "default": "(default)",

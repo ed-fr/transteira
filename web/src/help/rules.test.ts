@@ -7,6 +7,7 @@ import {
   levelRuleItems,
   levelViews,
   limitItems,
+  secretItems,
   summaryItems,
   type HelpLevel,
   type HelpTenantRules,
@@ -61,6 +62,49 @@ const tenant: HelpTenantRules = {
   ],
 };
 
+describe('secret rules in words', () => {
+  const secrets = {
+    enabled: true,
+    durations: ['1h', '7d'] as ('1h' | '7d')[],
+    defaultDuration: '1h' as const,
+    fileAllowed: true,
+    fileMaxBytes: 2048,
+    emailAllowed: true,
+    emailRequiresPassphrase: true,
+  };
+  const withSecrets = (s: typeof secrets): HelpTenantRules => ({
+    ...tenant,
+    features: { ...features, secrets: s },
+  });
+
+  it('says nothing without secret features', () => {
+    expect(secretItems(tenant, fmt)).toEqual([]);
+  });
+
+  it('says only that the module is off when disabled', () => {
+    expect(secretItems(withSecrets({ ...secrets, enabled: false }), fmt)).toEqual(['help.rules.secrets.off']);
+  });
+
+  it('gives durations, file and e-mail rules', () => {
+    expect(secretItems(withSecrets(secrets), fmt)).toEqual([
+      'help.rules.secrets.durations{"durations":"secretCreate.duration.1h + secretCreate.duration.7d"}',
+      'help.rules.secrets.file.on{"size":"2048B"}',
+      'help.rules.secrets.email.on',
+      'help.rules.secrets.email.passphrase',
+    ]);
+    expect(
+      secretItems(withSecrets({ ...secrets, fileAllowed: false, emailAllowed: false }), fmt).slice(1),
+    ).toEqual(['help.rules.secrets.file.off', 'help.rules.secrets.email.off']);
+    expect(secretItems(withSecrets({ ...secrets, emailRequiresPassphrase: false }), fmt)).not.toContain(
+      'help.rules.secrets.email.passphrase',
+    );
+  });
+
+  it('adds them to the summary', () => {
+    expect(summaryItems(withSecrets(secrets), fmt).at(-1)).toBe('help.rules.secrets.email.passphrase');
+  });
+});
+
 describe('rules in words', () => {
   it('words the durations like the deposit form', () => {
     expect(durationsText([1, 7], fmt)).toBe(
@@ -86,6 +130,7 @@ describe('rules in words', () => {
       'help.rules.features.recipientRestrictions.on',
       'help.rules.features.antivirus.on',
     ]);
+    expect(items.some((i) => i.startsWith('help.rules.secrets'))).toBe(false);
     const off = summaryItems(
       {
         ...tenant,

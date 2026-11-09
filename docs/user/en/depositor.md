@@ -221,6 +221,31 @@ Good to know:
 - The server still sees the size and number of files, the sender, the recipients and the dates.
 - A recent browser is required (encryption, background tasks and data streams). Without it, the box cannot be used.
 
+<!-- topic: secret-share -->
+## Share a secret
+
+To pass on a password, a key or a code, prefer a one-time secret to a file transfer. The secret is encrypted in your browser: the server never sees it in clear. It can be read only once, then it is destroyed; it is also destroyed when it expires, even if nobody has read it.
+
+Once you are identified on the sending page (see [Identify yourself with a code](topic:deposit-identify)), choose the **Share a secret** tab. It only appears if your organisation has turned secrets on.
+
+![Share a secret form with the Secret field, the validity, how the link is delivered and the passphrase, with the file choice](../screenshots/en/secret-create.png)
+
+1. Enter the **Secret**: 10,000 characters at most. It can stay empty if you attach a file.
+1. Choose the duration in **Valid for** (from 1 hour to 30 days, depending on the durations your organisation offers).
+1. Say how the recipient gets the link: **I copy the link myself**, or **Send the link by email** to a single address (if your organisation allows it).
+1. Add a **Passphrase** if you wish. The recipient will need it to read the secret, and it is never sent to the server. Give it **through another channel** than the link (phone, text message, in person): when the link is sent by email, a passphrase may be required.
+1. Attach a **File** if needed: a small file only (the maximum size is shown under the field). It is encrypted in your browser, so the antivirus does not scan it; the recipient is told so.
+1. Check **Notify me by email when the secret is read** to get a read receipt. You are also told if the secret expires unread, or is locked after too many wrong passphrases.
+1. Click **Create the secret**.
+
+With **I copy the link myself**, the **Secret created** screen shows the full link, key included. **This link is shown only once**: click **Copy the link** before leaving this screen: the link is forgotten as soon as you switch to the other tab, create another secret, end the session or leave the page. The copied link can stay in the clipboard history of your device: clear it once you have passed it on. Anyone who has the link can read the secret once, so pass it on through a trusted channel. With delivery by email, the link goes straight to the recipient and is not shown.
+
+![Secret created screen with the full link shown once and the Copy the link button](../screenshots/en/secret-link-shown.png)
+
+### My secrets
+
+In [My transfers](topic:my-transfers), the **My secrets** section lists your secrets, most recent first, with their state (**Pending**, **Available**, **Read**, **Expired**, **Deleted** or **Locked**). Their content is never shown there, and the link cannot be recovered. As long as a secret has not been read, click **Delete**: it is destroyed at once, even if the recipient already has the link.
+
 <!-- topic: my-transfers -->
 ## My transfers
 
