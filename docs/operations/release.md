@@ -50,7 +50,12 @@ in the repository (`.gitignore` and gitleaks refuse them). Keep `cosign.key` out
 and point `COSIGN_KEY` at it.
 
 `make release-keygen` refuses to overwrite an existing `cosign.key`, only changes the mode of a
-folder it created, and warns when it replaces an existing `cosign.pub`.
+folder it created, and warns when it replaces an existing `cosign.pub`. cosign asks for the
+password itself (leave `COSIGN_PASSWORD` unset): a key that opens with the empty password is
+deleted at once and the command fails, and `make release` refuses such a key. Up to 2.0.0 the
+script passed an empty `COSIGN_PASSWORD` to cosign, which then created the key **without
+password** without asking: check a key made with an earlier version with
+`COSIGN_PASSWORD= cosign public-key --key cosign.key` (it must fail).
 
 The public key is published through several channels so that a single compromised channel is
 detectable: the repository, the GitHub release assets, and its **SHA-256 fingerprint**
@@ -60,8 +65,8 @@ exactly this value. Also put the fingerprint in the **Docker Hub repository desc
 outside GitHub (manual step).
 
 `COSIGN_KEY` is resolved with `realpath` (symlinks followed), must be **outside the repository**,
-with mode `0600` (refused if group or other bits are set), and its public key must equal
-`cosign.pub`.
+with mode `0600` (refused if group or other bits are set), must have a password, and its public
+key must equal `cosign.pub`.
 
 **Rotation or revocation** (scheduled, loss, suspected theft): follow the procedure in
 [SECURITY.md](../../SECURITY.md#signing-key-compromise-revocation-and-replacement): new key pair,

@@ -77,8 +77,25 @@ die() {
 }
 
 # The key password reaches cosign only, never the other child processes (docker, make, syft).
+# An unset COSIGN_PASSWORD is not passed at all: cosign then asks for the password itself, whereas
+# an empty variable would silently be used as the password (a key without password at keygen).
 # shellcheck disable=SC2206 # deliberate word splitting of the command variables
-cosign() { local -a c=($COSIGN); COSIGN_PASSWORD="${COSIGN_PASSWORD-}" "${c[@]}" "$@"; }
+cosign() {
+	local -a c=($COSIGN)
+	if [ -n "${COSIGN_PASSWORD+set}" ]; then
+		COSIGN_PASSWORD="$COSIGN_PASSWORD" "${c[@]}" "$@"
+	else
+		"${c[@]}" "$@"
+	fi
+}
+
+# Succeeds when the cosign private key $1 opens with the empty password (no password).
+key_without_password() {
+	(
+		COSIGN_PASSWORD=""
+		cosign public-key --key "$1"
+	) >/dev/null 2>&1
+}
 # shellcheck disable=SC2206
 syft() { local -a c=($SYFT); "${c[@]}" "$@"; }
 
@@ -157,6 +174,8 @@ require_key() {
 	esac
 	mode="$(file_mode "$key")"
 	[ $((8#$mode & 8#077)) -eq 0 ] || die "COSIGN_KEY ($key) has mode $mode: chmod 600 it"
+	! key_without_password "$key" ||
+		die "COSIGN_KEY ($key) has no password: add one (docs/operations/release.md) before signing a release"
 	pub="$(cosign public-key --key "$key")" || die "cannot read the public key of COSIGN_KEY (wrong password?)"
 	[ "$(printf '%s\n' "$pub" | tr -d '\r')" = "$(tr -d '\r' <cosign.pub)" ] ||
 		die "COSIGN_KEY does not match cosign.pub"
@@ -400,6 +419,8 @@ mode_dry() {
 	BUILDER_NETWORK="host"
 	cosign generate-key-pair --output-key-prefix "$WORK/dry" >/dev/null
 	key="$WORK/dry.key"
+	# Self-test of the check of keygen and release: this throwaway key has no password.
+	key_without_password "$key" || die "key_without_password does not detect a key without password"
 	PUBKEY="$WORK/dry.pub"
 	publish "$repo" "$version" "$(git rev-parse HEAD)" "$key" "$WORK/out" 0
 
@@ -429,6 +450,10 @@ mode_keygen() {
 	log "creating the cosign key pair in $dir (cosign asks for its password: keep it in the password vault)"
 	(cd "$dir" && cosign generate-key-pair)
 	chmod 600 "$dir/cosign.key"
+	if key_without_password "$dir/cosign.key"; then
+		rm -f "$dir/cosign.key" "$dir/cosign.pub"
+		die "the key pair was created without password and is deleted: run again and type a password"
+	fi
 	cp "$dir/cosign.pub" "$ROOT/cosign.pub"
 	log "wrote $dir/cosign.key (private: vault copy, never in the repository) and cosign.pub (commit it)"
 	log "publish its fingerprint: ${FINGERPRINT_PREFIX}$(sha256_of "$ROOT/cosign.pub")"

@@ -20,6 +20,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
   at the top of `README.md` and `README.fr.md`; administration screenshots of the user guides
   regenerated.
 
+### Fixed
+
+- `make release-keygen` created the cosign key **without password**: the script passed an empty
+  `COSIGN_PASSWORD` to cosign, which uses it without asking. An unset `COSIGN_PASSWORD` is no
+  longer passed (cosign asks for the password), a key that opens with the empty password is
+  deleted by `make release-keygen` and refused by `make release`, and the release dry run checks
+  this detection. The 2.0.0 signing key was given a password before the release (same key pair,
+  `cosign.pub` unchanged).
+
 ## [2.0.0] - 2026-11-08
 
 The V2 scope of the specification (CLAUDE.md section 2, "enterprise"), on top of 1.0, 1.1 and
