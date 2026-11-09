@@ -26,7 +26,8 @@ type repo interface {
 	deleteSenderAccess(ctx context.Context, tid tenant.ID, email string, mac []byte) (int64, error)
 	deleteVerified(ctx context.Context, tid tenant.ID, email string) (bool, error)
 	removeRecipient(ctx context.Context, tid tenant.ID, trfID, email string) (recipientOutcome, error)
-	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error)
+	eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (invitationErasure, error)
+	countSecrets(ctx context.Context, tid tenant.ID, email string) (int, error)
 	countDropLinks(ctx context.Context, tid tenant.ID, email string) (int, error)
 	eraseDropLinks(ctx context.Context, tid tenant.ID, email string, now time.Time) (store.DropLinkErasure, error)
 	countProofs(ctx context.Context, tid tenant.ID, email string) (int, error)
@@ -35,6 +36,15 @@ type repo interface {
 	pseudonymiseAudit(ctx context.Context, tid tenant.ID, email, pseudonym string) (int64, error)
 	scrub(ctx context.Context) error
 	audit(ctx context.Context, tid tenant.ID, ev audit.Event) error
+}
+
+// invitationErasure is what [repo.eraseInvitations] did.
+type invitationErasure struct {
+	// invitations counts the invitations deleted.
+	invitations int64
+	// secrets is the erasure of the one-time secrets of the address, done in
+	// the same transaction, before its invitations.
+	secrets store.SecretErasure
 }
 
 // recipientOutcome is what [repo.removeRecipient] did.
@@ -55,12 +65,15 @@ const (
 type storeRepo struct {
 	db     *store.DB
 	writer *audit.Writer
+	// vault destroys the keys of the secrets erased.
+	vault store.SecretKeys
 }
 
 // newStoreRepo returns the store implementation of repo, recording with
-// writer (a writer of its own when nil).
-func newStoreRepo(db *store.DB, writer *audit.Writer) *storeRepo {
-	return &storeRepo{db: db, writer: audit.OrNew(writer, db)}
+// writer (a writer of its own when nil) and destroying the keys of the
+// secrets with vault.
+func newStoreRepo(db *store.DB, writer *audit.Writer, vault store.SecretKeys) *storeRepo {
+	return &storeRepo{db: db, writer: audit.OrNew(writer, db), vault: vault}
 }
 
 func (r *storeRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
@@ -181,24 +194,36 @@ func (r *storeRepo) removeRecipient(ctx context.Context, tid tenant.ID, trfID, e
 	return out, nil
 }
 
-// eraseInvitations deletes the invitations that invited email and
-// pseudonymises (and revokes) those it issued, in one transaction, and
-// returns how many it deleted.
-func (r *storeRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error) {
+// eraseInvitations deletes the one-time secrets created by or addressed to
+// email (their rows, then their keys), then the invitations that invited
+// email, and pseudonymises (and revokes) those it issued, in one
+// transaction. The secrets go first: those of an external reference their
+// invitation. It returns what it deleted; the files of the secrets are
+// removed by the caller.
+func (r *storeRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (invitationErasure, error) {
 	sc, err := r.db.Scoped(tid)
 	if err != nil {
-		return 0, err
+		return invitationErasure{}, err
 	}
-	var n int64
+	var out invitationErasure
 	err = sc.Tx(ctx, func(tx *store.ScopedTx) error {
 		var err error
-		if n, err = r.db.Invitations().DeleteByEmailTx(ctx, tx, email); err != nil {
+		if out.secrets, err = r.db.Secrets(r.vault).DeleteByAddressTx(ctx, tx, email); err != nil {
+			return err
+		}
+		if out.invitations, err = r.db.Invitations().DeleteByEmailTx(ctx, tx, email); err != nil {
 			return err
 		}
 		_, err = r.db.Invitations().PseudonymiseInviterTx(ctx, tx, email, pseudonym, now)
 		return err
 	})
-	return n, err
+	return out, err
+}
+
+// countSecrets counts the one-time secrets, in every state, created by or
+// addressed to email (since 2.1).
+func (r *storeRepo) countSecrets(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	return r.db.Secrets(nil).CountByAddress(ctx, tid, email)
 }
 
 // eraseAbuse deletes the abuse alert deduplication rows of email and

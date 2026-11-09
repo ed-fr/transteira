@@ -174,10 +174,30 @@ func (s *Server) GetPublicTenant(ctx context.Context, req gen.GetPublicTenantReq
 		Antivirus:             antivirus,
 		LinkOnly:              &t.LinkOnlyAllowed,
 		E2ePolicy:             e2eFeature(t.E2EPolicy),
+		Secrets:               secretFeatures(t),
 	}
 	return gen.GetPublicTenant200JSONResponse{
 		Body: body, Headers: gen.GetPublicTenant200ResponseHeaders{ContentLanguage: &lang},
 	}, nil
+}
+
+// secretFeatures renders the one-time secrets settings of t as the real
+// rules of the creation form (since 2.1): the default duration is always
+// given, resolved to the shortest offered one when the tenant chose none.
+func secretFeatures(t *tenant.Tenant) *gen.SecretFeatures {
+	in := tenantadmin.PublicSecretFeatures(t)
+	out := &gen.SecretFeatures{
+		Enabled: in.Enabled, Durations: make([]gen.SecretDuration, len(in.Durations)),
+		FileAllowed:  in.FileAllowed,
+		FileMaxBytes: in.FileMaxBytes, EmailAllowed: in.EmailAllowed, EmailRequiresPassphrase: new(in.EmailRequiresPassphrase),
+	}
+	for i, d := range in.Durations {
+		out.Durations[i] = gen.SecretDuration(d)
+	}
+	if in.DefaultDuration != "" {
+		out.DefaultDuration = new(gen.SecretDuration(in.DefaultDuration))
+	}
+	return out
 }
 
 // e2eFeature renders an end-to-end encryption policy; an unknown value is

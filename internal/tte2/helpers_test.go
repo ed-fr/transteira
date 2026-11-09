@@ -80,6 +80,8 @@ var errorNames = []struct {
 	{ErrEncoding, "ErrEncoding"},
 	{ErrInvalidMetadata, "ErrInvalidMetadata"},
 	{ErrInvalidMessage, "ErrInvalidMessage"},
+	{ErrInvalidSecret, "ErrInvalidSecret"},
+	{ErrInvalidPassphrase, "ErrInvalidPassphrase"},
 	{ErrInvalidState, "ErrInvalidState"},
 	{ErrInvalidKey, "ErrInvalidKey"},
 	{ErrInvalidIndex, "ErrInvalidIndex"},

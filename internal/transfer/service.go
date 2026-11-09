@@ -459,6 +459,24 @@ func (s *Service) checkEligible(ctx context.Context, t *tenant.Tenant, sender Se
 	return email, forced{}, nil
 }
 
+// CheckCreator applies to sender, for a deposit other than a transfer, the
+// eligibility rules a transfer creation applies (see checkEligible): the
+// blocklist, the internal rule from the current client IP, the remote rule
+// of an internal sender from outside, the invitation of an external sender
+// and the allowed senders of an API token (whose Email the caller sets to
+// the declared sender address). It returns the normalized address. A reply
+// sender and a drop link sender are refused with ErrForbidden before any
+// check and without a security event: they may deposit a transfer only
+// (since 2.1, the one-time secrets of package secret use it). The other
+// refusals are those of checkEligible, logged the same way.
+func (s *Service) CheckCreator(ctx context.Context, t *tenant.Tenant, sender Sender) (string, error) {
+	if sender.Kind == store.DepositorReply || sender.Kind == store.DepositorDropLink {
+		return "", ErrForbidden
+	}
+	email, _, err := s.checkEligible(ctx, t, sender)
+	return email, err
+}
+
 // forced is what the eligibility of checkEligible imposes on a transfer:
 // the recipients of an external, reply or drop link sender (nil for an
 // internal sender, who names them), and the drop link of a drop link

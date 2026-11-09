@@ -62,7 +62,7 @@ automatically.
 | Host | `passHostHeader: true` (default). |
 | HSTS | `transteira-hsts` middleware: `stsSeconds: 31536000`, `stsIncludeSubdomains: false` ([about `includeSubDomains`](../README.md#hsts-and-includesubdomains)). |
 | Compression | `transteira-compress` middleware (`zstd`, `gzip`) with `includedContentTypes` limited to HTML, CSS, JavaScript, JSON and SVG, applied only to the `transteira` and `transteira-tokens` routers: the uploads (`/api/v1/uploads`) and downloads (`/api/v1/downloads/`) routers have no compression. |
-| Tokens in the logs | Traefik cannot rewrite a logged path. The routers whose path carries a token, `transteira-downloads` (`/api/v1/downloads/`) and `transteira-tokens` (`/d/`, `/i/`, `/drop/`, `/api/v1/invitations/`, `/api/v1/drop-links/`), set `observability.accessLogs: false`: their requests are not in the access log. Request headers are never logged (`fields.headers.defaultMode: drop`). |
+| Tokens in the logs | Traefik cannot rewrite a logged path. The routers whose path carries a token, `transteira-downloads` (`/api/v1/downloads/`) and `transteira-tokens` (`/d/`, `/i/`, `/s/`, `/drop/`, `/api/v1/invitations/`, `/api/v1/drop-links/`, `/api/v1/secret-links/`), set `observability.accessLogs: false`: their requests are not in the access log. Request headers are never logged (`fields.headers.defaultMode: drop`). |
 
 Routers and priorities: `transteira` (priority 10) catches everything; the
 three path routers (priority 100) take precedence for their paths.

@@ -195,6 +195,17 @@ func (r *WrappedKeys) Get(ctx context.Context, tid tenant.ID, wkID string) (Wrap
 	return k, nil
 }
 
+// GetTx is [WrappedKeys.Get] inside tx, for the tenant tx is bound to (a
+// key read in the transaction that uses it, such as the reveal of a
+// one-time secret). After an error the caller must abort tx.
+func (r *WrappedKeys) GetTx(ctx context.Context, tx *ScopedTx, wkID string) (WrappedKey, error) {
+	k, err := scanWrappedKey(tx.QueryRow(ctx, qWrappedKeyGet, wkID))
+	if err != nil {
+		return WrappedKey{}, wrap("get wrapped key", err)
+	}
+	return k, nil
+}
+
 // Delete destroys the wrapped key wkID of tenant tid in its own
 // transaction (see [WrappedKeys.DeleteTx]).
 func (r *WrappedKeys) Delete(ctx context.Context, tid tenant.ID, wkID string) error {

@@ -113,6 +113,9 @@ const (
 	// DropLink identifies a permanent drop link record (since 2.0, OpenAPI
 	// DropLink.id), not its bearer token ("ttd_" + base62).
 	DropLink Prefix = "drl"
+	// Secret identifies a one-time secret record (since 2.1, OpenAPI
+	// SecretId), not its bearer token ("tts_" + 43 base62 characters).
+	Secret Prefix = "sec"
 )
 
 // ulidLen is the length of the encoded ULID part of an entity identifier.

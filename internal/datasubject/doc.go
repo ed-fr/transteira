@@ -34,7 +34,11 @@
 //     holds the transfer, so that a transfer still scanning never mails it.
 //     The status does not matter: an ended transfer (expired, deleted,
 //     rejected) is handled the same way, and no row keeps the address;
-//  4. the invitations of which it is the invitee are deleted; those it
+//  4. the one-time secrets created by or addressed to the address are
+//     deleted with their keys, in the same transaction as, and before, its
+//     invitations (those of an external reference their invitation; since
+//     2.1); their files are removed ([Options.Files]); the invitations of
+//     which it is the invitee are deleted; those it
 //     issued are revoked and their issuer replaced by the pseudonym;
 //     In the same step (since 2.0) the address is removed from the
 //     recipients of the permanent drop links, revoked ones included; a

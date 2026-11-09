@@ -106,10 +106,11 @@ var (
 	ErrTenantNotDeleting = errors.New("lifecycle: tenant deletion not started")
 )
 
-// Vault destroys wrapped keys inside a transaction. *masterkey.Vault
-// implements it.
+// Vault destroys wrapped keys inside a transaction, and serves the store
+// of the one-time secrets, whose sweeps create, open and destroy keys
+// (store.SecretKeys). *masterkey.Vault implements it.
 type Vault interface {
-	DestroyTx(ctx context.Context, tx *store.ScopedTx, wkID string) error
+	store.SecretKeys
 }
 
 // Remover erases the files of a transfer and reports its upload activity.
@@ -136,6 +137,7 @@ type Files interface {
 	RemoveState(tid tenant.ID, name string) error
 	RemoveTemp(tid tenant.ID, file string) error
 	RemoveTenantDir(tid tenant.ID) error
+	RemoveSecretFile(tid tenant.ID, name string) error
 }
 
 // HoldIntent tells the antivirus worker why a transfer is held, which
@@ -237,6 +239,12 @@ type Options struct {
 	// BackupKeep is the number of copies kept (TT_BACKUP_KEEP,
 	// DefaultBackupKeep).
 	BackupKeep int
+	// SecretExpired, when set, is called with each secret that TaskExpire
+	// expired, after its keys were destroyed and its file removed: the
+	// tombstone carries the sender, the recipient and the read receipt
+	// choice, for the receipt mail of an unread secret. It must not block;
+	// nil does nothing.
+	SecretExpired func(ctx context.Context, e store.EndedSecret)
 	// Now is the clock of the decisions and of the backup schedule
 	// (time.Now when nil).
 	Now func() time.Time
@@ -270,8 +278,10 @@ type Sweeper struct {
 	mailer   MailQueue
 	opener   Opener
 	fs       backupFS
-	now      func() time.Time
-	logger   *slog.Logger
+	// secretExpired is Options.SecretExpired.
+	secretExpired func(ctx context.Context, e store.EndedSecret)
+	now           func() time.Time
+	logger        *slog.Logger
 
 	endedRetention time.Duration
 	orphanGrace    time.Duration
@@ -345,7 +355,7 @@ func New(deps Deps, opts Options) *Sweeper {
 		repo:    storeRepo{db: deps.DB, vault: deps.Vault, writer: deps.Audit},
 		remover: deps.Remover, files: deps.Files, holder: holder, fs: osFS(),
 		notifier: deps.Notifier, mailer: deps.Mail, opener: deps.Opener,
-		now: opts.Now, logger: opts.Logger,
+		now: opts.Now, logger: opts.Logger, secretExpired: opts.SecretExpired,
 		endedRetention:       orDefault(opts.EndedRetention, EndedRetention),
 		orphanGrace:          orDefault(opts.OrphanGrace, OrphanGrace),
 		scanningMaxAge:       orDefault(opts.ScanningMaxAge, store.ScanningMaxAge),
@@ -366,8 +376,8 @@ func New(deps Deps, opts Options) *Sweeper {
 	interval := orDefault(opts.Interval, DefaultInterval)
 	s.tasks = []*task{
 		{TaskDeleteAfterDownload, interval, true, s.erasureTask(kindDelete)},
-		{TaskExpire, interval, true, s.erasureTask(kindExpire)},
-		{TaskAbandonedUploads, orDefault(opts.AbandonedInterval, DefaultAbandonedInterval), true, s.erasureTask(kindAbandoned)},
+		{TaskExpire, interval, true, withSecrets(s.erasureTask(kindExpire), s.expireSecrets)},
+		{TaskAbandonedUploads, orDefault(opts.AbandonedInterval, DefaultAbandonedInterval), true, withSecrets(s.erasureTask(kindAbandoned), s.purgePendingSecrets)},
 		{TaskTenantDeletions, orDefault(opts.TenantDeletionsInterval, DefaultTenantDeletionsInterval), true, s.tenantDeletions},
 		{TaskPurgeRows, orDefault(opts.PurgeInterval, DefaultPurgeInterval), true, s.purgeRows},
 		{TaskOrphans, orDefault(opts.OrphansInterval, DefaultOrphansInterval), true, s.orphans},

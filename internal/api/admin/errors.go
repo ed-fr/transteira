@@ -25,10 +25,10 @@ const (
 	// fieldNotAllowed is a valid value that is not allowed here: the mail
 	// delivery of a super admin activation link.
 	fieldNotAllowed = "not-allowed"
-	// fieldNotSupported is a member of API 2.0 that this server does not
-	// implement yet (delivery none, tenant and level policies):
-	// refused rather than ignored (fail closed), so that a client never
-	// believes it was applied.
+	// fieldNotSupported is a value that this server refuses on purpose
+	// (delivery none of the first delegated admin of a new tenant, which has
+	// no single sign-on yet): refused rather than ignored (fail closed), so
+	// that a client never believes it was applied.
 	fieldNotSupported = "not-supported"
 )
 

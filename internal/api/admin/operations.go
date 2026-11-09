@@ -41,6 +41,8 @@ type OperationsService interface {
 	ListAbuseReports(ctx context.Context, p adminauth.Principal, tid tenant.ID, status store.AbuseReportStatus, limit int, cursor string) (store.Page[store.AbuseReport], error)
 	GetAbuseReport(ctx context.Context, p adminauth.Principal, tid tenant.ID, repID string) (store.AbuseReport, error)
 	UpdateAbuseReport(ctx context.Context, p adminauth.Principal, tid tenant.ID, repID string, status store.AbuseReportStatus, note *string, ip netip.Addr) (store.AbuseReport, error)
+	ListSecrets(ctx context.Context, p adminauth.Principal, tid tenant.ID, f tenantops.SecretFilter) (store.Page[store.Secret], error)
+	DeleteSecret(ctx context.Context, p adminauth.Principal, tid tenant.ID, secID string, ip netip.Addr) error
 }
 
 // DataSubjectService serves the rights of the data subjects
@@ -599,7 +601,7 @@ func (s *Server) SearchDataSubject(ctx context.Context, req gen.SearchDataSubjec
 	return gen.SearchDataSubject200JSONResponse{
 		Email: sum.Email, VerifiedAddress: sum.VerifiedAddress, TransfersAsSender: sum.TransfersAsSender,
 		TransfersAsRecipient: sum.TransfersAsRecipient, Invitations: sum.Invitations, AuditEvents: sum.AuditEvents,
-		SecurityEvents: sum.SecurityEvents, Proofs: &sum.Proofs, DropLinks: &sum.DropLinks,
+		SecurityEvents: sum.SecurityEvents, Proofs: &sum.Proofs, DropLinks: &sum.DropLinks, Secrets: &sum.Secrets,
 	}, nil
 }
 
@@ -618,7 +620,7 @@ func (s *Server) EraseDataSubject(ctx context.Context, req gen.EraseDataSubjectR
 		TransfersDeleted: rep.TransfersDeleted, RecipientEntriesRemoved: rep.RecipientEntriesRemoved,
 		VerifiedAddressDeleted: rep.VerifiedAddressDeleted, InvitationsDeleted: rep.InvitationsDeleted,
 		LogEntriesPseudonymised: rep.LogEntriesPseudonymised, AccessLinks: &rep.AccessLinks, AbuseReports: &rep.AbuseReports, ProofsDeleted: &rep.ProofsDeleted,
-		DropLinksUpdated: &rep.DropLinksUpdated, DropLinksDisabled: &rep.DropLinksDisabled,
+		DropLinksUpdated: &rep.DropLinksUpdated, DropLinksDisabled: &rep.DropLinksDisabled, SecretsDeleted: &rep.SecretsDeleted,
 	}, nil
 }
 

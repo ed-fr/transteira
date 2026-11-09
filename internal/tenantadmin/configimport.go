@@ -106,6 +106,7 @@ var (
 	ptrRecipientRules = strictjson.Pointer("config", "recipientRules")
 	ptrLevels         = strictjson.Pointer("config", "confidentialityLevels")
 	ptrAbuse          = strictjson.Pointer("config", "abuseThresholds")
+	ptrSecrets        = strictjson.Pointer("config", "secretSettings")
 )
 
 // importPlan is a validated import: everything the transaction writes.
@@ -116,6 +117,7 @@ type importPlan struct {
 	hasNet    bool
 	recipient *store.RecipientRuleSet
 	levels    []store.ConfidentialityLevel
+	secrets   bool
 	abuse     *store.AbuseSettings
 	smtp      *store.SMTPConfig
 	templates []store.EmailTemplate
@@ -210,7 +212,8 @@ func importDetails(c ConfigExport, plan *importPlan) map[string]any {
 			"internalCidrs": len(plan.cidrs), "internalDomains": len(plan.domains),
 			"recipientRules":        recipientCount(plan.recipient),
 			"confidentialityLevels": len(plan.levels), "abuseThresholds": plan.abuse != nil,
-			"smtp": plan.smtp != nil, "emailTemplates": len(plan.templates),
+			"secretSettings": plan.secrets,
+			"smtp":           plan.smtp != nil, "emailTemplates": len(plan.templates),
 			"legalDocuments": len(plan.legal), "blocklist": len(plan.blocklist),
 			"logo": plan.tenant.HasLogo, "background": plan.tenant.HasBackground,
 			"webhooksSkipped": plan.webhooks,
@@ -288,6 +291,19 @@ func (s *Service) planImport(ctx context.Context, p adminauth.Principal, in Impo
 		return nil, err
 	}
 	plan := &importPlan{tenant: nt, webhooks: len(c.Webhooks)}
+	if ss := c.SecretSettings; ss != nil {
+		st, err := secretSettings(SecretSettingsInput{
+			Enabled: ss.Enabled, Durations: ss.Durations, DefaultDuration: deref(ss.DefaultDuration),
+			FileAllowed: ss.FileAllowed, FileMaxBytes: ss.FileMaxBytes, EmailAllowed: ss.EmailAllowed,
+			EmailRequiresPassphrase: ss.EmailRequiresPassphrase,
+		})
+		if err != nil {
+			return nil, atPointer(ptrSecrets, err)
+		}
+		// Stored with the tenant row (store.Tenants.Create).
+		nt.Secrets = st
+		plan.secrets = true
+	}
 	if err := s.planBranding(ctx, c.Branding, plan); err != nil {
 		return nil, err
 	}

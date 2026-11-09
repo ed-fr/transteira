@@ -172,6 +172,28 @@ func (v *Vault) Open(ctx context.Context, tid tenant.ID, p crypto.Purpose, wkID 
 	if err != nil {
 		return nil, fmt.Errorf("masterkey: open: %w", err)
 	}
+	return v.unwrap(tid, p, wkID, row)
+}
+
+// OpenTx is Open inside tx, for the tenant tx is bound to: the key is read
+// in the caller's transaction (the reveal of a one-time secret opens its
+// text key and destroys it in the same transaction, without a second
+// connection). After an error the caller must abort tx.
+func (v *Vault) OpenTx(ctx context.Context, tx *store.ScopedTx, p crypto.Purpose, wkID string) ([]byte, error) {
+	row, err := v.keys.GetTx(ctx, tx, wkID)
+	if err != nil {
+		return nil, fmt.Errorf("masterkey: open: %w", err)
+	}
+	return v.unwrap(tx.Tenant(), p, wkID, row)
+}
+
+// compile-time check: the vault creates, opens and destroys the data keys
+// of the one-time secrets.
+var _ store.SecretKeys = (*Vault)(nil)
+
+// unwrap checks the purpose of row, the wrapped key wkID of tid, and
+// unwraps it with the master key recorded on it.
+func (v *Vault) unwrap(tid tenant.ID, p crypto.Purpose, wkID string, row store.WrappedKey) ([]byte, error) {
 	if row.Purpose != string(p) {
 		return nil, fmt.Errorf("%w: wrapped key %s is not a %q key", ErrPurposeMismatch, wkID, p)
 	}

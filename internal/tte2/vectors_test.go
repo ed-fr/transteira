@@ -41,6 +41,10 @@ type vectorSet struct {
 	MetadataNegative []sealedNegative  `json:"metadataNegative"`
 	Messages         []messageVector   `json:"messages"`
 	MessageNegative  []sealedNegative  `json:"messageNegative"`
+	// Since 2.1 (vectors_secret_test.go).
+	SecretsDescription string           `json:"secretsDescription"`
+	Secrets            []secretVector   `json:"secrets"`
+	SecretNegative     []secretNegative `json:"secretNegative"`
 }
 
 // fileVector is a valid file stream.
@@ -292,6 +296,8 @@ func generateVectors(t *testing.T) *vectorSet {
 
 	vs.Metadata, vs.MetadataNegative = generateMetadata(t, key)
 	vs.Messages, vs.MessageNegative = generateMessages(t, key)
+	vs.SecretsDescription = secretVectorDoc
+	vs.Secrets, vs.SecretNegative = generateSecrets(t)
 	return vs
 }
 
@@ -530,6 +536,7 @@ func verifyVectors(t *testing.T, vs *vectorSet) {
 			t.Fatalf("message %s: got %s (%v), want %s", c.Name, got, err, c.ExpectedError)
 		}
 	}
+	verifySecrets(t, vs)
 }
 
 // runValidator feeds in to a new Validator in slices of step bytes and

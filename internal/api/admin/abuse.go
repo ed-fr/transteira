@@ -25,12 +25,14 @@ const apiBase = "/api/v1"
 
 // rawBodyRoutes are the route patterns (method and full path, as set in
 // Request.Pattern by the generated router) of the operations whose handler
-// reads the raw body (see CaptureRawBody): the abuse thresholds update and,
+// reads the raw body (see CaptureRawBody): the abuse thresholds update, since
+// API 2.1 the one-time secrets settings update (every required member) and,
 // since API 1.2, the creation of a provisioning token and of a tenant by a
 // provisioning token, and since API 2.0 the import of a tenant
 // configuration (strict JSON: duplicate and unknown members refused).
 var rawBodyRoutes = map[string]bool{
 	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/abuse-thresholds": true,
+	http.MethodPut + " " + apiBase + "/admin/tenants/{tenantId}/secret-settings":  true,
 	http.MethodPost + " " + apiBase + "/admin/provisioning-tokens":                true,
 	http.MethodPost + " " + apiBase + "/provisioning/tenants":                     true,
 	importRoute: true,
@@ -107,13 +109,17 @@ type failingReader struct{ err error }
 // Read implements io.Reader.
 func (f *failingReader) Read([]byte) (int, error) { return 0, f.err }
 
+// bodyMember is a member every body of an operation must carry; nullable
+// tells whether it may be null.
+type bodyMember struct {
+	name     string
+	nullable bool
+}
+
 // thresholdMembers lists the members of the thresholds body, every one
 // required, in the order their errors are reported; nullable tells whether
 // the member may be null.
-var thresholdMembers = []struct {
-	name     string
-	nullable bool
-}{
+var thresholdMembers = []bodyMember{
 	{"maxDailyBytesPerSender", true},
 	{"maxDailyTransfersPerSender", true},
 	{"maxRecipientsPerTransfer", true},
@@ -131,13 +137,17 @@ var thresholdMembers = []struct {
 // checkThresholdMembers checks that every member of the raw body is
 // present, and that the ones that cannot be null are not. A body that is
 // not a JSON object is refused as a whole.
-func checkThresholdMembers(raw []byte) error {
+func checkThresholdMembers(raw []byte) error { return checkMembers(raw, thresholdMembers) }
+
+// checkMembers checks that every member of required is present in the raw
+// body, and that the ones that cannot be null are not.
+func checkMembers(raw []byte, required []bodyMember) error {
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &members); err != nil || members == nil {
 		return validationFailed("", fieldInvalidFormat)
 	}
 	var errs []problem.FieldError
-	for _, m := range thresholdMembers {
+	for _, m := range required {
 		v, ok := members[m.name]
 		switch {
 		case !ok:

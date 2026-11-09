@@ -44,6 +44,12 @@ type TransferEraser interface {
 	EraseTransfer(ctx context.Context, tid tenant.ID, trfID string, mode lifecycle.EraseMode) (lifecycle.EraseResult, error)
 }
 
+// SecretFiles removes the stored files of one-time secrets
+// (*storage.Store).
+type SecretFiles interface {
+	RemoveSecretFile(tid tenant.ID, name string) error
+}
+
 // Keys computes the MAC of an address for the rate limit of the "my
 // transfers" access link requests (*masterkey.Keyring).
 type Keys interface {
@@ -54,6 +60,12 @@ type Keys interface {
 type Options struct {
 	// Eraser crypto-erases the transfers (required).
 	Eraser TransferEraser
+	// Vault destroys the keys of the one-time secrets erased
+	// (*masterkey.Vault; required).
+	Vault store.SecretKeys
+	// Files removes the files of the secrets erased (*storage.Store;
+	// required).
+	Files SecretFiles
 	// Holder is the antivirus worker (*scan.Worker), held while a
 	// recipient is removed from a transfer; nil holds nothing.
 	Holder lifecycle.Holder
@@ -102,6 +114,9 @@ type Summary struct {
 	// whose recipients include the address (since 2.0). It is not part of
 	// the API summary: it only feeds the audit details.
 	DropLinks int
+	// Secrets counts the one-time secrets, in every state, created by or
+	// addressed to the address (since 2.1).
+	Secrets int
 }
 
 // EraseReport counts what an erasure did (schema DataSubjectEraseReport).
@@ -139,6 +154,9 @@ type EraseReport struct {
 	// DropLinksDisabled counts those of them left without recipient, hence
 	// disabled (since 2.0).
 	DropLinksDisabled int
+	// SecretsDeleted counts the one-time secrets created by or addressed to
+	// the address, deleted with their content (since 2.1).
+	SecretsDeleted int
 }
 
 // details returns the audit details of the report: counts only.
@@ -149,6 +167,7 @@ func (r EraseReport) details() map[string]any {
 		"logEntriesPseudonymised": r.LogEntriesPseudonymised, "accessLinks": r.AccessLinks,
 		"abuseReports": r.AbuseReports, "proofsDeleted": r.ProofsDeleted,
 		"dropLinksUpdated": r.DropLinksUpdated, "dropLinksDisabled": r.DropLinksDisabled,
+		"oneTimeDeleted": r.SecretsDeleted, // not "secrets...": the audit refuses such keys
 	}
 }
 
@@ -158,6 +177,7 @@ type Service struct {
 	repo   repo
 	keys   Keys
 	eraser TransferEraser
+	files  SecretFiles
 	holder lifecycle.Holder
 	logger *slog.Logger
 	now    func() time.Time
@@ -171,15 +191,16 @@ type Service struct {
 }
 
 // errMissingDependency reports a [New] call without a required option.
-var errMissingDependency = errors.New("datasubject: db and Eraser are required")
+var errMissingDependency = errors.New("datasubject: db, Eraser, Vault and Files are required")
 
-// New returns the service over db. It fails when db or Eraser is missing.
+// New returns the service over db. It fails when db, Eraser, Vault or Files
+// is missing.
 func New(db *store.DB, opts Options) (*Service, error) {
-	if db == nil || opts.Eraser == nil {
+	if db == nil || opts.Eraser == nil || opts.Vault == nil || opts.Files == nil {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo: newStoreRepo(db, opts.Audit), keys: opts.Keys, eraser: opts.Eraser, holder: opts.Holder,
+		repo: newStoreRepo(db, opts.Audit, opts.Vault), keys: opts.Keys, eraser: opts.Eraser, files: opts.Files, holder: opts.Holder,
 		logger: opts.Logger, now: opts.Now, sleep: sleepContext,
 	}
 	if s.holder == nil {
@@ -323,14 +344,18 @@ func (s *Service) Search(ctx context.Context, p adminauth.Principal, ip netip.Ad
 	if err != nil {
 		return Summary{}, fmt.Errorf("datasubject: count drop links: %w", err)
 	}
+	secrets, err := s.repo.countSecrets(ctx, tid, addr)
+	if err != nil {
+		return Summary{}, fmt.Errorf("datasubject: count secrets: %w", err)
+	}
 	sum := Summary{
-		DropLinks: dropLinks, Email: addr, VerifiedAddress: verified, TransfersAsSender: len(sent), TransfersAsRecipient: len(received),
+		Secrets: secrets, DropLinks: dropLinks, Email: addr, VerifiedAddress: verified, TransfersAsSender: len(sent), TransfersAsRecipient: len(received),
 		Invitations: invitee + inviter, AuditEvents: events, Proofs: proofs,
 	}
 	s.record(ctx, p, ip, tid, audit.ActionDataSubjectSearched, newPseudonym(addr), map[string]any{
 		"verifiedAddress": sum.VerifiedAddress, "transfersAsSender": sum.TransfersAsSender,
 		"transfersAsRecipient": sum.TransfersAsRecipient, "invitations": sum.Invitations, "auditEvents": sum.AuditEvents,
-		"proofs": sum.Proofs, "dropLinks": sum.DropLinks,
+		"proofs": sum.Proofs, "dropLinks": sum.DropLinks, "oneTime": sum.Secrets, // not "secrets": the audit refuses such keys
 	})
 	return sum, nil
 }
@@ -413,8 +438,9 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 			return err
 		}
 	}
-	// 4. Invitations.
-	n, err := s.repo.eraseInvitations(ctx, tid, addr, pseudonym, s.now())
+	// 4. One-time secrets, then invitations (a secret of an external
+	// references its invitation), in one transaction.
+	inv, err := s.repo.eraseInvitations(ctx, tid, addr, pseudonym, s.now())
 	switch {
 	case errors.Is(err, store.ErrConflict):
 		// A deposit started with one of its invitations meanwhile.
@@ -422,7 +448,17 @@ func (s *Service) erase(ctx context.Context, tid tenant.ID, addr, pseudonym stri
 	case err != nil:
 		return fmt.Errorf("datasubject: erase invitations: %w", err)
 	}
-	rep.InvitationsDeleted = int(n)
+	rep.InvitationsDeleted = int(inv.invitations)
+	rep.SecretsDeleted = inv.secrets.Deleted
+	// The keys of the secrets are destroyed: their files are unreadable, a
+	// failure to remove one only leaves ciphertext (logged, not retried: the
+	// rows are gone).
+	for _, name := range inv.secrets.RemovedFiles {
+		if err := s.files.RemoveSecretFile(tid, name); err != nil {
+			s.logger.WarnContext(ctx, "datasubject: secret file left on disk", slog.String("tenant", string(tid)),
+				slog.String("error", err.Error()))
+		}
+	}
 	// 4b. Permanent drop links the address is a recipient of (since 2.0).
 	dl, err := s.repo.eraseDropLinks(ctx, tid, addr, s.now())
 	if err != nil {

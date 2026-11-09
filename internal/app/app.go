@@ -57,6 +57,7 @@ import (
 	"github.com/ed-fr/transteira/internal/provisioning"
 	"github.com/ed-fr/transteira/internal/quota"
 	"github.com/ed-fr/transteira/internal/scan"
+	"github.com/ed-fr/transteira/internal/secret"
 	"github.com/ed-fr/transteira/internal/securityevents"
 	"github.com/ed-fr/transteira/internal/securitylog"
 	"github.com/ed-fr/transteira/internal/stats"
@@ -631,13 +632,14 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 	operations, err := tenantops.New(db, tenantops.Options{
-		Vault: vault, Eraser: sweeper, Notifier: notifier, Mailer: opsMails, Logger: logger, Audit: auditLog,
+		Vault: vault, Eraser: sweeper, SecretKeys: vault, SecretFiles: files, Notifier: notifier, Mailer: opsMails,
+		Logger: logger, Audit: auditLog,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
 	subjects, err := datasubject.New(db, datasubject.Options{
-		Eraser: sweeper, Holder: worker, Keys: keys, Logger: logger, Audit: auditLog,
+		Eraser: sweeper, Holder: worker, Keys: keys, Logger: logger, Audit: auditLog, Vault: vault, Files: files,
 	})
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
@@ -695,6 +697,14 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		return fmt.Errorf("app: %w", err)
 	}
 	proofs := proof.NewService(db, proofSigner, auditLog, nil, logger, proof.WithSecurityLog(secLog))
+	// The one-time secrets (since 2.1): their creators are checked by the
+	// eligibility rules of the transfers.
+	secrets, err := secret.New(secret.Deps{
+		Secrets: db.Secrets(vault), Creators: transfers, Scrubber: vault, Files: files, SecurityLog: secLog,
+	}, secret.Options{Audit: auditLog, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
 	handler := httpserver.New(httpserver.Deps{
 		TrustedProxy: cfg.IsTrustedProxy,
 		Resolver:     resolver,
@@ -704,7 +714,7 @@ func Run(ctx context.Context, cfg *config.Config, opts ...Option) (err error) {
 		API: public.NewServer(public.WithDeposit(deposits), public.WithTransfers(transfers),
 			public.WithUploads(uploads), public.WithDownloads(downloadAdapter{svc: downloads}),
 			public.WithTenantService(tenants), public.WithMaintenance(maint), public.WithMyTransfers(senders),
-			public.WithProofs(proofs)),
+			public.WithProofs(proofs), public.WithSecrets(secrets)),
 		Sessions:    deposits,
 		MyTransfers: senders,
 		APITokens:   apiTokens,

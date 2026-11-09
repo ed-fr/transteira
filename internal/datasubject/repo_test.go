@@ -2,6 +2,7 @@ package datasubject
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/ed-fr/transteira/internal/store"
@@ -13,7 +14,7 @@ func TestStoreRepoEdges(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
 		ctx := context.Background()
-		r := newStoreRepo(ev.db, nil)
+		r := newStoreRepo(ev.db, nil, ev.vault)
 		bad := tenant.ID("bad tenant")
 
 		if err := r.deleteDepositRows(ctx, bad, carol); err == nil {
@@ -40,6 +41,9 @@ func TestStoreRepoEdges(t *testing.T) {
 		}
 		if _, err := r.eraseInvitations(ctx, ev.a.ID, "not an address", newPseudonym(carol), testStart); err == nil {
 			t.Error("eraseInvitations(bad address) succeeded")
+		}
+		if _, err := r.countSecrets(ctx, bad, carol); err == nil {
+			t.Error("countSecrets(bad tenant) succeeded")
 		}
 		if _, err := r.countDropLinks(ctx, bad, carol); err == nil {
 			t.Error("countDropLinks(bad tenant) succeeded")
@@ -102,6 +106,26 @@ func TestStoreRepoEdges(t *testing.T) {
 			if !want[invID] {
 				t.Errorf("unexpected invitation %s", invID)
 			}
+		}
+	})
+}
+
+// TestEraseInvitationsAtomic checks that an invitation still referenced by
+// a transfer is not deleted, and that the transaction then fails as a
+// whole: the secrets deleted before it are kept.
+func TestEraseInvitationsAtomic(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		ctx := context.Background()
+		r := newStoreRepo(ev.db, nil, ev.vault)
+		inv := ev.invitation(ev.a, carol, alice)
+		ev.transfer(ev.a, carol, inv, []string{alice}, stateAvailable)
+		ev.secret(ev.a, carol, "", false)
+		if _, err := r.eraseInvitations(ctx, ev.a.ID, carol, newPseudonym(carol), testStart); !errors.Is(err, store.ErrConflict) {
+			t.Errorf("eraseInvitations(referenced invitation) = %v, want a conflict", err)
+		}
+		if n, err := r.countSecrets(ctx, ev.a.ID, carol); err != nil || n != 1 {
+			t.Errorf("secrets after the failed transaction = %d, %v; want 1", n, err)
 		}
 	})
 }

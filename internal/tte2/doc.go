@@ -20,7 +20,16 @@
 //	metadata i HKDF(K, no salt,            info = InfoMetadata || u32 BE(i))
 //	message    HKDF(K, no salt,            info = InfoMessage)
 //
-// InfoSecret is reserved for the one-time secrets of V2.1.
+// # One-time secrets (V2.1)
+//
+// A secret has its own key K, carried by its link like a transfer key. K only
+// derives the secret root key K' (DeriveSecretKey, with an optional PBKDF2
+// passphrase) and the key proof (SecretKeyProof). K' derives the text key
+// (SealSecret, OpenSecret, AAD "TTE2S") and the proof (SecretProof), and
+// serves as the transfer key, index 0, of the optional file and its metadata.
+// The server stores SecretVerifier of both proofs and checks the proofs sent
+// at the reveal with VerifierMatches; keyless, it checks the sealed text with
+// CheckSecretFraming and SecretTextIsEmpty.
 //
 // # File streams
 //

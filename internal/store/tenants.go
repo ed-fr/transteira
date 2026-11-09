@@ -29,6 +29,12 @@ const tenantColumns = `id, name, fqdn, default_language, max_transfer_bytes, max
 	`antivirus_enabled, setup_state, smtp_tested_at, mail_templates_reviewed_at, network_reviewed_at, created_at, updated_at, provisioned_by, ` +
 	`link_only_allowed, e2e_policy`
 
+// tenantReadColumns is the column list read by the tenant selects:
+// tenantColumns and the secret settings (since 2.1), which the insert
+// leaves to their column defaults.
+const tenantReadColumns = tenantColumns + `, secrets_enabled, secret_durations, secret_default_duration, ` +
+	`secret_file_allowed, secret_file_max_bytes, secret_email_allowed, secret_email_requires_passphrase`
+
 // Statements of the Tenants repository. The tenants table is the registry of
 // tenants itself, so its statements are system queries.
 var (
@@ -38,13 +44,13 @@ var (
 		`INSERT INTO tenants (`+tenantColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		reasonTenantAdmin)
 	qTenantGet = systemQuery(
-		`SELECT `+tenantColumns+` FROM tenants WHERE id = ?`,
+		`SELECT `+tenantReadColumns+` FROM tenants WHERE id = ?`,
 		reasonTenantAdmin)
 	qTenantByFQDN = systemQuery(
-		`SELECT `+tenantColumns+` FROM tenants WHERE fqdn = ? AND status = 'active'`,
+		`SELECT `+tenantReadColumns+` FROM tenants WHERE fqdn = ? AND status = 'active'`,
 		reasonTenantResolve)
 	qTenantList = systemQuery(
-		`SELECT `+tenantColumns+` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`,
+		`SELECT `+tenantReadColumns+` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`,
 		reasonTenantAdmin)
 	// qTenantUpdate only updates an active tenant: a tenant being deleted
 	// is treated as gone.
@@ -69,6 +75,13 @@ var (
 	// active tenant (super admin only, since 2.0).
 	qTenantSetE2EPolicy = systemQuery(
 		`UPDATE tenants SET e2e_policy = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
+		reasonTenantAdmin)
+	// qTenantSetSecrets writes the secret settings of an active tenant
+	// (delegated admin or super admin, since 2.1).
+	qTenantSetSecrets = systemQuery(
+		`UPDATE tenants SET secrets_enabled = ?, secret_durations = ?, secret_default_duration = ?,
+			secret_file_allowed = ?, secret_file_max_bytes = ?, secret_email_allowed = ?,
+			secret_email_requires_passphrase = ?, updated_at = ? WHERE id = ? AND status = 'active'`,
 		reasonTenantAdmin)
 	// qTenantSetSMTPTested records the SMTP configuration of an active
 	// tenant that passed a test send (Tenants.SetSMTPTested).
@@ -204,15 +217,23 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 		preset, provBy          sql.NullString
 		tested, reviewed        sql.NullInt64
 		networkReviewed         sql.NullInt64
+		durations               string
+		defaultDuration         sql.NullString
 	)
 	if err := sc.Scan(&tid, &t.Name, &t.FQDN, &t.DefaultLanguage, &t.MaxTransferBytes, &t.MaxTransferCeiling,
 		&t.StorageQuotaBytes, &status, &t.PrimaryColor, &t.AccentColor, &t.HasLogo, &t.HasBackground, &preset,
 		&t.WebhookIncludeAddresses, &t.AllowRemoteInternalDeposit, &t.AllowTransferReply, &t.AntivirusEnabled,
-		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed, &e2e); err != nil {
+		&setup, &tested, &reviewed, &networkReviewed, &created, &updated, &provBy, &t.LinkOnlyAllowed, &e2e,
+		&t.Secrets.Enabled, &durations, &defaultDuration, &t.Secrets.FileAllowed, &t.Secrets.FileMaxBytes,
+		&t.Secrets.EmailAllowed, &t.Secrets.EmailRequiresPassphrase); err != nil {
 		return nil, err
 	}
-	t.BackgroundPreset = preset.String // NULL is the default preset, ""
-	t.ProvisionedBy = provBy.String    // NULL for a tenant created by a super admin
+	// The column check makes a parse error impossible (an empty set would
+	// offer nothing).
+	t.Secrets.Durations, _ = tenant.ParseSecretDurationSet(durations)
+	t.Secrets.DefaultDuration = tenant.SecretDuration(defaultDuration.String) // NULL: the shortest offered
+	t.BackgroundPreset = preset.String                                        // NULL is the default preset, ""
+	t.ProvisionedBy = provBy.String                                           // NULL for a tenant created by a super admin
 	t.ID = tenant.ID(tid)
 	t.Status = tenant.Status(status)
 	t.SetupState = tenant.SetupState(setup)
@@ -243,7 +264,9 @@ func scanTenant(sc interface{ Scan(...any) error }) (*tenant.Tenant, error) {
 // review of its mail templates or of its network rules recorded. It stores
 // t.LinkOnlyAllowed and t.E2EPolicy as given (false and
 // [tenant.E2EForbidden] for the zero values): the caller checks that only a
-// super admin sets them. It returns the stored tenant,
+// super admin sets them. It stores t.Secrets (since 2.1), normalized like
+// [Tenants.SetSecretSettings], when it names durations, and the defaults
+// ([tenant.DefaultSecretSettings]) otherwise. It returns the stored tenant,
 // ErrInvalid for invalid fields (including a preset ID, a status other
 // than active, a missing or unknown setup state, a transfer limit above
 // the ceiling, the ceiling being at most [tenant.MaxTransferLimit], or a
@@ -295,6 +318,15 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 	}
 	c.ID = tenant.ID(newID)
 	c.AntivirusEnabled = true
+	// The secret settings are the column defaults, unless the caller gives
+	// some (the import of a configuration).
+	custom := !t.Secrets.Durations.Empty()
+	c.Secrets = tenant.DefaultSecretSettings()
+	if custom {
+		if c.Secrets, err = normalizeSecretSettings(t.Secrets); err != nil {
+			return nil, err
+		}
+	}
 	c.SMTPTestedAt, c.MailTemplatesReviewedAt, c.NetworkReviewedAt = time.Time{}, time.Time{}, time.Time{}
 	now := r.db.now().UTC().Truncate(time.Millisecond) // millisecond precision, as stored
 	c.CreatedAt, c.UpdatedAt = now, now
@@ -314,6 +346,13 @@ func (r *Tenants) create(ctx context.Context, t *tenant.Tenant, guard func(tx *S
 		}
 		if err := seedTenant(ctx, tx, c.ID); err != nil {
 			return err
+		}
+		if custom {
+			if _, err := tx.Exec(ctx, qTenantSetSecrets, c.Secrets.Enabled, c.Secrets.Durations.String(),
+				nullText(string(c.Secrets.DefaultDuration)), c.Secrets.FileAllowed, c.Secrets.FileMaxBytes,
+				c.Secrets.EmailAllowed, c.Secrets.EmailRequiresPassphrase, toMillis(now), string(c.ID)); err != nil {
+				return err
+			}
 		}
 		if then == nil {
 			return nil
@@ -431,6 +470,9 @@ type TenantParts struct {
 	// E2E writes t.E2EPolicy (super admin only, since 2.0), which must be a
 	// valid [tenant.E2EPolicy].
 	E2E bool
+	// Secrets writes t.Secrets as [Tenants.SetSecretSettings] does (since
+	// 2.1).
+	Secrets bool
 }
 
 // UpdateWithPolicies writes the parts of t selected by parts in one
@@ -494,8 +536,43 @@ func (r *Tenants) SetE2EPolicy(ctx context.Context, tid tenant.ID, policy tenant
 	return r.update(ctx, &tenant.Tenant{ID: tid, E2EPolicy: policy}, TenantParts{E2E: true}, "set tenant e2e policy")
 }
 
+// SetSecretSettings writes the settings of the one-time secret module of
+// the active tenant tid (since 2.1) and refreshes UpdatedAt. The delegated
+// admin of the tenant and the super admin may call it (callers check the
+// caller's scope). The durations are stored in ascending order of
+// duration; a default duration that is no longer offered is reset to ""
+// (the shortest offered) rather than refused. It returns the stored
+// tenant, ErrInvalid for an empty duration set, an unknown default
+// duration or a file limit outside [tenant.MinSecretFileBytes] ..
+// [tenant.MaxSecretFileBytes], and ErrNotFound when the tenant does not
+// exist or is being deleted. The settings apply to the secrets created
+// afterwards. Callers must invalidate the tenant.Resolver cache of its
+// FQDN.
+func (r *Tenants) SetSecretSettings(ctx context.Context, tid tenant.ID, s tenant.SecretSettings) (*tenant.Tenant, error) {
+	if err := tid.Validate(); err != nil {
+		return nil, fmt.Errorf("store: set tenant secret settings: %w", ErrNotFound)
+	}
+	return r.update(ctx, &tenant.Tenant{ID: tid, Secrets: s}, TenantParts{Secrets: true}, "set tenant secret settings")
+}
+
+// normalizeSecretSettings resets a default duration that is a known code
+// but no longer offered, then validates s.
+func normalizeSecretSettings(s tenant.SecretSettings) (tenant.SecretSettings, error) {
+	if s.DefaultDuration != "" && !s.DefaultDuration.Valid() {
+		return s, invalid("unknown default secret duration")
+	}
+	if !s.Durations.Has(s.DefaultDuration) {
+		s.DefaultDuration = ""
+	}
+	if err := s.Validate(); err != nil {
+		return s, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return s, nil
+}
+
 // update implements Update, UpdateWithAntivirus, UpdateWithPolicies,
-// SetAntivirusEnabled, SetLinkOnlyAllowed and SetE2EPolicy: the parts of t
+// SetAntivirusEnabled, SetLinkOnlyAllowed, SetE2EPolicy and
+// SetSecretSettings: the parts of t
 // selected by parts, in one transaction.
 func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantParts, op string) (*tenant.Tenant, error) {
 	if t.ID.IsZero() {
@@ -508,6 +585,13 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 	}
 	if parts.E2E && !t.E2EPolicy.Valid() {
 		return nil, invalid("unknown end-to-end encryption policy")
+	}
+	secrets := t.Secrets
+	if parts.Secrets {
+		var err error
+		if secrets, err = normalizeSecretSettings(secrets); err != nil {
+			return nil, err
+		}
 	}
 	now := toMillis(r.db.now())
 	var out *tenant.Tenant
@@ -544,6 +628,17 @@ func (r *Tenants) update(ctx context.Context, t *tenant.Tenant, parts TenantPart
 		}
 		if parts.E2E {
 			res, err := tx.Exec(ctx, qTenantSetE2EPolicy, string(t.E2EPolicy), now, string(t.ID))
+			if err == nil {
+				err = expectOne(res)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		if parts.Secrets {
+			res, err := tx.Exec(ctx, qTenantSetSecrets, secrets.Enabled, secrets.Durations.String(),
+				nullText(string(secrets.DefaultDuration)), secrets.FileAllowed, secrets.FileMaxBytes,
+				secrets.EmailAllowed, secrets.EmailRequiresPassphrase, now, string(t.ID))
 			if err == nil {
 				err = expectOne(res)
 			}
@@ -717,7 +812,11 @@ func (r *Tenants) ListDeleting(ctx context.Context) ([]tenant.ID, error) {
 // comes first (spec 16.1, T-110): every wrapped key of the tenant (file
 // keys, SMTP password, sealed tokens) must have been destroyed beforehand
 // ([WrappedKeys.ListIDs], [WrappedKeys.Delete]); otherwise it returns
-// [ErrKeysRemain] and deletes nothing. It returns ErrNotFound when the
+// [ErrKeysRemain] and deletes nothing. The one-time secrets (since 2.1)
+// go first, with [Secrets.DeleteTenant]: a live secret must reference its
+// keys (checks of migration 0033), so destroying a key of a live secret
+// fails; the tombstones left hold no key and go with the cascade. It
+// returns ErrNotFound when the
 // tenant does not exist. A scrub left incomplete by active readers
 // (ErrScrubBusy) is logged as a warning, not returned; any other scrub
 // failure is returned, the tenant being deleted. Erasing the tenant's

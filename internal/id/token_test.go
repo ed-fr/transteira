@@ -237,3 +237,19 @@ func FuzzDropTokenValid(f *testing.F) {
 		}
 	})
 }
+
+func TestSecretToken(t *testing.T) {
+	t.Parallel()
+	tok, err := NewSecretToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^tts_[A-Za-z0-9]{43}$`).MatchString(tok) || !SecretTokenValid(tok) {
+		t.Fatalf("NewSecretToken() = %q", tok)
+	}
+	for _, bad := range []string{"", "tts_short", "ttd_" + tok[4:], tok[:len(tok)-1], tok + "a", "tts_é" + tok[6:]} {
+		if SecretTokenValid(bad) {
+			t.Errorf("SecretTokenValid(%q) = true", bad)
+		}
+	}
+}

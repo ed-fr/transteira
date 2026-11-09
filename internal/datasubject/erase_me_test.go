@@ -125,7 +125,7 @@ func TestEraseSenderAccessKeys(t *testing.T) {
 		ev := newEnv(t, e)
 		h := ev.meRows(ev.a, carol)
 
-		s, err := New(ev.db, Options{Eraser: ev.eraser, Keys: failingKeys{}, Now: ev.clock.Now})
+		s, err := New(ev.db, Options{Eraser: ev.eraser, Keys: failingKeys{}, Now: ev.clock.Now, Vault: ev.vault, Files: ev.files})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestEraseSenderAccessKeys(t *testing.T) {
 			t.Error("the session was erased although the erasure stopped before")
 		}
 
-		s, err = New(ev.db, Options{Eraser: ev.eraser, Now: ev.clock.Now})
+		s, err = New(ev.db, Options{Eraser: ev.eraser, Now: ev.clock.Now, Vault: ev.vault, Files: ev.files})
 		if err != nil {
 			t.Fatal(err)
 		}

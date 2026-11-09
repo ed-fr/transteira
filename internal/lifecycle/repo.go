@@ -49,6 +49,9 @@ type repo interface {
 	keyIDs(ctx context.Context, tid tenant.ID, after string, limit int) ([]string, error)
 	destroyKeys(ctx context.Context, tid tenant.ID, wkIDs []string) error
 	deleteTenant(ctx context.Context, tid tenant.ID) error
+	purgePendingSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error)
+	expireSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error)
+	deleteTenantSecrets(ctx context.Context, tid tenant.ID) ([]string, error)
 	audit(ctx context.Context, ev audit.Event) error
 
 	backupSupported() bool
@@ -215,6 +218,20 @@ func (r storeRepo) destroyKeys(ctx context.Context, tid tenant.ID, wkIDs []strin
 
 func (r storeRepo) deleteTenant(ctx context.Context, tid tenant.ID) error {
 	return r.db.Tenants().Delete(ctx, tid)
+}
+
+func (r storeRepo) purgePendingSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	return r.db.Secrets(r.vault).PurgePending(ctx, now, limit)
+}
+
+func (r storeRepo) expireSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	return r.db.Secrets(r.vault).ExpireDue(ctx, now, limit)
+}
+
+// deleteTenantSecrets deletes every secret of tid with its keys and returns
+// the storage names of their files.
+func (r storeRepo) deleteTenantSecrets(ctx context.Context, tid tenant.ID) ([]string, error) {
+	return r.db.Secrets(r.vault).DeleteTenant(ctx, tid)
 }
 
 // audit records ev in the audit log, in its own transaction.

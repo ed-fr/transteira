@@ -29,6 +29,7 @@ func operations(ev *env) map[string]func(p adminauth.Principal, tid tenant.ID) e
 		mustNoErr(ev.t, "blocklist", err)
 		entries = append(entries, e.ID)
 	}
+	sec := ev.secret(ev.a, alice, true)
 	n := 0
 	var reports []string
 	for range 6 {
@@ -88,6 +89,14 @@ func operations(ev *env) map[string]func(p adminauth.Principal, tid tenant.ID) e
 			_, err := ev.svc.ListAuditEvents(ctx, p, tid, AuditFilter{})
 			return err
 		},
+		"ListSecrets": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.ListSecrets(ctx, p, tid, SecretFilter{})
+			return err
+		},
+		"DeleteSecret": func(p adminauth.Principal, tid tenant.ID) error {
+			// Once ended, the secret is a tombstone: the next calls are no-ops.
+			return ev.svc.DeleteSecret(ctx, p, tid, sec, clientIP)
+		},
 	}
 }
 
@@ -112,7 +121,7 @@ func TestRightsMatrix(t *testing.T) {
 
 // auditorReads are the operations of the service open to the auditor
 // role (P55); every other one is refused with adminauth.ErrReadOnlyRole.
-var auditorReads = map[string]bool{"ListTransfers": true, "GetTransfer": true, "ListAuditEvents": true}
+var auditorReads = map[string]bool{"ListTransfers": true, "GetTransfer": true, "ListAuditEvents": true, "ListSecrets": true}
 
 // TestAuditorRights runs every tenant operation as an auditor of A (T-281):
 // the audit reads succeed on A, every other operation is
@@ -181,6 +190,14 @@ func TestAuditorAddressFilters(t *testing.T) {
 		mustNoErr(t, "ListAuditEvents by address by A's admin", err)
 		_, err = ev.svc.ListAuditEvents(ctx, auditorA, ev.a.ID, AuditFilter{Actor: "alice.admin"})
 		mustNoErr(t, "ListAuditEvents by username by A's auditor", err)
+		_, err = ev.svc.ListSecrets(ctx, auditorA, ev.a.ID, SecretFilter{Sender: alice})
+		wantErr(t, "ListSecrets by address by A's auditor", err, adminauth.ErrReadOnlyRole)
+		_, err = ev.svc.ListSecrets(ctx, auditorB, ev.a.ID, SecretFilter{Sender: alice})
+		wantErr(t, "ListSecrets by address by B's auditor on A", err, ErrNotFound)
+		_, err = ev.svc.ListSecrets(ctx, ev.adminA, ev.a.ID, SecretFilter{Sender: alice})
+		mustNoErr(t, "ListSecrets by address by A's admin", err)
+		_, err = ev.svc.ListSecrets(ctx, auditorA, ev.a.ID, SecretFilter{State: "active"})
+		mustNoErr(t, "ListSecrets by state by A's auditor", err)
 	})
 }
 

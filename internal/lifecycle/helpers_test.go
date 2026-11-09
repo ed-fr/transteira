@@ -110,7 +110,7 @@ func (f *faults) called(name string) int {
 // listing), "dueExpirations", "rejectedKeyed", "abandoned", "transfer", "finish", "scrub",
 // "tenantIDs", "listEnded", "deleteEnded", "purge:<name>", "purgeSystem:<name>", "storageRefs",
 // "availableIDs", "linkTransfers", "linkIDs", "deletingTenants", "getTenant", "transferIDs", "keyIDs",
-// "destroyKeys", "deleteTenant", "audit", "backup", and "backupUnsupported" (any
+// "destroyKeys", "deleteTenant", "purgePendingSecrets", "expireSecrets", "deleteTenantSecrets", "audit", "backup", and "backupUnsupported" (any
 // fault makes backupSupported false). refsHook, when set, edits the storage refs
 // returned.
 type faultRepo struct {
@@ -298,6 +298,27 @@ func (r *faultRepo) deleteTenant(ctx context.Context, tid tenant.ID) error {
 	return r.inner.deleteTenant(ctx, tid)
 }
 
+func (r *faultRepo) purgePendingSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	if err := r.f.hit("purgePendingSecrets"); err != nil {
+		return nil, false, err
+	}
+	return r.inner.purgePendingSecrets(ctx, now, limit)
+}
+
+func (r *faultRepo) expireSecrets(ctx context.Context, now time.Time, limit int) ([]store.EndedSecret, bool, error) {
+	if err := r.f.hit("expireSecrets"); err != nil {
+		return nil, false, err
+	}
+	return r.inner.expireSecrets(ctx, now, limit)
+}
+
+func (r *faultRepo) deleteTenantSecrets(ctx context.Context, tid tenant.ID) ([]string, error) {
+	if err := r.f.hit("deleteTenantSecrets"); err != nil {
+		return nil, err
+	}
+	return r.inner.deleteTenantSecrets(ctx, tid)
+}
+
 func (r *faultRepo) audit(ctx context.Context, ev audit.Event) error {
 	if err := r.f.hit("audit"); err != nil {
 		return err
@@ -327,6 +348,14 @@ func (v faultVault) DestroyTx(ctx context.Context, tx *store.ScopedTx, wkID stri
 		return err
 	}
 	return v.inner.DestroyTx(ctx, tx, wkID)
+}
+
+func (v faultVault) NewDEKTx(ctx context.Context, tx *store.ScopedTx) (string, []byte, error) {
+	return v.inner.NewDEKTx(ctx, tx)
+}
+
+func (v faultVault) OpenTx(ctx context.Context, tx *store.ScopedTx, p crypto.Purpose, wkID string) ([]byte, error) {
+	return v.inner.OpenTx(ctx, tx, p, wkID)
 }
 
 // faultRemover wraps the upload engine with the faults "lock", "remove"
@@ -413,6 +442,13 @@ func (s faultFiles) RemoveTemp(tid tenant.ID, file string) error {
 		return err
 	}
 	return s.inner.RemoveTemp(tid, file)
+}
+
+func (s faultFiles) RemoveSecretFile(tid tenant.ID, name string) error {
+	if err := s.f.hit("removeSecretFile"); err != nil {
+		return err
+	}
+	return s.inner.RemoveSecretFile(tid, name)
 }
 
 func (s faultFiles) RemoveTenantDir(tid tenant.ID) error {

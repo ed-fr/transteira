@@ -39,4 +39,7 @@ var AuditorOperations = map[string]bool{
 	// their tokens; since 2.0).
 	"listDropLinks": true,
 	"getDropLink":   true,
+	// The one-time secrets of an attached tenant (metadata only, never the
+	// content; the creator filter is refused to the auditor; since 2.1).
+	"listTenantSecrets": true,
 }

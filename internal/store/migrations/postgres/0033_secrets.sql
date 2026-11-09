@@ -23,7 +23,8 @@ ALTER TABLE tenants
     ADD COLUMN secret_file_max_bytes BIGINT NOT NULL DEFAULT 10485760
         CONSTRAINT tenants_secret_file_max_bytes_check
         CHECK (secret_file_max_bytes BETWEEN 1048576 AND 26214400),
-    ADD COLUMN secret_email_allowed BOOLEAN NOT NULL DEFAULT true;
+    ADD COLUMN secret_email_allowed BOOLEAN NOT NULL DEFAULT true,
+    ADD COLUMN secret_email_requires_passphrase BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE secrets (
     id                    TEXT    COLLATE "C" NOT NULL PRIMARY KEY,

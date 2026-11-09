@@ -66,6 +66,8 @@ const (
 	FieldCreatedAfter = "createdAfter"
 	FieldLimit        = "limit"
 	FieldCursor       = "cursor"
+	FieldState        = "state"
+	FieldSender       = "sender"
 	FieldKindParam    = "kind"
 	FieldAction       = "action"
 	FieldActor        = "actor"

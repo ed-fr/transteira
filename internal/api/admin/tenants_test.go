@@ -170,6 +170,14 @@ func (f *fakeTenantService) UpdateRecipientRules(_ context.Context, p adminauth.
 	return tenantadmin.RecipientRules{Allowed: allowed, Denied: denied}, f.record("UpdateRecipientRules", p.SessionID, tid, allowed, denied, ip)
 }
 
+func (f *fakeTenantService) GetSecretSettings(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SecretSettingsInput, error) {
+	return tenantadmin.SecretSettingsOf(tenant.DefaultSecretSettings()), f.record("GetSecretSettings", p.SessionID, tid)
+}
+
+func (f *fakeTenantService) UpdateSecretSettings(_ context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SecretSettingsInput, ip netip.Addr) (tenantadmin.SecretSettingsInput, error) {
+	return in, f.record("UpdateSecretSettings", p.SessionID, tid, in, ip)
+}
+
 func (f *fakeTenantService) GetSMTP(_ context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SMTPView, error) {
 	return smtpA, f.record("GetSMTP", p.SessionID, tid)
 }
@@ -387,6 +395,10 @@ func tenantOps(ctx context.Context, s *Server) map[string]error {
 	call("CompleteSetup", err)
 	_, err = s.GetTextProposal(ctx, gen.GetTextProposalRequestObject{TenantId: "ten_a", Document: "legal-notice", Language: "en"})
 	call("TextProposal", err)
+	_, err = s.GetSecretSettings(ctx, gen.GetSecretSettingsRequestObject{TenantId: "ten_a"})
+	call("GetSecretSettings", err)
+	_, err = s.UpdateSecretSettings(context.WithValue(ctx, rawBodyKey{}, []byte(validSecretSettingsJSON)), gen.UpdateSecretSettingsRequestObject{TenantId: "ten_a", Body: &gen.SecretSettings{}})
+	call("UpdateSecretSettings", err)
 	return out
 }
 
@@ -418,8 +430,8 @@ func TestTenantOperationsWiring(t *testing.T) {
 	// error is mapped.
 	svc = &fakeTenantService{err: tenantadmin.ErrNotFound}
 	ops := tenantOps(ctxWith(store.SessionAuthenticated, delegated), tenantServer(svc))
-	if len(ops) != 35 {
-		t.Fatalf("%d operations, want 35", len(ops))
+	if len(ops) != 37 {
+		t.Fatalf("%d operations, want 37", len(ops))
 	}
 	for name, err := range ops {
 		expectProblem(t, err, problem.CodeNotFound)

@@ -17,6 +17,32 @@ and the project follows [Semantic Versioning](https://semver.org/).
   before any reading); threat model sections 6.56 to 6.63 (T-339 to T-375, P69 to P83); new
   problem codes, audit actions `secret.*` and security events `secret_invalid` and
   `secret_proof_invalid` (in the fail2ban and CrowdSec rules).
+- One-time secret cryptography (V2.1 step 2, `docs/architecture/e2e-format.md` section 3.3):
+  `internal/tte2` derives the secret root key (optional PBKDF2-SHA-256 passphrase at 600 000
+  iterations, NFC), the key proof and the proof with their verifiers, seals and opens the secret
+  text and checks its framing without the key; `web/src/shared/e2e/secret.ts` reproduces it with
+  WebCrypto. Shared test vectors `secrets` and `secretNegative` in
+  `internal/tte2/testdata/vectors.json`.
+- One-time secrets, link delivery of a text (V2.1 step 2): `internal/secret` and the public
+  operations `createSecret` (deposit session or API token, eligibility of the transfers),
+  `getSecretLink`, `revealSecret` (key proof first, not counted; 5 counted wrong passphrases lock),
+  `listMySecrets` and `deleteMySecret`; the page route `/s/{token}` (`Cache-Control: no-store`);
+  per-client limits of the links (`rate_limited` scopes `secret_link_ip` and `secret_link`); new
+  problem code `secret-passphrase-required`. The e-mail delivery and the file are refused with
+  `400 validation-failed` (`not-supported`) until step 3.
+- One-time secrets administration and lifecycle (V2.1 step 2): admin operations
+  `listTenantSecrets` (metadata only, readable by an auditor), `deleteTenantSecret` (`204`, also
+  when the secret had already ended), `getSecretSettings` and `updateSecretSettings` (a missing or
+  null required member is `400 validation-failed`, `required` or `not-nullable`); secret settings
+  (enabled, durations, file and e-mail delivery, `emailRequiresPassphrase`) in `features.secrets`
+  of `getPublicTenant` and in the configuration export and import (`secretSettings`, no longer
+  refused on import); lifecycle sweeps run by the `expire` and `abandoned-uploads` tasks (expiry,
+  pending secrets after 1 hour, tombstones after 30 days, tenant erasure); secrets counted by the
+  data subject search and erasure and by the statistics; `POST /secrets`, `PUT /secrets/{id}/file`
+  and `POST /secrets/{id}/send` refused during maintenance.
+- Reverse proxy configurations (Caddy, Nginx, Apache, Traefik) now also redact the token of
+  `/s/{token}` and `/api/v1/secret-links/{token}` in the access log; `make check` asserts that
+  every configuration covers every token path (`TestProxyTokenRedaction`).
 - **Heads-up for the upgrade to 2.1:** once implemented, the one-time secrets module will be
   **enabled by default in every entity, existing ones included** (decision P81): each entity
   gains a channel of small end-to-end encrypted content (text and a file of up to 10 MiB by
@@ -40,6 +66,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The purge of invitations skips an invitation that a one-time secret (a tombstone included)
+  still references, instead of failing on the foreign key and aborting the batch of the tenant.
 - `make release-keygen` created the cosign key **without password**: the script passed an empty
   `COSIGN_PASSWORD` to cosign, which uses it without asking. An unset `COSIGN_PASSWORD` is no
   longer passed (cosign asks for the password), a key that opens with the empty password is

@@ -43,6 +43,13 @@ const (
 	// keyed by URLs carrying link, invitation and drop link tokens
 	// (/d/{token}, /i/{token}, /drop/{token}).
 	PublicUICacheControl = "private, no-cache"
+	// SecretPagePrefix is the path prefix of the page of a one-time secret
+	// link, /s/{token} (since 2.1).
+	SecretPagePrefix = "/s/"
+	// SecretPageCacheControl is the Cache-Control of the page of a secret
+	// link: never stored, not even by the browser (threat model T-345,
+	// T-355). Its Referrer-Policy is the no-referrer of every response.
+	SecretPageCacheControl = "no-store"
 )
 
 // Paths of the entry pages inside the build.
@@ -181,7 +188,12 @@ func (ui *webUI) tenantHandler() http.Handler {
 		if !isPublicRoute(r.URL.Path) {
 			status = http.StatusNotFound
 		}
-		ui.serveApp(w, r, ui.public, status)
+		app := ui.public
+		if strings.HasPrefix(r.URL.Path, SecretPagePrefix) {
+			// The page of a secret link (since 2.1), whatever its status.
+			app.cacheControl = SecretPageCacheControl
+		}
+		ui.serveApp(w, r, app, status)
 	})
 }
 
@@ -295,7 +307,8 @@ func etagMatches(header, etag string) bool {
 
 // isPublicRoute reports whether p is a route of the public application: /,
 // /d/{token}, /d/{token}/reply (reply to a transfer, since 1.1), /i/{token},
-// /drop/{token} (permanent drop link, since 2.0), /legal/{document},
+// /drop/{token} (permanent drop link, since 2.0), /s/{token} (one-time
+// secret link, since 2.1), /legal/{document},
 // /invite, /me ("my transfers",
 // since 1.1; its access token travels in the URL fragment, never in the
 // path), /help and anything under /help/.
@@ -303,7 +316,7 @@ func isPublicRoute(p string) bool {
 	if p == "/" || p == "/invite" || p == "/me" || p == "/help" || strings.HasPrefix(p, "/help/") {
 		return true
 	}
-	for _, prefix := range []string{"/d/", "/i/", "/drop/", "/legal/"} {
+	for _, prefix := range []string{"/d/", "/i/", "/drop/", SecretPagePrefix, "/legal/"} {
 		if rest, ok := strings.CutPrefix(p, prefix); ok {
 			if prefix == "/d/" {
 				rest = strings.TrimSuffix(rest, "/reply")
@@ -323,10 +336,13 @@ func logWebUILoad(logger *slog.Logger, err error) {
 }
 
 // robotsAPIPrefixes are the public API paths named after a secret link
-// token (download links, invitations, drop links): their responses get the
-// X-Robots-Tag of the web interface, so that a crawler that came across
-// such a link never indexes what it answers.
-var robotsAPIPrefixes = []string{APIBaseURL + "/downloads/", APIBaseURL + "/invitations/", APIBaseURL + "/drop-links/"}
+// token (download links, invitations, drop links, one-time secret links
+// since 2.1): their responses get the X-Robots-Tag of the web interface, so
+// that a crawler that came across such a link never indexes what it
+// answers.
+var robotsAPIPrefixes = []string{
+	APIBaseURL + "/downloads/", APIBaseURL + "/invitations/", APIBaseURL + "/drop-links/", APIBaseURL + "/secret-links/",
+}
 
 // tokenRobots sets the X-Robots-Tag UIRobots on the responses of the API
 // paths under robotsAPIPrefixes, whatever the method and the status, then

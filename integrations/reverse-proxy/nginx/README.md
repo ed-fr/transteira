@@ -84,7 +84,7 @@ default.
 | tus | Every method is passed through; nothing to add. |
 | HSTS | `add_header Strict-Transport-Security "max-age=31536000" always`. Do not declare `add_header` in a `location`: nginx would then drop the server-level headers there. |
 | Compression | `gzip` with `gzip_types` limited to CSS, JavaScript, JSON and SVG (HTML is always included), and `gzip off` in the `/api/v1/uploads` and `/api/v1/downloads/` locations. |
-| Tokens in the logs | `map $request_uri $transteira_log_uri` replaces the token segment of `/d/`, `/i/`, `/drop/`, `/api/v1/downloads/`, `/api/v1/invitations/` and `/api/v1/drop-links/` with `REDACTED`; the `transteira` log format logs that variable instead of `$request` and leaves out the Referer. Every TransTeira server uses it. |
+| Tokens in the logs | `map $request_uri $transteira_log_uri` replaces the token segment of `/d/`, `/i/`, `/s/`, `/drop/`, `/api/v1/downloads/`, `/api/v1/invitations/`, `/api/v1/drop-links/` and `/api/v1/secret-links/` with `REDACTED`; the `transteira` log format logs that variable instead of `$request` and leaves out the Referer. Every TransTeira server uses it. |
 
 Example of a logged download:
 

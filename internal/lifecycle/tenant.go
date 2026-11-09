@@ -112,6 +112,12 @@ func (s *Sweeper) eraseTenant(ctx context.Context, tid tenant.ID) error {
 	if err != nil {
 		return fmt.Errorf("lifecycle: erase tenant %s: transfers: %w", tid, err)
 	}
+	// A live secret references its keys: its rows go first, or the keys
+	// could not be destroyed (store.Secrets.DeleteTenant).
+	secrets, err := s.eraseTenantSecrets(ctx, tid)
+	if err != nil {
+		return fmt.Errorf("lifecycle: erase tenant %s: secrets: %w", tid, err)
+	}
 	keys, err := s.destroyTenantKeys(ctx, tid)
 	if err != nil {
 		return fmt.Errorf("lifecycle: erase tenant %s: keys: %w", tid, err)
@@ -138,7 +144,7 @@ func (s *Sweeper) eraseTenant(ctx context.Context, tid tenant.ID) error {
 		s.recordTenantDeleted(ctx, t)
 	}
 	s.logger.InfoContext(ctx, "lifecycle: tenant erased", slog.String("tenant", string(tid)),
-		slog.Int("transfers", transfers), slog.Int("keys", keys))
+		slog.Int("transfers", transfers), slog.Int("secret_files", secrets), slog.Int("keys", keys))
 	return nil
 }
 

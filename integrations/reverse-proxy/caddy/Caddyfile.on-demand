@@ -53,7 +53,7 @@
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "^/(d|i|drop|api/v1/downloads|api/v1/invitations|api/v1/drop-links)/[^/?#]+" "/$1/REDACTED"
+				request>uri regexp "^/(d|i|s|drop|api/v1/downloads|api/v1/invitations|api/v1/drop-links|api/v1/secret-links)/[^/?#]+" "/$1/REDACTED"
 				request>headers delete
 			}
 		}
@@ -82,8 +82,8 @@
 		}
 	}
 
-	# Access log with the capability tokens of /d/{token}, /i/{token}, /drop/{token},
-	# /api/v1/downloads/{token}/... and /api/v1/invitations/{token} and /api/v1/drop-links/{token} masked
+	# Access log with the capability tokens of /d/{token}, /i/{token}, /s/{token}, /drop/{token},
+	# /api/v1/downloads/{token}/... and /api/v1/invitations/{token}, /api/v1/drop-links/{token}, /s/{token} and /api/v1/secret-links/{token} masked
 	# (T-161), and without any request header (T-172): Caddy redacts only
 	# Cookie and Authorization by itself, while Referer (capability links),
 	# Upload-Metadata (file names, the sender's message) and X-Csrf-Token
@@ -93,7 +93,7 @@
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "^/(d|i|drop|api/v1/downloads|api/v1/invitations|api/v1/drop-links)/[^/?#]+" "/$1/REDACTED"
+				request>uri regexp "^/(d|i|s|drop|api/v1/downloads|api/v1/invitations|api/v1/drop-links|api/v1/secret-links)/[^/?#]+" "/$1/REDACTED"
 				request>headers delete
 			}
 		}

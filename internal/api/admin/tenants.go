@@ -67,6 +67,8 @@ type TenantService interface {
 	PutSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SSOUpdate, ip netip.Addr) (tenantadmin.SSOView, error)
 	DeleteSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID, ip netip.Addr) error
 	TestSSO(ctx context.Context, p adminauth.Principal, tid tenant.ID) (oidc.TestResult, error)
+	GetSecretSettings(ctx context.Context, p adminauth.Principal, tid tenant.ID) (tenantadmin.SecretSettingsInput, error)
+	UpdateSecretSettings(ctx context.Context, p adminauth.Principal, tid tenant.ID, in tenantadmin.SecretSettingsInput, ip netip.Addr) (tenantadmin.SecretSettingsInput, error)
 	ExportConfig(ctx context.Context, p adminauth.Principal, tid tenant.ID, includeBranding bool, ip netip.Addr) (tenantadmin.ConfigExport, error)
 	ImportTenant(ctx context.Context, p adminauth.Principal, in tenantadmin.ImportInput, ip netip.Addr) (tenantadmin.TenantCreated, error)
 }

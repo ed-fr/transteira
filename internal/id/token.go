@@ -46,6 +46,10 @@ const (
 	// appears in the landing page URL of the link and is looked up by its
 	// SHA-256 hash (see HashToken).
 	DropTokenPrefix = "ttd"
+	// SecretTokenPrefix starts a one-time secret token (since 2.1), the
+	// path component of the secret link "/s/<token>", looked up by its
+	// SHA-256 hash (see HashToken).
+	SecretTokenPrefix = "tts"
 	// ChallengeTokenBytes is the entropy of a challenge ID: 128 bits, as it
 	// lives 15 minutes and allows 2 attempts.
 	ChallengeTokenBytes = MinTokenBytes
@@ -66,6 +70,9 @@ const (
 	// DropTokenBytes is the entropy of a drop link token (256 bits): it
 	// lives until the link is rotated or revoked, without expiry.
 	DropTokenBytes = 32
+	// SecretTokenBytes is the entropy of a secret token (256 bits): always
+	// 43 base62 characters.
+	SecretTokenBytes = 32
 	// MinTokenBodyLen and MaxTokenBodyLen bound the base62 part of a
 	// deposit token: TokenLen(MinTokenBytes) and TokenLen(32).
 	MinTokenBodyLen = 22
@@ -125,6 +132,22 @@ func NewDropToken() (string, error) {
 // without a database query.
 func DropTokenValid(s string) bool {
 	return TokenValid(DropTokenPrefix, s, MinTokenBodyLen, MaxTokenBodyLen)
+}
+
+// NewSecretToken returns a new one-time secret token: SecretTokenPrefix
+// followed by SecretTokenBytes of crypto/rand entropy in base62, exactly
+// 43 characters (OpenAPI SecretToken "^tts_[A-Za-z0-9]{43}$"). Only its
+// HashToken is stored.
+func NewSecretToken() (string, error) {
+	return NewToken(SecretTokenPrefix, SecretTokenBytes)
+}
+
+// SecretTokenValid reports whether s has the shape of a secret token
+// ("tts_" + exactly 43 base62 characters). Callers check the shape before
+// hashing and looking a token up.
+func SecretTokenValid(s string) bool {
+	n := TokenLen(SecretTokenBytes)
+	return TokenValid(SecretTokenPrefix, s, n, n)
 }
 
 // DropPath is the path of the web landing page of a permanent drop link,

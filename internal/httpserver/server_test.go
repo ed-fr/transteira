@@ -785,6 +785,9 @@ func TestMaintenanceOperationsExist(t *testing.T) {
 		http.MethodPatch + " " + APIBaseURL + "/uploads/{uploadId}":             "AppendUploadChunk",
 		http.MethodPost + " " + APIBaseURL + "/invitations":                     "CreateInvitation",
 		http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/reply":     "StartTransferReply",
+		http.MethodPost + " " + APIBaseURL + "/secrets":                         "CreateSecret",
+		http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":          "UploadSecretFile",
+		http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send":         "SendSecret",
 	}
 	if len(ops) != len(maintenanceBlocked) {
 		t.Fatalf("%d blocked patterns, %d expected operations", len(maintenanceBlocked), len(ops))

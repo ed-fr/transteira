@@ -618,6 +618,7 @@ var tenantAllowlist = map[string]int{
 	`SELECT id, status FROM transfers WHERE tenant_id = ? LIMIT ?`:                                                  0,
 	`SELECT storage_name, id, transfer_id, dek_key_id, uploaded_at FROM transfer_files WHERE tenant_id = ? LIMIT ?`: 0,
 	`SELECT count(*) FROM transfers WHERE tenant_id = ? AND invitation_id = ?`:                                      0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND invitation_id = ?`:                                        0,
 	`DELETE FROM verified_addresses WHERE tenant_id = ? AND email = ? AND last_used_at = ?`:                         0,
 	`DELETE FROM deposit_sessions WHERE tenant_id = ? AND id = ? AND (ended_at IS NOT NULL OR expires_at <= ?) ` +
 		`AND (used_at IS NULL OR used_at <= ?)`: 0,
@@ -808,6 +809,45 @@ var tenantAllowlist = map[string]int{
 	`DELETE FROM tenant_sso_settings WHERE tenant_id = ?`:             0,
 	`DELETE FROM sso_email_domains WHERE tenant_id = ?`:               0,
 	`INSERT INTO sso_email_domains (tenant_id, domain) VALUES (?, ?)`: 0,
+	// One-time secrets (0033).
+	`INSERT INTO secrets (id, tenant_id, token_hash, state, creator_kind, sender_email, api_token_id, invitation_id, ` +
+		`delivery, recipient_email, read_receipt, verifier, key_verifier, kdf_salt, kdf_iterations, text_sealed, ` +
+		`text_key_id, duration_code, created_at, activated_at, expires_at, file_size, file_metadata, file_storage_name) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`: 1,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL ` +
+		`AND state IN ('pending', 'active')`: 0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL AND created_at > ?`:     0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND state IN ('pending', 'active')`:              0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND api_token_id = ? AND created_at > ?`:                              0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND id = ?`:                                              0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND token_hash = ?`:                                      0,
+	`SELECT id, state, expires_at, end_reason, file_size, key_verifier FROM secrets WHERE tenant_id = ? AND token_hash = ?`: 0,
+	`UPDATE secrets SET failed_proofs = failed_proofs + 1 ` +
+		`WHERE tenant_id = ? AND id = ? AND state = 'active' AND expires_at > ? AND failed_proofs < 5`: 0,
+	`SELECT failed_proofs, verifier, text_sealed, text_key_id, file_metadata ` +
+		`FROM secrets WHERE tenant_id = ? AND id = ?`: 0,
+	`UPDATE secrets SET state = 'read', failed_proofs = failed_proofs - 1, read_at = ?, ended_at = ?, ` +
+		`end_reason = 'read', ` + secretContentNull + ` WHERE tenant_id = ? AND id = ? AND state = 'active' AND file_size IS NULL`: 2,
+	`UPDATE secrets SET state = 'locked', ended_at = ?, end_reason = 'locked', ` + secretContentNull + `, ` + secretFileNull +
+		` WHERE tenant_id = ? AND id = ? AND state = 'active' AND failed_proofs = 5`: 1,
+	`UPDATE secrets SET state = 'expired', ended_at = ?, end_reason = 'expired', ` + secretContentNull + `, ` + secretFileNull +
+		` WHERE tenant_id = ? AND id = ? AND state = 'active' AND expires_at <= ?`: 1,
+	`UPDATE secrets SET state = 'deleted', ended_at = ?, end_reason = ?, ` + secretContentNull + `, ` + secretFileNull +
+		` WHERE tenant_id = ? AND id = ? AND state IN ('pending', 'active')`: 2,
+	`DELETE FROM secrets WHERE tenant_id = ? AND id = ? AND state = 'pending' AND created_at <= ?`: 0,
+	`DELETE FROM secrets WHERE tenant_id = ? AND id = ?`:                                           0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND (created_at, id) < (?, ?) ` +
+		`ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND sender_email = ? AND api_token_id IS NULL ` +
+		`AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND (? = '' OR state = ?) ` +
+		`AND (? = '' OR sender_email = ?) AND (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`: 0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? ORDER BY id LIMIT ?`:                                    0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND sender_email = ? ORDER BY id`:                       0,
+	`SELECT ` + secretColumns + ` FROM secrets WHERE tenant_id = ? AND recipient_email = ? ORDER BY id`:                    0,
+	`SELECT count(*) FROM secrets WHERE tenant_id = ? AND (sender_email = ? OR recipient_email = ?)`:                       0,
+	`SELECT id FROM secrets WHERE tenant_id = ? AND ended_at <= ? AND file_key_id IS NULL AND id > ? ORDER BY id LIMIT ?`:  0,
+	`DELETE FROM secrets WHERE tenant_id = ? AND id = ? AND ended_at <= ? AND file_key_id IS NULL AND text_key_id IS NULL`: 0,
 	// Declared by the tests (internal_test.go).
 	`INSERT INTO tenant_network_rules (kind, value, tenant_id) VALUES (?, ?, ?)`:               2,
 	`SELECT count(*) FROM tenant_network_rules WHERE kind = ? AND value = ? AND tenant_id = ?`: 2,
@@ -817,6 +857,9 @@ var tenantAllowlist = map[string]int{
 // reviewedAllowlist pins every reviewed (multi-table) tenant query with its
 // review reason. Each entry needs a security review.
 var reviewedAllowlist = map[string]string{
+	`SELECT n.status, n.secrets_enabled, n.secret_durations, n.secret_file_allowed, n.secret_file_max_bytes, ` +
+		`n.secret_email_allowed, n.secret_email_requires_passphrase ` +
+		`FROM secrets s JOIN tenants n ON n.id = s.tenant_id WHERE s.tenant_id = ? AND s.id = ?`: reasonSecretSettings,
 	`SELECT count(*) FROM transfers t JOIN tenants n ON n.id = t.tenant_id WHERE t.tenant_id = ? AND t.id = ? ` +
 		`AND n.status = 'active'`: reasonTransferTenantActive,
 	`SELECT ` + transferColumns + ` FROM transfers t WHERE t.tenant_id = ? AND (? = '' OR t.status = ?) ` +
@@ -904,9 +947,9 @@ var systemAllowlist = map[string]string{
 	`SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version`:                                                                           "schema migrations: read the applied versions",
 	`INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)`:                                                                      "schema migrations: record an applied version",
 	`INSERT INTO tenants (` + tenantColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`:                            reasonTenantAdmin,
-	`SELECT ` + tenantColumns + ` FROM tenants WHERE id = ?`:                                                                                                       reasonTenantAdmin,
-	`SELECT ` + tenantColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                               reasonTenantResolve,
-	`SELECT ` + tenantColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                                   reasonTenantAdmin,
+	`SELECT ` + tenantReadColumns + ` FROM tenants WHERE id = ?`:                                                                                                   reasonTenantAdmin,
+	`SELECT ` + tenantReadColumns + ` FROM tenants WHERE fqdn = ? AND status = 'active'`:                                                                           reasonTenantResolve,
+	`SELECT ` + tenantReadColumns + ` FROM tenants WHERE id > ? ORDER BY id LIMIT ?`:                                                                               reasonTenantAdmin,
 	`UPDATE tenants SET name = ?, fqdn = ?, default_language = ?, max_transfer_bytes = ?, max_transfer_ceiling = ?, storage_quota_bytes = ?, primary_color = ?, accent_color = ?, has_logo = ?, has_background = ?, background_preset = ?, webhook_include_addresses = ?, allow_remote_internal_deposit = ?, allow_transfer_reply = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
 	`DELETE FROM tenants WHERE id = ?`:                                                            reasonTenantAdmin,
 	`UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`:                                  reasonTenantAdmin,
@@ -1116,6 +1159,14 @@ var systemAllowlist = map[string]string{
 	`SELECT ` + proofKeyColumns + ` FROM proof_signing_keys WHERE id = ?`:                                             reasonProofKeys,
 	`SELECT ` + proofKeyColumns + ` FROM proof_signing_keys ORDER BY created_at DESC, id DESC`:                        reasonProofKeys,
 	`UPDATE proof_signing_keys SET retired_at = ? WHERE id = ? AND retired_at IS NULL`:                                reasonProofKeys,
+	// One-time secrets (0033).
+	`UPDATE tenants SET secrets_enabled = ?, secret_durations = ?, secret_default_duration = ?, ` +
+		`secret_file_allowed = ?, secret_file_max_bytes = ?, secret_email_allowed = ?, ` +
+		`secret_email_requires_passphrase = ?, updated_at = ? WHERE id = ? AND status = 'active'`: reasonTenantAdmin,
+	`SELECT tenant_id, id, created_at FROM secrets WHERE state = 'pending' AND created_at <= ? ` +
+		`AND (created_at, tenant_id, id) > (?, ?, ?) ORDER BY created_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
+	`SELECT tenant_id, id, expires_at FROM secrets WHERE state = 'active' AND expires_at <= ? ` +
+		`AND (expires_at, tenant_id, id) > (?, ?, ?) ORDER BY expires_at, tenant_id, id LIMIT ?`: reasonSecretSweep,
 }
 
 func TestRegistrySystemQueriesAllowlist(t *testing.T) {

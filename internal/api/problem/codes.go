@@ -186,6 +186,8 @@ const (
 	CodeSecretLimitReached Code = "secret-limit-reached"
 	// CodeSecretFormatInvalid means a sealed value of a secret (text, file metadata or uploaded file stream) fails a keyless framing check the OpenAPI schema cannot express (since 2.1); schema violations are CodeValidationFailed.
 	CodeSecretFormatInvalid Code = "secret-format-invalid"
+	// CodeSecretPassphraseRequired means the tenant requires a passphrase for the e-mail delivery of a secret and none was given (since 2.1).
+	CodeSecretPassphraseRequired Code = "secret-passphrase-required"
 	// CodeInternalError means an unexpected server-side error occurred.
 	CodeInternalError Code = "internal-error"
 )
@@ -282,6 +284,7 @@ var catalog = map[Code]Definition{
 	CodeSecretEmailNotAllowed:         {http.StatusForbidden, "E-mail delivery of secrets not allowed"},
 	CodeSecretLimitReached:            {http.StatusTooManyRequests, "Secret limit reached"},
 	CodeSecretFormatInvalid:           {http.StatusBadRequest, "Malformed sealed content"},
+	CodeSecretPassphraseRequired:      {http.StatusForbidden, "Passphrase required for the e-mail delivery"},
 	CodeInternalError:                 {http.StatusInternalServerError, "Internal error"},
 }
 

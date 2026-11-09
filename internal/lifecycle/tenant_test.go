@@ -200,7 +200,7 @@ func TestEraseTenant(t *testing.T) {
 			t.Fatalf("EraseTenant: %v\nlogs:\n%s", err, ev.logs.all())
 		}
 		ev.assertTenantErased(ev.a, fxs, before, td)
-		if ev.logs.count("lifecycle: tenant erased tenant="+string(ev.a.ID)+" transfers=6 keys=2") != 1 {
+		if ev.logs.count("lifecycle: tenant erased tenant="+string(ev.a.ID)+" transfers=6 secret_files=0 keys=2") != 1 {
 			t.Fatalf("logs:\n%s", ev.logs.all())
 		}
 		// Idempotent: a tenant already gone is a success.

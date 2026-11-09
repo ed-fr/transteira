@@ -68,9 +68,8 @@ const (
 	InfoMetadata = "transteira/tte2/v1/metadata"
 	// InfoMessage is the HKDF info of the message key.
 	InfoMessage = "transteira/tte2/v1/message"
-	// InfoSecret is reserved for the one-time secrets of V2.1, which will reuse
-	// the sealed blob construction of messages under this info. It is not used
-	// by this package.
+	// InfoSecret is the HKDF info of the secret root key K', derived from the
+	// key K of a one-time secret (V2.1, see DeriveSecretKey).
 	InfoSecret = "transteira/tte2/v1/secret" //nolint:gosec // G101: an HKDF label, not a credential.
 
 	// sealedVersion is the first byte of a sealed metadata or message blob.

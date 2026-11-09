@@ -78,6 +78,27 @@ func TestVaultSealOpenDestroy(t *testing.T) {
 			t.Errorf("NewDEK(no tenant) = %v", err)
 		}
 
+		// OpenTx: inside the caller's transaction, same checks.
+		sb, err := db.Scoped(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = sb.Tx(ctx, func(tx *store.ScopedTx) error {
+			if got, err := v.OpenTx(ctx, tx, crypto.PurposeDEK, wkID); err != nil || !bytes.Equal(got, key) {
+				t.Errorf("OpenTx = %v", err)
+			}
+			if _, err := v.OpenTx(ctx, tx, crypto.PurposeSecret, wkID); !errors.Is(err, masterkey.ErrPurposeMismatch) {
+				t.Errorf("OpenTx(wrong purpose) = %v", err)
+			}
+			if _, err := v.OpenTx(ctx, tx, crypto.PurposeDEK, secret.id); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("OpenTx(another tenant's key) = %v", err)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		// Seal errors.
 		if _, err := v.Seal(ctx, a, crypto.Purpose("bogus"), []byte("x")); !errors.Is(err, crypto.ErrUnknownPurpose) {
 			t.Errorf("Seal(bogus purpose) = %v", err)

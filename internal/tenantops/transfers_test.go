@@ -23,13 +23,14 @@ import (
 func TestNewRequiresDependencies(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
-		full := Options{Vault: ev.vault, Eraser: ev.eraser, Notifier: ev.notifier, Mailer: ev.mailer}
-		for name, o := range map[string]Options{
-			"vault":    {Eraser: ev.eraser, Notifier: ev.notifier, Mailer: ev.mailer},
-			"eraser":   {Vault: ev.vault, Notifier: ev.notifier, Mailer: ev.mailer},
-			"notifier": {Vault: ev.vault, Eraser: ev.eraser, Mailer: ev.mailer},
-			"mailer":   {Vault: ev.vault, Eraser: ev.eraser, Notifier: ev.notifier},
+		full := Options{Vault: ev.vault, Eraser: ev.eraser, SecretKeys: ev.vault, SecretFiles: ev.files, Notifier: ev.notifier, Mailer: ev.mailer}
+		for name, drop := range map[string]func(*Options){
+			"vault": func(o *Options) { o.Vault = nil }, "eraser": func(o *Options) { o.Eraser = nil },
+			"secret keys": func(o *Options) { o.SecretKeys = nil }, "secret files": func(o *Options) { o.SecretFiles = nil },
+			"notifier": func(o *Options) { o.Notifier = nil }, "mailer": func(o *Options) { o.Mailer = nil },
 		} {
+			o := full
+			drop(&o)
 			if _, err := New(ev.db, o); err == nil {
 				t.Errorf("New without %s succeeded", name)
 			}

@@ -17,13 +17,19 @@ import (
 func TestNew(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
-		if _, err := New(nil, Options{Eraser: ev.eraser}); !errors.Is(err, errMissingDependency) {
+		if _, err := New(nil, Options{Eraser: ev.eraser, Vault: ev.vault, Files: ev.files}); !errors.Is(err, errMissingDependency) {
 			t.Errorf("New(nil db) = %v", err)
 		}
 		if _, err := New(ev.db, Options{}); !errors.Is(err, errMissingDependency) {
 			t.Errorf("New(no eraser) = %v", err)
 		}
-		s, err := New(ev.db, Options{Eraser: ev.eraser})
+		if _, err := New(ev.db, Options{Eraser: ev.eraser, Files: ev.files}); !errors.Is(err, errMissingDependency) {
+			t.Errorf("New(no vault) = %v", err)
+		}
+		if _, err := New(ev.db, Options{Eraser: ev.eraser, Vault: ev.vault}); !errors.Is(err, errMissingDependency) {
+			t.Errorf("New(no files) = %v", err)
+		}
+		s, err := New(ev.db, Options{Eraser: ev.eraser, Vault: ev.vault, Files: ev.files})
 		if err != nil || s.logger == nil || s.now == nil || s.sleep == nil {
 			t.Fatalf("New defaults = %+v, %v", s, err)
 		}
@@ -131,7 +137,7 @@ func TestSearchFailures(t *testing.T) {
 	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
 		ev := newEnv(t, e)
 		ev.seed(ev.a)
-		for _, m := range []string{"senderTransfers", "recipientTransfers", "countInvitations", "verified", "countAudit", "countDropLinks", "countProofs"} {
+		for _, m := range []string{"senderTransfers", "recipientTransfers", "countInvitations", "verified", "countAudit", "countDropLinks", "countProofs", "countSecrets"} {
 			ev.faults(m)
 			_, err := ev.svc.Search(context.Background(), ev.super, clientIP, ev.a.ID, carol)
 			wantErr(t, m, err, errBoom)

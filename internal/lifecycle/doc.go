@@ -5,16 +5,34 @@
 //
 //	Task                    Interval          Action
 //	delete-after-download   1 min             transfers deleted after their first download, once the grace period is over
-//	expire                  1 min             available transfers past their expiry, transfers scanning for 30 days; files of rejected transfers
-//	abandoned-uploads       15 min            uploading transfers whose uploads expired (upload TTL or maximum age)
+//	expire                  1 min             available transfers past their expiry, transfers scanning for 30 days; files of rejected transfers;
+//	                                          then the one-time secrets past their expiry (since 2.1, see below)
+//	abandoned-uploads       15 min            uploading transfers whose uploads expired (upload TTL or maximum age);
+//	                                          then the pending one-time secrets older than an hour (since 2.1)
 //	tenant-deletions        1 h               tenants left in the deleting status: completes their erasure (EraseTenant)
 //	purge-rows              1 h               ended transfers after 30 days, codes, sessions, password failures, verified addresses, invitations;
 //	                                          admin sessions, admin activations, admin login failures, audit events after 12 months,
-//	                                          usage counters after 13 months
+//	                                          usage counters after 13 months; secret tombstones after 30 days (since 2.1)
 //	orphans                 24 h              files of the tenant directories that the database proves orphaned
 //	expiry-reminder         15 min            reminder mail to the recipients of a per-recipient transfer expiring within 24 h who have not downloaded
 //	                                          (skips blocklisted addresses; one reminder per link; mark reset when the mail cannot be queued)
 //	backup                  daily, UTC time   copy of a SQLite database (TT_BACKUP_TIME, TT_BACKUP_KEEP)
+//
+// # One-time secrets (since 2.1)
+//
+// The expire task goes on, whatever the outcome of its transfers, with
+// [store.Secrets.ExpireDue]: each active secret past its expiry becomes an
+// expired tombstone, its keys destroyed in the same transaction, page after
+// page (store.SecretSweepLimit) while the store reports more; the file of a
+// secret is removed from <tenant dir>/secrets ([Files.RemoveSecretFile]),
+// the database scrubbed, secret.expired audited (actor SystemActor) and
+// [Options.SecretExpired] called with the tombstone, which is where the read
+// receipt of an unread secret is sent. The abandoned-uploads task goes on
+// with [store.Secrets.PurgePending] (a creation never completed: no
+// tombstone). purge-rows deletes the tombstones 30 days after their end
+// ([store.Secrets.PurgeTombstones]), before the invitations they may
+// reference. A file that cannot be removed is logged, not retried: the key
+// is destroyed, so only unreadable ciphertext stays.
 //
 // # Scheduling
 //
@@ -105,8 +123,10 @@
 //     ([store.Transfers.IDsByStatus]), the ended ones page after page
 //     ([store.Transfers.ListEnded]), and those already without any key skip
 //     the file step, their leftovers going with the directory;
-//  2. destroys every wrapped key left to the tenant (SMTP password, any
-//     other), walked with [store.WrappedKeys.ListIDs], one transaction per
+//  2. deletes every one-time secret of the tenant with its keys and files
+//     ([store.Secrets.DeleteTenant]), since the key of a live secret cannot
+//     be destroyed while its row exists, then destroys every wrapped key
+//     left to the tenant (SMTP password, any other), walked with [store.WrappedKeys.ListIDs], one transaction per
 //     page;
 //  3. removes the tenant directory from the data volume with everything in
 //     it, branding assets included ([Files.RemoveTenantDir]);

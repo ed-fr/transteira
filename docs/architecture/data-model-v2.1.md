@@ -30,7 +30,7 @@ rebuilt**.
 
 | # | Name | Content |
 |---|---|---|
-| 0033 | `secrets` | `tenants`: `secrets_enabled`, `secret_durations`, `secret_default_duration`, `secret_file_allowed`, `secret_file_max_bytes`, `secret_email_allowed`. New table `secrets` (one-time secrets, their optional file and its one-time download grant). |
+| 0033 | `secrets` | `tenants`: `secrets_enabled`, `secret_durations`, `secret_default_duration`, `secret_file_allowed`, `secret_file_max_bytes`, `secret_email_allowed`, `secret_email_requires_passphrase`. New table `secrets` (one-time secrets, their optional file and its one-time download grant). |
 
 ### 2.1 Migration 0033 `secrets`
 
@@ -51,6 +51,8 @@ secret_file_allowed     INTEGER NOT NULL DEFAULT 1 CHECK (secret_file_allowed IN
 secret_file_max_bytes   INTEGER NOT NULL DEFAULT 10485760
     CHECK (secret_file_max_bytes BETWEEN 1048576 AND 26214400)        -- PG BIGINT, tenants_secret_file_max_bytes_check
 secret_email_allowed    INTEGER NOT NULL DEFAULT 1 CHECK (secret_email_allowed IN (0, 1))     -- PG BOOLEAN DEFAULT true
+secret_email_requires_passphrase INTEGER NOT NULL DEFAULT 0
+    CHECK (secret_email_requires_passphrase IN (0, 1))                -- PG BOOLEAN DEFAULT false
 ```
 
 - **Durations.** A comma-separated list of the duration codes `1h`, `12h`, `1d`, `3d`, `7d`,
@@ -73,6 +75,9 @@ secret_email_allowed    INTEGER NOT NULL DEFAULT 1 CHECK (secret_email_allowed I
 - **E-mail delivery.** `secret_email_allowed`; when off, only link delivery is offered, which
   also closes the module to invited externals (they can only send by e-mail to their inviter,
   section "Origin" below).
+- **Passphrase for the e-mail delivery** (P83, section 7 point 9).
+  `secret_email_requires_passphrase`, off by default: when on, an e-mail secret must carry a
+  passphrase descriptor (`kdf_salt`), checked by the store at creation.
 - **Writers.** The delegated admin of the tenant and the super admin (brief point 4), through
   `GET|PUT /admin/tenants/{tenantId}/secret-settings`, audited `secret.settings_updated`. On
   PostgreSQL the update runs in the system scope (`tenants_system`), like the other tenant
@@ -199,8 +204,11 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
   `recipient_email` to the inviter (`invitations.invited_by`). Drop links and transfer replies
   cannot create secrets (no kind). The composite foreign keys keep the invitation and the token
   in the tenant; they have no `ON DELETE` action, like `transfers`: API tokens are only revoked,
-  invitations are purged 12 months after their end (secrets live at most 30 days plus their
-  30-day tombstone), and the data-subject erasure deletes the secrets of an address before its
+  invitations are purged once they are revoked or expired (an invitation expires 12 months
+  after its last use) and older than the rate-limit retention, **and no transfer and no secret
+  references them any more**: the purge skips an invitation that a secret still references,
+  tombstone included (a secret lives at most 30 days, then its tombstone 30 days, so the
+  invitation goes after that), and the data-subject erasure deletes the secrets of an address before its
   invitations.
 - **Creator identity** (no session column). A secret records who created it, not which session:
   there is no `deposit_session_id`. The creator side operations are therefore allowed to the
@@ -362,7 +370,7 @@ CREATE UNIQUE INDEX secrets_file_storage_idx ON secrets (tenant_id, file_storage
 
 | Table | Change | RLS |
 |---|---|---|
-| `tenants` | 6 columns, 3 named checks | Unchanged (`tenants_read_own`, `tenants_system`); written in the system scope. |
+| `tenants` | 7 columns, 3 named checks | Unchanged (`tenants_read_own`, `tenants_system`); written in the system scope. |
 | `secrets` | New | `secrets_isolation` (tenant template); found by `verifyRLS` and `TestRLSRoleCannotBypass` through `tenant_id`; listed in `TestRLSOwnerCannotDisablePolicies`. |
 
 The foreign keys of `secrets` to `wrapped_keys`, `invitations` and `api_tokens` are all tenant
@@ -380,6 +388,14 @@ checks the tenant of a wrapped key, and the vault refuses another tenant's key r
 | Data-subject erasure | Deletes, in its tenant scope, every secret whose `sender_email` or `recipient_email` is the address (rows deleted, then their keys destroyed in the same transaction, files removed), counted in `DataSubjectEraseReport.secretsDeleted`; `DataSubjectSummary.secrets` counts them. Runs before the invitations of the address are deleted (foreign key). |
 | Tenant deletion | `Tenants.Delete` requires every wrapped key of the tenant destroyed first: the deletion deletes the tenant's `secrets` rows before that key loop (a live row would otherwise fail the hardening check), then the cascade; the tenant directory, `secrets/` included, is removed with it. |
 | `tenants.secret_*` | Configuration, tenant lifetime. |
+
+**Erasure delay.** The secret sweeps have no schedule of their own: the expiry and tombstone
+sweeps run with the `expire` task (every `DefaultInterval`, 1 minute) and the pending-secret
+sweep with the `abandoned-uploads` task (every 15 minutes by default). A secret is therefore
+erased at most about one task interval after it is due (about 1 minute after `expires_at`, up
+to about 1 hour 15 minutes for an abandoned `pending` secret), and its key is destroyed in
+the same sweep. The reveal and the status never depend on it: an active secret past
+`expires_at` is already answered `410 secret-gone` (`expired`) by the store.
 
 The audit events (`secret.*`) and the security events follow their own 12-month retention and
 never carry content, key, proof, verifier or token.
@@ -469,7 +485,7 @@ one applied in the design and in migration 0033:
 
 Items the implementation (step 2) must carry, found at the review of this design:
 
-- P83 validated: add `secret_email_requires_passphrase` (default false) to migration 0033 on both engines, `emailRequiresPassphrase` to `SecretSettings`, `SecretFeatures` and the configuration export/import, and the refusal of an e-mail secret without passphrase descriptor (problem code to add to the spec).
+- P83 validated: add `secret_email_requires_passphrase` (default false) to migration 0033 on both engines (**done**: column, `tenant.SecretSettings.EmailRequiresPassphrase`, store refusal `store.ErrSecretPassphraseRequired`), `emailRequiresPassphrase` to `SecretSettings`, `SecretFeatures` and the configuration export/import, and the refusal of an e-mail secret without passphrase descriptor (problem code to add to the spec).
 
 - **Authenticated cross-tenant isolation tests** for every `/secrets*`, `/secret-links/*` and
   `/me/secrets*` operation and the admin secret operations, replacing the interim tolerance of
@@ -486,12 +502,16 @@ Items the implementation (step 2) must carry, found at the review of this design
   reference with `DestroyTx` in the same transaction, after deleting the row (the hardening
   checks forbid NULLing a live row's key); `Tenants.Delete`, whose key loop runs before the
   cascade, must delete the secrets of the tenant first. A test checks, after each path, that no
-  unreferenced `dek` row remains.
+  unreferenced `dek` row remains. **Store side done** (`store.Secrets`: `PurgePending`,
+  `ExpireDue`, `PurgeTombstones`, `DeleteByAddressTx`, `DeleteTenant`, `DeleteByCreator`,
+  `DeleteByAdmin`, reveal and lock); the lifecycle task and the data-subject service call them
+  in the next wave (`Secrets.DeleteTenant` before the tenant's key loop).
 - **Hardening checks** of migration 0033 (`secrets_text_key_check`,
   `secrets_file_key_live_check`) respected by the store: keys created in the creation and upload
   transactions, never destroyed before the row changes.
 - **Attempt slots**: the reveal implements the claim of section 2.1 (key proof first, claim,
   compare, release on success), with the concurrency test (50 wrong + 1 right in parallel, at
-  most 5 proofs evaluated) on SQLite and PostgreSQL.
+  most 5 proofs evaluated) on SQLite and PostgreSQL. **Done** (`store.Secrets.Reveal`,
+  `TestSecretsConcurrentReveal`).
 - **Nothing sealed before the reveal**: contract test that `SecretStatus` and every error body of
   the public secret operations have no sealed member; the reveal returns `encryptedMetadata`.

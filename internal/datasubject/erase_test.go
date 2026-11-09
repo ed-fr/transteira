@@ -2,10 +2,15 @@ package datasubject
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +20,7 @@ import (
 	"github.com/ed-fr/transteira/internal/crypto"
 	"github.com/ed-fr/transteira/internal/id"
 	"github.com/ed-fr/transteira/internal/lifecycle"
+	"github.com/ed-fr/transteira/internal/storage"
 	"github.com/ed-fr/transteira/internal/store"
 	"github.com/ed-fr/transteira/internal/store/storetest"
 	"github.com/ed-fr/transteira/internal/tenant"
@@ -23,7 +29,7 @@ import (
 // seeded holds the fixtures of the address in every role.
 type seeded struct {
 	sent, invited, recvShared, recvSole, recvEnded, recvScanning, unrelated, viaInvitation string
-	invAsInvitee, invAsInviter                                                             string
+	invAsInvitee, invAsInviter, secretFile                                                 string
 	session, daveSession                                                                   []byte
 }
 
@@ -50,7 +56,50 @@ func (ev *env) seed(tn *tenant.Tenant) seeded {
 	ev.abuse(tn, carol, s.sent)
 	ev.abuse(tn, dave, s.viaInvitation)
 	ev.proofs(tn, s.sent)
+	s.secretFile = ev.secret(tn, carol, "", true)
+	ev.secret(tn, alice, carol, false)
+	ev.secret(tn, dave, "", false)
 	return s
+}
+
+// secret stores a one-time secret of tn sent by sender: delivered by mail
+// to recipient when it is not empty, with a file (on disk) when withFile.
+// It returns the storage name of the file, "" without one.
+func (ev *env) secret(tn *tenant.Tenant, sender, recipient string, withFile bool) string {
+	ev.t.Helper()
+	var kp, p [32]byte
+	_, _ = rand.Read(kp[:])
+	_, _ = rand.Read(p[:])
+	kv, v := sha256.Sum256(kp[:]), sha256.Sum256(p[:])
+	in := store.CreateSecret{
+		CreatorKind: store.SecretCreatorInternal, SenderEmail: sender, Delivery: store.SecretDeliveryLink,
+		Verifier: v[:], KeyVerifier: kv[:], SealedText: strings.Repeat("sealed-text_", 5),
+		Duration: tenant.SecretDuration1d, Now: ev.clock.Now(),
+	}
+	if recipient != "" {
+		in.Delivery, in.RecipientEmail = store.SecretDeliveryEmail, recipient
+	}
+	if withFile {
+		in.FileSize, in.FileMetadata, in.FileStorageName = 1024, strings.Repeat("meta_", 6), storage.NewName()
+		dir := filepath.Join(ev.root, string(tn.ID), "secrets")
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			ev.t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, in.FileStorageName), []byte("ciphertext"), 0o600); err != nil {
+			ev.t.Fatal(err)
+		}
+	}
+	if _, err := ev.db.Secrets(ev.vault).Create(context.Background(), tn.ID, in); err != nil {
+		ev.t.Fatalf("Secrets.Create: %v", err)
+	}
+	return in.FileStorageName
+}
+
+// secretFileExists reports whether the secret file name of tn is on disk.
+func (ev *env) secretFileExists(tn *tenant.Tenant, name string) bool {
+	ev.t.Helper()
+	_, err := os.Lstat(filepath.Join(ev.root, string(tn.ID), "secrets", name))
+	return err == nil
 }
 
 // abuse stores an abuse alert row of sender and a report about its
@@ -125,7 +174,7 @@ func TestEraseEveryRole(t *testing.T) {
 		got := ev.search(ev.a, subjectInput)
 		want := Summary{
 			Email: carol, VerifiedAddress: true, TransfersAsSender: 2, TransfersAsRecipient: 5,
-			Invitations: 2, AuditEvents: 3, Proofs: 2,
+			Invitations: 2, AuditEvents: 3, Proofs: 2, Secrets: 2,
 		}
 		if got != want {
 			t.Fatalf("Search before = %+v, want %+v", got, want)
@@ -134,7 +183,7 @@ func TestEraseEveryRole(t *testing.T) {
 		rep := ev.erase(ev.a, subjectInput)
 		wantRep := EraseReport{
 			TransfersDeleted: 3, RecipientEntriesRemoved: 4, VerifiedAddressDeleted: true,
-			InvitationsDeleted: 1, LogEntriesPseudonymised: 3, AbuseReports: 1, ProofsDeleted: 2,
+			InvitationsDeleted: 1, LogEntriesPseudonymised: 3, AbuseReports: 1, ProofsDeleted: 2, SecretsDeleted: 2,
 		}
 		if rep != wantRep {
 			t.Fatalf("Erase = %+v, want %+v", rep, wantRep)
@@ -204,6 +253,21 @@ func TestEraseEveryRole(t *testing.T) {
 		if ev.proofExists(ev.a, s.sent, store.ProofDeposit) || ev.proofExists(ev.a, ev.otherTrf1, store.ProofDelivery) ||
 			!ev.proofExists(ev.a, ev.otherTrf2, store.ProofDeposit) || !ev.proofExists(ev.b, ev.otherTrf1, store.ProofDelivery) {
 			t.Error("proofs after erasure are not the expected ones")
+		}
+
+		// Secrets: carol's (sent and received) are gone with their file and
+		// keys, dave's stays, and so do the other tenant's.
+		if ev.secretFileExists(ev.a, s.secretFile) {
+			t.Error("the file of carol's secret is left")
+		}
+		for _, c := range []struct {
+			tn   *tenant.Tenant
+			addr string
+			want int
+		}{{ev.a, carol, 0}, {ev.a, dave, 1}, {ev.b, carol, 2}} {
+			if n, err := ev.db.Secrets(nil).CountByAddress(ctx, c.tn.ID, c.addr); err != nil || n != c.want {
+				t.Errorf("secrets of %s = %d, %v; want %d", c.addr, n, err, c.want)
+			}
 		}
 
 		// Deposit rows: carol's gone, dave's kept.
@@ -571,6 +635,31 @@ func TestEraseDropLinkRecipients(t *testing.T) {
 		l, _ = ev.db.DropLinks().Get(ctx, ev.b.ID, other)
 		if len(l.Recipients) != 1 {
 			t.Errorf("other tenant link = %+v", l)
+		}
+	})
+}
+
+// failingFiles fails every removal of a secret file.
+type failingFiles struct{}
+
+func (failingFiles) RemoveSecretFile(tenant.ID, string) error { return errBoom }
+
+// TestEraseSecretFileLeft checks that a secret file that cannot be removed
+// does not stop the erasure: its key is destroyed, the failure is logged.
+func TestEraseSecretFileLeft(t *testing.T) {
+	storetest.Run(t, func(t *testing.T, e storetest.Engine) {
+		ev := newEnv(t, e)
+		name := ev.secret(ev.a, carol, "", true)
+		s, err := New(ev.db, Options{Eraser: ev.eraser, Now: ev.clock.Now, Vault: ev.vault, Files: failingFiles{}, Logger: slog.New(slog.NewTextHandler(ev.logs, nil))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rep, err := s.Erase(context.Background(), ev.super, clientIP, ev.a.ID, carol)
+		if err != nil || rep.SecretsDeleted != 1 {
+			t.Fatalf("Erase = %+v, %v", rep, err)
+		}
+		if !ev.secretFileExists(ev.a, name) || !strings.Contains(ev.logs.String(), "secret file left on disk") {
+			t.Errorf("file left = %v\nlogs:\n%s", ev.secretFileExists(ev.a, name), ev.logs.String())
 		}
 	})
 }

@@ -80,16 +80,16 @@ use to ban the client IP.
   language or with forbidden characters (`/message/<lang>`); `PATCH /admin/system/settings`
   refuses `diskAlertThreshold: null` (`not-nullable`), a threshold outside 0.50 to 0.99 and an
   unknown member. These body checks come after the role check: another administrator gets
-  `403 forbidden` whatever the body. Since 2.0, a member of a feature that the server does not
-  implement yet (for example `role: auditor`, `linkOnly`, `endToEndEncrypted`, `dropLinkToken`,
-  `invitation.delivery: none`, `linkOnlyAllowed`, `e2ePolicy`) is refused with the field code
-  `not-supported` on its pointer rather than ignored (`createTenant` with
-  `delegatedAdmin.delivery: none` included). Also since 2.0, `PUT /admin/tenants/{tenantId}/sso`
+  `403 forbidden` whatever the body. Since 2.0, `delegatedAdmin.delivery: none` (the first delegated admin of a new tenant, which has no single sign-on yet) is refused with the field code
+  `not-supported` on `/delegatedAdmin/delivery` (`createTenant` and the tenant import) rather than ignored. Also since 2.0, `PUT /admin/tenants/{tenantId}/sso`
   without `clientSecret` while `issuer` or `clientId` differs from the stored configuration is
   refused with `required` on `/clientSecret`: a stored secret is never carried over to another
   application or identity provider. An e-mail domain of the single sign-on configuration that is not one of the tenant's
   internal mail domains is refused with `not-internal-domain` on
-  `/emailDomains/<n>`.
+  `/emailDomains/<n>`. Since 2.1, `PUT /admin/tenants/{tenantId}/secret-settings` refuses a missing
+  member among `enabled`, `durations`, `fileAllowed`, `fileMaxBytes` and `emailAllowed` with
+  `required` on its pointer, and a `null` one with `not-nullable` (a missing boolean would
+  otherwise silently become `false`).
 - **Typical endpoints:** any endpoint accepting a body or query parameters.
 - **What to do:** fix the listed fields and send the request again. Do not retry unchanged.
 
@@ -870,6 +870,14 @@ use to ban the client IP.
 - **Meaning:** a sealed value of a secret fails a keyless check that the OpenAPI schema cannot express: the sealed text is not canonical base64url or its first byte is not 1, the sealed text is exactly 29 decoded bytes (empty text) without a declared file, the sealed file metadata fails the framing of a sealed blob, or the uploaded file is not exactly the declared size or fails the `TTE2` validator. The server holds no key: it only checks the encoding, the version and the sizes (and, for the file, the `TTE2` header and the declared size), never the content. The refused upload leaves the secret `pending`. **Rule:** anything the schema expresses (pattern, enumeration, length, bound: a verifier that is not 64 lowercase hex characters, a passphrase descriptor other than `pbkdf2-sha256` with 600000 iterations and a canonical 22-character salt, a sealed text outside 39 to 53 372 characters, a `fragmentKey` or a proof of the wrong form) is `400 validation-failed` with field codes, checked first.
 - **Typical endpoints:** `POST /secrets`, `PUT /secrets/{secretId}/file`.
 - **What to do:** produce the sealed values again with a client that implements the format (`docs/architecture/e2e-format.md`) and send them again.
+
+### secret-passphrase-required
+
+- **HTTP status:** 403 Forbidden
+- **Since:** 2.1.
+- **Meaning:** the entity requires a passphrase for the e-mail delivery of a secret (`emailRequiresPassphrase`) and the request has no `passphrase` descriptor: a mailed link carries the key, so only a passphrase sent by another channel keeps the secret out of reach of the mail chain.
+- **Typical endpoints:** `POST /secrets`.
+- **What to do:** add a passphrase and send it to the recipient by another channel, or use `delivery: link`.
 
 ### internal-error
 

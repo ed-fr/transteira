@@ -1137,6 +1137,7 @@ const (
 	ProblemCodeSecretFormatInvalid           ProblemCode = "secret-format-invalid"
 	ProblemCodeSecretGone                    ProblemCode = "secret-gone"
 	ProblemCodeSecretLimitReached            ProblemCode = "secret-limit-reached"
+	ProblemCodeSecretPassphraseRequired      ProblemCode = "secret-passphrase-required"
 	ProblemCodeSecretProofInvalid            ProblemCode = "secret-proof-invalid"
 	ProblemCodeSecretsDisabled               ProblemCode = "secrets-disabled"
 	ProblemCodeSetupAlreadyComplete          ProblemCode = "setup-already-complete"
@@ -1271,6 +1272,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeSecretGone:
 		return true
 	case ProblemCodeSecretLimitReached:
+		return true
+	case ProblemCodeSecretPassphraseRequired:
 		return true
 	case ProblemCodeSecretProofInvalid:
 		return true
@@ -4931,9 +4934,12 @@ type SecretFeatures struct {
 	DefaultDuration *SecretDuration  `json:"defaultDuration,omitempty"`
 	Durations       []SecretDuration `json:"durations"`
 	EmailAllowed    bool             `json:"emailAllowed"`
-	Enabled         bool             `json:"enabled"`
-	FileAllowed     bool             `json:"fileAllowed"`
-	FileMaxBytes    int64            `json:"fileMaxBytes"`
+
+	// EmailRequiresPassphrase Since 2.1. An e-mail secret needs a passphrase: the creation form requires one with the e-mail delivery. Absent means false.
+	EmailRequiresPassphrase *bool `json:"emailRequiresPassphrase,omitempty"`
+	Enabled                 bool  `json:"enabled"`
+	FileAllowed             bool  `json:"fileAllowed"`
+	FileMaxBytes            int64 `json:"fileMaxBytes"`
 }
 
 // SecretFileDeclaration Since 2.1. The optional small file of a secret, an ordinary TTE2 stream sealed with the secret key.
@@ -5011,6 +5017,9 @@ type SecretSettings struct {
 
 	// EmailAllowed E-mail delivery allowed. Default true.
 	EmailAllowed bool `json:"emailAllowed"`
+
+	// EmailRequiresPassphrase Since 2.1. An e-mail secret must carry a passphrase (`403 secret-passphrase-required` otherwise). Default false; absent in a replacement means false.
+	EmailRequiresPassphrase *bool `json:"emailRequiresPassphrase,omitempty"`
 
 	// Enabled The module is on by default.
 	Enabled bool `json:"enabled"`

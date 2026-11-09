@@ -55,6 +55,12 @@ var rowPurges = []rowPurge{
 	{"proofs", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.TransferProofs().Purge(ctx, tid, now)
 	}},
+	// The tombstones of the ended secrets go 30 days after their end; a
+	// secret of an external references its invitation without cascade, so
+	// they go before the invitations.
+	{"secret_tombstones", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
+		return db.Secrets(nil).PurgeTombstones(ctx, tid, now)
+	}},
 	{"invitations", func(ctx context.Context, db *store.DB, tid tenant.ID, now time.Time) (int64, error) {
 		return db.Invitations().Purge(ctx, tid, now)
 	}},

@@ -124,6 +124,14 @@ func operations(ev *env, logo []byte) map[string]func(p adminauth.Principal, tid
 			_, err := ev.svc.ExportConfig(ctx, p, tid, true, clientIP)
 			return err
 		},
+		"GetSecretSettings": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.GetSecretSettings(ctx, p, tid)
+			return err
+		},
+		"UpdateSecretSettings": func(p adminauth.Principal, tid tenant.ID) error {
+			_, err := ev.svc.UpdateSecretSettings(ctx, p, tid, SecretSettingsOf(tenant.DefaultSecretSettings()), clientIP)
+			return err
+		},
 	}
 }
 

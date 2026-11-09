@@ -151,6 +151,15 @@ var isolationCases = map[string]isolationCase{
 	// since 2.0): same refusals as the other "my transfers" operations;
 	// the previous link of A dies, the new one is unknown under B.
 	"reissueMyTransferLink": reissueMyForeignTransferLink,
+	// One-time secrets (secrets_test.go, since 2.1): a session of A is
+	// unknown under B, a link token of A is unknown under B (and is not
+	// consumed there), and a secret of A's owner is never listed nor
+	// deleted by another sender of A nor by the same address in B.
+	"createSecret":   createSecretWithForeignSession,
+	"getSecretLink":  getForeignSecretLink,
+	"revealSecret":   revealForeignSecret,
+	"listMySecrets":  listMyForeignSecrets,
+	"deleteMySecret": deleteMyForeignSecret,
 	// Administration (admin_test.go): served on the admin host only, where
 	// no tenant is resolved; under tenant A's and B's hosts every one
 	// answers 404 before any admin logic. The cross-tenant checks of the
@@ -291,6 +300,14 @@ var isolationCases = map[string]isolationCase{
 	"updateDropLink": adminDropLink,
 	"deleteDropLink": adminDropLink,
 	"rotateDropLink": adminDropLink,
+	// Administration of the one-time secrets (adminsecrets_test.go, since
+	// 2.1): served on the admin host only; tenant B's ID answers like an
+	// unknown tenant, B's secret under A's path like an unknown secret, and
+	// a change of A's settings never reaches B.
+	"listTenantSecrets":    adminSecret,
+	"deleteTenantSecret":   adminSecret,
+	"getSecretSettings":    adminSecret,
+	"updateSecretSettings": adminSecret,
 	// System operations (system_test.go): instance-wide, served on the
 	// admin host only. The maintenance state holds no tenant data and is
 	// readable by every administrator; the other operations are reserved
@@ -797,7 +814,7 @@ type response struct {
 
 // send performs op under host, with tenant A's identifiers in the path
 // (the "resource of A") and sample values for the other parameters.
-func (h *harness) send(t *testing.T, op operation, host string) response {
+func (h *harness) send(t *testing.T, op operation, host string, hdr ...string) response {
 	t.Helper()
 	path := op.template
 	header := http.Header{}
@@ -828,6 +845,9 @@ func (h *harness) send(t *testing.T, op operation, host string) response {
 		ct, payload := sampleBody(op.body)
 		header.Set("Content-Type", ct)
 		body = bytes.NewReader(payload)
+	}
+	for i := 0; i+1 < len(hdr); i += 2 {
+		header.Set(hdr[i], hdr[i+1])
 	}
 	target := "http://" + h.addr + op.base + path
 	if len(query) > 0 {
@@ -893,14 +913,20 @@ func (h *harness) leaks() []string {
 func stillStub(t *testing.T, h *harness, op operation) {
 	t.Helper()
 	for _, host := range []string{hostA, hostB} {
-		resp := h.send(t, op, host)
-		if resp.status == http.StatusUnauthorized && (strings.HasPrefix(op.template, "/me/") || strings.HasPrefix(op.template, "/secrets")) {
-			// A "My transfers" stub, or a creator operation of the one-time
-			// secrets (deposit session or API token), is behind the
-			// credential middleware, which refuses the request without
-			// credential before the stub, the same way under every tenant.
-			continue
+		var creds []string
+		if strings.HasPrefix(op.template, "/secrets/") {
+			// A creator operation of the one-time secrets is behind the
+			// credential middleware: call it with the host's own deposit
+			// session, so that the stub itself answers.
+			c := h.owner(t)
+			if host == hostB {
+				c = h.other(t)
+			}
+			// The raw-body policy of the file upload is step 3's: until
+			// then the media type check of the JSON middleware applies.
+			creds = c.headers("Content-Type", "application/json")
 		}
+		resp := h.send(t, op, host, creds...)
 		if resp.status != http.StatusNotFound {
 			t.Fatalf("%s under %s: status %d, want 404 from the stub; body %s", op, host, resp.status, resp.body)
 		}

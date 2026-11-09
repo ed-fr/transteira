@@ -62,6 +62,8 @@ type Problem struct { //nolint:errname // "Problem" is the RFC 9457 term and the
 	MaxTransferBytes *int64 `json:"maxTransferBytes,omitempty"`
 	// Files lists the identifiers of the files concerned.
 	Files []string `json:"files,omitempty"`
+	// Reason tells why a one-time secret ended (secret-gone, since 2.1).
+	Reason string `json:"reason,omitempty"`
 }
 
 // Option customizes a Problem built by New.
@@ -139,6 +141,11 @@ func WithMaxTransferBytes(n int64) Option {
 // WithFiles appends identifiers of the files concerned.
 func WithFiles(ids ...string) Option {
 	return func(p *Problem) { p.Files = append(p.Files, ids...) }
+}
+
+// WithReason sets why a one-time secret ended (secret-gone, since 2.1).
+func WithReason(reason string) Option {
+	return func(p *Problem) { p.Reason = reason }
 }
 
 // Error implements error. It returns the code and title only, never the

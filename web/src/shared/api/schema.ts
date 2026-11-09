@@ -836,7 +836,9 @@ export interface paths {
          *     must use `delivery=email`: `link` gets `400 validation-failed` on `/delivery`, and on a
          *     tenant whose `emailAllowed` is off it gets `403 secret-email-not-allowed` (the module is
          *     then closed to invited externals). `delivery=email` when the tenant disallows it gets
-         *     `403 secret-email-not-allowed`; a `file` when the tenant disallows it
+         *     `403 secret-email-not-allowed`, and without `passphrase` when the tenant requires one
+         *     for the e-mail delivery (`emailRequiresPassphrase`)
+         *     `403 secret-passphrase-required` (since 2.1); a `file` when the tenant disallows it
          *     `403 secret-file-not-allowed`, and one larger than the tenant limit
          *     `413 secret-file-too-large`. The module disabled for the tenant answers
          *     `403 secrets-disabled`.
@@ -3894,7 +3896,9 @@ export interface paths {
         get: operations["getSecretSettings"];
         /**
          * Replace the one-time secrets settings
-         * @description Since 2.1. Replaces every setting (a missing required member is `400 validation-failed`).
+         * @description Since 2.1. Replaces every setting: a missing required member (`enabled`, `durations`, `fileAllowed`,
+         *     `fileMaxBytes`, `emailAllowed`) is `400 validation-failed` with the field code `required` on its
+         *     pointer, and a `null` one `not-nullable`; `defaultDuration` and `emailRequiresPassphrase` are optional.
          *     The delegated admins manage all of them, `enabled` included, and so does the super admin:
          *     the module needs no instance resource beyond the storage quota. Disabling the module
          *     refuses new secrets (`403 secrets-disabled`) but does not touch existing ones, which are
@@ -4853,7 +4857,7 @@ export interface components {
          * @description Stable error code. See `docs/api/errors.md`.
          * @enum {string}
          */
-        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "secret-gone" | "secret-proof-invalid" | "secrets-disabled" | "secret-file-not-allowed" | "secret-file-too-large" | "secret-duration-not-offered" | "secret-email-not-allowed" | "secret-limit-reached" | "secret-format-invalid" | "internal-error";
+        ProblemCode: "validation-failed" | "unauthenticated" | "invalid-credentials" | "forbidden" | "csrf-invalid" | "deposit-not-allowed" | "ip-not-allowed" | "blocked-file" | "invitation-not-allowed" | "invitation-gone" | "verification-code-invalid" | "verification-exhausted" | "not-found" | "method-not-allowed" | "transfer-gone" | "download-locked" | "transfer-password-invalid" | "transfer-locked" | "state-conflict" | "already-exists" | "upload-incomplete" | "checksum-mismatch" | "transfer-too-large" | "payload-too-large" | "range-not-satisfiable" | "unsupported-media-type" | "quota-exceeded" | "rate-limited" | "maintenance" | "mail-unavailable" | "unknown-tenant" | "setup-already-done" | "setup-token-invalid" | "new-master-key-missing" | "recipient-domain-refused" | "confidentiality-rule-violated" | "abuse-threshold-blocked" | "recipient-verification-required" | "max-downloads-reached" | "reply-not-allowed" | "access-link-invalid" | "extension-limit-reached" | "tenant-in-setup" | "setup-incomplete" | "setup-already-complete" | "unknown-background-preset" | "system-smtp-unavailable" | "admin-already-active" | "update-check-disabled" | "provisioning-token-invalid" | "provisioning-scope-exceeded" | "read-only-role" | "sso-required" | "sso-not-available" | "sso-not-configured" | "sso-issuer-not-allowed" | "sso-domain-conflict" | "sso-mfa-required" | "proof-not-available" | "import-invalid" | "import-schema-unsupported" | "drop-link-invalid" | "drop-link-limit-reached" | "link-only-forbidden" | "link-only-conflict" | "e2e-forbidden" | "e2e-required" | "e2e-archive-unavailable" | "e2e-format-invalid" | "secret-gone" | "secret-proof-invalid" | "secrets-disabled" | "secret-file-not-allowed" | "secret-file-too-large" | "secret-duration-not-offered" | "secret-email-not-allowed" | "secret-limit-reached" | "secret-format-invalid" | "secret-passphrase-required" | "internal-error";
         /**
          * @description Supported UI language (ISO 639-1). New languages may be added.
          * @enum {string}
@@ -6935,6 +6939,8 @@ export interface components {
             fileMaxBytes: number;
             /** @description E-mail delivery allowed. Default true. */
             emailAllowed: boolean;
+            /** @description Since 2.1. An e-mail secret must carry a passphrase (`403 secret-passphrase-required` otherwise). Default false; absent in a replacement means false. */
+            emailRequiresPassphrase?: boolean;
         };
         /** @description Since 2.1. Real rules of the secrets module for the creation form: the settings of the tenant (`SecretSettings`), `defaultDuration` included. */
         SecretFeatures: {
@@ -6945,6 +6951,8 @@ export interface components {
             /** Format: int64 */
             fileMaxBytes: number;
             emailAllowed: boolean;
+            /** @description Since 2.1. An e-mail secret needs a passphrase: the creation form requires one with the e-mail delivery. Absent means false. */
+            emailRequiresPassphrase?: boolean;
         };
         /** @description Since 2.0. What the landing page of a drop link needs. */
         PublicDropLink: {
@@ -10014,7 +10022,8 @@ export interface operations {
             401: components["responses"]["DepositUnauthenticated"];
             /**
              * @description `secrets-disabled` (module disabled for the tenant), `secret-email-not-allowed`,
-             *     `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
+             *     `secret-passphrase-required` (e-mail delivery without passphrase while the tenant
+             *     requires one), `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
              *     blocklisted, or a drop link or reply session), `ip-not-allowed` (API token used from
              *     an IP outside its `allowedCidrs`, written to the security log) or `csrf-invalid`.
              */
@@ -18204,7 +18213,7 @@ type ReadonlyArray<T> = [
     unknown[]
 ] ? Readonly<Exclude<T, undefined>> : Readonly<Exclude<T, undefined>[]>;
 export const problemReasonValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Problem"]["reason"]> = ["read", "expired", "deleted", "locked"];
-export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "secret-gone", "secret-proof-invalid", "secrets-disabled", "secret-file-not-allowed", "secret-file-too-large", "secret-duration-not-offered", "secret-email-not-allowed", "secret-limit-reached", "secret-format-invalid", "internal-error"];
+export const problemCodeValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ProblemCode"]> = ["validation-failed", "unauthenticated", "invalid-credentials", "forbidden", "csrf-invalid", "deposit-not-allowed", "ip-not-allowed", "blocked-file", "invitation-not-allowed", "invitation-gone", "verification-code-invalid", "verification-exhausted", "not-found", "method-not-allowed", "transfer-gone", "download-locked", "transfer-password-invalid", "transfer-locked", "state-conflict", "already-exists", "upload-incomplete", "checksum-mismatch", "transfer-too-large", "payload-too-large", "range-not-satisfiable", "unsupported-media-type", "quota-exceeded", "rate-limited", "maintenance", "mail-unavailable", "unknown-tenant", "setup-already-done", "setup-token-invalid", "new-master-key-missing", "recipient-domain-refused", "confidentiality-rule-violated", "abuse-threshold-blocked", "recipient-verification-required", "max-downloads-reached", "reply-not-allowed", "access-link-invalid", "extension-limit-reached", "tenant-in-setup", "setup-incomplete", "setup-already-complete", "unknown-background-preset", "system-smtp-unavailable", "admin-already-active", "update-check-disabled", "provisioning-token-invalid", "provisioning-scope-exceeded", "read-only-role", "sso-required", "sso-not-available", "sso-not-configured", "sso-issuer-not-allowed", "sso-domain-conflict", "sso-mfa-required", "proof-not-available", "import-invalid", "import-schema-unsupported", "drop-link-invalid", "drop-link-limit-reached", "link-only-forbidden", "link-only-conflict", "e2e-forbidden", "e2e-required", "e2e-archive-unavailable", "e2e-format-invalid", "secret-gone", "secret-proof-invalid", "secrets-disabled", "secret-file-not-allowed", "secret-file-too-large", "secret-duration-not-offered", "secret-email-not-allowed", "secret-limit-reached", "secret-format-invalid", "secret-passphrase-required", "internal-error"];
 export const languageValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Language"]> = ["fr", "en"];
 export const healthStatusValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["Health"]["status"]> = ["ok", "degraded"];
 export const componentHealthValues: ReadonlyArray<FlattenedDeepRequired<components>["schemas"]["ComponentHealth"]> = ["ok", "unavailable"];

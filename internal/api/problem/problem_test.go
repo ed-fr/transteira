@@ -80,6 +80,7 @@ func TestNew(t *testing.T) {
 				WithMaxTransferBytes(21474836480),
 				WithFiles("f1"),
 				WithFiles("f2", "f3"),
+				WithReason("read"),
 			},
 			want: &Problem{
 				Type:     TypeBaseURI + "validation-failed",
@@ -96,6 +97,7 @@ func TestNew(t *testing.T) {
 				RetryAfterSeconds: ptr(2),
 				MaxTransferBytes:  ptr(int64(21474836480)),
 				Files:             []string{"f1", "f2", "f3"},
+				Reason:            "read",
 			},
 		},
 		{

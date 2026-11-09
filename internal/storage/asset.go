@@ -88,3 +88,18 @@ func (s *Store) RemoveAsset(tid tenant.ID, name string) error {
 	}
 	return s.removeIfExists("remove asset", filepath.Join(string(tid), name+assetExt), name)
 }
+
+// secretsDir is the directory of the files of the one-time secrets of a
+// tenant (<tenantID>/secrets/<name>), apart from the transfer files.
+const secretsDir = "secrets"
+
+// RemoveSecretFile deletes the stored file name of a one-time secret of
+// tenant tid (<tenantID>/secrets/<name>). A missing file is not an error, so
+// RemoveSecretFile is idempotent. Following threat model T-110, callers
+// destroy the key of the file in the database before calling it.
+func (s *Store) RemoveSecretFile(tid tenant.ID, name string) error {
+	if err := check(tid, name); err != nil {
+		return err
+	}
+	return s.removeIfExists("remove secret file", filepath.Join(string(tid), secretsDir, name), name)
+}

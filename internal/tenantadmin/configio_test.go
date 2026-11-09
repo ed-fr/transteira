@@ -166,6 +166,11 @@ func (ev *env) configure(t *testing.T, nBlocks int) {
 	abuse.ExternalMaxDailyDeposits = ptr(4)
 	_, err = ev.svc.UpdateAbuseThresholds(ctx, ev.adminA, tid, abuse, clientIP)
 	mustNoErr(t, "abuse", err)
+	_, err = ev.svc.UpdateSecretSettings(ctx, ev.adminA, tid, SecretSettingsInput{
+		Enabled: true, Durations: []string{"1h", "3d"}, DefaultDuration: "3d", FileAllowed: false,
+		FileMaxBytes: 2 << 20, EmailAllowed: true, EmailRequiresPassphrase: true,
+	}, clientIP)
+	mustNoErr(t, "secret settings", err)
 	_, err = ev.svc.UpdateSMTP(ctx, ev.adminA, tid, SMTPUpdate{
 		Host: "smtp.example.com", Port: 587, Security: store.SMTPSecuritySTARTTLS, Username: secretSMTPUser,
 		Password: ptr(secretSMTPPassword), FromAddress: "transfer@entity-a.example.com", FromName: "Entity A",
@@ -322,6 +327,11 @@ func TestExportConfig(t *testing.T) {
 			ab.OfficeHours.Start != "08:00" || ab.OfficeHours.End != "24:00" || !slices.Equal(ab.OfficeHours.Weekdays, []int{1, 2, 3, 4, 5}) {
 			t.Errorf("abuse = %+v", ab)
 		}
+		if ss := out.SecretSettings; ss == nil || !ss.Enabled || !slices.Equal(ss.Durations, []string{"1h", "3d"}) ||
+			ss.DefaultDuration == nil || *ss.DefaultDuration != "3d" || ss.FileAllowed || ss.FileMaxBytes != 2<<20 ||
+			!ss.EmailAllowed || !ss.EmailRequiresPassphrase {
+			t.Errorf("secret settings = %+v", ss)
+		}
 		if s := out.SMTP; s == nil || s.Host != "smtp.example.com" || s.Port != 587 || s.Security != "starttls" ||
 			s.FromAddress != "transfer@entity-a.example.com" || *s.FromName != "Entity A" {
 			t.Errorf("smtp = %+v", out.SMTP)
@@ -372,6 +382,10 @@ func TestExportConfig(t *testing.T) {
 		// A new tenant: defaults, no SMTP, no optional section.
 		out, err = ev.svc.ExportConfig(ctx, ev.adminB, ev.b.ID, true, clientIP)
 		mustNoErr(t, "export B", err)
+		if ss := out.SecretSettings; ss == nil || ss.DefaultDuration != nil || !ss.Enabled || ss.EmailRequiresPassphrase ||
+			!slices.Equal(ss.Durations, []string{"1h", "1d", "7d"}) {
+			t.Errorf("default secret settings = %+v", ss)
+		}
 		if out.SMTP != nil || out.EmailTemplates != nil || out.LegalDocuments != nil || out.Webhooks != nil ||
 			out.Blocklist != nil || out.Branding.Logo != nil || *out.Branding.BackgroundPreset != branding.DefaultPresetID ||
 			out.AbuseThresholds.OfficeHours != nil || out.AbuseThresholds.UnusualVolumeFactor != nil ||
@@ -670,6 +684,15 @@ func TestImportValidation(t *testing.T) {
 				in.Config.AbuseThresholds = a
 			}
 		}
+		secrets := func(mod func(*ExportedSecretSettings)) func(*ImportInput) {
+			return func(in *ImportInput) {
+				x := &ExportedSecretSettings{
+					Enabled: true, Durations: []string{"1h"}, FileAllowed: true, FileMaxBytes: tenant.MinSecretFileBytes, EmailAllowed: true,
+				}
+				mod(x)
+				in.Config.SecretSettings = x
+			}
+		}
 		tpl := func(items ...ExportedTemplate) func(*ImportInput) {
 			return func(in *ImportInput) { in.Config.EmailTemplates = items }
 		}
@@ -769,6 +792,10 @@ func TestImportValidation(t *testing.T) {
 				l.Rules.AllowedExpiryDays = []int{2}
 			})},
 			{"level e2e", "/config/confidentialityLevels/items/0/rules/e2ePolicy", level(func(l *ExportedLevel) { l.Rules.E2EPolicy = ptr("sometimes") })},
+			{"secret durations", "/config/secretSettings/durations", secrets(func(x *ExportedSecretSettings) { x.Durations = nil })},
+			{"secret duration", "/config/secretSettings/durations/1", secrets(func(x *ExportedSecretSettings) { x.Durations = []string{"1h", "2d"} })},
+			{"secret default", "/config/secretSettings/defaultDuration", secrets(func(x *ExportedSecretSettings) { x.DefaultDuration = ptr("7d") })},
+			{"secret file", "/config/secretSettings/fileMaxBytes", secrets(func(x *ExportedSecretSettings) { x.FileMaxBytes = 5 })},
 			{"office start", "/config/abuseThresholds/officeHours/start", abuse(func(a *ExportedAbuseThresholds) {
 				a.OfficeHours = &ExportedOfficeHours{Start: "25:00", End: "18:00", Weekdays: []int{1}}
 			})},

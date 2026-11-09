@@ -265,11 +265,18 @@ func (f *faultRepo) removeRecipient(ctx context.Context, tid tenant.ID, trfID, e
 	return f.repo.removeRecipient(ctx, tid, trfID, email)
 }
 
-func (f *faultRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (int64, error) {
+func (f *faultRepo) eraseInvitations(ctx context.Context, tid tenant.ID, email, pseudonym string, now time.Time) (invitationErasure, error) {
 	if err := f.fail("eraseInvitations"); err != nil {
-		return 0, err
+		return invitationErasure{}, err
 	}
 	return f.repo.eraseInvitations(ctx, tid, email, pseudonym, now)
+}
+
+func (f *faultRepo) countSecrets(ctx context.Context, tid tenant.ID, email string) (int, error) {
+	if err := f.fail("countSecrets"); err != nil {
+		return 0, err
+	}
+	return f.repo.countSecrets(ctx, tid, email)
 }
 
 func (f *faultRepo) countDropLinks(ctx context.Context, tid tenant.ID, email string) (int, error) {
@@ -336,6 +343,7 @@ type env struct {
 	db      *store.DB
 	vault   *masterkey.Vault
 	files   *storage.Store
+	root    string
 	sweeper *lifecycle.Sweeper
 	holder  *testHolder
 	eraser  *flakyEraser
@@ -372,12 +380,13 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 		t.Fatal(err)
 	}
 	vault := masterkey.NewVault(db, kr, nil)
-	files, err := storage.New(t.TempDir())
+	root := t.TempDir()
+	files, err := storage.New(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = files.Close() })
-	ev := &env{t: t, db: db, vault: vault, files: files, holder: &testHolder{}, logs: &bytes.Buffer{}, clock: clock, keys: kr}
+	ev := &env{t: t, root: root, db: db, vault: vault, files: files, holder: &testHolder{}, logs: &bytes.Buffer{}, clock: clock, keys: kr}
 	logger := slog.New(slog.NewTextHandler(ev.logs, nil))
 	ev.sweeper = lifecycle.New(lifecycle.Deps{
 		DB: db, Vault: vault, Remover: upload.New(db, vault, files, upload.Options{}), Files: files, Holder: ev.holder,
@@ -391,7 +400,7 @@ func newEnv(t *testing.T, e storetest.Engine) *env {
 		}
 	})
 	ev.eraser = &flakyEraser{inner: ev.sweeper}
-	ev.svc, err = New(db, Options{Eraser: ev.eraser, Holder: ev.holder, Logger: logger, Now: clock.Now, Keys: kr})
+	ev.svc, err = New(db, Options{Eraser: ev.eraser, Holder: ev.holder, Logger: logger, Now: clock.Now, Keys: kr, Vault: vault, Files: files})
 	if err != nil {
 		t.Fatal(err)
 	}

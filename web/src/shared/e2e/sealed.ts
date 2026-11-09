@@ -29,7 +29,7 @@ import {
 /** First byte of a sealed blob. */
 const SEALED_VERSION = 1;
 /** Size of a sealed blob without its plaintext. */
-const SEALED_OVERHEAD = 1 + NONCE_SIZE + TAG_SIZE;
+export const SEALED_OVERHEAD = 1 + NONCE_SIZE + TAG_SIZE;
 
 const encoder = new TextEncoder();
 // fatal: invalid UTF-8 is an error, as Go utf8.Valid; ignoreBOM: a leading U+FEFF is kept, as Go
@@ -179,12 +179,12 @@ function checkMessageLength(text: string): void {
 }
 
 /** Reports whether s holds no lone surrogate (so that it has an exact UTF-8 form). */
-function wellFormed(s: string): boolean {
+export function wellFormed(s: string): boolean {
   return !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(s);
 }
 
-/** Encrypts plain into a sealed blob. */
-async function seal(
+/** Encrypts plain into a sealed blob (also used by secret.ts). */
+export async function seal(
   aesKey: CryptoKey,
   aad: Uint8Array<ArrayBuffer>,
   plain: Uint8Array,
@@ -200,8 +200,8 @@ async function seal(
   return encodeBase64Url(concatBytes(Uint8Array.of(SEALED_VERSION), nonce, new Uint8Array(ct)));
 }
 
-/** Decodes and decrypts a sealed blob of at most maxEncoded characters. */
-async function open(
+/** Decodes and decrypts a sealed blob of at most maxEncoded characters (also used by secret.ts). */
+export async function open(
   aesKey: CryptoKey,
   aad: Uint8Array<ArrayBuffer>,
   s: string,
@@ -221,7 +221,7 @@ async function open(
 }
 
 /** Decodes the framing of a sealed blob: canonical base64url, version byte, room for nonce and tag. */
-function decodeSealed(s: string, maxEncoded: number): Uint8Array<ArrayBuffer> {
+export function decodeSealed(s: string, maxEncoded: number): Uint8Array<ArrayBuffer> {
   const b = s.length > maxEncoded ? null : decodeBase64Url(s);
   if (b === null) throw new E2EError('encoding', 'not base64url or too long');
   if (b.length < SEALED_OVERHEAD || b[0] !== SEALED_VERSION) {

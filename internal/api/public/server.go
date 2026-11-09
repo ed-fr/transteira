@@ -38,6 +38,9 @@ type Server struct {
 	downloads DownloadService
 	// myTransfers serves "my transfers"; nil until WithMyTransfers.
 	myTransfers MyTransfersService
+	// secrets serves the one-time secrets (since 2.1); nil until
+	// WithSecrets.
+	secrets SecretService
 	// proofs serves the proofs and their keys; nil until WithProofs.
 	proofs ProofService
 	// tenants serves the public tenant configuration; nil until

@@ -45,7 +45,7 @@ http:
     # Pages and API calls whose path carries a capability token: not in the
     # access log (T-161).
     transteira-tokens:
-      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`) || PathPrefix(`/drop/`) || PathPrefix(`/api/v1/drop-links/`))"
+      rule: "(Host(`admin.transfer.example.com`) || Host(`transfer.entity-a.example.com`) || Host(`transfer.entity-b.example.com`)) && (PathPrefix(`/d/`) || PathPrefix(`/i/`) || PathPrefix(`/api/v1/invitations/`) || PathPrefix(`/drop/`) || PathPrefix(`/api/v1/drop-links/`) || PathPrefix(`/s/`) || PathPrefix(`/api/v1/secret-links/`))"
       priority: 100
       entryPoints: [websecure]
       service: transteira

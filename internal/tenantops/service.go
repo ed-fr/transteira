@@ -46,6 +46,12 @@ type Eraser interface {
 	EraseTransfer(ctx context.Context, tid tenant.ID, trfID string, mode lifecycle.EraseMode) (lifecycle.EraseResult, error)
 }
 
+// SecretFiles removes the stored files of one-time secrets
+// (*storage.Store).
+type SecretFiles interface {
+	RemoveSecretFile(tid tenant.ID, name string) error
+}
+
 // Notifier builds the notification mail of each recipient of a transfer
 // (*notify.Notifier): with the shared link of a transfer created before
 // 1.1 (RecipientJobs), or with the own link of each recipient
@@ -69,6 +75,12 @@ type Options struct {
 	Vault Vault
 	// Eraser erases the transfers deleted by an administrator (required).
 	Eraser Eraser
+	// SecretKeys destroys the keys of the one-time secrets deleted by an
+	// administrator (*masterkey.Vault; required).
+	SecretKeys store.SecretKeys
+	// SecretFiles removes the files of those secrets (*storage.Store;
+	// required).
+	SecretFiles SecretFiles
 	// Notifier builds the resent notification mails (required).
 	Notifier Notifier
 	// Mailer queues them (required).
@@ -99,6 +111,7 @@ type Options struct {
 type Service struct {
 	repo           repo
 	eraser         Eraser
+	secretFiles    SecretFiles
 	notifier       Notifier
 	mailer         Mailer
 	logger         *slog.Logger
@@ -110,21 +123,22 @@ type Service struct {
 }
 
 // errMissingDependency reports a [New] call without a required option.
-var errMissingDependency = errors.New("tenantops: Vault, Eraser, Notifier and Mailer are required")
+var errMissingDependency = errors.New("tenantops: Vault, Eraser, SecretKeys, SecretFiles, Notifier and Mailer are required")
 
 // New returns the service over db. It fails when a required option is
 // missing.
 func New(db *store.DB, opts Options) (*Service, error) {
-	if db == nil || opts.Vault == nil || opts.Eraser == nil || opts.Notifier == nil || opts.Mailer == nil {
+	if db == nil || opts.Vault == nil || opts.Eraser == nil || opts.SecretKeys == nil || opts.SecretFiles == nil || opts.Notifier == nil || opts.Mailer == nil {
 		return nil, errMissingDependency
 	}
 	s := &Service{
-		repo:     newStoreRepo(db, opts.Vault, opts.Audit),
-		eraser:   opts.Eraser,
-		notifier: opts.Notifier,
-		mailer:   opts.Mailer,
-		logger:   opts.Logger,
-		now:      opts.Now,
+		repo:        newStoreRepo(db, opts.Vault, opts.Audit, opts.SecretKeys),
+		eraser:      opts.Eraser,
+		secretFiles: opts.SecretFiles,
+		notifier:    opts.Notifier,
+		mailer:      opts.Mailer,
+		logger:      opts.Logger,
+		now:         opts.Now,
 	}
 	if s.logger == nil {
 		s.logger = slog.Default()

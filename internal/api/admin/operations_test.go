@@ -86,6 +86,7 @@ type fakeOps struct {
 	detail     tenantops.TransferDetail
 	invitation tenantops.Invitation
 	events     []store.AuditEvent
+	secrets    []store.Secret
 	next       string
 }
 
@@ -130,6 +131,14 @@ func (f *fakeOps) DeleteBlocklistEntry(_ context.Context, p adminauth.Principal,
 	return f.record("DeleteBlocklistEntry", p.SessionID, tid, entryID, ip)
 }
 
+func (f *fakeOps) ListSecrets(_ context.Context, p adminauth.Principal, tid tenant.ID, fl tenantops.SecretFilter) (store.Page[store.Secret], error) {
+	return store.Page[store.Secret]{Items: f.secrets, NextCursor: f.next}, f.record("ListSecrets", p.SessionID, tid, fl)
+}
+
+func (f *fakeOps) DeleteSecret(_ context.Context, p adminauth.Principal, tid tenant.ID, secID string, ip netip.Addr) error {
+	return f.record("DeleteSecret", p.SessionID, tid, secID, ip)
+}
+
 func (f *fakeOps) ListAuditEvents(_ context.Context, p adminauth.Principal, tid tenant.ID, fl tenantops.AuditFilter) (store.Page[store.AuditEvent], error) {
 	return store.Page[store.AuditEvent]{Items: f.events, NextCursor: f.next}, f.record("ListAuditEvents", p.SessionID, tid, fl)
 }
@@ -170,7 +179,7 @@ func (f *fakeSubjects) Search(_ context.Context, p adminauth.Principal, ip netip
 func (f *fakeSubjects) Erase(_ context.Context, p adminauth.Principal, ip netip.Addr, tid tenant.ID, email string) (datasubject.EraseReport, error) {
 	return datasubject.EraseReport{
 		TransfersDeleted: 1, RecipientEntriesRemoved: 2, VerifiedAddressDeleted: true, InvitationsDeleted: 3, LogEntriesPseudonymised: 4,
-		AccessLinks: 5, ProofsDeleted: 6, DropLinksUpdated: 7, DropLinksDisabled: 2,
+		AccessLinks: 5, ProofsDeleted: 6, DropLinksUpdated: 7, DropLinksDisabled: 2, SecretsDeleted: 9,
 	}, f.record("Erase", p.SessionID, ip, tid, email)
 }
 
@@ -243,6 +252,10 @@ func operationCalls(ctx context.Context, s *Server) map[string]error {
 	out["GetAbuseReport"] = err
 	_, err = s.UpdateAbuseReport(ctx, gen.UpdateAbuseReportRequestObject{TenantId: "ten_a", ReportId: "abr_01", Body: &gen.AbuseReportUpdate{Status: gen.Closed}})
 	out["UpdateAbuseReport"] = err
+	_, err = s.ListTenantSecrets(ctx, gen.ListTenantSecretsRequestObject{TenantId: "ten_a"})
+	out["ListSecrets"] = err
+	_, err = s.DeleteTenantSecret(ctx, gen.DeleteTenantSecretRequestObject{TenantId: "ten_a", SecretId: "sec_01"})
+	out["DeleteSecret"] = err
 	_, err = s.GetGlobalStats(ctx, gen.GetGlobalStatsRequestObject{})
 	out["GlobalStats"] = err
 	_, err = s.SearchDataSubject(ctx, gen.SearchDataSubjectRequestObject{TenantId: "ten_a", Body: &gen.DataSubjectRequest{Email: "carol@customer.example.net"}})
@@ -261,13 +274,14 @@ func TestOperationsWiring(t *testing.T) {
 		"CreateBlocklistEntry": errNoOperationsService, "DeleteBlocklistEntry": errNoOperationsService,
 		"ListAuditEvents": errNoOperationsService, "ListGlobalAuditEvents": errNoOperationsService,
 		"ListAbuseReports": errNoOperationsService, "GetAbuseReport": errNoOperationsService, "UpdateAbuseReport": errNoOperationsService,
+		"ListSecrets": errNoOperationsService, "DeleteSecret": errNoOperationsService,
 		"TenantStats": errNoStatsService, "GlobalStats": errNoStatsService,
 		"Search": errNoDataSubjectService, "Erase": errNoDataSubjectService,
 	}
 	// Without services: 500 (wiring error), whatever the session.
 	ops := operationCalls(ctxWith(store.SessionAuthenticated, superRoot), NewServer())
-	if len(ops) != 18 {
-		t.Fatalf("%d operations, want 18", len(ops))
+	if len(ops) != 20 {
+		t.Fatalf("%d operations, want 20", len(ops))
 	}
 	for name, err := range ops {
 		if !errors.Is(err, wiring[name]) {
@@ -803,7 +817,7 @@ func TestDataSubjectOperations(t *testing.T) {
 	t.Parallel()
 	ctx := ctxWith(store.SessionAuthenticated, delegated)
 	d := &fakeSubjects{summary: datasubject.Summary{
-		Email: "carol@customer.example.net", TransfersAsRecipient: 3, AuditEvents: 7, Invitations: 1, VerifiedAddress: true, Proofs: 4, DropLinks: 8,
+		Email: "carol@customer.example.net", TransfersAsRecipient: 3, AuditEvents: 7, Invitations: 1, VerifiedAddress: true, Proofs: 4, DropLinks: 8, Secrets: 5,
 	}}
 	s := opsServer(nil, d, nil)
 	body := &gen.DataSubjectRequest{Email: "Carol@Customer.example.net"}
@@ -816,7 +830,7 @@ func TestDataSubjectOperations(t *testing.T) {
 	}
 	code, out := decode(t, resp)
 	if code != http.StatusOK || out["email"] != "carol@customer.example.net" || out["transfersAsRecipient"] != float64(3) ||
-		out["securityEvents"] != float64(0) || out["verifiedAddress"] != true || out["auditEvents"] != float64(7) || out["proofs"] != float64(4) || out["dropLinks"] != float64(8) {
+		out["securityEvents"] != float64(0) || out["verifiedAddress"] != true || out["auditEvents"] != float64(7) || out["proofs"] != float64(4) || out["dropLinks"] != float64(8) || out["secrets"] != float64(5) {
 		t.Errorf("summary = %d %v", code, out)
 	}
 	erase, err := s.EraseDataSubject(ctx, gen.EraseDataSubjectRequestObject{TenantId: "ten_a", Body: body})
@@ -827,7 +841,7 @@ func TestDataSubjectOperations(t *testing.T) {
 	if code != http.StatusOK || out["transfersDeleted"] != float64(1) || out["recipientEntriesRemoved"] != float64(2) ||
 		out["verifiedAddressDeleted"] != true || out["invitationsDeleted"] != float64(3) || out["logEntriesPseudonymised"] != float64(4) ||
 		out["accessLinks"] != float64(5) || out["proofsDeleted"] != float64(6) ||
-		out["dropLinksUpdated"] != float64(7) || out["dropLinksDisabled"] != float64(2) {
+		out["dropLinksUpdated"] != float64(7) || out["dropLinksDisabled"] != float64(2) || out["secretsDeleted"] != float64(9) {
 		t.Errorf("report = %d %v", code, out)
 	}
 	if args := d.args["Erase"]; args[1] != clientIP || args[2] != tenant.ID("ten_a") {

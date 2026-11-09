@@ -19,6 +19,8 @@ export type E2EErrorCode =
   | 'encoding'
   | 'invalid-metadata'
   | 'invalid-message'
+  | 'invalid-secret'
+  | 'invalid-passphrase'
   | 'size-mismatch';
 
 /** Go sentinel error name of each code ('size-mismatch' is a check of the browser only). */
@@ -35,6 +37,8 @@ export const GO_ERROR_NAMES: Readonly<Record<E2EErrorCode, string>> = {
   encoding: 'ErrEncoding',
   'invalid-metadata': 'ErrInvalidMetadata',
   'invalid-message': 'ErrInvalidMessage',
+  'invalid-secret': 'ErrInvalidSecret',
+  'invalid-passphrase': 'ErrInvalidPassphrase',
   'size-mismatch': 'ErrSizeMismatch',
 };
 

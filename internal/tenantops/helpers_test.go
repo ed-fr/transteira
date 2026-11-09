@@ -347,6 +347,27 @@ func (f *faultRepo) openSecret(ctx context.Context, tid tenant.ID, wkID string) 
 	return f.repo.openSecret(ctx, tid, wkID)
 }
 
+func (f *faultRepo) listSecrets(ctx context.Context, tid tenant.ID, fl store.SecretFilter, opts store.SecretListOptions) (store.Page[store.Secret], error) {
+	if err := f.fail("listSecrets"); err != nil {
+		return store.Page[store.Secret]{}, err
+	}
+	return f.repo.listSecrets(ctx, tid, fl, opts)
+}
+
+func (f *faultRepo) deleteSecret(ctx context.Context, tid tenant.ID, secID string, now time.Time) (store.EndedSecret, error) {
+	if err := f.fail("deleteSecret"); err != nil {
+		return store.EndedSecret{}, err
+	}
+	return f.repo.deleteSecret(ctx, tid, secID, now)
+}
+
+func (f *faultRepo) scrub(ctx context.Context) error {
+	if err := f.fail("scrub"); err != nil {
+		return err
+	}
+	return f.repo.scrub(ctx)
+}
+
 func (f *faultRepo) audit(ctx context.Context, tid tenant.ID, ev audit.Event) error {
 	if err := f.fail("audit"); err != nil {
 		return err
@@ -363,6 +384,8 @@ type env struct {
 	clock    *fakeClock
 	vault    *masterkey.Vault
 	eraser   *fakeEraser
+	files    *storage.Store
+	root     string
 	notifier *recNotifier
 	mailer   *fakeMailer
 	logs     *bytes.Buffer
@@ -394,13 +417,19 @@ func newEnv(t *testing.T, e storetest.Engine, opts ...envOption) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	root := t.TempDir()
+	files, err := storage.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = files.Close() })
 	ev := &env{
-		t: t, db: db, clock: clock, vault: masterkey.NewVault(db, kr, nil), eraser: &fakeEraser{db: db},
+		t: t, db: db, clock: clock, files: files, root: root, vault: masterkey.NewVault(db, kr, nil), eraser: &fakeEraser{db: db},
 		mailer: &fakeMailer{}, logs: &bytes.Buffer{},
 	}
 	ev.notifier = &recNotifier{inner: notify.New(ev.vault, db.SMTPSettings(), nil, notify.Options{Now: clock.Now})}
 	o := Options{
-		Vault: ev.vault, Eraser: ev.eraser, Notifier: ev.notifier, Mailer: ev.mailer,
+		Vault: ev.vault, Eraser: ev.eraser, SecretKeys: ev.vault, SecretFiles: ev.files, Notifier: ev.notifier, Mailer: ev.mailer,
 		Logger: slog.New(slog.NewTextHandler(ev.logs, nil)), Now: clock.Now, BusyDelay: time.Millisecond,
 	}
 	for _, f := range opts {

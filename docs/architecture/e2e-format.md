@@ -418,8 +418,12 @@ passphrase), `SecretKeyProof(K)`, `SecretProof(K')`, `SecretVerifier(proof) = SH
 `SealSecret(K', text)`, `OpenSecret(K', sealed)`, `CheckSecretFraming(sealed)` (keyless: strict
 base64url, first byte, length bounds of 3.3.3). The file uses the existing `Writer` / `Reader`,
 `SealMetadata` / `OpenMetadata` with `K'` and index 0. New error names: `ErrInvalidSecret`,
-`ErrInvalidPassphrase`. The browser (`web/src/shared/e2e/`) reproduces them with WebCrypto
-(`PBKDF2`, `HKDF`, `AES-GCM`, `SHA-256`).
+`ErrInvalidPassphrase`. Helpers: `PassphraseDescriptor` (zero value: no passphrase) with
+`NewPassphraseDescriptor`, `EncodedSalt` and `DecodePassphraseSalt`; `EncodeProof` / `ParseProof`
+(64 lowercase hexadecimal characters, `ErrInvalidSecret` otherwise); `VerifierMatches(verifier,
+proof)` for the server (SHA-256, then `subtle.ConstantTimeCompare`); `SecretTextIsEmpty(sealed)`
+for the keyless empty-text check of section 4.1. The browser (`web/src/shared/e2e/secret.ts`)
+reproduces them with WebCrypto (`PBKDF2`, `HKDF`, `AES-GCM`, `SHA-256`).
 
 ## 4. What the server validates
 

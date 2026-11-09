@@ -274,12 +274,9 @@ info:
     - **Policies**: `linkOnlyAllowed` and `e2ePolicy` on the tenant and, per level, in the
       confidentiality rules.
 
-    **Compatibility:** no member is removed, retyped or newly required. Interim, during the
-    development of 2.0 only: until each feature is implemented, the server refuses its new
-    optional request members with `400 validation-failed` and the field code `not-supported`,
-    and its new operations answer `404 not-found` like any unimplemented operation. The
-    features implemented so far (auditor, SSO, proofs, configuration export and import, drop
-    links, link-only, end-to-end encryption on the server) no longer use it.
+    **Compatibility:** no member is removed, retyped or newly required. The field code
+    `not-supported` remains only for `delivery: none` of a delegated admin invitation (a new
+    tenant has no single sign-on yet).
 
     ## Version 2.1 additions
     Version 2.1 only adds paths, optional members and values of enumerations to `/api/v1`; every
@@ -320,9 +317,10 @@ info:
       carrying content, key, proof, verifier or token.
 
     **Compatibility:** no member is removed, retyped or newly required. Interim, during the
-    development of 2.1 only: until each feature is implemented, the server refuses its new
-    optional request members with `400 validation-failed` and the field code `not-supported`,
-    and its new operations answer `404 not-found` like any unimplemented operation.
+    development of 2.1 only: `createSecret` refuses the e-mail delivery (`/delivery`) and a file
+    (`/file`) with `400 validation-failed` and the field code `not-supported` until they are
+    implemented. The configuration export and import already carry `secretSettings` (they do not
+    refuse it).
 
   license:
     name: AGPL-3.0-only
@@ -2024,7 +2022,9 @@ paths:
         must use `delivery=email`: `link` gets `400 validation-failed` on `/delivery`, and on a
         tenant whose `emailAllowed` is off it gets `403 secret-email-not-allowed` (the module is
         then closed to invited externals). `delivery=email` when the tenant disallows it gets
-        `403 secret-email-not-allowed`; a `file` when the tenant disallows it
+        `403 secret-email-not-allowed`, and without `passphrase` when the tenant requires one
+        for the e-mail delivery (`emailRequiresPassphrase`)
+        `403 secret-passphrase-required` (since 2.1); a `file` when the tenant disallows it
         `403 secret-file-not-allowed`, and one larger than the tenant limit
         `413 secret-file-too-large`. The module disabled for the tenant answers
         `403 secrets-disabled`.
@@ -2139,7 +2139,8 @@ paths:
         '403':
           description: |
             `secrets-disabled` (module disabled for the tenant), `secret-email-not-allowed`,
-            `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
+            `secret-passphrase-required` (e-mail delivery without passphrase while the tenant
+            requires one), `secret-file-not-allowed`, `deposit-not-allowed` (the creator is not eligible,
             blocklisted, or a drop link or reply session), `ip-not-allowed` (API token used from
             an IP outside its `allowedCidrs`, written to the security log) or `csrf-invalid`.
           content:
@@ -2158,6 +2159,12 @@ paths:
                     title: E-mail delivery of secrets not allowed
                     status: 403
                     code: secret-email-not-allowed
+                secretPassphraseRequired:
+                  value:
+                    type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-passphrase-required
+                    title: Passphrase required for the e-mail delivery
+                    status: 403
+                    code: secret-passphrase-required
                 secretFileNotAllowed:
                   value:
                     type: https://github.com/ed-fr/transteira/blob/main/docs/api/errors.md#secret-file-not-allowed
@@ -7382,7 +7389,9 @@ paths:
       operationId: updateSecretSettings
       summary: Replace the one-time secrets settings
       description: |
-        Since 2.1. Replaces every setting (a missing required member is `400 validation-failed`).
+        Since 2.1. Replaces every setting: a missing required member (`enabled`, `durations`, `fileAllowed`,
+        `fileMaxBytes`, `emailAllowed`) is `400 validation-failed` with the field code `required` on its
+        pointer, and a `null` one `not-nullable`; `defaultDuration` and `emailRequiresPassphrase` are optional.
         The delegated admins manage all of them, `enabled` included, and so does the super admin:
         the module needs no instance resource beyond the storage quota. Disabling the module
         refuses new secrets (`403 secrets-disabled`) but does not touch existing ones, which are
@@ -10226,6 +10235,7 @@ components:
         - secret-email-not-allowed
         - secret-limit-reached
         - secret-format-invalid
+        - secret-passphrase-required
         - internal-error
     Language:
       type: string
@@ -12643,6 +12653,7 @@ components:
         fileAllowed: { type: boolean, description: "Default true." }
         fileMaxBytes: { type: integer, format: int64, minimum: 1048576, maximum: 26214400, default: 10485760, description: "Largest ciphertext of a secret file: 1 MiB to 25 MiB, 10 MiB by default." }
         emailAllowed: { type: boolean, description: "E-mail delivery allowed. Default true." }
+        emailRequiresPassphrase: { type: boolean, description: "Since 2.1. An e-mail secret must carry a passphrase (`403 secret-passphrase-required` otherwise). Default false; absent in a replacement means false." }
       additionalProperties: false
     SecretFeatures:
       type: object
@@ -12655,6 +12666,7 @@ components:
         fileAllowed: { type: boolean }
         fileMaxBytes: { type: integer, format: int64 }
         emailAllowed: { type: boolean }
+        emailRequiresPassphrase: { type: boolean, description: "Since 2.1. An e-mail secret needs a passphrase: the creation form requires one with the e-mail delivery. Absent means false." }
     PublicDropLink:
       type: object
       description: Since 2.0. What the landing page of a drop link needs.

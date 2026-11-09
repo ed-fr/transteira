@@ -215,3 +215,69 @@ func TestSSOCrowdsecScenario(t *testing.T) {
 		t.Errorf("sso capacity %d must exceed the brute force capacity %d", sso.Capacity, bf.Capacity)
 	}
 }
+
+// tokenPaths are the path prefixes whose next segment is a capability token
+// (threat model T-161): the access log of every reverse proxy configuration
+// must mask it (Caddy, Nginx, Apache) or leave the request out (Traefik).
+var tokenPaths = []string{
+	"d", "i", "s", "drop",
+	"api/v1/downloads", "api/v1/invitations", "api/v1/drop-links", "api/v1/secret-links",
+}
+
+// TestProxyTokenRedaction checks that every reverse proxy configuration
+// covers every token path, one-time secret links included.
+func TestProxyTokenRedaction(t *testing.T) {
+	t.Parallel()
+	const dir = "reverse-proxy/"
+	cases := []struct {
+		file   string
+		marker string // selects the line(s) that carry the redaction rule
+		form   func(path string) string
+	}{
+		{dir + "caddy/Caddyfile", `request>uri regexp`, func(p string) string { return "|" + p + "|" }},
+		{dir + "caddy/Caddyfile.on-demand", `request>uri regexp`, func(p string) string { return "|" + p + "|" }},
+		{dir + "nginx/transteira.conf", `tt_prefix>`, func(p string) string { return "|" + p + "|" }},
+		{dir + "apache/transteira.conf", `TT_TOKEN_PREFIX=`, func(p string) string { return "|/" + p + "/" }},
+		{dir + "traefik/dynamic/transteira.yml", "rule:", func(p string) string { return "PathPrefix(`/" + p + "/`)" }},
+		{dir + "traefik/docker-compose.labels.yml", "transteira-tokens.rule", func(p string) string { return "PathPrefix(`/" + p + "/`)" }},
+	}
+	for _, c := range cases {
+		t.Run(c.file, func(t *testing.T) {
+			t.Parallel()
+			var lines []string
+			for _, line := range strings.Split(string(readFile(t, c.file)), "\n") {
+				if strings.Contains(line, c.marker) && !strings.HasPrefix(strings.TrimSpace(line), "#") {
+					lines = append(lines, line)
+				}
+			}
+			// The Traefik file holds the rule of several routers: only the
+			// one that mentions a token path is the token router.
+			traefik := strings.HasPrefix(c.file, dir+"traefik")
+			if traefik {
+				var tokens []string
+				for _, l := range lines {
+					if strings.Contains(l, "PathPrefix(`/d/`)") {
+						tokens = append(tokens, l)
+					}
+				}
+				lines = tokens
+			}
+			if len(lines) == 0 {
+				t.Fatalf("no redaction rule found (marker %q)", c.marker)
+			}
+			for _, line := range lines {
+				// Wrap the first alternation so that the first and last
+				// names also match the |name| form.
+				probe := strings.NewReplacer("(?:", "|", "(", "|", ")", "|").Replace(line)
+				for _, p := range tokenPaths {
+					if traefik && p == "api/v1/downloads" {
+						continue // its own router, transteira-downloads
+					}
+					if !strings.Contains(probe, c.form(p)) && !strings.Contains(line, c.form(p)) {
+						t.Errorf("token path %q is not covered by: %s", p, strings.TrimSpace(line))
+					}
+				}
+			}
+		})
+	}
+}

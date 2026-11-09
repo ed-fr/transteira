@@ -228,6 +228,11 @@ func TestCaptureRawBody(t *testing.T) {
 	if !haveRaw || string(gotRaw) != `{"a":1}` || gotBody != `{"a":1}` {
 		t.Errorf("captured %q (%v), downstream body %q", gotRaw, haveRaw, gotBody)
 	}
+	// The secret settings update is captured too.
+	run(http.MethodPut, "/api/v1/admin/tenants/{tenantId}/secret-settings", `{"b":2}`)
+	if !haveRaw || string(gotRaw) != `{"b":2}` {
+		t.Errorf("secret settings not captured: %q (%v)", gotRaw, haveRaw)
+	}
 	// Only the thresholds update is captured.
 	run(http.MethodGet, thresholds, "")
 	run(http.MethodPut, "/api/v1/admin/tenants/{tenantId}/recipient-rules", `{}`)

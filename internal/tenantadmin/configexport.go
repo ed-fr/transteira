@@ -43,9 +43,7 @@ type ConfigExport struct {
 	RecipientRules        *ExportedRecipientRules  `json:"recipientRules,omitempty"`
 	ConfidentialityLevels *ExportedLevelList       `json:"confidentialityLevels,omitempty"`
 	AbuseThresholds       *ExportedAbuseThresholds `json:"abuseThresholds,omitempty"`
-	// SecretSettings are the one-time secrets settings (since 2.1; refused on
-	// import, with the interim not-supported, until the module is
-	// implemented).
+	// SecretSettings are the one-time secrets settings (since 2.1).
 	SecretSettings *ExportedSecretSettings `json:"secretSettings,omitempty"`
 	// EmailTemplates are the customized templates only.
 	EmailTemplates []ExportedTemplate      `json:"emailTemplates,omitempty"`
@@ -64,6 +62,9 @@ type ExportedSecretSettings struct {
 	FileAllowed     bool     `json:"fileAllowed"`
 	FileMaxBytes    int64    `json:"fileMaxBytes"`
 	EmailAllowed    bool     `json:"emailAllowed"`
+	// EmailRequiresPassphrase refuses an e-mail secret without passphrase;
+	// absent on import means false.
+	EmailRequiresPassphrase bool `json:"emailRequiresPassphrase"`
 }
 
 // ExportedSettings are the general settings of a tenant, without its
@@ -249,6 +250,7 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 	if out.Branding, err = s.exportBranding(t, includeBranding); err != nil {
 		return ConfigExport{}, err
 	}
+	out.SecretSettings = exportSecretSettings(t.Secrets)
 	for _, step := range []func(context.Context, tenant.ID, *ConfigExport) error{
 		s.exportRules, s.exportSMTP, s.exportTemplates, s.exportLegal, s.exportWebhooks, s.exportBlocklist,
 	} {
@@ -258,6 +260,20 @@ func (s *Service) ExportConfig(ctx context.Context, p adminauth.Principal, tid t
 	}
 	s.record(ctx, p, ip, tid, audit.ActionTenantExported, map[string]any{"includeBranding": includeBranding})
 	return out, nil
+}
+
+// exportSecretSettings returns the one-time secrets settings of a tenant;
+// the default duration only when one was chosen.
+func exportSecretSettings(s tenant.SecretSettings) *ExportedSecretSettings {
+	in := SecretSettingsOf(s)
+	out := &ExportedSecretSettings{
+		Enabled: in.Enabled, Durations: in.Durations, FileAllowed: in.FileAllowed, FileMaxBytes: in.FileMaxBytes,
+		EmailAllowed: in.EmailAllowed, EmailRequiresPassphrase: in.EmailRequiresPassphrase,
+	}
+	if in.DefaultDuration != "" {
+		out.DefaultDuration = ptrTo(in.DefaultDuration)
+	}
+	return out
 }
 
 // ptrTo returns a pointer to a copy of v.

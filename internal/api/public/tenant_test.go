@@ -28,6 +28,9 @@ type fakeTenantConfig struct {
 	// language the levels were asked in.
 	restricted bool
 	levelsLang string
+	// levelsErr and restrictedErr fail only the levels or the recipient
+	// rules lookup.
+	levelsErr, restrictedErr error
 	// avOff makes AntivirusEffective false whatever the tenant flag
 	// (instance engine "none").
 	avOff bool
@@ -46,12 +49,18 @@ func (f *fakeTenantConfig) PublicConfidentialityLevels(_ context.Context, t *ten
 		return nil, errors.New("unexpected arguments")
 	}
 	f.levelsLang = lang
+	if f.levelsErr != nil {
+		return nil, f.levelsErr
+	}
 	return f.levels, f.err
 }
 
 func (f *fakeTenantConfig) HasRecipientRules(_ context.Context, t *tenant.Tenant) (bool, error) {
 	if t.ID != "ten_x" {
 		return false, errors.New("unexpected arguments")
+	}
+	if f.restrictedErr != nil {
+		return false, f.restrictedErr
 	}
 	return f.restricted, f.err
 }
@@ -112,6 +121,22 @@ func TestPublicTenantWithoutTenantOrService(t *testing.T) {
 	bare := NewServer()
 	if _, err := bare.GetPublicTenant(tenantCtx(), gen.GetPublicTenantRequestObject{}); !errors.Is(err, errNoTenantService) {
 		t.Errorf("without service: %v", err)
+	}
+}
+
+// TestGetPublicTenantLookupErrors checks that a failing levels or recipient
+// rules lookup fails the whole answer.
+func TestGetPublicTenantLookupErrors(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("lookup failed")
+	for name, f := range map[string]*fakeTenantConfig{
+		"levels":          {levelsErr: boom},
+		"recipient rules": {restrictedErr: boom},
+	} {
+		s := NewServer(WithTenantService(f))
+		if _, err := s.GetPublicTenant(brandedCtx(true), gen.GetPublicTenantRequestObject{}); !errors.Is(err, boom) {
+			t.Errorf("%s: %v, want the lookup error", name, err)
+		}
 	}
 }
 
@@ -282,6 +307,44 @@ func TestGetPublicTenantAntivirusFeature(t *testing.T) {
 				t.Errorf("features %+v, want antivirus %q", b.Features, tc.want)
 			}
 		})
+	}
+}
+
+func TestGetPublicTenantSecretsFeature(t *testing.T) {
+	t.Parallel()
+	durations, err := tenant.NewSecretDurationSet(tenant.SecretDuration12h, tenant.SecretDuration7d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		set  tenant.SecretSettings
+		want gen.SecretFeatures
+	}{
+		{"defaults", tenant.DefaultSecretSettings(), gen.SecretFeatures{
+			Enabled: true, Durations: []gen.SecretDuration{"1h", "1d", "7d"}, DefaultDuration: new(gen.SecretDuration("1h")),
+			FileAllowed: true, FileMaxBytes: tenant.DefaultSecretFileBytes, EmailAllowed: true, EmailRequiresPassphrase: new(false),
+		}},
+		{"custom", tenant.SecretSettings{
+			Enabled: false, Durations: durations, DefaultDuration: tenant.SecretDuration7d, FileMaxBytes: tenant.MinSecretFileBytes,
+			EmailRequiresPassphrase: true,
+		}, gen.SecretFeatures{
+			Durations: []gen.SecretDuration{"12h", "7d"}, DefaultDuration: new(gen.SecretDuration("7d")),
+			FileMaxBytes: tenant.MinSecretFileBytes, EmailRequiresPassphrase: new(true),
+		}},
+		{"unset", tenant.SecretSettings{}, gen.SecretFeatures{Durations: []gen.SecretDuration{}, EmailRequiresPassphrase: new(false)}},
+	} {
+		ctx := tenant.WithTenant(context.Background(), &tenant.Tenant{
+			ID: "ten_x", Name: "Entity A", FQDN: "transfer.entity-a.example.com", DefaultLanguage: "fr",
+			MaxTransferBytes: 5 << 30, PrimaryColor: "#0B5FFF", AccentColor: "#00875A", Secrets: tc.set,
+		})
+		resp, err := NewServer(WithTenantService(&fakeTenantConfig{})).GetPublicTenant(ctx, gen.GetPublicTenantRequestObject{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resp.(gen.GetPublicTenant200JSONResponse).Body.Features.Secrets; !reflect.DeepEqual(got, &tc.want) {
+			t.Errorf("%s: secrets = %+v, want %+v", tc.name, got, &tc.want)
+		}
 	}
 }
 

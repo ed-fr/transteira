@@ -130,6 +130,8 @@ var (
 		`SELECT storage_name, id, transfer_id, dek_key_id, uploaded_at FROM transfer_files WHERE tenant_id = ? LIMIT ?`)
 	qTransferCountByInvitation = tenantQuery(
 		`SELECT count(*) FROM transfers WHERE tenant_id = ? AND invitation_id = ?`)
+	qSecretCountByInvitation = tenantQuery(
+		`SELECT count(*) FROM secrets WHERE tenant_id = ? AND invitation_id = ?`)
 
 	qChallengePurgeList = tenantQuery(
 		`SELECT id FROM verification_challenges
@@ -634,12 +636,28 @@ func (r *VerifiedAddresses) Purge(ctx context.Context, tid tenant.ID, now time.T
 	})
 }
 
+// invitationRefs counts the rows that reference invitation invID through a
+// foreign key without cascade: transfers and one-time secrets (tombstones
+// included, they keep the reference until they are deleted after 30 days).
+func invitationRefs(ctx context.Context, tx *ScopedTx, invID string) (int, error) {
+	total := 0
+	for _, q := range []TenantQuery{qTransferCountByInvitation, qSecretCountByInvitation} {
+		var n int
+		if err := tx.QueryRow(ctx, q, invID).Scan(&n); err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
 // Purge deletes the invitations of tenant tid that are no longer active at
 // now (revoked, or expired: ExpiresAt at or before now), were created
 // strictly before now - RateLimitRetention (the per-inviter rate limit
 // still counts the younger ones, see [Invitations]) and are referenced by
-// no transfer: the foreign key from transfers has no cascade, so an
-// invitation goes once the rows of its transfers are deleted. Its
+// no transfer and no secret: the foreign keys from transfers and secrets
+// have no cascade, so an invitation goes once the rows of its transfers
+// and secrets are deleted. Its
 // challenges and sessions follow by cascade. It works in batches of
 // PurgeBatchSize under the tenant lock, which the creation of a transfer
 // takes too ([Transfers.UsedBytesTx]), and returns how many it deleted.
@@ -654,8 +672,8 @@ func (r *Invitations) Purge(ctx context.Context, tid tenant.ID, now time.Time) (
 		last := ""
 		for _, invID := range ids {
 			last = invID
-			var refs int
-			if err := tx.QueryRow(ctx, qTransferCountByInvitation, invID).Scan(&refs); err != nil {
+			refs, err := invitationRefs(ctx, tx, invID)
+			if err != nil {
 				return 0, "", false, err
 			}
 			if refs > 0 {

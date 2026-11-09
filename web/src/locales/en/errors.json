@@ -77,6 +77,7 @@
   "secret-email-not-allowed": "This entity does not allow sending secrets by email.",
   "secret-limit-reached": "You have reached the limit of secrets. Please try again later.",
   "secret-format-invalid": "The encrypted secret is malformed. Please create it again.",
+  "secret-passphrase-required": "This entity requires a passphrase for secrets sent by email.",
   "internal-error": "An unexpected error occurred. Please try again later.",
   "network": "The server could not be reached. Check your connection and try again.",
   "unknown": "An error occurred. Please try again."

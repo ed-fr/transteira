@@ -151,3 +151,36 @@ func TestRemoveAssetTemp(t *testing.T) {
 		t.Fatalf("left: %v", got)
 	}
 }
+
+func TestRemoveSecretFile(t *testing.T) {
+	s, dir := newTestStore(t)
+	tid := newTenant()
+	name := NewName()
+	if err := s.RemoveSecretFile(tid, name); err != nil {
+		t.Fatalf("remove missing: %v", err)
+	}
+	sdir := filepath.Join(dir, string(tid), secretsDir)
+	if err := os.MkdirAll(sdir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	other := NewName()
+	for _, n := range []string{name, other} {
+		if err := os.WriteFile(filepath.Join(sdir, n), []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RemoveSecretFile(tid, name); err != nil {
+		t.Fatal(err)
+	}
+	if got := listDir(t, sdir); len(got) != 1 || got[0] != other {
+		t.Fatalf("left: %v", got)
+	}
+	for _, c := range []struct {
+		tid  tenant.ID
+		name string
+	}{{"bad", name}, {tid, "../x"}, {tid, ""}} {
+		if err := s.RemoveSecretFile(c.tid, c.name); !errors.Is(err, ErrInvalid) {
+			t.Errorf("RemoveSecretFile(%q, %q) = %v", c.tid, c.name, err)
+		}
+	}
+}

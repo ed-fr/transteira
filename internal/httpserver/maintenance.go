@@ -52,6 +52,11 @@ var maintenanceBlocked = map[string]struct{}{
 	http.MethodPost + " " + APIBaseURL + "/invitations": {},
 	// A reply to a transfer (since 1.1) starts a deposit.
 	http.MethodPost + " " + APIBaseURL + "/downloads/{linkToken}/reply": {},
+	// The creation of a one-time secret, its file and its send call (since
+	// 2.1) are deposits too.
+	http.MethodPost + " " + APIBaseURL + "/secrets":                 {},
+	http.MethodPut + " " + APIBaseURL + "/secrets/{secretId}/file":  {},
+	http.MethodPost + " " + APIBaseURL + "/secrets/{secretId}/send": {},
 }
 
 // maintenanceMiddleware refuses the deposit operations with 503 and a

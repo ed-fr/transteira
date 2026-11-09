@@ -81,11 +81,10 @@ var auditorExpect = map[string]auditorClass{
 	// writes on them stay refused.
 	"getDropLink":   tenantRead,
 	"listDropLinks": tenantRead,
-	// The one-time secrets (since 2.1). The list (metadata only) becomes an
-	// audit read (tenantRead, with its entry in adminauth.AuditorOperations
-	// and RequireTenantAuditRead in the service) when the module is
-	// implemented; until then it is a stub that stays refused to an auditor.
-	"listTenantSecrets": refused,
+	// The one-time secrets (since 2.1): the list is metadata only (the
+	// creator filter is refused to an auditor, the settings and the deletion
+	// stay refused).
+	"listTenantSecrets": tenantRead,
 
 	// Accounts (super admin only).
 	"createAdmin":           refused,

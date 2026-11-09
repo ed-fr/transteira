@@ -34,6 +34,11 @@ ALTER TABLE tenants ADD COLUMN secret_file_max_bytes INTEGER NOT NULL DEFAULT 10
     CHECK (secret_file_max_bytes BETWEEN 1048576 AND 26214400);
 ALTER TABLE tenants ADD COLUMN secret_email_allowed INTEGER NOT NULL DEFAULT 1
     CHECK (secret_email_allowed IN (0, 1));
+-- secret_email_requires_passphrase refuses an e-mail secret created
+-- without passphrase (threat model P83: the mail carries K); off by
+-- default.
+ALTER TABLE tenants ADD COLUMN secret_email_requires_passphrase INTEGER NOT NULL DEFAULT 0
+    CHECK (secret_email_requires_passphrase IN (0, 1));
 
 -- One-time secrets of a tenant. id is "sec_" + ULID (management: creator,
 -- admin, audit); the recipient link carries a separate bearer token

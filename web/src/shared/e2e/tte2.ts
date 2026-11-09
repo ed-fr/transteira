@@ -55,7 +55,7 @@ export const INFO_FILE = 'transteira/tte2/v1/file';
 export const INFO_METADATA = 'transteira/tte2/v1/metadata';
 /** HKDF info of the message key. */
 export const INFO_MESSAGE = 'transteira/tte2/v1/message';
-/** HKDF info reserved for the one-time secrets of V2.1 (not used yet). */
+/** HKDF info of the secret root key K' of a one-time secret (V2.1, secret.ts). */
 export const INFO_SECRET = 'transteira/tte2/v1/secret';
 
 /**

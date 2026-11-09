@@ -29,6 +29,9 @@ type repo interface {
 	listAudit(ctx context.Context, f store.AuditFilter) (store.Page[store.AuditEvent], error)
 	recipientLinks(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientLink, error)
 	tracking(ctx context.Context, tid tenant.ID, trfID string) ([]store.RecipientTracking, error)
+	listSecrets(ctx context.Context, tid tenant.ID, f store.SecretFilter, opts store.SecretListOptions) (store.Page[store.Secret], error)
+	deleteSecret(ctx context.Context, tid tenant.ID, secID string, now time.Time) (store.EndedSecret, error)
+	scrub(ctx context.Context) error
 	openSecret(ctx context.Context, tid tenant.ID, wkID string) ([]byte, error)
 	audit(ctx context.Context, tid tenant.ID, ev audit.Event) error
 }
@@ -45,13 +48,26 @@ type storeRepo struct {
 	db     *store.DB
 	vault  Vault
 	writer *audit.Writer
+	// keys destroys the keys of the secrets deleted.
+	keys store.SecretKeys
 }
 
 // newStoreRepo returns the store implementation of repo, recording with
-// writer (a writer of its own when nil).
-func newStoreRepo(db *store.DB, vault Vault, writer *audit.Writer) *storeRepo {
-	return &storeRepo{db: db, vault: vault, writer: audit.OrNew(writer, db)}
+// writer (a writer of its own when nil) and destroying the keys of the
+// secrets deleted with keys.
+func newStoreRepo(db *store.DB, vault Vault, writer *audit.Writer, keys store.SecretKeys) *storeRepo {
+	return &storeRepo{db: db, vault: vault, writer: audit.OrNew(writer, db), keys: keys}
 }
+
+func (r *storeRepo) listSecrets(ctx context.Context, tid tenant.ID, f store.SecretFilter, opts store.SecretListOptions) (store.Page[store.Secret], error) {
+	return r.db.Secrets(nil).ListFiltered(ctx, tid, f, opts)
+}
+
+func (r *storeRepo) deleteSecret(ctx context.Context, tid tenant.ID, secID string, now time.Time) (store.EndedSecret, error) {
+	return r.db.Secrets(r.keys).DeleteByAdmin(ctx, tid, secID, now)
+}
+
+func (r *storeRepo) scrub(ctx context.Context) error { return r.db.ScrubDeleted(ctx) }
 
 func (r *storeRepo) getTenant(ctx context.Context, tid tenant.ID) (*tenant.Tenant, error) {
 	return r.db.Tenants().Get(ctx, tid)

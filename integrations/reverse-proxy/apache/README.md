@@ -89,7 +89,7 @@ certificate per name by default.
 | tus | Every method is passed through. |
 | HSTS | `Header always set Strict-Transport-Security "max-age=31536000"`. |
 | Compression | `AddOutputFilterByType DEFLATE` limited to HTML, CSS, JavaScript, JSON and SVG, and `no-gzip` set for `/api/v1/uploads` and `/api/v1/downloads/`. |
-| Tokens in the logs | `SetEnvIf Request_URI` sets `TT_TOKEN_PREFIX` (the matched prefix) for `/d/`, `/i/`, `/drop/`, `/api/v1/downloads/`, `/api/v1/invitations/` and `/api/v1/drop-links/`. Two `CustomLog` lines: the `transteira_redacted` format (`"GET /d/REDACTED HTTP/2.0"`, nothing after the prefix) when the variable is set, the `transteira` format otherwise. Neither logs the Referer. |
+| Tokens in the logs | `SetEnvIf Request_URI` sets `TT_TOKEN_PREFIX` (the matched prefix) for `/d/`, `/i/`, `/s/`, `/drop/`, `/api/v1/downloads/`, `/api/v1/invitations/`, `/api/v1/drop-links/` and `/api/v1/secret-links/`. Two `CustomLog` lines: the `transteira_redacted` format (`"GET /d/REDACTED HTTP/2.0"`, nothing after the prefix) when the variable is set, the `transteira` format otherwise. Neither logs the Referer. |
 
 Example of a logged download (`rt_us` is the duration in microseconds):
 

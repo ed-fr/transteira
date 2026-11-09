@@ -201,6 +201,12 @@ type Tenant struct {
 	// and with store.Tenants.SetE2EPolicy or UpdateWithPolicies, never with
 	// the general update).
 	E2EPolicy E2EPolicy
+	// Secrets are the settings of the one-time secret module (since 2.1),
+	// managed by the delegated admin and the super admin. The store reads
+	// them with the tenant, gives a new tenant [DefaultSecretSettings]
+	// (whatever this field holds at creation), and writes them only with
+	// store.Tenants.SetSecretSettings or UpdateWithPolicies.
+	Secrets SecretSettings
 	// ProvisionedBy is the identifier ("prv_" + ULID) of the provisioning
 	// token that created the tenant, "" for a tenant created by a super
 	// admin (V1.2). It is set at creation only, by the store.

@@ -47,7 +47,7 @@ func TestV21SchemaConstraints(t *testing.T) {
 		// durations, files of 10 MiB and e-mail delivery.
 		if n := count(`SELECT count(*) FROM tenants WHERE secrets_enabled AND secret_durations = '1h,1d,7d'
 			AND secret_default_duration IS NULL AND secret_file_allowed AND secret_file_max_bytes = 10485760
-			AND secret_email_allowed`); n != 2 {
+			AND secret_email_allowed AND NOT secret_email_requires_passphrase`); n != 2 {
 			t.Errorf("tenants with the 2.1 defaults = %d, want 2", n)
 		}
 		setting := `UPDATE tenants SET secret_durations = ?, secret_default_duration = ? WHERE id = ?`
@@ -66,6 +66,9 @@ func TestV21SchemaConstraints(t *testing.T) {
 		mustExec(size, 26214400, a)
 		rejected("file limit below 1 MiB", size, 1048575, a)
 		rejected("file limit above 25 MiB", size, 26214401, a)
+		passphrase := `UPDATE tenants SET secret_email_requires_passphrase = ? WHERE id = ?`
+		mustExec(passphrase, true, a)
+		mustExec(passphrase, false, a)
 
 		// Secrets. Columns: id, tenant, token hash, state, creator kind,
 		// API token, invitation, delivery, recipient, verifier, salt,
